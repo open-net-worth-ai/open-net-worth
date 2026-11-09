@@ -92,7 +92,7 @@
         "description": "3-letter ISO code. Use the account's native currency (default to the user's base_currency if not specified)."
       },
       "initial_balance": {
-        "description": "Required current balance today, in the account's currency; use 0 when empty. Signed as written — pass a NEGATIVE number for money owed (a card carrying 5000 of debt is -5000); the sign is not flipped for you. Stored as a dated Starting Balance transaction, not a field on the account.",
+        "description": "Required current balance today, in the account's currency; use 0 when empty. Signed as written — pass a NEGATIVE number for money owed (a card carrying 5000 of debt is -5000); the sign is not flipped for you. Stored as a dated Starting Balance transaction, not a field on the account. Investment/retirement: the account's TOTAL (holdings + cash); holdings added later are carved out of it.",
         "type": "number"
       },
       "initial_balance_date": {
@@ -278,6 +278,14 @@
             "payment_due_day": {
               "type": "integer",
               "description": "Credit: payment due day of month (1–31)."
+            },
+            "value_source": {
+              "enum": [
+                "total",
+                "holdings"
+              ],
+              "type": "string",
+              "description": "Investment/retirement: 'total' (worth the brokerage's total) or 'holdings' (holdings + cash). To 'holdings' clears an untracked part over 2% of the total; tell the user first (result: value_switch)."
             }
           },
           "required": [
@@ -347,8 +355,12 @@
               "type": "string"
             },
             "real_balance": {
-              "description": "The true current balance in the account's native currency (negative for a card you owe on).",
-              "type": "number"
+              "type": "number",
+              "description": "The true current balance in the account's native currency (negative for a card you owe on)."
+            },
+            "real_total": {
+              "type": "number",
+              "description": "value_source='total' accounts: their whole value, instead of real_balance."
             },
             "against": {
               "enum": [
@@ -364,8 +376,7 @@
             }
           },
           "required": [
-            "account_id",
-            "real_balance"
+            "account_id"
           ],
           "type": "object"
         },
@@ -4589,10 +4600,6 @@
               "type": "number",
               "description": "TOTAL acquisition commission for this lot in cost_currency (not per unit), amortized into cost basis. Copy it off the broker confirmation; omit when the source shows none — don't estimate. Default 0."
             },
-            "funding_account_id": {
-              "type": "string",
-              "description": "Cash account to debit for qty × unit_cost + fees, booked WITH the lot (ticker, quantity, memo). Omit only when that debit is already in the ledger. Unknown unit_cost skips the debit."
-            },
             "acquired_at": {
               "type": "string",
               "description": "Acquisition date, ISO YYYY-MM-DD. Drives FIFO order (oldest sells first) and the holding-period clock classifying a later sale long- vs short-term. Omitted = undated: term reports 'unknown' and the double-book guard cannot fire."
@@ -4611,6 +4618,10 @@
             },
             "note": {
               "type": "string"
+            },
+            "funding_account_id": {
+              "type": "string",
+              "description": "Cash account to debit for qty × unit_cost + fees, booked WITH the lot (ticker, quantity, memo). Omit only when that debit is already in the ledger. Unknown unit_cost skips the debit. value_source='total' account: omit it, don't ask — the holding is carved out of the total."
             }
           },
           "required": [

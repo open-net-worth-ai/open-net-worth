@@ -520,12 +520,18 @@ def apply_position_change(change: dict) -> dict:
     if ctype == "add":
         return _apply_add(change)
     if ctype == "remove":
+        from backend.services import account_value
+
         try:
-            removed = remove_position(change["position_id"])
+            # A Brokerage total account keeps its total (ADR 2026-11-10); a pass-through
+            # while `investment_value_source` is off.
+            removed, extra = account_value.around_position_remove(
+                change["position_id"], lambda: remove_position(change["position_id"])
+            )
         except ValidationError as exc:
             return {"error": exc.message or str(exc)}
         return (
-            {"ok": True, "position_id": change["position_id"]}
+            {"ok": True, "position_id": change["position_id"], **extra}
             if removed
             else {"error": "position not found"}
         )

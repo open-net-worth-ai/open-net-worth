@@ -25,9 +25,10 @@ Imports are downward only (db + core) — no api/ai import (Contract 3).
 
 from __future__ import annotations
 
+import functools
 import math
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy import Connection
 
@@ -418,6 +419,21 @@ def _fx_rate_only(currency: str, base: str, rates: dict | None) -> Optional[floa
 _CASH_REF_TYPES = frozenset({"acquire", "dispose", "amend", "dispose_amend"})
 
 
+def _keeps_brokerage_total(choke: Callable[[dict], dict]) -> Callable[[dict], dict]:
+    """A Brokerage total account keeps its total when a lot write moves no money (ADR
+    2026-11-10) — wrapped around the choke rather than inside it, so its dispatch stays the one
+    ``domain_introspect`` reads. A pass-through while ``investment_value_source`` is off."""
+
+    @functools.wraps(choke)
+    def wrapper(change: dict) -> dict:
+        from backend.services import account_value
+
+        return account_value.around_lot_change(change, choke)
+
+    return wrapper
+
+
+@_keeps_brokerage_total
 def apply_lot_change(change: dict) -> dict:
     """The single write entrypoint for lot mutations (D5). `change["type"]` ∈
     {"acquire", "dispose", "delete", "dispose_undo", "amend", "dispose_amend"}. Shared by the AI apply tools and the REST routes so

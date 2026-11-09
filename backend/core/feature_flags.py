@@ -124,6 +124,21 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 1),
     ),
     Flag(
+        name="investment_value_source",
+        description=(
+            "Investment and retirement accounts are valued by Brokerage total or Live holdings "
+            "(Edit account → Value this account by). A typed balance is the account's total, "
+            "and holdings you add later are carved out of it instead of counting twice. A "
+            "Brokerage total account linked through Plaid, SimpleFIN, Yodlee, Alpaca or YNAB "
+            "follows the total that connector reports, read about every 6 hours without "
+            "Lucius. Off: the account is worth its holdings plus its balance, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 10),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
         name="voice_calls",
         description=(
             "Talk to Lucius out loud: a Call button in the chat starts a voice call with your "

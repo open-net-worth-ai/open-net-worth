@@ -7,6 +7,7 @@
  */
 
 import { kindOf } from './categories'
+import { valuationOf } from './valuation'
 import { localIso, toBase as appToBase } from '../../../utils/format'
 import type {
   ApiAccount,
@@ -35,6 +36,7 @@ export function fromApiAccount(api: ApiAccount, holdingsBase = 0): Account {
   const kind: 'asset' | 'liability' = api.kind ?? kindOf(api.type)
   const role: 'securities' | 'cash' = holdingsBase > 0 ? 'securities' : 'cash'
   return {
+    valuation: valuationOf(api),
     id: api.id,
     name: api.name,
     kind,

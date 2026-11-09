@@ -2344,7 +2344,9 @@
   align-items: center;
   gap: 5px;
   min-height: 22px;
-  padding: 0 10px;
+  /* Plus Jakarta Sans carries extra room above its letters, so a centred line box reads low;
+     the 1px lifts the label to the pill's optical middle. */
+  padding: 0 10px 1px;
   border-radius: 999px;
   font: inherit;
   font-size: 11px;
@@ -9981,3 +9983,119 @@ button.acct-alert-src {
    import_v3/import3.css (same class names, same values), imported by ImportModal.tsx
    and registered in frontend/scripts/check-css-classes.mjs. The re-derived subset that
    used to live here is superseded; do not reintroduce a second imp3-* definition site. */
+
+/* Account value card for an investment/retirement account valued by Brokerage total or
+   Live holdings (ADR 2026-11-10): the figures, the side note and the source dot. */
+.acct-src-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
+  flex-wrap: wrap;
+}
+.acct-src-wait {
+  color: var(--faint);
+}
+.acct-src-side {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.acct-src-side b {
+  color: var(--ink);
+  font-weight: 600;
+}
+/* Where the total comes from can run long ("Value synced via SimpleFIN · last changed Nov 10"):
+   it wraps instead of pushing Reconcile off a phone screen. */
+.acct-src-stat {
+  white-space: normal;
+  min-width: 0;
+}
+.acct-src-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--good);
+  flex: none;
+}
+.acct-src-dot--warn {
+  background: var(--warn);
+}
+.acct-row-src {
+  color: var(--faint);
+}
+.acct-row-src--warn {
+  color: var(--warn);
+}
+/* The edit pencil after the account name — desktop only; phones keep the ⋯ menu. */
+.acct-head-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.acct-head-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.acct-head-edit:hover,
+.acct-head-edit:focus-visible {
+  background: var(--surface2);
+  color: var(--ink);
+}
+@media (max-width: 640px) {
+  .acct-head-edit {
+    display: none;
+  }
+}
+/* "Linked to" row in Edit account: same shape as the value-source options below it. */
+.acct-link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--good);
+}
+.acct-link-main {
+  flex: 1;
+  min-width: 0;
+}
+.acct-link-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acct-link-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+/* Where a Brokerage total comes from, inside Reconcile. */
+.acct-pop-note {
+  margin: -6px 0 10px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.acct-pop-note--lead {
+  margin: 0 0 10px;
+  max-width: 260px;
+}
+/* A single figure sits where the breakdown's first figure would, at the same size. */
+.acct-src-one {
+  margin-top: 10px;
+}

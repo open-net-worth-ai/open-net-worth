@@ -568,7 +568,7 @@ def account_with_balance(
     cutoff = row.get("date") if row else None
     bal = account_balance(account, txns, cutoff)
     cleared = cleared_account_balance(account, txns, cutoff)
-    return _hydrate_account(account, row, bal, cleared)
+    return _decorate_value([_hydrate_account(account, row, bal, cleared)])[0]
 
 
 def accounts_with_balances(
@@ -582,9 +582,17 @@ def accounts_with_balances(
     cutoffs = {a["id"]: row.get("date") if row else None for a, row in zip(accts, rows)}
     bals = balances_by_account(accts, txns, cutoffs)
     cleared = cleared_balances_by_account(accts, txns, cutoffs)
-    return [
-        _hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)
-    ]
+    return _decorate_value(
+        [_hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)]
+    )
+
+
+def _decorate_value(rows: list[dict]) -> list[dict]:
+    """How each investment/retirement account is valued and what its connector last reported
+    (``services.account_value``, ADR 2026-11-10) — unchanged rows while the flag is off."""
+    from backend.services import account_value
+
+    return account_value.decorate(rows)
 
 
 def _hydrated_external_ids(ids: list[dict]) -> list[dict]:

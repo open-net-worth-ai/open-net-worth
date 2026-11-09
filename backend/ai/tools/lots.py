@@ -678,7 +678,7 @@ _ACQ_KIND_DESC = "buy (default) | drp (dividend reinvestment) | transfer_in | gr
 # Shared by the root field and each acquisitions[] item — the refusal is enforced at the
 # choke point (services.lots._find_identical_open_lot), not just previewed.
 _ALLOW_DUPLICATE_ACQUIRE_DESC = "true ONLY for genuinely separate identical fills — otherwise a FULLY-OPEN lot on this position with the same kind, acquired_at, quantity and unit_cost is REFUSED as a double-book (returns existing_lot_id). A partially-sold match counts as a real earlier fill, not a duplicate."
-_ACQ_FUNDING_DESC = "Cash account to debit for qty × unit_cost + fees, booked WITH the lot (ticker, quantity, memo). Omit only when that debit is already in the ledger. Unknown unit_cost skips the debit."
+_ACQ_FUNDING_DESC = "Cash account to debit for qty × unit_cost + fees, booked WITH the lot (ticker, quantity, memo). Omit only when that debit is already in the ledger. Unknown unit_cost skips the debit. value_source='total' account: omit it, don't ask — the holding is carved out of the total."
 
 
 class ApplyLotAcquireItem(ToolInput):

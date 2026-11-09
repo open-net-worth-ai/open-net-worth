@@ -228,6 +228,8 @@ export interface AccountsLedgerState {
   restoreAccount: (id: string) => Promise<void>
   deleteAccount: (id: string, opts?: { force?: boolean }) => Promise<void>
   reconcile: (id: string, data: ReconcileData) => Promise<ReconcileResult>
+  /** Answer a connector total held back as suspicious: use it, or keep the account's value. */
+  confirmHeldTotal: (id: string, accept: boolean) => Promise<void>
   // refresh
   /** Returns a Promise so a caller that needs the refreshed data (e.g. a just-created category
    *  appearing in the categories list) can await it instead of racing a fire-and-forget reload. */
@@ -914,6 +916,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       const raw: ApiAccount & {
         retired_payment_envelopes?: RetiredPaymentEnvelope[]
         payment_envelope_sync_warning?: { message: string; retryable: boolean }
+        value_switch?: { txn_id?: string | null }
       } = await res.json()
       // Changing `type` away from `credit` retires that card's payment envelope and zeroes its
       // assigned amount in every month, right now — and flipping back mints a new one, so the
@@ -930,10 +933,12 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       } else {
         setAccounts((prev) => [...prev, acct])
       }
+      // A switch to Live holdings may book one adjustment (ADR 2026-11-10) — show it now.
+      if (raw.value_switch?.txn_id) await loadTxns(filters, 0, false)
       fireMutate()
       return acct
     },
-    [],
+    [filters, loadTxns],
   )
 
   // Soft-archive (PUT archived:true) — keeps transactions. DELETE is REFUSED (409) by the backend
@@ -1060,6 +1065,28 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     [refreshAccount, filters, loadTxns],
   )
 
+  const confirmHeldTotal = useCallback(
+    async (id: string, accept: boolean): Promise<void> => {
+      const res = await authFetch(`/api/accounts/${id}/value-sync/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ accept }),
+      })
+      if (!res.ok) {
+        let detail: unknown
+        try {
+          detail = (await res.json())?.detail
+        } catch {
+          detail = undefined
+        }
+        throw new Error(typeof detail === 'string' && detail ? detail : `Failed (${res.status})`)
+      }
+      await refreshAccount(id)
+      if (accept) await loadTxns(filters, 0, false)
+      fireMutate()
+    },
+    [refreshAccount, filters, loadTxns],
+  )
+
   const refresh = useCallback(async () => {
     invalidateQueryCache((key) => key.startsWith('/api/transactions?'))
     setOffset(0)
@@ -1115,6 +1142,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     restoreAccount,
     deleteAccount,
     reconcile,
+    confirmHeldTotal,
     refresh,
     refreshTxns,
   }

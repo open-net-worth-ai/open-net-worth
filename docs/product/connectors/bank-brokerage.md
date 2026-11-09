@@ -126,7 +126,9 @@ US banks and cards, through your own Plaid developer account.
 6. **③ Choose and link accounts** — every linked bank's accounts, grouped by type, each showing
    which bank it's at. **Add** each one you
    want to track, or **Link…** it to an account you already have.
-7. **④ Bring in transactions** — linking imports nothing by itself. Click **Set up automation**
+7. **④ Bring in transactions** — linking imports nothing by itself. (An investment or
+   retirement account needs no transactions: with **Brokerage total** on, it follows the total
+   Plaid reports — see [Accounts](../features/accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).) Click **Set up automation**
    to have Lucius add new transactions to your linked accounts on a schedule, or ask him for a
    one-off fetch. Unlinked accounts are skipped.
 
@@ -443,6 +445,10 @@ provider too if you no longer need it.
 - Whether a bank's transaction is "the same one" as one you typed is Lucius's judgement, from the
   amount, date and description. It's usually right; **Unlink source** fixes it when it isn't.
 - Enable Banking is the newest connector here and the least tested against real banks.
+- A linked investment account's total (experimental **Brokerage total**) comes from the
+  connector's account list, not from transactions. Plaid, SimpleFIN, Yodlee, Alpaca and YNAB
+  report one; Enable Banking, GoCardless, Lunch Flow and Lunch Money don't, so their investment
+  accounts stay as you enter them. It's only as fresh as the connector — about a day for Plaid.
 
 ## Troubleshooting
 

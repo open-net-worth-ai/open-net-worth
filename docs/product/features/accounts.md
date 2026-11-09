@@ -6,7 +6,7 @@ order: 20
 audience: [user]
 status: stable
 related: [concepts/the-ledger, concepts/accounts-and-opening-balances, concepts/net-worth, concepts/base-currency-and-fx, features/transactions, features/importing, connectors/bank-brokerage]
-keywords: [accounts, checking, savings, credit card, loan, mortgage, opening balance, starting balance, reconcile, archive, delete]
+keywords: [accounts, checking, savings, credit card, loan, mortgage, opening balance, starting balance, reconcile, archive, delete, brokerage total, live holdings, total value, untracked holdings]
 ---
 
 # Accounts
@@ -43,7 +43,9 @@ beside its amount, in case the **Source** column is out of view.
 4. **Currency** — the currency the bank shows this account in.
 5. **Current balance** (or **Amount currently owed** for a card or loan) — what it holds or
    owes today. Type `0` if it's empty or you'd rather import its history. Enter what you owe
-   as a positive number; the app knows a card or loan is a debt.
+   as a positive number; the app knows a card or loan is a debt. For an investment or
+   retirement account this is its **Total value**, holdings and cash together, as your
+   brokerage shows it (see [Brokerage total or Live holdings](#investment-and-retirement-accounts-brokerage-total-or-live-holdings)).
 6. Click **Add account**.
 
 The balance you enter is recorded as a **Starting Balance** transaction dated today — it's the
@@ -138,6 +140,82 @@ month without one. A collapsed group such as a bank with several accounts says h
 reconciling**, and so does **All accounts** at the top. Accounts that are up to date show nothing
 extra.
 
+## Investment and retirement accounts: Brokerage total or Live holdings
+
+> **Experimental.** Turn it on in [Settings → Developer → Experimental](settings.md#experimental-features)
+> (**Investment accounts valued by Brokerage total or Live holdings**). Off, an investment account
+> is worth its holdings plus its balance, as before.
+
+An investment or retirement account is valued one of two ways. Choose in **Edit account → Value
+this account by**:
+
+- **Brokerage total** — the account is worth the total your brokerage shows, holdings and cash
+  together. Holdings you add are a breakdown of that total, not extra money.
+- **Live holdings** — the account is worth each holding at market prices, plus cash. It's only
+  right once every holding is added.
+
+**Which one an account starts with.** A new investment or retirement account starts as
+**Brokerage total**, and **Add account** asks for its **Total value**. An account you already had
+keeps **Live holdings** if it holds anything, and starts as **Brokerage total** if it doesn't.
+Once an account has a value source, adding a holding doesn't change it.
+
+### Adding holdings to a Brokerage total account
+
+Adding a holding never changes the total. Its value is taken out of the rest of the total and the
+account card shows how the total splits, for example **$3,020.00** tracked holdings +
+**$4,980.00** cash and untracked holdings = **$8,000.00** total value. The register shows the
+move as a **Holding tracked from the total** adjustment. Removing a holding puts its value back
+the same way.
+
+Money that really moves still counts. A purchase paid from another account raises the total by
+what you paid, and a sale whose proceeds go to another account lowers it. A sale with no proceeds
+account leaves the cash in this account, because that's where a brokerage keeps it.
+
+**Add holding** on the account card opens Lucius with the request ready to send. Tickers and
+quantities are a conversation, and he can read them from a statement too. When nearly all of the
+total is tracked (2% or less left), the card offers **Switch** to Live holdings.
+
+### A linked account follows its connector's total
+
+Link a Brokerage total account to **Plaid**, **SimpleFIN**, **Yodlee**, **Alpaca** or **YNAB**
+and it follows the total that connector reports. No transactions or Lucius are needed. The first
+total arrives within about a minute of linking ("Waiting for Plaid's first total" until then).
+After that it's read about every 6 hours. Plaid itself updates investment balances about once a
+day.
+
+- Under the card: **Value synced via Plaid · last changed** *date*. Between readings your tracked
+  holdings move with the market, so the total can differ slightly from Plaid's until the next one.
+- Each change is booked as one **Total from Plaid** adjustment. It moves net worth only, never
+  spending, income or the budget.
+- **A suspicious total waits for you.** If the connector reports **0**, a drop of more than a
+  quarter, or a total more than 4 times the last one, nothing is booked. The first total after
+  you link is checked against the value the account already has, so linking the wrong account
+  can't quietly replace a total you typed. An account that's still at $0 takes its first total. The account asks *"Plaid reported $0.00. That looks wrong, so it
+  wasn't used. Is it real?"* with **Keep** and **Use**.
+- **Nothing is booked** when the connector reports another currency, can't be read, or no longer
+  lists the account. The account says so and keeps its value. An expired bank sign-in offers
+  **Reconnect**.
+- A paused or removed connector stops the updates. The account keeps its last value, and you
+  update it with Reconcile.
+- If the brokerage's accounts are split across several accounts here (one per currency, say),
+  its single total would count the others twice. A linked account like that starts as **Live
+  holdings**, and Edit account warns if you choose Brokerage total.
+- A **Live holdings** account linked to a connector only compares: if your holdings and cash are
+  more than 10% away from the connector's total, it suggests you may be missing a holding.
+
+### Reconcile a Brokerage total account
+
+**Reconcile** asks *"Is the account's real total …?"* and books the difference to the untracked
+part. On a linked account, the connector's next changed total replaces it ("Replaced at your
+brokerage's next update").
+
+### Switching
+
+Switching to **Brokerage total** books nothing: the value stays, and your holdings become a
+breakdown of it. Switching to **Live holdings** keeps a small untracked part (2% of the total or
+less) as cash. A larger one isn't cash, so it's cleared with one adjustment. Edit account says
+what the account will be worth before you save.
+
 ## Import a statement or connect a bank
 
 - **Import** (in the account header) reads a CSV, OFX, QIF, PDF or similar statement file — see
@@ -182,7 +260,11 @@ and its funding sources simply stop pointing at it.
 ## What Lucius can do here
 
 - Add, update, archive or delete accounts (it asks before deleting).
-- Reconcile a balance, or mark a batch of transactions cleared.
+- Reconcile a balance, or mark a batch of transactions cleared. On a Brokerage total account
+  he reconciles the total, and he reads its tracked and untracked parts, never mistaking the
+  untracked part for cash.
+- Switch an investment account between Brokerage total and Live holdings, telling you first what
+  a switch to Live holdings clears.
 - Answer "what's my net worth?" account by account, or show how it changed over 1M, 3M, YTD,
   1Y or all time.
 

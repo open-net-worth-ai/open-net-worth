@@ -34,7 +34,10 @@ _MAX_LISTED_CANDIDATES = 6
 
 # Fields the SERVER owns on an account row. A caller-settable opening pointer would hand one
 # account another account's Starting Balance row — i.e. another account's balance.
-SERVER_OWNED_ACCOUNT_FIELDS = frozenset({"opening_txn_id", "payment_envelope_id"})
+SERVER_OWNED_ACCOUNT_FIELDS = frozenset(
+    # value_sync: what a linked connector last reported (services.account_value_sync owns it).
+    {"opening_txn_id", "payment_envelope_id", "value_sync"}
+)
 
 # Fields the seven-type taxonomy retired (ADR 2026-09-07-seven-account-types-one-axis):
 # `type` alone now derives kind and net-worth band, and `locked`/`on_budget`/`group` never
@@ -197,6 +200,7 @@ def create_account(data: dict, *, side_effects: dict | None = None) -> dict:
         data["external_ids"] = normalized
 
     ensure_fx_rate(data.get("currency"), opening)
+    data = _with_value_source(data)
     with locked_unit_of_work(
         accounts_table, institutions_table, transactions_table, txn_audit_table
     ) as conn:
@@ -351,12 +355,42 @@ def update_account(
         assert_external_ids_unique(account_id, normalized)
         changes.update(_link_fill(existing, raw_ids))
         changes["external_ids"] = normalized
+    new_source = changes.pop("value_source", None)
+    if new_source is not None:
+        from backend.services import account_value
+
+        # Refused up front (wrong type, flag off, bad value) so a refused switch writes nothing.
+        account_value.check_switch(existing, new_source)
     with locked_unit_of_work(accounts_table, institutions_table) as conn:
         changes = _resolve_institution_patch(changes, conn=conn)
         result = ledger_service.accounts.update_by_id(account_id, changes, conn=conn)
     if result is None:
         return None
+    if new_source is not None:
+        # AFTER the rest of the patch has committed (security review 2026-11-10): a failed
+        # rename must never leave the untracked part already cleared — ADR 2026-11-10.
+        switch = account_value.apply_switch(existing, new_source)
+        if side_effects is not None:
+            side_effects["value_switch"] = switch
     return ledger_service.accounts.find_by_id(account_id) or result
+
+
+def _with_value_source(data: dict) -> dict:
+    """A new investment/retirement account starts as Brokerage total: the balance typed at
+    creation is the account's total (ADR 2026-11-10). A caller may choose otherwise. Unchanged
+    while the `investment_value_source` flag is off — then a `value_source` is refused."""
+    from backend.services import account_value
+
+    chosen = data.get("value_source")
+    if not account_value.applies(data):
+        if chosen:
+            raise ValidationError("Only investment and retirement accounts have a value source.")
+        return data
+    if not account_value.enabled():
+        if chosen:
+            raise ValidationError("Choosing how an account is valued isn't turned on.")
+        return data
+    return {**data, "value_source": account_value.validate_source(chosen or account_value.TOTAL)}
 
 
 def provider_label(source: str | None) -> str:

@@ -66,6 +66,7 @@ REVIEWED_SAFE = frozenset(
     PUT /api/accounts/{account_id}
     POST /api/accounts/{account_id}/align-tracking-start
     POST /api/accounts/{account_id}/reconcile
+    POST /api/accounts/{account_id}/value-sync/confirm
     POST /api/action-status
     PATCH /api/actions/{action_id}/status
     POST /api/alerts
