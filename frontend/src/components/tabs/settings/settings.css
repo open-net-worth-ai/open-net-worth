@@ -2785,6 +2785,11 @@
     top: var(--visual-viewport-top, 0px);
     bottom: auto;
     height: var(--visual-viewport-height, 100%);
+    /* No blur on a phone: every other phone sheet's scrim is a plain dim, and a filtered layer
+       over the top edge left the installed app's status bar white above Settings while the
+       tint (utils/statusBarTint.ts) was set (owner, 2026-11-09). */
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
   .ui-modal-card--workspace.onw-settings {
     flex-direction: column;
