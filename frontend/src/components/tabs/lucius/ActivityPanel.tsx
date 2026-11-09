@@ -131,8 +131,8 @@ function NeedsAttentionSection({
 }
 
 /** An automation whose latest run failed. Opens the run's own conversation, where the error
- *  and "Try again" are; it leaves this list once a later run or that retry succeeds, or after
- *  24 hours (the server's window). */
+ *  and "Try again" are; opening it marks it read, which clears it here. It also leaves once a
+ *  later run or that retry succeeds, or after 24 hours (the server's window). */
 function FailedRow({
   item,
   onOpen,

@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import Counter
 
 from backend.core.errors import ConflictError
+from backend.services.budget_app import current
 from backend.services.ynab_migration import category_make as make
 from backend.services.ynab_migration.mapping import clean
 from backend.services.ynab_sync import assigned, conflicts
@@ -19,7 +20,9 @@ def _check(sync: News) -> None:
     if sync.errors:
         raise ConflictError(sync.errors[0])
     if sync.deferred:
-        raise ConflictError("YNAB can't take any more requests for now. Try again shortly.")
+        raise ConflictError(
+            f"{current().name} can't take any more requests for now. Try again shortly."
+        )
 
 
 def _protected(sync: News, keep: str) -> bool:
@@ -85,6 +88,7 @@ def _plan_category(sync: News, ycid: str) -> dict:
         "group_id": ycat["category_group_id"],
         "group_name": sync.ygroup_name(ycat["category_group_id"]),
         "hidden": sync.ystate(ycat)["hidden"],
+        **({"kind": "income"} if ycat.get("is_income") else {}),
     }
 
 
@@ -103,10 +107,12 @@ def _choose(sync: News, item: dict, keep: str, choice: str | None) -> None:
     paired = {p["category"] for p in sync.base.cats.values()}
     adding = keep == "ynab" or (choice or "").startswith("env:")
     if adding and not sync.can_pull:
-        raise ConflictError("In To YNAB mode this book isn't changed. Switch to Both ways first.")
+        raise ConflictError(
+            f"In To {current().name} mode this book isn't changed. Switch to Both ways first."
+        )
     if keep == "ynab":
         cat = sync.create_here(c)
-        text = f"Added {cat['label']} here, as it is new in YNAB."
+        text = f"Added {cat['label']} here, as it is new in {current().name}."
         return sync.pair_new(c, sync.book.rows[cat["id"]], text, fresh=False)
     if choice not in [o["ref"] for o in item["options"]]:
         raise ConflictError("Pick which of your categories to use.")
@@ -116,14 +122,14 @@ def _choose(sync: News, item: dict, keep: str, choice: str | None) -> None:
             raise ConflictError("That category is no longer in this book. Pick another.")
         if cat["id"] in paired:
             raise ConflictError(
-                "That category is already matched with another YNAB category. Pick another."
+                f"That category is already matched with another {current().name} category. Pick another."
             )
         return sync.pair_existing(c, cat, paired)
     env = next((e for e in sync.book.envelopes if e["id"] == choice[4:]), None)
     if env is None:
         raise ConflictError("That envelope is no longer in this book. Pick another.")
     cat = make.make_category_in(sync.book, env, c["label"], c["hidden"])
-    text = f"Added {cat['label']} to your envelope {env['name']}, as it is new in YNAB."
+    text = f"Added {cat['label']} to your envelope {env['name']}, as it is new in {current().name}."
     sync.pair_new(c, sync.book.rows[cat["id"]], text)
 
 
@@ -135,7 +141,8 @@ def _new_here(sync: News, item: dict, keep: str) -> None:
     if cat is None:
         return  # gone from this book: nothing to add to YNAB
     if not sync.can_push:
-        raise ConflictError("In From YNAB mode YNAB isn't changed. Switch to Both ways first.")
+        app = current().name
+        raise ConflictError(f"In From {app} mode {app} isn't changed. Switch to Both ways first.")
     sync.create_in_ynab(cat)
     _check(sync)
 
@@ -154,7 +161,9 @@ def _budget(sync: News, item: dict, keep: str) -> None:
     if sync.book.env_of.get(cat["id"]) is not None:
         return  # it has joined an envelope since the question was asked: nothing to give
     if not sync.can_pull:
-        raise ConflictError("In To YNAB mode this book isn't changed. Switch to Both ways first.")
+        raise ConflictError(
+            f"In To {current().name} mode this book isn't changed. Switch to Both ways first."
+        )
     env = sync.give_envelope_now(ycid, p, cat)
     figures = {k: v for k, v in sync.ynab_figures().items() if k[1] == ycid and v}
     sync.base.drop_assigned_of(ycid)
@@ -179,7 +188,7 @@ def apply(item: dict, keep: str, choice: str | None, st: dict, meta: dict, base,
             _new_here(sync, item, keep)
     except RateCapReached:
         raise ConflictError(
-            "YNAB can't take any more requests for now. Try again shortly."
+            f"{current().name} can't take any more requests for now. Try again shortly."
         ) from None
     finally:
         sync.finish()

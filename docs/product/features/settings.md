@@ -33,7 +33,8 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
    and the default date on new entries. The browser's zone is detected the first time; a zone
    you pick yourself is never overwritten.
 3. Under **Number & date format**, choose a **Date format** (31/12/2026, 12/31/2026 or
-   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser.
+   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser. Large figures in tight spaces are
+   shortened with K, M, B or T (₫2.01B) in every number format; only the separators change.
 
 **Switch to dark mode**
 1. Open **Settings → Appearance**.
@@ -84,7 +85,8 @@ removed) and disappears from this list. When the list is empty there is nothing 
 
 Right now the list holds **Permissions v2**, a new way of deciding when Lucius asks you before
 using a tool; see [Permissions v2](../lucius/permissions-v2.md). It also holds **Voice calls**: talk to Lucius out loud
-from the chat; see [Voice calls](../connectors/voice-calls.md). And **Investment accounts valued by
+from the chat; see [Voice calls](../connectors/voice-calls.md). **Actual Budget** is here too, off
+by default: see [Import from Actual Budget](actual-budget-import.md). And **Investment accounts valued by
 Brokerage total or Live holdings**: a typed or synced total that holdings are carved out of; see
 [Accounts](accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).
 
@@ -102,6 +104,9 @@ or off. Lucius cannot change these switches.
   Anything you'd rather he not know, leave blank.
 - **Some sections only appear where they apply** — Desktop in the desktop app, Terminal where it
   is enabled.
+- **The version is at the bottom of Settings** — at the foot of the side rail, or of the menu on a
+  phone. It's the version of the server you're connected to, so it changes only after that server
+  restarts on a new release.
 
 ## Related pages
 

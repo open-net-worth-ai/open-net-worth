@@ -1,4 +1,5 @@
 import { Badge, CollapsibleSection, Stack, Text } from '../../ui'
+import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
 import type { Check, Counts, Problem, Verification } from './runs'
 
 // The tables of a run report. Rows are `<tr>`s, but on a phone each one stacks into labelled
@@ -95,13 +96,13 @@ export function ProblemList({ problems }: { problems: Problem[] }) {
   )
 }
 
-function ChecksTable({ checks }: { checks: Check[] }) {
+function ChecksTable({ app, checks }: { app: BudgetAppInfo; checks: Check[] }) {
   return (
     <table className="imp-table">
       <thead>
         <tr>
           <th>Check</th>
-          <th className="imp-table__num">YNAB</th>
+          <th className="imp-table__num">{app.name}</th>
           <th className="imp-table__num">Open Net Worth</th>
           <th className="imp-table__num">Difference</th>
         </tr>
@@ -117,7 +118,7 @@ function ChecksTable({ checks }: { checks: Check[] }) {
                 </Text>
               )}
             </td>
-            <td data-label="YNAB" className="imp-table__num">
+            <td data-label={app.name} className="imp-table__num">
               {show(c.ynab_value, c.unit)}
             </td>
             <td data-label="Open Net Worth" className="imp-table__num">
@@ -134,13 +135,19 @@ function ChecksTable({ checks }: { checks: Check[] }) {
 }
 
 // Mismatches come first; the checks that agree stay one click away.
-export function VerificationBody({ verification: v }: { verification: Verification }) {
+export function VerificationBody({
+  app = YNAB_APP,
+  verification: v,
+}: {
+  app?: BudgetAppInfo
+  verification: Verification
+}) {
   return (
     <Stack gap="--space-4">
       <Badge tone={v.ok ? 'pos' : 'neg'}>
         {v.ok ? 'All match' : `${v.mismatches.length} to look at`}
       </Badge>
-      {v.mismatches.length > 0 && <ChecksTable checks={v.mismatches} />}
+      {v.mismatches.length > 0 && <ChecksTable app={app} checks={v.mismatches} />}
       {!v.ok && (
         <Text size="xs" tone="faint">
           A transaction count that differs usually means a row was not booked (listed under Needs
@@ -151,7 +158,7 @@ export function VerificationBody({ verification: v }: { verification: Verificati
       )}
       {v.matches.length > 0 && (
         <CollapsibleSection title={`Show all ${v.matches.length} that match`}>
-          <ChecksTable checks={v.matches} />
+          <ChecksTable app={app} checks={v.matches} />
         </CollapsibleSection>
       )}
     </Stack>

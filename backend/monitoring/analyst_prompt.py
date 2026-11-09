@@ -254,6 +254,18 @@ def prior_analysis_block(prior_summary: str) -> str:
     )
 
 
+def _one_line_fields(item: dict) -> dict:
+    """A line break inside a title or snippet can't start a new line, so a planted line can't sit on
+    its own and read like the fence around it."""
+    return {
+        **item,
+        "title": " ".join(str(item.get("title") or "").split()),
+        "snippet": " ".join(str(item.get("snippet") or "").split()),
+        "source": " ".join(str(item.get("source") or "").split()),
+        "published_at": " ".join(str(item.get("published_at") or "").split()),
+    }
+
+
 def render_news_context_block(signal_summary: str, headlines: list[dict]) -> str:
     """Bounded NEWS CONTEXT for a prompt OUTSIDE the Analyst's own pipeline (INT13 — the
     price-alert narrator built context from position data only and never consulted the asset's
@@ -271,10 +283,9 @@ def render_news_context_block(signal_summary: str, headlines: list[dict]) -> str
         ``_build_prompts`` uses — collision-proofed the same way (text_sanitize's dash-run
         collapse), so hostile headline content can't forge either boundary.
     Returns "" when both are empty — a caller with no signal and no fresh evidence gets nothing to
-    inject, so its own prompt renders exactly as it did before this feature existed (pinned by
-    price_monitor's own byte-identical-prompt test)."""
-    signal_block = prior_analysis_block(signal_summary)
-    headline_lines = _render_evidence_lines(headlines)
+    inject."""
+    signal_block = prior_analysis_block(" ".join((signal_summary or "").split()))
+    headline_lines = _render_evidence_lines([_one_line_fields(item) for item in headlines])
     headlines_block = (
         "\n--- BEGIN UNTRUSTED NEWS DATA ---\n"
         + "\n\n".join(headline_lines)

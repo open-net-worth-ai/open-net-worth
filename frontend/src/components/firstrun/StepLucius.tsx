@@ -20,7 +20,11 @@ import type { SelectOption } from '../ui'
 import { ChevronDown } from '../../ui/icons'
 import { useCliDetectionPoll } from '../../hooks/useCliDetectionPoll'
 import { useDataVersion } from '../../hooks/useDataVersion'
-import { CliSubscriptionHelp, type CliHostPlatform } from '../shared/CliSubscriptionHelp'
+import {
+  CliSubscriptionHelp,
+  type CliHostPlatform,
+  type CliSignInState,
+} from '../shared/CliSubscriptionHelp'
 import { NO_LOCAL_MODELS_NOTE, isLocalOnlyProvider } from '../shared/privateCloudCopy'
 
 interface CatalogEntry {
@@ -126,6 +130,8 @@ export function StepLucius({
   const restoredSaved = useRef(false)
   const [cliDefaults, setCliDefaults] = useState<Record<string, string>>({})
   const [hostPlatform, setHostPlatform] = useState<CliHostPlatform>()
+  const [signIn, setSignIn] = useState<Record<string, CliSignInState>>({})
+  const [inContainer, setInContainer] = useState(false)
   // Two stages on ONE page: choose a provider, then configure it. `picked` is the gate —
   // null means "still choosing". Kept inline rather than split into a screen because the
   // decision and its consequences belong together, and going back must cost one click.
@@ -223,6 +229,8 @@ export function StepLucius({
         setPaths(data?.detected_cli_paths || {})
         setCliDefaults(data?.cli_default_models || {})
         setHostPlatform(data?.cli_host_platform)
+        setSignIn(data?.cli_sign_in || {})
+        setInContainer(Boolean(data?.cli_in_container))
       } catch {
         // Detection is an enhancement. Its failure must never block first run — the keyed
         // path below still works.
@@ -243,6 +251,8 @@ export function StepLucius({
     setDetected(data?.detected_clis || {})
     setPaths(data?.detected_cli_paths || {})
     setHostPlatform(data?.cli_host_platform)
+    setSignIn(data?.cli_sign_in || {})
+    setInContainer(Boolean(data?.cli_in_container))
   }, pollingEnabled)
   const dataVersion = useDataVersion('*')
   useEffect(() => {
@@ -504,9 +514,11 @@ export function StepLucius({
                 <div key={d.key} className="firstrun-found">
                   <div className="firstrun-found__eyebrow">
                     <span>
-                      {detected[d.key]
-                        ? `Found ${d.label} on this machine`
-                        : 'Connect a subscription'}
+                      {!detected[d.key]
+                        ? 'Connect a subscription'
+                        : inContainer
+                          ? `${d.label} comes with this Docker install`
+                          : `Found ${d.label} on this machine`}
                     </span>
                   </div>
                   <div className="firstrun-found__body">
@@ -536,6 +548,8 @@ export function StepLucius({
                       provider={d.key}
                       platform={hostPlatform}
                       detected={Boolean(detected[d.key])}
+                      signIn={signIn[d.key]}
+                      inContainer={inContainer}
                       onCheck={checkClis}
                     />
                   )}

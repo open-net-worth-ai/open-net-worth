@@ -261,3 +261,8 @@ category both **labels a transaction and holds the budget**; here a **category**
   envelope has not moved since (`pair.home_for`), else to the group paired with the envelope's.
   The import never makes a book group from a parking group (`ynab_pairs.PARKING`). Pairs and
   remembered decisions of every plan survive a reset.
+
+## Amendment 2026-11-05: the engine serves a second app
+
+Actual Budget runs on this same engine through a `BudgetApp` description; YNAB's behaviour is
+unchanged. ADR `2026-11-05-actual-budget-is-a-second-app-behind-the-ynab-engine`.

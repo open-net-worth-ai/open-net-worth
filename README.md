@@ -15,6 +15,12 @@
 </p>
 
 <p align="center">
+  <a href="https://demo.opennetworth.ai"><img src="https://img.shields.io/badge/Try_the_live_demo-c9a15b?style=for-the-badge" alt="Try the live demo" height="36"></a>
+</p>
+
+<p align="center"><sub>If this is useful, a star helps others find it.</sub></p>
+
+<p align="center">
   <a href="https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest"><img src="https://img.shields.io/github/v/release/open-net-worth-ai/open-net-worth-releases?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
   <a href="https://docs.opennetworth.ai"><img src="https://img.shields.io/badge/docs-docs.opennetworth.ai-informational" alt="Documentation"></a>
@@ -52,6 +58,21 @@ Nothing leaves your machine except the calls you explicitly configure (an AI pro
 feed, an optional connector), and there is no telemetry.
 The one exception is a problem report you choose to send: you read it first, and it goes only when
 you press Send.
+
+## Compared with Claude and ChatGPT Personal Finance
+
+|  | Claude Personal Finance | ChatGPT Personal Finance | Open Net Worth |
+|---|---|---|---|
+| **Can it act?** | No, it reads your accounts | No, it can't change your accounts | Yes: books transactions, runs your budget, places trades through your broker (approval by default) |
+| **Comes to you first** | No, it waits for you to ask | No, it waits for you to ask | Daily briefings, weekly and monthly reports, Telegram pings when news hits what you hold |
+| **Investment advice** | Not meant to give it | Planning questions | Judges a ticker against your own investment thesis |
+| **Where it works** | US only, through Plaid (up to 16 accounts) | US only, through Plaid | Any country and currency, from your bank emails and statements |
+| **Where your data lives** | Anthropic's cloud | OpenAI's cloud | Your own machine |
+| **Your AI** | Claude only | ChatGPT only | Your Claude Code or Codex subscription, an API key, or a local model |
+| **What it covers** | Spending, bills, balances | Spending, cash flow, investments, loans | Everything you own, including property, cars and RSUs |
+| **Who can get it** | Paid US plans, in beta | US ChatGPT Pro, in preview | Anyone: free and open source (AGPL-3.0) |
+
+<sub>Based on each launch's announcement and coverage as of November 2026.</sub>
 
 ## What's inside
 
@@ -117,37 +138,90 @@ folders and keyboard shortcuts.
 
 ### Option B — a server
 
+**1. Install it.** You don't need Python or Node.js on your system. This is for macOS and Linux;
+on Windows, follow [these steps](docs/product/getting-started/installation.md#windows) instead.
+
 ```bash
 curl -fsSL https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/install-server.sh | sh
+```
+
+If it says `onw` was added to your `PATH`, run the `source` line it shows (for zsh,
+`source ~/.zshenv`) or open a new terminal. It finishes by listing the commands you're likely to
+need next.
+
+**2. Start it.** Your browser opens the app, and first run takes it from there.
+
+```bash
 onw start --open
 ```
 
-Installs [uv](https://docs.astral.sh/uv/) if needed, then `open-net-worth` on its own Python 3.12
-(no system Python or Node.js). It provides the `onw` command (`onw start --open`,
-`onw start --autostart --auto-upgrade`, `onw upgrade`, `onw reset-password`, `onw mcp`, `onw version`). The desktop app can connect to a server
-like this instead of using a local book. Working on the code instead? `make setup start` from a
-checkout (Python 3.12+ and Node.js 22+).
+**3. Optional: keep it running and up to date.** Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the
+copy from step 2, then run the command below. It starts the app at login, restarts it after a
+crash and installs each new signed release. Leave out `--auto-upgrade` to update by hand. See
+[Keeping it running](#keeping-it-running).
 
-No `.env` file is needed. Everything lives in one working folder, `~/.open-net-worth/`, holding
-`data/`, `cache/`, `logs/` and `backups/`. First run lets you put it elsewhere and remembers the
-choice.
+```bash
+onw start --autostart --auto-upgrade
+```
+
+Other commands you may need ([full list](docs/product/getting-started/installation.md#the-onw-command)):
+
+| Command | What it does |
+|---|---|
+| `onw start --background` | Run it without keeping this terminal, until `onw stop` or a reboot |
+| `onw stop` | Stop it |
+| `onw restart` | Restart it, the way it was running |
+| `onw status` | Show whether it's running, its URL, version and folder |
+| `onw logs` | Show the end of its log. `-f` keeps following it |
+| `onw upgrade` | Update to the newest release |
+| `onw reset-password` | Set a new password if you've forgotten it |
+| `onw version` | Print the installed version |
+
+Good to know:
+
+- **Your data** lives in one working folder, `~/.open-net-worth/`, holding `data/`, `cache/`,
+  `logs/` and `backups/`. First run lets you put it elsewhere and remembers the choice. No `.env`
+  file is needed.
+- **The desktop app** can connect to a server like this instead of using a local book.
+- **Other AI apps** like Claude Desktop, Cursor or ChatGPT can use your book while the server is
+  running. See [Use your book from other AI apps](docs/product/operations/connect-ai-apps.md).
+- **Working on the code?** Run `make setup start` from a checkout (Python 3.12+ and Node.js 22+).
 
 ### Option C — Docker
 
+**1. Download the Compose file** into an empty folder.
+
 ```bash
 curl -fsSLO https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/docker-compose.yml
+```
+
+**2. Pick a password and start it.** Use at least 8 characters. Compose won't start without a
+password.
+
+```bash
 AUTH_PASSWORD='pick a password' docker compose up -d
 ```
 
-Pulls the public image `ghcr.io/open-net-worth-ai/open-net-worth`, pinned by that compose file to
-the release it came with (`ONW_VERSION=x.y.z` runs another). From a checkout, add
-`-f compose.build.yml --build` to build it locally instead. Then open http://localhost:8080 and log in with
-that password. The password is not optional under Docker: your browser reaches the container from
-Docker's bridge, not from localhost, so the "same machine, no login" shortcut never applies, and
-without a password nothing can operate the instance — details in the
-[first-run guide](docs/product/getting-started/first-run.md#docker). Compose refuses to start
-without it. Migrations run at boot; data lives in a named volume that survives
-`docker compose down`.
+In Windows PowerShell, use `curl.exe` in step 1, and run this in step 2:
+
+```powershell
+$env:AUTH_PASSWORD='pick a password'; docker compose up -d
+```
+
+**3. Open <http://localhost:8080>** and log in with that password.
+
+Good to know:
+
+- **Why the password is required:** your browser reaches the container from Docker's bridge, not
+  from localhost, so the "same machine, no login" shortcut never applies. Without a password,
+  nothing could operate the instance. Details are in the
+  [first-run guide](docs/product/getting-started/first-run.md#docker).
+- **Your data** lives in a named volume that survives `docker compose down`. Migrations run at
+  boot.
+- **The version** is the public image `ghcr.io/open-net-worth-ai/open-net-worth`, pinned by that
+  Compose file to the release it came with. `ONW_VERSION=x.y.z` runs another.
+- **Working on the code?** From a checkout, add `-f compose.build.yml --build` to build the image
+  locally.
 
 ## Coming from YNAB or Lunch Money?
 
@@ -174,11 +248,11 @@ front of it, and none is required.
   onw start --autostart
   ```
 
-  (`onw autostart install` is the same thing. From a source checkout, `make autostart` runs setup
+  (`onw autostart on` is the same thing, and `onw autostart off` turns it off again. From a source checkout, `make autostart` runs setup
   first, then the same thing.) This installs a per-user **launchd** LaunchAgent on macOS, a
   per-user **systemd** unit (plus `loginctl enable-linger`, so it starts even before you log in) on
   Linux, or a per-user **Task Scheduler** task on Windows — no sudo or admin needed on any of them.
-  `onw autostart status` shows whether it's running; `onw autostart stop` stops it and removes the
+  `onw autostart` on its own shows whether it's on; `onw autostart off` stops it and removes the
   service. Logs land in `~/.open-net-worth/logs/app.log`.
 
   <details>
@@ -231,9 +305,10 @@ front of it, and none is required.
 
 - **Updating.** The desktop app updates itself (see the
   [desktop guide](docs/product/operations/desktop.md#updates)); re-running its installer also
-  works. A server installed with uv: `onw upgrade` by hand, or start it with
-  `onw start --autostart --auto-upgrade` to install each new signed release and restart itself
-  once it's idle — off unless you ask for it ([Upgrading](docs/product/operations/upgrading.md)).
+  works. A server installed with uv: `onw upgrade` by hand, which a running server installs and
+  restarts into once it's idle, or start it with `onw start --autostart --auto-upgrade` to do that
+  for each new signed release — off unless you ask for it
+  ([Upgrading](docs/product/operations/upgrading.md)).
   For Docker, download the new release's `docker-compose.yml` (it pins the image version) or set
   `ONW_VERSION=x.y.z`, then `docker compose up -d` (a checkout: `git pull && make setup`). Your data is outside all of them, and migrations run at the next start.
 

@@ -58,6 +58,11 @@ _RESIDUE_TAG_RE = re.compile(
 # this module already strips. Unlike that fence this one carries NO nonce: it makes no
 # security claim, so there is nothing to forge — a reader that trusts it is only deciding
 # whether to draw a bubble, never whether to obey an instruction.
+# How the notes on a voice call's messages open (``connectors/voice/desk.py``), so readers under
+# ``ai`` can tell such a message without importing the call.
+VOICE_CALL_NOTE_OPENINGS = ("This message was spoken on a live voice call", "Said on a voice call")
+
+
 def harness_note(text: str) -> str:
     """Wrap harness-authored text so every reader can tell it apart from the owner's."""
     return f"{HARNESS_NOTE_OPEN}{text}{HARNESS_NOTE_CLOSE}"

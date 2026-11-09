@@ -15,6 +15,10 @@ import { dismissProblem, startCall, useVoiceCall } from './voiceCall'
 
 interface VoiceReadiness {
   ready: boolean
+  language?: string
+  stt_model?: string
+  tts_model?: string
+  tts_voice?: string
   worker: { flag_on: boolean; libraries_installed: boolean; running: boolean; error: string }
 }
 

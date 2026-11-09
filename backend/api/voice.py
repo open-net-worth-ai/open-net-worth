@@ -16,12 +16,14 @@ from pydantic import BaseModel
 
 from backend.ai import assistant, turns
 from backend.api import demo_visitor
+from backend.connectors.voice import isolation
 from backend.connectors.voice import service as voice_service
 from backend.connectors.voice.tokens import TTL_S, mint_call_token, new_room_name
 from backend.connectors.voice.tts_models import speaks
 from backend.db.voice_config_store import (
-    ENGLISH_ONLY_STT,
     LANGUAGES,
+    NOISE_FILTERS,
+    STT_HEARS_ONLY,
     VoiceConfigStore,
     is_ready,
     public,
@@ -59,8 +61,8 @@ class VoiceConfigPatch(BaseModel):
     stt_model: Optional[str] = None
     tts_model: Optional[str] = None
     tts_voice: Optional[str] = None
-    lucius_model: Optional[str] = None
     language: Optional[str] = None
+    noise_filter: Optional[str] = None
 
 
 class StartCallRequest(BaseModel):
@@ -76,7 +78,13 @@ def _automation_owned(session_id: str) -> bool:
 
 
 def _view(config: dict) -> dict:
-    return {**public(config), "ready": is_ready(config), "worker": voice_service.status()}
+    return {
+        **public(config),
+        "ready": is_ready(config),
+        "worker": voice_service.status(),
+        # New calls are on Standard for now, as LiveKit refused voice isolation; blank otherwise.
+        "isolation_standard_until": isolation.standard_until(),
+    }
 
 
 def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
@@ -86,12 +94,11 @@ def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
     stt = body.stt_model if body.stt_model is not None else saved.get("stt_model") or ""
     if language not in LANGUAGES:
         raise HTTPException(status_code=422, detail="That language isn't available for calls.")
-    if language != "en" and stt in ENGLISH_ONLY_STT:
+    if stt in STT_HEARS_ONLY and language not in STT_HEARS_ONLY[stt]:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"That speech-to-text model hears English only. Pick Automatic for "
-                f"{LANGUAGES[language]}."
+                f"That speech-to-text model doesn't hear {LANGUAGES[language]}. Pick Automatic."
             ),
         )
     tts = body.tts_model if body.tts_model is not None else saved.get("tts_model") or ""
@@ -111,7 +118,7 @@ def get_voice_config():
 
 @router.put("/api/voice/config")
 async def update_voice_config(body: VoiceConfigPatch):
-    """Save settings, then restart the worker so they apply (it reads them once, at start)."""
+    """Save settings. A call reads them when it starts; only a new connection restarts the worker."""
     _require_flag()
     url = (body.livekit_url or "").strip()
     if url and not _acceptable_url(url):
@@ -119,10 +126,16 @@ async def update_voice_config(body: VoiceConfigPatch):
             status_code=422,
             detail="The LiveKit URL starts with wss:// (ws:// only for a server on this machine).",
         )
+    if body.noise_filter is not None and body.noise_filter not in NOISE_FILTERS:
+        raise HTTPException(status_code=422, detail="That noise cancelling option isn't available.")
     store = VoiceConfigStore()
     _check_language(store.get(), body)
+    before = store.get()
     config = store.update(body.model_dump(exclude_none=True))
-    await voice_service.reload()
+    if config.get("noise_filter") != before.get("noise_filter"):
+        isolation.forget()
+    if voice_service.needs_restart(before, config):
+        await voice_service.reload()
     return _view(config)
 
 
@@ -178,12 +191,16 @@ def start_call(body: StartCallRequest, request: Request):
 
 
 @router.get("/api/voice/call/health")
-def call_health(room: str):
+def call_health(room: str, mic: Optional[str] = None):
     """Whether this call's line is broken on the app's side, which the call screen takes no
     answer at all to mean as well, and whether Lucius is working on something: away from the chat
     a phone has no other way to know. Asked every few seconds."""
     _require_flag()
     session_id = voice_service.call_session(room)
+    # Not on the public demo, whose visitors would fill the log. No check for the room: a call the
+    # worker has claimed isn't in call_session any more, which is every call that's on.
+    if mic and not demo_calls.enabled():
+        voice_service.note_mic(mic)
     return {
         "trouble": voice_service.call_connection_trouble(room),
         "working": bool(session_id and turns.executing_turn_id(session_id)),

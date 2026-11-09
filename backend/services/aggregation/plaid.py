@@ -55,9 +55,9 @@ SOURCE_ID = "plaid"
 EXTERNAL_SOURCE = "plaid"
 
 _HTTP_TIMEOUT = 30.0
-# Plaid product + the country/language for the link token (US-first; the user re-classifies).
+# Plaid product + the country/language for the link token (US and Canada; the user re-classifies).
 _LINK_PRODUCTS = ["transactions"]
-_LINK_COUNTRY_CODES = ["US"]
+_LINK_COUNTRY_CODES = ["US", "CA"]
 _LINK_LANGUAGE = "en"
 _CLIENT_NAME = "Open Net Worth"
 # /transactions/get page size + a guard against a pathological never-terminating page loop.

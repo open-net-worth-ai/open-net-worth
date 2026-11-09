@@ -347,7 +347,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                       a.id,
                       a.label,
                       `${a.label} ${c.name} ${a.note ?? ''}`,
-                      `${c.name} • ${a.due_date}`,
+                      `${c.name} • ${fmtDate(a.due_date)}`,
                     ),
                     'data-ctx': '',
                     'data-ctx-type': 'commitment_action',

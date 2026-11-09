@@ -403,24 +403,24 @@ describe('matchOptionLine (picker option line)', () => {
 
   it('renders date • note • amount with the drift suffix vs the statement figure', () => {
     expect(matchOptionLine(cand, -18.8, 'SGD')).toBe(
-      '06-19 • Anthropic Claude API • -S$18.20 (3.3% off)',
+      '06/19 • Anthropic Claude API • -S$18.20 (3.3% off)',
     )
   })
 
   it('an in-tolerance figure reads "same amount"', () => {
     expect(matchOptionLine({ ...cand, amount: -18.8 }, -18.8, 'SGD')).toBe(
-      '06-19 • Anthropic Claude API • -S$18.80 (same amount)',
+      '06/19 • Anthropic Claude API • -S$18.80 (same amount)',
     )
   })
 
   it('carries the option\u2019s own pre-conversion charge — often the only thing telling two near-identical figures apart', () => {
     expect(
       matchOptionLine({ ...cand, original_amount: 10.9, original_currency: 'USD' }, -18.8, 'SGD'),
-    ).toBe('06-19 • Anthropic Claude API • -S$18.20 ($10.90) (3.3% off)')
+    ).toBe('06/19 • Anthropic Claude API • -S$18.20 ($10.90) (3.3% off)')
   })
 
   it('degrades field-by-field — never "undefined", no suffix without a usable amount', () => {
     expect(matchOptionLine({ note: '' }, -18.8, 'SGD')).toBe('—')
-    expect(matchOptionLine({ date: '2026-06-19', note: 'x' }, -18.8, 'SGD')).toBe('06-19 • x')
+    expect(matchOptionLine({ date: '2026-06-19', note: 'x' }, -18.8, 'SGD')).toBe('06/19 • x')
   })
 })

@@ -21,13 +21,19 @@ than a Lucius prompt, so no AI is involved and it costs nothing to run. Every ru
 saved, so you can come back to its report whenever you like, from any device.
 
 > **Experimental, on by default.** It has a switch in [Settings → Developer → Experimental](settings.md#experimental-features)
-> (**Ynab import and sync**). Turning it off stops the sync and hides the **Data sync** tab, but
-> keeps its settings, review list and history, so turning it back on carries on where it left
-> off. The YNAB connector itself works
-> the same either way.
+> (**Ynab import and sync**). Turning it off stops the sync and takes YNAB out of the **Data sync**
+> tab, but keeps its settings, review list and history, so turning it back on carries on where it
+> left off. The tab goes too unless Actual is there. The YNAB connector itself works the same
+> either way.
 
 This is separate from [importing a statement](importing.md), which reads one bank or card file, and
 from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transactions on a schedule.
+
+Coming from Actual Budget instead? Once it's turned on in **Settings → Developer → Experimental**, it
+has its own card under **Data sync**, and works the same way,
+with a few differences its page lists: see [Import from Actual Budget](actual-budget-import.md). A
+book syncs with one of the two at a time, and an import from one is refused while the other's sync is
+on.
 
 ## Set it up
 
@@ -218,3 +224,11 @@ A run that failed shows why at the top, with everything it captured before it st
 
 Run history belongs to the book it describes: **Reset** clears it, and it is not part of an export.
 It never contains your YNAB token.
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Leave YNAB With Your Plan: Categories, Assigned and Sync](https://opennetworth.ai/blog/migrate-from-ynab/): moving a whole YNAB plan, step by step
+- [Actual Budget Alternative: Open Net Worth vs Actual Budget](https://opennetworth.ai/blog/open-net-worth-vs-actual-budget/): what carries over from Actual Budget and what doesn't
+- [Open Source YNAB Alternative: Zero-Based Budget, AI Agent](https://opennetworth.ai/blog/open-net-worth-vs-ynab/): how the YNAB-style budget compares

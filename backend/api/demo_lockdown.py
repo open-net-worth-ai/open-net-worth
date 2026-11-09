@@ -121,6 +121,8 @@ _LOCKED: tuple[_Rule, ...] = (
     ),
     *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
+    # Actual reads a saved server on a GET too: a budget list signs in and answers with names.
+    *_rules(_ANY, r"^/api/actual-budget(/.*)?$"),
     # the host and other visitors
     *_rules(
         _ANY,

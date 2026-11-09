@@ -25,6 +25,7 @@ import { ModelEffortCluster } from './ModelEffortRow'
 import { ConversationApprovalPicker } from '../ConversationApprovalPicker'
 import { useCallInSendSlot, VoiceCallButton } from './VoiceCallButton'
 import { VoiceCallNotice } from './VoiceCallNotice'
+import { LastAnswerReveal, VoiceCallHeardMessage, VoiceCallSpokenMessage } from './VoiceCallLive'
 import { VoiceCallSlot } from './VoiceCallSlot'
 import { VoiceCallPill } from './VoiceCallPill'
 import type { LuciusComposerHandle, ComposerParsed } from './Composer'
@@ -441,31 +442,45 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
             as the side panel (not a stripped-down raw-text view). */}
         {lastExchange.length > 0 && (
           <div className="lx-dock-answer" ref={answerRef}>
-            {lastExchange.map((m) => (
-              <MessageBubble
+            {lastExchange.map((m, i) => (
+              <LastAnswerReveal
                 key={m.id}
                 message={m}
-                onSendMessage={(text) =>
-                  sendMessage(
-                    text,
-                    [],
-                    effort,
-                    false,
-                    conversationModel,
-                    [],
-                    undefined,
-                    undefined,
-                    screenEnabled
-                      ? captureAndSerialize('lucius-dock', visibleIds, pinnedHandleIds)
-                      : undefined,
-                  )
-                }
-                onResolvePendingToolUse={resolvePendingToolUse}
-                onRespondToChange={respondToChange}
-                onPreviewCheckpoint={previewCheckpoint}
-                onRestoreCheckpoint={restoreCheckpoint}
-              />
+                messages={messages}
+                sessionId={activeId}
+                live={i === lastExchange.length - 1}
+              >
+                {(shown) => (
+                  <MessageBubble
+                    message={shown}
+                    onSendMessage={(text) =>
+                      sendMessage(
+                        text,
+                        [],
+                        effort,
+                        false,
+                        conversationModel,
+                        [],
+                        undefined,
+                        undefined,
+                        screenEnabled
+                          ? captureAndSerialize('lucius-dock', visibleIds, pinnedHandleIds)
+                          : undefined,
+                      )
+                    }
+                    onResolvePendingToolUse={resolvePendingToolUse}
+                    onRespondToChange={respondToChange}
+                    onPreviewCheckpoint={previewCheckpoint}
+                    onRestoreCheckpoint={restoreCheckpoint}
+                  />
+                )}
+              </LastAnswerReveal>
             ))}
+            <VoiceCallHeardMessage
+              sessionId={activeId}
+              lastUser={messages.findLast((m) => m.role === 'user')}
+            />
+            <VoiceCallSpokenMessage sessionId={activeId} messages={messages} />
           </div>
         )}
 

@@ -76,6 +76,7 @@ function mockApi(
   detected: Record<string, boolean>,
   paths: Record<string, string> = {},
   liveModels: string[] = [],
+  extra: Record<string, unknown> = {},
 ) {
   authFetch.mockImplementation((url: string) => {
     if (url === '/api/model-config/providers') {
@@ -87,6 +88,7 @@ function mockApi(
             detected_clis: detected,
             detected_cli_paths: paths,
             cli_host_platform: 'macos',
+            ...extra,
           }),
       })
     }
@@ -131,6 +133,22 @@ describe('StepLucius — the detected CLIs', () => {
     expect(screen.getByText(/Found Antigravity CLI on this machine/i)).toBeTruthy()
     expect(screen.getByText('/opt/homebrew/bin/claude')).toBeTruthy()
     expect(screen.getByText('/Users/test/.local/bin/agy')).toBeTruthy()
+  })
+
+  it('does not say "on this machine" for a CLI that ships inside the container', async () => {
+    mockApi({ codex_cli: true }, { codex_cli: '/usr/local/bin/codex' }, [], {
+      cli_in_container: true,
+      cli_sign_in: { codex_cli: 'not_signed_in' },
+    })
+    render(<StepLucius onDone={() => {}} />)
+
+    expect(await screen.findByText(/Codex comes with this Docker install/i, {}, T)).toBeTruthy()
+    expect(screen.queryByText(/Found Codex/i)).toBeNull()
+    expect(screen.getByText('Not signed in')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^Sign in/ }))
+    expect(
+      screen.getByText('docker exec -it open-net-worth codex login --device-auth'),
+    ).toBeTruthy()
   })
 
   it('offers installation for an absent CLI without claiming it was found', async () => {

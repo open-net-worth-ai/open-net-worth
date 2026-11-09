@@ -9,7 +9,11 @@ const { FakeRoom } = vi.hoisted(() => {
     static last: FakeRoom
     handlers = new Map<string, Handler[]>()
     remoteParticipants = new Map<string, { identity: string }>()
-    localParticipant = { identity: 'owner', publishTrack: vi.fn(async () => {}) }
+    localParticipant = {
+      identity: 'owner',
+      trackPublications: new Map([['TR_mine', {}]]),
+      publishTrack: vi.fn(async () => {}),
+    }
     constructor() {
       FakeRoom.last = this
     }
@@ -19,6 +23,10 @@ const { FakeRoom } = vi.hoisted(() => {
     }
     emit(event: string, ...args: unknown[]) {
       for (const h of this.handlers.get(event) ?? []) h(...args)
+    }
+    transcript: ((reader: unknown, from: { identity: string }) => Promise<void>) | null = null
+    registerTextStreamHandler(_topic: string, h: FakeRoom['transcript']) {
+      this.transcript = h
     }
     async connect() {}
     async disconnect() {
@@ -34,6 +42,7 @@ vi.mock('livekit-client', () => ({
     TrackSubscribed: 'trackSubscribed',
     ActiveSpeakersChanged: 'activeSpeakersChanged',
     ConnectionQualityChanged: 'connectionQualityChanged',
+    ParticipantAttributesChanged: 'participantAttributesChanged',
     ParticipantConnected: 'participantConnected',
     ParticipantDisconnected: 'participantDisconnected',
     Reconnecting: 'reconnecting',
@@ -42,7 +51,12 @@ vi.mock('livekit-client', () => ({
   },
   Track: { Kind: { Audio: 'audio' } },
   DisconnectReason: { CLIENT_INITIATED: 1, ROOM_DELETED: 5 },
-  createLocalAudioTrack: vi.fn(async () => ({ stop: vi.fn(), mediaStreamTrack: {} })),
+  createLocalAudioTrack: vi.fn(async () => ({
+    stop: vi.fn(),
+    mute: vi.fn(async () => {}),
+    unmute: vi.fn(async () => {}),
+    mediaStreamTrack: {},
+  })),
 }))
 const serverProblem: { current: { kind: string; message: string } | null } = vi.hoisted(() => ({
   current: null,
@@ -52,7 +66,7 @@ vi.mock('../../../api/client', () => ({
     ok: true,
     json: async () =>
       url === '/api/voice/config'
-        ? { worker: { call_problem: serverProblem.current } }
+        ? { worker: { running: true, call_problem: serverProblem.current } }
         : { url: 'wss://acme.example', token: 't', session_id: 's1' },
   })),
 }))
@@ -64,12 +78,16 @@ import {
   LEFT_GRACE_MS,
   PICKUP_TIMEOUT_MS,
   minimizeCall,
+  readLevels,
   resetVoiceCallForTests,
+  restartCall,
   startCall,
+  toggleMute,
   useVoiceCall,
 } from './voiceCall'
 import { page, saveNeedsReload, takeReloadNotice } from './voicePagePolicy'
 import { renderHook } from '@testing-library/react'
+import { createLocalAudioTrack } from 'livekit-client'
 import { authFetch } from '../../../api/client'
 
 function state() {
@@ -277,6 +295,677 @@ describe('starting a call', () => {
   })
 })
 
+describe('muting before Lucius picks up', () => {
+  const openedMic = () => vi.mocked(createLocalAudioTrack).mock.results.at(-1)!.value
+
+  it('mutes while it rings, and stays muted when he answers', async () => {
+    await startCall('s1')
+    expect(state().phase).toBe('ringing')
+    await toggleMute()
+    expect(state().muted).toBe(true)
+    expect((await openedMic()).mute).toHaveBeenCalledOnce()
+    const room = FakeRoom.last
+    room.remoteParticipants.set('lucius', { identity: 'lucius' })
+    room.emit('participantConnected')
+    room.emit('activeSpeakersChanged', [{ identity: 'lucius' }])
+    expect(state().phase).toBe('live')
+    expect(state().muted).toBe(true)
+  })
+
+  it('holds a press made while the microphone is still opening', async () => {
+    const calling = startCall('s1')
+    expect(state().phase).toBe('connecting')
+    await toggleMute()
+    await calling
+    expect(state().muted).toBe(true)
+    expect((await openedMic()).mute).toHaveBeenCalledOnce()
+  })
+
+  it('unmutes the same way', async () => {
+    await startCall('s1')
+    await toggleMute()
+    await toggleMute()
+    expect(state().muted).toBe(false)
+    expect((await openedMic()).unmute).toHaveBeenCalledOnce()
+  })
+
+  it('does nothing with no call on', async () => {
+    await toggleMute()
+    expect(state().muted).toBe(false)
+  })
+})
+
+describe('how loud you are', () => {
+  const openedMic = () => vi.mocked(createLocalAudioTrack).mock.results.at(-1)!.value
+
+  it("uses LiveKit's level when the page's own reads nothing, as on an iPhone", async () => {
+    const room = await liveCall()
+    expect(readLevels().you).toBe(0)
+    ;(room.localParticipant as unknown as { audioLevel: number }).audioLevel = 0.4
+    expect(readLevels().you).toBe(0.4)
+  })
+
+  it('reads nothing while muted, whatever LiveKit last said', async () => {
+    const room = await liveCall()
+    ;(room.localParticipant as unknown as { audioLevel: number }).audioLevel = 0.4
+    await toggleMute()
+    expect(readLevels().you).toBe(0)
+    await toggleMute()
+    expect(readLevels().you).toBe(0.4)
+  })
+
+  describe('with Lucius on the speaker', () => {
+    // A level for each side, by the track the meter is on: what the analyser would read.
+    let levels: Map<unknown, number>
+
+    beforeEach(() => {
+      levels = new Map()
+      vi.stubGlobal(
+        'AudioContext',
+        class {
+          currentTime = 0
+          destination = {}
+          resume = vi.fn(async () => {})
+          close = vi.fn(async () => {})
+          createAnalyser = () => ({
+            fftSize: 512,
+            source: null as unknown,
+            getFloatTimeDomainData(this: { source: unknown }, out: Float32Array) {
+              out.fill(levels.get(this.source) ?? 0)
+            },
+          })
+          createMediaStreamSource = (stream: { track: unknown }) => ({
+            connect: (analyser: { source: unknown }) => {
+              analyser.source = stream.track
+            },
+          })
+          createGain = () => ({
+            connect: vi.fn(),
+            gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          })
+          createOscillator = () => ({
+            frequency: { value: 0 },
+            connect: vi.fn(),
+            start: vi.fn(),
+            stop: vi.fn(),
+          })
+        },
+      )
+      vi.stubGlobal(
+        'MediaStream',
+        class {
+          track: unknown
+          constructor(tracks: unknown[]) {
+            this.track = tracks[0]
+          }
+        },
+      )
+    })
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    async function onSpeaker() {
+      await startCall('s1')
+      const mine = (await openedMic()).mediaStreamTrack
+      const his = {}
+      FakeRoom.last.emit('trackSubscribed', {
+        kind: 'audio',
+        mediaStreamTrack: his,
+        attach: () => document.createElement('audio'),
+      })
+      return { mine, his }
+    }
+
+    it('does not take his voice in the mic for you talking', async () => {
+      const { mine, his } = await onSpeaker()
+      levels.set(mine, 0.2) // the mic hears the speaker
+      levels.set(his, 0.2)
+      const heard = readLevels()
+      expect(heard.lucius).toBeGreaterThan(0)
+      expect(heard.you).toBe(0)
+    })
+
+    it('shows you when you cut in, louder than he is', async () => {
+      const { mine, his } = await onSpeaker()
+      levels.set(his, 0.1)
+      levels.set(mine, 0.3)
+      const heard = readLevels()
+      expect(heard.you).toBeGreaterThan(0) // the mic's light still shows you
+      expect(heard.luciusTalking).toBe(true) // and the wash knows the light is his
+    })
+
+    it('stays quiet through the gaps between his words, then shows you', async () => {
+      const { mine, his } = await onSpeaker()
+      levels.set(mine, 0.2)
+      levels.set(his, 0.2)
+      readLevels()
+      levels.set(his, 0)
+      levels.set(mine, 0) // the room's echo fades with him
+      expect(readLevels().you).toBe(0)
+      vi.advanceTimersByTime(600)
+      levels.set(mine, 0.2)
+      expect(readLevels().you).toBeGreaterThan(0)
+    })
+
+    it('shows you straight away while he is silent', async () => {
+      const { mine } = await onSpeaker()
+      levels.set(mine, 0.2)
+      expect(readLevels().you).toBeGreaterThan(0)
+    })
+  })
+
+  describe('after unmuting onto a new track', () => {
+    let listeningTo: unknown[] = []
+
+    beforeEach(() => {
+      listeningTo = []
+      vi.stubGlobal(
+        'AudioContext',
+        class {
+          currentTime = 0
+          destination = {}
+          resume = vi.fn(async () => {})
+          close = vi.fn(async () => {})
+          createAnalyser = () => ({ fftSize: 0, getFloatTimeDomainData: vi.fn() })
+          createMediaStreamSource = (stream: { track: unknown }) => {
+            listeningTo.push(stream.track)
+            return { connect: vi.fn() }
+          }
+          createGain = () => ({
+            connect: vi.fn(),
+            gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          })
+          createOscillator = () => ({
+            frequency: { value: 0 },
+            connect: vi.fn(),
+            start: vi.fn(),
+            stop: vi.fn(),
+          })
+        },
+      )
+      vi.stubGlobal(
+        'MediaStream',
+        class {
+          track: unknown
+          constructor(tracks: unknown[]) {
+            this.track = tracks[0]
+          }
+        },
+      )
+    })
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('listens to the new track, not the dead one', async () => {
+      await startCall('s1')
+      const track = await openedMic()
+      const fresh = { id: 'reacquired' }
+      track.unmute.mockImplementation(async () => {
+        track.mediaStreamTrack = fresh
+      })
+      await toggleMute()
+      await toggleMute()
+      expect(listeningTo.at(-1)).toBe(fresh)
+    })
+
+    it('leaves it alone when the track stayed the same', async () => {
+      await startCall('s1')
+      const before = listeningTo.length
+      await toggleMute()
+      await toggleMute()
+      expect(listeningTo).toHaveLength(before)
+    })
+  })
+})
+
+describe('restarting a call', () => {
+  it('hangs up, runs the change, and calls back into the same conversation', async () => {
+    const first = await liveCall()
+    const seen: string[] = []
+    await restartCall(async () => {
+      seen.push(state().phase)
+      expect(FakeRoom.last).toBe(first) // no new call until the change is done
+    })
+    expect(seen).toEqual(['connecting'])
+    expect(FakeRoom.last).not.toBe(first)
+    expect(state().phase).toBe('ringing')
+    expect(state().sessionId).toBe('s1')
+    expect(state().problem).toBeNull()
+  })
+
+  it('restarts a call still opening the microphone, and drops that first attempt', async () => {
+    let openMic = (_mic: unknown) => {}
+    vi.mocked(createLocalAudioTrack).mockImplementationOnce(
+      () => new Promise((done) => (openMic = done)) as never,
+    )
+    const starting = startCall('s1')
+    await restartCall(async () => {})
+    expect(state().phase).toBe('ringing')
+    const restarted = FakeRoom.last
+    const stale = { stop: vi.fn() }
+    openMic(stale)
+    await starting
+    expect(stale.stop).toHaveBeenCalledOnce()
+    expect(FakeRoom.last).toBe(restarted)
+    expect(state().phase).toBe('ringing')
+  })
+
+  it('keeps the full screen it was on', async () => {
+    await startCall('s1', 'stage')
+    await restartCall(async () => {})
+    expect(state().view).toBe('stage')
+  })
+
+  it('only runs the change with no call on', async () => {
+    const change = vi.fn(async () => {})
+    await restartCall(change)
+    expect(change).toHaveBeenCalledOnce()
+    expect(state().phase).toBe('idle')
+  })
+
+  it('says so and stays hung up when the change is refused', async () => {
+    const first = await liveCall()
+    await restartCall(async () => {
+      throw new Error('That voice cannot speak Hindi.')
+    })
+    expect(FakeRoom.last).toBe(first)
+    expect(state().phase).toBe('idle')
+    expect(state().problem?.message).toBe('That voice cannot speak Hindi.')
+  })
+
+  it('does not call back if you ended the call meanwhile', async () => {
+    const first = await liveCall()
+    await restartCall(async () => {
+      await hangUp()
+    })
+    expect(FakeRoom.last).toBe(first)
+    expect(state().phase).toBe('idle')
+  })
+})
+
+describe('your words as you speak them', () => {
+  const words = (text: string, final = false, track = 'TR_mine', after = Promise.resolve()) => ({
+    info: {
+      attributes: { 'lk.transcribed_track_id': track, 'lk.transcription_final': String(final) },
+    },
+    readAll: async () => {
+      await after
+      return text
+    },
+    async *[Symbol.asyncIterator]() {
+      await after
+      for (const piece of text.split(/(?<= )/)) yield piece
+    },
+  })
+  const say = async (reader: unknown, identity = 'lucius-agent') => {
+    await FakeRoom.last.transcript!(reader, { identity })
+  }
+
+  it('shows them as they arrive, each update replacing the last', async () => {
+    await liveCall()
+    await say(words('how much'))
+    expect(state().heard).toBe('how much')
+    await say(words('how much did I spend'))
+    expect(state().heard).toBe('how much did I spend')
+  })
+
+  it("knows them by your mic's track or your name, whoever relays them", async () => {
+    await liveCall()
+    await say(words('by track'))
+    expect(state().heard).toBe('by track')
+    await say(words('by name', false, 'TR_other'), 'owner')
+    expect(state().heard).toBe('by name')
+  })
+
+  it("never shows Lucius's words as yours", async () => {
+    await liveCall()
+    await say(words('your balance is fine', false, 'TR_lucius'))
+    expect(state().heard).toBe('')
+    expect(state().spoken).toBe('your balance is fine')
+    expect(state().spokenDone).toBe(true)
+  })
+
+  it('follows Lucius word by word as the voice says them', async () => {
+    await liveCall()
+    const seen: string[] = []
+    await say({
+      info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+      async *[Symbol.asyncIterator]() {
+        for (const piece of ['your ', 'balance ', 'is fine']) {
+          yield piece
+          seen.push(state().spoken)
+        }
+      },
+    })
+    expect(seen).toEqual(['your', 'your balance', 'your balance is fine'])
+    expect(state().spokenDone).toBe(true)
+    expect(state().spokenLines).toEqual(['your balance is fine'])
+  })
+
+  it('builds up across the segments of one long sentence', async () => {
+    await liveCall()
+    await say(words('so what I want to know', true))
+    await say(words('is how much'))
+    expect(state().heard).toBe('so what I want to know is how much')
+    await say(words('is how much I spent', true))
+    expect(state().heard).toBe('so what I want to know is how much I spent')
+  })
+
+  it('starts a fresh sentence once you have stopped talking', async () => {
+    await liveCall()
+    const realSetTimeout = window.setTimeout
+    const pending: (() => void)[] = []
+    window.setTimeout = ((fn: () => void, ms?: number) => {
+      if (ms === 3000) pending.push(fn)
+      return realSetTimeout(() => {}, 0)
+    }) as typeof window.setTimeout
+    await say(words('how much did I spend', true))
+    window.setTimeout = realSetTimeout
+    pending.forEach((fn) => fn())
+    expect(state().heard).toBe('how much did I spend')
+    expect(state().heardDone).toBe(true)
+    await say(words('and my rent'))
+    expect(state().heard).toBe('and my rent')
+    expect(state().heardDone).toBe(false)
+  })
+
+  it('keeps newer words when an older update finishes reading last', async () => {
+    await liveCall()
+    let finishOld = () => {}
+    const old = say(words('how', false, 'TR_mine', new Promise<void>((done) => (finishOld = done))))
+    await say(words('how much'))
+    finishOld()
+    await old
+    expect(state().heard).toBe('how much')
+  })
+
+  // A line of his held open until `end()`, as the voice speaks it.
+  const hisLine = (text: string) => {
+    let end = () => {}
+    const ended = new Promise<void>((done) => (end = done))
+    const reader = {
+      info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+      async *[Symbol.asyncIterator]() {
+        yield text
+        await ended
+      },
+    }
+    return { reader, end }
+  }
+  const whileHeSpeaks = async (text: string, during: () => Promise<void>) => {
+    const line = hisLine(text)
+    const speaking = say(line.reader)
+    await vi.waitFor(() => expect(state().spoken).toBe(text))
+    await during()
+    line.end()
+    await speaking
+  }
+
+  it('shows your words on the call screen while you talk and until he answers', async () => {
+    await liveCall()
+    await say(words('how much'))
+    expect(state().heardShown).toBe(true)
+    await say(words('how much did I spend', true))
+    expect(state().heardShown).toBe(true)
+    await whileHeSpeaks('One sec', async () => {
+      expect(state().heardShown).toBe(false)
+      expect(state().heard).toBe('how much did I spend') // the chat still needs them
+    })
+    expect(state().heardShown).toBe(false)
+  })
+
+  it('does not bring your words back when they finish late, after he has stopped', async () => {
+    await liveCall()
+    await say(words('how much did I'))
+    await whileHeSpeaks('One sec', async () => {})
+    await say(words('how much did I spend', true))
+    expect(state().heardShown).toBe(false)
+  })
+
+  it('does not bring them back when the same sentence finishes twice', async () => {
+    await liveCall()
+    await say(words('how much did I spend', true))
+    await whileHeSpeaks('One sec', async () => {})
+    await say(words('How much did I spend?', true))
+    expect(state().heardShown).toBe(false)
+    expect(state().heard).toBe('how much did I spend')
+  })
+
+  it('never shows what is heard while he talks, echo or not', async () => {
+    await liveCall()
+    await whileHeSpeaks('Your balance is fine', async () => {
+      await say(words('your balance'))
+      expect(state().heardShown).toBe(false)
+      await say(words('your balance is fine', true))
+      expect(state().heardShown).toBe(false)
+    })
+    expect(state().heardShown).toBe(false)
+  })
+
+  it('shows you once you talk on after he has stopped, as when you cut him off', async () => {
+    await liveCall()
+    await whileHeSpeaks('Your balance is', async () => {
+      await say(words('wait'))
+      expect(state().heardShown).toBe(false)
+    })
+    await say(words('wait a second'))
+    expect(state().heardShown).toBe(true)
+    await say(words('wait a second please', true))
+    expect(state().heardShown).toBe(true)
+  })
+
+  it('does not join what you said before his line to what you say after it', async () => {
+    await liveCall()
+    await say(words('how much did I spend', true))
+    await whileHeSpeaks('One sec', async () => {})
+    await say(words('and my rent'))
+    expect(state().heard).toBe('and my rent')
+    expect(state().heardShown).toBe(true)
+  })
+
+  // Live call, 2026-11-07: a line sometimes sends no words, and your earlier question stayed up.
+  const hisVoice = (state: string) =>
+    FakeRoom.last.emit(
+      'participantAttributesChanged',
+      { 'lk.agent.state': state },
+      { identity: 'lucius-agent', attributes: { 'lk.agent.state': state } },
+    )
+
+  it('takes your words off the call screen when his voice starts, words or no words', async () => {
+    await liveCall()
+    await say(words('how much did I spend', true))
+    expect(state().heardShown).toBe(true)
+    hisVoice('speaking')
+    expect(state().luciusSpeaking).toBe(true)
+    expect(state().heardShown).toBe(false)
+    expect(state().heard).toBe('how much did I spend') // the chat still needs them
+    hisVoice('listening')
+    expect(state().luciusSpeaking).toBe(false)
+    expect(state().heardShown).toBe(false)
+  })
+
+  // The owner's call, 2026-11-08: his greeting's stream never closed, so yours never showed.
+  const lineThatNeverCloses = (text: string) => ({
+    info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+    async *[Symbol.asyncIterator]() {
+      yield text
+      await new Promise(() => {})
+    },
+  })
+
+  it('shows your words once his voice is quiet, even if his line never closes', async () => {
+    await liveCall()
+    void say(lineThatNeverCloses('hi it is Lucius'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(state().spoken).toBe('hi it is Lucius')
+    await say(words('how'))
+    expect(state().heardShown).toBe(false) // his words can trail his voice for a moment
+
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(state().spokenDone).toBe(true)
+    await say(words('how much'))
+    expect(state().heardShown).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(state().spoken).toBe('') // and his line doesn't come back after yours
+  })
+
+  it('leaves his line alone for as long as his voice is talking', async () => {
+    await liveCall()
+    hisVoice('speaking')
+    void say(lineThatNeverCloses('a long answer'))
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(state().spokenDone).toBe(false)
+    await say(words('background talk'))
+    expect(state().heardShown).toBe(false)
+
+    hisVoice('listening')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(state().spokenDone).toBe(true)
+  })
+
+  it('gives a line more time while its words are still arriving after his voice', async () => {
+    await liveCall()
+    let more: () => void = () => {}
+    const pause = new Promise<void>((resolve) => (more = resolve))
+    void say({
+      info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+      async *[Symbol.asyncIterator]() {
+        yield 'first '
+        await pause
+        yield 'second'
+        await new Promise(() => {})
+      },
+    })
+    await vi.advanceTimersByTimeAsync(1500)
+    more()
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(state().spoken).toBe('first second')
+    expect(state().spokenDone).toBe(false)
+  })
+
+  it('hides what is heard while his voice talks with no words of its own', async () => {
+    await liveCall()
+    hisVoice('speaking')
+    await say(words('your balance'))
+    expect(state().heardShown).toBe(false)
+    hisVoice('listening')
+    await say(words('wait a second'))
+    expect(state().heardShown).toBe(true)
+  })
+
+  it('does not take his line off the screen when the voice starts after its words', async () => {
+    await liveCall()
+    await whileHeSpeaks('One sec', async () => {
+      hisVoice('speaking')
+      expect(state().spoken).toBe('One sec')
+    })
+  })
+
+  it('clears an earlier line when the voice starts with no words', async () => {
+    await liveCall()
+    await say(words('One sec', false, 'TR_lucius'))
+    expect(state().spoken).toBe('One sec')
+    hisVoice('speaking')
+    expect(state().spoken).toBe('')
+  })
+
+  it('ignores your own attributes', async () => {
+    await liveCall()
+    FakeRoom.last.emit(
+      'participantAttributesChanged',
+      {},
+      {
+        identity: FakeRoom.last.localParticipant.identity,
+        attributes: { 'lk.agent.state': 'speaking' },
+      },
+    )
+    expect(state().luciusSpeaking).toBe(false)
+  })
+
+  it('takes your finished words off the call screen if nothing answers soon', async () => {
+    const timers = vi.spyOn(window, 'setTimeout')
+    await liveCall()
+    await say(words('how much did I spend', true))
+    const hide = timers.mock.calls.find(([, ms]) => ms === 3500)?.[0] as () => void
+    timers.mockRestore()
+    hide()
+    expect(state().heardShown).toBe(false)
+    expect(state().heard).toBe('how much did I spend')
+  })
+
+  it('keeps the final words for the chat, and clears at once when the call ends', async () => {
+    const timers = vi.spyOn(window, 'setTimeout')
+    await liveCall()
+    await say(words('how much did I spend', true))
+    expect(state().heard).toBe('how much did I spend')
+    expect(state().heardDone).toBe(true)
+    expect(timers.mock.calls.some(([, ms]) => ms === 10000)).toBe(true)
+    timers.mockRestore()
+    await say(words('still talking'))
+    await hangUp()
+    expect(state().heard).toBe('')
+  })
+})
+
+describe('the sound of muting', () => {
+  let played: number[] = []
+
+  beforeEach(() => {
+    played = []
+    class FakeContext {
+      currentTime = 0
+      destination = {}
+      resume = vi.fn(async () => {})
+      close = vi.fn(async () => {})
+      createAnalyser = () => ({ fftSize: 0, getFloatTimeDomainData: vi.fn() })
+      createMediaStreamSource = () => ({ connect: vi.fn() })
+      createGain = () => ({
+        connect: vi.fn(),
+        gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+      })
+      createOscillator() {
+        const osc = { frequency: { value: 0 }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() }
+        osc.start = vi.fn(() => void played.push(osc.frequency.value))
+        return osc
+      }
+    }
+    vi.stubGlobal('AudioContext', FakeContext)
+    vi.stubGlobal('MediaStream', class {})
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  async function afterTheRing() {
+    await startCall('s1')
+    played = []
+  }
+
+  it('falls for muted and rises for live again', async () => {
+    await afterTheRing()
+    await toggleMute()
+    expect(played).toEqual([660, 440])
+    played = []
+    await toggleMute()
+    expect(played).toEqual([440, 660])
+  })
+
+  it('plays from the moment you press Call, before he picks up', async () => {
+    await afterTheRing()
+    expect(state().phase).toBe('ringing')
+    await toggleMute()
+    expect(played).toHaveLength(2)
+  })
+
+  it('stays quiet with no call on', async () => {
+    await toggleMute()
+    expect(played).toEqual([])
+  })
+})
+
 describe('the connection rating', () => {
   const you = { identity: 'owner' }
   const lucius = { identity: 'lucius' }
@@ -342,6 +1031,20 @@ describe("Lucius's side of the call dropping", () => {
   })
   const askAgain = () => vi.advanceTimersByTimeAsync(HEALTH_MS)
 
+  it('reports what the mic is doing with each check, never sound', async () => {
+    health(answers(false))
+    await liveCall()
+    await askAgain()
+    const asked = vi
+      .mocked(authFetch)
+      .mock.calls.map(([url]) => String(url))
+      .find((url) => url.startsWith('/api/voice/call/health'))!
+    const report = new URL(asked, 'http://acme.test').searchParams.get('mic')
+    expect(report).toMatch(
+      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+,streams=\d+,words=\d+,caption=(you|lucius|none),voice=[01],line=[01],quality=\w+$/,
+    )
+  })
+
   afterEach(() => {
     vi.mocked(authFetch).mockReset()
     vi.mocked(authFetch).mockImplementation(async (url) => {
@@ -349,7 +1052,7 @@ describe("Lucius's side of the call dropping", () => {
         ok: true,
         json: async () =>
           url === '/api/voice/config'
-            ? { worker: { call_problem: serverProblem.current } }
+            ? { worker: { running: true, call_problem: serverProblem.current } }
             : { url: 'wss://acme.example', token: 't', session_id: 's1' },
       } as Response
     })

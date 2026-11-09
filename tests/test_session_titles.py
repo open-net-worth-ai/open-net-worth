@@ -231,3 +231,37 @@ def test_live_listing_reports_recent_titles(client, monkeypatch):
     monkeypatch.setattr(session_titles, "_recent", {"s-live": 9e12})
     body = c.get("/api/sessions/live").json()
     assert body["titled"] == {"s-live": 9e12}
+
+
+def test_a_call_is_named_from_its_first_real_request(monkeypatch):
+    """Both of the owner's calls were titled with their greeting (2026-11-07)."""
+    from backend.ai import assistant
+
+    metas = {
+        "s1": {"title_source": "auto"},
+        "s2": {"title_source": "ai"},
+        "s3": {"title_source": "user"},
+    }
+    store = type("Store", (), {"get_meta": lambda _self, sid: metas.get(sid)})()
+    monkeypatch.setattr(assistant, "_store", lambda: store)
+    asked = []
+    monkeypatch.setattr(
+        session_titles, "schedule_title", lambda sid, text: asked.append((sid, text)) or True
+    )
+
+    assert session_titles.title_from_request("s1", "Check my ACME spending") is True
+    assert asked == [("s1", "Check my ACME spending")]
+    assert session_titles.title_from_request("s2", "Another one") is False
+    assert session_titles.title_from_request("s3", "Another one") is False
+    assert len(asked) == 1
+    assert session_titles.title_from_request("new", "A first request") is True
+
+
+def test_an_unreadable_title_never_fails_the_request(monkeypatch):
+    from backend.ai import assistant
+
+    def broken():
+        raise RuntimeError("no store")
+
+    monkeypatch.setattr(assistant, "_store", broken)
+    assert session_titles.title_from_request("s1", "words") is False

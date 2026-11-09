@@ -168,6 +168,14 @@ _NO_JUDGE = (
 )
 
 
+# The same reason refuses a turn whose tool list must be a real ceiling (an unattended turn reading
+# untrusted text): the tool loop never sees what this CLI runs itself.
+_NO_ENFORCED_OFFER = (
+    "This turn's tools must be enforced, and the Antigravity CLI cannot be limited to them. "
+    "Pick another model for it in Settings -> AI."
+)
+
+
 class AntigravityCliProvider(AIProvider):
     """AIProvider implementation backed by the local `agy` CLI binary."""
 
@@ -293,6 +301,10 @@ class AntigravityCliProvider(AIProvider):
         source: str = "complete",
         effort: str = "",
     ) -> AsyncGenerator[dict, None]:
+        from backend.ai.tools._skill_scope import offer_is_enforced
+
+        if offer_is_enforced():
+            raise ConfigurationError(_NO_ENFORCED_OFFER)
         if not model:
             from backend.db.model_config_store import ModelConfigStore
 

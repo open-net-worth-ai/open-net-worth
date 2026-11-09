@@ -47,8 +47,8 @@ Automations and any restore or import have finished, installs it and restarts it
   [Going back to an older version](#going-back-to-an-older-version).
 - **A restart takes a few seconds or more,** and an open browser tab reconnects by itself. A voice
   call in progress isn't noticed as busy: a restart can end it.
-- **To turn it off,** run `onw start --autostart` without the flag. `onw autostart status` shows
-  whether it's on. `onw autostart install` also leaves it off.
+- **To turn it off,** run `onw start --autostart` without the flag. `onw autostart` shows
+  whether it's on. `onw autostart on` also leaves it off.
 - **In a terminal,** `onw start --auto-upgrade` without `--autostart` works too: it restarts
   itself in the same terminal (on Windows, in a new console window).
 - **On Windows,** a separate helper does the install once the app has closed, because Windows
@@ -57,21 +57,35 @@ Automations and any restore or import have finished, installs it and restarts it
 
 To check by hand, `onw upgrade --check` says whether a newer version is out and changes nothing.
 
-**To update by hand:**
+**To update by hand,** run this. You don't need to stop the app first:
 
-1. Stop the app (press <kbd>Ctrl</kbd>+<kbd>C</kbd> where `onw start` is running, or
-   `onw autostart stop` if it runs as a boot service).
-2. Run:
+```bash
+onw upgrade
+```
 
-   ```bash
-   onw upgrade
-   ```
+It gets the newest signed release, with the same checks as auto-upgrade. Use it rather than
+`uv tool upgrade open-net-worth`: after an upgrade `uv` says there's nothing to upgrade, even when
+there is.
 
-   This installs the newest signed release. Re-running the install script works too. Use one of
-   these rather than `uv tool upgrade open-net-worth`: after an upgrade `uv` says there's nothing
-   to upgrade, even when there is.
-3. Start it again: `onw start` (or `onw autostart install`).
-4. Check: `onw version` prints the new version.
+- **If the app is running,** the app does the update itself. It waits until Lucius, your Automations
+  and any restore or import have finished, installs the new version and restarts, in the same
+  terminal if you started it in one (on Windows, in a new console window), or as the boot service.
+  The command shows each step and tells you when the new version is running. If the app is busy for
+  longer than a few minutes the command stops waiting, and the update carries on without it:
+  `onw status` shows how it's going, and why it failed if it did.
+- **If the new version doesn't come back,** the command says so, names the log and exits with an
+  error code. `onw status` also shows where the log is.
+- **If the app isn't running,** it installs the new version, which is used the next time the app
+  starts.
+- **If the running server is older than the install,** say after an update that didn't restart it,
+  run `onw upgrade` again: it restarts that server even when the install is already up to date.
+- **A server on a version from before this feature can't be asked.** The command says so and names
+  its address. Restart that server yourself. On Windows, stop it, run `onw upgrade` again, then
+  start it.
+- **To check,** `onw status` shows the version the server is running, and `onw version` the version
+  that's installed.
+
+Re-running the install script also updates the app, but it doesn't restart a running server.
 
 ### Docker
 

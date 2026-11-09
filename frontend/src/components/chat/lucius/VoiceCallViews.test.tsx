@@ -7,6 +7,14 @@ const authFetch = vi.fn(async () => ({ ok: true, json: async () => ({ ready: tru
 vi.mock('../../../api/client', () => ({ authFetch: () => authFetch() }))
 const navigate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
+vi.mock('../../../state/luciusChat', () => ({
+  useLuciusChat: () => ({
+    conversations: [],
+    activeId: '',
+    conversationModel: '',
+    sendMessage: vi.fn(),
+  }),
+}))
 vi.mock('livekit-client', () => ({
   Room: vi.fn(),
   RoomEvent: {},
@@ -52,6 +60,13 @@ function call(over: Partial<CallState>): CallState {
     quality: null,
     offline: false,
     luciusWorking: false,
+    heard: '',
+    heardDone: false,
+    heardShown: false,
+    spoken: '',
+    spokenDone: false,
+    luciusSpeaking: false,
+    spokenLines: [],
     ...over,
   }
 }

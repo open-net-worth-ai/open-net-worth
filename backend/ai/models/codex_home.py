@@ -48,11 +48,24 @@ def _operator_home() -> Path:
     return Path.home() / ".codex"
 
 
+def _refresh_private_copy(src: Path, dst: Path) -> None:
+    """A copy instead of a link (no symlinks here, or Codex renamed over ours) must still follow
+    a new sign-in. Newer wins, so the tokens Codex rotated into the copy are never overwritten."""
+    try:
+        if src.stat().st_mtime > dst.stat().st_mtime:
+            dst.write_bytes(src.read_bytes())
+    except OSError:
+        log.debug("codex_home: could not refresh auth.json from %s", src, exc_info=True)
+
+
 def _seed_auth(home: Path) -> None:
     """Link the operator's ``auth.json`` in, so ``codex login`` still authenticates us."""
     src = _operator_home() / "auth.json"
     dst = home / "auth.json"
-    if dst.exists() or dst.is_symlink():
+    if dst.is_symlink():
+        return
+    if dst.exists():
+        _refresh_private_copy(src, dst)
         return
     if not src.exists():
         # Not an error: the user may be running on a stored API key instead of a login.
@@ -151,6 +164,12 @@ def native_workspace() -> str:
     workspace = _HOME_DIR / _NATIVE_WORKSPACE_NAME
     workspace.mkdir(parents=True, exist_ok=True)
     return str(workspace)
+
+
+def has_login(native_tools: bool = False) -> bool:
+    """True when the home turns run in holds a login — seeding it first, so a ``codex login``
+    made since the last spawn counts. A link to a file that is gone is no login."""
+    return (Path(isolated_home(native_tools)) / "auth.json").exists()
 
 
 def isolated_home(native_tools: bool = False) -> str:

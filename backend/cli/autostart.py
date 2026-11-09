@@ -6,7 +6,7 @@ runs THIS interpreter (`<python> -m backend.cli start`), so it is identical for 
 install and for a checkout's .venv, and it carries this shell's PATH — launchd/systemd hand a
 fresh process a minimal one, and the claude/codex CLI providers would not resolve otherwise.
 
-`stop` deletes the unit file, not just unloads it: a LaunchAgent that is merely booted out is
+`off` deletes the unit file, not just unloads it: a LaunchAgent that is merely booted out is
 loaded again at the next login, which is not "stopped".
 
 Windows: a per-user Task Scheduler task with restart-on-failure (``autostart_windows``).
@@ -29,7 +29,7 @@ from backend.cli import autostart_windows
 LABEL = "ai.opennetworth.app"
 UNIT_NAME = "open-net-worth.service"
 # Carried into the service verbatim when set in the installing shell — PATH for the CLI
-# providers, the rest so `PORT=9000 onw autostart install` sticks across reboots. The last ones
+# providers, the rest so `PORT=9000 onw autostart on` sticks across reboots. The last ones
 # decide where uv keeps this install: without them the service looks elsewhere and can't upgrade.
 PASSTHROUGH_ENV = (
     "PATH",
@@ -174,7 +174,7 @@ def _install_launchd(spec: ServiceSpec, home: Path, runner: Runner) -> int:
     if result.returncode != 0:
         print(f"launchctl bootstrap failed: {result.stderr.strip()}", file=sys.stderr)
         return result.returncode
-    print("==> Installed and started. It will also start at login.")
+    print("==> Autostart is on. It's running now, and starts by itself at every login.")
     print(f"    Logs: {spec.log_dir}/app.log")
     return 0
 
@@ -188,7 +188,7 @@ def _install_systemd(spec: ServiceSpec, home: Path, runner: Runner) -> int:
     if result.returncode != 0:
         print(f"systemctl enable failed: {result.stderr.strip()}", file=sys.stderr)
         return result.returncode
-    print("==> Installed and started.")
+    print("==> Autostart is on. It's running now, and starts by itself after every restart.")
     linger = runner(["loginctl", "enable-linger", getpass.getuser()])
     if linger.returncode == 0:
         print("==> Linger enabled — it also starts on boot with nobody logged in.")
@@ -211,7 +211,7 @@ def stop(system: str, home: Path, runner: Runner) -> int:
         return autostart_windows.stop(home / ".open-net-worth", runner)
     else:
         return _unsupported(system)
-    print("==> Stopped and removed. It will no longer start at login/boot.")
+    print("==> Autostart is off. It's stopped, and won't start by itself again.")
     return 0
 
 
@@ -245,10 +245,10 @@ def status(system: str, home: Path, runner: Runner) -> int:
     else:
         return _unsupported(system)
     if not installed:
-        print("not installed")
+        print("off")
         return 1
     running = runner(probe).returncode == 0
-    print("installed and running" if running else "installed but not running")
+    print("on and running" if running else "on, but not running")
     _print_auto_upgrade(system, home)
     return 0 if running else 1
 
@@ -266,5 +266,13 @@ def install_service(auto_upgrade: bool = False) -> int:
 
 
 def run_autostart(action: str) -> int:
-    handlers = {"install": install, "stop": stop, "status": status}
+    # `install`, `uninstall` and `stop` are the older names: scripts and older docs still use them.
+    handlers = {
+        "on": install,
+        "off": stop,
+        "status": status,
+        "install": install,
+        "uninstall": stop,
+        "stop": stop,
+    }
     return handlers[action](platform.system(), Path.home(), _run)

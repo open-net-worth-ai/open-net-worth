@@ -29,6 +29,7 @@ from difflib import SequenceMatcher
 from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
 from backend.services import planning
+from backend.services.budget_app import current
 from backend.services.ynab_pairs import norm
 
 
@@ -65,6 +66,8 @@ class Book:
         self.envelopes = [e for e in live if e["id"] not in bot]
         self.names = {e["name"].strip().lower() for e in live}
         self.env_of = {cid: e for e in live for cid in e.get("category_ids") or []}
+        # One in an envelope would hold what comes in there, away from Ready to Assign.
+        self.income = [c for c in rows if c.get("kind") == "income" and c["id"] not in self.env_of]
         self.groups = [g for g in planning.list_groups() if not g.get("synced")]
 
     def solo_envelope(self, category_id: str) -> dict | None:
@@ -76,31 +79,38 @@ class Book:
         """``label``, or ``label (YNAB)`` / ``label (YNAB 2)`` … when a category (or, with
         ``envelopes``, an envelope) already carries it."""
         taken = self.labels | (self.names if envelopes else set())
-        out, n = label, 1
+        app, out, n = current().name, label, 1
         while out.strip().lower() in taken:
             n += 1
-            out = f"{label} (YNAB)" if n == 2 else f"{label} (YNAB {n - 1})"
+            out = f"{label} ({app})" if n == 2 else f"{label} ({app} {n - 1})"
         return out
 
     def free_envelope_name(self, name: str) -> str:
-        out, n = name, 1
+        app, out, n = current().name, name, 1
         while out.strip().lower() in self.names:
             n += 1
-            out = f"{name} (YNAB)" if n == 2 else f"{name} (YNAB {n - 1})"
+            out = f"{name} ({app})" if n == 2 else f"{name} ({app} {n - 1})"
         return out
 
 
-def propose(name: str, book: Book, taken_cats: set[str], taken_envs: set[str]) -> Match:
+def propose(
+    name: str, book: Book, taken_cats: set[str], taken_envs: set[str], income: bool = False
+) -> Match:
+    """``income``: an income category pairs only with one of the book's income categories, and
+    never goes in an envelope."""
     key = norm(name)
     if not key:
         return Match("new")
-    cats = [c for c in book.matchable if norm(c["label"]) == key and c["id"] not in taken_cats]
+    pool = book.income if income else book.matchable
+    cats = [c for c in pool if norm(c["label"]) == key and c["id"] not in taken_cats]
     if len(cats) == 1:
         return Match("category", category=cats[0])
     if cats:
         return Match(
             "ambiguous", options=[{"ref": cat_ref(c["id"]), "name": c["label"]} for c in cats]
         )
+    if income:
+        return Match("new")
     envs = [e for e in book.envelopes if norm(e["name"]) == key and e["id"] not in taken_envs]
     if len(envs) == 1:
         return Match("offer" if envs[0].get("category_ids") else "envelope", envelope=envs[0])

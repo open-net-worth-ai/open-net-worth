@@ -9,6 +9,7 @@
  */
 
 import { fCur } from './format'
+import { fMonthDay } from '../../../utils/format'
 
 // ── Format detection ──────────────────────────────────────────────────────
 
@@ -864,7 +865,7 @@ export function existingTxnLine(
   // Cmp's own callers already show a date + amount footer (imp3-cmp-facts) right below this
   // line — repeating both here read as duplicated information (owner, 2026-07-27).
   const omitFacts = !!transferCtx?.omitFacts
-  if (existing.date && !omitFacts) parts.push(existing.date.slice(5))
+  if (existing.date && !omitFacts) parts.push(fMonthDay(existing.date))
   const acct = accounts.find((a) => a.id === existing.account_id)
   const tl = transferLine(existing, accounts, catMap, transferCtx ?? {})
   if (tl) {
@@ -975,7 +976,7 @@ export function matchOptionLine(
   fallbackCurrency: string,
 ): string {
   const bits: string[] = []
-  if (row.date) bits.push(row.date.slice(5))
+  if (row.date) bits.push(fMonthDay(row.date))
   bits.push(row.note || '—')
   if (typeof row.amount === 'number') {
     const ccy = row.currency || fallbackCurrency
@@ -1329,7 +1330,7 @@ export function afterImportProjection(args: {
   const existingRecord: AfterRecord = {
     tag: 'kept',
     title: existing.note || '—',
-    ...(existing.date ? { date: { value: existing.date.slice(5) } } : {}),
+    ...(existing.date ? { date: { value: fMonthDay(existing.date) } } : {}),
     category: exTransfer ?? catLabel(existing.category),
     ...(typeof existingAmount === 'number'
       ? { amount: { value: fmt(existingAmount, existingCurrency) } }
@@ -1345,7 +1346,7 @@ export function afterImportProjection(args: {
     const newRecord: AfterRecord = {
       tag: 'new',
       title: draft.payee || draft.description,
-      date: { value: draft.date.slice(5) },
+      date: { value: fMonthDay(draft.date) },
       category: transferLine(draft, accounts, catMap) ?? catLabel(draft.category),
       amount: { value: fmt(draft.amount) },
       ...(oa != null && oc && oc !== draft.currency
@@ -1412,8 +1413,8 @@ export function afterImportProjection(args: {
               ? `${fromName} → ${toName}`
               : existing.note || draft.payee || draft.description || '—',
           date: {
-            value: draft.date.slice(5),
-            ...(dateChanged ? { old: existing.date!.slice(5) } : {}),
+            value: fMonthDay(draft.date),
+            ...(dateChanged ? { old: fMonthDay(existing.date) } : {}),
           },
           // An internal transfer moves money between YOUR OWN accounts — it isn't a spending
           // category (the title already names the from/to accounts; the old single-leg
@@ -1452,8 +1453,8 @@ export function afterImportProjection(args: {
         tag: 'updated',
         title: existing.note || '—',
         date: {
-          value: draft.date.slice(5),
-          ...(dateChanged ? { old: existing.date!.slice(5) } : {}),
+          value: fMonthDay(draft.date),
+          ...(dateChanged ? { old: fMonthDay(existing.date) } : {}),
         },
         category: catLabel(existing.category),
         amount: {

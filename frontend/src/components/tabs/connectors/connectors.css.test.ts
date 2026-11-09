@@ -255,3 +255,18 @@ describe('connectors.css — .rd-modal.xl is a fixed height; the base modal and 
     },
   )
 })
+
+/**
+ * Regression: on a phone the masthead is `display: contents`, which drops its box but NOT its
+ * pseudo-elements. The desktop scroll shadow (`.rd-masthead::after`, absolute at top:100%) kept
+ * rendering once the page had scrolled, anchored to the scroller, and washed out the first line
+ * of the "Want Claude Desktop…" footer. The phone layout must switch it off.
+ */
+describe('connectors.css — the dissolved phone masthead casts no shadow of its own', () => {
+  it('hides .rd-masthead::after alongside display: contents', () => {
+    const css = readFileSync(CONNECTORS_CSS, 'utf8')
+    const phone = css.slice(css.indexOf('@media (max-width: 700px)'))
+    expect(phone).toMatch(/\.cn-page \.rd-masthead \{\s*display: contents;/)
+    expect(phone).toMatch(/\.cn-page \.rd-masthead::after \{\s*display: none;/)
+  })
+})

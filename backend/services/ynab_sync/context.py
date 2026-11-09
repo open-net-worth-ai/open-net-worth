@@ -11,7 +11,9 @@ from dataclasses import dataclass, field
 
 from backend.services import categories as categories_service
 from backend.services import ledger as ledger_service
+from backend.services.budget_app import current
 from backend.services.ynab_migration import apply, mapping
+from backend.services.ynab_sync.baselines import categories_paired_elsewhere
 
 
 @dataclass
@@ -24,7 +26,7 @@ class Context:
     ynab_acct: dict[str, str]  # ledger account id -> YNAB account id
     cat_ids: dict[str, str | None]  # YNAB category id -> ledger category id
     ynab_cat: dict[str, str]  # ledger category id -> YNAB category id
-    income: frozenset[str]  # ledger income categories: YNAB sees their rows as Ready to Assign
+    income: frozenset[str]  # ledger income categories
     env_of: dict[str, str]  # YNAB category id -> the envelope holding only that category
     card_env: dict[str, str]  # YNAB card-payment category id -> payment envelope id
     names: dict
@@ -39,6 +41,8 @@ class Context:
     openings: dict[str, str] = field(
         default_factory=dict
     )  # YNAB account id -> Starting Balance txn
+    # Ledger accounts linked to this app but not to this budget (``budget_scoped_accounts``).
+    other_budget_accounts: frozenset[str] = frozenset()
 
     @property
     def live_accounts(self) -> list[dict]:
@@ -83,12 +87,20 @@ def build(
     live = {c["id"] for c in rows}
     paired = {y: p for y, p in pairs.items() if not p.get("gone") and p["category"] in live}
     accounts = ledger_service.accounts.query_accounts(include_archived=True)
+    source, caps = current().source, current().caps
     acct_ids = {
         e["ref"]: a["id"]
         for a in accounts
         for e in a.get("external_ids") or []
-        if e.get("source") == mapping.SOURCE
+        if e.get("source") == source
     }
+    others: frozenset[str] = frozenset()
+    elsewhere: set[str] = set()
+    if caps.budget_scoped_accounts:
+        elsewhere = categories_paired_elsewhere(current().stores.baselines(), state["plan_id"])
+        held = {a["id"] for a in meta["accounts"]}
+        others = frozenset(v for k, v in acct_ids.items() if k not in held)
+        acct_ids = {k: v for k, v in acct_ids.items() if k in held}
     sub_parent = {s["id"]: t["id"] for t in mirror.values() for s in t.get("subtransactions") or []}
     link_of = {
         t["transfer_transaction_id"]: t["id"]
@@ -108,9 +120,9 @@ def build(
         unsent=frozenset(
             c["id"]
             for c in rows
-            if c.get("kind", "expense") == "expense"
+            if (c.get("kind", "expense") == "expense" or caps.income_categories)
             and c["id"] not in {p["category"] for p in paired.values()}
-            and (c.get("hidden") or f"o:{c['id']}" in declined)
+            and (c.get("hidden") or f"o:{c['id']}" in declined or c["id"] in elsewhere)
         ),
         env_of={y: p["env"] for y, p in paired.items() if p.get("env")},
         card_env={cid: v["envelope"] for cid, v in card.items()},
@@ -121,6 +133,7 @@ def build(
         sub_parent=sub_parent,
         link_of=link_of,
         openings=_openings(mirror),
+        other_budget_accounts=others,
     )
 
 

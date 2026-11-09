@@ -78,16 +78,42 @@ the in-app terminal, you can do it from **Settings → Terminal** instead — se
 
 ## Subscription under Docker
 
-The Docker image already includes Claude Code and Codex, but the container has its own
-filesystem, so it can't see your computer's sign-in. To share it:
+The Docker image already includes Claude Code and Codex, so **Settings → AI** lists them with a
+path like `/usr/local/bin/codex`. That path is inside the container, not on your computer or NAS.
+The container has its own filesystem, so these tools start signed out, and they can't see a
+sign-in, an Ollama or any other AI tool on the machine around them.
 
-1. On your computer (not in the container), sign in first:
+The row says **Not signed in** until you sign in. Run the command for your tool on the machine
+hosting the container, using your own container name if you changed it from `open-net-worth`:
+
+```bash
+docker exec -it open-net-worth codex login --device-auth
+```
+
+```bash
+docker exec -it open-net-worth claude auth login
+```
+
+Follow the link it prints, on any device. The row changes to **Signed in** by itself, and Lucius
+uses the sign-in on your next message.
+
+With the current `docker-compose.yml`, the sign-in stays in its own Docker volume
+(`open-net-worth-codex`, `open-net-worth-claude`), so updates keep it. With an older file or a
+plain `docker run`, it is lost whenever the container is recreated: [download the new
+file](../operations/upgrading.md#docker), or mount your own volumes at `/home/onw/.codex` and
+`/home/onw/.claude`. These volumes hold your sign-in and aren't part of the app's backups.
+
+**Or share a sign-in from the host:**
+
+1. On the host (not in the container), sign in first:
    - Claude Code: run `claude setup-token`. This is needed even if `claude` already works for
      you — macOS keeps the sign-in in the Keychain, which the container can't read.
    - Codex: `codex login` is enough.
 2. In `docker-compose.yml`, uncomment the matching line under `volumes:`
    (`~/.claude/.credentials.json` or `~/.codex/auth.json`). Do this **after** step 1 —
-   mounting a file that doesn't exist yet creates an empty folder instead.
+   mounting a file that doesn't exist yet creates an empty folder instead. The container runs as
+   user ID 1000, so that user must be able to read the file. A file created by `root` usually
+   can't be read, and the row shows **Not signed in**.
 3. Run `docker compose up -d` again.
 
 ## Use an API key
@@ -110,7 +136,7 @@ filesystem, so it can't see your computer's sign-in. To share it:
 | **Google Gemini** | [aistudio.google.com](https://aistudio.google.com) → **Get API key** → **Create API key**. |
 | **xAI (Grok)** | [console.x.ai](https://console.x.ai) → **API keys** → create a key. |
 | **Zhipu (GLM)** | [z.ai](https://z.ai) → API keys. The endpoint can be changed if you use the mainland China service. |
-| **Custom (OpenAI-compatible)** | Any service that speaks the OpenAI API (DeepSeek, Moonshot, a self-hosted gateway). Enter its **Endpoint** URL and key. |
+| **Custom (OpenAI-compatible)** | Any service that speaks the OpenAI API (DeepSeek, Moonshot, a self-hosted gateway). Enter its **Endpoint** URL and key. Add it as many times as you like — give each a **Display name** and they sit side by side. |
 
 The key is stored on the machine running Open Net Worth only. It's never sent to Lucius, never
 included in an export, and the field hides it (you can reveal it in Settings to check it).
@@ -126,6 +152,11 @@ with tool calling. Small models often struggle with Lucius's longer tasks.
 2. Download a model, for example `ollama pull <model-name>` in a terminal.
 3. In the app, pick **Ollama (local)**. The **Endpoint** is preset to
    `http://localhost:11434/v1`. Click **Continue**, then pick your model.
+
+**Running Open Net Worth in Docker?** `localhost` then means the container, not the machine running
+Ollama. Make Ollama listen on your network by setting `OLLAMA_HOST=0.0.0.0` where it starts, then
+use that machine's network address as the **Endpoint**, such as `http://192.168.1.20:11434/v1`.
+Ollama has no password, so every device on your network can use it after this.
 
 **LM Studio** — start LM Studio's local server, then pick **Custom (OpenAI-compatible)** with
 the endpoint `http://localhost:1234/v1`. LM Studio doesn't check keys, so any text works in
@@ -182,8 +213,12 @@ automations and memory.
 - **Claude Code or Codex stays "Not installed"** — install it on the computer running Open Net
   Worth, then open a new terminal so it's on your `PATH`. Still not found? Set its **Binary path**
   in **Settings → AI**.
-- **Found, but Lucius fails on the first message** — finding the tool doesn't prove it's signed
-  in. Run `claude auth login` or `codex login` again on that computer.
+- **"Not signed in" or "isn't signed in where Open Net Worth runs"** — the tool is there but has
+  no sign-in Lucius can use. Run `claude auth login` or `codex login` on the computer running Open
+  Net Worth. On a server you reach over SSH, use `codex login --device-auth`. Under Docker, see
+  [Subscription under Docker](#subscription-under-docker). The row in **Settings → AI** gives the
+  exact command. If the row says **Signed in** but Lucius still refuses, the sign-in has expired:
+  run the same command again.
 - **"Choose a default model on another provider first"** — you tried to switch off the provider
   Lucius uses by default. Pick another **Default model** first.
 
@@ -192,3 +227,10 @@ automations and memory.
 - [Your first run](first-run.md)
 - [Models and cost](../lucius/models-and-cost.md)
 - [Terminal](../operations/terminal.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [An Open-Source Claude Personal Finance Alternative](https://opennetworth.ai/blog/claude-personal-finance-alternative/): using a Claude subscription with your own ledger
+- [Private AI financial assistant: where your data goes](https://opennetworth.ai/blog/where-your-financial-data-goes/): what each model choice means for your data

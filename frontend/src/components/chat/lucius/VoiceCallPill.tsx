@@ -39,6 +39,7 @@ const PROBLEM: Record<CallProblemKind, { label: string; action: string }> = {
   service: { label: 'LiveKit refused the call', action: 'Try again' },
   insecure: { label: "Call couldn't start", action: 'Try again' },
   other: { label: "Call couldn't start", action: 'Try again' },
+  conversation: { label: "Can't call from this conversation", action: 'Try again' },
 }
 
 const IN_CALL_MODES: PillMode[] = ['calling', 'live', 'attention', 'reconnecting', 'poor']
@@ -226,7 +227,7 @@ export function VoiceCallPill({
             className="lx-dock-pill-btn"
             aria-pressed={call.muted}
             aria-label={call.muted ? 'Unmute' : 'Mute'}
-            disabled={call.phase !== 'live'}
+            disabled={call.phase === 'ended'}
             onClick={() => void toggleMute()}
           >
             {call.muted ? <MicOff size={14} /> : <Mic size={14} />}

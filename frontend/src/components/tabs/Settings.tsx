@@ -10,7 +10,7 @@
 // and the Lucius-dock exemption; settings.css restyles that shell to the prototype's exact
 // geometry. The route is kept (rather than becoming pure UI state) because Overview
 // deep-links into it with ?sub=data.
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { lazyChunk } from '../../lazyChunk'
 import type { ComponentType } from 'react'
 import { useNavigate } from '@tanstack/react-router'
@@ -42,7 +42,14 @@ import {
   X,
 } from '../../ui/icons'
 import type { IconProps } from '../../ui/icons'
-import { SectionBackProvider, SectionBusyProvider, useToast } from './settings/ds'
+import {
+  SavingIndicator,
+  SectionBackProvider,
+  SectionBusyProvider,
+  SectionSavingProvider,
+  useToast,
+} from './settings/ds'
+import { SettingsVersion } from './settings/SettingsVersion'
 import type { SectionBack } from './settings/ds'
 import { Spark } from '../../lucius/identity'
 import { PROFILE_KEY, fetchJson } from '../../hooks/serverState'
@@ -384,6 +391,13 @@ export function Settings({
   // Sections declare their first load via useSectionBusy; the pane renders the skeleton.
   const [busyCount, setBusyCount] = useState(0)
   const bumpBusy = useRef((delta: number) => setBusyCount((n) => Math.max(0, n + delta))).current
+  // Sections wrap their writes in useSaving(); the shell shows one "Saving…" pill for all of them.
+  const [savingCount, setSavingCount] = useState(0)
+  const [savedCount, setSavedCount] = useState(0)
+  const bumpSaving = useCallback((delta: number, failed?: boolean) => {
+    setSavingCount((n) => Math.max(0, n + delta))
+    if (delta < 0 && !failed) setSavedCount((n) => n + 1)
+  }, [])
 
   const active = SECTIONS.find((s) => s.key === section) || SECTIONS[0]!
 
@@ -498,6 +512,7 @@ export function Settings({
               {!shown.length ? <span className="rd-set-nohits">No matching settings</span> : null}
             </div>
           )}
+          <SettingsVersion />
         </nav>
       )}
       <div className="rd-set-pane" {...swipeBackHandlers}>
@@ -582,27 +597,30 @@ export function Settings({
                     </div>
                   </div>
                 ))}
+                <SettingsVersion />
               </div>
             ) : (
               <SectionBusyProvider onChange={bumpBusy}>
-                <SectionBackProvider value={setBack}>
-                  {Body ? (
-                    <Suspense fallback={<SectionFallback />}>
-                      <Body
+                <SectionSavingProvider onChange={bumpSaving}>
+                  <SectionBackProvider value={setBack}>
+                    {Body ? (
+                      <Suspense fallback={<SectionFallback />}>
+                        <Body
+                          toast={toast}
+                          actionBarSlot={actionBarSlot}
+                          gatewayMode={gatewayMode}
+                          openSection={(key) => setSec(key as Section)}
+                        />
+                      </Suspense>
+                    ) : (
+                      <ProfileSection
                         toast={toast}
+                        onReviewDefaultChange={onReviewDefaultChange}
                         actionBarSlot={actionBarSlot}
-                        gatewayMode={gatewayMode}
-                        openSection={(key) => setSec(key as Section)}
                       />
-                    </Suspense>
-                  ) : (
-                    <ProfileSection
-                      toast={toast}
-                      onReviewDefaultChange={onReviewDefaultChange}
-                      actionBarSlot={actionBarSlot}
-                    />
-                  )}
-                </SectionBackProvider>
+                    )}
+                  </SectionBackProvider>
+                </SectionSavingProvider>
               </SectionBusyProvider>
             )}
           </div>
@@ -614,6 +632,11 @@ export function Settings({
         <div className="rd-set-actionbar-slot" ref={setActionBarSlot} />
       </div>
       {toastNode}
+      <SavingIndicator
+        active={savingCount > 0}
+        savedCount={savedCount}
+        quiet={Boolean(toastNode)}
+      />
     </Modal>
   )
 }

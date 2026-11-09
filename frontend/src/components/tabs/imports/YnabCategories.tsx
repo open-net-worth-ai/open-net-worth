@@ -1,6 +1,7 @@
 import { Mail, Tag, TriangleAlert } from 'lucide-react'
 import { InfoPopover } from '../../ui'
 import { PMSelect } from '../accounts/ds'
+import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
 import type { CategoryChoices, Preview, PreviewCategory } from './runs'
 
 // The Categories tab of the YNAB review: each YNAB category under its group, then two choices in
@@ -20,24 +21,29 @@ const NEW = 'new'
 const SEARCH_FROM = 8
 
 export interface CategoryProps {
+  app?: BudgetAppInfo
   catLinks: Record<string, string>
   proposals: Record<string, string>
   checking: boolean
   onChoose: (ynabId: string, ref: string) => void
 }
 
-export function Categories({ preview: p, ...pick }: { preview: Preview } & CategoryProps) {
+export function Categories({
+  app = YNAB_APP,
+  preview: p,
+  ...pick
+}: { preview: Preview } & CategoryProps) {
   const groups = p.category_groups
   if (!groups || !p.category_choices)
     return <p className="ynr-empty">Review again to see the categories by name.</p>
   if (groups.length === 0)
-    return <p className="ynr-empty">This plan has no categories of its own.</p>
+    return <p className="ynr-empty">{`This ${app.planWord} has no categories of its own.`}</p>
   const choices = p.category_choices
   return (
     <table className="imp-table ynr-table ynr-cats">
       <thead>
         <tr>
-          <th>YNAB category</th>
+          <th>{app.categoryColumn}</th>
           <th>Category here</th>
           <th>Envelope</th>
         </tr>
@@ -54,7 +60,14 @@ export function Categories({ preview: p, ...pick }: { preview: Preview } & Categ
             </th>
           </tr>
           {g.categories.map((c) => (
-            <CategoryRow key={c.id} category={c} choices={choices} preview={p} {...pick} />
+            <CategoryRow
+              key={c.id}
+              app={app}
+              category={c}
+              choices={choices}
+              preview={p}
+              {...pick}
+            />
           ))}
         </tbody>
       ))}
@@ -62,18 +75,23 @@ export function Categories({ preview: p, ...pick }: { preview: Preview } & Categ
   )
 }
 
-type RowProps = { category: PreviewCategory; choices: CategoryChoices; preview: Preview }
+type RowProps = {
+  app: BudgetAppInfo
+  category: PreviewCategory
+  choices: CategoryChoices
+  preview: Preview
+}
 
-function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & CategoryProps) {
+function CategoryRow({ app, category: c, choices, preview: p, ...pick }: RowProps & CategoryProps) {
   if (c.link?.kind === 'linked')
     return (
       <tr>
-        <td data-label="YNAB category">{c.name}</td>
+        <td data-label={app.categoryColumn}>{c.name}</td>
         <td data-label="Category here">
           <Chip kind="tag" color={colorOf(choices, c.link.ref)} name={c.link.name} />
         </td>
         <td data-label="Envelope">
-          <EnvelopeOfYours category={c} choices={choices} ref_={c.link.ref} />
+          <EnvelopeOfYours app={app} category={c} choices={choices} ref_={c.link.ref} />
         </td>
       </tr>
     )
@@ -94,10 +112,10 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
   const toNew = () =>
     choose(proposed.startsWith('env:') && free(proposed) ? proposed : (c.offer ?? ''))
   const chosenEnv = choices.envelopes.find((e) => e.ref === ref)
-  const why = categoryWarning(c, ref, askEnv)
+  const why = categoryWarning(app, c, ref, askEnv)
   return (
     <tr>
-      <td data-label="YNAB category">{c.name}</td>
+      <td data-label={app.categoryColumn}>{c.name}</td>
       <td data-label="Category here">
         <span className="ynr-cell">
           <PMSelect
@@ -117,7 +135,7 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
       </td>
       <td data-label="Envelope">
         {ref === ASK && !askEnv ? null : ours ? (
-          <EnvelopeOfYours category={c} choices={choices} ref_={ref} />
+          <EnvelopeOfYours app={app} category={c} choices={choices} ref_={ref} />
         ) : (
           <span className="ynr-cell">
             <PMSelect
@@ -133,10 +151,10 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
               onChange={(v) => v !== ASK && choose(v)}
             />
             {askEnv ? (
-              <Warn text={sameNames(c)} name={c.name} />
+              <Warn text={sameNames(app, c)} name={c.name} />
             ) : (
               chosenEnv &&
-              chosenEnv.holds > 0 && <Warn text={shared(chosenEnv.name)} name={c.name} />
+              chosenEnv.holds > 0 && <Warn text={shared(app, chosenEnv.name)} name={c.name} />
             )}
           </span>
         )}
@@ -147,10 +165,12 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
 
 /** The envelope a category of yours is already in — it stays there, so it is shown, not asked. */
 function EnvelopeOfYours({
+  app,
   category: c,
   choices,
   ref_,
 }: {
+  app: BudgetAppInfo
   category: PreviewCategory
   choices: CategoryChoices
   ref_: string
@@ -166,7 +186,7 @@ function EnvelopeOfYours({
   return (
     <span className="ynr-cell">
       <Chip kind="envelope" color={env.color} name={env.name} />
-      {env.shared && <Warn text={shared(env.name)} name={c.name} />}
+      {env.shared && <Warn text={shared(app, env.name)} name={c.name} />}
     </span>
   )
 }
@@ -203,11 +223,11 @@ function Warn({ text, name }: { text: string; name: string }) {
   )
 }
 
-const shared = (envelope: string) =>
-  `${envelope} holds other categories too, so its Assigned won't sync with YNAB. Their labels still do.`
+const shared = (app: BudgetAppInfo, envelope: string) =>
+  `${envelope} holds other categories too, so its Assigned won't sync with ${app.name}. Their labels still do.`
 
-const sameNames = (c: PreviewCategory) =>
-  `${listed(c.options.map((o) => o.name))} all read the same as YNAB's ${c.name}. Pick the one it is.`
+const sameNames = (app: BudgetAppInfo, c: PreviewCategory) =>
+  `${listed(c.options.map((o) => o.name))} all read the same as ${app.name}'s ${c.name}. Pick the one it is.`
 
 function listed(names: string[]) {
   return names.length < 2
@@ -216,13 +236,13 @@ function listed(names: string[]) {
 }
 
 /** Why the category picked for a row is worth a look — only when the review guessed it. */
-function categoryWarning(c: PreviewCategory, ref: string, askEnv: boolean) {
-  if (ref === ASK) return askEnv ? null : sameNames(c)
+function categoryWarning(app: BudgetAppInfo, c: PreviewCategory, ref: string, askEnv: boolean) {
+  if (ref === ASK) return askEnv ? null : sameNames(app, c)
   if (c.chosen || c.link?.ref !== ref) return null
   if (c.among)
-    return `${listed(c.options.map((o) => o.name))} all read the same as YNAB's ${c.name}. This one is spelled most like it; change it if it's the wrong one.`
+    return `${listed(c.options.map((o) => o.name))} all read the same as ${app.name}'s ${c.name}. This one is spelled most like it; change it if it's the wrong one.`
   if (c.close)
-    return `Picked because its name is close to YNAB's ${c.name}. Change it if it's the wrong one.`
+    return `Picked because its name is close to ${app.name}'s ${c.name}. Change it if it's the wrong one.`
   return null
 }
 

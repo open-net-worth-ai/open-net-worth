@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 
-from backend.db.ynab_sync_store import YnabConflictStore
+from backend.services.budget_app import current
 from backend.services.ynab_sync import recorder
 
 CONFLICT = "conflict"  # both sides changed it and they disagree
@@ -15,7 +15,9 @@ UNSUPPORTED = "unsupported"  # one side changed it in a way the other side's API
 CHOOSE = "choose"  # a YNAB category matches several things here; the person picks
 FAILED = "failed"  # the other side refused the change; the reason is YNAB's or the ledger's own
 
-_store = YnabConflictStore()
+
+def _store():
+    return current().stores.conflicts()
 
 
 def key_id(key: str) -> str:
@@ -23,7 +25,7 @@ def key_id(key: str) -> str:
 
 
 def open_keys() -> dict[str, dict]:
-    return {c["key"]: c for c in _store.open_items()}
+    return {c["key"]: c for c in _store().open_items()}
 
 
 def file(kind: str, key: str, title: str, reason: str, onw, ynab, **extra) -> dict:
@@ -39,19 +41,19 @@ def file(kind: str, key: str, title: str, reason: str, onw, ynab, **extra) -> di
         "resolved_at": None,
         **extra,
     }
-    saved = _store.upsert(item)
+    saved = _store().upsert(item)
     recorder.conflict(item)
     return saved
 
 
 def close(key: str) -> None:
-    _store.delete(key_id(key))
+    _store().delete(key_id(key))
 
 
 def get(conflict_id: str) -> dict | None:
-    item = _store.find_by_id(conflict_id)
+    item = _store().find_by_id(conflict_id)
     return item if item and not item.get("resolved_at") else None
 
 
 def listing() -> list[dict]:
-    return sorted(_store.open_items(), key=lambda c: c["created_at"])
+    return sorted(_store().open_items(), key=lambda c: c["created_at"])

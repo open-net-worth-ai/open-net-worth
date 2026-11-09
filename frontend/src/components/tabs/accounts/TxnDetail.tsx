@@ -177,7 +177,7 @@ export function fmtDay(iso: string | null | undefined): string {
   return iso ? fDate(iso.split('T')[0]!, 'short', 'always') : '—'
 }
 // Date-only values stay verbatim (no timezone shift). A full timestamp is stored in UTC
-// (…Z) — render it in the viewer's LOCAL time (HH:MM, 24h, no seconds), like the rest of the drawer.
+// (…Z) — render it in the viewer's LOCAL time, (HH:MM, 24h, no seconds); the date follows the app's Date-format preference.
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   const d = iso.includes('T') ? new Date(iso) : null

@@ -12,7 +12,9 @@ from collections import Counter
 
 from backend.core.errors import ValidationError
 from backend.core.untrusted import sanitize_untrusted
+from backend.services.budget_app import current
 
+# YNAB's value, for what still imports it; the engine reads ``budget_app.current().source``.
 SOURCE = "ynab"  # external_refs / external_ids namespace — the connector's, so both dedup
 SB_PAYEE = "starting balance"
 RTA_CATEGORY = "inflow: ready to assign"
@@ -35,7 +37,9 @@ def validate_amounts(accounts: list[dict], txns: list[dict], months: list[dict])
 
     def check(value):
         if isinstance(value, bool) or not isinstance(value, int) or abs(value) > INT64_MAX:
-            raise ValidationError("YNAB returned an amount that is not a valid whole number.")
+            raise ValidationError(
+                f"{current().name} returned an amount that is not a valid whole number."
+            )
 
     for a in accounts:
         for key in ("balance", "cleared_balance"):
@@ -99,11 +103,13 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
     skip: dict[str, str] = {}
     cards: dict[str, str] = {}  # card payment category id -> its card account's name
     chosen: list[tuple[str, str, str, bool, str]] = []
+    income: set[str] = set()
+    caps = current().caps
     by_id = {g["id"]: g for g in groups if not g.get("deleted")}
     for g in groups:
         if g.get("deleted"):
             continue
-        card_group = g["name"].strip().lower() == CC_GROUP
+        card_group = caps.card_payment_categories and g["name"].strip().lower() == CC_GROUP
         for c in g.get("categories", []):
             hidden = bool(c.get("hidden") or g.get("hidden"))
             if c.get("deleted"):
@@ -129,16 +135,19 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
                 chosen.append(
                     (c["id"], clean(c["name"], 120), clean(home["name"], 120), hidden, home["id"])
                 )
+                if caps.income_categories and c.get("is_income"):
+                    income.add(c["id"])
     labels = unique_labels([(i, n, g) for i, n, g, _, _ in chosen])
     cats = [
         {
             "id": i,
             "label": labels[i],
             "name": n,
-            "group": f"{g} (YNAB)" if g.strip().lower() in RESERVED_GROUPS else g,
+            "group": f"{g} ({current().name})" if g.strip().lower() in RESERVED_GROUPS else g,
             "group_id": gid,
             "group_name": g,
             "hidden": h,
+            **({"kind": "income"} if i in income else {}),
         }
         for i, n, g, h, gid in chosen
     ]
@@ -365,6 +374,7 @@ def balance_gaps(live, txns, pieces, stats) -> None:
     """YNAB's balance for some accounts (loans, with interest YNAB calculates itself) is not the
     sum of their transactions; book the difference once, as dated, labelled adjustments — the
     cleared part cleared and the rest uncleared, so both balances match YNAB's."""
+    app = current().name
     last = max((t["date"] for t in txns if not t.get("deleted")), default=None)
     for a in live:
         mine = [t for t in txns if not t.get("deleted") and t["account_id"] == a["id"]]
@@ -383,8 +393,9 @@ def balance_gaps(live, txns, pieces, stats) -> None:
                 {
                     "kind": "adjustment",
                     "date": last,
-                    "description": "YNAB balance not covered by its transactions",
-                    "memo": "Booked by the YNAB import (e.g. loan interest YNAB calculates itself)",
+                    "description": f"{app} balance not covered by its transactions",
+                    "memo": f"Booked by the {app} import "
+                    f"(e.g. loan interest {app} calculates itself)",
                     "category": None,
                     "splits": None,
                     "cleared": cleared,
@@ -424,7 +435,9 @@ def build_plan(plan_name, currency, accounts, groups, txns, months) -> dict:
             "type": map_account_type(a),
             "currency": currency,
             "initial_balance": amt(sb["amount"]) if sb else 0,
-            "external_ids": [{"source": SOURCE, "ref": a["id"], "name": clean(a["name"], 120)}],
+            "external_ids": [
+                {"source": current().source, "ref": a["id"], "name": clean(a["name"], 120)}
+            ],
             "note": clean(a.get("note"), 500),
         }
         if dates:
@@ -451,7 +464,8 @@ def build_plan(plan_name, currency, accounts, groups, txns, months) -> dict:
             }
         )
     real = {c["id"] for c in cat_plan["categories"]}
-    budgeted = real | set(cat_plan["card_categories"])
+    envelopes = {c["id"] for c in cat_plan["categories"] if c.get("kind") != "income"}
+    budgeted = envelopes | set(cat_plan["card_categories"])
     assigned: dict[str, dict[str, int]] = {}
     for m in months:
         row = {
@@ -502,7 +516,7 @@ def render_piece(p: dict, acct_ids: dict, cat_ids: dict, currency: str) -> dict:
         "kind": p["kind"],
         "description": p["description"],
         "memo": p["memo"],
-        "external_refs": [{"source": SOURCE, "ref": r} for r in p["refs"]],
+        "external_refs": [{"source": current().source, "ref": r} for r in p["refs"]],
         "needs_review": False,
         "cleared": p["cleared"],
     }
@@ -531,12 +545,13 @@ def preview_summary(plan: dict) -> dict:
         )
     if s.get("unknown_category"):
         warnings.append(
-            f"{s['unknown_category']} line(s) use a category YNAB no longer lists; they import uncategorized."
+            f"{s['unknown_category']} line(s) use a category {current().name} no longer lists; they import uncategorized."
         )
     if s.get("transfers_one_sided"):
         warnings.append(
             f"{s['transfers_one_sided']} transfer(s) have no matching row in the other account; they import as plain income or expense."
         )
+    warnings += plan.get("notices", [])
     return {
         "plan_name": plan["name"],
         "currency": plan["currency"],

@@ -599,7 +599,7 @@ describe('Autocomplete', () => {
       const txnMoney = subElements[2]!.querySelector('.money')
       expect(txnMoney).toBeTruthy()
       expect(txnMoney?.textContent).toBe('-18.50 SGD')
-      expect(subElements[2]!.textContent).toBe('Grab • OCBC 360 • 2026-08-30 • -18.50 SGD')
+      expect(subElements[2]!.textContent).toBe('Grab • OCBC 360 • Aug 30, 2026 • -18.50 SGD')
     })
 
     it('wraps maskable .ac-item-v in .money while leaving non-amount selectors plain', () => {

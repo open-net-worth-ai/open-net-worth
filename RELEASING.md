@@ -68,6 +68,12 @@ The same pipeline exists in this repo as `.github/workflows/release.yml` (trigge
 tag, always manual promotion). It is **dormant** until this repo's Actions run again (see Owner
 steps); never run both for one version. Keep the two in step when you change either.
 
+`mirror-releases.yml` copies each published release into this repo's own Releases list every hour,
+so people reading the code can see it: same notes, a link to the downloads, no files. Nothing reads
+those entries. Their tags have no `v` (`0.2.0`) because a `v*` tag here starts `release.yml`, so
+never create a `vX.Y.Z` release from this repo's page. Releases older than this repo's history
+(before 0.1.19) point at its first commit and say so, because the commit they were built from isn't here.
+
 ### Release assets
 
 Everything is in the public repo `open-net-worth-ai/open-net-worth-releases`, release `vX.Y.Z`:

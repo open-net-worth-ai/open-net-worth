@@ -59,10 +59,24 @@ For a story rather than one stock — an IPO, a war, interest rates:
 3. Choose **Target price** (**Falls below** / **Rises above** a price) or **% move** (**Falls by** /
    **Rises by** a percentage in a day).
 4. Optional: a **Name**, a **Cooldown** (or **Turn off** after it fires once), **Notifications**
-   (where this alert goes), and **Additional instructions** — what Lucius should check when it
-   fires, e.g. *"check whether the move is news-driven"*.
+   (where this alert goes), and **Additional instructions** — what Lucius should weigh when it
+   fires, e.g. *"check whether the move is news-driven"*. An alert reads the news the app has
+   already collected for that ticker from the last 24 hours, held or not. If nothing recent is on
+   file, it says so. It doesn't search the web on its own unless you turn on the experiment below.
 5. Click **Create alert**. The ticker's alerts screen shows every level on a 52-week price scale, each with its own
    on/off switch.
+
+**Let Lucius look into each alert (experimental, off by default).** In Settings → Developer →
+Experimental, turn on *"When a price alert fires, Lucius looks into it"*. Lucius then follows an
+alert's instructions when it fires, searching the web and X before it messages you. It takes up to
+two minutes (usually much less), so the message can arrive a little later, and it uses your AI model
+and search quota, up to 20 runs a day. The search can only search: it can't change your data, send
+anything or place an order, and it never sees your position or profile. Digits in the alert's name
+and instructions are removed before it searches, but it does read the rest of the wording, so keep
+private details out of them. What it finds is labelled *From a web search, unverified*. Your **Web
+search** setting for scans doesn't turn this off; the experiment switch does. If a run fails or
+times out, you get the quick alert. This doesn't run on the Antigravity or Codex CLIs, which have
+tools of their own that the app can't limit.
 
 The **🔔 Mute** button next to the price on that screen silences the ticker: no price alerts and no
 news scans for it until you click it again (it then reads **Muted**). **Additional news sources**
@@ -335,8 +349,11 @@ already told you in the last 48 hours and what time it is where you are, and cho
 - **Skip** — analyst target changes, "moved 3%" with no new cause, anything you told it to
   ignore, anything you were already told. It stays in the Intel tab.
 
-Everything is still in the Intel tab either way. A price alert or crash-watch you set yourself is
-never held back if Lucius cannot be reached: it is sent as written.
+Everything is still in the Intel tab either way. **A price alert you set always reaches you right
+away**, at any hour, and Lucius only chooses how the message reads. To stop one, mute the ticker or
+turn the alert off. Automatic crash-watch alerts are different: Lucius can hold them back, usually
+because you've already heard about the same slide, but they are still sent as written if Lucius
+cannot be reached.
 
 With the experiment on, **Settings → Intelligence → What Intel should tell me** takes your own
 words, for example *"Don't tell me about analyst upgrades. Not at night unless it's serious."*
@@ -347,7 +364,8 @@ Lucius reads it every time it decides. You can also ask Lucius in chat to set it
 **No alerts on my phone** — check that the channel is set up and enabled in **Connectors**, and
 ticked for that alert kind in **Settings → Intelligence → Alerts**. Remember only explained alerts
 are pushed for watch signals; the rest stay in the app. If you turned on the experiment above,
-Lucius may have held the alert for a roundup or skipped it; the Intel tab has it either way.
+Lucius may have held a news or crash-watch alert for a roundup or skipped it; the Intel tab has it
+either way. It never does that to a price alert you set.
 
 **An alert I expected did not come right away** — with the experiment on, a normal alert waits
 about a minute so Lucius can see related alerts together. — check that the channel is set up and enabled in **Connectors**, and

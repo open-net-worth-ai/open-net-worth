@@ -273,7 +273,12 @@ async def notify(text: str) -> int:
             if html_parts is None:
                 html_parts = chunk_message(render(text, "telegram"), 4096, utf16_len, html=True)
             for part in html_parts:
-                await _app.bot.send_message(chat_id=chat_id, text=part, parse_mode=ParseMode.HTML)
+                await _app.bot.send_message(
+                    chat_id=chat_id,
+                    text=part,
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
+                )
             sent += 1
         except Exception as exc:
             log.warning("notify: failed to send to %s: %s", chat_id, exc)

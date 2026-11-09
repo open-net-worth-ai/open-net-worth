@@ -1235,6 +1235,10 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "528520ce70242fc9b4a5bc5fac3c52869c468a187652911f14981052aad8f372",
             # 2026-11-02: before the "on what you watch" paragraph (get_untold_news).
             "a3ea85de528f72da449398bf5648c12683cc2dff4dafa55078c949c2c21d66cf",
+            # 2026-11-06: before "Needs a look" checked each item against memory.
+            "e285d7433a577013205dc4cc0964d13e2a7af525088de990b6d67a50c6c64bc5",
+            # 2026-11-06: before what's still open got its own line and a reminder to recheck.
+            "853ae7eae7692d36d5bb4ffd635a1b9670d7dd21edef1b453adea5e593b559c0",
         }
     ),
     # 2026-11-05: before one money test for every email, and connecting each item to the books.

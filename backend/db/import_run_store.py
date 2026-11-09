@@ -123,10 +123,12 @@ class ImportRunStore:
         with self._eng().connect() as conn:
             return [dict(r._mapping) for r in conn.execute(query.limit(limit))]
 
-    def has_running(self, provider: str) -> bool:
+    def has_running(self, provider: str, kinds: tuple[str, ...] | None = None) -> bool:
         query = select(import_runs.c.id).where(
             import_runs.c.provider == provider, import_runs.c.status == "running"
         )
+        if kinds is not None:
+            query = query.where(import_runs.c.kind.in_(kinds))
         with self._eng().connect() as conn:
             return conn.execute(query.limit(1)).first() is not None
 

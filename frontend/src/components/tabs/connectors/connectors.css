@@ -1887,16 +1887,16 @@
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
   color: var(--toast-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 9px 18px;
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
   box-shadow: var(--shadow-toast);
   /* Sized to its text, never squeezed: centred with left 50% + translate, a shrink-to-fit box
      only gets half the viewport, so a long message wrapped into a tall pill-shaped oval. */
   width: max-content;
   max-width: min(520px, calc(100vw - 32px));
   text-align: center;
-  border-radius: 14px;
+  border-radius: var(--toast-radius);
 }
 
 /* ── phone ────────────────────────────────────────────────────────────────── */
@@ -1936,6 +1936,13 @@
      inside a still-sticky parent. */
   .cn-page .rd-masthead {
     display: contents;
+  }
+  /* `display: contents` drops the box, not its pseudo-elements: the desktop scroll shadow
+     (`.rd-masthead.scrolled::after`, absolute at top:100%) would still render, anchored to the
+     scroller instead of the header, and wash out whatever line of the page it lands on once the
+     page has scrolled. The pinned bar's own fade below is the phone's shadow. */
+  .cn-page .rd-masthead::after {
+    display: none;
   }
   .cn-page .rd-masthead-sub {
     display: none;

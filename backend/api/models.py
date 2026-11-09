@@ -49,6 +49,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from backend.ai.models import cli_sign_in
 from backend.ai.models.cli_default_model import cli_default_model, cli_default_models
 from backend.ai.models.codex_cli_catalog import model_ids as _codex_model_ids
 from backend.core.config import get_settings
@@ -483,6 +484,10 @@ def get_model_config_providers():
     so without this the Settings row has nothing true to say about itself while its models
     are already showing up in every picker.  Detection writes nothing.
     ``cli_host_platform`` names the server OS for installation instructions.
+
+    ``cli_sign_in`` is what detection cannot say: whether each detected Claude Code / Codex
+    can spend a login (``signed_in`` | ``not_signed_in`` | ``unknown``). ``cli_in_container``
+    says a sign-in has to go through ``docker exec``.
     """
     store = ModelConfigStore()
     return {
@@ -499,7 +504,22 @@ def get_model_config_providers():
         "cli_host_platform": {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(
             platform.system(), "other"
         ),
+        "cli_sign_in": _cli_sign_in_states(store),
+        "cli_in_container": cli_sign_in.in_container(),
     }
+
+
+def _cli_sign_in_states(store: ModelConfigStore) -> dict[str, str]:
+    """Sign-in state for each detected CLI that is switched on. A switched-off row shows no
+    status at all, so it isn't worth a process spawn on every poll."""
+    configured = store.providers_public()
+    paths = {
+        key: path
+        for key, path in store.detected_cli_paths().items()
+        if (configured.get(key) or {}).get("enabled") is not False
+    }
+    has_key = {key: bool((configured.get(key) or {}).get("has_api_key")) for key in paths}
+    return cli_sign_in.states(paths, has_key)
 
 
 @router.put("/api/model-config")
@@ -547,6 +567,7 @@ class ProviderCredentialsUpdate(BaseModel):
     base_url: Optional[str] = None
     model: Optional[str] = None
     enabled: Optional[bool] = None
+    label: Optional[str] = None  # the owner's name for a custom endpoint; ignored elsewhere
 
 
 @router.put("/api/model-config/providers/{provider_key}")
@@ -574,7 +595,7 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
     The models cache is busted on any ``enabled`` change so the model picker
     reflects the new state without waiting 6 hours.
     """
-    from backend.db.model_config_store import _infer_provider_key, _provider_entry
+    from backend.db.model_config_store import _provider_entry
 
     entry = _provider_entry(provider_key)
     if entry is None:
@@ -585,13 +606,11 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
 
     # Guard: refuse to disable the active instance default.
     if changes.get("enabled") is False:
-        inst = store.resolved()
-        default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
-        if default_key == provider_key:
+        if store.default_provider_key() == provider_key:
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    f"Cannot disable {entry['label']!r} — it is the active default. "
+                    f"Cannot disable {store.display_label(provider_key)!r} — it is the active default. "
                     "Set another provider as default first."
                 ),
             )
@@ -653,20 +672,18 @@ def delete_provider_key(provider_key: str):
     refused with 409 (it would break every chat turn) — set another default first.
     ``base_url``/``model``/``enabled=False`` survive; an empty entry is pruned.
     """
-    from backend.db.model_config_store import _infer_provider_key, _provider_entry
+    from backend.db.model_config_store import _provider_entry
 
     entry = _provider_entry(provider_key)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown provider key: {provider_key!r}")
 
     store = ModelConfigStore()
-    inst = store.resolved()
-    default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
-    if default_key == provider_key and entry.get("needs_api_key", True):
+    if store.default_provider_key() == provider_key and entry.get("needs_api_key", True):
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Cannot remove the API key for {entry['label']!r} — it is the active "
+                f"Cannot remove the API key for {store.display_label(provider_key)!r} — it is the active "
                 "default. Set another provider as default first."
             ),
         )
@@ -689,20 +706,18 @@ def delete_provider(provider_key: str):
     key deletion, and for the same reason: it would break every chat turn. Set another
     default first.
     """
-    from backend.db.model_config_store import _infer_provider_key, _provider_entry
+    from backend.db.model_config_store import _provider_entry
 
     entry = _provider_entry(provider_key)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown provider key: {provider_key!r}")
 
     store = ModelConfigStore()
-    inst = store.resolved()
-    default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
-    if default_key == provider_key:
+    if store.default_provider_key() == provider_key:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Cannot remove {entry['label']!r} — it is the active default. "
+                f"Cannot remove {store.display_label(provider_key)!r} — it is the active default. "
                 "Set another provider as default first."
             ),
         )
@@ -874,7 +889,32 @@ def validate_provider_credentials(provider_key: str):
         result["models"] = models
     else:
         result["error"] = error
+    if status == "valid":
+        _report_cli_sign_in(result, provider_key, entry, base_url, api_key)
     return result
+
+
+def _report_cli_sign_in(
+    result: dict, provider_key: str, entry: dict, cli_path: str, api_key: str
+) -> None:
+    """Test connection answers "will this work", and for a CLI ``--version`` can't. ``key_status``
+    stays about the binary, because the model pickers key off it and a login can come later."""
+    from backend.db.model_config_store import cli_binary_path
+
+    if entry["transport"] not in _CLI_TRANSPORTS:
+        return
+    state = cli_sign_in.check(
+        provider_key,
+        cli_binary_path(provider_key, cli_path),
+        has_api_key=bool(api_key),
+        fresh=True,
+    )
+    result["sign_in"] = state
+    if state == cli_sign_in.NOT_SIGNED_IN:
+        result["error"] = (
+            f"{entry.get('label') or provider_key} is installed but not signed in. "
+            "Expand Sign in to see how."
+        )
 
 
 # ── Reveal stored API key ─────────────────────────────────────────────────────
@@ -1498,7 +1538,17 @@ def get_models(all: bool = Query(default=False, alias="all")):  # noqa: A002
     pref_refs = _preferred_ref_set()
 
     def _resp(rows: list[dict], source: str) -> dict:
-        return {"models": _mark_preferred(rows, pref_refs), "source": source}
+        out = {"models": _mark_preferred(rows, pref_refs), "source": source}
+        if all:
+            # Key → owner's name for every configured provider, so a selection whose provider
+            # returned no models (an unreachable custom endpoint) still shows its name.
+            try:
+                out["provider_labels"] = {
+                    k: store.display_label(k) for k in store.configured_provider_keys()
+                }
+            except Exception:  # noqa: BLE001 — the picker must render whatever else is broken
+                pass
+        return out
 
     if not all:
         # Single-provider path — use the provider key for cache identity so this
@@ -1546,11 +1596,8 @@ def get_models(all: bool = Query(default=False, alias="all")):  # noqa: A002
             "fallback",
         )
 
-    from backend.db.model_config_store import _provider_entry
-
     def _fetch_one(key: str) -> tuple[str, str, list[dict], str]:
-        entry = _provider_entry(key)
-        label = entry["label"] if entry else key
+        label = store.display_label(key) or key
         models, src = _fetch_models_for_provider(key, store)
         return key, label, models, src
 

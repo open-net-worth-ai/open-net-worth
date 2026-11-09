@@ -99,7 +99,7 @@ token and paste it into the same field. Leaving the field blank keeps the saved 
 
 ## Plaid
 
-US banks and cards, through your own Plaid developer account.
+US and Canadian banks and cards, through your own Plaid developer account.
 
 1. Create a developer account at [Plaid](https://dashboard.plaid.com). Under **Developers →
    Keys**, copy your **client_id** and the **secret** for the environment you want. *Sandbox*
@@ -362,6 +362,18 @@ deleted yet: each waits in the review list, where you confirm or undo it, and th
 goes ahead. Edits older than the transaction audit log keeps (20,000
 events) can't be told apart from YNAB's on the first run.
 
+## Actual Budget
+
+Off by default: turn it on in
+[Settings → Developer → Experimental](../features/settings.md#experimental-features).
+
+Bring a whole Actual budget here from your own Actual server, and keep the two in step if you want
+to. The connector asks for the server's address, a password or token, and the encryption password
+if the budget has one, then lists your budgets. Passwords and tokens never come back from the server:
+a saved one shows as dots, and leaving the field blank keeps it. An Actual server limits how fast one
+address can call it, so a very large sync finishes over more than one run. It isn't available on a
+hosted instance. See [Import from Actual Budget](../features/actual-budget-import.md).
+
 ## Alpaca
 
 The read-only Alpaca data source is no longer offered in **Browse & add**. Alpaca's own MCP
@@ -496,3 +508,9 @@ paused.
 - [Importing](../features/importing.md) — the statement-file alternative (CSV, OFX, QIF, PDF…)
 - [What Lucius can do](../lucius/overview.md) — and what he can't
 - [Email](email-ingestion.md) — book transactions from your bank's notification emails instead
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Open Source Monarch Money Alternative: Your Own AI Agent](https://opennetworth.ai/blog/open-net-worth-vs-monarch-money/): bank connections compared with Monarch Money

@@ -20,7 +20,7 @@ import {
 } from '../../ui'
 import { fCur } from './format'
 import { authFetch } from '../../../api/client'
-import { getBaseCurrency } from '../../../utils/format'
+import { fDate, getBaseCurrency } from '../../../utils/format'
 import { useFlag } from '../../../hooks/useFlag'
 import { isWaiting } from './valuation'
 import type {
@@ -853,10 +853,7 @@ export default function AccountModal({
                                     }`
                                   : `Through ${entry.providerLabel}${
                                       entry.linkedAt
-                                        ? ` · linked ${new Date(entry.linkedAt).toLocaleDateString(
-                                            'en-US',
-                                            { month: 'short', day: 'numeric' },
-                                          )}`
+                                        ? ` · linked ${fDate(new Date(entry.linkedAt))}`
                                         : ''
                                     }`}
                               </div>
@@ -927,7 +924,9 @@ export default function AccountModal({
                         {!isAsset && (account?.initialBalance ?? 0) !== 0 ? ' owed' : ''}
                       </span>
                       <span className="acct-opening-meta">
-                        {form.asOf ? `as of ${form.asOf}` : 'tracked from the first transaction'}
+                        {form.asOf
+                          ? `as of ${fDate(form.asOf, 'short', 'always')}`
+                          : 'tracked from the first transaction'}
                       </span>
                       {onEditOpening && (
                         <button type="button" className="acct-opening-link" onClick={onEditOpening}>

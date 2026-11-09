@@ -5,14 +5,20 @@ from __future__ import annotations
 
 from collections import Counter
 
+from backend.services.budget_app import current
+
+PROBLEMS_LISTED = 100
+
 _HINTS = {
-    "failed": "Open Net Worth refused this row. Fix the cause in YNAB, or add the transaction by "
+    "failed": "Open Net Worth refused this row. Fix the cause in {app}, or add the transaction by "
     "hand.",
     "refused_duplicate": "It looks like a transaction already in the book. If it is a separate "
     "one, add it by hand.",
     "previously_deleted": "You deleted this transaction here earlier, so it was not booked again. "
     "Restore it from Accounts if you want it back.",
     "assigned": "Set that month's Assigned by hand in Plan.",
+    "split_gap": "{app} counts the lines, so that is what was booked. Correct the split in {app} "
+    "if the larger figure was right.",
 }
 
 
@@ -88,7 +94,7 @@ def problem(raw: dict) -> dict:
     return {
         "item": raw["ref"],
         "reason": raw.get("reason") or "",
-        "hint": _HINTS.get(raw.get("kind", ""), ""),
+        "hint": _HINTS.get(raw.get("kind", ""), "").format(app=current().name),
     }
 
 

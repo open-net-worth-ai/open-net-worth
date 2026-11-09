@@ -273,9 +273,12 @@ def test_a_public_demo_cannot_reach_the_answer_endpoint():
 def test_the_events_stream_keeps_a_requests_own_type():
     from backend.api import data_events_api
 
+    # An earlier test's app shutdown leaves this process-wide flag set, which ends every stream.
+    data_events._closing.clear()
+
     class Req:
         async def is_disconnected(self):
-            return True
+            return False
 
     async def go():
         stream = data_events_api._event_stream(Req())

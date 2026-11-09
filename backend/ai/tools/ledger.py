@@ -246,6 +246,28 @@ def _currency_conversion_warning(t: dict) -> dict | None:
     }
 
 
+def _category_dropped_warning(derived: dict | None, labelled: dict) -> dict | None:
+    """The category you passed was replaced by the payee's pinned default (ADR 0010).
+
+    Silent until now: the result showed only the final category, so a model that had chosen
+    one for a reason (a standing instruction) could not tell it had been overwritten."""
+    dropped = (derived or {}).get("category_dropped")
+    if not dropped:
+        return None
+    applied = labelled.get("category_label") or labelled.get("category")
+    return {
+        "type": "category_replaced_by_payee_default",
+        "requested": dropped,
+        "applied": applied,
+        "message": (
+            f"Your category {dropped!r} was NOT used: this payee's pinned default "
+            f"({applied!r}) was applied instead. If a standing user instruction requires "
+            f"{dropped!r}, fix it with update_transactions or re-book with "
+            "override_payee_default=true. Otherwise leave it."
+        ),
+    }
+
+
 def _derived_leg_warning(derived: dict | None) -> dict | None:
     """The destination leg of a cross-currency transfer was COMPUTED, not stated.
 
@@ -491,6 +513,9 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
     derived_warning = _derived_leg_warning(derived_leg)
     if derived_warning:
         out.setdefault("warnings", []).append(derived_warning)
+    dropped_warning = _category_dropped_warning(derived_leg, labelled)
+    if dropped_warning:
+        out.setdefault("warnings", []).append(dropped_warning)
     equal_amount_warning = _unverified_equal_amount_warning(labelled)
     if equal_amount_warning:
         out.setdefault("warnings", []).append(equal_amount_warning)
@@ -2014,9 +2039,15 @@ async def add_transactions(input_data: dict):
     # If any item fails normalisation the whole call is aborted — no partial batches.
     normalised = []
     errors = []
+    dropped_by_index: dict[int, str] = {}
     for i, item in enumerate(raw):
         try:
-            normalised.append(_txn_data_from_ai(item, default_date=today_iso))
+            _row_meta: dict = {}
+            normalised.append(
+                _txn_data_from_ai(item, default_date=today_iso, derived_out=_row_meta)
+            )
+            if _row_meta.get("category_dropped"):
+                dropped_by_index[i] = _row_meta["category_dropped"]
         except (ValueError, KeyError) as e:
             _desc = item.get("description") or ""
             logger.warning(
@@ -2802,9 +2833,18 @@ async def add_transactions(input_data: dict):
             accounts_now = svc.accounts.query_accounts()
             all_txns = svc.transactions.all()
             warnings: list[dict] = []
+            index_by_txn = {tid: i for i, tid in created_by_index.items()}
+            category_labels = labels.label_maps(categories=True).get("categories") or {}
             for txn in created:
                 for flag in tracking_start.flags_for_txn(txn, accounts_now, all_txns) or []:
                     warnings.append({"txn_id": txn.get("id"), **flag})
+                dropped = dropped_by_index.get(index_by_txn.get(txn.get("id")))
+                replaced = _category_dropped_warning(
+                    {"category_dropped": dropped} if dropped else None,
+                    {"category_label": category_labels.get(txn.get("category"))},
+                )
+                if replaced:
+                    warnings.append({"txn_id": txn.get("id"), **replaced})
                 equal_amount_warning = _unverified_equal_amount_warning(txn)
                 if equal_amount_warning:
                     warnings.append({"txn_id": txn.get("id"), **equal_amount_warning})

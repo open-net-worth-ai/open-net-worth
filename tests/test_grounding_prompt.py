@@ -124,6 +124,25 @@ def test_system_prompt_names_the_app_in_stable_half(isolated):
     assert "it means this app, not an outside third party" in stable
 
 
+def test_system_prompt_checks_memory_before_flagging_in_stable_half(isolated):
+    """A briefing asked the owner to sort out a charge they had already disputed with their bank.
+    The fact was in its memory, labelled only "apply when relevant", and its skill said to list
+    everything uncategorized."""
+    from backend.ai.prompts import CACHE_SPLIT_MARKER, build_system_prompt
+
+    stable, _volatile = build_system_prompt().split(CACHE_SPLIT_MARKER, 1)
+
+    assert "CHECK WHAT YOU REMEMBER BEFORE YOU FLAG OR ASK" in stable
+    assert "This holds in a report or a scheduled run" in stable
+    assert "even when your instructions say to list everything of its kind" in stable
+    assert "When you can't tell whether a remembered fact covers it" in stable
+    assert "Never ask them to do what they have already done or decided." in stable
+    assert "If it's still open, say where it stands in a few words" in stable
+    # Not asking again must not mean forgetting: the owner still needs telling to recheck.
+    assert "Once the date on something still open has arrived" in stable
+    assert "remind them to recheck it" in stable
+
+
 def test_selling_block_has_disposal_grounding_reinforcement(isolated):
     from backend.ai.prompts import build_system_prompt
 

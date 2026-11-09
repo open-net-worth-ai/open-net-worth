@@ -16,17 +16,25 @@ import asyncio
 import importlib.util
 import logging
 import platform
+import re
 import sys
 import threading
 import time
 from typing import Optional
 
+from backend.connectors.voice import isolation
+from backend.connectors.voice.cards import sounds_like_a_yes
 from backend.core.config import get_settings
 from backend.core.user_time import user_now
 from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
 from backend.services.feature_flags import enabled as flag_enabled
 
 log = logging.getLogger(__name__)
+# A hint makes its words likelier: no merchant gets to make a yes likelier, on a call that can approve.
+_SOUNDS_LIKE_A_YES = re.compile(r"\b(?:approve\w*|confirm\w*|okay|ok)\b", re.I)
+_PLAIN_NAME = re.compile(r"^[^\W\d_][^\W_]*(?:[ '&.-][^\W\d_][^\W_]*)*$")
+
+_MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,13}")
 
 FLAG = "voice_calls"
 _REQUIRED_MODULES = ("livekit.agents", "livekit.plugins.silero")
@@ -120,6 +128,13 @@ def call_session(room: str) -> Optional[str]:
     with _calls_lock:
         entry = _calls.get(room)
         return entry[0] if entry and entry[1] >= time.monotonic() else None
+
+
+def note_mic(report: str) -> None:
+    """What the caller's phone says its mic is doing: state and loudness, never sound or words. A
+    page's text going into the log, so anything but that shape is dropped."""
+    if _MIC_REPORT.fullmatch(report):
+        log.info("voice mic: %s", report)
 
 
 def claim_call(room: str) -> Optional[str]:
@@ -231,12 +246,31 @@ def libraries_installed() -> bool:
         return False
 
 
+_NOISE_MODULES = {
+    "standard": "livekit.plugins.noise_cancellation",
+    "isolation": "livekit.plugins.krisp",
+}
+
+
+def noise_filters_installed() -> dict[str, bool]:
+    """Which Krisp filters this install has. A call runs without a missing one, so the settings
+    page says so rather than letting it pass unnoticed (owner, 2026-11-08)."""
+    found = {}
+    for choice, module in _NOISE_MODULES.items():
+        try:
+            found[choice] = importlib.util.find_spec(module) is not None
+        except (ImportError, ValueError):
+            found[choice] = False
+    return found
+
+
 def status() -> dict:
     """What the settings page shows: is the worker up, and if not, why."""
     running = _running()
     return {
         "flag_on": flag_enabled(FLAG),
         "libraries_installed": libraries_installed(),
+        "noise_installed": noise_filters_installed(),
         "libraries_problem": libraries_problem(),
         "running": running,
         "error": "" if running else _worker.error,
@@ -295,8 +329,54 @@ async def stop() -> None:
         await _stop()
 
 
+# What a call reads when it starts, so changing one takes effect at the next call with no restart:
+# stopping and starting the worker took 2-7s, all of it silence after changing language or voice
+# mid-call (owner, 2026-11-06). Never a credential: those are the worker's connection.
+_PER_CALL = ("language", "front_model", "stt_model", "tts_model", "tts_voice", "noise_filter")
+_CONNECTION = ("enabled", "livekit_url", "api_key", "api_secret")
+
+
+def call_settings() -> dict:
+    config = VoiceConfigStore().get()
+    return {
+        **{key: config.get(key) for key in _PER_CALL},
+        "noise_filter": isolation.filter_for_call(config.get("noise_filter")),
+        "language_name": LANGUAGES.get(config.get("language") or "en", "English"),
+        "own_terms": _own_terms(),
+    }
+
+
+def _own_terms(limit: int = 20) -> list[str]:
+    """The owner's most used merchants, for the call to hear them right. Plain names only: a raw
+    bank description ("ACME*1234 SG") would only teach it noise. Never fails a call."""
+    from backend.services.payees import list_payees
+
+    try:
+        payees = list_payees()["payees"]
+    except Exception:  # noqa: BLE001 — a call is still a call without them
+        log.info("voice: couldn't read the merchants to hint at")
+        return []
+    payees = sorted(payees, key=lambda p: p.get("txn_count") or 0, reverse=True)
+    names = [str(p.get("payee") or "").strip() for p in payees]
+    plain = [
+        n
+        for n in names
+        if 3 <= len(n) <= 30
+        and len(n.split()) <= 3
+        and _PLAIN_NAME.match(n)
+        and not _SOUNDS_LIKE_A_YES.search(n)
+        and not sounds_like_a_yes(n)
+    ]
+    return plain[:limit]
+
+
+def needs_restart(before: dict, after: dict) -> bool:
+    """Only the connection is read once, at start; a worker that isn't up may be able to start."""
+    return not status()["running"] or any(before.get(k) != after.get(k) for k in _CONNECTION)
+
+
 async def reload() -> None:
-    """Apply changed settings: the worker reads its config once, at start."""
+    """Apply a changed connection: the worker reads it once, at start."""
     async with _lifecycle_lock():
         _worker.restarts = 0
         await _stop()

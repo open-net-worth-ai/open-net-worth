@@ -1585,6 +1585,7 @@ def create_transaction(
     conn: Connection | None = None,
     account_rows: list[dict] | None = None,
     resurrect: bool = False,
+    labels_as_given: bool = False,
 ) -> dict:
     """Normalise legs into account currencies, compute the base-currency reporting
     snapshot (skipped for transfers), and persist. Returns the stored transaction.
@@ -1694,6 +1695,8 @@ def create_transaction(
         skip_payee_resolve=_skip_payee_resolve,
         account_rows=account_rows,
         force_transfer_rate=force_transfer_rate,
+        automations=[] if labels_as_given else None,
+        labels_as_given=labels_as_given,
     )
     automation_matches = meta["automation_matches"]
     automation_hint = meta["automation_hint"]
@@ -2925,10 +2928,17 @@ def _fields_the_write_declined(requested: dict, before: dict, after: dict) -> li
 
 
 def update_transaction(
-    txn_id: str, changes: dict, *, preserve_base: bool = False, meta_out: dict | None = None
+    txn_id: str,
+    changes: dict,
+    *,
+    preserve_base: bool = False,
+    meta_out: dict | None = None,
+    labels_as_given: bool = False,
 ) -> dict | None:
     """Update one transaction in place by id and return the rebuilt row (or None if it
     doesn't exist). ``changes`` is a partial field map (already filtered of unset fields).
+    ``labels_as_given`` keeps the row's category exactly as it ends up here, blank included: no
+    Automation and no payee default fill it (``bulk_create_transactions``' argument of that name).
 
     This is the SINGLE per-txn edit choke point — it re-runs the create logic so legs +
     the base-currency snapshot stay consistent (and the spend-rules engine fires), then
@@ -3034,6 +3044,7 @@ def update_transaction(
             _skip_payee_resolve=True,
             meta_out=rebuild_meta,
             force_transfer_rate=not _leg_changed,
+            labels_as_given=labels_as_given,
         )
     # PLAN 3 TASK 4: the cleanup below (drop the appended dup, restamp the stable id, restore
     # the row in place) + the update audit event are now ONE transaction. The inner

@@ -2278,15 +2278,15 @@
 .acct-recon-line .warn {
   color: var(--warn);
 }
-/* Every item on the line is the review buttons' height, so the line is the same height
-   before the review count arrives (a beat after the card) as after: a 15px stat beside 20px
-   buttons grew the line by 5px when they appeared. On the ITEMS, not a min-height on the
+/* Every item on the line is the review buttons' height (22px), so the line is the same height
+   before the review count arrives (a beat after the card) as after: a shorter stat beside the
+   buttons grew the line when they appeared. On the ITEMS, not a min-height on the
    line — border-box there swallowed it in the padding (owner report 2026-09-20, twice). */
 .acct-recon-stat {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 20px;
+  min-height: 22px;
   white-space: nowrap;
 }
 .acct-recon-grow {
@@ -6470,11 +6470,11 @@ select.acct-addin {
   z-index: 80;
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
-  border-radius: var(--radius-pill);
+  border-radius: var(--toast-radius);
   box-shadow: var(--shadow-toast);
-  padding: 10px 18px;
-  font-size: 12.5px;
-  font-weight: 600;
+  padding: var(--toast-padding);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
   color: var(--toast-ink);
   animation: acct-toast-in 0.2s ease;
 }

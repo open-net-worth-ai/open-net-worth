@@ -8,9 +8,13 @@ migration's own mapping) and ``payloads`` (ledger -> YNAB).
 Behind the ``ynab_import_and_sync`` flag (``services.ynab_flag``): off, the scheduler's tick
 never runs it, the connector fetches the plan as before, and every other entry point refuses."""
 
-from backend.services import ynab_flag
+import logging
+
+from backend.services import budget_app, ynab_flag
 from backend.services.ynab_sync import resolve, runner
 from backend.services.ynab_sync.state import INTERVALS, SURFACE
+
+logger = logging.getLogger(__name__)
 
 start_now = ynab_flag.gated(runner.start_now)
 status = ynab_flag.gated(runner.status)
@@ -19,8 +23,23 @@ resolve_item = ynab_flag.gated(resolve.resolve)
 
 
 def run_if_due() -> bool:
-    """The scheduler's tick: never runs while the flag is off."""
-    return ynab_flag.on() and runner.run_if_due()
+    """The scheduler's tick has no request to say which app it is for, so it names each one with
+    a sync that can run here (``budget_app.syncing_apps``) and runs that app's own. One app failing
+    doesn't stop the next, and one that ``defers`` doesn't hold the tick; the first failure is raised
+    once all have had their turn, for the scheduler to log."""
+    ran = False
+    failures: list[Exception] = []
+    for app in budget_app.syncing_apps(failures.append):
+        try:
+            with budget_app.using(app):
+                ran = runner.run_if_due() or ran
+        except Exception as exc:
+            failures.append(exc)
+    for later in failures[1:]:
+        logger.error("sync tick failed", exc_info=later)
+    if failures:
+        raise failures[0]
+    return ran
 
 
 def plan_in_sync(plan_id: str | None) -> bool:
@@ -29,7 +48,8 @@ def plan_in_sync(plan_id: str | None) -> bool:
 
     if not ynab_flag.on():
         return False
-    st = state.load()
+    with budget_app.using(budget_app.YNAB):
+        st = state.load()
     return bool(plan_id) and st["enabled"] and st["plan_id"] == plan_id
 
 
