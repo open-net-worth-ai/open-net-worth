@@ -546,7 +546,12 @@ class ModelConfigStore(NamespacedSettingsStore):
         # A provider we cannot map to a catalogue entry still goes into the ref verbatim,
         # so resolved() can raise the precise "Unknown AI provider 'bogus'" rather than
         # degrading to the much less useful "not configured".
-        key = _infer_provider_key(provider, (data.get("base_url") or "").strip()) or provider
+        key = (
+            _infer_provider_key(
+                provider, (data.get("base_url") or "").strip(), data.get("providers") or {}
+            )
+            or provider
+        )
         # codex_cli legitimately has a blank model ("use the CLI's own default"), and that
         # survives as an empty tail — `codex_cli:` still names its provider.
         migrated = {k: v for k, v in data.items() if k not in ("provider", "base_url", "model")}
@@ -572,7 +577,7 @@ class ModelConfigStore(NamespacedSettingsStore):
         if provider not in VALID_PROVIDERS:
             return data
         base_url = (data.get("base_url") or "").strip()
-        provider_key = _infer_provider_key(provider, base_url)
+        provider_key = _infer_provider_key(provider, base_url, data.get("providers") or {})
         if provider_key is None:
             return data
 
@@ -649,6 +654,15 @@ class ModelConfigStore(NamespacedSettingsStore):
             "base_url": _stored_base_url(entry, creds),
             "api_key": api_key,
         }
+
+    def default_provider_key(self) -> str:
+        """The provider key the instance default names, or ``""`` when none is picked yet.
+
+        For callers that only ask "is this the default?" (the disable / remove guards): unlike
+        ``resolved()`` it never raises on an unset default, so removing a provider on an
+        instance that has no default is a normal request, not a 500."""
+        ref = (self._read_raw().get("default_model") or "").strip()
+        return ref.partition(":")[0]
 
     def public(self) -> dict:
         """The non-secret view for the API/UI — never includes the api_key.
@@ -1254,7 +1268,36 @@ class ModelConfigStore(NamespacedSettingsStore):
         return self.public()
 
 
-def _infer_provider_key(transport: str, base_url: str) -> Optional[str]:
+def _custom_key_for(base_url: str, providers: Optional[dict] = None) -> str:
+    """The stored custom endpoint (``custom`` or ``custom_<id>``) that owns ``base_url``.
+
+    A bare ``(transport, base_url)`` pair is all most callers have, and several custom
+    endpoints share one catalog row — so the URL is what tells them apart. ``providers`` is
+    passed by the store's own migrations (which run INSIDE a read, so loading the store here
+    would recurse); other callers leave it None and it is read once. No match, or no URL, is
+    plain ``custom``; when two endpoints share a URL ``custom`` wins, then the lowest key."""
+    want = (base_url or "").strip().rstrip("/")
+    if not want:
+        return "custom"
+    if providers is None:
+        try:
+            providers = ModelConfigStore()._providers_raw()
+        except Exception:  # noqa: BLE001 — attribution must never break a turn
+            providers = {}
+    for key in sorted(providers, key=lambda k: (k != "custom", k)):
+        creds = providers[key]
+        if (
+            is_custom_key(key)
+            and isinstance(creds, dict)
+            and (creds.get("base_url") or "").strip().rstrip("/") == want
+        ):
+            return key
+    return "custom"
+
+
+def _infer_provider_key(
+    transport: str, base_url: str, providers: Optional[dict] = None
+) -> Optional[str]:
     """Infer the best-matching provider key from a (transport, base_url) pair.
 
     Used to map the legacy instance default back to a provider key for the
@@ -1283,7 +1326,7 @@ def _infer_provider_key(transport: str, base_url: str) -> Optional[str]:
                 and entry["base_url"] == base_url
             ):
                 return entry["key"]
-        return "custom"
+        return _custom_key_for(base_url, providers)
     if transport == "anthropic":
         return "anthropic"
     if transport in ("claude_cli", "codex_cli", "antigravity_cli"):
@@ -1310,5 +1353,18 @@ def provider_label_for(transport: str, base_url: str, provider_key: str = "") ->
     served it instead of being reverse-engineered from the model id at read time.
     """
     pk = provider_key or _infer_provider_key(transport, base_url) or ""
+    if is_custom_key(pk):
+        try:
+            store = ModelConfigStore()
+            owns_url = bool(provider_key) or (
+                _custom_key_for(base_url, store._providers_raw()) == pk
+                and (store._providers_raw().get(pk) or {}).get("base_url", "").strip().rstrip("/")
+                == (base_url or "").strip().rstrip("/")
+            )
+            named = store.display_label(pk) if owns_url else ""
+        except Exception:  # noqa: BLE001 — a label must never break a turn
+            named = ""
+        if named:
+            return named
     entry = _provider_entry(pk) if pk else None
     return str(entry["label"]) if entry else (pk or transport or "Unknown")

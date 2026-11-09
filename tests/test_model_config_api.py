@@ -1540,3 +1540,37 @@ def test_a_custom_endpoint_default_is_protected_not_its_sibling(cfg_env):
         client.put("/api/model-config/providers/custom", json={"enabled": False}).status_code == 200
     )
     assert client.delete("/api/model-config/providers/custom").status_code == 200
+
+
+def test_removing_or_disabling_a_provider_with_no_default_is_not_a_500(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    # Raw reset: no default model picked, the state of a fresh instance.
+    store_mod.ModelConfigStore().save({})
+    client = _client()
+    client.put(
+        "/api/model-config/providers/custom",
+        json={"base_url": "https://one.example/v1", "api_key": "sk-x", "enabled": True},
+    )
+    assert (
+        client.put("/api/model-config/providers/custom", json={"enabled": False}).status_code == 200
+    )
+    assert client.delete("/api/model-config/providers/custom/key").status_code == 200
+    assert client.delete("/api/model-config/providers/custom").status_code == 200
+
+
+def test_models_union_names_every_configured_provider(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    cfg_env.setattr(models_api, "_fetch_models_for_provider", lambda key, store: ([], "fallback"))
+    client = _client()
+    client.put(
+        "/api/model-config/providers/custom_ab12cd34",
+        json={
+            "base_url": "https://two.example/v1",
+            "api_key": "sk-x",
+            "label": "Home server",
+            "enabled": True,
+        },
+    )
+    body = client.get("/api/models?all=1").json()
+    # Present even though that endpoint returned no models — the picker's chip needs the name.
+    assert body["provider_labels"]["custom_ab12cd34"] == "Home server"

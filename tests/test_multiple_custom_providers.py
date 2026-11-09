@@ -66,3 +66,31 @@ def test_label_is_ignored_for_a_preset_and_removing_one_keeps_the_other(store):
     store.remove_provider("custom")
     assert "custom" not in store.providers_public()
     assert store.resolve_for_provider("custom_ab12cd34")["api_key"] == "k2"
+
+
+def test_a_url_alone_finds_the_custom_endpoint_that_owns_it(store):
+    from backend.db.model_config_store import _infer_provider_key, provider_label_for
+
+    store.update_provider("custom", {"base_url": "https://one.example/v1", "label": "Work gateway"})
+    store.update_provider(
+        "custom_ab12cd34", {"base_url": "https://two.example/v1/", "label": "Home server"}
+    )
+
+    # Cost attribution, vision refs and the model list only know (transport, base_url).
+    assert _infer_provider_key("openai_compatible", "https://two.example/v1") == "custom_ab12cd34"
+    assert _infer_provider_key("openai_compatible", "https://one.example/v1") == "custom"
+    assert _infer_provider_key("openai_compatible", "https://nobody.example/v1") == "custom"
+    assert provider_label_for("openai_compatible", "https://two.example/v1") == "Home server"
+    assert provider_label_for("openai_compatible", "https://one.example/v1") == "Work gateway"
+    assert provider_label_for("openai_compatible", "https://nobody.example/v1") == (
+        "Custom (OpenAI-compatible)"
+    )
+
+
+def test_cost_provider_for_a_pinned_custom_ref_uses_its_name(store):
+    from backend.services.cost import provider_of_model
+
+    store.update_provider(
+        "custom_ab12cd34", {"base_url": "https://two.example/v1", "label": "Home"}
+    )
+    assert provider_of_model("custom_ab12cd34:some-model") == "Home"

@@ -47,11 +47,22 @@ export type ModelSource = 'live' | 'fallback'
 export interface ModelsResponse {
   models: ModelOption[]
   source: ModelSource
+  provider_labels?: Record<string, string>
+}
+
+// Provider key → the name the owner sees, for every configured provider. A selection whose
+// provider listed no models (an unreachable endpoint) has no row to read its name from.
+let providerLabels: Record<string, string> = {}
+
+export function providerLabelFor(key: string): string | undefined {
+  return providerLabels[key] || undefined
 }
 
 export async function fetchModels(all = false): Promise<ModelsResponse> {
   const url = all ? '/api/models?all=1' : '/api/models'
   const r = await authFetch(url)
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  return r.json() as Promise<ModelsResponse>
+  const body = (await r.json()) as ModelsResponse
+  if (all && body.provider_labels) providerLabels = body.provider_labels
+  return body
 }
