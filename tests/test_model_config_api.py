@@ -1509,3 +1509,34 @@ def test_two_custom_endpoints_survive_over_http(cfg_env):
     assert client.delete("/api/model-config/providers/custom").status_code == 200
     after = client.get("/api/model-config/providers").json()["configured_providers"]
     assert "custom" not in after and "custom_ab12cd34" in after
+
+
+def test_a_custom_endpoint_default_is_protected_not_its_sibling(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    client = _client()
+    for key, url in (
+        ("custom", "https://one.example/v1"),
+        ("custom_ab12cd34", "https://two.example/v1"),
+    ):
+        client.put(
+            f"/api/model-config/providers/{key}",
+            json={"base_url": url, "api_key": "sk-" + key, "enabled": True},
+        )
+    assert (
+        client.put("/api/model-config", json={"default_model": "custom_ab12cd34:m1"}).status_code
+        == 200
+    )
+
+    # The active default is refused on every path; its sibling `custom` is free to change.
+    assert (
+        client.put(
+            "/api/model-config/providers/custom_ab12cd34", json={"enabled": False}
+        ).status_code
+        == 409
+    )
+    assert client.delete("/api/model-config/providers/custom_ab12cd34").status_code == 409
+    assert client.delete("/api/model-config/providers/custom_ab12cd34/key").status_code == 409
+    assert (
+        client.put("/api/model-config/providers/custom", json={"enabled": False}).status_code == 200
+    )
+    assert client.delete("/api/model-config/providers/custom").status_code == 200

@@ -607,12 +607,14 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
     # Guard: refuse to disable the active instance default.
     if changes.get("enabled") is False:
         inst = store.resolved()
-        default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
+        default_key = inst.get("provider_key") or _infer_provider_key(
+            inst["provider"], inst.get("base_url") or ""
+        )
         if default_key == provider_key:
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    f"Cannot disable {entry['label']!r} — it is the active default. "
+                    f"Cannot disable {store.display_label(provider_key)!r} — it is the active default. "
                     "Set another provider as default first."
                 ),
             )
@@ -682,12 +684,14 @@ def delete_provider_key(provider_key: str):
 
     store = ModelConfigStore()
     inst = store.resolved()
-    default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
+    default_key = inst.get("provider_key") or _infer_provider_key(
+        inst["provider"], inst.get("base_url") or ""
+    )
     if default_key == provider_key and entry.get("needs_api_key", True):
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Cannot remove the API key for {entry['label']!r} — it is the active "
+                f"Cannot remove the API key for {store.display_label(provider_key)!r} — it is the active "
                 "default. Set another provider as default first."
             ),
         )
@@ -718,12 +722,14 @@ def delete_provider(provider_key: str):
 
     store = ModelConfigStore()
     inst = store.resolved()
-    default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
+    default_key = inst.get("provider_key") or _infer_provider_key(
+        inst["provider"], inst.get("base_url") or ""
+    )
     if default_key == provider_key:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Cannot remove {entry['label']!r} — it is the active default. "
+                f"Cannot remove {store.display_label(provider_key)!r} — it is the active default. "
                 "Set another provider as default first."
             ),
         )

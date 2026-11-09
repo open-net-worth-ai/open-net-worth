@@ -644,6 +644,7 @@ class ModelConfigStore(NamespacedSettingsStore):
 
         return {
             "provider": transport,
+            "provider_key": key,
             "model": model,
             "base_url": _stored_base_url(entry, creds),
             "api_key": api_key,
