@@ -54,6 +54,18 @@ interface ConfiguredProvider {
   label?: string
 }
 
+// "Custom" is one catalog row, but the owner may keep several OpenAI-compatible endpoints:
+// each further one is stored as `custom_<id>` and shown as a copy of that row.
+const isCustomKey = (key: string) => /^custom(_[a-z0-9]{1,24})?$/.test(key)
+
+function newCustomKey(taken: string[]): string {
+  if (!taken.includes('custom')) return 'custom'
+  let key: string
+  do key = `custom_${Math.random().toString(36).slice(2, 10)}`
+  while (taken.includes(key))
+  return key
+}
+
 // A local CLI enrols by DETECTION, not by stored credentials — it has no api_key or base_url
 // to save, so `configured_providers` has no row for it. The Settings list still shows it (it is
 // a usable provider, and may be the instance default), which means the row renderer must be
@@ -376,7 +388,9 @@ function ProviderModal({
   onRemove: (key: string) => void
   toast: SectionProps['toast']
 }) {
-  const available = catalog.filter((e) => e.key === 'custom' || !taken.includes(e.key))
+  const available = catalog.filter((e) =>
+    e.key === 'custom' ? true : !isCustomKey(e.key) && !taken.includes(e.key),
+  )
   const [sel, setSel] = useState(
     mode === 'edit' ? editKey || 'custom' : available[0]?.key || 'custom',
   )
@@ -522,7 +536,7 @@ function ProviderModal({
             label="Provider"
             span="full"
             help={
-              entry.key === 'custom'
+              isCustomKey(entry.key)
                 ? 'Any endpoint that speaks the OpenAI API — a self-hosted gateway, a proxy, anything'
                 : undefined
             }
@@ -536,7 +550,7 @@ function ProviderModal({
             </Select>
           </Field>
         )}
-        {entry.key === 'custom' && (
+        {isCustomKey(entry.key) && (
           <Field label="Display name" span="full">
             <input
               className="rd-input"
@@ -920,10 +934,19 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
 
   const terminal =
     gatewayMode && openSection ? { onOpen: () => openSection('terminal') } : undefined
-  const catalog = (providers.data?.catalog ?? []).filter(
+  const baseCatalog = (providers.data?.catalog ?? []).filter(
     (entry) => !gatewayMode || !isLocalOnlyProvider(entry),
   )
   const configured = providers.data?.configured_providers ?? {}
+  const customRow = baseCatalog.find((entry) => entry.key === 'custom')
+  const catalog = customRow
+    ? [
+        ...baseCatalog,
+        ...Object.keys(configured)
+          .filter((key) => key !== 'custom' && isCustomKey(key))
+          .map((key) => ({ ...customRow, key })),
+      ]
+    : baseCatalog
   const detected = providers.data?.detected_clis ?? {}
   const detectedPaths = providers.data?.detected_cli_paths ?? {}
   const cliSignIn = providers.data?.cli_sign_in ?? {}
@@ -1275,8 +1298,11 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
           toast={toast}
           onClose={() => setEditor(null)}
           onSave={(key, patch) => {
-            const entry = catalog.find((e) => e.key === key)
+            // Adding "Custom" when one exists must not overwrite it: it gets its own key.
+            if (editor.mode === 'add' && key === 'custom') key = newCustomKey(takenKeys)
+            const entry = catalog.find((e) => e.key === key) ?? customRow
             const body: Record<string, unknown> = { enabled: true }
+            if (isCustomKey(key)) body.label = patch.label
             if (entry?.cli_binary) body.base_url = patch.bin
             else body.base_url = patch.url
             if (patch.model) body.model = patch.model

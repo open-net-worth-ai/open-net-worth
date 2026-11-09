@@ -136,7 +136,7 @@ file](../operations/upgrading.md#docker), or mount your own volumes at `/home/on
 | **Google Gemini** | [aistudio.google.com](https://aistudio.google.com) → **Get API key** → **Create API key**. |
 | **xAI (Grok)** | [console.x.ai](https://console.x.ai) → **API keys** → create a key. |
 | **Zhipu (GLM)** | [z.ai](https://z.ai) → API keys. The endpoint can be changed if you use the mainland China service. |
-| **Custom (OpenAI-compatible)** | Any service that speaks the OpenAI API (DeepSeek, Moonshot, a self-hosted gateway). Enter its **Endpoint** URL and key. |
+| **Custom (OpenAI-compatible)** | Any service that speaks the OpenAI API (DeepSeek, Moonshot, a self-hosted gateway). Enter its **Endpoint** URL and key. Add it as many times as you like — give each a **Display name** and they sit side by side. |
 
 The key is stored on the machine running Open Net Worth only. It's never sent to Lucius, never
 included in an export, and the field hides it (you can reveal it in Settings to check it).

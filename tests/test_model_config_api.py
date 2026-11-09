@@ -1483,3 +1483,29 @@ def test_blank_codex_model_reports_the_clis_real_default(cfg_env, tmp_path):
 
 def test_explicit_model_is_its_own_effective_model(cfg_env):
     assert _client().get("/api/model-config").json()["effective_model"] == "test-model"
+
+
+def test_two_custom_endpoints_survive_over_http(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    client = _client()
+    for key, url, label in (
+        ("custom", "https://one.example/v1", "Work gateway"),
+        ("custom_ab12cd34", "https://two.example/v1", "Home server"),
+    ):
+        r = client.put(
+            f"/api/model-config/providers/{key}",
+            json={"base_url": url, "api_key": "sk-" + key, "label": label, "enabled": True},
+        )
+        assert r.status_code == 200, r.text
+
+    got = client.get("/api/model-config/providers").json()["configured_providers"]
+    assert got["custom"]["base_url"] == "https://one.example/v1"
+    assert got["custom"]["label"] == "Work gateway"
+    assert got["custom_ab12cd34"]["base_url"] == "https://two.example/v1"
+    assert got["custom_ab12cd34"]["label"] == "Home server"
+    assert "sk-custom" not in str(got)
+
+    assert client.put("/api/model-config/providers/custom_BAD!", json={}).status_code == 404
+    assert client.delete("/api/model-config/providers/custom").status_code == 200
+    after = client.get("/api/model-config/providers").json()["configured_providers"]
+    assert "custom" not in after and "custom_ab12cd34" in after

@@ -567,6 +567,7 @@ class ProviderCredentialsUpdate(BaseModel):
     base_url: Optional[str] = None
     model: Optional[str] = None
     enabled: Optional[bool] = None
+    label: Optional[str] = None  # the owner's name for a custom endpoint; ignored elsewhere
 
 
 @router.put("/api/model-config/providers/{provider_key}")
@@ -1591,11 +1592,8 @@ def get_models(all: bool = Query(default=False, alias="all")):  # noqa: A002
             "fallback",
         )
 
-    from backend.db.model_config_store import _provider_entry
-
     def _fetch_one(key: str) -> tuple[str, str, list[dict], str]:
-        entry = _provider_entry(key)
-        label = entry["label"] if entry else key
+        label = store.display_label(key) or key
         models, src = _fetch_models_for_provider(key, store)
         return key, label, models, src
 

@@ -62,6 +62,7 @@ scope creep.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from typing import Optional
 
@@ -418,9 +419,24 @@ PROVIDER_CATALOG: list = [
 _PROVIDERS_BY_KEY: dict[str, dict] = {e["key"]: e for e in PROVIDER_CATALOG}
 
 
+# A user may keep several OpenAI-compatible endpoints at once. The catalog holds ONE generic
+# row (``custom``); every further endpoint is stored under ``custom_<id>`` and resolves to a
+# copy of that row, so there is no second catalog and nothing to migrate.
+CUSTOM_KEY_RE = re.compile(r"^custom(_[a-z0-9]{1,24})?$")
+_MAX_LABEL_LEN = 60
+
+
+def is_custom_key(key: str) -> bool:
+    """True for ``custom`` and every ``custom_<id>`` endpoint."""
+    return bool(CUSTOM_KEY_RE.match(key or ""))
+
+
 def _provider_entry(key: str) -> Optional[dict]:
     """Return the catalog entry for a key, or None if unknown."""
-    return _PROVIDERS_BY_KEY.get(key)
+    entry = _PROVIDERS_BY_KEY.get(key)
+    if entry is None and key != "custom" and is_custom_key(key):
+        return {**_PROVIDERS_BY_KEY["custom"], "key": key}
+    return entry
 
 
 def _stored_base_url(entry: dict, creds: dict) -> str:
@@ -443,7 +459,7 @@ def _drop_key_if_rebound(entry: dict, creds: dict, new_url: str) -> None:
 def provider_entry(key: str) -> Optional[dict]:
     """Public accessor for one catalog entry — for callers outside this module that need to
     map a provider KEY onto its label/transport (e.g. the cost service attributing spend)."""
-    return _PROVIDERS_BY_KEY.get(key)
+    return _provider_entry(key)
 
 
 # Catalog keys whose transport is a locally-installed CLI, in catalog order.
@@ -720,7 +736,19 @@ class ModelConfigStore(NamespacedSettingsStore):
                 "checked_at": checked_at,
                 "enabled": enabled,
             }
+            label = (creds.get("label") or "").strip()
+            if label:
+                result[key]["label"] = label
         return result
+
+    def display_label(self, provider_key: str) -> str:
+        """The name to show for a provider: the owner's own name for a custom endpoint, else
+        the catalog label. Empty when the key is unknown."""
+        stored = ""
+        if is_custom_key(provider_key):
+            creds = self._providers_raw().get(provider_key)
+            stored = ((creds or {}).get("label") or "").strip() if isinstance(creds, dict) else ""
+        return stored or str((_provider_entry(provider_key) or {}).get("label") or "")
 
     def provider_enabled(self, provider_key: str) -> bool:
         """Return True when the provider is enabled (or absent — default True).
@@ -760,6 +788,12 @@ class ModelConfigStore(NamespacedSettingsStore):
             creds["api_key"] = str(changes["api_key"]).strip()
         if "model" in changes and changes["model"] is not None:
             creds["model"] = str(changes["model"]).strip()
+        if "label" in changes and changes["label"] is not None and is_custom_key(provider_key):
+            label = str(changes["label"]).strip()[:_MAX_LABEL_LEN]
+            if label:
+                creds["label"] = label
+            else:
+                creds.pop("label", None)
         if "key_status" in changes and changes["key_status"] is not None:
             creds["key_status"] = str(changes["key_status"])
         if "checked_at" in changes and changes["checked_at"] is not None:
