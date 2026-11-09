@@ -327,7 +327,9 @@ class CreateAccountInput(ToolInput):
             "written — pass a NEGATIVE number for money owed (a card carrying 5000 of "
             "debt is -5000); the sign is not flipped for you. Stored as a dated "
             "Starting Balance transaction, not a field on the account. Investment/retirement: "
-            "the account's TOTAL (holdings + cash); holdings added later are carved out of it."
+            "the account's TOTAL (holdings + cash). Result value_source='total': holdings added "
+            "later are carved out of it. No value_source: a holding counts on top unless its "
+            "funding account is this one."
         ),
     )
     initial_balance_date: Optional[str] = Field(

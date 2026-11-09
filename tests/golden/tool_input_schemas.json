@@ -92,7 +92,7 @@
         "description": "3-letter ISO code. Use the account's native currency (default to the user's base_currency if not specified)."
       },
       "initial_balance": {
-        "description": "Required current balance today, in the account's currency; use 0 when empty. Signed as written — pass a NEGATIVE number for money owed (a card carrying 5000 of debt is -5000); the sign is not flipped for you. Stored as a dated Starting Balance transaction, not a field on the account. Investment/retirement: the account's TOTAL (holdings + cash); holdings added later are carved out of it.",
+        "description": "Required current balance today, in the account's currency; use 0 when empty. Signed as written — pass a NEGATIVE number for money owed (a card carrying 5000 of debt is -5000); the sign is not flipped for you. Stored as a dated Starting Balance transaction, not a field on the account. Investment/retirement: the account's TOTAL (holdings + cash). Result value_source='total': holdings added later are carved out of it. No value_source: a holding counts on top unless its funding account is this one.",
         "type": "number"
       },
       "initial_balance_date": {

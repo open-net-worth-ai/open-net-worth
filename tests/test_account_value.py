@@ -117,6 +117,36 @@ def test_flag_off_value_source_is_refused(book):
         _account(value_source="holdings")
 
 
+@pytest.mark.flags(investment_value_source=False)
+def test_flag_off_a_holding_funded_from_the_account_keeps_the_typed_total(book):
+    """What create_account's description tells Lucius to do with the flag off (no
+    value_source in the result): fund the holding from the account itself, so a typed total
+    is not counted twice."""
+    acct = _account(type_="investment")
+    shell = _shell(acct["id"], _instrument())
+    lots_service.apply_lot_change(
+        {
+            "type": "acquire",
+            "position_id": shell["position_id"],
+            "quantity": 5,
+            "unit_cost": PRICE,
+            "cost_currency": "USD",
+            "acquired_at": "2026-10-02",
+            "funding_account_id": acct["id"],
+        }
+    )
+    assert _value(acct["id"]) == 8000.0
+    assert "value_source" not in _hydrated(acct["id"])
+
+
+def test_create_account_description_holds_with_the_flag_on_and_off():
+    """The tool schema is fixed text, so it must not promise the carve-out unconditionally."""
+    from backend.ai.tools.accounts import CreateAccountInput
+
+    desc = CreateAccountInput.model_fields["initial_balance"].description
+    assert "Result value_source='total'" in desc and "No value_source" in desc
+
+
 # ── default and carve-out ──────────────────────────────────────────────────────────────
 
 
