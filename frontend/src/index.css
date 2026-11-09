@@ -5902,6 +5902,14 @@ body.hide-amounts .mask * {
   /* The tallest a phone sheet may be RIGHT NOW: the shared ceiling, or — with the keyboard
      up — what is visible above it. iOS never shrinks the layout viewport for the keyboard;
      --visual-viewport-height is useVisualViewportVars' measurement of what is visible. */
+  /* One toast: the update notice's full pill. Every message toast reads these; the colours are
+     already shared (--toast-bg / --toast-ink). */
+  :root {
+    --toast-radius: var(--radius-pill);
+    --toast-font-size: 13px;
+    --toast-font-weight: 500;
+    --toast-padding: 10px 18px;
+  }
   :root {
     --sheet-visible-max-height: min(
       var(--sheet-max-height),

@@ -393,10 +393,11 @@ export function Settings({
   const bumpBusy = useRef((delta: number) => setBusyCount((n) => Math.max(0, n + delta))).current
   // Sections wrap their writes in useSaving(); the shell shows one "Saving…" pill for all of them.
   const [savingCount, setSavingCount] = useState(0)
-  const bumpSaving = useCallback(
-    (delta: number) => setSavingCount((n) => Math.max(0, n + delta)),
-    [],
-  )
+  const [savedCount, setSavedCount] = useState(0)
+  const bumpSaving = useCallback((delta: number, failed?: boolean) => {
+    setSavingCount((n) => Math.max(0, n + delta))
+    if (delta < 0 && !failed) setSavedCount((n) => n + 1)
+  }, [])
 
   const active = SECTIONS.find((s) => s.key === section) || SECTIONS[0]!
 
@@ -631,7 +632,11 @@ export function Settings({
         <div className="rd-set-actionbar-slot" ref={setActionBarSlot} />
       </div>
       {toastNode}
-      <SavingIndicator active={savingCount > 0} />
+      <SavingIndicator
+        active={savingCount > 0}
+        savedCount={savedCount}
+        quiet={Boolean(toastNode)}
+      />
     </Modal>
   )
 }

@@ -6468,11 +6468,11 @@ select.acct-addin {
   z-index: 80;
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
-  border-radius: var(--radius-pill);
+  border-radius: var(--toast-radius);
   box-shadow: var(--shadow-toast);
-  padding: 10px 18px;
-  font-size: 12.5px;
-  font-weight: 600;
+  padding: var(--toast-padding);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
   color: var(--toast-ink);
   animation: acct-toast-in 0.2s ease;
 }

@@ -1512,10 +1512,10 @@ button.as-row-chevron {
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
   color: var(--toast-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 10px 16px;
-  border-radius: var(--radius-pill);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
+  border-radius: var(--toast-radius);
   box-shadow: var(--shadow-toast);
   z-index: 90;
 }

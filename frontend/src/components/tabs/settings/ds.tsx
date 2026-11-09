@@ -10,7 +10,7 @@
 // Not ported (the prototype's standalone-shell scaffolding): AppNav, Shell, Kebab, Tabs, Dot.
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode, SelectHTMLAttributes } from 'react'
-import { ChevronDown, X } from '../../../ui/icons'
+import { Check, ChevronDown, X } from '../../../ui/icons'
 
 // ── primitives ───────────────────────────────────────────────────────────────
 export type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid'
@@ -322,7 +322,8 @@ export interface SectionProps {
 //
 // A counter, not a boolean: several hooks in one section load concurrently, and the skeleton
 // must persist until the last one lands, not clear when the first does.
-type CounterContext = React.Context<((delta: number) => void) | null>
+type Bump = (delta: number, failed?: boolean) => void
+type CounterContext = React.Context<Bump | null>
 
 function CounterProvider({
   context: Context,
@@ -330,18 +331,18 @@ function CounterProvider({
   children,
 }: {
   context: CounterContext
-  onChange: (delta: number) => void
+  onChange: Bump
   children: ReactNode
 }) {
   const ref = useRef(onChange)
   ref.current = onChange
   // Stable identity: a fresh callback each render would retrigger every consumer's effect,
   // decrementing and re-incrementing the counter and flickering the skeleton.
-  const bump = useRef((delta: number) => ref.current(delta)).current
+  const bump = useRef<Bump>((delta, failed) => ref.current(delta, failed)).current
   return <Context.Provider value={bump}>{children}</Context.Provider>
 }
 
-const SectionBusyContext: CounterContext = createContext<((delta: number) => void) | null>(null)
+const SectionBusyContext: CounterContext = createContext<Bump | null>(null)
 
 export function SectionBusyProvider(props: {
   onChange: (delta: number) => void
@@ -355,19 +356,17 @@ export function SectionBusyProvider(props: {
 // life: the owner changed something and the server has not answered yet. A section wraps its
 // write in `useSaving()`'s `track` and the SHELL shows one "Saving…" pill for every section —
 // a new settings screen gets the indicator by wrapping its save, with no UI of its own.
-const SectionSavingContext: CounterContext = createContext<((delta: number) => void) | null>(null)
+const SectionSavingContext: CounterContext = createContext<Bump | null>(null)
 
-export function SectionSavingProvider(props: {
-  onChange: (delta: number) => void
-  children: ReactNode
-}) {
+export function SectionSavingProvider(props: { onChange: Bump; children: ReactNode }) {
   return <CounterProvider context={SectionSavingContext} {...props} />
 }
 
 /**
  * `const track = useSaving()`, then `await track(() => authFetch(...))`: the shell shows
- * "Saving…" while the promise is pending. Returns the work's result, rethrows its error, and
- * is a plain pass-through outside the Settings shell.
+ * "Saving…" while the promise is pending and "Saved ✓" when it ends. Returns the work's
+ * result, rethrows its error (no "Saved" for a write that threw), and is a plain pass-through
+ * outside the Settings shell.
  */
 export function useSaving(): <T>(work: () => Promise<T>) => Promise<T> {
   const bump = useContext(SectionSavingContext)
@@ -375,21 +374,53 @@ export function useSaving(): <T>(work: () => Promise<T>) => Promise<T> {
     async <T,>(work: () => Promise<T>): Promise<T> => {
       bump?.(1)
       try {
-        return await work()
-      } finally {
+        const result = await work()
         bump?.(-1)
+        return result
+      } catch (error) {
+        bump?.(-1, true)
+        throw error
       }
     },
     [bump],
   )
 }
 
+// "Saved ✓" confirms a write that changed the screen without a message of its own. It stays
+// out of the way of the section's own result toast (the same spot) and of an error toast: if a
+// toast is up when the write ends there is nothing to add, so it never shows.
+function SavedPill({ quiet }: { quiet: boolean }) {
+  const [on, setOn] = useState(!quiet)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setOn(false), 1400)
+    return () => window.clearTimeout(timer)
+  }, [])
+  if (!on) return null
+  return (
+    <div className="rd-saving rd-saving--done" role="status" aria-live="polite">
+      <Check size={13} strokeWidth={2.2} aria-hidden="true" />
+      Saved
+    </div>
+  )
+}
+
 /**
- * The "Saving…" pill. Appears only if the write is still pending after `delayMs`, so a save
- * that answers at once (most do, in well under 100ms) never flashes it; it leaves the moment
- * the write ends, as the result toast takes its place.
+ * The shell's write feedback. "Saving…" appears only if the write is still pending after
+ * `delayMs`, so a save that answers at once never flashes a spinner. `savedCount` counts writes
+ * that finished without throwing; each one shows "Saved ✓" for a moment, unless `quiet` (a toast
+ * is already speaking) or another write is still in flight.
  */
-export function SavingIndicator({ active, delayMs = 200 }: { active: boolean; delayMs?: number }) {
+export function SavingIndicator({
+  active,
+  savedCount = 0,
+  quiet = false,
+  delayMs = 200,
+}: {
+  active: boolean
+  savedCount?: number
+  quiet?: boolean
+  delayMs?: number
+}) {
   const [shown, setShown] = useState(false)
   useEffect(() => {
     if (!active) return
@@ -399,13 +430,16 @@ export function SavingIndicator({ active, delayMs = 200 }: { active: boolean; de
       setShown(false)
     }
   }, [active, delayMs])
-  if (!active || !shown) return null
-  return (
-    <div className="rd-saving" role="status" aria-live="polite">
-      <span className="rd-saving__spin" aria-hidden="true" />
-      Saving…
-    </div>
-  )
+  if (active) {
+    if (!shown) return null
+    return (
+      <div className="rd-saving" role="status" aria-live="polite">
+        <span className="rd-saving__spin" aria-hidden="true" />
+        Saving…
+      </div>
+    )
+  }
+  return savedCount > 0 ? <SavedPill key={savedCount} quiet={quiet} /> : null
 }
 
 // A section with a page of its own (a memory topic) hands the shell a way back, and the shell draws

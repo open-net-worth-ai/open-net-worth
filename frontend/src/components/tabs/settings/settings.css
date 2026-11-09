@@ -2667,16 +2667,16 @@
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
   color: var(--toast-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 9px 18px;
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
   box-shadow: var(--shadow-toast);
   /* Sized to its text, never squeezed: centred with left 50% + translate, a shrink-to-fit box
      only gets half the viewport, so a long message wrapped into a tall pill-shaped oval. */
   width: max-content;
   max-width: min(520px, calc(100vw - 32px));
   text-align: center;
-  border-radius: 14px;
+  border-radius: var(--toast-radius);
 }
 
 /* "Saving…": the shell's one pill for any settings write in flight (useSaving). It takes the
@@ -2693,12 +2693,12 @@
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
   color: var(--toast-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 9px 18px;
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
   box-shadow: var(--shadow-toast);
   width: max-content;
-  border-radius: 14px;
+  border-radius: var(--toast-radius);
 }
 .onw-settings .rd-saving__spin {
   width: 12px;
@@ -2708,6 +2708,10 @@
   border-top-color: transparent;
   border-radius: 50%;
   animation: rd-saving-spin 0.7s linear infinite;
+}
+/* Confirmation, not progress: the toast's own look, with the check riding the text. */
+.onw-settings .rd-saving--done {
+  gap: 6px;
 }
 @keyframes rd-saving-spin {
   to {

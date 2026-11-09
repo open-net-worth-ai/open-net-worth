@@ -43,15 +43,18 @@ describe('useSaving', () => {
   })
 
   it('releases it when the write throws, and rethrows', async () => {
-    const deltas: number[] = []
+    const calls: Array<[number, boolean | undefined]> = []
     const out: { run?: () => Promise<unknown> } = {}
     render(
-      <SectionSavingProvider onChange={(d) => deltas.push(d)}>
+      <SectionSavingProvider onChange={(d, failed) => calls.push([d, failed])}>
         <Probe work={() => Promise.reject(new Error('boom'))} out={out} />
       </SectionSavingProvider>,
     )
     await expect(out.run!()).rejects.toThrow('boom')
-    expect(deltas).toEqual([1, -1])
+    expect(calls).toEqual([
+      [1, undefined],
+      [-1, true],
+    ])
   })
 
   it('is a plain pass-through outside the Settings shell', async () => {
@@ -83,5 +86,40 @@ describe('SavingIndicator', () => {
     rerender(<SavingIndicator active={false} />)
     act(() => void vi.advanceTimersByTime(500))
     expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+describe('SavingIndicator — Saved', () => {
+  it('confirms a finished write for a moment, then goes', () => {
+    const { rerender } = render(<SavingIndicator active={false} savedCount={0} />)
+    expect(screen.queryByRole('status')).toBeNull()
+    rerender(<SavingIndicator active={false} savedCount={1} />)
+    expect(screen.getByRole('status').textContent).toContain('Saved')
+    act(() => void vi.advanceTimersByTime(1500))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('shows for a fast save too — no "Saving…" first', () => {
+    const { rerender } = render(<SavingIndicator active={false} savedCount={0} />)
+    rerender(<SavingIndicator active savedCount={0} />)
+    act(() => void vi.advanceTimersByTime(50))
+    rerender(<SavingIndicator active={false} savedCount={1} />)
+    expect(screen.getByRole('status').textContent).toMatch(/Saved/)
+    expect(screen.queryByText(/Saving/)).toBeNull()
+  })
+
+  it('stays out of the way of a toast that is already speaking, even after it leaves', () => {
+    const { rerender } = render(<SavingIndicator active={false} savedCount={0} />)
+    rerender(<SavingIndicator active={false} savedCount={1} quiet />)
+    expect(screen.queryByRole('status')).toBeNull()
+    rerender(<SavingIndicator active={false} savedCount={1} quiet={false} />)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('waits while another write is still in flight', () => {
+    const { rerender } = render(<SavingIndicator active savedCount={1} />)
+    expect(screen.queryByText(/Saved/)).toBeNull()
+    rerender(<SavingIndicator active={false} savedCount={2} />)
+    expect(screen.getByRole('status').textContent).toContain('Saved')
   })
 })
