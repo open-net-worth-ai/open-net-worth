@@ -59,6 +59,21 @@ feed, an optional connector), and there is no telemetry.
 The one exception is a problem report you choose to send: you read it first, and it goes only when
 you press Send.
 
+## Compared with Claude and ChatGPT Personal Finance
+
+|  | Claude Personal Finance | ChatGPT Personal Finance | Open Net Worth |
+|---|---|---|---|
+| **Can it act?** | No, it reads your accounts | No, it can't change your accounts | Yes: books transactions, runs your budget, places trades through your broker (approval by default) |
+| **Comes to you first** | No, it waits for you to ask | No, it waits for you to ask | Daily briefings, weekly and monthly reports, Telegram pings when news hits what you hold |
+| **Investment advice** | Not meant to give it | Planning questions | Judges a ticker against your own investment thesis |
+| **Where it works** | US only, through Plaid (up to 16 accounts) | US only, through Plaid | Any country and currency, from your bank emails and statements |
+| **Where your data lives** | Anthropic's cloud | OpenAI's cloud | Your own machine |
+| **Your AI** | Claude only | ChatGPT only | Your Claude Code or Codex subscription, an API key, or a local model |
+| **What it covers** | Spending, bills, balances | Spending, cash flow, investments, loans | Everything you own, including property, cars and RSUs |
+| **Who can get it** | Paid US plans, in beta | US ChatGPT Pro, in preview | Anyone: free and open source (AGPL-3.0) |
+
+<sub>Based on each launch's announcement and coverage as of November 2026.</sub>
+
 ## What's inside
 
 | | |
