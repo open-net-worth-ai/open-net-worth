@@ -1326,6 +1326,10 @@
   gap: 5px;
   padding-left: 5px;
 }
+.a3-conn-type {
+  display: inline-flex;
+  flex: none;
+}
 .a3-conn-logo {
   flex: none;
   width: 14px;

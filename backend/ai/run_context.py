@@ -138,7 +138,14 @@ def _as_list(value: Any) -> list[str]:
 
 
 def _channel_label(value: str) -> str:
-    return value.replace("_", " ").strip().title()
+    """The connector's own name from the directory ("YNAB"), else a title-cased id."""
+    from backend.services.connector_directory import entries
+
+    key = value.strip()
+    for entry in entries():
+        if entry.get("id") == key and entry.get("name"):
+            return str(entry["name"])
+    return key.replace("_", " ").title()
 
 
 def _account_name(ref: str) -> Optional[str]:
