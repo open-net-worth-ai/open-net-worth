@@ -2716,9 +2716,12 @@
 }
 /* …except in an installed iOS app: it has no browser chrome to hide behind, and with the
    `default` status bar iOS resolves 100dvh to the FULL screen while the web view starts below
-   the status bar, so the pane's bottom fell off the screen. The fixed overlay IS the web view. */
+   the status bar, so the pane's bottom fell off the screen. The fixed overlay IS the web view.
+   Not on a phone: there Settings is a bottom sheet sized from the visible viewport (below),
+   and this rule's higher specificity made it full-height — the white card reached the top
+   edge, so the status-bar tint (utils/statusBarTint.ts) sampled white (owner, 2026-11-09). */
 @supports (-webkit-touch-callout: none) {
-  @media (max-width: 1023.98px) {
+  @media (min-width: 640px) and (max-width: 1023.98px) {
     :root[data-onw-display-mode='standalone'] .ui-modal-card--workspace.onw-settings {
       height: 100%;
       max-height: 100%;
@@ -2785,11 +2788,6 @@
     top: var(--visual-viewport-top, 0px);
     bottom: auto;
     height: var(--visual-viewport-height, 100%);
-    /* No blur on a phone: every other phone sheet's scrim is a plain dim, and a filtered layer
-       over the top edge left the installed app's status bar white above Settings while the
-       tint (utils/statusBarTint.ts) was set (owner, 2026-11-09). */
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
   }
   .ui-modal-card--workspace.onw-settings {
     flex-direction: column;
