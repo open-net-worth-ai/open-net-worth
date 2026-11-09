@@ -15,6 +15,12 @@
 </p>
 
 <p align="center">
+  <a href="https://demo.opennetworth.ai"><img src="https://img.shields.io/badge/Try_the_live_demo-c9a15b?style=for-the-badge" alt="Try the live demo" height="36"></a>
+</p>
+
+<p align="center"><sub>If this is useful, a star helps others find it.</sub></p>
+
+<p align="center">
   <a href="https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest"><img src="https://img.shields.io/github/v/release/open-net-worth-ai/open-net-worth-releases?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
   <a href="https://docs.opennetworth.ai"><img src="https://img.shields.io/badge/docs-docs.opennetworth.ai-informational" alt="Documentation"></a>
