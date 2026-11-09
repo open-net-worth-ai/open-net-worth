@@ -1,4 +1,5 @@
 import { Check, ChevronRight, FileText, Folder, Sparkles, X } from 'lucide-react'
+import { useToolOwnerLogos } from '../../chat/toolActivity/useToolOwnerLogos'
 import type { AutomationRun } from '../../../api/automations'
 import { money, tokenCount } from './AutomationCostPanel'
 import { fDateTime } from '../../../utils/format'
@@ -136,7 +137,7 @@ export function AutomationRunCard({ run, onClose }: { run: AutomationRun; onClos
           {context.hasAny ? (
             <>
               {context.connectors.length > 0 && (
-                <ContextPills label="Connectors" values={context.connectors} />
+                <ContextPills label="Connectors" values={context.connectors} brand />
               )}
               {context.accounts.length > 0 && (
                 <ContextPills label="Accounts it read" values={context.accounts} />
@@ -213,14 +214,36 @@ function durationLabel(start: string, finish: string | null) {
   return `${Math.floor(duration / 60_000)}m ${Math.round((duration % 60_000) / 1000)}s`
 }
 
-function ContextPills({ label, values }: { label: string; values: string[] }) {
+function ContextPills({
+  label,
+  values,
+  brand = false,
+}: {
+  label: string
+  values: string[]
+  brand?: boolean
+}) {
+  const lookup = useToolOwnerLogos(brand ? values : [])
   return (
     <div className="ctxg">
       <span className="ctxk">{label}</span>
       <div className="a3-conn">
-        {values.map((item) => (
-          <span key={item}>{item}</span>
-        ))}
+        {values.map((item) => {
+          if (!brand) return <span key={item}>{item}</span>
+          const logo = lookup(item.toLowerCase()).logo
+          return (
+            <span key={item} className="a3-conn-brand">
+              {logo ? (
+                <img src={logo} alt="" className="a3-conn-logo" />
+              ) : (
+                <i className="a3-conn-logo a3-conn-initial" aria-hidden="true">
+                  {item.charAt(0).toUpperCase()}
+                </i>
+              )}
+              {item}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
