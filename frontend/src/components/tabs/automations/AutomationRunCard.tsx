@@ -252,7 +252,10 @@ function ContextPills({
             )
           }
           if (!brand) return <span key={item}>{item}</span>
-          const logo = lookup(item.toLowerCase().replace(/\s+/g, '_')).logo
+          const look = lookup(item.toLowerCase().replace(/\s+/g, '_'))
+          const logo = look.logo
+          const shown =
+            look.name ?? item.replace(/_/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase())
           return (
             <span key={item} className="a3-conn-brand">
               {logo ? (
@@ -262,7 +265,7 @@ function ContextPills({
                   {item.charAt(0).toUpperCase()}
                 </i>
               )}
-              {item}
+              {shown}
             </span>
           )
         })}
