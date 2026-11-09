@@ -4326,6 +4326,10 @@
               "type": "string",
               "description": "Spending label — a category's label ('Food & Dining') or its id; both resolve. OPTIONAL: unset records the row as 'Uncategorized'. 'income'/'transfer'/'investment' are transaction KINDS, not categories — use direction='credit' for income and the leg account ids for a transfer."
             },
+            "override_payee_default": {
+              "type": "boolean",
+              "description": "A payee's pinned default category replaces your `category` unless this is true. Set it ONLY when a standing user instruction decides the category; never for a guess."
+            },
             "account_id": {
               "type": "string",
               "description": "REQUIRED. The account money leaves (debit) or enters (credit) — for a statement row, the statement's own account. Accepts the account's NAME ('Meridian Bank Savings', case-insensitive) or its id — no list_accounts lookup needed just to translate a name. A name matching two accounts is refused with both named; send an id then."
