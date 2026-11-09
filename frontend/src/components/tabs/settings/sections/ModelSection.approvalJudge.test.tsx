@@ -11,7 +11,7 @@
 // nothing.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('../../../../api/client', () => ({
   authFetch: vi.fn(),
@@ -27,6 +27,7 @@ import { ModelSection } from './ModelSection'
 import { authFetch } from '../../../../api/client'
 import { invalidateQueryCache } from '../../../../state/queryCache'
 import { overrideFlagsForTests } from '../../../../hooks/useFlag'
+import { SectionSavingProvider } from '../ds'
 
 const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
 
@@ -140,5 +141,67 @@ describe('ModelSection — the Auto-approval judge row (permissions_v2=false)', 
     await screen.findByRole('button', { name: 'Memory' })
     expect(screen.getByText('All tasks use your default model')).toBeTruthy()
     expect(screen.queryByText(/Auto-approval judge/)).toBeNull()
+  })
+})
+
+// The PUT takes the whole map and ignores a task it does not carry: leaving the judge out of the
+// body made every judge pick (and a Reset of it) answer 200 and change nothing.
+function putBody(): Record<string, string | null> | undefined {
+  const call = mockAuthFetch.mock.calls.find(
+    ([url, init]) => url === '/api/model-config/task-models' && init?.method === 'PUT',
+  )
+  return call ? JSON.parse(call[1].body as string) : undefined
+}
+
+describe('ModelSection — saving task models carries the judge row', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('sends the judge with the flag on, so a Reset clears its pin', async () => {
+    const restore = overrideFlagsForTests({ permissions_v2: true })
+    mockAuthFetch.mockImplementation(async (url: string) =>
+      route(String(url), { approval: 'anthropic:claude-haiku-4-5' }),
+    )
+    render(<ModelSection toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset' }))
+    await waitFor(() => expect(putBody()).toBeDefined())
+    expect(putBody()).toHaveProperty('approval', null)
+    restore()
+  })
+
+  it('leaves the judge out with the flag off, so an earlier pin is kept', async () => {
+    const restore = overrideFlagsForTests({ permissions_v2: false })
+    mockAuthFetch.mockImplementation(async (url: string) =>
+      route(String(url), { memory: 'anthropic:claude-haiku-4-5', approval: 'x:y' }),
+    )
+    render(<ModelSection toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset' }))
+    await waitFor(() => expect(putBody()).toBeDefined())
+    expect(putBody()).not.toHaveProperty('approval')
+    restore()
+  })
+})
+
+describe("ModelSection — a write shows the shell's saving indicator", () => {
+  it('counts the task-models PUT while it is in flight', async () => {
+    const restore = overrideFlagsForTests({ permissions_v2: true })
+    const deltas: number[] = []
+    let release: () => void = () => {}
+    mockAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/model-config/task-models' && init?.method === 'PUT') {
+        await new Promise<void>((r) => (release = r))
+        return json({})
+      }
+      return route(String(url), { approval: 'anthropic:claude-haiku-4-5' })
+    })
+    render(
+      <SectionSavingProvider onChange={(d) => deltas.push(d)}>
+        <ModelSection toast={vi.fn()} />
+      </SectionSavingProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset' }))
+    await waitFor(() => expect(deltas).toEqual([1]))
+    release()
+    await waitFor(() => expect(deltas).toEqual([1, -1]))
+    restore()
   })
 })

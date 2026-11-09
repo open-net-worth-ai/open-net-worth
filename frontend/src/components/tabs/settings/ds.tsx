@@ -8,7 +8,7 @@
 // break every row.
 //
 // Not ported (the prototype's standalone-shell scaffolding): AppNav, Shell, Kebab, Tabs, Dot.
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode, SelectHTMLAttributes } from 'react'
 import { ChevronDown, X } from '../../../ui/icons'
 
@@ -322,12 +322,14 @@ export interface SectionProps {
 //
 // A counter, not a boolean: several hooks in one section load concurrently, and the skeleton
 // must persist until the last one lands, not clear when the first does.
-const SectionBusyContext = createContext<((delta: number) => void) | null>(null)
+type CounterContext = React.Context<((delta: number) => void) | null>
 
-export function SectionBusyProvider({
+function CounterProvider({
+  context: Context,
   onChange,
   children,
 }: {
+  context: CounterContext
   onChange: (delta: number) => void
   children: ReactNode
 }) {
@@ -336,7 +338,74 @@ export function SectionBusyProvider({
   // Stable identity: a fresh callback each render would retrigger every consumer's effect,
   // decrementing and re-incrementing the counter and flickering the skeleton.
   const bump = useRef((delta: number) => ref.current(delta)).current
-  return <SectionBusyContext.Provider value={bump}>{children}</SectionBusyContext.Provider>
+  return <Context.Provider value={bump}>{children}</Context.Provider>
+}
+
+const SectionBusyContext: CounterContext = createContext<((delta: number) => void) | null>(null)
+
+export function SectionBusyProvider(props: {
+  onChange: (delta: number) => void
+  children: ReactNode
+}) {
+  return <CounterProvider context={SectionBusyContext} {...props} />
+}
+
+// ── a write in flight, declared by whoever makes it ────────────────────────────
+// The same counter idea as the first-load skeleton, for the other half of a settings screen's
+// life: the owner changed something and the server has not answered yet. A section wraps its
+// write in `useSaving()`'s `track` and the SHELL shows one "Saving…" pill for every section —
+// a new settings screen gets the indicator by wrapping its save, with no UI of its own.
+const SectionSavingContext: CounterContext = createContext<((delta: number) => void) | null>(null)
+
+export function SectionSavingProvider(props: {
+  onChange: (delta: number) => void
+  children: ReactNode
+}) {
+  return <CounterProvider context={SectionSavingContext} {...props} />
+}
+
+/**
+ * `const track = useSaving()`, then `await track(() => authFetch(...))`: the shell shows
+ * "Saving…" while the promise is pending. Returns the work's result, rethrows its error, and
+ * is a plain pass-through outside the Settings shell.
+ */
+export function useSaving(): <T>(work: () => Promise<T>) => Promise<T> {
+  const bump = useContext(SectionSavingContext)
+  return useCallback(
+    async <T,>(work: () => Promise<T>): Promise<T> => {
+      bump?.(1)
+      try {
+        return await work()
+      } finally {
+        bump?.(-1)
+      }
+    },
+    [bump],
+  )
+}
+
+/**
+ * The "Saving…" pill. Appears only if the write is still pending after `delayMs`, so a save
+ * that answers at once (most do, in well under 100ms) never flashes it; it leaves the moment
+ * the write ends, as the result toast takes its place.
+ */
+export function SavingIndicator({ active, delayMs = 200 }: { active: boolean; delayMs?: number }) {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    if (!active) return
+    const timer = window.setTimeout(() => setShown(true), delayMs)
+    return () => {
+      window.clearTimeout(timer)
+      setShown(false)
+    }
+  }, [active, delayMs])
+  if (!active || !shown) return null
+  return (
+    <div className="rd-saving" role="status" aria-live="polite">
+      <span className="rd-saving__spin" aria-hidden="true" />
+      Saving…
+    </div>
+  )
 }
 
 // A section with a page of its own (a memory topic) hands the shell a way back, and the shell draws

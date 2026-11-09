@@ -2679,6 +2679,47 @@
   border-radius: 14px;
 }
 
+/* "Saving…": the shell's one pill for any settings write in flight (useSaving). It takes the
+   toast's place and is gone before the result toast replaces it, so the two never overlap. */
+.onw-settings .rd-saving {
+  position: fixed;
+  bottom: 22px;
+  left: calc(50% - var(--chat-width, 0px) / 2);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
+  color: var(--toast-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 18px;
+  box-shadow: var(--shadow-toast);
+  width: max-content;
+  border-radius: 14px;
+}
+.onw-settings .rd-saving__spin {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: rd-saving-spin 0.7s linear infinite;
+}
+@keyframes rd-saving-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onw-settings .rd-saving__spin {
+    animation-duration: 2s;
+  }
+}
+
 /* an inline SVG used as a flex child can collapse to 0px width (its flex min-content
    resolves to 0), so icons inside interactive elements are marked flex: none */
 .onw-settings button svg,
@@ -3599,7 +3640,8 @@
   flex-wrap: wrap;
 }
 @media (max-width: 700px) {
-  .onw-settings .rd-toast {
+  .onw-settings .rd-toast,
+  .onw-settings .rd-saving {
     bottom: calc(96px + env(safe-area-inset-bottom));
   }
 }

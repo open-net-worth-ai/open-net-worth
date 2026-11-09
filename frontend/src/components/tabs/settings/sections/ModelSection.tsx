@@ -26,7 +26,18 @@ import type { CliHostPlatform, CliSignInState } from '../../../shared/CliSubscri
 import { NO_LOCAL_MODELS_NOTE, isLocalOnlyProvider } from '../../../shared/privateCloudCopy'
 import { ModelPicker } from '../../../ui'
 import { ChevronRight, Eye, EyeOff, TriangleAlert, Plus } from '../../../../ui/icons'
-import { Badge, Btn, Empty, Field, Modal, Panel, Select, Toggle, useSectionBusy } from '../ds'
+import {
+  Badge,
+  Btn,
+  Empty,
+  Field,
+  Modal,
+  Panel,
+  Select,
+  Toggle,
+  useSaving,
+  useSectionBusy,
+} from '../ds'
 import type { SectionProps } from '../ds'
 import { TurnTimeLimitPanel } from './TurnTimeLimitPanel'
 
@@ -891,6 +902,8 @@ export function PreferredModels({
 
 // ── the section ──────────────────────────────────────────────────────────────
 export function ModelSection({ toast, gatewayMode = false, openSection }: SectionProps) {
+  const judgePicker = useFlag('permissions_v2') === true
+  const track = useSaving()
   const [subscriptionKeys, setSubscriptionKeys] = useState<string[]>([])
   const providers = useCachedFetchState<ProvidersResponse>(
     '/api/model-config/providers',
@@ -1017,7 +1030,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     window.dispatchEvent(new Event(MODEL_CONFIG_CHANGED_EVENT))
   }
 
-  async function putProvider(key: string, body: Record<string, unknown>, message: string) {
+  async function putProviderNow(key: string, body: Record<string, unknown>, message: string) {
     try {
       const r = await authFetch(`/api/model-config/providers/${encodeURIComponent(key)}`, {
         method: 'PUT',
@@ -1040,7 +1053,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
   // DELETE /providers/{key}, not the sibling /providers/{key}/key — that one drops only the
   // API key and keeps `enabled: false`, so the provider never left the list however many
   // times you pressed Remove. (Removing only the key is `/key`, which nothing here calls.)
-  async function removeProvider(key: string) {
+  async function removeProviderNow(key: string) {
     try {
       const r = await authFetch(`/api/model-config/providers/${encodeURIComponent(key)}`, {
         method: 'DELETE',
@@ -1058,7 +1071,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putDefaultModel(ref: string) {
+  async function putDefaultModelNow(ref: string) {
     try {
       const r = await authFetch('/api/model-config', {
         method: 'PUT',
@@ -1078,7 +1091,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putPreferred(models: string[], message: string) {
+  async function putPreferredNow(models: string[], message: string) {
     try {
       const r = await authFetch('/api/preferred-models', {
         method: 'PUT',
@@ -1101,10 +1114,13 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putTaskModels(next: Record<string, string | null>) {
+  async function putTaskModelsNow(next: Record<string, string | null>) {
     // The endpoint takes the WHOLE map; an omitted task would silently keep its old pin.
+    // The judge's row exists only with permissions_v2; leaving it out while the flag is off keeps
+    // a pin made earlier. Sending TASK_ROWS alone dropped every judge pick, answered 200, and the
+    // picker snapped back to "Same as chat model" on the refresh.
     const full: Record<string, string | null> = {}
-    for (const [k] of TASK_ROWS) full[k] = next[k] || null
+    for (const [k] of judgePicker ? TASK_ROWS_V2 : TASK_ROWS) full[k] = next[k] || null
     try {
       const r = await authFetch('/api/model-config/task-models', {
         method: 'PUT',
@@ -1122,6 +1138,17 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
       toast('Could not reach the server. Try again.')
     }
   }
+
+  // Every write below shows the shell's "Saving…" pill while it is in flight.
+  const saving =
+    <A extends unknown[]>(write: (...args: A) => Promise<void>) =>
+    (...args: A) =>
+      track(() => write(...args))
+  const putProvider = saving(putProviderNow)
+  const removeProvider = saving(removeProviderNow)
+  const putDefaultModel = saving(putDefaultModelNow)
+  const putPreferred = saving(putPreferredNow)
+  const putTaskModels = saving(putTaskModelsNow)
 
   return (
     <>
