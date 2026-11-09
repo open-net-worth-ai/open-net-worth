@@ -257,6 +257,13 @@ def model(monkeypatch):
     return state
 
 
+async def _next(it):
+    item = next(it)
+    if isinstance(item, BaseException):
+        raise item
+    return item
+
+
 def _pairs(count=3):
     return [("get_transactions", {"q": f"coffee {i}"}) for i in range(count)]
 
@@ -318,6 +325,26 @@ def test_a_timeout_asks_for_every_call_after_one_budget_for_the_whole_batch(mode
         return _verdicts("allow", "allow", "allow")
 
     model.reply = slow
+    assert {v.verdict for v in _run(auto_judge.judge_calls(_pairs()))} == {"ask"}
+    assert len(model.calls) == auto_judge.JUDGE_ATTEMPTS
+
+
+def test_a_timeout_then_an_answer_is_judged_normally_and_is_no_breaker_failure(model):
+    replies = iter([asyncio.TimeoutError(), _verdicts("allow", "ask", "allow")])
+    model.reply = lambda: _next(replies)
+    out = _run(auto_judge.judge_calls(_pairs()))
+    assert [v.verdict for v in out] == ["allow", "ask", "allow"]
+    assert len(model.calls) == 2 and auto_judge._breaker.failures == 0
+
+
+def test_an_empty_reply_is_tried_once_more_and_junk_is_not(model):
+    replies = iter(["", _verdicts("allow", "allow", "allow")])
+    model.reply = lambda: _next(replies)
+    assert {v.verdict for v in _run(auto_judge.judge_calls(_pairs()))} == {"allow"}
+    assert len(model.calls) == 2
+
+    model.calls.clear()
+    model.reply = "I think these are fine."
     assert {v.verdict for v in _run(auto_judge.judge_calls(_pairs()))} == {"ask"}
     assert len(model.calls) == 1
 

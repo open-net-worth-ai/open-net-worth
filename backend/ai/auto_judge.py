@@ -68,6 +68,8 @@ logger = logging.getLogger(__name__)
 #: twice the slowest, for a cold start or a busy machine. Slower than that is a card, never a stall.
 JUDGE_TIMEOUT_S = 10.0
 JUDGE_MAX_TOKENS = 200
+#: One try plus one retry, for a timeout or an empty reply only (``ask_model``).
+JUDGE_ATTEMPTS = 2
 #: A batch reply carries one entry (id, verdict, a one-sentence reason) per call. A reason has no
 #: length cap of its own: a slice cut it mid-sentence on the card (owner, 2026-11-04). On an API
 #: model these token budgets bound it, and a reply past them is unusable JSON — a card, never a
@@ -265,9 +267,7 @@ def _tool_facts(name: str) -> tuple[str, Optional[dict], Optional[str], bool]:
     return tool_description(name) or "", tool_schema(name), tool_connector(name), False
 
 
-async def ask_model(prompt: str, system: str, target: _Target, max_tokens: int) -> str:
-    """The one model request the judge makes — single call or batch: cheap, JSON, attributed to
-    ``auto_approval`` (one cost-log row) and bounded by ``JUDGE_TIMEOUT_S`` for the whole of it."""
+async def _ask_once(prompt: str, system: str, target: _Target, max_tokens: int) -> str:
     from backend.core import llm_seam
 
     return await asyncio.wait_for(
@@ -282,6 +282,32 @@ async def ask_model(prompt: str, system: str, target: _Target, max_tokens: int) 
         ),
         timeout=JUDGE_TIMEOUT_S,
     )
+
+
+async def ask_model(prompt: str, system: str, target: _Target, max_tokens: int) -> str:
+    """The one model request the judge makes — single call or batch: cheap, JSON, attributed to
+    ``auto_approval`` (one cost-log row per attempt) and bounded by ``JUDGE_TIMEOUT_S`` per attempt.
+
+    A timeout or an EMPTY reply (a transport that answered with no text — a Claude Code reply with
+    no text block, 2026-11-09) is tried once more: neither carries a verdict, so a second try
+    cannot shop for an ``allow``. A reply with ANY content is never retried — it goes to the strict
+    parser as it is — and neither is a provider error (the breaker owns a provider that is down).
+    The second attempt's outcome is the call's: a second timeout raises, a second empty reply is
+    returned, so the caller records ONE breaker result per judged call.
+    """
+    for attempt in range(JUDGE_ATTEMPTS):
+        last = attempt == JUDGE_ATTEMPTS - 1
+        try:
+            text = await _ask_once(prompt, system, target, max_tokens)
+        except asyncio.TimeoutError:
+            if last:
+                raise
+            logger.warning("auto judge: timed out; trying once more")
+            continue
+        if (text or "").strip() or last:
+            return text
+        logger.warning("auto judge: empty reply; trying once more")
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 async def judge_call(name: str, input_data: dict) -> JudgeVerdict:
