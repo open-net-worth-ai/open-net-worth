@@ -228,6 +228,14 @@ const STATUS_BADGE: Record<string, [string, 'good' | 'bad']> = {
   unreachable: ["Can't connect", 'bad'],
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return ''
+  }
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const r = await authFetch(path)
   if (!r.ok) throw new Error(String(r.status))
@@ -246,6 +254,7 @@ function ProviderRow({
   onToggle,
   toast,
   subscription,
+  checking,
 }: {
   entry: CatalogEntry
   cfg: ConfiguredProvider
@@ -256,6 +265,7 @@ function ProviderRow({
   onEdit: (k: string) => void
   onToggle: (k: string, v: boolean) => void
   toast: SectionProps['toast']
+  checking?: string
   subscription?: {
     platform?: CliHostPlatform
     inContainer?: boolean
@@ -277,6 +287,14 @@ function ProviderRow({
     // whether its binary was even installed. The Default model row below names its provider,
     // so the chip was saying it twice and costing the useful fact.
     if (!enabled) return null
+    if (checking !== undefined)
+      return (
+        <span title="Asking the provider for its model list to confirm the address and key work. A slow provider can take up to 15 seconds.">
+          <Badge tone="neutral">
+            {checking ? `Contacting ${checking}…` : 'Contacting provider…'}
+          </Badge>
+        </span>
+      )
     // Binary presence does not prove the CLI's saved login can answer a turn, so the CLI's own
     // answer wins. "Installed" is left for a CLI we couldn't ask.
     if (isCli) {
@@ -395,7 +413,7 @@ function ProviderModal({
   onSave: (
     key: string,
     patch: { label: string; url: string; model: string; key: string; bin: string },
-  ) => void
+  ) => Promise<void>
   onRemove: (key: string) => void
   toast: SectionProps['toast']
 }) {
@@ -426,6 +444,9 @@ function ProviderModal({
   }, [models, entry])
   const [armed, setArmed] = useState(false)
   const [testing, setTesting] = useState(false)
+  // The save is awaited: the server probes the provider before it answers (up to 15s on a slow
+  // one), so the dialog stays up with a visible wait instead of closing on a silent request.
+  const [busy, setBusy] = useState(false)
   // The toast is gone in two seconds; a failed connection test stays up, beside a way to report it.
   const [testFailure, setTestFailure] = useState<string | null>(null)
 
@@ -527,16 +548,30 @@ function ProviderModal({
               {armed ? 'Confirm remove' : 'Remove'}
             </Btn>
           ) : null}
-          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn onClick={onClose} disabled={busy}>
+            Cancel
+          </Btn>
           <Btn
             variant="primary"
-            disabled={urlMissing}
+            disabled={urlMissing || busy}
+            aria-busy={busy || undefined}
             onClick={() => {
-              onSave(sel, f)
-              onClose()
+              setBusy(true)
+              void onSave(sel, f).finally(() => {
+                setBusy(false)
+                onClose()
+              })
             }}
           >
-            {mode === 'edit' ? 'Save changes' : 'Add provider'}
+            {busy ? (
+              <>
+                <span className="ui-btn__spinner" aria-hidden="true" /> Checking connection…
+              </>
+            ) : mode === 'edit' ? (
+              'Save changes'
+            ) : (
+              'Add provider'
+            )}
           </Btn>
         </>
       }
@@ -688,6 +723,13 @@ function ProviderModal({
           </div>
         )}
       </div>
+      {busy ? (
+        <div className="rd-help" role="status">
+          {isCli || !hostOf(f.url || entry.base_url)
+            ? 'Checking that this provider works…'
+            : `Contacting ${hostOf(f.url || entry.base_url)} to confirm the address and key work. A slow provider can take up to 15 seconds.`}
+        </div>
+      ) : null}
       {mode === 'edit' ? (
         <Btn size="xs" disabled={testing} onClick={() => void testConnection()}>
           {testing ? 'Testing…' : 'Test connection'}
@@ -1030,7 +1072,13 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     window.dispatchEvent(new Event(MODEL_CONFIG_CHANGED_EVENT))
   }
 
+  // Keys whose save is in flight: the server probes the provider before it answers, and that
+  // can take several seconds on a slow API.
+  const [checking, setChecking] = useState<Record<string, string>>({})
+
   async function putProviderNow(key: string, body: Record<string, unknown>, message: string) {
+    const validates = body.enabled !== false
+    if (validates) setChecking((c) => ({ ...c, [key]: hostOf(String(body.base_url ?? '')) }))
     try {
       const r = await authFetch(`/api/model-config/providers/${encodeURIComponent(key)}`, {
         method: 'PUT',
@@ -1042,11 +1090,22 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
         toast(b?.detail || `Could not save (HTTP ${r.status})`)
         return
       }
+      const saved = (await r.json().catch(() => null)) as {
+        key_status?: string
+        error?: string
+      } | null
       void providers.refresh()
       announceModelConfigChanged()
-      toast(message)
+      if (validates && (saved?.key_status === 'invalid' || saved?.key_status === 'unreachable')) {
+        toast(`Saved, but the check failed: ${saved.error || 'could not verify this provider'}`)
+      } else {
+        toast(message)
+      }
     } catch {
       toast('Could not reach the server. Try again.')
+    } finally {
+      if (validates)
+        setChecking((c) => Object.fromEntries(Object.entries(c).filter(([k]) => k !== key)))
     }
   }
 
@@ -1174,6 +1233,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   detectedPath={detectedPaths[entry.key] || ''}
                   signIn={cliSignIn[entry.key]}
                   toast={toast}
+                  checking={checking[entry.key]}
                   onEdit={(k) => setEditor({ mode: 'edit', key: k })}
                   onToggle={(k, v) =>
                     void putProvider(k, { enabled: v }, v ? 'Enabled' : 'Disabled')
@@ -1334,7 +1394,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
             else body.base_url = patch.url
             if (patch.model) body.model = patch.model
             if (patch.key) body.api_key = patch.key
-            void putProvider(key, body, configured[key] ? 'Provider updated' : 'Provider added')
+            return putProvider(key, body, configured[key] ? 'Provider updated' : 'Provider added')
           }}
           onRemove={(key) => void removeProvider(key)}
         />

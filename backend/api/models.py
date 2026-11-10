@@ -169,7 +169,7 @@ _ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models"
 _ANTHROPIC_VERSION = "2023-06-01"
 _HTTP_TIMEOUT = 8.0
 # Shorter dedicated timeout for the on-save validation probe (the user is waiting).
-_VALIDATE_TIMEOUT = 6.0
+_VALIDATE_TIMEOUT = 15.0
 
 KeyStatus = Literal["valid", "invalid", "unreachable", "unchecked"]
 
