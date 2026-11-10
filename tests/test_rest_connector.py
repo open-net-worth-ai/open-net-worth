@@ -320,6 +320,32 @@ def test_a_permission_picked_on_an_endpoints_row_is_saved_with_the_api(db_isolat
     assert all("permission" not in e for e in apis.load("acme_bank")["endpoints"])
 
 
+def test_the_form_reads_levels_as_the_connector_page_does_under_either_engine(db_isolated):
+    """Under the new permissions an untouched GET runs: the connector page said Always allow
+    while the form said Ask (a live check, 2026-11-11), and saving the form would have written
+    Ask onto every read nobody touched."""
+    from backend.core import rest_tools
+    from backend.services import connectors
+
+    apis.save_api(_payload())
+    # As the save route does: an untouched tool's level under the new engine is read from its
+    # registered declaration (a POST's `external_effect`).
+    from backend.ai.tools import rest_api
+
+    rest_api.sync_rest_tools()
+    for v2 in (False, True):
+        page = {
+            t.name: t.level for t in connectors.get_connector("rest:acme_bank", ladder_v2=v2).tools
+        }
+        form = apis.get_operator_api("acme_bank", ladder_v2=v2)["endpoints"]
+        assert {rest_tools.tool_name("acme_bank", e["tool"]): e["level"] for e in form} == page
+    v2_form = {
+        e["method"]: e["level"]
+        for e in apis.get_operator_api("acme_bank", ladder_v2=True)["endpoints"]
+    }
+    assert v2_form == {"GET": "always_allow", "POST": "needs_approval"}
+
+
 def test_an_endpoint_nobody_touched_gets_no_permission_row(db_isolated):
     """Untouched means the default, whatever the permission engine makes that: writing a row
     for it would freeze today's default into a decision nobody took."""

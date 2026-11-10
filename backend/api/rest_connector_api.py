@@ -20,6 +20,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.ai.permissions import engine
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.services.rest_api import apis as rest_apis
 from backend.services.rest_api import openapi
@@ -72,19 +73,19 @@ def _sync_tools() -> None:
 
 @router.get("/api/rest-connector/apis/{slug}")
 def get_rest_api(slug: str):
-    return _run(rest_apis.get_operator_api, slug)
+    return _run(lambda: rest_apis.get_operator_api(slug, ladder_v2=engine().ladder_v2))
 
 
 @router.post("/api/rest-connector/apis")
 def create_rest_api(body: RestApiBody):
-    saved = _run(rest_apis.save_api, body.model_dump())
+    saved = _run(lambda: rest_apis.save_api(body.model_dump(), ladder_v2=engine().ladder_v2))
     _sync_tools()
     return saved
 
 
 @router.put("/api/rest-connector/apis/{slug}")
 def update_rest_api(slug: str, body: RestApiBody):
-    saved = _run(rest_apis.save_api, body.model_dump(), slug)
+    saved = _run(lambda: rest_apis.save_api(body.model_dump(), slug, ladder_v2=engine().ladder_v2))
     _sync_tools()
     return saved
 

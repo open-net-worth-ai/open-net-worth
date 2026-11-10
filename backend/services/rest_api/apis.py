@@ -303,7 +303,7 @@ def find_endpoint(api: dict, tool: str) -> dict:
     return hit
 
 
-def operator_view(api: dict) -> dict:
+def operator_view(api: dict, *, ladder_v2: bool = False) -> dict:
     auth = api["auth"]
     return {
         "id": api["id"],
@@ -318,18 +318,23 @@ def operator_view(api: dict) -> dict:
             "has_value": bool(auth.get("value")),
         },
         "header_names": sorted(api["headers"]),
-        "endpoints": _with_levels(api),
+        "endpoints": _with_levels(api, ladder_v2),
         "notes": api["notes"],
     }
 
 
-def _with_levels(api: dict) -> list[dict]:
+def _with_levels(api: dict, ladder_v2: bool) -> list[dict]:
     """Each endpoint with the level its tool is at now, as the connector's own page shows it
-    (the same read: ``connectors.get_connector``), so the form and that page cannot disagree."""
+    (the same read: ``connectors.get_connector``), so the form and that page cannot disagree.
+    ``ladder_v2`` is the permission engine in use, which the caller (``api/``) knows and this
+    layer may not ask: read without it, an untouched GET showed Ask in the form while the page
+    showed Always allow (a live check, 2026-11-11) — and a save would have written Ask."""
     from backend.services import connectors as connectors_service
 
     try:
-        view = connectors_service.get_connector(rest_tools.connector_id(api["id"]))
+        view = connectors_service.get_connector(
+            rest_tools.connector_id(api["id"]), ladder_v2=ladder_v2
+        )
     except NotFoundError:
         return api["endpoints"]
     levels = {t.name: t.level for t in view.tools}
@@ -350,8 +355,8 @@ def enabled_instructions() -> list[tuple[str, str, str]]:
     ]
 
 
-def get_operator_api(slug: str) -> dict:
-    return operator_view(load(slug))
+def get_operator_api(slug: str, *, ladder_v2: bool = False) -> dict:
+    return operator_view(load(slug), ladder_v2=ladder_v2)
 
 
 # ── writes ────────────────────────────────────────────────────────────────────────────────
@@ -381,7 +386,7 @@ def _new_slug(payload: dict, name: str) -> str:
     return slug
 
 
-def save_api(payload: dict, slug: Optional[str] = None) -> dict:
+def save_api(payload: dict, slug: Optional[str] = None, *, ladder_v2: bool = False) -> dict:
     """Create an API (``slug`` None — a new connector, switched on) or replace one. Returns
     its operator view.
 
@@ -414,7 +419,7 @@ def save_api(payload: dict, slug: Optional[str] = None) -> dict:
         store.update(new_slug, name, fields)
     _withdraw_stale_grants(new_slug, saved, fields)
     _apply_chosen_levels(new_slug, chosen)
-    return get_operator_api(new_slug)
+    return get_operator_api(new_slug, ladder_v2=ladder_v2)
 
 
 def _apply_chosen_levels(slug: str, chosen: dict[str, str]) -> None:
