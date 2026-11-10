@@ -474,6 +474,27 @@ export const CATALOG: CatalogEntry[] = [
     popular: false,
     tools: [],
   },
+  {
+    // Any HTTP API the owner points it at. Each one added becomes its own connector
+    // (`rest:<slug>`), so this entry never reads as installed: it is always "add another".
+    id: 'rest',
+    name: 'REST API',
+    families: ['Data source'],
+    // What it is FOR depends on the API it is pointed at; here that is most often a bank's.
+    categories: ['Banking'],
+    icon: 'link',
+    hue: 'var(--cash-c)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["rest"]`.
+    publisher: 'Open Net Worth',
+    verification: 'unverified',
+    // OURS, and no privacy link: it talks to whatever API the person points it at, so there
+    // is no vendor of ours in the middle whose policy would govern it.
+    homepageUrl: 'https://opennetworth.ai',
+    mcp: false,
+    popular: false,
+    // Each API added brings its own three tools; the entry that adds one has none.
+    tools: [],
+  },
 
   // ── Web (native providers — we build and operate these integrations) ────────
   {

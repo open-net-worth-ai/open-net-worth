@@ -33,6 +33,7 @@ import logging
 from typing import Any
 from urllib.parse import urlparse
 
+from backend.core import rest_tools
 from backend.core.errors import NotFoundError, ValidationError
 from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
 from backend.db.mcp_client_store import McpClientStore
@@ -43,7 +44,7 @@ from backend.models.mcp_client import (
     McpServerConfig,
     McpServerCreate,
 )
-from backend.services import connectors
+from backend.services import connectors, tool_permissions
 from backend.services.connector_catalog import CATALOG, ConnectorKind, builtins, kind_of
 
 logger = logging.getLogger(__name__)
@@ -205,6 +206,9 @@ def _validated_row(entry: Any) -> tuple[dict, ConnectorKind]:
         or not isinstance(entry.get("state") or {}, dict)
     ):
         raise ValidationError("unknown connector in the secrets payload")
+    if connector_id == rest_tools.LAUNCHER_ID:
+        # The "add a REST API" card is not an API and never holds anything.
+        raise ValidationError("unknown connector in the secrets payload")
     if len(repr(entry)) > _MAX_ROW_BYTES:
         raise ValidationError(f"connector {connector_id} configuration is too large")
     return entry, kind
@@ -246,6 +250,11 @@ def _write_row(entry: dict, kind: ConnectorKind) -> None:
             for other in store.list("web_search", conn=conn):
                 if other["id"] != connector_id and other["config"].get("default"):
                     store.patch_config(other["id"], {"default": False}, conn=conn)
+    if kind.kind == rest_tools.KIND:
+        # A received API replaces whatever had this id: an Always allow given to the old one's
+        # tools must not carry over to the sender's endpoints of the same name. After the
+        # transaction — the permission table is written on its own connection.
+        tool_permissions.revoke_allowed_tools(connector_id)
 
 
 def _apply_providers(payload: dict, providers: dict, skipped: list[dict]) -> list[dict]:

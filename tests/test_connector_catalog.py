@@ -24,6 +24,7 @@ def test_catalog_lists_every_kind_the_migration_creates():
         "yodlee",
         "alpaca",
         "ibkr",
+        "rest",
         "yahoo_finance",
         "coingecko",
         "web_search",
@@ -37,7 +38,7 @@ def test_only_the_price_sources_cannot_be_paused():
 
 
 def test_only_search_and_mcp_have_many_instances():
-    assert {k for k, v in CATALOG.items() if v.multi} == {"web_search", "mcp"}
+    assert {k for k, v in CATALOG.items() if v.multi} == {"web_search", "mcp", "rest"}
 
 
 def test_notify_channels():

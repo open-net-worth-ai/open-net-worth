@@ -98,21 +98,35 @@ def _first_sentence(description: str) -> str:
     return sentence
 
 
-def _internal_names() -> list[str]:
-    """Every registered internal tool name, sorted alphabetically.
+def _internal_names() -> tuple[list[str], list[str]]:
+    """``(names, rest_rosters)``: every registered internal tool name, sorted alphabetically,
+    and the roster lines that stand in for the names left out.
 
     Excludes ``_CATALOG_HIDDEN`` (the permanent hides — empty today) AND
     ``_connector_gate.hidden_connector_tools()`` — a ``connector=``-tagged tool whose
     connector isn't enabled (RFC ``.claude/rfcs/2026-08-10-connectors-architecture.md``
     §B2). An untagged (internal) tool is never affected by the second check.
+
+    A REST API with many endpoint tools is ONE roster line, not a name each
+    (``rest_api.catalog_rosters``) — the trade ``_external_sections`` makes for a large MCP
+    server. Best-effort: if that fails every tool is listed by name, which costs tokens and
+    loses nothing.
     """
     from backend.ai.tools._connector_gate import hidden_connector_tools
     from backend.ai.tools.registry import iter_registered_tools
 
-    hidden = hidden_tools() | hidden_connector_tools()
-    return sorted(
+    hidden_connectors = hidden_connector_tools()
+    try:
+        from backend.ai.tools.rest_api import catalog_rosters
+
+        collapsed, rosters = catalog_rosters(hidden_connectors)
+    except Exception:
+        collapsed, rosters = frozenset(), []
+    hidden = hidden_tools() | hidden_connectors | collapsed
+    names = sorted(
         name for name, _description, _module in iter_registered_tools() if name not in hidden
     )
+    return names, rosters
 
 
 def _external_sections() -> list[str]:
@@ -206,11 +220,12 @@ def build_tool_catalog(
     interactive behavior: every registered tool.
     """
     try:
-        internal = _internal_names()
+        internal, rest_rosters = _internal_names()
         if names is not None:
             allowed = set(names)
             internal = [n for n in internal if n in allowed]
-        lines: list[str] = [_CATALOG_PREAMBLE, ", ".join(internal)]
+            rest_rosters = []  # a scoped offer names only its own tools
+        lines: list[str] = [_CATALOG_PREAMBLE, ", ".join(internal), *rest_rosters]
 
         # External-MCP tools render after the internal list, adaptively (a large server
         # collapses to a roster line) so the cached prompt stays flat regardless of MCP scale.

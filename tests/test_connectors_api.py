@@ -52,6 +52,7 @@ def test_list_has_builtins_never_500(client):
         "yodlee",
         "alpaca",
         "ibkr",
+        "rest",
         "yahoo_finance",
         "coingecko",
     }

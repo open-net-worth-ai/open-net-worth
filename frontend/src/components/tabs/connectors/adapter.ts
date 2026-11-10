@@ -34,6 +34,8 @@ const ERROR_STATUSES = new Set(['error', 'connect_error', 'auth_error', 'failed'
  *  belongs to (spec §1). Webhook is a Channel here; only the directory never offers it (§8). */
 const UNLISTED_FAMILIES: Record<string, ConnectorFamily[]> = {
   webhook: ['Channel'],
+  // One per API the user added (`rest:<slug>`); the catalog only has the entry that adds one.
+  rest: ['Data source'],
   yodlee: ['Data source'],
 }
 
@@ -43,6 +45,7 @@ const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   telegram: { icon: 'chat', hue: 'var(--accent)' },
   voice: { icon: 'voice', hue: 'var(--cta)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
+  rest: { icon: 'link', hue: 'var(--cash-c)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
   actual_budget: { icon: 'accounts', hue: 'var(--accent)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },
@@ -77,6 +80,7 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
   voice: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   webhook: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   email: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
+  rest: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   simplefin: { name: 'SimpleFIN', url: 'https://www.simplefin.org/' },
   plaid: { name: 'Plaid Inc.', url: 'https://plaid.com/docs/link/' },
   lunch_money: { name: 'Lunch Money', url: 'https://lunchmoney.app' },

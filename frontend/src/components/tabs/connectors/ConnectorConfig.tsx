@@ -27,6 +27,7 @@ import { SimpleFinSection } from './SimpleFinSection'
 import { PlaidSection } from './PlaidSection'
 import { LunchMoneySection } from './LunchMoneySection'
 import { LunchFlowSection } from './LunchFlowSection'
+import { RestSection } from './RestSection'
 import { ActualSection } from './ActualSection'
 import { YnabSection } from './YnabSection'
 import { WebSearchSection } from './WebSearchSection'
@@ -63,6 +64,7 @@ const CONFIGURABLE_KINDS = new Set([
   'ibkr',
   'yahoo_finance',
   'coingecko',
+  'rest',
 ])
 
 /**
@@ -128,6 +130,8 @@ function configForm(connector: Connector, initialCountry?: string): JSX.Element 
       return <YahooFinanceSection />
     case 'coingecko':
       return <CoinGeckoSection />
+    case 'rest':
+      return <RestSection connectorId={connector.id} />
     default:
       return (
         <Text size="sm" tone="faint">

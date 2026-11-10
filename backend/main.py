@@ -188,6 +188,7 @@ from backend.api.rebalance import router as rebalance_router
 from backend.api.receipts import router as receipts_router
 from backend.api.recurring import router as recurring_router
 from backend.api.reports import router as reports_router
+from backend.api.rest_connector_api import router as rest_connector_router
 from backend.api.returns import router as returns_router
 from backend.api.screen_read_api import router as screen_read_router
 from backend.api.search_config_api import router as search_config_router
@@ -862,6 +863,11 @@ async def lifespan(app: FastAPI):
 
     _mcp_client_manager = register_on_seam()
 
+    # Each REST connector's own tools, so its Tool permissions list them before the first turn.
+    from backend.ai.tools.rest_api import sync_quietly as _sync_rest_tools
+
+    _sync_rest_tools()
+
     def _run_mcp_boot_connect() -> None:
         try:
             _mcp_client_manager.connect_enabled()
@@ -1199,6 +1205,7 @@ app.include_router(automations_router)
 app.include_router(ibkr_router)
 app.include_router(yodlee_router)
 app.include_router(lunch_money_router)
+app.include_router(rest_connector_router)
 app.include_router(ynab_router)
 app.include_router(actual_budget_router)
 app.include_router(import_runs_router)

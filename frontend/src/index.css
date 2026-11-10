@@ -9604,6 +9604,56 @@ body.hide-amounts .mask * {
   .conn-acct-pick {
     min-width: 220px;
   }
+  /* REST connector: the endpoint list and its inline editor (RestEndpointsEditor). */
+  .rest-method {
+    flex: none;
+    min-width: 52px;
+    color: var(--muted);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .rest-method--get {
+    color: var(--good);
+  }
+  .rest-method--delete {
+    color: var(--bad);
+  }
+  .rest-path {
+    font-family: var(--font-mono);
+  }
+  .rest-ep-open + .conn-acct-row,
+  .conn-acct-row + .rest-ep-open,
+  .rest-ep-open + .rest-ep-open {
+    border-top: 1px solid var(--line);
+  }
+  .rest-ep-form {
+    padding: var(--space-3);
+    background: var(--surface2);
+  }
+  .rest-ep-line {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+  .rest-param-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px minmax(0, 2fr) auto auto;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .rest-header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  @media (max-width: 640px) {
+    .rest-param-row,
+    .rest-header-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
   @media (max-width: 640px) {
     .conn-acct-row {
       flex-wrap: wrap;
