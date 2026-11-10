@@ -24,6 +24,9 @@ import {
 import type { ConfirmDialogData } from '../ui'
 import { toLocalISODate } from './DisposalForm'
 import { FormError } from './FormError'
+import { LotFundingHint } from './LotFundingHint'
+import { removeLotCashNote, type LotCashRow } from './cashHints'
+import { readCachedFxRates } from '../../utils/fxCache'
 
 // `extends AccountLike` supplies the index signature `useAccounts<T>()`'s constraint demands.
 export interface AccountLite extends AccountLike {
@@ -174,6 +177,10 @@ export function AcquireLotForm({
   // Sent on an edit only once the user picks it: the lot's current funding account loads in
   // the background, and saving before it lands sent null — which deleted the purchase.
   const [fundingTouched, setFundingTouched] = useState(false)
+  const [cashRow, setCashRow] = useState<LotCashRow | null>(null)
+  const [fx] = useState(readCachedFxRates)
+  const savedGross =
+    lot?.unit_cost != null ? lot.original_qty * lot.unit_cost + (lot.fees || 0) : null
   const { data: accountsData, error: accountsQueryError } = useAccounts<AccountLite>()
   const accounts = accountsData ?? EMPTY_ACCOUNTS
   const accountsError = !!accountsQueryError
@@ -208,8 +215,10 @@ export function AcquireLotForm({
     let alive = true
     authFetch(`/api/transactions/${lot.txn_id}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((txn: { from_account_id?: string | null }) => {
-        if (alive && txn.from_account_id) setFundingAccountId(txn.from_account_id)
+      .then((txn: LotCashRow) => {
+        if (!alive) return
+        setCashRow(txn)
+        if (txn.from_account_id) setFundingAccountId(txn.from_account_id)
       })
       .catch(() => {})
     return () => {
@@ -321,10 +330,6 @@ export function AcquireLotForm({
   const holdOpts = holdingAccounts(accounts)
   const fundOpts = fundingAccounts(accounts)
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name || ''
-  // Cash dated before an account's Starting Balance is left out of its balance (by design —
-  // docs: accounts › Troubleshooting), so "will be deducted" would be untrue there.
-  const fundingStart = accounts.find((a) => a.id === fundingAccountId)?.initial_balance_date || ''
-  const fundingBeforeStart = !!fundingStart && !!acquiredAt && acquiredAt < fundingStart
 
   async function resolveSymbol(raw: string): Promise<string | null> {
     const query = raw.trim().toUpperCase()
@@ -460,7 +465,7 @@ export function AcquireLotForm({
     setConfirm({
       title: 'Remove this lot?',
       // Removing a lot also removes its purchase transaction, and frees what it paid (UAT DS-LOT-REMOVE).
-      body: `This will permanently remove ${lot.original_qty} units acquired on ${lot.acquired_at ? fDate(lot.acquired_at, 'short', 'always') : 'an unknown date'}. Unrealized P&L and cost basis will update.${lot.txn_id ? ' Its purchase transaction is removed too, and anything it paid, such as an installment, goes back to unpaid.' : ''}`,
+      body: `This will permanently remove ${lot.original_qty} units acquired on ${lot.acquired_at ? fDate(lot.acquired_at, 'short', 'always') : 'an unknown date'}. Unrealized P&L and cost basis will update.${removeLotCashNote(lot.txn_id, cashRow)}`,
       confirmLabel: 'Remove',
       danger: true,
       confirmDisabled: removing,
@@ -736,25 +741,18 @@ export function AcquireLotForm({
                   Could not load accounts. You can still save the lot without linking cash.
                 </span>
               )}
-              {fundingAccountId ? (
-                gross > 0 && (
-                  <span className="disposal-deposit-hint muted">
-                    {fundingBeforeStart
-                      ? `${fAmountNative(gross, costCcy)} is recorded against ${accountName(fundingAccountId)}, but this date is before its starting balance (${fDate(fundingStart, 'short', 'always')}), so its balance won't change. Move the starting balance earlier to count it.`
-                      : `${fAmountNative(gross, costCcy)} will be deducted from ${accountName(fundingAccountId)}.`}
-                  </span>
-                )
-              ) : lot?.txn_id && fundingTouched ? (
+              <LotFundingHint
+                account={accounts.find((a) => a.id === fundingAccountId)}
+                accountId={fundingAccountId}
+                gross={gross}
+                costCcy={costCcy}
+                acquiredAt={acquiredAt}
+                cashRow={cashRow}
+                savedGross={savedGross}
                 // Saving deletes the purchase this lot has, and frees what it paid (UAT DS-LOT-NODEDUCT).
-                <span className="disposal-warn">
-                  Saving removes this lot's purchase transaction from the ledger. Anything it paid,
-                  such as an installment, goes back to unpaid.
-                </span>
-              ) : (
-                <span className="disposal-deposit-hint muted">
-                  Funding not linked — your cash balance won't change when you add this lot.
-                </span>
-              )}
+                removing={!!lot?.txn_id && fundingTouched}
+                fx={fx}
+              />
             </label>
             <FormError message={error} />
           </>

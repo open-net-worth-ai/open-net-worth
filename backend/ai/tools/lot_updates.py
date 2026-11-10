@@ -1,4 +1,5 @@
-"""Lot correction tool — ``update_lots``: fix a recorded lot's date, quantity, cost or kind.
+"""Lot correction tool — ``update_lots``: fix a recorded lot's date, quantity, cost, kind or the
+account that paid for it.
 
 A position's quantity and cost basis are derived from its lots (ADR
 2026-10-07-a-position-quantity-is-derived-from-its-records), so a wrong lot is fixed on the
@@ -18,7 +19,7 @@ from pydantic import Field
 
 from backend.ai.tools import _confirm_gate as _gate
 from backend.ai.tools import registry
-from backend.ai.tools.lots import _batch_summary, _for_model, _position_display
+from backend.ai.tools.lots import _account_name, _batch_summary, _for_model, _position_display
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of_batch_only
 from backend.core.errors import OpenNetWorthError
@@ -29,7 +30,7 @@ _MAX_LOT_UPDATE_BATCH = 100
 
 # The lot's identity — what a sale freezes once it has consumed part of the lot.
 _IDENTITY_FIELDS = ("acquired_at", "quantity", "unit_cost", "cost_currency", "fees", "kind")
-_EDITABLE_FIELDS = (*_IDENTITY_FIELDS, "note")
+_EDITABLE_FIELDS = (*_IDENTITY_FIELDS, "note", "funding_account_id")
 _KINDS = ("buy", "drp", "transfer_in", "opening")
 
 _LOT_ID_DESC = "The lot to correct — lot id from get_lots."
@@ -42,6 +43,10 @@ _QUANTITY_DESC = "Units in this lot (positive). The position's quantity follows 
 _UNIT_COST_DESC = "Cost PER UNIT in cost_currency — not the total paid."
 _COST_CURRENCY_DESC = "Three-letter currency of unit_cost."
 _FEES_DESC = "Acquisition fees in cost_currency, spread across the lot's units."
+_FUNDING_DESC = (
+    "Account that paid (id or exact name): moves the lot's purchase cash there, or debits it "
+    "there if the lot has none. To take the cash off a lot, delete its purchase transaction."
+)
 _KIND_DESC = (
     "buy | drp | transfer_in | opening. 'opening' = held when tracking started (counts at "
     "market value in returns); 'buy' = a purchase at its cost."
@@ -61,6 +66,7 @@ class UpdateLotItem(ToolInput):
         default=None, description=_KIND_DESC
     )
     note: Optional[str] = Field(default=None)
+    funding_account_id: Optional[str] = Field(default=None, description=_FUNDING_DESC)
 
 
 class UpdateLotsInput(ToolInput):
@@ -76,6 +82,7 @@ class UpdateLotsInput(ToolInput):
         default=None, description=_KIND_DESC
     )
     note: Optional[str] = Field(default=None)
+    funding_account_id: Optional[str] = Field(default=None, description=_FUNDING_DESC)
     reason: Optional[str] = Field(default=None, description="Why the lot is being corrected")
     updates: Optional[List[UpdateLotItem]] = Field(
         default=None,
@@ -95,6 +102,12 @@ def _refusal(lot: dict, fields: dict) -> str | None:
     must not do that the app's editor can: re-shape a vest's lot behind its vest event."""
     if not fields:
         return "nothing to change — pass at least one of: " + ", ".join(_EDITABLE_FIELDS)
+    if "funding_account_id" in fields and not str(fields["funding_account_id"]).strip():
+        # A blank account reads as "no account" downstream, which deletes the purchase row.
+        return (
+            "funding_account_id needs an account id or name; to take the cash off a lot, delete "
+            "its purchase transaction"
+        )
     identity = [k for k in _IDENTITY_FIELDS if k in fields]
     sold = float(lot.get("original_qty") or 0) - float(lot.get("remaining_qty") or 0)
     if "quantity" in fields and float(fields["quantity"]) + 1e-9 < sold:
@@ -102,11 +115,14 @@ def _refusal(lot: dict, fields: dict) -> str | None:
             f"{sold:g} units of this lot have already been sold, so it can't hold fewer than "
             f"{sold:g} — edit or undo the sale first (undo_lot_disposals)"
         )
-    if identity and lot.get("kind") == "grant":
+    if (identity or "funding_account_id" in fields) and lot.get("kind") == "grant":
         return (
             "this lot was created by a vest and follows its vest record — undo the vest "
             "(undo_vest) and record it again instead of editing the lot"
         )
+    cost = fields.get("unit_cost", lot.get("unit_cost"))
+    if "funding_account_id" in fields and cost is None:
+        return "this lot has no unit cost, so there's no purchase to pay — pass unit_cost too"
     if "acquired_at" in fields:
         try:
             when = date.fromisoformat(str(fields["acquired_at"]))
@@ -133,7 +149,15 @@ def _build_lot_update_change(item: dict) -> tuple[Optional[dict], Optional[str]]
     refused = _refusal(lot, fields)
     if refused:
         return None, refused
-    before = {**lot, "quantity": lot.get("original_qty")}
+    try:
+        fields = lots_service.resolve_cash_account_refs(fields)
+    except OpenNetWorthError as exc:
+        return None, exc.message or str(exc)
+    before = {
+        **lot,
+        "quantity": lot.get("original_qty"),
+        "funding_account_id": lots_service.funding_account_of(lot),
+    }
     # Names, not ids: "Bought Jun 12, 2026 · 10 units" tells a person which lot this is; the
     # lot and position UUIDs on the card read as noise (seen live, 2026-10-13).
     display = {
@@ -143,6 +167,10 @@ def _build_lot_update_change(item: dict) -> tuple[Optional[dict], Optional[str]]
     for key, value in fields.items():
         if _same(before.get(key), value):
             continue  # a no-op field ("USD → USD") is noise on the card, not a change
+        if key == "funding_account_id":
+            old = _account_name(before.get(key)) or "no account"
+            display["paid_from"] = f"{old} → {_account_name(value) or value}"
+            continue
         display[key] = f"{before.get(key) if before.get(key) not in (None, '') else '—'} → {value}"
     sales = lots_service.preview_sold_lot_amend(lot, fields)
     if sales:
@@ -237,7 +265,8 @@ def _apply(item: dict) -> dict:
 @tool(
     "update_lots",
     description=(
-        "Correct a recorded lot — its purchase date, quantity, unit cost, fees, kind or note — "
+        "Correct a recorded lot — its purchase date, quantity, unit cost, fees, kind, note or "
+        "paying account — "
         "including a lot whose shares have been sold (sold lots are correctable). "
         "A position's quantity and cost basis are DERIVED from its lots, so this is how a "
         "wrong holding is fixed (update_positions refuses those fields). Typical use: the "

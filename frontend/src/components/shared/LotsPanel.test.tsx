@@ -543,6 +543,50 @@ describe('LotsPanel — write controls', () => {
     const dialog = await findByRole('dialog')
     expect(dialog.textContent).toMatch(/Edit sale/)
   })
+
+  // A dividend could only be corrected or deleted by asking Lucius (hand UAT, 2026-11-10).
+  it('opens the dividend form when a dividend row is clicked', async () => {
+    const EVENT: IncomeEvent = {
+      id: 'inc-1',
+      position_id: 'pos-1',
+      instrument_id: 'inst-1',
+      account_id: 'acct-1',
+      paid_at: '2024-03-15',
+      income_kind: 'dividend',
+      gross_amount: 120,
+      tax_withheld: 20,
+      currency: 'USD',
+      is_drp: false,
+      txn_id: null,
+      base_amount: 135,
+    }
+    mockAuthFetch.mockImplementation((url: string) => {
+      if (url.includes('/lots'))
+        return Promise.resolve({ ok: true, json: async () => ({ lots: [] }) })
+      if (url.startsWith('/api/realized-pnl') || url.includes('/income'))
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            base_currency: 'SGD',
+            events: url.includes('/income') ? [EVENT] : [],
+          }),
+        })
+      if (url === '/api/accounts') return Promise.resolve({ ok: true, json: async () => [] })
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+    })
+    const { container, findByRole } = render(
+      <LotsPanel positionId="pos-1" symbol="AAPL" costCcy="USD" base={20000} costBase={18520} />,
+    )
+    const row = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>('[data-entity-id="income:inc-1"]')
+      if (!el) throw new Error('dividend row not yet rendered')
+      return el
+    })
+    fireEvent.click(row)
+    const dialog = await findByRole('dialog')
+    expect(dialog.textContent).toMatch(/Edit dividend/)
+    expect(dialog.textContent).toMatch(/Delete/)
+  })
 })
 
 describe('LotsPanel — sold lots stay in the history (found 2026-10-12)', () => {

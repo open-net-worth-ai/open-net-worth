@@ -2141,10 +2141,13 @@
   }
   .msg-restore-popover {
     /* Portaled to <body> and placed by anchoredPopover.ts — below the trigger, or above it
-       when the window has no room below. It must paint over the composer and the docked
-       Lucius panel (--z-overlay), the same reason .kebab-menu--portal sits at --z-modal. */
+       when the window has no room below. It must paint over the composer, the docked Lucius
+       panel (--z-overlay) AND the floating one: .lx-dock sits at calc(var(--z-toast) + 10), so
+       at --z-modal Restore in the floating chat opened its popover underneath the panel and
+       looked like it did nothing (hand UAT, 2026-11-11). The same level as .mp-pop, which
+       outranks the dock it renders inside for the same reason. */
     position: fixed;
-    z-index: var(--z-modal);
+    z-index: calc(var(--z-toast) + 20);
     width: 260px;
     padding: 10px;
     border-radius: 8px;

@@ -552,11 +552,35 @@ def _delete_lot(lot_id: str) -> dict:
     if txn_id:
         tables.extend((txns_tbl, txn_audit_tbl, *transaction_links.LOCK_TABLES))
     with locked_unit_of_work(*tables) as conn:
-        if txn_id:
-            from backend.services import ledger as ledger_service
-
-            ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+        # The refusal of a partly sold lot comes back as a result, not an error, so it would
+        # commit a cash release made before it: check first, then let go of the cash.
+        if txn_id and lot and not _has_sales(lot):
+            release_lot_cash(lot, txn_id, conn=conn)
         return _delete_lot_core(lot_id, conn=conn)
+
+
+def _has_sales(lot: dict) -> bool:
+    """The test ``_delete_lot_core`` refuses on: some of the lot has been sold."""
+    original = float(lot.get("original_qty") or 0)
+    return original > 0 and float(lot.get("remaining_qty") or 0) < original
+
+
+def release_lot_cash(lot: dict, txn_id: str, *, conn: Connection) -> None:
+    """A lot going away lets go of its purchase cash (see ``_release_cash_row``)."""
+    _release_cash_row(
+        txn_id,
+        leg="from",
+        before=_acquisition_gross(
+            {
+                "quantity": lot.get("original_qty"),
+                "unit_cost": lot.get("unit_cost"),
+                "fees": lot.get("fees"),
+            }
+        ),
+        currency=(lot.get("cost_currency") or "").upper(),
+        shared=_shares_cash_row(LotStore(), txn_id, lot["id"], conn=conn),
+        conn=conn,
+    )
 
 
 def find_realized_event(event_id: str) -> Optional[dict]:
@@ -620,9 +644,14 @@ def _restore_disposal(ev: dict, *, conn: Connection, keep_cash: bool = False) ->
     lots.bulk_restore([(c["lot_id"], float(c.get("qty") or 0)) for c in consumptions], conn=conn)
     txn_id = _live_cash_row(ev.get("txn_id"))
     if txn_id and not keep_cash:
-        from backend.services import ledger as ledger_service
-
-        ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+        _release_cash_row(
+            txn_id,
+            leg="to",
+            before=_net_proceeds(ev),
+            currency=(ev.get("proceeds_currency") or "").upper(),
+            shared=_shares_cash_row(RealizedEventStore(), txn_id, ev["id"], conn=conn),
+            conn=conn,
+        )
     RealizedEventStore().delete(ev["id"], conn=conn)
 
 
@@ -1256,6 +1285,11 @@ def _lot_is_partial(lot: dict) -> bool:
     return original > 0 and remaining + _QTY_EPS < original
 
 
+def funding_account_of(lot: dict) -> Optional[str]:
+    """The account a lot's live purchase row takes its cash from, or None."""
+    return _funding_account_from_txn(lot.get("txn_id"))
+
+
 def _funding_account_from_txn(txn_id: str | None) -> Optional[str]:
     if not txn_id:
         return None
@@ -1334,6 +1368,47 @@ def _edit_cash_row(
     return row_id
 
 
+def _release_cash_row(
+    row_id: str,
+    *,
+    leg: str,
+    before: Optional[float],
+    currency: str,
+    shared: bool,
+    conn: Connection,
+) -> None:
+    """A record that stops moving cash lets go of its row. Only a row that is still this record's
+    own cash is deleted: one the user turned into a transfer is a real movement and stays, and one
+    another record shares shrinks by this record's part, so the other keeps its cash."""
+    from backend.services import ledger as ledger_service
+
+    row = ledger_service.transactions.find_by_id(row_id, conn=conn) or {}
+    if not row or row.get("deleted"):
+        return
+    if row.get("kind") == "transfer" or not row.get(f"{leg}_account_id"):
+        logger.info("lots: kept cash row %s, it is no longer this record's own cash", row_id)
+        return
+    if shared:
+        if not before:
+            return
+        _edit_cash_row(
+            row_id,
+            leg=leg,
+            account_id=row[f"{leg}_account_id"],
+            before=before,
+            after=0.0,
+            currency=currency,
+            day=None,
+            traded={},
+            generated=None,
+            payee_id=None,
+            shared=True,
+            conn=conn,
+        )
+        return
+    ledger_service.bulk_delete_transactions([row_id], conn=conn, reject_identities=False)
+
+
 def _figures_changed(old: dict, new: dict, keys: tuple[str, ...]) -> bool:
     return any(float(old.get(k) or 0) != float(new.get(k) or 0) for k in keys)
 
@@ -1347,12 +1422,24 @@ def _sync_purchase_cash(
 ) -> Optional[str]:
     """Bring a corrected lot's purchase cash in line and return the row that now holds it: the row
     it already had, a new one if it had none and an account was chosen, or none at all."""
-    from backend.services import ledger as ledger_service
 
     txn_id = lot.get("txn_id")
     if not _will_fund_acquire(fund_change):
         if txn_id:
-            ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+            _release_cash_row(
+                txn_id,
+                leg="from",
+                before=_acquisition_gross(
+                    {
+                        "quantity": lot.get("original_qty"),
+                        "unit_cost": lot.get("unit_cost"),
+                        "fees": lot.get("fees"),
+                    }
+                ),
+                currency=(lot.get("cost_currency") or "").upper(),
+                shared=_shares_cash_row(LotStore(), txn_id, lot["id"], conn=conn),
+                conn=conn,
+            )
         return None
     if not txn_id:
         return _book_funding_debit(fund_change, patched, payee_id, conn=conn)
@@ -1409,13 +1496,19 @@ def _sync_proceeds_cash(
 ) -> Optional[str]:
     """The sale-edit twin of ``_sync_purchase_cash``. The old event is already gone when this runs,
     so sharing is read from the other sales still on the row."""
-    from backend.services import ledger as ledger_service
 
     if not txn_id:
         return _book_deposit_proceeds(draft, change, payee_id, conn=conn)
     net = _net_proceeds(draft)
     if not change.get("proceeds_account_id") or net <= 0:
-        ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+        _release_cash_row(
+            txn_id,
+            leg="to",
+            before=_net_proceeds(ev),
+            currency=(ev.get("proceeds_currency") or "").upper(),
+            shared=_shares_cash_row(RealizedEventStore(), txn_id, ev["id"], conn=conn),
+            conn=conn,
+        )
         return None
     currency = (draft.get("proceeds_currency") or "").upper()
     figures_changed = _figures_changed(
