@@ -346,39 +346,6 @@ def sync_quietly() -> None:
         )
 
 
-# Past this many, an API's endpoint tools are not named one by one in the system prompt's
-# catalog: one line says how many there are and how to find them.
-CATALOG_LIST_THRESHOLD = 8
-
-
-def catalog_rosters(hidden: frozenset[str]) -> tuple[frozenset[str], list[str]]:
-    """``(names, lines)`` for the tool catalog: the endpoint tools of every ENABLED API that
-    has more than ``CATALOG_LIST_THRESHOLD`` of them, to leave out of the flat name list, and
-    the one line that stands in for each such API. ``hidden`` is the offer's hidden connector
-    tools (a paused API gets no line). The same trade the catalog makes for a
-    large MCP server — the cached prompt stays flat however many endpoints a document lists;
-    the tools stay loadable by name and searchable with ``find_tools``."""
-    collapsed: set[str] = set()
-    lines: list[str] = []
-    with _lock:
-        registered = {slug: list(names) for slug, (_fp, names) in _registered.items()}
-    for slug in sorted(registered):
-        endpoint_tools = [
-            n
-            for n in registered[slug]
-            if (rest_tools.split_tool(n) or ("", ""))[1] not in rest_tools.GENERIC
-        ]
-        if len(endpoint_tools) <= CATALOG_LIST_THRESHOLD or endpoint_tools[0] in hidden:
-            continue
-        collapsed.update(endpoint_tools)
-        prefix = rest_tools.tool_name(slug, "")
-        lines.append(
-            f"REST API ({slug}): {len(endpoint_tools)} endpoint tools named {prefix}… — call "
-            f'{prefix}{rest_tools.LIST_ENDPOINTS} to see them, or find_tools(query="…")'
-        )
-    return frozenset(collapsed), lines
-
-
 def reset_registered_for_tests() -> None:
     """Drop every REST tool from the registry. The registry is process-wide and a test
     database is not, so a test that added an API calls this on the way out."""

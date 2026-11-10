@@ -1037,7 +1037,9 @@ def test_endpoints_that_would_share_a_name_each_get_their_own(db_isolated):
     assert all(len(rest_tools.tool_name("s" * rest_tools.MAX_SLUG, t)) <= 64 for t in tools)
 
 
-def test_a_big_api_is_one_line_in_the_prompt_catalog_not_a_name_per_endpoint(db_isolated):
+def test_every_rest_tool_is_a_bare_name_in_the_prompt_catalog(db_isolated):
+    """Listed as Claude Code lists tools it has not loaded: names only, in the one flat list —
+    no section, no summary, no roster line, however many endpoints an API has."""
     from backend.ai.tools.catalog import build_tool_catalog
     from backend.services.connectors import set_connector_enabled
 
@@ -1046,16 +1048,16 @@ def test_a_big_api_is_one_line_in_the_prompt_catalog_not_a_name_per_endpoint(db_
     apis.save_api(_payload(name="Big", base_url="https://big.test", endpoints=many))
 
     catalog = build_tool_catalog()
-    # A small API's endpoint tools are named; a big one's are a single roster line.
-    assert TXNS in catalog and "rest__big__get_things_7" not in catalog
-    assert "REST API (big): 40 endpoint tools named rest__big__…" in catalog
-    assert "rest__big__list_endpoints" in catalog and "rest__big__get_data" in catalog
+    assert TXNS in catalog and TRANSFER in catalog and "rest__big__get_things_7" in catalog
+    assert "rest__big__list_endpoints" in catalog
+    assert "REST API (" not in catalog and " — GET " not in catalog
+    assert catalog.count(TXNS) == 1
 
     set_connector_enabled("rest:big", False)
     assert "rest__big__" not in build_tool_catalog()
 
 
-def test_a_collapsed_endpoint_tool_is_still_found_by_search_and_offered(db_isolated):
+def test_an_endpoint_tool_of_a_big_api_is_found_by_search_and_offered(db_isolated):
     from backend.ai.tools import TOOL_SCHEMAS
     from backend.ai.tools._groups import _search_tools
     from backend.services.connectors import remove_connector

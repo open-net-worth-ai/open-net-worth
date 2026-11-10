@@ -42,8 +42,10 @@ that can read the ledger (`run_sql_query`) and send a request anywhere can take 
   anything else declares `external_effect`. This is what MCP already gives a server's tools, and the
   costs are the ones the app already accepts there: a description written outside the app
   (sanitised, as MCP's are), a tool that disappears when its endpoint does (a stored name then fails
-  as an unknown tool), and hundreds of tools (an API with more than 8 endpoint tools is one roster
-  line in the prompt catalog, found through `find_tools`, as a large MCP server is).
+  as an unknown tool), and hundreds of tools. Every REST tool is a bare name in the prompt
+  catalog's flat list, with no section, summary or roster line however many there are, the way
+  Claude Code lists tools it has not loaded (owner, 2026-11-11): `find_tools` and the discovery
+  gate load a schema when it is needed.
 - **Three generic tools per API as well**: `list_endpoints` (the endpoints and the owner's notes),
   `get_data` (GET any path) and `send_request` (POST/PUT/PATCH/DELETE any path), for what was not
   declared. Setting the last two to Blocked makes the declared list the whole of what Lucius may
