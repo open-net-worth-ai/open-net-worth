@@ -11,15 +11,41 @@ export interface ModelHolding {
   weight: number
   prev_weight: number | null
   change: HoldingChange
+  /** Fund only: share counts at the two quarter-ends, the quarter-end price the filing implies,
+   *  and the share change valued at it. A 13F gives no trade date and no trade price. */
+  shares?: number
+  price?: number | null
+  prev_shares?: number
+  shares_change?: number
+  shares_change_pct?: number | null
+  change_value?: number | null
+  /** House member only: the newest counted trade in this stock. */
+  last_trade?: LastTrade | null
+}
+
+export interface LastTrade {
+  date: string
+  filed_at: string
+  side: 'buy' | 'sell' | 'exchange'
+  amount_low: number
+  amount_high: number
 }
 
 export interface FollowModel {
   as_of: string
+  /** The previous filing's quarter-end, when there is one. */
+  prev_as_of?: string | null
   filed_at: string
   age_days: number | null
   estimated: boolean
   holdings: ModelHolding[]
-  exited: { symbol: string; name: string }[]
+  exited: {
+    symbol: string
+    name: string
+    prev_shares?: number
+    prev_value?: number
+    last_trade?: LastTrade | null
+  }[]
   unmatched: { name: string; weight: number }[]
   unread_reports: number
 }

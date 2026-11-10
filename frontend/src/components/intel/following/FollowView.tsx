@@ -57,7 +57,13 @@ function Stats({ follow }: { follow: Follow }) {
       <Stat
         label={member ? COPY.statChangesMember : COPY.statChanges}
         value={changeSummary(model) ?? COPY.noChanges}
-        sub={member ? `${follow.activity.length} trades listed` : undefined}
+        sub={
+          member
+            ? `${follow.activity.length} trades listed`
+            : model.prev_as_of
+              ? `${shortDate(model.prev_as_of)} to ${shortDate(model.as_of)}`
+              : undefined
+        }
       />
     </dl>
   )

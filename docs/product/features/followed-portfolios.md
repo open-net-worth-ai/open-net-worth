@@ -48,6 +48,15 @@ Each portfolio you follow gets a chip at the top of the screen. Pick one to see 
 filed and how old that is, its top 20 holdings with their weights, and what changed since the
 previous filing (new, added, trimmed, sold out). A member also shows their recent trades.
 
+What each change tells you depends on the source:
+
+- **A fund.** The filing gives share counts at two quarter-ends, so an "Added" or "Trimmed"
+  holding shows how many shares changed, the percent, and the two dates it happened between. A
+  13F gives no trade dates and no trade prices, so the dollar figure beside it uses the
+  quarter-end price and is approximate. Hover the figure for the full sentence.
+- **A House member.** Each holding shows the latest disclosed trade in it: the trade date and
+  the dollar range reported. Members do not report share counts or prices.
+
 Filings are checked twice a day. A new one updates the portfolio and adds a story to **Intel**.
 Use **Refresh** to check now. If a check fails, the last portfolio stays and the screen says
 what went wrong. A fund whose latest filing is more than about two quarters old, or a member

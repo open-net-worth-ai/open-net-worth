@@ -237,7 +237,7 @@
 /* One row: Instrument | weight bar | Weight | Last filing | Change. */
 .fol-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(80px, 200px) 64px 84px 92px;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 160px) 64px 84px minmax(170px, 230px);
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
@@ -317,7 +317,7 @@
     padding: var(--space-4);
   }
   .fol-grid {
-    grid-template-columns: minmax(0, 1fr) 56px 84px;
+    grid-template-columns: minmax(0, 1fr) 56px minmax(96px, 150px);
   }
   .fol-grid > .fol-wide {
     display: none;
@@ -352,4 +352,17 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+.fol-change {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  min-width: 0;
+  text-align: right;
+}
+
+.fol-change > .fol-sub {
+  max-width: 100%;
+  margin-top: 0;
 }

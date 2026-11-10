@@ -61,6 +61,8 @@ export const COPY = {
   statChanges: 'Since the last filing',
   statChangesMember: 'Since the last report',
   noChanges: 'No changes',
+  changeBasis:
+    'Share changes are between the two quarter-ends. A 13F gives no trade dates or trade prices, so dollar figures use the quarter-end price and are approximate.',
   tradesTitle: 'Recent trades',
   noTrades: 'No trades filed in the last 36 months.',
   filterLabel: 'Filter holdings',

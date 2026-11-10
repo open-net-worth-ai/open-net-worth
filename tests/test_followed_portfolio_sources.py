@@ -345,7 +345,21 @@ def test_model_weights_sum_to_one_and_flag_changes():
         "BOLT": "reduced",
         "COG": "new",
     }
-    assert model["exited"] == [{"symbol": "EXIT", "name": "EXIT"}]
+    assert model["exited"] == [
+        {"symbol": "EXIT", "name": "EXIT", "prev_shares": 9.0, "prev_value": 900.0}
+    ]
+    assert model["prev_as_of"] == "2026-05-15"
+    by = {h["symbol"]: h for h in model["holdings"]}
+    assert (by["BOLT"]["shares"], by["BOLT"]["prev_shares"], by["BOLT"]["shares_change"]) == (
+        10.0,
+        20.0,
+        -10.0,
+    )
+    assert by["BOLT"]["shares_change_pct"] == pytest.approx(-0.5)
+    assert by["BOLT"]["price"] == pytest.approx(30.0)
+    assert by["BOLT"]["change_value"] == pytest.approx(-300.0)
+    assert (by["COG"]["prev_shares"], by["COG"]["shares_change_pct"]) == (0.0, None)
+    assert by["ACME"]["shares_change"] == 0.0
     assert model["unmatched"] == [{"name": "MYSTERY CO", "weight": pytest.approx(400 / 1500)}]
     assert model["age_days"] == 88 and model["estimated"] is False
 
@@ -477,6 +491,48 @@ def test_an_accession_number_that_is_not_one_is_skipped(monkeypatch):
     name, filings = edgar_13f._recent_filings("12345")
     assert [f["filing_id"] for f in filings] == ["0000000000-26-000001"]
     assert name == "Acme Capital Lp"
+
+
+def test_a_member_holding_carries_its_newest_counted_trade_and_no_share_counts():
+    trade = {
+        "symbol": "ACME",
+        "counted": True,
+        "side": "buy",
+        "date": "2026-09-01",
+        "filed_at": "2026-10-01",
+        "amount_low": 1001.0,
+        "amount_high": 15000.0,
+    }
+    follow = {
+        "kind": "house_member",
+        "current": _snap("2026-10-01", ("ACME", "ACME", 500, 500)),
+        "previous": None,
+        "activity": [
+            {**trade, "counted": False, "date": "2026-09-20"},
+            trade,
+            {**trade, "date": "2026-01-01"},
+        ],
+    }
+    holding = build_model(follow, TODAY)["holdings"][0]
+    assert holding["last_trade"] == {
+        "date": "2026-09-01",
+        "filed_at": "2026-10-01",
+        "side": "buy",
+        "amount_low": 1001.0,
+        "amount_high": 15000.0,
+    }
+    assert "shares" not in holding
+
+
+def test_a_first_filing_has_shares_but_no_move():
+    follow = {
+        "kind": "fund_13f",
+        "current": _snap("2026-10-01", ("ACME", "ACME", 500, 5)),
+        "previous": None,
+    }
+    holding = build_model(follow, TODAY)["holdings"][0]
+    assert (holding["shares"], holding["price"]) == (5.0, 100.0)
+    assert "shares_change" not in holding
 
 
 def test_model_top_n_is_a_read_time_choice():

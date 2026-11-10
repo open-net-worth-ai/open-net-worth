@@ -39,6 +39,11 @@ the `copy-followed-portfolio` automation template. Every control on the screen h
 - WHEN I click the "New" chip beside "Top holdings"
 - THEN only holdings marked New are listed; "All" restores every holding
 
+### FOLLOWING-CHANGE-DETAIL
+- GIVEN a fund holding marked Added or Trimmed
+- WHEN I read its row and hover the figure under the badge
+- THEN the row shows the share change, the percent and an approximate dollar value, and the hover text gives the two quarter-end dates, the share counts before and after, the quarter-end price used, and that the filing has no trade dates or prices; a House member's row shows the latest trade's date and range instead
+
 ### FOLLOWING-HOLDINGS-DISCLOSURES
 - GIVEN a fund sold out of a holding and has a holding with no ticker
 - WHEN I read below the holdings

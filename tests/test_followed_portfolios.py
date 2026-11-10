@@ -172,7 +172,8 @@ def test_refresh_new_filing_updates_the_model_and_raises_exactly_one_story(sourc
     assert out["new_filing"] is True
     changes = {h["symbol"]: h["change"] for h in out["follow"]["model"]["holdings"]}
     assert changes == {"ACME": "increased", "COG": "new"}
-    assert out["follow"]["model"]["exited"] == [{"symbol": "BOLT", "name": "Bolt Corp"}]
+    exited = out["follow"]["model"]["exited"]
+    assert [(x["symbol"], x["prev_shares"]) for x in exited] == [("BOLT", 40.0)]
     stories = IntelStoriesStore().all()
     assert len(stories) == 1
     assert stories[0]["label"] == "Acme Capital filed a new 13F"

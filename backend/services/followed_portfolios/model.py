@@ -85,15 +85,50 @@ def _unmatched(positions: list[dict], total: float, top_n: int) -> list[dict]:
     return out
 
 
+def _fund_detail(now: dict, prior: dict | None, has_previous: bool) -> dict:
+    """What a 13F says about one holding's move: share counts at both quarter-ends and the
+    quarter-end price the filing implies (value / shares). It gives no trade date and no trade
+    price, so ``change_value`` is the share change AT that quarter-end price — an estimate."""
+    shares = now["qty"]
+    price = now["value"] / shares if shares > 0 else None
+    if not has_previous:
+        return {"shares": shares, "price": price}
+    before = prior["qty"] if prior else 0.0
+    moved = shares - before
+    return {
+        "shares": shares,
+        "price": price,
+        "prev_shares": before,
+        "shares_change": moved,
+        "shares_change_pct": moved / before if before > 0 else None,
+        "change_value": moved * price if price else None,
+    }
+
+
+def _last_trades(follow: dict) -> dict[str, dict]:
+    """A member's newest counted trade per symbol (``activity`` is stored newest first)."""
+    out: dict[str, dict] = {}
+    for trade in follow.get("activity") or []:
+        symbol = normalize_symbol(trade.get("symbol"))
+        if symbol and trade.get("counted") and symbol not in out:
+            out[symbol] = {
+                k: trade.get(k) for k in ("date", "filed_at", "side", "amount_low", "amount_high")
+            }
+    return out
+
+
 def build_model(follow: dict, today: date, top_n: int = DEFAULT_TOP_N) -> dict | None:
-    """``{as_of, filed_at, age_days, estimated, holdings, exited, unmatched, unread_reports}``
-    for a follow, or None when it has no snapshot yet."""
+    """``{as_of, prev_as_of, filed_at, age_days, estimated, holdings, exited, unmatched,
+    unread_reports}`` for a follow, or None when it has no snapshot yet. A fund holding carries
+    its share counts and move (``_fund_detail``); a member holding its ``last_trade``."""
     current = follow.get("current")
     if not current:
         return None
     top_n = max(1, min(int(top_n or DEFAULT_TOP_N), MAX_TOP_N))
     previous = follow.get("previous")
     now, before = _merged(current), _merged(previous)
+    fund = follow.get("kind") == "fund_13f"
+    last_trades = {} if fund else _last_trades(follow)
     weights = _top_weights(now, top_n)
     prev_weights = _top_weights(before, top_n)
     holdings = [
@@ -103,11 +138,24 @@ def build_model(follow: dict, today: date, top_n: int = DEFAULT_TOP_N) -> dict |
             "weight": weight,
             "prev_weight": prev_weights.get(symbol),
             "change": _change(symbol, now[symbol], before, previous is not None),
+            **(
+                _fund_detail(now[symbol], before.get(symbol), previous is not None)
+                if fund
+                else {"last_trade": last_trades.get(symbol)}
+            ),
         }
         for symbol, weight in weights.items()
     ]
     exited = [
-        {"symbol": symbol, "name": before[symbol]["name"]}
+        {
+            "symbol": symbol,
+            "name": before[symbol]["name"],
+            **(
+                {"prev_shares": before[symbol]["qty"], "prev_value": before[symbol]["value"]}
+                if fund
+                else {"last_trade": last_trades.get(symbol)}
+            ),
+        }
         for symbol in prev_weights
         if symbol not in now
     ]
@@ -117,6 +165,7 @@ def build_model(follow: dict, today: date, top_n: int = DEFAULT_TOP_N) -> dict |
     unmatched = _unmatched(current.get("positions") or [], total, top_n)
     return {
         "as_of": current.get("as_of"),
+        "prev_as_of": (previous or {}).get("as_of"),
         "filed_at": current.get("filed_at"),
         "age_days": _age_days(current.get("filed_at"), today),
         "estimated": follow.get("kind") == "house_member",

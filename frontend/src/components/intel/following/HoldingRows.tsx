@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { fPct } from '../../../utils/format'
 import type { FollowModel, HoldingChange, ModelHolding } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
+import { changeDetail, exitedDetail } from './following.format'
 
 type Filter = 'all' | Exclude<HoldingChange, 'unchanged'>
 
@@ -19,8 +20,16 @@ const FILTERS: { value: Filter; label: string }[] = [
 
 const pct = (n: number | null) => (n === null ? '—' : fPct(n, { fraction: true }))
 
-function Row({ h, compare, top }: { h: ModelHolding; compare: boolean; top: number }) {
+interface RowProps {
+  h: ModelHolding
+  model: FollowModel
+  compare: boolean
+  top: number
+}
+
+function Row({ h, model, compare, top }: RowProps) {
   const change = h.change === 'unchanged' ? null : CHANGE[h.change]
+  const detail = changeDetail(h, model)
   return (
     <article className="fol-card">
       <div className="fol-grid">
@@ -33,7 +42,10 @@ function Row({ h, compare, top }: { h: ModelHolding; compare: boolean; top: numb
         </span>
         <span className="fol-num">{pct(h.weight)}</span>
         <span className="fol-num fol-num--soft fol-wide">{compare ? pct(h.prev_weight) : ''}</span>
-        {change ? <span className={`fol-pill ${change.cls}`}>{change.label}</span> : <span />}
+        <div className="fol-change" title={detail?.title}>
+          {change && <span className={`fol-pill ${change.cls}`}>{change.label}</span>}
+          {detail && <span className="fol-sub">{detail.line}</span>}
+        </div>
       </div>
     </article>
   )
@@ -49,6 +61,7 @@ function Footnotes({ model }: { model: FollowModel }) {
             <span key={x.symbol}>
               {i > 0 && ', '}
               <b>{x.symbol}</b> {x.name}
+              {exitedDetail(x)}
             </span>
           ))}
         </p>
@@ -97,11 +110,12 @@ export function HoldingRows({ model }: { model: FollowModel }) {
         <span className="fol-wide" />
         <span>Weight</span>
         <span className="fol-wide">{compare ? 'Last filing' : ''}</span>
-        <span>{compare ? 'Change' : ''}</span>
+        <span>{model.estimated ? 'Latest trade' : compare ? 'Change' : ''}</span>
       </div>
       {rows.map((h) => (
-        <Row key={h.symbol} h={h} compare={compare} top={top} />
+        <Row key={h.symbol} h={h} model={model} compare={compare} top={top} />
       ))}
+      {compare && !model.estimated && <p className="fol-foot">{COPY.changeBasis}</p>}
       <Footnotes model={model} />
     </section>
   )
