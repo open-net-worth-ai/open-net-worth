@@ -450,8 +450,7 @@ class UpdateProfileInput(ToolInput):
         "IMPORTANT — changing base_currency does NOT convert manually-entered amounts "
         "(monthly income/expenses/saving, retirement spending, liability amounts, budget "
         "targets and caps): they are read in the new currency as-is. Account balances and "
-        "transactions DO convert. So confirm with the user and warn them first, then remind "
-        "them which amounts to re-enter."
+        "transactions DO convert. So warn the user of that, and remind them which amounts to re-enter."
     ),
     input_schema=schema_of(UpdateProfileInput, tool_name="update_profile"),
     mutates=("profile",),
@@ -547,7 +546,7 @@ class DismissBaseCurrencyReviewInput(ToolInput):
     description=(
         "Clear the base-currency review flag — the reminder banner that lists the manual "
         "base-denominated amounts (income, expenses, FIRE/goal/liability figures, budgets) that "
-        "did NOT auto-convert after a base-currency change. Call this once the user confirms they "
+        "did NOT auto-convert after a base-currency change. Call this once the user says they "
         "have reviewed / re-entered those amounts (or that they're fine as-is)."
     ),
     input_schema=schema_of(

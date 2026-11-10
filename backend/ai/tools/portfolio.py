@@ -500,7 +500,7 @@ class ResolveInstrumentItem(ToolInput):
     )
     unit: Optional[str] = Field(default=None, description="Holding unit for physical metal.")
     allow_duplicate_symbol: Optional[bool] = Field(
-        default=None, description="true only for a confirmed genuinely-different asset."
+        default=None, description="true only for an asset the user said is genuinely different."
     )
 
 
@@ -549,7 +549,7 @@ class ResolveInstrumentInput(ToolInput):
     allow_duplicate_symbol: Optional[bool] = Field(
         default=None,
         description=(
-            "Set true only after a prior call errored with 'symbol already exists' AND the user confirmed this is a genuinely different asset (e.g. same ticker, different exchange)."
+            "Set true only after a prior call errored with 'symbol already exists' AND the user said this is a genuinely different asset (e.g. same ticker, different exchange)."
         ),
     )
     queries: Optional[List[Union[str, ResolveInstrumentItem]]] = Field(
@@ -1161,7 +1161,7 @@ class ApplyPositionUpdateInput(ToolInput):
     updates: Optional[List[ApplyPositionUpdateItem]] = Field(
         default=None,
         description=(
-            "Batch form: [{position_id, changes}, …] — one call for several positions. One call covers them all, and raises ONE confirm card for the whole batch. Omit position_id/changes when using this."
+            "Batch form: [{position_id, changes}, …] — one call for several positions. One call covers them all. Omit position_id/changes when using this."
         ),
     )
 
@@ -1169,7 +1169,7 @@ class ApplyPositionUpdateInput(ToolInput):
 @tool(
     "update_positions",
     description=(
-        "Move an existing position to another account (account_id/account_name). quantity, cost_basis and cost_currency are DERIVED from the position's records and are always REFUSED — record a buy/sale instead (acquire_lots / dispose_lots), or correct a wrong lot's date/quantity/cost with update_lots. vesting_state belongs to the grant tools. Moving a position to another account moves its lots too. Identify the position by its position_id (from get_portfolio). To move a position to a different custodian, pass account_id (from list_accounts) or account_name inside changes. On an interactive turn this raises a confirm card (no write yet, shows from→to accounts if moving venues); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller applies immediately, no card. For several positions at once, pass `updates` (a list of {position_id, changes}) instead — one call, and ONE confirm card for the whole batch."
+        "Move an existing position to another account (account_id/account_name). quantity, cost_basis and cost_currency are DERIVED from the position's records and are always REFUSED — record a buy/sale instead (acquire_lots / dispose_lots), or correct a wrong lot's date/quantity/cost with update_lots. vesting_state belongs to the grant tools. Moving a position to another account moves its lots too. Identify the position by its position_id (from get_portfolio). To move a position to a different custodian, pass account_id (from list_accounts) or account_name inside changes. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. For several positions at once, pass `updates` (a list of {position_id, changes}) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1313,7 +1313,7 @@ class ApplyPositionAddInput(ToolInput):
         default=None,
         min_length=1,
         description=(
-            "Batch form: add MULTIPLE new holdings in ONE call (e.g. every position in a freshly-imported portfolio). Every item needs its OWN idempotency_key. One call covers them all, and raises ONE confirm card for the whole batch. Each is applied independently, so an instrument×account already holding an active position is refused alone (buy more via acquire_lots) while the rest still add."
+            "Batch form: add MULTIPLE new holdings in ONE call (e.g. every position in a freshly-imported portfolio). Every item needs its OWN idempotency_key. One call covers them all. Each is applied independently, so an instrument×account already holding an active position is refused alone (buy more via acquire_lots) while the rest still add."
         ),
     )
 
@@ -1321,7 +1321,7 @@ class ApplyPositionAddInput(ToolInput):
 @tool(
     "add_positions",
     description=(
-        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. On an interactive turn this raises a confirm card (no write yet); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller adds immediately, no card. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call, and ONE confirm card for the whole batch."
+        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1427,7 +1427,7 @@ class ApplyPositionRemoveInput(ToolInput):
     removals: Optional[List[str]] = Field(
         default=None,
         description=(
-            "Batch form: remove SEVERAL positions in ONE call — a list of position_ids. Each is removed independently; an unknown id is reported for that item only. One call covers them all, and raises ONE confirm card for the whole batch. Omit the single `position_id` field when using this."
+            "Batch form: remove SEVERAL positions in ONE call — a list of position_ids. Each is removed independently; an unknown id is reported for that item only. One call covers them all. Omit the single `position_id` field when using this."
         ),
     )
 
@@ -1435,7 +1435,7 @@ class ApplyPositionRemoveInput(ToolInput):
 @tool(
     "remove_positions",
     description=(
-        "Remove a position, identified by position_id (from get_portfolio). On an interactive turn this raises a confirm card (no write yet); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller (no user watching) removes immediately, no card. Removing several positions at once? Pass `removals` (a list of position_ids) instead of one call per position — one call, and ONE confirm card for the whole batch."
+        "Remove a position, identified by position_id (from get_portfolio). If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Removing several positions at once? Pass `removals` (a list of position_ids) instead of one call per position — one call."
     ),
     input_schema=schema_of(ApplyPositionRemoveInput, tool_name="remove_positions"),
     mutates=("portfolio",),

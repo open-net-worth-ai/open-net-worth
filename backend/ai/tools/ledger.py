@@ -1157,7 +1157,7 @@ def _split_update_item(item: dict) -> tuple[Optional[str], dict, Optional[bool]]
 _APPROVE_VIA_UPDATE_REFUSAL = (
     "Refused: update_transactions does not approve. Approving is its own call — use "
     "approve_transactions with the transaction id(s) (load it with find_tools names="
-    '["approve_transactions"] if you do not have it); the user confirms it. NOTHING in this '
+    '["approve_transactions"] if you do not have it). NOTHING in this '
     "call was applied to the row. If the rest of your edit is still wanted, send it again "
     "WITHOUT needs_review. needs_review=true (re-flag) is still accepted here."
 )
@@ -1516,9 +1516,7 @@ async def _update_legacy_bulk(
         "transaction_id and no other field changes NOTHING — reported as a no-op, never "
         "silent success. To APPROVE flagged rows use approve_transactions, not this tool "
         "(needs_review=true here re-flags a row; false is refused).\n\n"
-        "Interactive turns PREVIEW first: ONE confirmation card (single edit or the whole "
-        "batch) showing the resolved before/after per field — including a category a spend "
-        "rule or payee default would silently change — and write nothing until confirmed.\n\n"
+        "If the call asks the user first, ONE card (single edit or the whole batch) shows them the resolved before/after per field — including a category a spend rule or payee default would silently change — and nothing is written until they answer.\n\n"
         "REFUSES an account's Starting Balance row (source='opening') for any field except "
         "`cleared=true` — change its opening balance/date via update_accounts instead."
     ),
@@ -1850,9 +1848,7 @@ def _resolve_live_txn(existing_id: str | None) -> dict | None:
         "go to the currency wallet (e.g. 'IBKR USD'), not the securities account ('IBKR').\n\n"
         "Returns per-item `results` — {index, ok, id} or {index, error}. Never re-submit a row "
         "that reported an id.\n\n"
-        "Interactive turns PREVIEW first: ONE confirmation card (single entry or whole batch) "
-        "showing the RESOLVED outcome — the category and WHICH tier set it, the resolved "
-        "accounts, the base-currency value. Nothing is written until the user confirms.\n\n"
+        "If the call asks the user first, ONE card (single entry or whole batch) shows them the RESOLVED outcome — the category and WHICH tier set it, the resolved accounts, the base-currency value — and nothing is written until they answer.\n\n"
         "STATEMENT IMPORT: do NOT hand-parse statements into this tool. `import_transactions` "
         "is the single entrance for EVERY format and books through this same choke point. "
         "Use `add_transactions` for a statement ONLY as a fallback for rows the parser "
@@ -1880,7 +1876,7 @@ def _resolve_live_txn(existing_id: str | None) -> dict | None:
                 "type": "boolean",
                 "description": (
                     "Book every row even where it looks like a duplicate of one already in the "
-                    "ledger. Set this ONLY when the user has confirmed these are genuinely "
+                    "ledger. Set this ONLY when the user has said these are genuinely "
                     "separate charges — it does not make a re-run safe, it books the rows twice. "
                     "Duplicates are still reported back to you either way."
                 ),
@@ -2798,7 +2794,7 @@ async def add_transactions(input_data: dict):
         result["refused_note"] = (
             f"{len(refused)} row(s) were NOT written — each matches a transaction already in the "
             "ledger (see results[].error and results[].duplicate_of). Show the user the existing "
-            "row before doing anything else. If they confirm it is a genuinely separate charge, "
+            "row before doing anything else. If they say it is a genuinely separate charge, "
             "re-send ONLY that row with allow_duplicate=true. Do NOT re-send unchanged, and do NOT "
             "delete "
             "the existing row to make room."

@@ -515,7 +515,7 @@ class GetRuleSuggestionsInput(ToolInput):
         "a payee → category pair plus how many times they made that correction. Use this to "
         "be PROACTIVE: 'you keep recategorizing STARBUCKS as food — want me to automate "
         "that?' — and if they say yes, call create_automation with a txn event trigger "
-        "matching that payee (approve-tier: confirm first, never auto-create). If they "
+        "matching that payee (never auto-create). If they "
         "decline, call dismiss_rule_suggestions so it stops being suggested. Returns [] when "
         "there is nothing to suggest."
     ),

@@ -576,7 +576,7 @@ def _cached_diff_parse(record: dict) -> tuple[list[dict] | None, dict, dict | No
         "1. User uploads the bank statement file and mentions the account.\n"
         "2. Call this tool with the file's ref_id and the account_id.\n"
         "3. Show the user the summary and the mismatch lists.\n"
-        "4. Ask for confirmation, then use add_transactions / delete_transactions to fix them.\n"
+        "4. Use add_transactions / delete_transactions to fix them.\n"
         "5. Call verify_statement_balance to confirm the closing balance matches."
     ),
     input_schema=schema_of(DiffStatementInput, tool_name="diff_statement"),

@@ -116,10 +116,10 @@ class CreateEnvelopeInput(ToolInput):
 @tool(
     "create_envelope",
     description=(
-        "Propose creating a standalone envelope — a named pot with ZERO categories linked "
-        "(mints no category). APPROVE-TIER, previews only. Link a category afterward with "
+        "Create a standalone envelope — a named pot with ZERO categories linked "
+        "(mints no category). Link a category afterward with "
         "link_categories. group_id places it in a group (omit for 'Others'); color is a "
-        "6-digit hex swatch. Approving the card writes it; nothing else to call."
+        "6-digit hex swatch. Nothing else to call to apply it."
     ),
     input_schema=schema_of(CreateEnvelopeInput, tool_name="create_envelope"),
     mutates=("budget",),
@@ -176,8 +176,7 @@ def _envelope_changes(item: dict) -> list[dict]:
         "Edit envelopes — each update sets any of name, color and note (note '' clears it; "
         "absent fields are unchanged). A one-category envelope is usually renamed through its "
         "category (rename_categories) so the two stay in step; rename here for a merged or "
-        "zero-category envelope. Several envelopes are reported per item. Approving the card "
-        "writes it; nothing else to call."
+        "zero-category envelope. Several envelopes are reported per item. Nothing else to call to apply it."
     ),
     input_schema=schema_of(UpdateEnvelopesInput, tool_name="update_envelopes"),
     mutates=("budget",),
@@ -208,10 +207,9 @@ class MergeEnvelopesInput(ToolInput):
 @tool(
     "merge_envelopes",
     description=(
-        "Propose folding source's categories + assigned money (all months) into target, "
-        "then archiving source (restorable). APPROVE-TIER, previews only. Source's own "
-        "target/note drop. Refused if either side is archived or Commitments-synced. "
-        "Approving the card writes it; nothing else to call."
+        "Fold source's categories + assigned money (all months) into target, "
+        "then archiving source (restorable). Source's own "
+        "target/note drop. Refused if either side is archived or Commitments-synced. Nothing else to call to apply it."
     ),
     input_schema=schema_of(MergeEnvelopesInput, tool_name="merge_envelopes"),
     mutates=("budget",),
@@ -260,8 +258,7 @@ def _category_batch(change_type: str, op: str, input_data: dict):
     description=(
         "Link UNLINKED categories (no envelope — their spending shows as unbudgeted) to one "
         "envelope, making them budgetable. No money moves. A category already linked "
-        "elsewhere is REFUSED (unlink it first); several are reported per item. Approving the "
-        "card writes it; nothing else to call."
+        "elsewhere is REFUSED (unlink it first); several are reported per item. Nothing else to call to apply it."
     ),
     input_schema=schema_of(LinkCategoriesInput, tool_name="link_categories"),
     mutates=("budget",),
@@ -285,8 +282,7 @@ class UnlinkCategoriesInput(ToolInput):
     description=(
         "UNLINK categories from an envelope. Each becomes ENVELOPE-LESS — no new envelope is "
         "minted; its spending shows as unbudgeted until relinked. Legal even for the SOLE "
-        "member (the envelope stays alive and keeps its money; nothing moves). Approving the "
-        "card writes it; nothing else to call."
+        "member (the envelope stays alive and keeps its money; nothing moves). Nothing else to call to apply it."
     ),
     input_schema=schema_of(UnlinkCategoriesInput, tool_name="unlink_categories"),
     mutates=("budget",),
@@ -305,14 +301,14 @@ class DeleteEnvelopeInput(ToolInput):
 @tool(
     "delete_envelope",
     description=(
-        "Propose DELETING an envelope FOR REAL. APPROVE-TIER, previews only. On apply: every "
+        "DELETE an envelope FOR REAL. On apply: every "
         "linked category detaches (→ 'Unbudgeted', never deleted), its Assigned zeroes across "
         "EVERY month, target/note/50-30-20-cap cleared, and the envelope is HARD-DELETED — not "
         "archived, not restorable by this tool. A POSITIVE balance (unspent money) releases to "
         "Ready to Assign. A NEGATIVE balance (an unresolved overspend) is neither forgiven nor "
         "charged now: its detached categories are unlinked, and unlinked cash spend keeps "
         "holding the same hole until the month-end roll, so Ready to Assign does NOT drop. "
-        "Refused if archived or Commitments-synced. Approving the card writes it; a delete made "
+        "Refused if archived or Commitments-synced. Nothing else to call to apply it; a delete made "
         "in the app has its own short-lived Undo in the UI, and an older Lucius write can be "
         "undone via restore_checkpoint — nothing else to call here."
     ),

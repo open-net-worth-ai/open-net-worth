@@ -1737,7 +1737,7 @@
           "cancelled"
         ],
         "type": "string",
-        "description": "Declared lifecycle state. 'cancelled' is terminal and passes through to reads verbatim. NOTE: reads DERIVE the displayed verdict — a target whose progress meets its amount reads 'completed' whether or not you set it here, and an unmet one reads ahead/on_track/behind/past_due from its pace regardless. Omit to leave it unchanged; confirm cancelled/completed with the user first."
+        "description": "Declared lifecycle state. 'cancelled' is terminal and passes through to reads verbatim. NOTE: reads DERIVE the displayed verdict — a target whose progress meets its amount reads 'completed' whether or not you set it here, and an unmet one reads ahead/on_track/behind/past_due from its pace regardless. Omit to leave it unchanged."
       },
       "note": {
         "type": "string",
@@ -2016,7 +2016,7 @@
       },
       "purpose": {
         "type": "string",
-        "description": "One short line describing what the script does, shown to the user on the permission card (e.g. 'subset-sum search over 22 transaction amounts')."
+        "description": "One short line describing what the script does, shown to the user (e.g. 'subset-sum search over 22 transaction amounts')."
       }
     },
     "required": [
@@ -3127,7 +3127,7 @@
       },
       "create_new_account": {
         "type": "boolean",
-        "description": "When true AND account_name is given without account_id, create a new account with that name. Only set after the user has explicitly confirmed a new account should be created. Default false — resolve against existing accounts instead."
+        "description": "When true AND account_name is given without account_id, create a new account with that name. Only set when the user has said a new account should be created. Default false — resolve against existing accounts instead."
       },
       "locked_position_id": {
         "type": "string",
@@ -3235,7 +3235,7 @@
       },
       "create_new_account": {
         "type": "boolean",
-        "description": "When true AND account_name is given without account_id, create a new account with that name. Only set after the user has explicitly confirmed a new account should be created. Default false — resolve against existing accounts instead."
+        "description": "When true AND account_name is given without account_id, create a new account with that name. Only set when the user has said a new account should be created. Default false — resolve against existing accounts instead."
       }
     },
     "required": [
@@ -3363,7 +3363,7 @@
       },
       "payload": {
         "type": "object",
-        "description": "An already-extracted preview result to commit directly (e.g. an unattended flow with its own pre-extracted payload). The normal interactive flow never passes this by hand — the approval re-runs the tool on the stored extraction."
+        "description": "An already-extracted preview result to commit directly (e.g. an unattended flow with its own pre-extracted payload). The normal interactive flow never passes this by hand — an answered card re-runs the tool on the stored extraction."
       }
     },
     "type": "object",
@@ -3443,7 +3443,7 @@
       },
       "commit": {
         "type": "boolean",
-        "description": "false (default) = PREVIEW only, writes nothing, returns statement_id. true = book it — pass the statement_id the preview returned so the cached parse is reused instead of re-parsed. Only after the user confirms."
+        "description": "false (default) = PREVIEW only, writes nothing, returns statement_id. true = book it — pass the statement_id the preview returned so the cached parse is reused instead of re-parsed. Only once the user has reviewed the preview."
       },
       "decisions": {
         "description": "OPTIONAL per-row actions from a prior preview (with statement_id + commit:true) — [{index: <preview index>, action: create|merge|skip, existing_id?: <merge target from the row's match flag>, edits?: {category?, payee?, amount?, date?, direction?, account_id?, to_account_id?}}]. to_account_id (an existing account's name or id) books the row as a TRANSFER to it in this batch — e.g. 'TRANSFER TO REVOLUT'; the statement amount stays on the statement account's leg and the other leg is FX-converted. Rows not listed follow default_action. An approved needs-eyes/low-confidence row requires an explicit create decision even when the user says 'approve all'; omitted flagged rows and exact duplicates still skip.",
@@ -4421,7 +4421,7 @@
       },
       "allow_duplicate": {
         "type": "boolean",
-        "description": "Book every row even where it looks like a duplicate of one already in the ledger. Set this ONLY when the user has confirmed these are genuinely separate charges — it does not make a re-run safe, it books the rows twice. Duplicates are still reported back to you either way."
+        "description": "Book every row even where it looks like a duplicate of one already in the ledger. Set this ONLY when the user has said these are genuinely separate charges — it does not make a re-run safe, it books the rows twice. Duplicates are still reported back to you either way."
       },
       "force_transfer_rate": {
         "type": "boolean",
@@ -4625,7 +4625,7 @@
         },
         "minItems": 1,
         "type": "array",
-        "description": "Batch form: record MULTIPLE buys/transfers-in/grants in ONE call (e.g. every trade in an imported broker statement). Every item needs its OWN idempotency_key, and the double-book guard applies PER ITEM — one already-booked trade is refused alone while the rest still record. One call covers them all, and raises ONE confirm card for the whole batch."
+        "description": "Batch form: record MULTIPLE buys/transfers-in/grants in ONE call (e.g. every trade in an imported broker statement). Every item needs its OWN idempotency_key, and the double-book guard applies PER ITEM — one already-booked trade is refused alone while the rest still record. One call covers them all."
       }
     },
     "required": [
@@ -4659,7 +4659,7 @@
           "type": "object"
         },
         "type": "array",
-        "description": "Batch form: delete SEVERAL orphaned/duplicate lots in ONE call. Each is deleted independently (a partially-consumed lot is refused for that item only). One call covers them all, and raises ONE confirm card for the whole batch."
+        "description": "Batch form: delete SEVERAL orphaned/duplicate lots in ONE call. Each is deleted independently (a partially-consumed lot is refused for that item only). One call covers them all."
       }
     },
     "type": "object",
@@ -4744,7 +4744,7 @@
         },
         "minItems": 1,
         "type": "array",
-        "description": "Batch form: one call for several disposals, each applied (and double-book-guarded) independently. One call covers them all, and raises ONE confirm card for the whole batch."
+        "description": "Batch form: one call for several disposals, each applied (and double-book-guarded) independently. One call covers them all."
       }
     },
     "required": [
@@ -4764,7 +4764,7 @@
           "type": "string"
         },
         "type": "array",
-        "description": "Batch form: undo SEVERAL disposals in ONE call (e.g. reverting an entire botched import batch) — a list of event_ids. Each is undone independently; an event whose consumed lots no longer exist is refused for that item only. One call covers them all, and raises ONE confirm card for the whole batch. Omit the single `event_id` field when using this."
+        "description": "Batch form: undo SEVERAL disposals in ONE call (e.g. reverting an entire botched import batch) — a list of event_ids. Each is undone independently; an event whose consumed lots no longer exist is refused for that item only. One call covers them all. Omit the single `event_id` field when using this."
       }
     },
     "type": "object",
@@ -5442,7 +5442,7 @@
       },
       "allow_duplicate": {
         "type": "boolean",
-        "description": "Only if the user confirmed a same-signature second fill"
+        "description": "Only if the user said it is a genuine same-signature second fill"
       }
     },
     "type": "object",
@@ -5513,7 +5513,7 @@
       },
       "force": {
         "type": "boolean",
-        "description": "Default false — only an 'open' contract may be deleted, and a closed/expired/assigned/exercised one is refused with its status. Pass true to delete a non-open contract anyway, which discards settled history: do it only for a genuinely mistaken entry the user has confirmed."
+        "description": "Default false — only an 'open' contract may be deleted, and a closed/expired/assigned/exercised one is refused with its status. Pass true to delete a non-open contract anyway, which discards settled history: do it only for an entry the user has said was a genuine mistake."
       }
     },
     "required": [
@@ -6955,7 +6955,7 @@
       },
       "allow_duplicate_symbol": {
         "type": "boolean",
-        "description": "Set true only after a prior call errored with 'symbol already exists' AND the user confirmed this is a genuinely different asset (e.g. same ticker, different exchange)."
+        "description": "Set true only after a prior call errored with 'symbol already exists' AND the user said this is a genuinely different asset (e.g. same ticker, different exchange)."
       },
       "queries": {
         "items": {
@@ -6996,7 +6996,7 @@
                 },
                 "allow_duplicate_symbol": {
                   "type": "boolean",
-                  "description": "true only for a confirmed genuinely-different asset."
+                  "description": "true only for an asset the user said is genuinely different."
                 }
               },
               "required": [
@@ -7179,7 +7179,7 @@
           "type": "object"
         },
         "type": "array",
-        "description": "Batch form: [{position_id, changes}, …] — one call for several positions. One call covers them all, and raises ONE confirm card for the whole batch. Omit position_id/changes when using this."
+        "description": "Batch form: [{position_id, changes}, …] — one call for several positions. One call covers them all. Omit position_id/changes when using this."
       }
     },
     "type": "object",
@@ -7254,7 +7254,7 @@
         },
         "minItems": 1,
         "type": "array",
-        "description": "Batch form: add MULTIPLE new holdings in ONE call (e.g. every position in a freshly-imported portfolio). Every item needs its OWN idempotency_key. One call covers them all, and raises ONE confirm card for the whole batch. Each is applied independently, so an instrument×account already holding an active position is refused alone (buy more via acquire_lots) while the rest still add."
+        "description": "Batch form: add MULTIPLE new holdings in ONE call (e.g. every position in a freshly-imported portfolio). Every item needs its OWN idempotency_key. One call covers them all. Each is applied independently, so an instrument×account already holding an active position is refused alone (buy more via acquire_lots) while the rest still add."
       }
     },
     "required": [
@@ -7278,7 +7278,7 @@
           "type": "string"
         },
         "type": "array",
-        "description": "Batch form: remove SEVERAL positions in ONE call — a list of position_ids. Each is removed independently; an unknown id is reported for that item only. One call covers them all, and raises ONE confirm card for the whole batch. Omit the single `position_id` field when using this."
+        "description": "Batch form: remove SEVERAL positions in ONE call — a list of position_ids. Each is removed independently; an unknown id is reported for that item only. One call covers them all. Omit the single `position_id` field when using this."
       }
     },
     "type": "object",
@@ -8869,7 +8869,7 @@
     "additionalProperties": false,
     "properties": {
       "skill_id": {
-        "description": "The skill to delete, by its stored id (from list_skills). Returns a proposal — nothing is removed until the user confirms it.",
+        "description": "The skill to delete, by its stored id (from list_skills).",
         "type": "string"
       }
     },
@@ -10479,7 +10479,7 @@
         },
         "minItems": 1,
         "type": "array",
-        "description": "Corrections, one per lot: [{lot_id, …fields to change}]. One call covers them all, and raises ONE confirm card for the whole batch."
+        "description": "Corrections, one per lot: [{lot_id, …fields to change}]. One call covers them all."
       }
     },
     "type": "object",

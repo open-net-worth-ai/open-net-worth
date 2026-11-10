@@ -775,9 +775,7 @@ class DescribeAccountInput(ToolInput):
         "Turn a plain-language description of ONE account into a structured, EDITABLE account-form "
         "draft (type, name, currency, initial_balance, institution, last_four, note, "
         "and credit/loan fields when implied). Use this when the user describes an account in words "
-        "('my Meridian Bank savings account, about 12k SGD') and you want to pre-fill the Add-account form for "
-        "them to confirm. This NEVER creates the account — it only proposes fields; call create_account "
-        "after the user confirms. Interactive only (needs the AI provider)."
+        "('my Meridian Bank savings account, about 12k SGD') and you want to pre-fill the Add-account form for them to review. This NEVER creates the account — it only proposes fields; call create_account once the user has settled the fields. Interactive only (needs the AI provider)."
     ),
     input_schema=schema_of(DescribeAccountInput, tool_name="describe_account"),
 )
@@ -1035,9 +1033,7 @@ def _reconcile_one(
         "reconcile several accounts in ONE call — each to its OWN asserted balance. Every "
         "account is resolved and reconciled independently; an unresolved/ambiguous name is "
         "reported per-item in `not_found`/`ambiguous` and never blocks the rest.\n\n"
-        "ALWAYS call with dry_run=true first. Show the user the computed delta(s) and ask for "
-        "explicit confirmation before calling again with dry_run=false (or omitting it) to "
-        "apply. Never apply without user approval."
+        "ALWAYS call with dry_run=true first and show the user the computed delta(s); then call again with dry_run=false (or omitting it) to apply."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1144,8 +1140,7 @@ class SetTransactionsClearedInput(ToolInput):
         "Mark one or more transactions cleared or uncleared (cleared/reconcile flow) — i.e. "
         "whether the user has matched them against the bank. This NEVER changes the account's "
         "working balance; it only moves which legs the cleared balance folds. Use "
-        "get_transactions to find the transaction id(s). This is an immediate write — confirm "
-        "with the user first. An account's Starting Balance row (source='opening') cannot be "
+        "get_transactions to find the transaction id(s). An account's Starting Balance row (source='opening') cannot be "
         "UNcleared — it must stay cleared to reconcile.\n\n"
         "Pass several txn_ids to set the same cleared flag on many transactions in one call. "
         "Each is set independently — a Starting-Balance refusal is reported per item in "

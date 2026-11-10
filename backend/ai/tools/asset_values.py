@@ -94,7 +94,7 @@ class CorrectAssetValueInput(ToolInput):
         "in place. This rewrites the value history (the old figure is gone; the entry is "
         "marked edited). A new appraisal or market move is record_asset_value, never this. "
         "The purchase point (mark_id 'purchase') can't be corrected here — change "
-        "cost/cost_date with update_asset. Confirm before → after with the user first."
+        "cost/cost_date with update_asset."
     ),
     input_schema=schema_of(CorrectAssetValueInput, tool_name="correct_asset_value"),
     mutates=("assets",),
@@ -135,7 +135,7 @@ class RemoveAssetValueInput(ToolInput):
         "Delete one value observation that should never have been recorded (mark_id from "
         "get_asset's marks). Refused for the purchase point (clear cost/cost_date with "
         "update_asset) and for the last remaining value (record a new value first, or "
-        "delete_asset). Changes net-worth history. Confirm with the user first."
+        "delete_asset). Changes net-worth history."
     ),
     input_schema=schema_of(RemoveAssetValueInput, tool_name="remove_asset_value"),
     mutates=("assets",),

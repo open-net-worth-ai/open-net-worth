@@ -109,7 +109,6 @@ class UpdateModelConfigInput(ToolInput):
     "update_model_config",
     description=(
         "Change which provider/model the assistant runs on. Takes effect next turn — no restart. "
-        "CONFIRM intent with the user before calling. "
         "api_key is WRITE-ONLY (never returned; blank keeps saved key) — prefer the UI for secrets. "
         "The endpoint URL (base_url) cannot be set here — it is changed in Settings → AI Models only. "
         "Call get_model_config first to see valid providers and model hints."
@@ -180,8 +179,7 @@ class SetProviderCredentialsInput(ToolInput):
         "Store the api_key for a secondary AI provider (for per-conversation overrides). "
         "Does NOT change the instance default (use update_model_config for that). "
         "api_key is WRITE-ONLY. The endpoint URL (base_url) cannot be set here — it is changed "
-        "in Settings → AI Models only, because a stored key is bound to its endpoint. "
-        "Confirm intent before calling. NOT headless."
+        "in Settings → AI Models only, because a stored key is bound to its endpoint. NOT headless."
     ),
     input_schema=schema_of(SetProviderCredentialsInput, tool_name="set_provider_credentials"),
     mutates=("config",),

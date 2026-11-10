@@ -729,7 +729,7 @@ class ApplyLotAcquireInput(ToolInput):
         default=None,
         min_length=1,
         description=(
-            "Batch form: record MULTIPLE buys/transfers-in/grants in ONE call (e.g. every trade in an imported broker statement). Every item needs its OWN idempotency_key, and the double-book guard applies PER ITEM — one already-booked trade is refused alone while the rest still record. One call covers them all, and raises ONE confirm card for the whole batch."
+            "Batch form: record MULTIPLE buys/transfers-in/grants in ONE call (e.g. every trade in an imported broker statement). Every item needs its OWN idempotency_key, and the double-book guard applies PER ITEM — one already-booked trade is refused alone while the rest still record. One call covers them all."
         ),
     )
 
@@ -737,7 +737,7 @@ class ApplyLotAcquireInput(ToolInput):
 @tool(
     "acquire_lots",
     description=(
-        "Record a buy / transfer-in / grant as a tax lot on an existing position (so cost basis is exact, not averaged-away). Use this — NOT add_positions — when the instrument is already held in the account. Identify the position by position_id (from get_portfolio). ALWAYS capture the commission: extract the fee/commission line from a broker confirmation into `fees`; omit if the source shows none, never guess. On an interactive turn this raises a confirm card (no write yet); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller records immediately, no card — pass idempotency_key so a reprocessed email/retry can never double-book. For kind=buy, pass funding_account_id to debit cash in the same write; omit it only when that cash debit is already in the ledger — never add_transactions for a buy's cash (that row is unlinked from the lot). Recording a whole statement's worth of trades? Pass `acquisitions` (a list) instead — one call, and ONE confirm card for the whole batch."
+        "Record a buy / transfer-in / grant as a tax lot on an existing position (so cost basis is exact, not averaged-away). Use this — NOT add_positions — when the instrument is already held in the account. Identify the position by position_id (from get_portfolio). ALWAYS capture the commission: extract the fee/commission line from a broker confirmation into `fees`; omit if the source shows none, never guess. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Pass idempotency_key so a reprocessed email/retry can never double-book. For kind=buy, pass funding_account_id to debit cash in the same write; omit it only when that cash debit is already in the ledger — never add_transactions for a buy's cash (that row is unlinked from the lot). Recording a whole statement's worth of trades? Pass `acquisitions` (a list) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -875,7 +875,7 @@ class ApplyLotDeleteInput(ToolInput):
     deletions: Optional[List[ApplyLotDeleteItem]] = Field(
         default=None,
         description=(
-            "Batch form: delete SEVERAL orphaned/duplicate lots in ONE call. Each is deleted independently (a partially-consumed lot is refused for that item only). One call covers them all, and raises ONE confirm card for the whole batch."
+            "Batch form: delete SEVERAL orphaned/duplicate lots in ONE call. Each is deleted independently (a partially-consumed lot is refused for that item only). One call covers them all."
         ),
     )
 
@@ -883,7 +883,7 @@ class ApplyLotDeleteInput(ToolInput):
 @tool(
     "delete_lots",
     description=(
-        "Delete a specific lot that is fully open (no disposals have consumed it). Use this to remove orphaned or duplicate lots — e.g. a spurious 'opening' placeholder left behind when a real buy lot already exists for the same position. Call get_lots first to identify the lot_id. On an interactive turn this raises a confirm card (no write yet); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller deletes immediately, no card. Cleaning up several duplicate/orphaned lots at once? Pass `deletions` (a list) instead — one call, and ONE confirm card for the whole batch."
+        "Delete a specific lot that is fully open (no disposals have consumed it). Use this to remove orphaned or duplicate lots — e.g. a spurious 'opening' placeholder left behind when a real buy lot already exists for the same position. Call get_lots first to identify the lot_id. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Cleaning up several duplicate/orphaned lots at once? Pass `deletions` (a list) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1016,7 +1016,7 @@ class ApplyLotDisposeInput(ToolInput):
         default=None,
         min_length=1,
         description=(
-            "Batch form: one call for several disposals, each applied (and double-book-guarded) independently. One call covers them all, and raises ONE confirm card for the whole batch."
+            "Batch form: one call for several disposals, each applied (and double-book-guarded) independently. One call covers them all."
         ),
     )
 
@@ -1024,7 +1024,7 @@ class ApplyLotDisposeInput(ToolInput):
 @tool(
     "dispose_lots",
     description=(
-        "Record a disposal (a sell, or a transfer-out/gift with is_taxable=false) — consumes the lots and books the realized gain. Identify the position by position_id (from get_portfolio). method 'fifo' (default) consumes oldest lots first; 'specific_id' requires lot_selection [{lot_id, qty}] (call get_lots first to read lot ids) and the qty must sum to quantity. ALWAYS capture the commission: extract the selling fee/commission into `disposal_fees`; omit if the source shows none, never guess. On an interactive turn this raises a confirm card (no write yet) — showing which lots get consumed, the per-lot long/short term, and the total gain in the proceeds and base currency; the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller records immediately, no card — pass idempotency_key so a retry can't double-book. Recording several sales at once (e.g. a batch of fills from a broker statement)? Pass `disposals` (a list) instead — one call, one confirm card for the whole batch, each item keeping its own idempotency_key and double-book guard."
+        "Record a disposal (a sell, or a transfer-out/gift with is_taxable=false) — consumes the lots and books the realized gain. Identify the position by position_id (from get_portfolio). method 'fifo' (default) consumes oldest lots first; 'specific_id' requires lot_selection [{lot_id, qty}] (call get_lots first to read lot ids) and the qty must sum to quantity. ALWAYS capture the commission: extract the selling fee/commission into `disposal_fees`; omit if the source shows none, never guess. If the call asks the user first, they see which lots get consumed, the per-lot long/short term and the total gain in the proceeds and base currency, and their answer runs it server-side with exactly those values — never call it again and never restate the values. Pass idempotency_key so a retry can't double-book. Recording several sales at once (e.g. a batch of fills from a broker statement)? Pass `disposals` (a list) instead — one call, each item keeping its own idempotency_key and double-book guard."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1193,7 +1193,7 @@ class ApplyLotDisposeUndoInput(ToolInput):
     event_ids: Optional[List[str]] = Field(
         default=None,
         description=(
-            "Batch form: undo SEVERAL disposals in ONE call (e.g. reverting an entire botched import batch) — a list of event_ids. Each is undone independently; an event whose consumed lots no longer exist is refused for that item only. One call covers them all, and raises ONE confirm card for the whole batch. Omit the single `event_id` field when using this."
+            "Batch form: undo SEVERAL disposals in ONE call (e.g. reverting an entire botched import batch) — a list of event_ids. Each is undone independently; an event whose consumed lots no longer exist is refused for that item only. One call covers them all. Omit the single `event_id` field when using this."
         ),
     )
 
@@ -1201,7 +1201,7 @@ class ApplyLotDisposeUndoInput(ToolInput):
 @tool(
     "undo_lot_disposals",
     description=(
-        "REVERSE a disposal (sell / transfer-out) — use this to remove a duplicate or mistaken sale from the realized history. Call get_realized_pnl first to find the event_id. The undo re-opens the lots the disposal consumed (restoring the shares to the position), soft-deletes the cash proceeds transaction if one was booked, and deletes the realized event. REFUSED if a consumed lot no longer exists (the shares can't be restored cleanly). On an interactive turn this raises a confirm card (no write yet, showing exactly what will be reversed); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller undoes immediately, no card. Undoing several disposals at once? Pass `event_ids` (a list) instead — one call, and ONE confirm card for the whole batch."
+        "REVERSE a disposal (sell / transfer-out) — use this to remove a duplicate or mistaken sale from the realized history. Call get_realized_pnl first to find the event_id. The undo re-opens the lots the disposal consumed (restoring the shares to the position), soft-deletes the cash proceeds transaction if one was booked, and deletes the realized event. REFUSED if a consumed lot no longer exists (the shares can't be restored cleanly). If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Undoing several disposals at once? Pass `event_ids` (a list) instead — one call."
     ),
     input_schema=schema_of(ApplyLotDisposeUndoInput, tool_name="undo_lot_disposals"),
     mutates=("portfolio",),

@@ -80,8 +80,7 @@ class UpdateLotsInput(ToolInput):
         default=None,
         min_length=1,
         description=(
-            "Corrections, one per lot: [{lot_id, …fields to change}]. One call covers them "
-            "all, and raises ONE confirm card for the whole batch."
+            "Corrections, one per lot: [{lot_id, …fields to change}]. One call covers them all."
         ),
     )
 
@@ -238,11 +237,7 @@ def _apply(item: dict) -> dict:
         "the units they took; their lines for this lot are re-dated and, if cost changed, "
         "their realized gain is recomputed — the card shows each sale's gain before → after. "
         "Its quantity can't go below the units already sold. Refused for a vest's lot (undo "
-        "and re-record the vest). Linked purchase cash is rewritten to match. On an "
-        "interactive turn this raises a confirm card (no write yet); the user's approval "
-        "then runs it server-side with exactly the values the card showed. Never call it "
-        "again to confirm and never restate the values. An unattended/automated caller "
-        "applies immediately, no card. Several lots? Pass `updates` — one call, one card."
+        "and re-record the vest). Linked purchase cash is rewritten to match. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Several lots? Pass `updates` — one call."
     ),
     input_schema=schema_of_batch_only(UpdateLotsInput, array="updates", tool_name="update_lots"),
     mutates=("portfolio",),
