@@ -266,10 +266,42 @@ async function detailOf(r: Response, fallback: string): Promise<string> {
   return typeof d.detail === 'string' && d.detail ? d.detail : `${fallback} (error ${r.status})`
 }
 
-export async function getRestApi(slug: string): Promise<RestApi> {
+async function fetchRestApi(slug: string): Promise<RestApi> {
   const r = await authFetch(`/api/rest-connector/apis/${encodeURIComponent(slug)}`)
   if (!r.ok) throw new Error('Could not load this API.')
   return r.json()
+}
+
+// The last settings read per API. The connector's page asks for them as it opens
+// (`prefetchRestApi`), so "Edit configuration" draws the whole form at once instead of a
+// "Loading…" line that the form then replaced — the dialog jumped twice (owner, 2026-11-11).
+// Holds no credential value: the server never sends one back.
+const loaded = new Map<string, RestApi>()
+const loading = new Map<string, Promise<RestApi>>()
+
+/** The settings already read for this API, if any — to draw the form without waiting. */
+export function cachedRestApi(slug: string): RestApi | undefined {
+  return loaded.get(slug)
+}
+
+/** Read an API's settings, keeping the answer for `cachedRestApi`. */
+export function getRestApi(slug: string): Promise<RestApi> {
+  const pending = loading.get(slug)
+  if (pending) return pending
+  const request = fetchRestApi(slug)
+    .then((api) => {
+      loaded.set(slug, api)
+      return api
+    })
+    .finally(() => loading.delete(slug))
+  loading.set(slug, request)
+  return request
+}
+
+/** Start reading an API's settings ahead of the form, quietly: a failure is the form's to
+ *  report when it opens. */
+export function prefetchRestApi(slug: string): void {
+  getRestApi(slug).catch(() => undefined)
 }
 
 export async function saveRestApi(draft: RestApiDraft): Promise<RestApi> {
@@ -282,7 +314,9 @@ export async function saveRestApi(draft: RestApiDraft): Promise<RestApi> {
     body: JSON.stringify(bodyOf(draft)),
   })
   if (!r.ok) throw new Error(await detailOf(r, 'Could not save the API.'))
-  return r.json()
+  const saved: RestApi = await r.json()
+  loaded.set(saved.id, saved)
+  return saved
 }
 
 /** Read an OpenAPI / Swagger document: pasted text when it looks like one, else its address. */

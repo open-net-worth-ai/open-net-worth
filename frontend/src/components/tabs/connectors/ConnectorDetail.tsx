@@ -41,7 +41,7 @@ import { useConnectorSaveHost } from './formSave'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
-import { restToolLabel } from './restApi'
+import { prefetchRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
   stampGroup,
@@ -149,6 +149,12 @@ export function ConnectorDetail({
   // whenever the server's own view of the levels changes underneath us.
   const [perms, setPerms] = useState<PermissionMap>(entry.perms)
   useEffect(() => setPerms(entry.perms), [entry.id, entry.perms])
+  // A REST API's settings take a request to read: start it now, so Edit configuration opens on
+  // the whole form rather than a "Loading…" line it then replaces.
+  useEffect(() => {
+    const slug = restSlugOf(entry.id)
+    if (slug) prefetchRestApi(slug)
+  }, [entry.id])
 
   /**
    * Show the new level immediately — then ROLL IT BACK if the write did not land.

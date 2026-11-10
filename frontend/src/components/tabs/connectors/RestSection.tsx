@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Stack, Text } from '../../ui'
 import { RestApiEditor } from './RestApiEditor'
-import { draftOf, emptyDraft, getRestApi, restSlugOf } from './restApi'
+import { cachedRestApi, draftOf, emptyDraft, getRestApi, restSlugOf } from './restApi'
 import type { RestApi, RestApiDraft } from './restApi'
 
 // REST connector config over /api/rest-connector/* (per-provider plane). Each API is its own
@@ -79,11 +79,19 @@ interface SavedRestApiProps {
 }
 
 function SavedRestApi({ slug, onSaveError }: SavedRestApiProps) {
-  const [draft, setDraft] = useState<RestApiDraft | null>(null)
+  // Drawn at once from what the connector's page already read.
+  const [draft, setDraft] = useState<RestApiDraft | null>(() => {
+    const api = cachedRestApi(slug)
+    return api ? draftOf(api) : null
+  })
   const [failed, setFailed] = useState(false)
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
+    // Already drawn from the page's read: a second read would re-key the form under the owner
+    // (the very jump the cache is for). Only this form writes an API's settings, and its save
+    // refreshes the cache, so what was read is what is saved.
+    if (cachedRestApi(slug)) return
     let live = true
     getRestApi(slug)
       .then((api) => {
