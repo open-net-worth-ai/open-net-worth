@@ -24,7 +24,7 @@ describe('previewDeleteEffects', () => {
     await expect(previewDeleteEffects(['txn_1'])).resolves.toEqual([
       '10 shares bought 2026-01-05: The lot keeps its shares.',
     ])
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ ids: ['txn_1'] })
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ ids: ['txn_1'] })
   })
 
   it('leaves the dialog plain when nothing points at the row', async () => {

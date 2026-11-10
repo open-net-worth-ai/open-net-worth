@@ -766,14 +766,25 @@ def test_a_note_only_sale_edit_keeps_a_description_you_wrote(book):
     assert TransactionStore().find_by_id(sold["cash_leg_id"])["description"] == "My own words"
 
 
-def test_changing_a_sales_figures_updates_the_description(book):
+def test_changing_a_sales_figures_updates_the_apps_own_description(book):
+    _buy(book)
+    sold = _sell(book)
+
+    _edit_sale(book, sold["event_id"])
+
+    assert "26" in TransactionStore().find_by_id(sold["cash_leg_id"])["description"]
+
+
+def test_changing_a_sales_figures_keeps_a_description_you_wrote(book):
+    # Only the app's own trade text follows the figures (hand UAT DS-LOT-FEE, 2026-11-10;
+    # ADR 2026-11-06-deleting-a-transaction-leaves-nothing-unfixable).
     _buy(book)
     sold = _sell(book)
     TransactionStore().update_by_id(sold["cash_leg_id"], {"description": "My own words"})
 
     _edit_sale(book, sold["event_id"])
 
-    assert "26" in TransactionStore().find_by_id(sold["cash_leg_id"])["description"]
+    assert TransactionStore().find_by_id(sold["cash_leg_id"])["description"] == "My own words"
 
 
 def test_choosing_no_account_removes_the_cash_row(book):
