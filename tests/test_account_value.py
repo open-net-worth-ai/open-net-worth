@@ -101,7 +101,7 @@ def _hydrated(account_id):
 # ── flag off: the old code path ────────────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_flag_off_a_holding_still_counts_on_top_and_nothing_new_is_stored(book):
     acct = _account()
     _add_holding(acct["id"], _instrument())
@@ -111,13 +111,13 @@ def test_flag_off_a_holding_still_counts_on_top_and_nothing_new_is_stored(book):
     assert "value_source" not in _hydrated(acct["id"])
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_flag_off_value_source_is_refused(book):
     with pytest.raises(Exception, match="isn't turned on"):
         _account(value_source="holdings")
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_flag_off_a_holding_funded_from_the_account_keeps_the_typed_total(book):
     """What create_account's description tells Lucius to do with the flag off (no
     value_source in the result): fund the holding from the account itself, so a typed total
@@ -150,7 +150,7 @@ def test_create_account_description_holds_with_the_flag_on_and_off():
 # ── default and carve-out ──────────────────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_flag_turned_off_hides_a_stamped_source_and_reading(book):
     """On → off: the stored fields stay (on again is safe) but the response is the old one."""
     acct = _account()
@@ -162,7 +162,7 @@ def test_flag_turned_off_hides_a_stamped_source_and_reading(book):
     assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "total"
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_new_investment_account_starts_as_brokerage_total(book):
     acct = _account(type_="investment")
     assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "total"
@@ -171,7 +171,7 @@ def test_new_investment_account_starts_as_brokerage_total(book):
     assert "value_source" not in _hydrated(cash["id"])
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_first_holding_is_carved_out_of_the_typed_total(book):
     """The owner's journey #1: typed $8,000, then 5 ACME → 3,020 tracked + 4,980 untracked."""
     acct = _account()
@@ -186,7 +186,7 @@ def test_first_holding_is_carved_out_of_the_typed_total(book):
     assert len(txns) == 1 and txns[0]["kind"] == "adjustment" and txns[0]["cleared"]
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_more_holdings_and_removing_one_never_move_the_total(book):
     acct = _account()
     first = _add_holding(acct["id"], _instrument())
@@ -200,7 +200,7 @@ def test_more_holdings_and_removing_one_never_move_the_total(book):
     assert _value(acct["id"]) == 8000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_an_existing_empty_account_does_not_flip_at_its_first_holding(book, monkeypatch):
     """Regression (prototype 2026-11-09): re-deciding the default at every read flipped the
     account to Live holdings the moment it held something, counting 11,020."""
@@ -211,7 +211,7 @@ def test_an_existing_empty_account_does_not_flip_at_its_first_holding(book, monk
     assert _value(acct["id"]) == 8000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_an_account_already_holding_something_defaults_to_live_holdings(book):
     acct = _account()
     inst = _instrument()
@@ -221,7 +221,7 @@ def test_an_account_already_holding_something_defaults_to_live_holdings(book):
     assert _hydrated(acct["id"])["value_source"] == "holdings"
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_purchase_paid_from_another_account_raises_the_total_by_its_cost(book):
     acct = _account(type_="investment")
     checking = _account(name="Checking", type_="cash", total=5000.0)
@@ -242,7 +242,7 @@ def test_a_purchase_paid_from_another_account_raises_the_total_by_its_cost(book)
     assert not [t for t in TransactionStore().all() if "the total" in (t.get("description") or "")]
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_purchase_paid_from_the_account_itself_keeps_the_total(book):
     acct = _account(type_="investment")
     shell = _shell(acct["id"], _instrument())
@@ -260,7 +260,7 @@ def test_a_purchase_paid_from_the_account_itself_keeps_the_total(book):
     assert _value(acct["id"]) == 8000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_sale_with_no_proceeds_account_keeps_the_cash_at_the_brokerage(book):
     acct = _account(type_="investment")
     added = _add_holding(acct["id"], _instrument())
@@ -279,7 +279,7 @@ def test_a_sale_with_no_proceeds_account_keeps_the_cash_at_the_brokerage(book):
     assert _value(acct["id"]) == 8000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_live_holdings_account_keeps_the_old_rule(book):
     acct = _account(value_source="holdings", total=500.0)
     _add_holding(acct["id"], _instrument())
@@ -290,7 +290,7 @@ def test_a_live_holdings_account_keeps_the_old_rule(book):
 # ── switching, reconcile, split institutions ───────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_switch_to_live_holdings_clears_a_large_untracked_part(book):
     acct = _account()
     _add_holding(acct["id"], _instrument())
@@ -303,7 +303,7 @@ def test_switch_to_live_holdings_clears_a_large_untracked_part(book):
     assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "holdings"
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_switch_to_live_holdings_keeps_a_small_untracked_part_as_cash(book):
     acct = _account(total=3080.0)  # 3,020 tracked + 60 untracked (≤ 2%)
     _add_holding(acct["id"], _instrument())
@@ -313,7 +313,7 @@ def test_switch_to_live_holdings_keeps_a_small_untracked_part_as_cash(book):
     assert _value(acct["id"]) == 3080.0  # back to Brokerage total writes nothing
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_reconcile_a_brokerage_total_sets_the_untracked_part(book):
     acct = _account()
     _add_holding(acct["id"], _instrument())
@@ -323,7 +323,7 @@ def test_reconcile_a_brokerage_total_sets_the_untracked_part(book):
     assert _value(acct["id"]) == 9000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_linked_account_at_a_split_institution_defaults_to_live_holdings(book):
     link = [{"source": "plaid", "ref": "pa-1", "name": "Brokerage", "mask": "0001"}]
     main = _account(name="Acme Securities", type_="investment", institution="Acme Securities")
@@ -335,7 +335,7 @@ def test_a_linked_account_at_a_split_institution_defaults_to_live_holdings(book)
     assert view["value_siblings"] == [usd["name"]]
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_sale_with_no_exchange_rate_still_saves(book, monkeypatch):
     """QA 2026-11-10: keeping a sale's cash at the brokerage needs rates into the account's
     currency and the base. Without them the sale books as before (no cash leg) — the lot write

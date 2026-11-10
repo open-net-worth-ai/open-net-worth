@@ -51,7 +51,7 @@ export interface ApiAccount {
   payoff_date?: string | null
   min_payment?: number | null
   apy?: number | null
-  /** Investment/retirement only, while `investment_value_source` is on (ADR 2026-11-10):
+  /** Investment/retirement only, while `allow_brokerage_total_valuation` is on (ADR 2026-11-10):
    *  Brokerage total (`total`) or Live holdings (`holdings`). Absent = the old valuation. */
   value_source?: ValueSource
   /** What a linked balance-reporting connector last said about this account. */
@@ -280,7 +280,7 @@ export interface Account {
   /** Market value of this account's holdings in base currency (positions, from /api/portfolio). */
   holdingsBase: number
   /** How an investment/retirement account is valued (ADR 2026-11-10); null when the old
-   *  valuation applies — every other type, or the `investment_value_source` flag off. */
+   *  valuation applies — every other type, or the `allow_brokerage_total_valuation` flag off. */
   valuation?: import('./valuation').Valuation | null
 }
 

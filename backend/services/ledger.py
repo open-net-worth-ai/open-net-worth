@@ -631,7 +631,7 @@ def account_kind_and_band(
     book knows which row to fix. Every services-tier classification of a stored row goes through
     here.
 
-    ``untracked`` (``untracked_holdings.account_ids``, empty while investment_value_source is
+    ``untracked`` (``untracked_holdings.account_ids``, empty while allow_brokerage_total_valuation is
     off): a Brokerage total account's balance is its holdings not entered yet, so it bands as
     ``untracked_holdings`` — never settlement or retirement cash."""
     type_ = account.get("type")
@@ -830,7 +830,7 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
     if retirement_untracked:
         # The part of `retirement_base` that bands as untracked_holdings, for a reader that
         # splits Retirement from Investments (owned_assets_summary). Absent while
-        # investment_value_source is off: the old payload, byte for byte.
+        # allow_brokerage_total_valuation is off: the old payload, byte for byte.
         breakdown["retirement_untracked_base"] = round(retirement_untracked, 2)
     return {
         "base_currency": base,
@@ -4628,7 +4628,7 @@ def _breakdown_as_of(
     Accounts classify by `band_of(type)`: `cash` (bank/e-wallet) / `fixed_deposit` /
     `settlement_cash` (an `investment` account's brokerage/exchange cash, margin debit
     included) / `retirement` / `receivable` — `credit`/`loan` accounts are liabilities instead;
-    under investment_value_source a Brokerage total investment or retirement account bands as
+    under allow_brokerage_total_valuation a Brokerage total investment or retirement account bands as
     `untracked_holdings` (``untracked``: ``untracked_holdings.account_ids``, from each account's
     CURRENT source, so every past point bands the way today's does; computed here if omitted);
     market positions add to `equity` / `crypto` / `commodity` / `property` (only when
@@ -4807,7 +4807,7 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
     `classes` maps asset-class band → value (cash [bank-only]/fixed_deposit/settlement_cash
     [an `investment` account's brokerage/exchange cash, margin debit included]/retirement/
     receivable always — plus untracked_holdings [a Brokerage total account's balance, banded by
-    the account's CURRENT source at every point] under investment_value_source; equity/crypto/
+    the account's CURRENT source at every point] under allow_brokerage_total_valuation; equity/crypto/
     commodity/property once price collection has begun on/before that date — see ADR
     2026-07-31-liquid-net-worth-bands). `market_tracked` flags
     the point as including market value. `accounts` =

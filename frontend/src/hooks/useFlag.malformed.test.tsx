@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// PR #93 FLAG-11: `useFlag('investment_value_source')` on a malformed flag list. A response that
+// PR #93 FLAG-11: `useFlag('allow_brokerage_total_valuation')` on a malformed flag list. A response that
 // is not a flag list reads as "not loaded" (undefined → the old UI), never a crash; only a
 // well-formed list that lacks the flag throws (the declared-flag guard). Synthetic data only.
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -14,7 +14,7 @@ import { authFetch } from '../api/client'
 import { useFlag } from './useFlag'
 
 const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
-const NAME = 'investment_value_source'
+const NAME = 'allow_brokerage_total_valuation'
 
 function Probe() {
   const on = useFlag(NAME)
@@ -52,7 +52,7 @@ function flag(enabled: boolean) {
     enabled,
     source: 'default',
     stored: null,
-    env_var: 'ONW_FLAG_INVESTMENT_VALUE_SOURCE',
+    env_var: 'ONW_FLAG_ALLOW_BROKERAGE_TOTAL_VALUATION',
     owner: 'tests',
     added: '2026-11-10',
     remove_by: '2027-03-01',

@@ -124,7 +124,7 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 1),
     ),
     Flag(
-        name="investment_value_source",
+        name="allow_brokerage_total_valuation",
         description=(
             "Investment and retirement accounts are valued by Brokerage total or Live holdings "
             "(Edit account → Value this account by). A typed balance is the account's total, "

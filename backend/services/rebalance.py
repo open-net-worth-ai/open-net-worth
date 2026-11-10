@@ -211,7 +211,7 @@ def rebalance_plan(
 
 def _untracked_fields(base: str) -> dict:
     """What the plan leaves out because it isn't broken into holdings, and the line that says
-    so (ADR 2026-11-10, amendment 2). Empty while investment_value_source is off — the old
+    so (ADR 2026-11-10, amendment 2). Empty while allow_brokerage_total_valuation is off — the old
     payload."""
     from backend.services import untracked_holdings
 

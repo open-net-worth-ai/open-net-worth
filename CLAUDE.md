@@ -132,7 +132,7 @@ One line each — full reasoning and the scar behind each is in
   settlement cash (margin included) belongs to `investment`, never netted into cash. Dashboard
   net worth includes retirement accounts; the Assets breakdown groups their cash and vested
   holdings together, and `net_worth_excl_retirement` subtracts both from the full total.
-- An investment/retirement account is still holdings + ledger balance; under `investment_value_source`
+- An investment/retirement account is still holdings + ledger balance; under `allow_brokerage_total_valuation`
   a Brokerage total (`value_source=total`) account's balance is its UNTRACKED part, kept by the
   carve-out around `apply_lot_change` and the linked-total sync — never read it as cash: it bands
   as `untracked_holdings` (`ledger.account_kind_and_band(account, untracked)`), and book-level

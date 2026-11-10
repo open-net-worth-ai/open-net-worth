@@ -422,7 +422,7 @@ _CASH_REF_TYPES = frozenset({"acquire", "dispose", "amend", "dispose_amend"})
 def _keeps_brokerage_total(choke: Callable[[dict], dict]) -> Callable[[dict], dict]:
     """A Brokerage total account keeps its total when a lot write moves no money (ADR
     2026-11-10) — wrapped around the choke rather than inside it, so its dispatch stays the one
-    ``domain_introspect`` reads. A pass-through while ``investment_value_source`` is off."""
+    ``domain_introspect`` reads. A pass-through while ``allow_brokerage_total_valuation`` is off."""
 
     @functools.wraps(choke)
     def wrapper(change: dict) -> dict:

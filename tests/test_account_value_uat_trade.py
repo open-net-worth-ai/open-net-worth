@@ -33,7 +33,7 @@ from tests.account_value_uat_support import (
     signed,
 )
 
-ON = pytest.mark.flags(investment_value_source=True)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
 
 
 def _sell(position_id, qty=2, price=604.0, **extra):

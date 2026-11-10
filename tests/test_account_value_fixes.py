@@ -49,7 +49,7 @@ def client(book):
 # ── TYPED-05 / SB-01: removing a holding through the REST route keeps the total ────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_typed_05_rest_delete_position_keeps_the_total(client):
     acct = _account()
     added = _add_holding(acct["id"], _instrument())
@@ -62,7 +62,7 @@ def test_typed_05_rest_delete_position_keeps_the_total(client):
     assert len(_rows("Holding returned to the total")) == 1
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_typed_05_flag_off_rest_delete_is_unchanged(client):
     acct = _account()
     added = _add_holding(acct["id"], _instrument())
@@ -79,7 +79,7 @@ def _set_price(inst, price):
     InstrumentStore().update_by_id(inst["id"], {"manual_price": price})
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_typed_12_unpriced_holding_carved_at_cost_is_trued_up_when_priced(book):
     acct = _account()
     inst = _instrument(price=None)
@@ -96,7 +96,7 @@ def test_typed_12_unpriced_holding_carved_at_cost_is_trued_up_when_priced(book):
     assert cost.settle() == []  # once only
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_typed_13_unpriced_holding_with_no_cost_is_carved_when_priced(book):
     acct = _account()
     inst = _instrument(price=None)
@@ -109,7 +109,7 @@ def test_typed_13_unpriced_holding_with_no_cost_is_carved_when_priced(book):
     assert _value(acct["id"]) == 8000.0 and _balance(acct["id"]) == 4980.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_typed_12_a_true_up_is_dropped_once_the_account_is_on_live_holdings(book):
     acct = _account()
     inst = _instrument(price=None)
@@ -121,7 +121,7 @@ def test_typed_12_a_true_up_is_dropped_once_the_account_is_on_live_holdings(book
     assert cost._Pending().get().get("pending") == {}
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_typed_12_flag_off_nothing_is_noted_or_settled(book):
     acct = _account()
     _add_holding(acct["id"], _instrument(price=None), qty=5, cost=400.0)
@@ -132,7 +132,7 @@ def test_typed_12_flag_off_nothing_is_noted_or_settled(book):
 # ── TRADE-17 / SB-03: a remove whose carve-out can't be booked says so ────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_trade_17_failed_remove_carve_out_is_reported_not_raised(book, monkeypatch):
     acct = _account()
     added = _add_holding(acct["id"], _instrument())
@@ -154,7 +154,7 @@ def test_trade_17_failed_remove_carve_out_is_reported_not_raised(book, monkeypat
 # ── TRADE-18 / SB-02: moving a holding keeps both totals ──────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_trade_18_moving_a_holding_between_total_accounts_keeps_both_totals(book):
     a = _account(name="Old 401(k)")
     b = _account(name="Brokerage Z", type_="investment", total=5000.0)
@@ -165,7 +165,7 @@ def test_trade_18_moving_a_holding_between_total_accounts_keeps_both_totals(book
     assert len(_rows("Holding moved — total kept")) == 2
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_trade_18_moving_into_a_live_holdings_account_counts_it_there(book):
     a = _account(name="Old 401(k)")
     b = _account(name="Live", type_="investment", total=1000.0)
@@ -176,7 +176,7 @@ def test_trade_18_moving_into_a_live_holdings_account_counts_it_there(book):
     assert _value(b["id"]) == 4020.0  # holdings + cash, the Live holdings rule
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_trade_18_flag_off_a_move_books_nothing(book):
     a = _account(name="Old 401(k)")
     b = _account(name="Brokerage Z", type_="investment", total=5000.0)
@@ -189,7 +189,7 @@ def test_trade_18_flag_off_a_move_books_nothing(book):
 # ── SWITCH-12 / SB-13: a switch whose adjustment fails changes nothing ────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_switch_12_failed_adjustment_rolls_back_the_whole_edit(book, monkeypatch):
     acct = _account()
     _add_holding(acct["id"], _instrument())
@@ -207,7 +207,7 @@ def test_switch_12_failed_adjustment_rolls_back_the_whole_edit(book, monkeypatch
     assert _value(acct["id"]) == 8000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_switch_06_negative_untracked_part_switches_to_the_holdings_value(book):
     """Not a bug (review of SB-12): on Live holdings the account is worth its holdings."""
     acct = _account(total=2900.0)
@@ -220,7 +220,7 @@ def test_switch_06_negative_untracked_part_switches_to_the_holdings_value(book):
 # ── HOLD-09 / SB-04: a kept figure is asked about again after a recovery ──────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_hold_09_a_zero_after_a_recovery_is_asked_about_again(plaid):
     acct = _linked(total=5000.0)
     plaid.balances["pa-1"] = 5000.0
@@ -241,7 +241,7 @@ def test_hold_09_a_zero_after_a_recovery_is_asked_about_again(plaid):
 # ── LINK-16 / SB-09: a negative reading ───────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_link_16_a_negative_first_reading_is_held(plaid):
     acct = _linked()
     plaid.balances["pa-1"] = -500.0
@@ -256,7 +256,7 @@ def test_link_16_a_negative_first_reading_is_held(plaid):
     assert _value(acct["id"]) == -600.0 and _sync_state(acct["id"])["status"] == "fresh"
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_link_16_a_negative_reading_after_a_positive_total_is_held(plaid):
     acct = _linked()
     sync.run()  # 123,456.78
@@ -269,7 +269,7 @@ def test_link_16_a_negative_reading_after_a_positive_total_is_held(plaid):
 # ── FEED-03/04 / SB-08, SB-05: no currency on either side fails closed ────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_feed_03_no_stored_and_no_reported_currency_is_never_booked(plaid):
     """The store refuses to blank a currency, so this is a row stored without one."""
     acct = _linked()
@@ -286,7 +286,7 @@ def test_feed_03_no_stored_and_no_reported_currency_is_never_booked(plaid):
     assert _rows("Total from Plaid") == []
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_feed_04_yodlee_inferred_currency_is_not_a_reported_one(plaid, monkeypatch):
     monkeypatch.setattr(ledger_service, "base_currency", lambda: "USD")
     common = yodlee._account_to_common({"id": 7, "accountName": "IRA", "balance": {"amount": 5}})
@@ -318,7 +318,7 @@ def test_feed_04_yodlee_inferred_currency_is_not_a_reported_one(plaid, monkeypat
 # ── REC-16 / SB-16: NaN and Infinity are refused ──────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity"])
 def test_rec_16_rest_reconcile_refuses_a_non_finite_total(book, bad):
     """Refused at the request model, before the route runs. (FastAPI's own 422 handler then
@@ -352,7 +352,7 @@ def test_rec_16_reconcile_tool_input_refuses_a_non_finite_total(value):
 # ── TRADE-20 / SB-07 (not a bug): a vest raises the total and books nothing ───────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_trade_20_a_vest_into_a_brokerage_total_account_books_no_row(book, monkeypatch):
     from backend.services import equity as equity_svc
 

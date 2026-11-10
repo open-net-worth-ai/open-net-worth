@@ -36,7 +36,7 @@ def _tool(fn, payload):
 # ── REST ───────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_rest_create_reads_back_brokerage_total_and_switches_with_a_preview(client):
     made = client.post(
         "/api/accounts",
@@ -63,7 +63,7 @@ def test_rest_create_reads_back_brokerage_total_and_switches_with_a_preview(clie
     assert _value(made["id"]) == 3020.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_rest_reconcile_takes_the_real_total(client):
     acct = _account()
     _add_holding(acct["id"], _instrument())
@@ -72,14 +72,14 @@ def test_rest_reconcile_takes_the_real_total(client):
     assert _value(acct["id"]) == 9100.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_rest_reconcile_total_is_refused_on_a_cash_account(client):
     cash = _account(name="Checking", type_="cash", total=100.0)
     res = client.post(f"/api/accounts/{cash['id']}/reconcile", json={"real_total": 50})
     assert res.status_code == 422  # ValidationError → 422 (core.errors.to_http_status)
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_rest_flag_off_refuses_value_source_and_confirm(client):
     acct = _account()
     assert (
@@ -94,7 +94,7 @@ def test_rest_flag_off_refuses_value_source_and_confirm(client):
 # ── Lucius ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_list_accounts_tells_lucius_the_untracked_part_is_not_cash(book):
     acct = _account()
     _add_holding(acct["id"], _instrument())
@@ -109,7 +109,7 @@ def test_list_accounts_tells_lucius_the_untracked_part_is_not_cash(book):
     }
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_reconcile_tool_refuses_a_balance_and_takes_a_total(book):
     acct = _account()
     refused = _tool(
@@ -125,7 +125,7 @@ def test_reconcile_tool_refuses_a_balance_and_takes_a_total(book):
     assert _value(acct["id"]) == 8500.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_update_accounts_switches_and_reports_what_it_cleared(book):
     acct = _account()
     _add_holding(acct["id"], _instrument())
@@ -136,7 +136,7 @@ def test_update_accounts_switches_and_reports_what_it_cleared(book):
     assert out["ok"] and out["account"]["value_switch"]["adjustment"] == -4980.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_create_account_tool_defaults_to_brokerage_total(book):
     out = _tool(
         account_tools.create_account,
@@ -145,7 +145,7 @@ def test_create_account_tool_defaults_to_brokerage_total(book):
     assert out["ok"] and out["account"]["value_source"] == "total"
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_flag_off_reconcile_tool_is_unchanged(book):
     acct = _account()
     out = _tool(account_tools.reconcile_accounts, {"account_id": acct["id"], "real_balance": 9000})
@@ -225,4 +225,4 @@ def test_scheduler_registers_the_linked_totals_tick(db_isolated, monkeypatch):
         scheduler._scheduler = original
     ids = {j.get("id") for j in fake.jobs}
     assert "linked_account_totals" in ids
-    assert av.FLAG == "investment_value_source"
+    assert av.FLAG == "allow_brokerage_total_valuation"

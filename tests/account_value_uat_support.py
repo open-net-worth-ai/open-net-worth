@@ -129,11 +129,11 @@ def differential(fresh_db, scenario) -> tuple[dict, dict]:
     must be identical: this PR changes valuation, never budgeting."""
     from backend.core.feature_flags import override
 
-    with override(investment_value_source=False):
+    with override(allow_brokerage_total_valuation=False):
         scenario()
         off = figures()
     fresh_db()
-    with override(investment_value_source=True):
+    with override(allow_brokerage_total_valuation=True):
         scenario()
         on = figures()
     return off, on

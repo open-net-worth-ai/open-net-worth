@@ -127,7 +127,7 @@ class AccountCreate(BaseModel):
     min_payment: Optional[float] = None
     apy: Optional[float] = None
     # Investment/retirement only: "total" (Brokerage total, the default) | "holdings" (Live
-    # holdings). Refused while the `investment_value_source` flag is off (ADR 2026-11-10).
+    # holdings). Refused while the `allow_brokerage_total_valuation` flag is off (ADR 2026-11-10).
     value_source: Optional[Literal["total", "holdings"]] = None
 
     @model_validator(mode="before")

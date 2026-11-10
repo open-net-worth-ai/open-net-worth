@@ -38,8 +38,8 @@ from tests.account_value_uat_support import (
 )
 from tests.flags import flags
 
-ON = pytest.mark.flags(investment_value_source=True)
-OFF = pytest.mark.flags(investment_value_source=False)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
+OFF = pytest.mark.flags(allow_brokerage_total_valuation=False)
 NEW_KEYS = {"value_source", "value_sync", "value_breakdown", "value_siblings", "value_switch"}
 
 
@@ -72,7 +72,7 @@ def test_flag_05_to_08_the_off_on_off_on_sequence(book):
     assert _value(old) == 11020.0 and "value_source" not in ledger_service.accounts.find_by_id(old)
     txns = len(rows())
 
-    with flags(investment_value_source=True):  # FLAG-05: nothing booked on turning it on
+    with flags(allow_brokerage_total_valuation=True):  # FLAG-05: nothing booked on turning it on
         assert hydrated(old)["value_source"] == "holdings" and _value(old) == 11020.0
         assert len(rows()) == txns
         ira = _account(name="New IRA", type_="retirement", total=8000.0)["id"]
@@ -86,7 +86,7 @@ def test_flag_05_to_08_the_off_on_off_on_sequence(book):
     _add_holding(ira, beta, qty=2, cost=50.25)  # FLAG-07: OFF, counts on top
     assert _value(ira) == 8100.5 and len(carve_rows(ira)) == 1
 
-    with flags(investment_value_source=True):  # FLAG-08
+    with flags(allow_brokerage_total_valuation=True):  # FLAG-08
         assert hydrated(ira)["value_source"] == "total" and _value(ira) == 8100.5
         assert (holdings(ira), balance(ira)) == (3120.5, 4980.0)  # the 100.50 stays on top
         _add_holding(ira, _instrument("ACME2", 10.0), qty=10, cost=10.0)
@@ -97,7 +97,7 @@ def test_flag_05_to_08_the_off_on_off_on_sequence(book):
 def test_flag_09_an_edit_made_while_off_is_not_chased_until_the_broker_total_changes(plaid):
     x = linked()
     sync.run()
-    with flags(investment_value_source=False):
+    with flags(allow_brokerage_total_valuation=False):
         ledger_service.create_transaction(
             {
                 "date": "2026-11-09",
@@ -123,7 +123,7 @@ def test_flag_10_turning_it_off_keeps_the_stored_reading_and_the_run_clock(plaid
     assert sync.run_if_due() is True
     now_calls["last"] = sync._RunState().get()["last_run_at"]
     calls = plaid.calls
-    with flags(investment_value_source=False):
+    with flags(allow_brokerage_total_valuation=False):
         assert hydrated(x["id"]).get("value_sync") is None  # never shown
         assert sync.run_if_due() is False and plaid.calls == calls
     assert ledger_service.accounts.find_by_id(x["id"])["value_sync"]["status"] == "fresh"

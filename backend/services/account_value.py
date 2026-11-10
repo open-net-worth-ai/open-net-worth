@@ -12,7 +12,7 @@ what the ledger balance MEANS:
 * ``holdings`` (Live holdings): the account is worth its holdings plus its cash, the ledger
   balance. Nothing here writes to it.
 
-Every entry point is a no-op while the ``investment_value_source`` flag is off, so callers call
+Every entry point is a no-op while the ``allow_brokerage_total_valuation`` flag is off, so callers call
 it unconditionally and the flag is read in this one module (docs/FEATURE_FLAGS.md rule 1).
 """
 
@@ -27,7 +27,7 @@ from backend.core.user_time import user_today
 
 logger = logging.getLogger(__name__)
 
-FLAG = "investment_value_source"
+FLAG = "allow_brokerage_total_valuation"
 TOTAL = "total"
 HOLDINGS = "holdings"
 SOURCES = (TOTAL, HOLDINGS)

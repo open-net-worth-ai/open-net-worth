@@ -82,7 +82,7 @@ def _resolve_net_worth(_ref: str) -> dict:
         "receivable": account_classes.get("receivable"),
     }
     if "untracked_holdings" in account_classes:
-        # A Brokerage total account's holdings not entered (investment_value_source) —
+        # A Brokerage total account's holdings not entered (allow_brokerage_total_valuation) —
         # invested, never cash. Absent with the flag off, so the old payload is unchanged.
         out["untracked_holdings"] = account_classes["untracked_holdings"]
     return out

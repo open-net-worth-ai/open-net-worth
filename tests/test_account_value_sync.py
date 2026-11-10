@@ -89,7 +89,7 @@ def _sync_rows():
     return [t for t in TransactionStore().all() if t.get("description") == "Total from Plaid"]
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_the_reported_case_a_linked_brokerage_at_zero_follows_plaids_total(plaid):
     acct = _linked()
     assert _sync_state(acct["id"])["status"] == "waiting"
@@ -101,7 +101,7 @@ def test_the_reported_case_a_linked_brokerage_at_zero_follows_plaids_total(plaid
     assert len(_sync_rows()) == 1 and _sync_rows()[0]["kind"] == "adjustment"
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_an_unchanged_total_writes_nothing_and_a_new_one_books_once(plaid):
     acct = _linked()
     sync.run()
@@ -113,7 +113,7 @@ def test_an_unchanged_total_writes_nothing_and_a_new_one_books_once(plaid):
     assert len(_sync_rows()) == 2
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_tracked_holdings_are_part_of_the_synced_total(plaid):
     acct = _linked()
     _add_holding(acct["id"], _instrument())
@@ -122,7 +122,7 @@ def test_tracked_holdings_are_part_of_the_synced_total(plaid):
     assert round(av.ledger_balance(acct["id"]), 2) == round(REPORTED - 3020.0, 2)
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_reported_zero_is_held_until_the_user_answers(plaid):
     acct = _linked(total=5000.0)
     plaid.balances["pa-1"] = 0.0
@@ -138,7 +138,7 @@ def test_a_reported_zero_is_held_until_the_user_answers(plaid):
     assert _value(acct["id"]) == 5000.0 and _sync_state(acct["id"])["status"] == "kept"
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_zero_on_an_account_already_at_zero_is_not_asked_about(plaid):
     """QA 2026-11-10: the card offered "Keep $0.00 / Use $0.00" — a question about nothing."""
     acct = _linked(total=0.0)
@@ -149,7 +149,7 @@ def test_a_zero_on_an_account_already_at_zero_is_not_asked_about(plaid):
     assert not _sync_rows()
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_big_drop_is_held_and_accepting_it_books_it(plaid):
     acct = _linked()
     sync.run()
@@ -164,7 +164,7 @@ def test_a_big_drop_is_held_and_accepting_it_books_it(plaid):
         sync.confirm_held(acct["id"], accept=True)
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_another_currency_or_a_failed_read_writes_nothing(plaid):
     acct = _linked(total=5000.0)
     plaid.currency = "EUR"
@@ -177,7 +177,7 @@ def test_another_currency_or_a_failed_read_writes_nothing(plaid):
     assert _value(acct["id"]) == 5000.0 and not _sync_rows()
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_paused_connector_writes_nothing(plaid):
     acct = _linked(total=5000.0)
     plaid.enabled = False
@@ -185,7 +185,7 @@ def test_a_paused_connector_writes_nothing(plaid):
     assert _value(acct["id"]) == 5000.0 and _sync_state(acct["id"])["status"] == "waiting"
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_live_holdings_account_only_records_the_comparison(plaid):
     acct = _linked(total=500.0, value_source="holdings")
     sync.run()
@@ -194,7 +194,7 @@ def test_a_live_holdings_account_only_records_the_comparison(plaid):
     assert _value(acct["id"]) == 500.0 and not _sync_rows()
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_reconcile_on_a_linked_total_is_replaced_by_the_next_changed_figure(plaid):
     acct = _linked()
     sync.run()
@@ -207,7 +207,7 @@ def test_reconcile_on_a_linked_total_is_replaced_by_the_next_changed_figure(plai
     assert _value(acct["id"]) == 226000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_the_tick_reads_a_new_link_at_once_then_waits_six_hours(plaid):
     acct = _linked()
     now = datetime.now(timezone.utc)
@@ -219,14 +219,14 @@ def test_the_tick_reads_a_new_link_at_once_then_waits_six_hours(plaid):
     assert sync.run_if_due(now + timedelta(hours=6, minutes=1)) is True
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_flag_off_the_tick_never_reads(plaid):
     _linked()
     assert sync.run_if_due() is False
     assert plaid.calls == 0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_sync_rows_stay_out_of_spending_and_income(plaid):
     """A synced total moves net worth only: this month's report shows no spend and no income."""
     from backend.core.user_time import user_today
@@ -243,7 +243,7 @@ def test_sync_rows_stay_out_of_spending_and_income(plaid):
 # ── security review 2026-11-10 ─────────────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 @pytest.mark.parametrize("currency", ["DOGE", "https://bank.example/points", ""])
 def test_an_unreadable_or_missing_currency_is_never_booked_as_ours(plaid, currency):
     acct = _linked(total=5000.0)
@@ -254,7 +254,7 @@ def test_an_unreadable_or_missing_currency_is_never_booked_as_ours(plaid, curren
     assert _value(acct["id"]) == 5000.0 and not _sync_rows()
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), "Infinity"])
 def test_a_non_finite_balance_is_no_balance(plaid, bad):
     acct = _linked(total=5000.0)
@@ -264,7 +264,7 @@ def test_a_non_finite_balance_is_no_balance(plaid, bad):
     assert not _sync_rows()
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_linking_the_wrong_account_is_held_not_booked(plaid):
     """A typed $500k total linked to a $5k provider account must not be rewritten silently."""
     acct = _linked(total=500000.0)
@@ -275,7 +275,7 @@ def test_linking_the_wrong_account_is_held_not_booked(plaid):
     assert _value(acct["id"]) == 500000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_jump_past_four_times_is_held_too(plaid):
     acct = _linked()
     sync.run()  # 0 → REPORTED: an account worth nothing takes its first total
@@ -285,7 +285,7 @@ def test_a_jump_past_four_times_is_held_too(plaid):
     assert _value(acct["id"]) == REPORTED
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_reading_that_raises_is_recorded_and_not_retried_every_minute(plaid, monkeypatch):
     acct = _linked()
 
@@ -301,7 +301,7 @@ def test_a_reading_that_raises_is_recorded_and_not_retried_every_minute(plaid, m
     assert plaid.calls == calls
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_no_rate_for_the_holdings_writes_nothing(plaid, monkeypatch):
     acct = _linked()
     monkeypatch.setattr(av, "_value_or_none", lambda account: None)
@@ -311,7 +311,7 @@ def test_no_rate_for_the_holdings_writes_nothing(plaid, monkeypatch):
     assert not _sync_rows()
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_confirm_is_refused_once_the_account_is_on_live_holdings(plaid):
     acct = _linked(total=5000.0)
     plaid.balances["pa-1"] = 0.0
@@ -322,7 +322,7 @@ def test_confirm_is_refused_once_the_account_is_on_live_holdings(plaid):
     assert _value(acct["id"]) == 5000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_failed_edit_never_clears_the_untracked_part(plaid, monkeypatch):
     """The edit, the switch and its adjustment commit or roll back together."""
     acct = _account()

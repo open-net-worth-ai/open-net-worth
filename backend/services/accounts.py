@@ -382,7 +382,7 @@ def update_account(
 def _with_value_source(data: dict) -> dict:
     """A new investment/retirement account starts as Brokerage total: the balance typed at
     creation is the account's total (ADR 2026-11-10). A caller may choose otherwise. Unchanged
-    while the `investment_value_source` flag is off — then a `value_source` is refused."""
+    while the `allow_brokerage_total_valuation` flag is off — then a `value_source` is refused."""
     from backend.services import account_value
 
     chosen = data.get("value_source")
