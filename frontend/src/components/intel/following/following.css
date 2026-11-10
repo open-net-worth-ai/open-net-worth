@@ -49,8 +49,19 @@
 }
 
 .fol-pick.is-on {
-  background: var(--selected);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+
+/* On the ink chip the mark and the figure drop their own colours: the sign carries direction. */
+.fol-pick.is-on .fol-mono {
+  background: color-mix(in srgb, var(--surface) 18%, transparent);
+  color: var(--surface);
+}
+
+.fol-page .fol-pick.is-on .fol-pick-ret {
+  color: var(--surface);
+  opacity: 0.8;
 }
 
 .fol-pick:focus-visible {
