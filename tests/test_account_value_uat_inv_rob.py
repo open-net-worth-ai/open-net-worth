@@ -39,7 +39,7 @@ from tests.account_value_uat_support import (
     today,
 )
 
-ON = pytest.mark.flags(investment_value_source=True)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
 
 
 def _typed_01():
@@ -196,11 +196,11 @@ def test_inv_12_cash_and_fixed_deposit_rungs_are_unchanged_by_carve_rows(fresh_d
 
     from backend.core.feature_flags import override
 
-    with override(investment_value_source=False):
+    with override(allow_brokerage_total_valuation=False):
         scenario()
         off = read()
     fresh_db()
-    with override(investment_value_source=True):
+    with override(allow_brokerage_total_valuation=True):
         scenario()
         on = read()
     assert on == off == {"cash": 10000.0, "fd": 0.0}

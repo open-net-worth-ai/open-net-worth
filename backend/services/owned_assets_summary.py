@@ -112,7 +112,7 @@ def _return_pct(value: float, gain: float) -> float:
 
 def _untracked_row(value: float) -> list[dict]:
     """A Brokerage total account's untracked part, as a card row — invested, holdings not
-    entered (ADR 2026-11-10, amendment 2). None of it while investment_value_source is off."""
+    entered (ADR 2026-11-10, amendment 2). None of it while allow_brokerage_total_valuation is off."""
     if not value:
         return []
     return [{"key": UNTRACKED_BAND, "label": UNTRACKED_LABEL, "value": value}]
@@ -288,7 +288,7 @@ def _composition(breakdown: dict, rows: list[dict], base: str, rates: dict, *, o
     then key."""
     ac = breakdown["account_classes"]
     # A Brokerage total account's untracked part is invested: Investments, or Retirement for a
-    # retirement account (both 0 while investment_value_source is off).
+    # retirement account (both 0 while allow_brokerage_total_valuation is off).
     retirement_untracked = breakdown.get("retirement_untracked_base", 0.0)
     classes = {
         "cash": ac.get("cash", 0.0) + ac.get("fixed_deposit", 0.0),

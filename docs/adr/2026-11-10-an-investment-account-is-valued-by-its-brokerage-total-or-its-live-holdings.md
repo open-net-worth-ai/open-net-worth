@@ -258,3 +258,10 @@ right; only the bucketing was wrong. The owner approved this design.
 - **Flag off** leaves every output as it was. The new keys are absent, not zero.
 
 This resolves the first Negative consequence and the first follow-up above.
+
+## Amendment 3 (2026-11-10): the flag is renamed
+
+The release flag `investment_value_source` is renamed `allow_brokerage_total_valuation` (env
+`ONW_FLAG_ALLOW_BROKERAGE_TOTAL_VALUATION`), so its name says what it turns on. Nothing else
+changes, and the account field `value_source` keeps its name. A value stored under the old name
+is no longer read: the flag reads as its default, off, until it is set again.

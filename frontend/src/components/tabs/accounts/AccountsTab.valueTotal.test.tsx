@@ -118,7 +118,7 @@ async function boot(id: string) {
 beforeEach(() => {
   setBaseCurrency('USD')
   vi.clearAllMocks()
-  restoreFlag = overrideFlagsForTests({ investment_value_source: true })
+  restoreFlag = overrideFlagsForTests({ allow_brokerage_total_valuation: true })
   accounts = [TYPED, HELD]
   confirmReply = () => res({})
   reconcileReply = () => res({ adjustment: 0, balance: 4980, cleared_balance: 4980 })

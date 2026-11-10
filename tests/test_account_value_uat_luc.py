@@ -31,7 +31,7 @@ from tests.account_value_uat_support import (
     signed,
 )
 
-ON = pytest.mark.flags(investment_value_source=True)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
 
 
 def call(name, **inp):
@@ -49,7 +49,7 @@ def _typed_01():
 # ── what Lucius reads ──────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_luc_02_flag_off_list_accounts_has_none_of_the_new_keys(book):
     r, k, _ = _typed_01()
     ledger_service.accounts.update_by_id(
@@ -87,7 +87,7 @@ def test_luc_04_and_16_update_accounts_is_a_gated_write_on_every_surface(book):
     assert out["account"]["value_switch"]["value_after"] == 3020.0 and _value(k) == 3020.0
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_luc_05_flag_off_update_accounts_refuses_a_value_source(book):
     _, k, _ = _typed_01()
     out = call("update_accounts", updates=[{"account_id": k, "value_source": "holdings"}])
@@ -223,7 +223,7 @@ def test_luc_13_run_sql_query_reads_the_stored_value_source_and_reading_not_cred
     assert "access_token" not in text and "secret" not in text.lower()
     from backend.core.feature_flags import override
 
-    with override(investment_value_source=False):
+    with override(allow_brokerage_total_valuation=False):
         off = json.dumps(call("run_sql_query", sql=sql))
     assert "value_source" in off  # pinned: the stored row is raw; "old response" is REST/tools only
 

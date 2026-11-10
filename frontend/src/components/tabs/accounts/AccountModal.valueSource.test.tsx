@@ -16,7 +16,7 @@ import type { Account, ApiAccount } from './types'
 import { overrideFlagsForTests } from '../../../hooks/useFlag'
 import { setBaseCurrency } from '../../../utils/format'
 
-const FLAG = 'investment_value_source'
+const FLAG = 'allow_brokerage_total_valuation'
 let restoreFlag: () => void = () => {}
 
 beforeEach(() => {

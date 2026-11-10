@@ -656,7 +656,7 @@ def start() -> None:
         )
         logger.info("scheduler: ynab_sync scheduled — checked every 60s")
         # Linked investment totals — one tick a minute; due every 6h, or at once for an account
-        # never read on its link. No-op unless `investment_value_source` is on.
+        # never read on its link. No-op unless `allow_brokerage_total_valuation` is on.
         _scheduler.add_job(
             _run_linked_account_totals,
             trigger=IntervalTrigger(seconds=60),

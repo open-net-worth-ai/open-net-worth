@@ -10,7 +10,7 @@ Net worth and cash on hand don't move; only the bucketing does. Readers that mea
 broken-down holdings (rebalance, concentration, today's move) keep this amount out of their
 denominators and report it beside them (``untracked_excluded``).
 
-Every entry point is empty / None while ``investment_value_source`` is off, read through
+Every entry point is empty / None while ``allow_brokerage_total_valuation`` is off, read through
 ``account_value.enabled`` (docs/FEATURE_FLAGS.md rule 1), so the old outputs stay as they were.
 """
 

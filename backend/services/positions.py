@@ -299,7 +299,7 @@ def update_position(
     from backend.services import account_value
 
     # A Brokerage total account on either side keeps its total (ADR 2026-11-10); a
-    # pass-through while `investment_value_source` is off.
+    # pass-through while `allow_brokerage_total_valuation` is off.
     return account_value.around_position_move(
         position_id, clean["account_id"], lambda: _move_position(position_id, clean)
     )
@@ -534,7 +534,7 @@ def apply_position_change(change: dict) -> dict:
 
         try:
             # A Brokerage total account keeps its total (ADR 2026-11-10); a pass-through
-            # while `investment_value_source` is off.
+            # while `allow_brokerage_total_valuation` is off.
             removed, extra = account_value.around_position_remove(
                 change["position_id"], lambda: remove_position(change["position_id"])
             )

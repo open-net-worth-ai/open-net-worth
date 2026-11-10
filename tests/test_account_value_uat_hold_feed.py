@@ -36,7 +36,7 @@ from tests.account_value_uat_support import (
     today,
 )
 
-ON = pytest.mark.flags(investment_value_source=True)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
 
 
 def _synced(plaid, total=100000.0, **extra):

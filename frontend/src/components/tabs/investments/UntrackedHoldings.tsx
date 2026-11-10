@@ -1,4 +1,4 @@
-// A Brokerage total account's holdings not entered yet (flag investment_value_source, ADR
+// A Brokerage total account's holdings not entered yet (flag allow_brokerage_total_valuation, ADR
 // 2026-11-10 amendment 2). Invested, in no known class — so the server keeps it out of the
 // book's weights, concentration, today's move and the rebalance trades, and reports it as
 // `untracked_excluded`. These pieces SAY what was left out; they compute nothing.

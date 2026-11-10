@@ -207,7 +207,7 @@ def _with_value_breakdown(projected: list[dict]) -> list[dict]:
     """How each investment/retirement account is valued (ADR 2026-11-10). A Brokerage total
     account also carries `value_breakdown` — tracked holdings + untracked == total, at
     last-known prices — so 'what is this account worth' never reads the untracked part as
-    cash. Unchanged rows while `investment_value_source` is off."""
+    cash. Unchanged rows while `allow_brokerage_total_valuation` is off."""
     from backend.services import account_value
 
     return account_value.decorate(projected)

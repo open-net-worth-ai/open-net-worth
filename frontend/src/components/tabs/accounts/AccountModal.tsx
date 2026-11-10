@@ -161,7 +161,7 @@ export default function AccountModal({
   // How an investment/retirement account is valued (ADR 2026-11-10) — edit mode only; a new
   // account starts as Brokerage total, which the server decides.
   const valuation = mode === 'edit' ? (account?.valuation ?? null) : null
-  const valueFlag = useFlag('investment_value_source') === true
+  const valueFlag = useFlag('allow_brokerage_total_valuation') === true
   const [valueSource, setValueSource] = useState<ValueSource>('total')
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(null)
   const money = (n: number) => fCur(n, form.currency, { cents: true })

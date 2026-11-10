@@ -1,7 +1,7 @@
 """The Untracked holdings band (ADR 2026-11-10, amendment 2) — synthetic data only.
 
 On a Brokerage total account the ledger balance is the part of the total not entered as
-holdings: invested, in no known class. With ``investment_value_source`` on it bands as
+holdings: invested, in no known class. With ``allow_brokerage_total_valuation`` on it bands as
 ``untracked_holdings`` on every reader — net worth, the chart, the Assets cards, the allocation —
 never as settlement or retirement cash, and the book-level figures (rebalance, concentration,
 today's move) leave it out of their denominators and say how much. Flag off: every output as
@@ -73,7 +73,7 @@ def _tool(fn, payload):
 # ── a Brokerage total account with no holdings ──────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_total_with_no_holdings_is_untracked_holdings_not_settlement_cash(offline):
     acct = _brokerage()
     nw = ledger_service.net_worth("USD")
@@ -106,7 +106,7 @@ def test_a_total_with_no_holdings_is_untracked_holdings_not_settlement_cash(offl
     }
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_the_assets_investments_card_shows_it_as_untracked_holdings(offline):
     _brokerage()
     card = owned_assets.summary("USD")["classes"]["investments"]
@@ -124,7 +124,7 @@ def test_the_assets_investments_card_shows_it_as_untracked_holdings(offline):
 # ── a partly tracked account: $8,000 total, $3,020 of ACME → $4,980 untracked ──────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_partly_tracked_account_splits_into_holdings_and_untracked(offline):
     acct = _brokerage(total=8000.0)
     _add_holding(acct["id"], _instrument())
@@ -142,7 +142,7 @@ def test_a_partly_tracked_account_splits_into_holdings_and_untracked(offline):
     ]
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_concentration_and_today_leave_the_untracked_part_out_and_say_so(offline):
     acct = _brokerage(total=8000.0)
     _add_holding(acct["id"], _instrument())
@@ -161,7 +161,7 @@ def test_concentration_and_today_leave_the_untracked_part_out_and_say_so(offline
     assert drift["total"] == 3020.0 and [r["key"] for r in drift["rows"]] == ["equity"]
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_the_brief_calls_the_share_one_of_the_holdings_entered_and_names_the_rest(offline):
     from backend.services import portfolio_brief
     from backend.services import positions as positions_service
@@ -175,7 +175,7 @@ def test_the_brief_calls_the_share_one_of_the_holdings_entered_and_names_the_res
     )
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_rebalance_keeps_the_untracked_part_out_and_says_how_much(offline):
     acct = _brokerage(total=8000.0)
     _add_holding(acct["id"], _instrument())
@@ -191,7 +191,7 @@ def test_rebalance_keeps_the_untracked_part_out_and_says_how_much(offline):
     assert _tool(rebalance_tools.get_rebalance_plan, {})["untracked_note"] == plan["untracked_note"]
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_lucius_get_portfolio_says_the_untracked_part_is_invested_not_cash(offline):
     acct = _brokerage(total=8000.0)
     _add_holding(acct["id"], _instrument())
@@ -203,7 +203,7 @@ def test_lucius_get_portfolio_says_the_untracked_part_is_invested_not_cash(offli
 # ── a retirement Brokerage total account ───────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_retirement_total_is_untracked_and_still_counts_as_retirement(offline):
     acct = _account(total=8000.0)  # "Old 401(k)", retirement
     _add_holding(acct["id"], _instrument())
@@ -233,7 +233,7 @@ def test_a_retirement_total_is_untracked_and_still_counts_as_retirement(offline)
 # ── a Live holdings account: unchanged ─────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_live_holdings_account_keeps_its_balance_as_settlement_cash(offline):
     acct = _brokerage(total=500.0, value_source="holdings")
     _add_holding(acct["id"], _instrument())
@@ -250,7 +250,7 @@ def test_a_live_holdings_account_keeps_its_balance_as_settlement_cash(offline):
 # ── the "total kept" rows are part of the untracked part ───────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_priced_true_up_stays_in_the_untracked_band(offline):
     from backend.db.instrument_store import InstrumentStore
     from backend.services import account_value_cost as cost
@@ -266,7 +266,7 @@ def test_a_priced_true_up_stays_in_the_untracked_band(offline):
     assert nw["net_worth"] == 8000.0
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_a_moved_holding_keeps_both_untracked_parts_in_the_band(offline):
     from backend.services import positions as positions_service
 
@@ -283,7 +283,7 @@ def test_a_moved_holding_keeps_both_untracked_parts_in_the_band(offline):
 # ── the chart: every point bands by the account's CURRENT source ───────────────────────
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_history_bands_every_point_by_the_current_source_so_a_switch_does_not_jump(offline):
     acct = _brokerage(total=500.0, value_source="holdings")
     before = ledger_service.net_worth_history()
@@ -298,7 +298,7 @@ def test_history_bands_every_point_by_the_current_source_so_a_switch_does_not_ju
         assert ledger_service.net_worth_on(past)["classes"] == {"untracked_holdings": 500.0}
 
 
-@pytest.mark.flags(investment_value_source=True)
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_account_ids_reads_a_stored_source_without_touching_holdings(offline, monkeypatch):
     total = _brokerage(total=1.0)
     live = _brokerage(total=1.0, value_source="holdings")
@@ -313,7 +313,7 @@ def test_account_ids_reads_a_stored_source_without_touching_holdings(offline, mo
 # ── flag off: every output as before ───────────────────────────────────────────────────
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_flag_off_the_balance_is_still_settlement_cash_everywhere(offline):
     acct = _brokerage(total=8000.0)
     _add_holding(acct["id"], _instrument())

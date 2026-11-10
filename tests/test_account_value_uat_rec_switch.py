@@ -31,7 +31,7 @@ from tests.account_value_uat_support import (
     tool,
 )
 
-ON = pytest.mark.flags(investment_value_source=True)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
 
 
 def _typed_01():
@@ -107,7 +107,7 @@ def test_rec_08_real_total_on_a_live_holdings_account_is_refused(client):
     assert res.status_code == 422 and "Brokerage total" in res.json()["detail"]
 
 
-@pytest.mark.flags(investment_value_source=False)
+@pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_rec_09_real_total_with_the_flag_off_is_refused(client):
     k = _account()
     res = client.post(f"/api/accounts/{k['id']}/reconcile", json={"real_total": 9000})

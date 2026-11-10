@@ -1,4 +1,4 @@
-"""UAT: "I linked my brokerage and it showed $0" (LINK) — PR #93, flag investment_value_source.
+"""UAT: "I linked my brokerage and it showed $0" (LINK) — PR #93, flag allow_brokerage_total_valuation.
 
 A fake connector stands in for Plaid. Figures are synthetic (ACME, 123,456.78). Net worth, cash on
 hand and Ready to Assign come from the real services; every held/applied boundary is pinned to
@@ -35,7 +35,7 @@ from tests.account_value_uat_support import (
     today,
 )
 
-ON = pytest.mark.flags(investment_value_source=True)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
 
 
 def _audit(client, txn_id):

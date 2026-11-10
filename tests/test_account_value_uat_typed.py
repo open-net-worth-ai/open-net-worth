@@ -35,7 +35,7 @@ from tests.account_value_uat_support import (
     today,
 )
 
-ON = pytest.mark.flags(investment_value_source=True)
+ON = pytest.mark.flags(allow_brokerage_total_valuation=True)
 
 
 def _add_today(account_id, inst, qty=5, cost=600.0):

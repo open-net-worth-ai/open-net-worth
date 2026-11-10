@@ -500,7 +500,7 @@ export interface InvestedBookRow {
 /** What a book of broken-down holdings leaves out: each Brokerage total account's untracked
  *  part (backend/services/untracked_holdings.py). Invested, in no known class — so it is NOT in
  *  `grand`, the weights, concentration or today's move. Present only with the
- *  `investment_value_source` flag on. */
+ *  `allow_brokerage_total_valuation` flag on. */
 export interface UntrackedExcluded {
   total: number
   /** Its share of everything invested (`grand` + `total`) — the "Not broken down" slice. */
