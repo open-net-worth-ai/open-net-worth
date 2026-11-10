@@ -53,8 +53,8 @@ the broker's email.
 ### DS-DUP-FIX
 - GIVEN I deleted the linked copy
 - WHEN I correct the lot's fee
-- THEN the correction saves, no cash transaction is added or changed, and I'm told the cash wasn't
-  touched
+- THEN the correction saves and no cash transaction is added or changed (the delete already said
+  the lot lost its linked purchase)
 
 ### DS-DUP-REBOOK
 - GIVEN I deleted the linked copy and the email copy is still there

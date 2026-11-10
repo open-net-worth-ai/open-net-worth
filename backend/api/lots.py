@@ -79,6 +79,15 @@ def _dispose_fields(body: DisposalCreate) -> dict:
     }
 
 
+def _apply(change: dict) -> dict:
+    """A choke's refusal (a duplicate purchase, an unknown account) is its status and reason,
+    never a 500: the lot screen shows the reason so the user can act on it."""
+    try:
+        return lots_service.apply_lot_change(change)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
 def _raise_lot_write(result: dict) -> dict:
     if not result.get("error"):
         return result
@@ -106,9 +115,7 @@ def acquire_lot(position_id: str, body: LotCreate):
     """Record an acquisition (buy / transfer-in / grant) as a new lot, then resync the
     position's aggregate quantity + avg cost. Thin: shapes the change and hands it to the
     `apply_lot_change` choke point (checkpoint-covered) — no cost math here."""
-    return _raise_lot_write(
-        lots_service.apply_lot_change(_acquire_change(body, {"position_id": position_id}))
-    )
+    return _raise_lot_write(_apply(_acquire_change(body, {"position_id": position_id})))
 
 
 @router.post("/api/instruments/{instrument_id}/lots")
@@ -117,7 +124,7 @@ def acquire_instrument_lot(instrument_id: str, body: InstrumentLotCreate):
     account, then record the lot. Never POST /positions then POST /lots (that would
     seed an opening lot and double-book)."""
     return _raise_lot_write(
-        lots_service.apply_lot_change(
+        _apply(
             _acquire_change(body, {"instrument_id": instrument_id, "account_id": body.account_id})
         )
     )
@@ -131,15 +138,13 @@ def amend_lot(lot_id: str, body: LotAmend):
         payload["kind"] = _kind_value(payload["kind"])
     if "funding_account_id" in payload:
         payload["funding_account_id"] = payload["funding_account_id"] or None
-    return _raise_lot_write(
-        lots_service.apply_lot_change({"type": "amend", "lot_id": lot_id, **payload})
-    )
+    return _raise_lot_write(_apply({"type": "amend", "lot_id": lot_id, **payload}))
 
 
 @router.delete("/api/lots/{lot_id}")
 def delete_lot(lot_id: str):
     """Delete a fully-open lot. Partially consumed lots are refused (422)."""
-    return _raise_lot_write(lots_service.apply_lot_change({"type": "delete", "lot_id": lot_id}))
+    return _raise_lot_write(_apply({"type": "delete", "lot_id": lot_id}))
 
 
 @router.post("/api/positions/{position_id}/disposals")
