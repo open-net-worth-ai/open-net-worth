@@ -135,6 +135,47 @@ def _auth(doc: dict) -> tuple[dict, str]:
     return {"type": "none", "name": ""}, ""
 
 
+def _shape(doc: dict, schema: Any) -> str:
+    """What a value must look like, from its schema, in words: its type, the values it may take,
+    an example. The document says this in the schema, not the description, so without it a tool
+    argument read only "Body field." (a live turn on the Petstore, 2026-11-11)."""
+    schema = _resolve(doc, schema)
+    if not isinstance(schema, dict):
+        return ""
+    kind = schema.get("type")
+    if kind == "array":
+        items = _resolve(doc, schema.get("items"))
+        inner = items.get("type") if isinstance(items, dict) else None
+        kind = f"array of {inner or 'objects'}"
+    elif kind is None and isinstance(schema.get("properties"), dict):
+        kind = "object with " + ", ".join(list(schema["properties"])[:8])
+    elif kind == "object" and isinstance(schema.get("properties"), dict):
+        kind = "object with " + ", ".join(list(schema["properties"])[:8])
+    parts = [str(kind)] if kind else []
+    if schema.get("format"):
+        parts[-1:] = [f"{parts[-1] if parts else ''} ({schema['format']})".strip()]
+    enum = schema.get("enum")
+    if isinstance(enum, list) and enum:
+        parts.append("one of " + ", ".join(str(v) for v in enum[:12]))
+    example = schema.get("example")
+    if example is not None and not isinstance(example, (dict, list)):
+        parts.append(f"e.g. {example}")
+    return "; ".join(parts)
+
+
+def _describe(doc: dict, written: Any, schema: Any) -> str:
+    """A parameter's description: what the document wrote, then the shape of its value."""
+    text = str(written or "").strip()
+    shape = _shape(doc, schema)
+    if not shape:
+        return text
+    return (
+        f"{text.rstrip('.')}. {shape[0].upper()}{shape[1:]}."
+        if text
+        else f"{shape[0].upper()}{shape[1:]}."
+    )
+
+
 def _body_params(doc: dict, operation: dict) -> list[dict]:
     """The top-level fields of a JSON request body, as ``in: body`` parameters."""
     body = _resolve(doc, operation.get("requestBody"))
@@ -152,7 +193,12 @@ def _body_params(doc: dict, operation: dict) -> list[dict]:
         prop = _resolve(doc, prop)
         desc = prop.get("description") if isinstance(prop, dict) else ""
         out.append(
-            {"name": name, "in": "body", "required": name in required, "description": desc or ""}
+            {
+                "name": name,
+                "in": "body",
+                "required": name in required,
+                "description": _describe(doc, desc, prop),
+            }
         )
     return out
 
@@ -180,7 +226,10 @@ def _params(doc: dict, shared: Any, operation: dict) -> list[dict]:
                 "name": param["name"],
                 "in": "path" if place == "path" else "query",
                 "required": bool(param.get("required")),
-                "description": param.get("description") or "",
+                # OpenAPI 3 puts the type in `schema`; Swagger 2 on the parameter itself.
+                "description": _describe(
+                    doc, param.get("description"), param.get("schema") or param
+                ),
             }
         )
     return [*out, *_body_params(doc, operation)][:MAX_PARAMS]

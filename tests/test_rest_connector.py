@@ -436,6 +436,58 @@ def test_an_openapi_document_prefills_address_auth_and_endpoints():
     ]
 
 
+def test_an_imported_parameter_says_what_its_value_must_look_like():
+    """The type, the allowed values and an example live in the document's schema, not its
+    description: without them a tool argument read "Body field." and Lucius had to guess (a
+    live turn on the Petstore, 2026-11-11)."""
+    doc = {
+        "openapi": "3.0.3",
+        "info": {"title": "Pets"},
+        "servers": [{"url": "https://pets.test/v1"}],
+        "paths": {
+            "/pets": {
+                "get": {
+                    "operationId": "findPets",
+                    "parameters": [
+                        {
+                            "name": "status",
+                            "in": "query",
+                            "required": True,
+                            "description": "Which pets",
+                            "schema": {"type": "string", "enum": ["available", "sold"]},
+                        }
+                    ],
+                },
+                "post": {
+                    "operationId": "addPet",
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["name"],
+                                    "properties": {
+                                        "id": {"type": "integer", "format": "int64", "example": 10},
+                                        "name": {"type": "string"},
+                                        "tags": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                }
+                            }
+                        }
+                    },
+                },
+            }
+        },
+    }
+    draft = openapi.draft_from_spec(json.dumps(doc))
+    by_tool = {e["tool"]: {p["name"]: p for p in e["params"]} for e in draft["endpoints"]}
+    find, add = by_tool["find_pets"], by_tool["add_pet"]
+    assert find["status"]["description"] == "Which pets. String; one of available, sold."
+    assert add["id"]["description"] == "Integer (int64); e.g. 10."
+    assert add["tags"]["description"] == "Array of string."
+    assert add["name"]["required"] and not add["id"]["required"]
+
+
 def test_a_swagger_2_yaml_document_reads_too():
     text = """
 swagger: "2.0"
