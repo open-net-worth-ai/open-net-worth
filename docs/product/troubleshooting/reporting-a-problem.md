@@ -15,7 +15,8 @@ Something broken or confusing? Send a report straight from the app. Open Net Wor
 anything about itself on its own — a report goes only when **you** open it, read it, and click
 **Send report**. Closing the window sends nothing.
 
-To close it without sending, press **Cancel**, the **×** in its corner or **Esc**. In the desktop
+To close it without sending, press **Cancel**, the **×** in its corner or **Esc**. On a phone it
+opens as a sheet with no Cancel: tap the **×**, tap outside it or drag it down. In the desktop
 app the report opens over the main window: clicking outside it, or choosing another menu command,
 closes it too.
 
@@ -45,9 +46,12 @@ When it's sent you'll see **Thank you. Your report was sent.** and a **Reference
 you write to us about the same problem. We aim to investigate and fix reports within 48 hours.
 
 Prefer to talk it through? Click **Post on Discord** instead of **Send report**. Discord can't
-fill in a message for you, so the app copies one to your clipboard — what happened, plus the
-version, platform and screen — and opens our [Discord](https://discord.gg/RTUMyHcUmN) for you to
-paste it. It never includes your email or your logs, because a Discord channel is public.
+fill in a message for you, so the app copies the report to your clipboard — what happened, the
+version, platform and screen, and the recent logs (masked) if they're ticked — and opens the
+#bugs channel on our [Discord](https://discord.gg/RTUMyHcUmN). The line above the buttons then
+tells you to paste it (⌘V on a Mac, Ctrl+V elsewhere). A long paste arrives as an attached text
+file. It never includes your email, because a Discord channel is public; untick the logs if you'd
+rather not post them.
 
 ## What a report contains
 

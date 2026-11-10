@@ -5,6 +5,8 @@
 export const REPORTS_ENDPOINT = 'https://cloud.opennetworth.ai/api/problem-reports';
 export const SUPPORT_EMAIL = 'support@opennetworth.ai';
 export const COMMUNITY_URL = 'https://discord.gg/RTUMyHcUmN';
+// The channel COMMUNITY_URL's invite opens, named so the dialog can say where to paste.
+export const DISCORD_CHANNEL = '#bugs';
 export const REPORTS_URL_ENV = 'ONW_REPORTS_URL';
 
 function loopbackHost(host: string): boolean {

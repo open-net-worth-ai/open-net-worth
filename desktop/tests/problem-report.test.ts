@@ -148,16 +148,17 @@ test('the dialog page says why it asks for an email, and offers Discord without 
   assert.match(html, /tell you when the fix is out/);
   assert.match(html, /aria-describedby="email-hint"/);
   assert.match(html, /<button id="send" type="button">Send report<\/button><button id="discord" class="primary" type="button"><svg class="mark"/, 'Discord is the primary action, beside Send');
+  assert.match(html, /Post on Discord copies your message for you to paste in #bugs\./, 'it says what the button does before the click');
   assert.doesNotMatch(html, /discord\.gg/, 'the main process opens the one community link it knows');
 });
 
-test('the Discord message carries what went wrong, never the email or the logs', async () => {
+test('the Discord message carries the report and its logs, never the email', async () => {
   const report = filled(await buildDraft(environment({ recentEvents: ['2026-10-04T10:00:02 WARNING desktop {"event":"x"}'] }), { error: 'boom', screen: '/plan' }));
   const text = discordText({ ...report, contact_email: 'someone@example.com' });
-  for (const part of ['It froze on import', 'boom', '0.1.2', '/plan']) assert.ok(text.includes(part), part);
+  for (const part of ['It froze on import', 'boom', '0.1.2', '/plan', 'Recent logs (masked)', '# desktop events']) assert.ok(text.includes(part), part);
   assert.ok(!text.includes('someone@example.com'), 'a Discord channel is public');
-  assert.ok(!text.includes('desktop events'), 'logs stay out of a public post');
-  assert.ok(discordText({ ...report, error: 'x'.repeat(5000) }).length < 1000);
+  assert.ok(!discordText({ ...report, logs: null }).includes('Recent logs'), 'unticked logs stay out');
+  assert.doesNotMatch(text, /\*\*|^-# /m, 'plain lines, no Discord formatting to show while pasting');
 });
 
 // Runs the page's own script over stand-in elements for exactly the ids the markup has: a missing

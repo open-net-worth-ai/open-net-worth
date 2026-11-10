@@ -8,6 +8,7 @@ import {
 } from '../state/reportProblem'
 import {
   COMMUNITY_URL,
+  DISCORD_CHANNEL,
   discordText,
   emailHref,
   REPORT_LIMITS,
@@ -23,6 +24,7 @@ import { Loading } from './ui'
 import { Stack } from './ui/Stack'
 import { openExternal } from '../platform/desktop'
 import { DiscordMark } from '../ui/DiscordMark'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { Text } from './ui/Text'
 import { TextArea } from './ui/TextArea'
 import { TextField } from './ui/TextField'
@@ -62,8 +64,9 @@ function ReportProblemDialog({
   const [includeLogs, setIncludeLogs] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  // The Discord message, shown only when the browser refused to copy it.
-  const [discordUncopied, setDiscordUncopied] = useState<string | null>(null)
+  // Set once Post on Discord was clicked: whether the message reached the clipboard, and the
+  // message itself, shown only when it did not.
+  const [discord, setDiscord] = useState<{ copied: boolean; text: string } | null>(null)
   const [reference, setReference] = useState<string | null>(null)
   const statusRef = useRef<HTMLDivElement>(null)
 
@@ -114,6 +117,9 @@ function ReportProblemDialog({
     [base, description, email, screen, error, logs, includeLogs],
   )
 
+  const isMobile = useIsMobile()
+  // A phone pastes by long-press, so it gets no shortcut to press.
+  const pasteKey = isMobile ? null : /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘V' : 'Ctrl+V'
   const busy = phase !== 'editing'
   const logsSent = Boolean(report?.logs)
   const ready = Boolean(report?.description) && !busy
@@ -154,8 +160,7 @@ function ReportProblemDialog({
     } catch {
       copied = false
     }
-    setDiscordUncopied(copied ? null : text)
-    setNote(copied ? 'Copied. Paste it in Discord.' : 'Copy this and paste it in Discord:')
+    setDiscord({ copied, text })
     void openExternal(COMMUNITY_URL)
   }
 
@@ -210,9 +215,13 @@ function ReportProblemDialog({
       size="lg"
       footer={
         <>
-          <Button size="sm" variant="ghost" onClick={onClose} disabled={phase === 'sending'}>
-            Cancel
-          </Button>
+          {/* On a phone the dialog is a bottom sheet the ✕, a tap outside or a drag closes, so
+              Cancel only crowds the two real actions. */}
+          {!isMobile && (
+            <Button size="sm" variant="ghost" onClick={onClose} disabled={phase === 'sending'}>
+              Cancel
+            </Button>
+          )}
           {/* The fallbacks appear only once sending can't work (it failed, or the server is
               down); before that, Send is the one action. */}
           {(failure || offline) && report && (
@@ -270,9 +279,6 @@ function ReportProblemDialog({
               <Text as="p" size="sm" tone="muted">
                 {note}
               </Text>
-            )}
-            {!failure && discordUncopied && (
-              <pre className="report-problem__discord-text">{discordUncopied}</pre>
             )}
           </div>
           <FormField label="What happened?" htmlFor="report-description" required>
@@ -356,6 +362,20 @@ function ReportProblemDialog({
               </details>
             </Stack>
           </details>
+          {/* Says what Post on Discord does before the click, and what to do next after it, beside
+              the button itself. Discord has no link that fills in a message. */}
+          <div className="report-problem__discord" role="status" aria-live="polite">
+            {!discord &&
+              `Post on Discord copies your message for you to paste in ${DISCORD_CHANNEL}.`}
+            {discord?.copied &&
+              `Copied — ${pasteKey ? `press ${pasteKey}` : 'paste it'} in ${DISCORD_CHANNEL}${pasteKey ? ' to paste it' : ''}.`}
+            {discord && !discord.copied && (
+              <>
+                Copy this and paste it in {DISCORD_CHANNEL}:
+                <pre className="report-problem__discord-text">{discord.text}</pre>
+              </>
+            )}
+          </div>
         </Stack>
       )}
     </Modal>

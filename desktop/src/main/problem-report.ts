@@ -35,7 +35,6 @@ const EVENT_LINES = 50;
 const RAW_LOG_BYTES = 256 * 1024;
 const RAW_LOG_LINES = 800;
 const EMAIL_BODY_CHARS = 1000;
-const DISCORD_ERROR_CHARS = 600;
 
 // The newest lines of a log file without reading the whole file; a missing file is simply no log.
 async function tailLines(path: string): Promise<string[]> {
@@ -138,12 +137,15 @@ export function reportText(report: ReportPayload): string {
   return `${lines.join('\n')}\n`;
 }
 
-// The message to paste in Discord. A Discord channel is public, so it leaves out the email and the
-// logs; the error is cut to its start so a post stays readable. Mirrors frontend/src/utils/problemReport.ts.
+// The message to paste in Discord: the report as plain lines, logs included when they are
+// ticked. Never the email — a channel is public. Discord turns a paste past 2,000 characters into
+// an attached text file, so long logs still arrive whole.
 export function discordText(report: ReportPayload): string {
   const where = [report.app_version, report.platform, report.mode, report.screen].filter(Boolean);
-  const lines = ['**Problem report**', report.description, '', `-# ${where.join(' · ')}`];
-  if (report.error) lines.splice(2, 0, '', '```', report.error.slice(0, DISCORD_ERROR_CHARS), '```');
+  const lines = ['Problem report', report.description];
+  if (report.error) lines.push('', 'Error', report.error);
+  lines.push('', where.join(' · '));
+  if (report.logs) lines.push('', 'Recent logs (masked)', report.logs);
   return lines.join('\n');
 }
 

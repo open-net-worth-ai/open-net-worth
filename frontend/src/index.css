@@ -20255,9 +20255,16 @@ body.hide-amounts .mf-lbl-amt {
   margin: 0;
   overflow-wrap: anywhere;
 }
+/* One line above the footer: what Post on Discord does, then what to do after it. */
+.report-problem__discord {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 /* The Discord message, shown only when the browser refused to copy it. */
 .report-problem__discord-text {
+  max-height: 160px;
   margin: var(--space-2) 0 0;
+  overflow: auto;
   font: inherit;
   font-size: var(--text-sm);
   white-space: pre-wrap;

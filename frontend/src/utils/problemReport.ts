@@ -5,6 +5,8 @@
 
 export const SUPPORT_EMAIL = 'support@opennetworth.ai'
 export const COMMUNITY_URL = 'https://discord.gg/RTUMyHcUmN'
+/** The channel COMMUNITY_URL's invite opens, named so the dialog can say where to paste. */
+export const DISCORD_CHANNEL = '#bugs'
 
 export const REPORT_LIMITS = {
   description: 5000,
@@ -28,7 +30,6 @@ export interface ProblemReport {
 }
 
 const EMAIL_BODY_CHARS = 1000
-const DISCORD_ERROR_CHARS = 600
 
 /** The report as plain text: what Copy report puts on the clipboard and Email instead pastes in. */
 export function reportText(report: ProblemReport): string {
@@ -49,12 +50,15 @@ export function reportText(report: ProblemReport): string {
   return `${lines.join('\n')}\n`
 }
 
-/** The message to paste in Discord. A Discord channel is public, so it leaves out the email and the
- *  logs; the error is cut to its start so a post stays readable. */
+/** The message to paste in Discord: the report as plain lines, logs included when they are
+ * ticked. Never the email — a channel is public. Discord turns a paste past 2,000 characters into
+ * an attached text file, so long logs still arrive whole. */
 export function discordText(report: ProblemReport): string {
   const where = [report.app_version, report.platform, report.mode, report.screen].filter(Boolean)
-  const lines = ['**Problem report**', report.description, '', `-# ${where.join(' · ')}`]
-  if (report.error) lines.splice(2, 0, '', '```', report.error.slice(0, DISCORD_ERROR_CHARS), '```')
+  const lines = ['Problem report', report.description]
+  if (report.error) lines.push('', 'Error', report.error)
+  lines.push('', where.join(' · '))
+  if (report.logs) lines.push('', 'Recent logs (masked)', report.logs)
   return lines.join('\n')
 }
 

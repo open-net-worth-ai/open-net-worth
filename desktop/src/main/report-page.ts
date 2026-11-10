@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LIMITS, type ReportPayload } from './problem-report';
-import { SUPPORT_EMAIL } from './report-config';
+import { DISCORD_CHANNEL, SUPPORT_EMAIL } from './report-config';
 
 const assets = JSON.parse(readFileSync(join(__dirname, '..', '..', 'resources', 'onboarding.generated.json'), 'utf8')) as { css: string; logo: string };
 
@@ -33,7 +33,7 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0;padd
 .check input{appearance:none;-webkit-appearance:none;flex:none;width:16px;height:16px;margin:2px 0 0;border-radius:4px;border:1.5px solid var(--line-strong);background:transparent no-repeat center;cursor:inherit}
 .check input:checked{background-color:var(--fr-gold);border-color:var(--fr-gold);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E")}
 .check input:disabled{opacity:.5}.check-text{display:flex;flex-direction:column;gap:2px}.check-label{line-height:1.3}.check.off .check-label{opacity:.6}.check-desc{font-size:var(--text-sm);color:var(--faint);line-height:1.35}
-.hint{margin:6px 0 0;font-size:13px;color:var(--muted)}.mark{width:15px;height:15px;margin-right:7px;flex:none}.link{padding:0;border:0;background:none;font:inherit;font-size:13px;color:var(--ink);text-decoration:underline;cursor:pointer;height:auto}
+.hint{margin:6px 0 0;font-size:13px;color:var(--muted)}.discord-hint{margin-top:var(--space-6)}.mark{width:15px;height:15px;margin-right:7px;flex:none}.link{padding:0;border:0;background:none;font:inherit;font-size:13px;color:var(--ink);text-decoration:underline;cursor:pointer;height:auto}
 details{margin-top:var(--space-6)}details.included>dl{margin-top:var(--space-4)}summary{cursor:pointer;color:var(--muted)}pre{margin:var(--space-3) 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-sm);white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
 footer{flex:none;border-top:1px solid var(--line);padding:var(--space-5) var(--space-8)}.bar{max-width:640px;margin:0 auto;display:flex;gap:var(--space-4);justify-content:flex-end;flex-wrap:wrap}
 .status{max-width:640px;margin:0 auto var(--space-4);font-size:13px}.status:empty{display:none}.status.bad{color:var(--bad)}.status .addr{user-select:text;-webkit-user-select:text;font-weight:600;color:var(--ink)}
@@ -61,7 +61,7 @@ const guarded=run=>async()=>{busy=true;refresh();status('');try{await run()}catc
 const fallback=message=>{const node=status(message+' You can copy the report or email it to ',true);const address=document.createElement('span');address.className='addr';address.textContent=${JSON.stringify(SUPPORT_EMAIL)};node.append(address,'.');$('copy').hidden=false;$('email').hidden=false};
 for(const field of Object.values(fields))if(field)field.addEventListener('input',refresh);fields.include.addEventListener('change',refresh);
 $('send').addEventListener('click',guarded(async()=>{const sent=await bridge.send(payload());$('form').hidden=true;$('foot').hidden=true;$('done').hidden=false;if(sent.id)$('reference').textContent='Reference '+sent.id;$('close').focus()}));
-$('discord').addEventListener('click',guarded(async()=>{await bridge.community(payload());status('Copied. Paste it in Discord.')}));$('copy').addEventListener('click',guarded(async()=>{await bridge.copy(payload());status('Copied. Paste it wherever you like.')}));
+$('discord').addEventListener('click',guarded(async()=>{await bridge.community(payload());$('discord-hint').textContent='Copied — press '+(draft.platform.startsWith('darwin')?'⌘V':'Ctrl+V')+' in '+${JSON.stringify(DISCORD_CHANNEL)}+' to paste it.'}));$('copy').addEventListener('click',guarded(async()=>{await bridge.copy(payload());status('Copied. Paste it wherever you like.')}));
 $('email').addEventListener('click',guarded(async()=>{await bridge.email(payload());status('Your mail app opened with the start of the report. The whole report, logs included, is on your clipboard to paste.')}));
 const close=()=>{if(!busy)bridge.close()};
 for(const id of ['cancel','close','dismiss'])$(id).addEventListener('click',close);
@@ -81,7 +81,7 @@ ${draft.error ? `<label for="error">Error</label><textarea id="error" rows="3" m
 <details class="included"><summary id="included-summary"></summary><dl><dt>Version</dt><dd>${escapeHtml(draft.app_version)}</dd><dt>Platform</dt><dd>${escapeHtml(draft.platform)}</dd><dt>Mode</dt><dd>${draft.mode}</dd>${draft.screen ? `<dt>Screen</dt><dd>${escapeHtml(draft.screen)}</dd>` : ''}</dl>
 <label class="check${logs ? '' : ' off'}"><input id="include" type="checkbox"><span class="check-text"><span class="check-label">Include recent logs</span><span class="check-desc">${logs ? 'Amounts, names and keys are masked.' : 'No logs yet.'}</span></span></label>
 ${logs ? `<textarea id="logs" class="mono" rows="9" aria-label="Recent logs" maxlength="${LIMITS.logs}" spellcheck="false"></textarea>` : ''}
-<details><summary>Show exactly what is sent</summary><pre id="json"></pre></details></details></div>
+<details><summary>Show exactly what is sent</summary><pre id="json"></pre></details></details><p id="discord-hint" class="hint discord-hint" role="status" aria-live="polite">Post on Discord copies your message for you to paste in ${DISCORD_CHANNEL}.</p></div>
 <div id="done" class="done" hidden><h1>Thank you. Your report was sent.</h1><p>We will investigate and fix this within 48 hours!</p><p id="reference"></p><div class="actions"><button id="close" class="primary" type="button">Close</button></div></div></main></div>
 <footer id="foot"><div id="status" class="status" role="status" aria-live="polite"></div><div class="bar"><button id="cancel" type="button">Cancel</button><button id="copy" type="button" hidden>Copy report</button><button id="email" type="button" hidden>Email instead</button><button id="send" type="button">Send report</button><button id="discord" class="primary" type="button"><svg class="mark" viewBox="0 0 20 19" fill="currentColor" aria-hidden="true"><path d="M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82"/></svg>Post on Discord</button></div></footer>
 </div></div><script type="application/json" id="draft">${json(draft)}</script><script nonce="onw-report">${SCRIPT}</script></body></html>`;
