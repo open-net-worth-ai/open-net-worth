@@ -91,7 +91,7 @@ class GetPortfolioInput(ToolInput):
 @tool(
     "get_portfolio",
     description=(
-        "Get the user's portfolio — positions with label, category, asset_class, quantity, price, cost_basis, currency, ticker, vesting_state, and `thesis` (the user's own investment thesis read at today's price — role, reason, breaks_if, levels, stance; judge any move against it, never the move alone) when one exists.\n\nReturns EVERY position when called with no arguments (that is the right call for a portfolio total or an allocation breakdown). When you want one holding, filter instead: query='AAPL' matches symbol or name, or narrow with asset_class / account_id / vesting_state. asset_class, vesting_state and account_ids each accept a LIST as well as a single value (OR'd within the field) — 'what do I hold at IBKR or Binance' is ONE call with account_ids=[a,b], never one per account. The response reports `showing` and `total`, so a filtered read never looks like the whole book.\n\nVESTING_STATE MATTERS FOR ANY TOTAL: 'vested' rows are OWNED; 'unvested' rows are equity-grant units NOT owned yet (forfeited if the person leaves). NEVER sum an unvested row into a portfolio total, allocation breakdown, or 'what am I worth' answer. `summary.owned_base`/`summary.unvested_base` already do this split over whatever positions this call returned — use them instead of hand-summing price×quantity. get_net_worth / get_net_worth_history report the same split as `net_worth`/`unvested_base`.\n\nTODAY (unfiltered): `today` {pl_base, pct, top_movers} is the screens' figure; use it, never get_returns."
+        "Get the user's portfolio — positions with label, category, asset_class, quantity, price, cost_basis, currency, ticker, vesting_state, and `thesis` (the user's own investment thesis read at today's price — role, reason, breaks_if, levels, stance; judge any move against it, never the move alone) when one exists.\n\nReturns EVERY position when called with no arguments (that is the right call for a portfolio total or an allocation breakdown). When you want one holding, filter instead: query='AAPL' matches symbol or name, or narrow with asset_class / account_id / vesting_state. asset_class, vesting_state and account_ids each accept a LIST (OR'd) — 'what do I hold at IBKR or Binance' is ONE call with account_ids=[a,b]. The response reports `showing` and `total`, so a filtered read never looks like the whole book.\n\nVESTING_STATE MATTERS FOR ANY TOTAL: 'vested' rows are OWNED; 'unvested' rows are equity-grant units NOT owned yet (forfeited if the person leaves). NEVER sum an unvested row into a portfolio total, allocation breakdown, or 'what am I worth' answer. `summary.owned_base`/`summary.unvested_base` already do this split over whatever positions this call returned — use them instead of hand-summing price×quantity. get_net_worth / get_net_worth_history report the same split as `net_worth`/`unvested_base`.\n\nTODAY (unfiltered): `today` {pl_base, pct, top_movers} is the screens' figure; use it, never get_returns. `today.untracked_note`: money invested but not in positions."
     ),
     input_schema=schema_of(GetPortfolioInput, tool_name="get_portfolio"),
 )
@@ -166,7 +166,7 @@ def _book_today(base: str) -> dict:
     investments doing today", Lucius answered from get_returns' calendar window instead — since
     midnight, so US stocks read flat through a Singapore morning while the screens showed the
     last session's move (screens -S$250, Lucius +S$126; QA 2026-10-14)."""
-    from backend.services import investments_book, portfolio_rows
+    from backend.services import investments_book, portfolio_rows, untracked_holdings
 
     try:
         rows = portfolio_rows.projected_rows(base)["rows"]
@@ -178,7 +178,7 @@ def _book_today(base: str) -> dict:
     movers = sorted(
         (r for r in invested if r.get("daily_pl")), key=lambda r: abs(r["daily_pl"]), reverse=True
     )
-    return {
+    out = {
         "pl_base": move["pl"],
         "pct": move["pct"],
         "has_data": move["has_data"],
@@ -191,6 +191,17 @@ def _book_today(base: str) -> dict:
             for r in movers[:5]
         ],
     }
+    # A Brokerage total account's untracked part: invested at the brokerage, its holdings not
+    # entered — in no row above and left out of today's move. Said, so it is never read as
+    # cash or as nothing (ADR 2026-11-10, amendment 1). Absent while the flag is off.
+    excluded = untracked_holdings.untracked_excluded(rows)
+    if excluded and excluded["accounts"]:
+        out["untracked_excluded"] = excluded
+        out["untracked_note"] = (
+            untracked_holdings.note(excluded, base, action="track")
+            + " It is invested (counted in net worth), not cash; it is not in `positions`."
+        )
+    return out
 
 
 def _vesting_of(input_data: dict) -> str:
@@ -396,7 +407,7 @@ class GetNetWorthHistoryInput(ToolInput):
 @tool(
     "get_net_worth_history",
     description=(
-        "Get the user's NET WORTH OVER TIME — the monthly reconstructed series (cash + receivables + market positions − liabilities), each point in the base currency. Use this to answer 'how has my net worth changed?' / 'is my wealth growing?' and to read the trajectory. Each point: {date, net_worth, accounts (cash+settlement_cash+receivable+liabilities, the account-only basis), liabilities (raw-negative), classes (per-asset-class band), unvested_base (unvested equity, see below), market_tracked (whether market value is included yet)}. IMPORTANT: classes.cash is cash on hand (bank/e-wallet); classes.settlement_cash is brokerage/exchange settlement cash (negative when margin is drawn) and belongs to investments, not cash; classes.fixed_deposit / classes.retirement are locked. unvested_base (unvested RSU/option grant units, vesting_state=unvested) is EXCLUDED from net_worth and every classes band — forfeited if the person leaves the company, so not owned yet; mention it only as a separate, not-yet-owned figure, never as part of net worth. Periods: 1M | 3M | YTD | 1Y | ALL (default 1Y). This is the wealth TRAJECTORY, distinct from get_returns (investment PERFORMANCE/TWR). A young/empty book returns an empty history."
+        "Get the user's NET WORTH OVER TIME — the monthly reconstructed series (cash + receivables + market positions − liabilities), each point in the base currency. Use for 'how has my net worth changed?'. Each point: {date, net_worth, accounts (cash+settlement_cash+receivable+liabilities, the account-only basis), liabilities (raw-negative), classes (per-asset-class band), unvested_base (unvested equity, see below), market_tracked (whether market value is included yet)}. IMPORTANT: classes.cash is cash on hand (bank/e-wallet); classes.settlement_cash is brokerage/exchange settlement cash (negative when margin is drawn) and belongs to investments, not cash; classes.untracked_holdings is invested with holdings not entered, never cash; classes.fixed_deposit / classes.retirement are locked. unvested_base (unvested RSU/option grant units, vesting_state=unvested) is EXCLUDED from net_worth and every classes band — forfeited if the person leaves the company, so not owned yet; mention it only as a separate, not-yet-owned figure, never as part of net worth. Periods: 1M | 3M | YTD | 1Y | ALL (default 1Y). This is the wealth TRAJECTORY, distinct from get_returns (investment PERFORMANCE/TWR). A young/empty book returns an empty history."
     ),
     input_schema=schema_of(GetNetWorthHistoryInput, tool_name="get_net_worth_history"),
 )

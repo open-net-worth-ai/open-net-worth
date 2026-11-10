@@ -46,7 +46,8 @@ class GetRebalancePlanInput(ToolInput):
         "remove_positions (each previews a confirm card first on an interactive turn). "
         "mode: 'sell_to_target' (full rebalance, may sell) or 'cash_only' (buys only). "
         "Returns current/target weights, drift, and trade suggestions. "
-        "No target_allocation set → status='no_targets'."
+        "No target_allocation set → status='no_targets'. untracked_note: invested money "
+        "left out (holdings not entered)."
     ),
     input_schema=schema_of(GetRebalancePlanInput, tool_name="get_rebalance_plan"),
 )

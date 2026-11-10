@@ -163,7 +163,8 @@ Once an account has a value source, adding a holding doesn't change it.
 
 Adding a holding never changes the total. Its value is taken out of the rest of the total and the
 account card shows how the total splits, for example **$3,020.00** tracked holdings +
-**$4,980.00** cash and untracked holdings = **$8,000.00** total value. The register shows the
+**$4,980.00** cash and untracked holdings = **$8,000.00** total value. Net worth shows that
+$4,980.00 as **Untracked holdings** (see "Where the untracked part shows" below). The register shows the
 move as a **Holding tracked from the total** adjustment. Removing a holding puts its value back
 the same way.
 
@@ -174,6 +175,26 @@ account leaves the cash in this account, because that's where a brokerage keeps 
 **Add holding** on the account card opens Lucius with the request ready to send. Tickers and
 quantities are a conversation, and he can read them from a statement too. When nearly all of the
 total is tracked (2% or less left), the card offers **Switch** to Live holdings.
+
+### Where the untracked part shows
+
+The part of a Brokerage total account that isn't entered as holdings is money invested at the
+brokerage, not cash. Everywhere net worth is broken down it's its own band, **Untracked
+holdings** — never **Settlement cash** or retirement cash:
+
+- The net-worth chart and its breakdown show it in its own pale-blue band. Every past point uses
+  the account's current value source, so switching an account doesn't make the chart jump.
+- On **Assets**, the **Investments** card (or **Retirement**, for a retirement account) shows
+  **Positions** and **Untracked holdings** rows. A retirement account still counts in full as
+  retirement, so **excluding retirement** leaves all of it out.
+- The Dashboard's allocation counts it as invested, as **Untracked holdings**.
+- On **Investments**, allocation, concentration, today's move and rebalancing are worked out over
+  the holdings you've entered. Each says how much it left out, for example "$4,980.00 at Old
+  401(k) isn't broken into holdings — add holdings to rebalance it."
+- Lucius describes it as invested with holdings not entered, never as cash.
+
+Net worth and cash on hand are the same either way. Cash at the brokerage counts as **Settlement
+cash** only on a **Live holdings** account.
 
 ### A linked account follows its connector's total
 

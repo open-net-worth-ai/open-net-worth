@@ -24,14 +24,14 @@ import logging
 from backend.core.fx import base_currency, to_base
 from backend.db.owned_assets_store import OwnedAssetsStore
 from backend.services import ledger as ledger_service
-from backend.services import owned_assets_valuation
+from backend.services import owned_assets_valuation, untracked_holdings
 from backend.services import positions as positions_service
 from backend.services.fx_cache import load_fx_cache
 
 _log = logging.getLogger(__name__)
 
 
-def _account_band(account: dict) -> str:
+def _account_band(account: dict, untracked: frozenset[str] = frozenset()) -> str:
     """The asset-class band an account belongs to — the SAME classification
     ``ledger._breakdown_as_of`` applies when it builds the net-worth bands.
 
@@ -44,11 +44,14 @@ def _account_band(account: dict) -> str:
     that key is absent from the browser's `ASSET_CLASS_ORDER`, and `useAllocRows` drops any
     key it cannot order — so every debt row vanished from the chart while the allocation
     total still contained it.
+
+    ``untracked`` (``untracked_holdings.account_ids``): a Brokerage total account is an
+    ``untracked_holdings`` row — invested, its holdings not entered — never settlement cash.
     """
-    return ledger_service.account_kind_and_band(account)[1]
+    return ledger_service.account_kind_and_band(account, untracked)[1]
 
 
-def _account_as_row(account: dict, balance: float) -> dict:
+def _account_as_row(account: dict, balance: float, untracked: frozenset[str] = frozenset()) -> dict:
     """Surface an account as a portfolio row so allocation/venue/reach math sees one row
     vocabulary. An account balance is ALWAYS the holder's (only an equity grant can be
     unvested, and grants are positions) — what varies is its REACHABILITY."""
@@ -56,7 +59,7 @@ def _account_as_row(account: dict, balance: float) -> dict:
     liquidity = (
         "illiquid" if account["type"] in {"retirement", "receivable", "fixed_deposit"} else "liquid"
     )
-    cls = _account_band(account)
+    cls = _account_band(account, untracked)
     name = account.get("name") or ""
     return {
         "category": "Receivables" if is_receivable else name,
@@ -345,7 +348,8 @@ def projected_rows(
     txns, accts = book.txns, book.live_accounts
     cutoffs = ledger_service.cutoffs_by_account(accts, txns)
     balances = ledger_service.balances_by_account(accts, txns, cutoffs)
-    account_rows = [_account_as_row(a, balances[a["id"]]) for a in accts]
+    untracked = untracked_holdings.account_ids(accts)
+    account_rows = [_account_as_row(a, balances[a["id"]], untracked) for a in accts]
     asset_rows = [
         _asset_as_row(a, base) for a in OwnedAssetsStore().query_assets(include_archived=False)
     ]

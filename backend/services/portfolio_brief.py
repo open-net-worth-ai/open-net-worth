@@ -28,7 +28,7 @@ from backend.core.fx import base_currency
 from backend.core.user_time import user_today
 from backend.db import read_cache
 from backend.services import equity as equity_service
-from backend.services import investments_book
+from backend.services import investments_book, untracked_holdings
 from backend.services import positions as positions_service
 from backend.services import profile as profile_service
 from backend.services import rebalance as rebalance_service
@@ -94,20 +94,24 @@ def _days_until(iso_date: str) -> int:
     return ceil(delta.total_seconds() / 86_400)
 
 
-def _concentration_narrative(top: dict, over_by: float, guideline_pct: float) -> str:
+def _concentration_narrative(
+    top: dict, over_by: float, guideline_pct: float, *, untracked: str | None = None
+) -> str:
     """Information, not an order: what the name is, then how it sits against the guideline —
     the nudge used to tell a day-one user to trim against a 20% rule they never set (persona QA
-    round 7). A guideline the user set is called theirs."""
-    share = f"{top['name']} is {top['pct']:.0f}% of your investments"
-    if guideline_pct == investments_book.CONCENTRATION_GUIDELINE_PCT:
-        return (
-            f"{share}, {over_by:.0f} percentage points over the {guideline_pct:.0f}% "
-            f"single-name guideline."
-        )
-    return (
-        f"{share}, {over_by:.0f} percentage points over your {guideline_pct:.0f}% "
+    round 7). A guideline the user set is called theirs. `untracked` (a formatted amount): money
+    at Brokerage total accounts not broken into holdings, which the share leaves out — so the
+    share is "of the holdings you've entered", and the sentence says what wasn't counted."""
+    of = "of the holdings you've entered" if untracked else "of your investments"
+    share = f"{top['name']} is {top['pct']:.0f}% {of}"
+    whose = "the" if guideline_pct == investments_book.CONCENTRATION_GUIDELINE_PCT else "your"
+    text = (
+        f"{share}, {over_by:.0f} percentage points over {whose} {guideline_pct:.0f}% "
         f"single-name guideline."
     )
+    if untracked:
+        text += f" {untracked} not broken into holdings isn't counted."
+    return text
 
 
 def _concentration_signal(
@@ -124,13 +128,17 @@ def _concentration_signal(
         return None
     top = ranked[0]
     over_by = top["pct"] - concentration_guideline_pct
+    untracked_total = untracked_holdings.total_now(base)  # None while the flag is off
+    untracked = _fmt_base(untracked_total, base) if untracked_total else None
     return {
         "id": "concentration",
         "kind": "concentration",
         "tone": "warn",
         "actionable": True,
         "tag": "Concentration",
-        "narrative": _concentration_narrative(top, over_by, concentration_guideline_pct),
+        "narrative": _concentration_narrative(
+            top, over_by, concentration_guideline_pct, untracked=untracked
+        ),
         "amount": top["value"],
     }
 
