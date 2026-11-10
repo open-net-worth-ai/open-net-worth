@@ -33,17 +33,21 @@ closes it too.
      open or the app couldn't start.
 2. Under **What happened?**, describe what you did and what went wrong. This is the only
    required field.
-3. Optionally add your **Email**. We only use it to tell you when the fix is out.
-4. Leave **Include recent logs** ticked unless you'd rather not share them. Read the log lines
-   in the box below it — you can edit or delete any of them. With no logs yet, the box is greyed
-   out and there are no lines to show. **Show exactly what is sent**
-   displays the final report exactly as it will be posted.
+3. Optionally add your **Email**. We need it only to tell you when the fix is out — never for marketing, and it’s never shared.
+4. The line **Also sent: app details and recent logs (masked)** says what goes with your words.
+   Click it to see the version, platform and screen, and the log lines. Untick **Include recent
+   logs** if you'd rather not share them, or edit or delete any line. With no logs yet, the box
+   is greyed out. **Show exactly what is sent** displays the final report exactly as it will be
+   posted.
 5. Click **Send report**.
 
 When it's sent you'll see **Thank you. Your report was sent.** and a **Reference** — quote it if
 you write to us about the same problem. We aim to investigate and fix reports within 48 hours.
 
-Prefer to talk it through? The dialog also links to our [Discord](https://discord.gg/gRRsQRgwE8).
+Prefer to talk it through? Click **Post on Discord** instead of **Send report**. Discord can't
+fill in a message for you, so the app copies one to your clipboard — what happened, plus the
+version, platform and screen — and opens our [Discord](https://discord.gg/RTUMyHcUmN) for you to
+paste it. It never includes your email or your logs, because a Discord channel is public.
 
 ## What a report contains
 

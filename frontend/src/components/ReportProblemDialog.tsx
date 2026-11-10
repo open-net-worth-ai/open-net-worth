@@ -8,6 +8,7 @@ import {
 } from '../state/reportProblem'
 import {
   COMMUNITY_URL,
+  discordText,
   emailHref,
   REPORT_LIMITS,
   reportText,
@@ -21,6 +22,7 @@ import { Modal } from './ui/Modal'
 import { Loading } from './ui'
 import { Stack } from './ui/Stack'
 import { openExternal } from '../platform/desktop'
+import { DiscordMark } from '../ui/DiscordMark'
 import { Text } from './ui/Text'
 import { TextArea } from './ui/TextArea'
 import { TextField } from './ui/TextField'
@@ -60,6 +62,8 @@ function ReportProblemDialog({
   const [includeLogs, setIncludeLogs] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  // The Discord message, shown only when the browser refused to copy it.
+  const [discordUncopied, setDiscordUncopied] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
   const statusRef = useRef<HTMLDivElement>(null)
 
@@ -111,6 +115,7 @@ function ReportProblemDialog({
   )
 
   const busy = phase !== 'editing'
+  const logsSent = Boolean(report?.logs)
   const ready = Boolean(report?.description) && !busy
 
   async function send() {
@@ -136,6 +141,22 @@ function ReportProblemDialog({
     } catch {
       setNote('Your browser blocked copying. Open the exact data below and copy it from there.')
     }
+  }
+
+  // Discord has no link that fills in a message, so the message goes on the clipboard for the
+  // user to paste in the channel the invite opens.
+  async function postOnDiscord() {
+    if (!report || !ready) return
+    const text = discordText(report)
+    let copied = true
+    try {
+      await window.navigator.clipboard.writeText(text)
+    } catch {
+      copied = false
+    }
+    setDiscordUncopied(copied ? null : text)
+    setNote(copied ? 'Copied. Paste it in Discord.' : 'Copy this and paste it in Discord:')
+    void openExternal(COMMUNITY_URL)
   }
 
   async function mail() {
@@ -207,12 +228,22 @@ function ReportProblemDialog({
           {report && !offline && (
             <Button
               size="sm"
-              variant="primary"
               loading={phase === 'sending'}
               disabled={!ready}
               onClick={() => void send()}
             >
               Send report
+            </Button>
+          )}
+          {report && (
+            <Button
+              size="sm"
+              variant="primary"
+              iconLeft={<DiscordMark size={15} />}
+              onClick={() => void postOnDiscord()}
+              disabled={!ready}
+            >
+              Post on Discord
             </Button>
           )}
         </>
@@ -240,6 +271,9 @@ function ReportProblemDialog({
                 {note}
               </Text>
             )}
+            {!failure && discordUncopied && (
+              <pre className="report-problem__discord-text">{discordUncopied}</pre>
+            )}
           </div>
           <FormField label="What happened?" htmlFor="report-description" required>
             <TextArea
@@ -252,9 +286,9 @@ function ReportProblemDialog({
             />
           </FormField>
           <FormField
-            label="Email (optional)"
+            label="Email"
             htmlFor="report-email"
-            help="We’ll only use it to tell you when the fix is out."
+            help="We need it only to tell you when the fix is out — never for marketing, and it’s never shared."
           >
             <TextField
               id="report-email"
@@ -279,56 +313,49 @@ function ReportProblemDialog({
               />
             </FormField>
           )}
-          <dl className="report-problem__meta" aria-label="Sent with the report">
-            <dt>Version</dt>
-            <dd>{report.app_version}</dd>
-            <dt>Platform</dt>
-            <dd>{report.platform}</dd>
-            <dt>Mode</dt>
-            <dd>{report.mode}</dd>
-            {screen && (
-              <>
-                <dt>Screen</dt>
-                <dd>{screen}</dd>
-              </>
-            )}
-          </dl>
-          <Checkbox
-            id="report-include-logs"
-            label="Include recent logs"
-            description={base?.logs ? 'Amounts, names and keys are masked.' : 'No logs yet.'}
-            checked={includeLogs}
-            disabled={!base?.logs}
-            onChange={(event) => setIncludeLogs(event.target.checked)}
-          />
-          <TextArea
-            aria-label="Recent logs"
-            rows={8}
-            className="report-problem__mono"
-            maxLength={REPORT_LIMITS.logs}
-            spellCheck={false}
-            value={logs}
-            disabled={!includeLogs}
-            onChange={(event) => setLogs(event.target.value)}
-          />
-          <details className="report-problem__exact">
-            <summary>Show exactly what is sent</summary>
-            <pre>{JSON.stringify(report, null, 2)}</pre>
+          {/* Everything beyond what the user writes folds into one line that names it, so the
+              dialog reads as two fields; opening it shows (and edits) exactly what is sent. */}
+          <details className="report-problem__included">
+            <summary>Also sent: app details{logsSent ? ' and recent logs (masked)' : ''}</summary>
+            <Stack gap="--space-4" className="report-problem__included-body">
+              <dl className="report-problem__meta" aria-label="Sent with the report">
+                <dt>Version</dt>
+                <dd>{report.app_version}</dd>
+                <dt>Platform</dt>
+                <dd>{report.platform}</dd>
+                <dt>Mode</dt>
+                <dd>{report.mode}</dd>
+                {screen && (
+                  <>
+                    <dt>Screen</dt>
+                    <dd>{screen}</dd>
+                  </>
+                )}
+              </dl>
+              <Checkbox
+                id="report-include-logs"
+                label="Include recent logs"
+                description={base?.logs ? 'Amounts, names and keys are masked.' : 'No logs yet.'}
+                checked={includeLogs}
+                disabled={!base?.logs}
+                onChange={(event) => setIncludeLogs(event.target.checked)}
+              />
+              <TextArea
+                aria-label="Recent logs"
+                rows={8}
+                className="report-problem__mono"
+                maxLength={REPORT_LIMITS.logs}
+                spellCheck={false}
+                value={logs}
+                disabled={!includeLogs}
+                onChange={(event) => setLogs(event.target.value)}
+              />
+              <details className="report-problem__exact">
+                <summary>Show exactly what is sent</summary>
+                <pre>{JSON.stringify(report, null, 2)}</pre>
+              </details>
+            </Stack>
           </details>
-          <p className="report-problem__community">
-            Prefer to chat?{' '}
-            <a
-              href={COMMUNITY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => {
-                event.preventDefault()
-                void openExternal(COMMUNITY_URL)
-              }}
-            >
-              Join us on Discord
-            </a>
-          </p>
         </Stack>
       )}
     </Modal>

@@ -20255,10 +20255,22 @@ body.hide-amounts .mf-lbl-amt {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.report-problem__community {
-  margin: 0;
+/* The Discord message, shown only when the browser refused to copy it. */
+.report-problem__discord-text {
+  margin: var(--space-2) 0 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.report-problem__included > summary {
+  cursor: pointer;
   color: var(--muted);
   font-size: var(--text-sm);
+}
+.report-problem__included-body {
+  margin-top: var(--space-4);
 }
 .report-problem__exact summary {
   cursor: pointer;
