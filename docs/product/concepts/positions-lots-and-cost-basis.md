@@ -96,7 +96,12 @@ the **Not a sale** option.
   unrealized gain; its gain is under **Realized history**.
 - Click any lot to correct its date, quantity, cost, fees or kind — including a lot you've sold
   from. If you deducted its cost from an account, that transaction is corrected to match and keeps
-  its category, status and history; changing only the note leaves it alone.
+  its category, status, history and any description you wrote; changing only the note leaves it
+  alone.
+- Removing a lot, or switching its **Deduct from** to **Don't deduct from an account**, removes
+  its purchase transaction, and anything that transaction paid, such as an installment, goes back
+  to unpaid. The form says so before you save. A sale's **Don't add to an account** does the same
+  to its deposit and anything that deposit funded.
 - If you delete the cash transaction behind a lot, the lot stays and keeps its cost, but it no
   longer has a linked purchase. Correcting that lot later doesn't change or add any cash. To book
   the purchase again, pick an account under **Deduct from**.

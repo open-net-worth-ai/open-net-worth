@@ -144,9 +144,11 @@ _LINKS = (
         what="proceeds in the ledger",
         before="Linked",
         after="None",
+        # "Sell it again" is what reaches the rebooking sale: asked to "record the sale again",
+        # Lucius booked a loose income row that wasn't linked to the asset (hand UAT, 2026-11-10).
         effect=(
-            "The asset stays sold with no proceeds in the ledger. Ask Lucius to record the sale "
-            "again to rebook them."
+            "The asset stays sold with no proceeds in the ledger. Ask Lucius to sell it again "
+            "to rebook them."
         ),
     ),
     _Link(

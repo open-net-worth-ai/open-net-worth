@@ -704,6 +704,9 @@ def test_DS_ASSET_DEL_a_sold_asset_stays_sold_and_lucius_can_rebook_its_proceeds
 
     assert result["ok"] is True, result
     assert balance(app, savings) == 500.0
+    # Booked as the asset's sale, linked to it: not a loose income row (hand UAT found that).
+    relinked = OwnedAssetsStore().find_by_id(asset_id)["disposal_txn_id"]
+    assert relinked and relinked != txn_id and relinked in live_ids()
 
 
 def test_DS_ASSET_TWICE_an_asset_with_its_proceeds_cant_be_sold_again(app, book):

@@ -15,6 +15,7 @@ import {
   plClass,
 } from '../../utils/format'
 import { authFetch } from '../../api/client'
+import { useDataVersion } from '../../hooks/useDataVersion'
 import { EntityRow } from '../../lucius/EntityRow'
 import { Button, Loading, Panel } from '../ui'
 import { AcquireLotForm } from './AcquireLotForm'
@@ -73,6 +74,9 @@ export function LotsPanel({
   const [dividendsBase, setDividendsBase] = useState('')
   const [dividendsError, setDividendsError] = useState(false)
   const [tick, setTick] = useState(0)
+  // A write from Lucius (an undone sale, a corrected lot) changes these tables too; they kept
+  // the old rows until a reload (UAT DS-SALE-UNDO).
+  const dataV = useDataVersion('*')
   const [adding, setAdding] = useState(false)
   const [editLot, setEditLot] = useState<Lot | null>(null)
   const [saleFor, setSaleFor] = useState<{
@@ -102,7 +106,7 @@ export function LotsPanel({
     return () => {
       alive = false
     }
-  }, [positionId, merged, tick])
+  }, [positionId, merged, tick, dataV])
 
   useEffect(() => {
     if (merged || !positionId) return
@@ -126,7 +130,7 @@ export function LotsPanel({
     return () => {
       alive = false
     }
-  }, [positionId, merged, tick])
+  }, [positionId, merged, tick, dataV])
 
   useEffect(() => {
     if (merged || !positionId) return
@@ -147,7 +151,7 @@ export function LotsPanel({
     return () => {
       alive = false
     }
-  }, [positionId, merged, tick])
+  }, [positionId, merged, tick, dataV])
 
   // Merged (multi-account) data wins over a fetch — merged is already loaded synchronously
   // from the asset-detail response, so there's nothing to fetch in that case at all.

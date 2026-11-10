@@ -103,7 +103,9 @@ history, releases its loan link, and drops it from net worth from that day. The 
 measured against your share of what you paid.
 
 If you later delete that transaction, the asset stays sold but its proceeds are no longer in your
-ledger. Ask Lucius to record the sale again to book them back.
+ledger. Ask Lucius to sell it again, for example "sell my road bike again for 500 into Savings",
+to book them back as the asset's sale. A sold asset no longer appears on the Assets screen, so
+Lucius is the way back.
 
 **Added it by mistake?** **⋯** → **Delete asset** removes the record and its whole history.
 

@@ -213,7 +213,8 @@ the broker's email.
 ### DS-ASSET-DEL
 - GIVEN an asset I sold, with its proceeds in a cash account
 - WHEN I delete the proceeds transaction
-- THEN the asset stays sold, and asking Lucius to record the sale again books the proceeds
+- THEN the asset stays sold, and asking Lucius to sell it again books the proceeds as the asset's
+  sale, linked to it (not a loose income row)
 
 ### DS-ASSET-TWICE
 - GIVEN an asset I sold whose proceeds are still in the ledger

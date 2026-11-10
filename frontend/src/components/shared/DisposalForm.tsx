@@ -104,6 +104,7 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
   // recorded sale is intentionally just a cost-basis event, with a clear note that net worth
   // won't move). A chosen account books a transfer of the net proceeds via the money path.
   const [proceedsAccountId, setProceedsAccountId] = useState(() => event?.proceeds_account_id || '')
+  const [accountTouched, setAccountTouched] = useState(false)
   // Where the shares went on a transfer between the user's own accounts. '' = not one of
   // their accounts (a gift / write-off). A label on the disposal, not a second leg — the
   // receiving lots are still acquired on the other side.
@@ -484,7 +485,10 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
                   Deposit proceeds to
                   <select
                     value={proceedsAccountId}
-                    onChange={(e) => setProceedsAccountId(e.target.value)}
+                    onChange={(e) => {
+                      setProceedsAccountId(e.target.value)
+                      setAccountTouched(true)
+                    }}
                   >
                     <option value="">Don't add to an account</option>
                     {accounts.map((a) => (
@@ -500,6 +504,12 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
                         {accountName(proceedsAccountId)}.
                       </span>
                     )
+                  ) : event?.txn_id && accountTouched ? (
+                    // Saving deletes the deposit this sale has, and frees what it funded (UAT DS-SALE-NOACCT).
+                    <span className="disposal-warn">
+                      Saving removes this sale's deposit transaction from the ledger. Anything it
+                      funded, such as a commitment, goes back to planned.
+                    </span>
                   ) : (
                     <span className="disposal-deposit-hint muted">
                       The sale is recorded but the cash is not added anywhere, so your net worth
