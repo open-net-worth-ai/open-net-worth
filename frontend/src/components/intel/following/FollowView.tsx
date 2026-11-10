@@ -1,21 +1,22 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
+import { ActionMenu, Badge, Button, ConfirmDialog, EmptyState } from '../../ui'
+import { Spark } from '../../../lucius/identity'
+import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import {
-  ActionMenu,
-  Badge,
-  Button,
-  ConfirmDialog,
-  EmptyState,
-  SummaryBar,
-  type StatCard,
-} from '../../ui'
-import { Sparkles } from '../../../ui/icons'
-import { fPct } from '../../../utils/format'
-import { refreshFollow, unfollowPortfolio, type Follow } from '../../../api/followedPortfolios'
+  refreshFollow,
+  unfollowPortfolio,
+  type Follow,
+  type PerfPeriod,
+} from '../../../api/followedPortfolios'
 import { COPY, askPrompt } from './following.copy'
-import { ageText, changeSummary, shortDate } from './following.format'
+import { ageText, shortDate } from './following.format'
 import { HoldingRows } from './HoldingRows'
+import { Monogram } from './Monogram'
+import { MovesChart } from './MovesChart'
+import { PerformanceBlock } from './PerformanceBlock'
 import { TradeRows } from './TradeRows'
+import { usePerformance } from './useFollowing'
 
 interface Props {
   follow: Follow
@@ -26,45 +27,13 @@ interface Props {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-function statCards(follow: Follow): StatCard[] {
-  const model = follow.model
-  if (!model) return []
-  const top = model.holdings[0]
-  const member = follow.kind === 'house_member'
-  const pct = (n: number) => fPct(n, { fraction: true })
-  const topFive = model.holdings.slice(0, 5).reduce((sum, h) => sum + h.weight, 0)
-  const cards: StatCard[] = []
-  if (top)
-    cards.push({
-      label: COPY.statTop,
-      value: top.symbol,
-      caption: `${pct(top.weight)} of the portfolio`,
-    })
-  if (model.holdings.length > 5)
-    cards.push({
-      label: COPY.statTopFive,
-      value: pct(topFive),
-      caption: `of the ${model.holdings.length} holdings shown`,
-    })
-  cards.push({
-    label: member ? COPY.statChangesMember : COPY.statChanges,
-    value: changeSummary(model) ?? COPY.noChanges,
-    caption: member
-      ? `${follow.activity.length} trades listed`
-      : model.prev_as_of
-        ? `${shortDate(model.prev_as_of)} to ${shortDate(model.as_of)}`
-        : undefined,
-  })
-  return cards
-}
-
 /** One line under the name: who, and how old the data is. Never a claim that it is current. */
 function metaLine(follow: Follow): string {
   const model = follow.model
   if (!model) return follow.subtitle
-  const filed = `${follow.kind === 'house_member' ? 'Last report' : 'Filed'} ${shortDate(model.filed_at)}, ${ageText(model.age_days)}`
-  const asOf = follow.kind === 'fund_13f' ? ` · Holdings as of ${shortDate(model.as_of)}` : ''
-  return `${follow.subtitle} · ${filed}${asOf}`
+  const member = follow.kind === 'house_member'
+  const filed = `${member ? 'Last report' : 'Filed'} ${shortDate(model.filed_at)}, ${ageText(model.age_days)}`
+  return `${follow.subtitle} · ${filed}${member ? '' : ` · Holdings as of ${shortDate(model.as_of)}`}`
 }
 
 function Notes({ follow, error }: { follow: Follow; error: string | null }) {
@@ -88,12 +57,51 @@ function Notes({ follow, error }: { follow: Follow; error: string | null }) {
   )
 }
 
-export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Props) {
+/** The reason this screen exists: copying the portfolio. One primary action, said plainly. */
+function CopyPanel({ follow, onAskLucius }: Pick<Props, 'follow' | 'onAskLucius'>) {
   const navigate = useNavigate()
+  return (
+    <aside className="fol-copy" aria-label={COPY.copyTitle}>
+      <h3 className="fol-copy-title">{COPY.copyTitle}</h3>
+      <p className="fol-copy-pitch">{COPY.copyPitch}</p>
+      <Button
+        variant="primary"
+        fullWidth
+        onClick={() =>
+          void navigate({
+            to: '/automations',
+            search: { template: 'copy-followed-portfolio' } as never,
+          } as never)
+        }
+      >
+        {COPY.copyCta}
+      </Button>
+      {onAskLucius && (
+        <Button
+          fullWidth
+          iconLeft={<Spark className="fol-spark" size={15} filled ariaHidden />}
+          aria-label={COPY.askLabel(follow.name)}
+          onClick={() => {
+            sendNextPrefill()
+            onAskLucius(askPrompt(follow.name))
+          }}
+        >
+          {COPY.askLucius}
+        </Button>
+      )}
+      <p className="fol-foot">{COPY.notAdvice}</p>
+    </aside>
+  )
+}
+
+export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Props) {
   const [refreshing, setRefreshing] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [period, setPeriod] = useState<PerfPeriod>('12M')
+  const perf = usePerformance(follow.id)
   const model = follow.model
+  const hasModel = !!model && model.holdings.length > 0
 
   async function run(action: () => Promise<unknown>, failed: (why: string) => string) {
     setActionError(null)
@@ -115,17 +123,12 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
     setConfirming(false)
     if (await run(() => unfollowPortfolio(follow.id), COPY.saveFailed)) onUnfollowed(follow.id)
   }
-  const refreshButton = (
-    <Button size="sm" loading={refreshing} onClick={() => void refresh()}>
-      {COPY.refresh}
-    </Button>
-  )
-  const cards = statCards(follow)
 
   return (
     <>
       <section className="fol-hero" aria-label={follow.name}>
         <div className="fol-hero-top">
+          <Monogram name={follow.name} />
           <div className="fol-id">
             <h2 className="fol-name">
               {follow.name}
@@ -135,52 +138,54 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
             </h2>
             <div className="fol-by">{refreshing ? COPY.refreshing : metaLine(follow)}</div>
           </div>
-          <div className="fol-actions">
-            <Button
-              size="sm"
-              iconLeft={<Sparkles size={14} />}
-              onClick={() => onAskLucius?.(askPrompt(follow.name))}
-            >
-              {COPY.askLucius}
-            </Button>
-            <Button
-              size="sm"
-              onClick={() =>
-                void navigate({
-                  to: '/automations',
-                  search: { template: 'copy-followed-portfolio' } as never,
-                } as never)
-              }
-            >
-              {COPY.setUpAutomation}
-            </Button>
-            <ActionMenu
-              label={COPY.moreActions(follow.name)}
-              title={follow.name}
-              items={[
-                { label: COPY.refresh, onSelect: () => void refresh(), disabled: refreshing },
-                { label: COPY.unfollow, onSelect: () => setConfirming(true), tone: 'danger' },
-              ]}
-            />
-          </div>
+          <ActionMenu
+            label={COPY.moreActions(follow.name)}
+            title={follow.name}
+            items={[
+              { label: COPY.refresh, onSelect: () => void refresh(), disabled: refreshing },
+              { label: COPY.unfollow, onSelect: () => setConfirming(true), tone: 'danger' },
+            ]}
+          />
         </div>
-        {cards.length > 0 && <SummaryBar cards={cards} />}
+        {hasModel && (
+          <div className="fol-hero-body">
+            <PerformanceBlock follow={follow} period={period} onPeriod={setPeriod} />
+            <CopyPanel follow={follow} onAskLucius={onAskLucius} />
+          </div>
+        )}
       </section>
       <Notes follow={follow} error={actionError} />
-      {model && model.holdings.length > 0 ? (
-        <HoldingRows model={model} />
-      ) : follow.status === 'error' ? (
-        <EmptyState title={COPY.loadFailedTitle} body={follow.error} action={refreshButton} />
-      ) : (
-        <EmptyState title={COPY.nothingYetTitle} body={COPY.nothingYetBody} />
+      {!hasModel &&
+        (follow.status === 'error' ? (
+          <EmptyState
+            title={COPY.loadFailedTitle}
+            body={follow.error}
+            action={
+              <Button size="sm" loading={refreshing} onClick={() => void refresh()}>
+                {COPY.refresh}
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState title={COPY.nothingYetTitle} body={COPY.nothingYetBody} />
+        ))}
+      {hasModel && (
+        <div className="fol-cols">
+          {follow.kind === 'fund_13f' ? (
+            <MovesChart model={model} who={follow.name} onAskLucius={onAskLucius} />
+          ) : (
+            <TradeRows
+              activity={follow.activity}
+              unread={model.unread_reports}
+              returns={perf.data?.trade_returns ?? {}}
+              who={follow.name}
+              onAskLucius={onAskLucius}
+            />
+          )}
+          <HoldingRows model={model} period={period} win={perf.data?.periods[period]} />
+        </div>
       )}
-      {follow.kind === 'house_member' && (
-        <TradeRows activity={follow.activity} unread={model?.unread_reports ?? 0} />
-      )}
-      <p className="fol-foot">
-        {model?.estimated && `${COPY.estimatedSubtitle} `}
-        {COPY.copyBody} {COPY.notAdvice}
-      </p>
+      {model?.estimated && <p className="fol-foot">{COPY.estimatedSubtitle}</p>}
       <ConfirmDialog
         data={
           confirming

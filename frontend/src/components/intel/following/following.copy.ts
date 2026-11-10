@@ -1,10 +1,10 @@
+const PAST_WINDOW = (window: string) =>
+  `Price return of the holdings in the newest filing, at their filed weights, over ${window}. It is not the fund's own return: it applies today's holdings to the past, so recent winners flatter it.`
+
 export const COPY = {
   listTitle: 'Following',
   follow: 'Follow a portfolio',
   followShort: 'Follow',
-  emptyTitle: 'Follow a famous portfolio',
-  emptyBody:
-    'See what a well-known fund or a US House member holds and what changed in their latest filing. It comes from public filings, so it is weeks or months old, never live.',
   loadingList: 'Loading followed portfolios…',
   listErrorTitle: "Couldn't load your followed portfolios",
   listErrorBody: "We couldn't reach the server. Check your connection and try again.",
@@ -50,31 +50,62 @@ export const COPY = {
   nothingYetTitle: 'Nothing to show yet',
   nothingYetBody:
     "We haven't found a filing for this portfolio. Try Refresh, or check back after its next report.",
-  holdingsTitle: 'Top holdings',
+  holdingsTitle: 'Holdings',
   notCounted: 'Option or other asset, not counted in the weights',
   showAllTrades: (n: number) => `Show all ${n} trades`,
-  statTop: 'Largest position',
-  statTopFive: 'Top five',
   refreshing: 'Checking for a newer filing…',
   moreActions: (name: string) => `More actions for ${name}`,
-  statChanges: 'Since the last filing',
-  statChangesMember: 'Since the last report',
-  noChanges: 'No changes',
   changeBasis:
     'Share changes are between the two quarter-ends. A 13F gives no trade dates or trade prices, so dollar figures use the quarter-end price and are approximate.',
   tradesTitle: 'Recent trades',
   noTrades: 'No trades filed in the last 36 months.',
-  filterLabel: 'Filter holdings',
   unreadReports: (n: number) => `${n} reports could not be read and are left out.`,
-  exited: 'Sold out since the last filing:',
   unmatched: (n: number) =>
     `${n} ${n === 1 ? 'holding has' : 'holdings have'} no ticker we could match and are left out:`,
-  copyBody:
-    'To copy this portfolio, use Copy in Automations: you set the account, the amount and your own rules there, and Lucius places the trades through your broker.',
-  setUpAutomation: 'Copy in Automations',
-  askLucius: 'Ask Lucius',
+  copyCta: 'Start copy trading',
+  copyTitle: 'Copy trading',
+  copyPitch:
+    'Lucius buys and sells in your broker account to match this portfolio, every week. You set the amount and your rules, and you can have it ask before every order.',
+  askLucius: 'Ask Lucius about this portfolio',
+  copyTrade: 'Copy trade',
+  copyTradeLabel: (what: string) => `Copy this trade: ${what}`,
+  askLabel: (name: string) => `Ask Lucius about ${name}`,
+  movesTitle: 'Latest moves',
+  noMoves: 'No change in the holdings shown since the previous filing.',
+  showAllMoves: (n: number) => `Show all ${n} moves`,
+  perfLine: 'These holdings',
+  perfPeriodLabel: 'Performance window',
+  perfCaption: {
+    '1M': 'These holdings over the past month',
+    '6M': 'These holdings over the past 6 months',
+    '12M': 'These holdings over the past 12 months',
+    FILING: 'These holdings since the filing',
+  },
+  perfColumn: { '1M': '1 month', '6M': '6 months', '12M': '12 months', FILING: 'Since filing' },
+  perfInfo: {
+    '1M': PAST_WINDOW('the past month'),
+    '6M': PAST_WINDOW('the past 6 months'),
+    '12M': PAST_WINDOW('the past 12 months'),
+    FILING:
+      'What copying this portfolio on the day it was filed would have returned since, before costs and dividends.',
+  },
+  perfUnavailable: 'Price history is not available for these holdings right now.',
+  perfErrorTitle: "Couldn't load performance",
+  perfErrorBody: 'The price history did not load. Try again.',
+  sinceTradeHead: 'and the stock since',
+  sinceTradeTitle: "The stock's price change since the trade date.",
+  galleryTitle: 'Pick a portfolio to follow',
+  gallerySub: 'From public filings, so weeks or months old.',
+  gallerySearch: 'Search any fund or US House member',
   notAdvice: 'Not financial advice. Filings are public, delayed and can be incomplete.',
 }
 
 export const askPrompt = (name: string) =>
   `What does ${name} hold, what changed in the latest filing, and how does it compare with my own portfolio?`
+
+const COPY_TRADE_STEPS =
+  'Check my broker account and what I already hold, suggest a size that makes sense for me, then draft the order with my broker for me to approve. If no broker is connected, tell me what to connect.'
+
+/** Sent to Lucius by a row's "Copy trade": one trade, now, sized for the owner. */
+export const copyTradePrompt = (who: string, what: string) =>
+  `I want to copy this trade from ${who}: ${what}. ${COPY_TRADE_STEPS}`

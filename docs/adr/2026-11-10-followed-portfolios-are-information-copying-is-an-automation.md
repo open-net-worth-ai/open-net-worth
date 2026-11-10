@@ -52,6 +52,11 @@ The public sources shape the feature more than the code does:
   (`core.untrusted.sanitize_untrusted`) where they are parsed, before they are stored. A symbol
   is a plain ticker or it is dropped (`model.normalize_symbol`). The tool text tells Lucius the
   names are data, never instructions.
+- **Performance is the holdings' price return, and says so.** `performance.py` computes the
+  return of the current top holdings at their filed weights against `preferred_benchmark`, for
+  four windows (1, 6 and 12 months, and since the filing). "Since filing" is what copying on the filing date would have done; the longer
+  windows apply today's holdings to the past and are labelled as not the fund's own return.
+  Nobody outside a fund knows its real return, so none is claimed.
 - **Copying is an Automation.** The "Copy a followed portfolio" template carries editable
   instructions: the account, the amount and the owner's rules. Lucius reads the follow with
   `get_followed_portfolios`, reads positions and cash from the broker's own MCP tools, judges

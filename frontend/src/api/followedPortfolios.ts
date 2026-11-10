@@ -144,3 +144,31 @@ export const unfollowPortfolio = (id: string) =>
 
 export const refreshFollow = (id: string) =>
   send(`${followPath(id)}/refresh`, 'POST', undefined, 'The refresh did not go through.')
+
+export type PerfPeriod = '1M' | '6M' | '12M' | 'FILING'
+
+export interface PerfWindow {
+  status: 'ok' | 'unavailable'
+  start?: string
+  end?: string
+  /** 0-based fractions: 0.12 is +12%. */
+  return?: number
+  benchmark_return?: number
+  covered_weight?: number
+  series: { date: string; portfolio: number; benchmark: number | null }[]
+  holdings: Record<string, number>
+  missing: string[]
+}
+
+/** Price return of a follow's CURRENT top holdings at their filed weights, against the
+ *  owner's benchmark. Not the fund's or the member's own return. */
+export interface FollowPerformance {
+  benchmark: string
+  periods: Partial<Record<PerfPeriod, PerfWindow>>
+  /** "<trade date>|<symbol>" to the return since that trade, for a member's counted trades. */
+  trade_returns: Record<string, number>
+}
+
+export const performanceKey = (id: string) => `${FOLLOWING_KEY}/${id}/performance`
+
+export const fetchPerformance = (id: string) => readJson<FollowPerformance>(performanceKey(id))

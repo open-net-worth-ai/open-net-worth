@@ -83,3 +83,57 @@ export function exitedDetail(x: FollowModel['exited'][number]): string {
   const value = x.prev_value ? `, about ${usd(x.prev_value)}` : ''
   return ` (all ${fCompact(x.prev_shares)} shares${value})`
 }
+
+/** "+12.4%", "−3.1%", or "—" when unknown. `unit` swaps the sign for points ("+3.2 pts"). */
+export function signedPct(n: number | null | undefined, unit: '%' | 'pts' = '%'): string {
+  if (n == null || Number.isNaN(n)) return '—'
+  const body = Math.abs(n * 100).toFixed(1)
+  return `${n >= 0 ? '+' : '−'}${body}${unit === '%' ? '%' : ' pts'}`
+}
+
+export const toneOf = (n: number | null | undefined): 'up' | 'down' | 'flat' =>
+  n == null || Number.isNaN(n) || n === 0 ? 'flat' : n > 0 ? 'up' : 'down'
+
+export interface MoveRow {
+  symbol: string
+  name: string
+  /** Approximate dollars, signed: a buy is positive, a sale negative. */
+  value: number
+  label: string
+  detail: string
+  title: string
+}
+
+/** A fund's moves between its last two filings, biggest first. */
+export function moveRows(model: FollowModel): MoveRow[] {
+  const rows: MoveRow[] = []
+  for (const h of model.holdings) {
+    const detail = changeDetail(h, model)
+    if (h.change === 'unchanged' || !detail || h.shares_change == null) continue
+    const sign = h.shares_change > 0 ? '+' : '−'
+    rows.push({
+      symbol: h.symbol,
+      name: h.name,
+      value: h.change_value ?? 0,
+      label: `${h.change === 'new' ? 'New · ' : ''}${sign}${usd(h.change_value ?? 0)}`,
+      detail: `${sign}${fCompact(Math.abs(h.shares_change))} shares${
+        h.shares_change_pct == null
+          ? ''
+          : ` (${fPct(h.shares_change_pct, { fraction: true, sign: true })})`
+      }`,
+      title: detail.title,
+    })
+  }
+  for (const x of model.exited) {
+    if (!x.prev_shares) continue
+    rows.push({
+      symbol: x.symbol,
+      name: x.name,
+      value: -(x.prev_value ?? 0),
+      label: `Sold out · −${usd(x.prev_value ?? 0)}`,
+      detail: `all ${fCompact(x.prev_shares)} shares`,
+      title: 'Held in the previous filing, gone from this one.',
+    })
+  }
+  return rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+}

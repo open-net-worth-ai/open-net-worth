@@ -1,11 +1,13 @@
 import './following.css'
 
 import { useState } from 'react'
-import { Button, EmptyState, ErrorState, TabSkeleton } from '../../ui'
+import { Button, ErrorState, TabSkeleton } from '../../ui'
 import { Plus } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { COPY } from './following.copy'
+import { FollowChip } from './FollowChip'
 import { FollowDialog } from './FollowDialog'
+import { Gallery } from './Gallery'
 import { FollowView } from './FollowView'
 import { useFollowList } from './useFollowing'
 
@@ -43,22 +45,21 @@ export function FollowingTab({ onAskLucius }: Props) {
     />
   )
   const followButton = (
-    <Button
-      variant="primary"
-      size="sm"
-      iconLeft={<Plus size={14} />}
-      onClick={() => setDialogOpen(true)}
-    >
+    <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setDialogOpen(true)}>
       {isMobile && selected ? COPY.followShort : COPY.follow}
     </Button>
   )
 
   if (!selected)
     return (
-      <>
-        <EmptyState title={COPY.emptyTitle} body={COPY.emptyBody} action={followButton} />
-        {dialog}
-      </>
+      <div className="fol-page">
+        <Gallery
+          onFollowed={(follow) => {
+            setPickedId(follow.id)
+            void list.refresh()
+          }}
+        />
+      </div>
     )
 
   return (
@@ -66,17 +67,12 @@ export function FollowingTab({ onAskLucius }: Props) {
       <div className="fol-bar">
         <div className="fol-chips" role="tablist" aria-label={COPY.listTitle}>
           {follows.map((f) => (
-            <button
+            <FollowChip
               key={f.id}
-              type="button"
-              role="tab"
-              aria-selected={f.id === selected.id}
-              className={`fol-chip${f.id === selected.id ? ' is-on' : ''}`}
-              onClick={() => setPickedId(f.id)}
-            >
-              {f.name}
-              <span className="fol-chip-n">{f.model?.holdings.length ?? 0}</span>
-            </button>
+              follow={f}
+              selected={f.id === selected.id}
+              onSelect={() => setPickedId(f.id)}
+            />
           ))}
         </div>
         {followButton}

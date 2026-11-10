@@ -4,6 +4,8 @@ GET    /api/followed-portfolios/directory       — ?q=: well-known portfolios, 
 POST   /api/followed-portfolios                 — follow one ({kind, source_ref}); fetches its filing
 DELETE /api/followed-portfolios/{id}            — unfollow
 POST   /api/followed-portfolios/{id}/refresh    — re-read the source now
+GET    /api/followed-portfolios/{id}/performance — its current holdings' price return against
+                                                  the benchmark, by window (not the fund's own return)
 
 Behind the ``followed_portfolios`` flag: every route 404s while it is off. Rules and writes live
 in ``services.followed_portfolios.service.apply_followed_portfolio_change``.
@@ -67,3 +69,8 @@ def unfollow_portfolio(follow_id: str):
 @router.post("/api/followed-portfolios/{follow_id}/refresh")
 def refresh_followed_portfolio(follow_id: str):
     return _run(service.apply_followed_portfolio_change, {"op": "refresh", "id": follow_id})
+
+
+@router.get("/api/followed-portfolios/{follow_id}/performance")
+def followed_portfolio_performance(follow_id: str):
+    return _run(service.follow_performance, follow_id)

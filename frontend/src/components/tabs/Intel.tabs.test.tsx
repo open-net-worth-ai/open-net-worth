@@ -219,7 +219,7 @@ describe('Intel tabs', () => {
       url === '/api/followed-portfolios' ? ok({ follows: [] }) : base(url),
     )
     const on = mount({ subTabRequest: 'following' })
-    expect(await within(on.container).findByText('Follow a famous portfolio')).toBeTruthy()
+    expect(await within(on.container).findByText('Pick a portfolio to follow')).toBeTruthy()
     const labels = [...on.container.querySelectorAll('[role="tab"]')].map((b) => b.textContent)
     expect(labels.at(-1)).toBe('Following')
     expect(on.container.querySelector('.intel-layout')).toBeNull()

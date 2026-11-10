@@ -40,32 +40,45 @@ Limits you should know:
 
 ## Follow a portfolio
 
-1. Open **Intel → Following** and click **Follow a portfolio**.
-2. Pick one from the list, or search by fund or member name.
-3. Click **Follow**. Fetching the filing takes a few seconds.
+1. Open **Intel → Following**. The first time, it shows well-known portfolios to pick from.
+2. Click **Follow** on one, or search by fund or member name.
+3. Fetching the filing takes a few seconds. Later, add more with **Follow a portfolio**.
 
-Each portfolio you follow gets a chip at the top of the screen. Pick one to see when it was
-filed and how old that is, its top 20 holdings with their weights, and what changed since the
-previous filing (new, added, trimmed, sold out). A member also shows their recent trades.
+The portfolios you follow sit in a row at the top, each with its past-year figure. Opening one
+shows:
 
-What each change tells you depends on the source:
-
-- **A fund.** The filing gives share counts at two quarter-ends, so an "Added" or "Trimmed"
-  holding shows how many shares changed, the percent, and the two dates it happened between. A
-  13F gives no trade dates and no trade prices, so the dollar figure beside it uses the
-  quarter-end price and is approximate. Hover the figure for the full sentence.
-- **A House member.** Each holding shows the latest disclosed trade in it: the trade date and
-  the dollar range reported. Members do not report share counts or prices.
+- **How its holdings have done.** A large figure and a chart compare the price return of the
+  portfolio's current top holdings, at their filed weights, with your benchmark. Switch between
+  **1M**, **6M**, **12M** and **Since filing**.
+  - **Since filing** is what copying it on the day it was filed would have returned, before
+    costs and dividends.
+  - **1M**, **6M** and **12M** apply today's holdings to the past. They are not the fund's own return,
+    and they flatter a portfolio that recently bought its winners.
+- **Latest moves** (a fund). One bar per stock it bought or sold between its last two filings,
+  with the approximate dollar value and the share change. A 13F gives share counts at two
+  quarter-ends and nothing else: no trade dates and no trade prices, so the dollar figures use
+  the quarter-end price.
+- **Recent trades** (a House member). Each disclosed trade with its date, the dollar range
+  reported, and how the stock has moved since. Members do not report share counts or prices.
+- **Holdings.** The top 20 by weight, each with its own return over the window you chose.
 
 Filings are checked twice a day. A new one updates the portfolio and adds a story to **Intel**.
-Use **Refresh** in the **⋯** menu beside the buttons to check now; **Unfollow** is in the same menu. If a check fails, the last portfolio stays and the screen says
-what went wrong. A fund whose latest filing is more than about two quarters old, or a member
-with no report for a year, is marked out of date.
+Use **Refresh** in the **⋯** menu on the card to check now; **Unfollow** is in the same menu. If
+a check fails, the last portfolio stays and the screen says what went wrong. A fund whose latest
+filing is more than about two quarters old, or a member with no report for a year, is marked
+out of date.
 
 ## Copy a portfolio
 
-Copy trading is an automation, not a button on this screen. Open a follow and click **Copy in
-Automations**, or open **Automations** and pick **Copy a followed portfolio**.
+There are two ways.
+
+**Copy one trade now.** Point at a row under **Latest moves** or **Recent trades** and click
+**Copy trade**. Lucius gets that one trade, checks your broker account and what you already
+hold, suggests a size, and drafts the order for you to approve.
+
+**Copy the whole portfolio, every week.** Click **Start copy trading**, the main button beside
+the chart. It opens a ready-made automation; you can also find it in **Automations** as **Copy a
+followed portfolio**.
 
 The automation is a set of instructions for Lucius that you edit before saving:
 

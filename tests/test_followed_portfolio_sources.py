@@ -9,7 +9,7 @@ from datetime import date
 import pytest
 
 from backend.core.errors import ExternalServiceError, ValidationError
-from backend.services.followed_portfolios import edgar_13f, figi, house_ptr
+from backend.services.followed_portfolios import edgar_13f, figi, house_ptr, performance
 from backend.services.followed_portfolios.model import build_model, normalize_symbol, status_of
 
 TODAY = date(2026, 11, 10)
@@ -551,3 +551,96 @@ def test_model_top_n_is_a_read_time_choice():
 def test_a_member_with_no_report_for_a_year_reads_as_out_of_date():
     quiet = {"kind": "house_member", "current": _snap("2025-11-01", ("ACME", "ACME", 1, 1))}
     assert status_of(quiet, build_model(quiet, TODAY)) == "stale"
+
+
+# ── performance of the current holdings ─────────────────────────────────────────────
+
+
+def _days(start: date, n: int) -> list[str]:
+    from datetime import timedelta
+
+    return [(start + timedelta(days=i)).isoformat() for i in range(n)]
+
+
+def test_performance_weights_each_holdings_price_return_against_the_benchmark():
+    days = _days(date(2026, 8, 14), 4)
+    out = performance.build_performance(
+        weights={"ACME": 0.75, "BOLT": 0.25},
+        closes={
+            "ACME": dict(zip(days, [100, 110, 120, 130])),
+            "BOLT": dict(zip(days, [50, 50, 45, 40])),
+        },
+        bench=dict(zip(days, [400, 404, 408, 420])),
+        filed_at="2026-08-14",
+        today=date(2026, 8, 17),
+    )
+    filing = out["periods"]["FILING"]
+    assert filing["status"] == "ok" and (filing["start"], filing["end"]) == (days[0], days[-1])
+    assert filing["return"] == pytest.approx(0.75 * 0.30 + 0.25 * -0.20)
+    assert filing["benchmark_return"] == pytest.approx(0.05)
+    assert filing["holdings"] == {"ACME": pytest.approx(0.30), "BOLT": pytest.approx(-0.20)}
+    assert filing["series"][0] == {"date": days[0], "portfolio": 0.0, "benchmark": 0.0}
+    assert set(out["periods"]) == {"1M", "6M", "12M", "FILING"}
+
+
+def test_performance_leaves_out_a_holding_with_no_price_and_reweights_the_rest():
+    days = _days(date(2026, 8, 14), 3)
+    out = performance.build_performance(
+        weights={"ACME": 0.5, "GHOST": 0.5},
+        closes={"ACME": dict(zip(days, [100, 100, 110])), "GHOST": {days[2]: 9.0}},
+        bench=dict(zip(days, [1, 1, 1])),
+        filed_at="2026-08-14",
+        today=date(2026, 8, 16),
+    )
+    filing = out["periods"]["FILING"]
+    assert filing["return"] == pytest.approx(0.10)
+    assert filing["missing"] == ["GHOST"] and filing["covered_weight"] == 0.5
+
+
+def test_performance_carries_a_close_over_a_day_one_venue_was_shut():
+    days = _days(date(2026, 8, 14), 3)
+    out = performance.build_performance(
+        weights={"ACME": 1.0},
+        closes={"ACME": {days[0]: 100.0, days[2]: 120.0}},
+        bench=dict(zip(days, [1, 1, 1])),
+        filed_at="2026-08-14",
+        today=date(2026, 8, 16),
+    )
+    assert [p["portfolio"] for p in out["periods"]["FILING"]["series"]] == [0.0, 0.0, 0.2]
+
+
+def test_performance_is_unavailable_without_two_benchmark_days_or_any_priced_holding():
+    one_day = performance.build_performance(
+        weights={"ACME": 1.0},
+        closes={"ACME": {"2026-08-14": 1.0}},
+        bench={"2026-08-14": 1.0},
+        filed_at="2026-08-14",
+        today=date(2026, 8, 14),
+    )
+    assert one_day["periods"]["FILING"]["status"] == "unavailable"
+    nothing = performance.build_performance(
+        weights={"ACME": 1.0},
+        closes={},
+        bench={"2026-08-14": 1.0, "2026-08-15": 1.0},
+        filed_at="2026-08-14",
+        today=date(2026, 8, 15),
+    )
+    assert nothing["periods"]["FILING"]["status"] == "unavailable"
+
+
+def test_a_members_counted_trade_gets_its_return_since_the_trade_date():
+    days = _days(date(2026, 8, 14), 3)
+    out = performance.build_performance(
+        weights={"ACME": 1.0},
+        closes={"ACME": dict(zip(days, [100, 110, 150]))},
+        bench=dict(zip(days, [1, 1, 1])),
+        filed_at="2026-08-14",
+        today=date(2026, 8, 16),
+        activity=[
+            {"date": days[1], "symbol": "ACME", "counted": True},
+            {"date": days[1], "symbol": "ACME", "counted": False},
+            {"date": "2020-01-01", "symbol": "ACME", "counted": True},
+            {"date": days[0], "symbol": "NOPE", "counted": True},
+        ],
+    )
+    assert out["trade_returns"] == {f"{days[1]}|ACME": pytest.approx(150 / 110 - 1)}

@@ -251,6 +251,20 @@ def test_directory_survives_a_source_that_is_down(source, monkeypatch):
     assert service.directory("acme")["results"] == []
 
 
+def test_performance_route_serves_the_services_answer_and_404s_for_a_stranger(client, monkeypatch):
+    fid = _follow()["id"]
+    asked = []
+
+    def fake(row):
+        asked.append(row["id"])
+        return {"benchmark": "SPY", "periods": {}, "trade_returns": {}}
+
+    monkeypatch.setattr(service.performance, "performance_for", fake)
+    got = client.get(f"/api/followed-portfolios/{fid}/performance")
+    assert got.status_code == 200 and got.json()["benchmark"] == "SPY" and asked == [fid]
+    assert client.get("/api/followed-portfolios/fol_missing/performance").status_code == 404
+
+
 def test_rest_round_trip(client):
     assert client.get("/api/followed-portfolios").json() == {"follows": []}
     found = client.get("/api/followed-portfolios/directory", params={"q": "acme"}).json()

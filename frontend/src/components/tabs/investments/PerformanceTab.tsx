@@ -46,9 +46,20 @@ interface PerfChartProps {
   hasBenchmark: boolean
   benchLabel: string
   period: ReturnPeriod
+  /** Name the main line in the tooltip (default "Portfolio"). */
+  mainLabel?: string
+  /** Read each point's own date in the tooltip, for a window `period` cannot describe. */
+  exactDates?: boolean
 }
 
-function PerfChart({ series, hasBenchmark, benchLabel, period }: PerfChartProps) {
+export function PerfChart({
+  series,
+  hasBenchmark,
+  benchLabel,
+  period,
+  mainLabel,
+  exactDates,
+}: PerfChartProps) {
   const [hi, setHi] = useState<number | null>(null)
 
   const port = series.map((p) => p.portfolio)
@@ -73,6 +84,7 @@ function PerfChart({ series, hasBenchmark, benchLabel, period }: PerfChartProps)
   const span = spanDays[period] || 365
 
   function dateAt(i: number): string {
+    if (exactDates && series[i]) return fDate(series[i].date)
     const d = new Date()
     d.setDate(d.getDate() - Math.round(span * (1 - (N > 1 ? i / (N - 1) : 1))))
     return fDate(d)
@@ -178,7 +190,7 @@ function PerfChart({ series, hasBenchmark, benchLabel, period }: PerfChartProps)
             <div className="mk-chart-tip-d">{dateAt(hi)}</div>
             <div className="mk-chart-tip-r">
               <i className="good" />
-              <span>Portfolio</span>
+              <span>{mainLabel ?? 'Portfolio'}</span>
               <b className={(port[hi]! >= 0 ? 'pos' : 'neg') + ' money'}>{fmtReturn(port[hi]!)}</b>
             </div>
             {bench && (

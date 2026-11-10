@@ -6,8 +6,11 @@ import {
   directoryKey,
   fetchDirectory,
   fetchFollowList,
+  fetchPerformance,
+  performanceKey,
   type DirectoryEntry,
   type FollowList,
+  type FollowPerformance,
 } from '../../../api/followedPortfolios'
 
 const DEBOUNCE_MS = 250
@@ -26,4 +29,13 @@ export function useDirectory(typed: string): QueryCacheResult<DirectoryEntry[]> 
   }, [typed])
   const query = useQueryCache(directoryKey(q), () => fetchDirectory(q))
   return { ...query, q }
+}
+
+// One answer costs a price-history fetch per holding, and closes move once a day.
+const PERFORMANCE_STALE_MS = 10 * 60 * 1000
+
+export function usePerformance(id: string): QueryCacheResult<FollowPerformance> {
+  return useQueryCache(performanceKey(id), () => fetchPerformance(id), {
+    staleTime: PERFORMANCE_STALE_MS,
+  })
 }

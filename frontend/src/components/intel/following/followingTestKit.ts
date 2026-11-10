@@ -1,5 +1,10 @@
 import { vi } from 'vitest'
-import type { DirectoryEntry, Follow } from '../../../api/followedPortfolios'
+import type {
+  DirectoryEntry,
+  Follow,
+  FollowPerformance,
+  PerfWindow,
+} from '../../../api/followedPortfolios'
 
 export function fund(over: Partial<Follow> = {}): Follow {
   return {
@@ -13,22 +18,43 @@ export function fund(over: Partial<Follow> = {}): Follow {
     last_checked_at: '2026-11-09T08:00:00Z',
     model: {
       as_of: '2026-06-30',
+      prev_as_of: '2026-03-31',
       filed_at: '2026-08-14',
       age_days: 88,
       estimated: false,
       holdings: [
-        { symbol: 'ACME', name: 'Acme Corp', weight: 0.224, prev_weight: 0.241, change: 'reduced' },
+        {
+          symbol: 'ACME',
+          name: 'Acme Corp',
+          weight: 0.224,
+          prev_weight: 0.241,
+          change: 'reduced',
+          shares: 1_000_000,
+          prev_shares: 1_500_000,
+          shares_change: -500_000,
+          shares_change_pct: -1 / 3,
+          price: 30,
+          change_value: -15_000_000,
+        },
         {
           symbol: 'BOLT',
           name: 'Bolt Inc',
           weight: 0.109,
           prev_weight: 0.103,
           change: 'increased',
+          shares: 400,
+          prev_shares: 200,
+          shares_change: 200,
+          shares_change_pct: 1,
+          price: 10_000,
+          change_value: 2_000_000,
         },
         { symbol: 'CRUX', name: 'Crux Holdings', weight: 0.032, prev_weight: null, change: 'new' },
         { symbol: 'DUNE', name: 'Dune Ltd', weight: 0.05, prev_weight: 0.05, change: 'unchanged' },
       ],
-      exited: [{ symbol: 'OXYZ', name: 'Oxyz Energy' }],
+      exited: [
+        { symbol: 'OXYZ', name: 'Oxyz Energy', prev_shares: 3_200_000, prev_value: 96_000_000 },
+      ],
       unmatched: [{ name: 'Mystery Trust', weight: 0.041 }],
       unread_reports: 0,
     },
@@ -125,8 +151,39 @@ export const DIRECTORY: DirectoryEntry[] = [
   },
 ]
 
+const window_ = (ret: number, bench: number, holdings: Record<string, number>): PerfWindow => ({
+  status: 'ok',
+  start: '2025-11-10',
+  end: '2026-11-10',
+  return: ret,
+  benchmark_return: bench,
+  covered_weight: 1,
+  series: [
+    { date: '2025-11-10', portfolio: 0, benchmark: 0 },
+    { date: '2026-05-10', portfolio: ret / 2, benchmark: bench / 2 },
+    { date: '2026-11-10', portfolio: ret, benchmark: bench },
+  ],
+  holdings,
+  missing: [],
+})
+
+export function performance(over: Partial<FollowPerformance> = {}): FollowPerformance {
+  return {
+    benchmark: 'SPY',
+    periods: {
+      '12M': window_(0.163, 0.108, { ACME: 0.294, BOLT: -0.107, CRUX: 0.05, DUNE: 0, NOVA: 0.2 }),
+      '6M': window_(0.081, 0.06, { ACME: 0.1, BOLT: 0.02, NOVA: 0.03 }),
+      '1M': window_(0.021, 0.034, { ACME: 0.01, BOLT: 0.02, NOVA: 0.03 }),
+      FILING: window_(-0.012, -0.035, { ACME: -0.02, BOLT: 0.004, NOVA: 0.01 }),
+    },
+    trade_returns: { '2026-10-02|NOVA': 0.102 },
+    ...over,
+  }
+}
+
 export interface Server {
   follows: Follow[]
+  performance?: FollowPerformance | null
   directory: DirectoryEntry[]
   followResult?: { status: number; body: unknown }
   failList?: boolean
@@ -164,6 +221,10 @@ export function installServer(authFetch: ReturnType<typeof vi.fn>, server: Serve
       const [gone] = server.follows.splice(at, 1)
       return json({ follow: gone, new_filing: false })
     }
+    if (url.endsWith('/performance'))
+      return server.performance === null
+        ? json({ detail: 'no prices' }, 502)
+        : json(server.performance ?? performance())
     if (url.endsWith('/refresh')) {
       const f = server.follows[at]!
       f.last_checked_at = '2026-11-10T09:30:00Z'

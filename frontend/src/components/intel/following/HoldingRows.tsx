@@ -1,122 +1,61 @@
-import { useState } from 'react'
 import { fPct } from '../../../utils/format'
-import type { FollowModel, HoldingChange, ModelHolding } from '../../../api/followedPortfolios'
+import type { FollowModel, PerfPeriod, PerfWindow } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
-import { changeDetail, exitedDetail } from './following.format'
+import { signedPct, toneOf, tradeLine } from './following.format'
 
-type Filter = 'all' | Exclude<HoldingChange, 'unchanged'>
-
-const CHANGE: Record<Exclude<HoldingChange, 'unchanged'>, { cls: string; label: string }> = {
-  new: { cls: 'up', label: 'New' },
-  increased: { cls: 'up', label: 'Added' },
-  reduced: { cls: 'down', label: 'Trimmed' },
-}
-const FILTERS: { value: Filter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'new', label: 'New' },
-  { value: 'increased', label: 'Added' },
-  { value: 'reduced', label: 'Trimmed' },
-]
-
-const pct = (n: number | null) => (n === null ? '—' : fPct(n, { fraction: true }))
-
-interface RowProps {
-  h: ModelHolding
+interface Props {
   model: FollowModel
-  compare: boolean
-  top: number
+  period: PerfPeriod
+  win: PerfWindow | undefined
 }
 
-function Row({ h, model, compare, top }: RowProps) {
-  const change = h.change === 'unchanged' ? null : CHANGE[h.change]
-  const detail = changeDetail(h, model)
+const pct = (n: number) => fPct(n, { fraction: true })
+
+/** Every holding shown, largest first: its weight as a bar, and its own return over the window
+ *  the chart above is showing. One quiet list; the moves have their own section. */
+export function HoldingRows({ model, period, win }: Props) {
+  const top = Math.max(...model.holdings.map((h) => h.weight), 0.0001)
+  const returns = win?.status === 'ok' ? win.holdings : {}
   return (
-    <article className="fol-card">
-      <div className="fol-grid">
-        <div className="fol-id">
-          <div className="fol-sym">{h.symbol}</div>
-          <div className="fol-sub">{h.name}</div>
-        </div>
-        <span className="fol-track fol-wide" aria-hidden="true">
-          <span className="fol-fill" style={{ width: `${Math.max(2, (h.weight / top) * 100)}%` }} />
-        </span>
-        <span className="fol-num">{pct(h.weight)}</span>
-        <span className="fol-num fol-num--soft fol-wide">{compare ? pct(h.prev_weight) : ''}</span>
-        <div className="fol-change" title={detail?.title}>
-          {change && <span className={`fol-pill ${change.cls}`}>{change.label}</span>}
-          {detail && <span className="fol-sub">{detail.line}</span>}
-        </div>
+    <section className="fol-sec" aria-label={COPY.holdingsTitle}>
+      <div className="fol-sec-head">
+        <h3 className="fol-sec-title">{COPY.holdingsTitle}</h3>
+        <span className="fol-sec-sub">{model.holdings.length} shown</span>
       </div>
-    </article>
-  )
-}
-
-function Footnotes({ model }: { model: FollowModel }) {
-  return (
-    <>
-      {model.exited.length > 0 && (
-        <p className="fol-foot">
-          {COPY.exited}{' '}
-          {model.exited.map((x, i) => (
-            <span key={x.symbol}>
-              {i > 0 && ', '}
-              <b>{x.symbol}</b> {x.name}
-              {exitedDetail(x)}
+      <div className="fol-hold fol-head" aria-hidden="true">
+        <span />
+        <span>Stock</span>
+        <span>Weight</span>
+        <span />
+        <span>{COPY.perfColumn[period]}</span>
+      </div>
+      <ol className="fol-holds">
+        {model.holdings.map((h, i) => (
+          <li key={h.symbol} className="fol-hold">
+            <span className="fol-rank">{i + 1}</span>
+            <div className="fol-id">
+              <div className="fol-sym">{h.symbol}</div>
+              <div className="fol-sub">{h.last_trade ? tradeLine(h.last_trade) : h.name}</div>
+            </div>
+            <span className="fol-num">{pct(h.weight)}</span>
+            <span className="fol-track" aria-hidden="true">
+              <span
+                className="fol-fill"
+                style={{ width: `${Math.max(2, (h.weight / top) * 100)}%` }}
+              />
             </span>
-          ))}
-        </p>
-      )}
+            <span className={`fol-num ${toneOf(returns[h.symbol])}`}>
+              {signedPct(returns[h.symbol])}
+            </span>
+          </li>
+        ))}
+      </ol>
       {model.unmatched.length > 0 && (
         <p className="fol-foot">
           {COPY.unmatched(model.unmatched.length)}{' '}
           {model.unmatched.map((x) => `${x.name} (${pct(x.weight)})`).join(', ')}
         </p>
       )}
-    </>
-  )
-}
-
-export function HoldingRows({ model }: { model: FollowModel }) {
-  const [filter, setFilter] = useState<Filter>('all')
-  const compare = model.exited.length > 0 || model.holdings.some((h) => h.change !== 'unchanged')
-  const count = (f: Filter) =>
-    f === 'all' ? model.holdings.length : model.holdings.filter((h) => h.change === f).length
-  const rows = filter === 'all' ? model.holdings : model.holdings.filter((h) => h.change === filter)
-  const top = Math.max(...model.holdings.map((h) => h.weight), 0.0001)
-  return (
-    <section className="fol-sec" aria-label={COPY.holdingsTitle}>
-      <div className="fol-sec-head">
-        <h3 className="fol-sec-title">{COPY.holdingsTitle}</h3>
-        {compare && (
-          <div className="fol-chips" role="tablist" aria-label={COPY.filterLabel}>
-            {FILTERS.filter((f) => f.value === 'all' || count(f.value) > 0).map((f) => (
-              <button
-                key={f.value}
-                type="button"
-                role="tab"
-                aria-selected={filter === f.value}
-                className={`fol-chip${filter === f.value ? ' is-on' : ''}`}
-                onClick={() => setFilter(f.value)}
-              >
-                {f.label}
-                <span className="fol-chip-n">{count(f.value)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="fol-grid fol-head" aria-hidden="true">
-        <span>Stock</span>
-        <span className="fol-wide" />
-        <span>Weight</span>
-        <span className="fol-wide">{compare ? 'Last filing' : ''}</span>
-        <span>{model.estimated ? 'Latest trade' : compare ? 'Change' : ''}</span>
-      </div>
-      {rows.map((h) => (
-        <Row key={h.symbol} h={h} model={model} compare={compare} top={top} />
-      ))}
-      {compare && !model.estimated && <p className="fol-foot">{COPY.changeBasis}</p>}
-      <Footnotes model={model} />
     </section>
   )
 }
