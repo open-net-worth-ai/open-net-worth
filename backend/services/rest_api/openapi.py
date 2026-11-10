@@ -19,7 +19,7 @@ from urllib.parse import urljoin
 
 import yaml
 
-from backend.core.errors import ExternalServiceError, ValidationError
+from backend.core.errors import ValidationError
 from backend.core.net_guard import UnsafeUrlError
 from backend.core.pinned_http import PinnedFetchError, pinned_urlopen
 from backend.core.untrusted import sanitize_untrusted
@@ -40,10 +40,20 @@ def fetch_spec(url: str) -> str:
             raw = response.read(MAX_SPEC_BYTES + 1)
     except UnsafeUrlError as exc:
         raise ValidationError(f"That address cannot be fetched: {exc}")
+    # A ValidationError (422), not an ExternalServiceError (502), on purpose: the address is
+    # something the owner typed and can correct, and a 502 does not survive a reverse proxy.
+    # Behind a Cloudflare tunnel the proxy swaps its own error page in for ours, so the form
+    # could only say "Could not import that document" with the reason gone (owner, 2026-11-11).
     except urllib.error.HTTPError as exc:
-        raise ExternalServiceError(f"The server answered {exc.code} for that document.")
+        raise ValidationError(
+            f"That address answered {exc.code}, not a document. Check it is the OpenAPI "
+            "document's own address, or paste the document instead."
+        )
     except (urllib.error.URLError, PinnedFetchError, OSError) as exc:
-        raise ExternalServiceError(f"Could not download the document ({type(exc).__name__}).")
+        raise ValidationError(
+            f"Could not reach that address ({type(exc).__name__}). Check it, or paste the "
+            "document instead."
+        )
     if len(raw) > MAX_SPEC_BYTES:
         raise ValidationError("That document is over 10 MB. Paste the part you need instead.")
     return raw.decode("utf-8", errors="replace")

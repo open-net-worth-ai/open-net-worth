@@ -10,12 +10,12 @@
 // persists the change — the detail page against the saved config, the MCP add flow
 // against a local draft that is only written when the server is created.
 
-import { useEffect, useRef, useState, type JSX } from 'react'
-import { Badge, Btn } from './primitives'
-import { icon, Icons } from './icons'
+import { useState, type JSX } from 'react'
+import { Badge } from './primitives'
+import { Icons } from './icons'
+import { GroupLevelMenu, LevelSeg } from './PermissionControls'
 import {
   LEVELS,
-  TOOL_LEVELS,
   deriveGroupLevel,
   toolPermission,
   type PermissionLevel,
@@ -33,6 +33,12 @@ export interface PermissionLadderProps {
   onSetGroup: (tools: string[], level: PermissionLevel) => void
   /** How each level is named and drawn. */
   levels?: typeof LEVELS
+  /** What a tool is called on its row, when that is not its full name. A REST API's tools are
+   *  `rest__<api>__<tool>`, and on that API's own page the first two parts say nothing. The
+   *  full name stays the key, and shows on hover. */
+  toolLabel?: (tool: string) => string
+  /** A second line under a tool's name, where one helps: what a REST tool calls. */
+  toolSub?: (tool: string) => string | undefined
 }
 
 export function PermissionLadder({
@@ -41,34 +47,18 @@ export function PermissionLadder({
   onSetTool,
   onSetGroup,
   levels = LEVELS,
+  toolLabel,
+  toolSub,
 }: PermissionLadderProps): JSX.Element {
   // Every group starts EXPANDED (2026-08-18, owner request — spec §4's collapse-past-6-tools
   // default read as hiding real tool names behind an extra click). A later refresh that
   // lengthens a group still does not re-collapse it under the user, and their own toggles
   // always win — this only changes the seed, not the mechanism.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const [groupMenu, setGroupMenu] = useState<string | null>(null)
-
-  // The group menu is a popover, so a click anywhere else dismisses it — matching `Kebab`.
-  // The prototype left it open until something was picked.
-  const root = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!groupMenu) return
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Element | null
-      // A mousedown inside one of THIS ladder's group controls is that control's business.
-      if (target && root.current?.contains(target) && target.closest('.rd-kebab')) return
-      setGroupMenu(null)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [groupMenu])
-
   return (
-    <div ref={root} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {groups.map((g) => {
         const level = deriveGroupLevel(g.tools, perms)
-        const GroupIcon = icon(levels[level].icon)
         return (
           <div key={g.name}>
             <div
@@ -104,65 +94,30 @@ export function PermissionLadder({
                 {g.name}
                 <Badge>{g.tools.length}</Badge>
               </span>
-              <span className="rd-kebab">
-                <Btn
-                  size="xs"
-                  aria-expanded={groupMenu === g.name}
-                  onClick={() => setGroupMenu(groupMenu === g.name ? null : g.name)}
-                  style={{ fontSize: 12.5 }}
-                >
-                  <GroupIcon /> {levels[level].label}{' '}
-                  <span style={{ display: 'inline-flex', width: 12, height: 12 }}>
-                    <Icons.chev />
-                  </span>
-                </Btn>
-                {groupMenu === g.name && (
-                  <span className="rd-kebab-pop">
-                    {(Object.keys(levels) as (keyof typeof levels)[]).map((lv) => {
-                      const ItemIcon = icon(levels[lv].icon)
-                      return (
-                        <button
-                          key={lv}
-                          className="rd-kebab-item"
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
-                          onClick={() => {
-                            if (lv !== 'custom') onSetGroup(g.tools, lv)
-                            setGroupMenu(null)
-                          }}
-                        >
-                          <ItemIcon /> {levels[lv].label}
-                        </button>
-                      )
-                    })}
-                  </span>
-                )}
-              </span>
+              <GroupLevelMenu
+                value={level}
+                onPick={(lv) => onSetGroup(g.tools, lv)}
+                levels={levels}
+              />
             </div>
             {!collapsed[g.name] && (
               <div className="cn-permlist">
                 {g.tools.map((t) => (
                   <div key={t} className="cn-permrow2">
-                    <span className="cn-permtool" style={{ fontSize: 13.5 }}>
-                      {t}
+                    <span
+                      className="cn-permtool"
+                      style={{ fontSize: 13.5 }}
+                      title={toolLabel ? t : undefined}
+                    >
+                      {toolLabel ? toolLabel(t) : t}
+                      {toolSub?.(t) ? <span className="cn-permsub">{toolSub(t)}</span> : null}
                     </span>
-                    <span className="cn-permseg">
-                      {TOOL_LEVELS.map((lv) => {
-                        const LevelIcon = icon(levels[lv].icon)
-                        const on = toolPermission(perms, t) === lv
-                        return (
-                          <button
-                            key={lv}
-                            className={'cn-permbtn' + (on ? ` on ${levels[lv].tone}` : '')}
-                            title={levels[lv].label}
-                            aria-label={`${t}: ${levels[lv].label}`}
-                            aria-pressed={on}
-                            onClick={() => onSetTool(t, lv)}
-                          >
-                            <LevelIcon />
-                          </button>
-                        )
-                      })}
-                    </span>
+                    <LevelSeg
+                      label={toolLabel ? toolLabel(t) : t}
+                      value={toolPermission(perms, t)}
+                      onChange={(lv) => onSetTool(t, lv)}
+                      levels={levels}
+                    />
                   </div>
                 ))}
               </div>

@@ -9622,18 +9622,131 @@ body.hide-amounts .mask * {
   .rest-path {
     font-family: var(--font-mono);
   }
+  /* "Change the ID" under the Name field: a link inside the help line, not a button beside it. */
+  .rest-id-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+  }
+  .rest-id-link:hover {
+    text-decoration: underline;
+  }
   .rest-ep-open + .conn-acct-row,
   .conn-acct-row + .rest-ep-open,
   .rest-ep-open + .rest-ep-open {
     border-top: 1px solid var(--line);
   }
-  .rest-ep-form {
-    padding: var(--space-3);
+  /* A shared-kit select inside a connector's form (`.ui-select`): the browser draws its own arrow
+     hard against the right edge, whatever the padding. It gets this screen's arrow instead, set
+     in from the edge like `.rd-select`'s (owner, 2026-11-11). Here, not in connectors.css: that sheet may
+     only style a shared class if it re-declares everything else declared on it. */
+  .cn-page .ui-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa3b2' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  /* The endpoint list's two groups (read, write), headed like the permission ladder's. */
+  .rest-ep-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .rest-ep-grouphead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .rest-ep-chev {
+    display: inline-flex;
+    color: var(--faint);
+    transition: transform 0.15s;
+  }
+  .rest-ep-chev--open {
+    transform: rotate(90deg);
+  }
+  /* An endpoint's row: the endpoint itself is a button that opens its editor, and the
+     permission switch sits beside it on one line at every width, as an MCP tool's does. */
+  .rest-ep-row {
+    flex-wrap: nowrap;
+  }
+  .rest-ep-rowbtn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .rest-ep-rowbtn:hover .conn-acct-name {
+    color: var(--accent);
+  }
+  /* Edit and Remove: out of sight until the row is pointed at or tabbed into. Where rows
+     swipe instead (a touch screen) they are not drawn at all. */
+  .rest-ep-acts {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .rest-ep-row:hover .rest-ep-acts,
+  .rest-ep-row:focus-within .rest-ep-acts {
+    opacity: 1;
+  }
+  .rest-ep-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .rest-ep-icon:hover {
     background: var(--surface2);
+    color: var(--ink);
+  }
+  .rest-ep-icon--remove:hover {
+    color: var(--bad);
+  }
+  /* Where rows swipe, each is wrapped, so the list's own row-after-row rule no longer sees
+     two rows side by side. */
+  .rest-ep-group .ui-swipe + .ui-swipe,
+  .rest-ep-group .ui-swipe + .rest-ep-open,
+  .rest-ep-group .rest-ep-open + .ui-swipe {
+    border-top: 1px solid var(--line);
+  }
+  .rest-ep-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .rest-ep-text > span {
+    display: block;
   }
   .rest-ep-line {
     display: grid;
-    grid-template-columns: 110px minmax(0, 1fr);
+    /* The method picker is as wide as its longest word, not a fixed 110px box around "GET". */
+    grid-template-columns: max-content minmax(0, 1fr);
     gap: var(--space-2);
   }
   .rest-param-row {
@@ -9648,10 +9761,17 @@ body.hide-amounts .mask * {
     align-items: center;
     gap: var(--space-2);
   }
+  /* On a phone a row's fields stack, and what is left (Required, the bin) shares the last
+     line instead of taking one each. */
   @media (max-width: 640px) {
     .rest-param-row,
     .rest-header-row {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .rest-param-row > .rd-input,
+    .rest-param-row > .rd-select,
+    .rest-header-row > .rd-input {
+      grid-column: 1 / -1;
     }
   }
   @media (max-width: 640px) {

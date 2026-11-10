@@ -479,9 +479,9 @@ export const CATALOG: CatalogEntry[] = [
     // (`rest:<slug>`), so this entry never reads as installed: it is always "add another".
     id: 'rest',
     name: 'REST API',
-    families: ['Data source'],
-    // What it is FOR depends on the API it is pointed at; here that is most often a bank's.
-    categories: ['Banking'],
+    families: ['API'],
+    // What it is FOR depends on the API it is pointed at, so the label says only what it is.
+    categories: ['Custom API'],
     icon: 'link',
     hue: 'var(--cash-c)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["rest"]`.

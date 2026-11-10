@@ -244,9 +244,131 @@ def test_two_apis_cannot_share_a_name_or_an_id(db_isolated, name):
         apis.save_api(_payload(name=name))
 
 
+@pytest.mark.parametrize(
+    ("name", "slug"),
+    [
+        ("Acme Bank", "acme_bank"),
+        ("  My bank’s API!  ", "my_bank_s_api"),
+        # Too long: whole words go from the end, never half of one.
+        ("Swagger Petstore - OpenAPI 3.0", "swagger_petstore"),
+        ("A very long name that ends_ on a break", "a_very_long_name"),
+        ("abcdefghijklmnopqrs tuv", "abcdefghijklmnopqrs"),
+        ("Exactly twenty chars and more", "exactly_twenty_chars"),
+        ("Acme Bank International", "acme_bank"),
+        ("Acme Internationalbankingcorporation", "acme"),
+        # Dropping the long word would leave almost nothing: only then is a word cut.
+        ("Supercalifragilisticexpialidocious", "supercalifragilistic"),
+        ("A supercalifragilisticexpialidocious", "a_supercalifragilist"),
+        ("!!!", ""),
+    ],
+)
+def test_the_id_made_from_a_name(name, slug):
+    """The form shows this id under the name as it is typed (`restIdFromName`, the same cases
+    in restApi.test.ts), so the two rules must give the same answer."""
+    from backend.core.rest_tools import slug_from_name
+
+    assert slug_from_name(name) == slug
+
+
 def test_a_name_with_nothing_to_make_an_id_from_is_refused(db_isolated):
     with pytest.raises(ValidationError, match="letter or digit"):
         apis.save_api(_payload(name="日本"))
+
+
+def test_a_new_api_takes_the_id_the_owner_typed(db_isolated):
+    """The id is fixed for the connector's life, so the owner may choose it at the one moment
+    it can be chosen, instead of taking whatever the name gives."""
+    saved = apis.save_api(_payload(id="acme", name="Acme Bank International"))
+    assert saved["id"] == "acme" and saved["connector_id"] == "rest:acme"
+    assert apis.load("acme")["name"] == "Acme Bank International"
+    with pytest.raises(NotFoundError):
+        apis.load("acme_bank")
+
+
+@pytest.mark.parametrize("bad", ["Acme", "acme bank", "acme__bank", "_acme", "acme_", "a" * 21])
+def test_a_typed_id_is_checked_never_tidied_into_another(db_isolated, bad):
+    with pytest.raises(ValidationError, match="The ID takes"):
+        apis.save_api(_payload(id=bad))
+    assert apis.load_all() == []
+
+
+def test_a_typed_id_already_in_use_is_refused(db_isolated):
+    apis.save_api(_payload())
+    with pytest.raises(ConflictError, match="id 'acme_bank'"):
+        apis.save_api(_payload(id="acme_bank", name="Another Bank"))
+
+
+def test_an_edit_cannot_move_the_id(db_isolated):
+    """Its tool names are stored in Automations and permissions: a payload id on an edit is
+    ignored, whatever it says."""
+    apis.save_api(_payload())
+    saved = apis.save_api(_payload(id="moved", name="Acme Bank"), "acme_bank")
+    assert saved["id"] == "acme_bank"
+    with pytest.raises(NotFoundError):
+        apis.load("moved")
+
+
+def _levels(slug: str = "acme_bank") -> dict[str, str]:
+    return {e["path"]: e["level"] for e in apis.get_operator_api(slug)["endpoints"]}
+
+
+def test_a_permission_picked_on_an_endpoints_row_is_saved_with_the_api(db_isolated):
+    """The form splits endpoints into read and write with a permission on each row, as an MCP
+    server's does, so a new API can be saved already permissioned."""
+    from backend.services import tool_permissions
+
+    payload = _payload()
+    payload["endpoints"][0]["permission"] = "always_allow"
+    payload["endpoints"][1]["permission"] = "blocked"
+    apis.save_api(payload)
+
+    stored = tool_permissions.get_connector_permissions("rest:acme_bank")
+    assert stored == {TXNS: "always_allow", TRANSFER: "blocked"}
+    assert _levels() == {
+        "/accounts/{account_id}/transactions": "always_allow",
+        "/transfers": "blocked",
+    }
+    # A decision about the tool, never part of what the API holds.
+    assert all("permission" not in e for e in apis.load("acme_bank")["endpoints"])
+
+
+def test_an_endpoint_nobody_touched_gets_no_permission_row(db_isolated):
+    """Untouched means the default, whatever the permission engine makes that: writing a row
+    for it would freeze today's default into a decision nobody took."""
+    from backend.services import tool_permissions
+
+    apis.save_api(_payload())
+    assert tool_permissions.get_connector_permissions("rest:acme_bank") == {}
+    assert set(_levels().values()) == {"needs_approval"}
+
+
+def test_an_unknown_permission_is_refused_and_nothing_is_saved(db_isolated):
+    payload = _payload()
+    payload["endpoints"][0]["permission"] = "sure"
+    with pytest.raises(ValidationError, match="Unknown permission"):
+        apis.save_api(payload)
+    assert apis.load_all() == []
+
+
+def test_a_permission_picked_while_changing_an_endpoint_is_about_the_new_endpoint(db_isolated):
+    """An Always allow that merely SURVIVES an edit is withdrawn (the endpoint it was given to
+    is gone); one the owner picks on the edited row, in the same save, is their decision."""
+    from backend.services import tool_permissions
+
+    payload = _payload()
+    payload["endpoints"][0]["permission"] = "always_allow"
+    saved = apis.save_api(payload)
+
+    survived = [dict(e) for e in saved["endpoints"]]
+    survived[0]["method"] = "DELETE"
+    apis.save_api(_payload(endpoints=survived), "acme_bank")
+    assert TXNS not in tool_permissions.get_connector_permissions("rest:acme_bank")
+
+    picked = [dict(e) for e in apis.get_operator_api("acme_bank")["endpoints"]]
+    picked[0]["method"] = "GET"
+    picked[0]["permission"] = "always_allow"
+    apis.save_api(_payload(endpoints=picked), "acme_bank")
+    assert tool_permissions.get_connector_permissions("rest:acme_bank")[TXNS] == "always_allow"
 
 
 def test_endpoint_search_narrows_what_lucius_reads(db_isolated):
@@ -1176,3 +1298,25 @@ def test_the_openapi_route_returns_a_draft_and_saves_nothing(http):
         c for c in http.get("/api/connectors").json()["connectors"] if c["id"].startswith("rest:")
     ] == []
     assert http.post("/api/rest-connector/openapi", json={"text": "nope"}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("failure", "says"),
+    [
+        (urllib.error.HTTPError("https://api.acme.test/x", 404, "Not Found", None, None), "404"),  # type: ignore[arg-type]
+        (urllib.error.URLError("no route"), "URLError"),
+    ],
+)
+def test_a_document_that_cannot_be_downloaded_says_why_as_a_422(http, monkeypatch, failure, says):
+    """Never a 502: a reverse proxy replaces a 502's body with its own page (Cloudflare's
+    tunnel did), so the form could only say "Could not import that document". The address is
+    the owner's to correct, which is what a 422 means."""
+    from backend.services.rest_api import openapi
+
+    def refuse(*_a, **_k):
+        raise failure
+
+    monkeypatch.setattr(openapi, "pinned_urlopen", refuse)
+    r = http.post("/api/rest-connector/openapi", json={"url": "https://api.acme.test/x"})
+    assert r.status_code == 422
+    assert says in r.json()["detail"]

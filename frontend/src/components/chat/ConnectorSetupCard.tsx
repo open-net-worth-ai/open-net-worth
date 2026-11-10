@@ -12,7 +12,7 @@ import { preopenSignInWindow } from '../tabs/connectors/oauthSignIn'
 import type { ReactNode } from 'react'
 import { ArrowRight, Share2 } from '../../ui/icons'
 
-/** `custom` opens the Add custom server form — the catalog's one generic entry. */
+/** `custom` opens the Add MCP server form — the catalog's one generic entry. */
 function entryFor(id: string) {
   return id === 'custom' ? CATALOG.find((e) => e.generic) : CATALOG.find((e) => e.id === id)
 }

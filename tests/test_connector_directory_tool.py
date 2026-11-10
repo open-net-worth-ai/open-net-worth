@@ -221,8 +221,42 @@ def test_every_search_says_the_directory_is_not_the_limit(db):
     for query in ("binance", "webull"):
         text, _ = asyncio.run(execute_tool("search_connector_directory", {"query": query}))
         out = json.loads(text)
-        assert "Add custom server" in out["beyond_directory"]
+        assert "Add MCP server" in out["beyond_directory"]
         assert "'custom'" in out["beyond_directory"]
+
+
+def test_every_search_also_offers_the_rest_api_form_for_an_app_with_an_api(db):
+    """The second way in for an app we don't list: an API with a key, added as a REST API."""
+    import asyncio
+    import json
+
+    from backend.ai.tools import execute_tool
+
+    text, _ = asyncio.run(execute_tool("search_connector_directory", {"query": "binance"}))
+    beyond = json.loads(text)["beyond_directory"]
+    assert "Add REST API" in beyond and "'rest'" in beyond
+    # An API that only signs in through OAuth cannot be added this way: say so up front.
+    assert "OAuth" in beyond
+    # The MCP server is still looked for first.
+    assert beyond.index("'custom'") < beyond.index("'rest'")
+
+
+def test_the_rest_api_entry_explains_why_it_never_reads_installed(db):
+    """Each API added is its own connector, so the entry that adds one stays 'not installed';
+    unexplained, Lucius would re-check it and report the add as failed."""
+    from backend.services import connector_directory
+
+    row = next(r for r in connector_directory.search("rest api")["connectors"] if r["id"] == "rest")
+    assert row["installed"] is False
+    assert "get_connector_status" in row["note"]
+    others = connector_directory.search("plaid")["connectors"]
+    assert all("note" not in r for r in others)
+
+
+def test_open_setup_accepts_rest_for_the_rest_api_form():
+    from backend.ai.tools.screen import _validate_command_semantics
+
+    assert _validate_command_semantics("connectors.open_setup", {"id": "rest"}) is None
 
 
 def test_open_setup_accepts_custom_for_the_custom_server_form():

@@ -227,10 +227,10 @@
       "id": "rest",
       "name": "REST API",
       "families": [
-        "Data source"
+        "API"
       ],
       "categories": [
-        "Banking"
+        "Custom API"
       ],
       "publisher": "Open Net Worth",
       "verification": "unverified",

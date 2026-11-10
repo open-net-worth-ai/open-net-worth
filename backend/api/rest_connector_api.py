@@ -37,6 +37,9 @@ class RestAuth(BaseModel):
 
 
 class RestApiBody(BaseModel):
+    # A new API's id, when the owner typed one instead of taking the name's. Ignored on an edit:
+    # the id is the route's.
+    id: Optional[str] = None
     name: str
     base_url: str
     auth: RestAuth = Field(default_factory=RestAuth)

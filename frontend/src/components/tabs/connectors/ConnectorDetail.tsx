@@ -41,6 +41,7 @@ import { useConnectorSaveHost } from './formSave'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
+import { restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
   stampGroup,
@@ -315,7 +316,14 @@ export function ConnectorDetail({
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Identity entry={entry} />
-        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--muted)',
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
           {entry.mcp ? (
             <>
               Remove <strong>{entry.name}</strong>? Lucius loses{' '}
@@ -358,7 +366,14 @@ export function ConnectorDetail({
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Identity entry={entry} />
-        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--muted)',
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
           Pause <strong>{entry.name}</strong>? {pauseVerb(entry)} until you resume. Your saved
           credentials and settings stay put — resuming won&apos;t ask for them again. To clear your
           saved credentials instead, use Remove connector from the menu.
@@ -500,7 +515,14 @@ export function ConnectorDetail({
           ) : null}
 
           {entry.desc ? (
-            <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+            <p
+              style={{
+                fontSize: 'var(--text-base)',
+                color: 'var(--muted)',
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
               <LinkedDesc desc={entry.desc} service={entry.service} />
             </p>
           ) : null}
@@ -526,7 +548,7 @@ export function ConnectorDetail({
             description) and in the Details footer's "Vendor" field, so nothing is hidden — this
             line just answers one question cleanly: did WE build this. */}
           {entry.developer ? (
-            <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink)' }}>
+            <div style={{ fontSize: 'var(--text-base)', fontWeight: 400, color: 'var(--ink)' }}>
               Developed by{' '}
               {entry.mcp ? (
                 entry.developerUrl ? (
@@ -594,6 +616,8 @@ export function ConnectorDetail({
                   onSetGroup={(tools, level) =>
                     applyLevel(tools, level, onSetGroupPermission(tools, level))
                   }
+                  toolLabel={entry.kind === 'rest' ? restToolLabel : undefined}
+                  toolSub={entry.toolSubs ? (tool) => entry.toolSubs?.[tool] : undefined}
                 />
               </>
             ) : (
@@ -630,7 +654,7 @@ function Identity({
 }): JSX.Element {
   return (
     <div className={compact ? 'cn-idhead cn-idhead-compact' : 'cn-idhead'}>
-      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} size="lg" />
+      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} letter={entry.letter} size="lg" />
       <div className="cn-idhead-main">
         <div className="cn-idhead-name">
           {entry.name}

@@ -171,10 +171,23 @@ def _endpoint_id(item: dict, method: str, path: str, taken: set[str]) -> str:
     return candidate
 
 
-def clean_endpoints(raw: Any) -> list[dict]:
+def _chosen_level(item: dict, path: str) -> Optional[str]:
+    """The permission the owner picked on this endpoint's row of the form, if they picked one.
+    Absent means "leave it as it is": an untouched endpoint keeps its default, whatever the
+    permission engine makes that."""
+    level = item.get("permission")
+    if level in (None, ""):
+        return None
+    if level not in tool_permissions.LEVELS:
+        raise ValidationError(f"Unknown permission '{level}' on {path}.")
+    return str(level)
+
+
+def clean_endpoints(raw: Any, chosen: Optional[dict[str, str]] = None) -> list[dict]:
     """The endpoint list as stored: a tool id, method, path, a description and its
     parameters. An entry with no path is dropped; an unknown method is refused (a typo should
-    not vanish)."""
+    not vanish). ``chosen`` collects, by tool id, the permission picked on an endpoint's row:
+    it is the owner's decision about the tool, never part of what the API holds."""
     endpoints: list[dict] = []
     taken: set[str] = set()
     if isinstance(raw, list) and len(raw) > MAX_ENDPOINTS:
@@ -191,15 +204,19 @@ def clean_endpoints(raw: Any) -> list[dict]:
         if method not in METHODS:
             raise ValidationError(f"Unknown method '{method}' on {path}.")
         path = path if path.startswith("/") else f"/{path}"
+        level = _chosen_level(item, path)
+        tool = _endpoint_id(item, method, path, taken)
         endpoints.append(
             {
-                "tool": _endpoint_id(item, method, path, taken),
+                "tool": tool,
                 "method": method,
                 "path": path,
                 "description": _text(item.get("description"), 500),
                 "params": _clean_params(item.get("params")),
             }
         )
+        if level is not None and chosen is not None:
+            chosen[tool] = level
     return endpoints
 
 
@@ -300,9 +317,25 @@ def operator_view(api: dict) -> dict:
             "has_value": bool(auth.get("value")),
         },
         "header_names": sorted(api["headers"]),
-        "endpoints": api["endpoints"],
+        "endpoints": _with_levels(api),
         "notes": api["notes"],
     }
+
+
+def _with_levels(api: dict) -> list[dict]:
+    """Each endpoint with the level its tool is at now, as the connector's own page shows it
+    (the same read: ``connectors.get_connector``), so the form and that page cannot disagree."""
+    from backend.services import connectors as connectors_service
+
+    try:
+        view = connectors_service.get_connector(rest_tools.connector_id(api["id"]))
+    except NotFoundError:
+        return api["endpoints"]
+    levels = {t.name: t.level for t in view.tools}
+    return [
+        {**e, "level": levels.get(rest_tools.tool_name(api["id"], e["tool"]))}
+        for e in api["endpoints"]
+    ]
 
 
 def _matches(endpoint: dict, words: list[str]) -> bool:
@@ -347,27 +380,43 @@ def _name_taken(name: str, *, besides: Optional[str]) -> bool:
     )
 
 
+def _new_slug(payload: dict, name: str) -> str:
+    """The id of an API being created: the one the owner typed, else the name's. It is the
+    owner's only chance to choose it, so a typed id is checked, never tidied into another."""
+    typed = str(payload.get("id") or "").strip()
+    if typed:
+        if not rest_tools.is_slug(typed):
+            raise ValidationError(
+                "The ID takes lowercase letters, digits and single underscores, "
+                f"up to {rest_tools.MAX_SLUG} characters."
+            )
+        return typed
+    slug = rest_tools.slug_from_name(name)
+    if not rest_tools.is_slug(slug):
+        raise ValidationError("The name needs at least one letter or digit (a to z, 0 to 9).")
+    return slug
+
+
 def save_api(payload: dict, slug: Optional[str] = None) -> dict:
     """Create an API (``slug`` None — a new connector, switched on) or replace one. Returns
     its operator view.
 
     On an update a blank credential or header value keeps the saved one, so the form never has
     to be handed a secret to round-trip it. The id never changes: it names the connector's
-    tools, and those names are stored in Automations."""
+    tools, and those names are stored in Automations. A payload ``id`` is read only on create."""
     saved = load(slug) if slug is not None else None
     name = _text(payload.get("name"), 80)
     if not name:
         raise ValidationError("Give the API a name.")
-    new_slug = slug or rest_tools.slug_from_name(name)
-    if not rest_tools.is_slug(new_slug):
-        raise ValidationError("The name needs at least one letter or digit (a to z, 0 to 9).")
+    new_slug = slug or _new_slug(payload, name)
     if _name_taken(name, besides=slug):
         raise ConflictError(f"There is already a REST API called '{name}'.")
+    chosen: dict[str, str] = {}
     fields = {
         "base_url": clean_base_url(payload.get("base_url")),
         "auth": _clean_auth(payload.get("auth"), saved["auth"] if saved else None),
         "headers": _clean_headers(payload.get("headers"), saved["headers"] if saved else None),
-        "endpoints": clean_endpoints(payload.get("endpoints")),
+        "endpoints": clean_endpoints(payload.get("endpoints"), chosen),
         "notes": sanitize_untrusted(str(payload.get("notes") or "").strip(), max_len=20_000),
     }
     store = RestConfigStore()
@@ -378,7 +427,18 @@ def save_api(payload: dict, slug: Optional[str] = None) -> dict:
     else:
         store.update(new_slug, name, fields)
     _withdraw_stale_grants(new_slug, saved, fields)
+    _apply_chosen_levels(new_slug, chosen)
     return get_operator_api(new_slug)
+
+
+def _apply_chosen_levels(slug: str, chosen: dict[str, str]) -> None:
+    """Record the permissions the owner picked in the form, AFTER stale grants are withdrawn:
+    a level chosen in the same save that changed an endpoint is a decision about the endpoint
+    as it now is. This plane is the owner's alone (no tool reaches it), exactly like the
+    connector page's own permission switches, which would accept the same choice a click later."""
+    connector = rest_tools.connector_id(slug)
+    for tool, level in chosen.items():
+        tool_permissions.set_tool_permission(connector, rest_tools.tool_name(slug, tool), level)  # type: ignore[arg-type]
 
 
 def _withdraw_stale_grants(slug: str, saved: Optional[dict], fields: dict) -> None:

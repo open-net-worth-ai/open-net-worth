@@ -85,14 +85,25 @@ export interface ConnectorConfigProps {
   /** Seeded by the "Find your bank" institution search, which resolves a country to a
    *  provider and hands the country on so the form does not ask for it twice. */
   initialCountry?: string
+  /** A form that ADDS a connector of its own (the REST API entry: each API saved there
+   *  becomes `rest:<id>`) reports it here, so the screen can move on to the new one. */
+  onCreated?: (connectorId: string, name: string) => void
+  /** A form whose own failure message can be out of sight of the footer's Save reports the
+   *  reason here, for the screen's toast. */
+  onSaveError?: (message: string) => void
 }
 
-export function ConnectorConfig({ connector, initialCountry }: ConnectorConfigProps): JSX.Element {
+export function ConnectorConfig(props: ConnectorConfigProps): JSX.Element {
   // One opt-out for all 16 credential forms below — see screenSnapshot.secrets.test.ts.
-  return <div data-ctx-secret="">{configForm(connector, initialCountry)}</div>
+  return <div data-ctx-secret="">{configForm(props)}</div>
 }
 
-function configForm(connector: Connector, initialCountry?: string): JSX.Element {
+function configForm({
+  connector,
+  initialCountry,
+  onCreated,
+  onSaveError,
+}: ConnectorConfigProps): JSX.Element {
   switch (connector.kind) {
     case 'email':
       return <EmailUnifiedSection />
@@ -131,7 +142,9 @@ function configForm(connector: Connector, initialCountry?: string): JSX.Element 
     case 'coingecko':
       return <CoinGeckoSection />
     case 'rest':
-      return <RestSection connectorId={connector.id} />
+      return (
+        <RestSection connectorId={connector.id} onCreated={onCreated} onSaveError={onSaveError} />
+      )
     default:
       return (
         <Text size="sm" tone="faint">

@@ -31,6 +31,7 @@ GENERIC = (LIST_ENDPOINTS, GET_DATA, SEND_REQUEST)
 
 # A tool name is at most 64 characters at every provider: ``rest__`` + slug + ``__`` + tool.
 MAX_SLUG = 20
+_MIN_WORD_CUT = 4
 MAX_ENDPOINT_ID = 36
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SLUG = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
@@ -39,8 +40,17 @@ _NOT_SLUG = re.compile(r"[^a-z0-9]+")
 
 def slug_from_name(name: str) -> str:
     """The id a new API gets from its name. Fixed for the connector's life: its tool names
-    are stored in Automations and transcripts, so a rename must not move them."""
-    return _NOT_SLUG.sub("_", (name or "").lower()).strip("_")[:MAX_SLUG].strip("_")
+    are stored in Automations and transcripts, so a rename must not move them.
+
+    A name too long for the id loses whole words from the end, never half of one: "Swagger
+    Petstore - OpenAPI 3.0" cut at 20 characters read ``swagger_petstore_ope`` (owner,
+    2026-11-11). A word is cut only when dropping it would leave almost nothing (under four
+    characters): "A Supercalifragilistic…" is not the API ``a``."""
+    slug = _NOT_SLUG.sub("_", (name or "").lower()).strip("_")
+    if len(slug) <= MAX_SLUG:
+        return slug
+    cut = slug[: MAX_SLUG + 1].rfind("_")
+    return slug[:cut] if cut >= _MIN_WORD_CUT else slug[:MAX_SLUG].strip("_")
 
 
 def is_slug(value: str) -> bool:

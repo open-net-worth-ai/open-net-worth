@@ -24,7 +24,7 @@ that can read the ledger (`run_sql_query`) and send a request anywhere can take 
 
 - **One connector per API.** Kind `rest` is open-ended like `mcp`: each API the owner adds is a row
   `rest:<slug>`, with its own card, Pause, Remove and permission rows. The slug is made from the
-  first name and never changes. The catalog's built-in `rest` instance holds nothing and never reads
+  first name, or typed by the owner in the form before the first save, and never changes. The catalog's built-in `rest` instance holds nothing and never reads
   as set up: it is the Browse & add card that opens the form for a new one, so the frontend's
   native add flow works as it does for every other connector.
 - **Everything an API holds is a secret**: base URL, credential, fixed headers, endpoints, notes. A
@@ -100,7 +100,11 @@ and pinned by tests:
   endpoint's method or path changes, every one on the connector when the base URL changes or the
   API is new (or arrives through Move), and the row of a removed endpoint. A Blocked or Needs
   approval row is never weakened. This is the rule MCP's edit already follows
-  (`tool_permissions.revoke_allowed_tools`).
+  (`tool_permissions.revoke_allowed_tools`). The form's endpoint list carries a permission
+  switch per row (added after this review, at the owner's request, as an MCP server's form
+  has): a level picked there is applied AFTER the withdrawal, as the owner's decision about
+  the endpoint as saved, and the form itself puts an allowed row back to asking, in view, the
+  moment its method or path is edited. A row nobody touched sends no level and gets no row.
 - **A tool refuses when its endpoint changed since it was registered.** `external_effect` is fixed
   at registration and the method is read at call time, so a worker that had not re-synced could send
   a just-edited POST under a read's classification. The handler compares `(method, path)` with what

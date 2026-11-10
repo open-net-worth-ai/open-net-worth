@@ -24,16 +24,22 @@ its own tool permissions. Add as many as you like.
 
 ## Add an API
 
-1. Open **Connectors → Browse & add → REST API**.
-2. Fill in the form (below) and press **Save**. The API appears in your connectors list.
+1. Open **Connectors → Browse & add** and choose **Add REST API**, in the row pinned at the top of
+   the list. **Add your own**, beside **Close** at the bottom, offers it too.
+2. Fill in the form (below) and press **Save**. The API appears in your connectors list, in its
+   own **REST APIs** section.
 3. Ask Lucius to use it: "pull last month's transactions from Acme Bank".
 
-To add another, open **REST API** in Browse & add again.
+To add another, choose **Add REST API** in Browse & add again.
+
+You can also ask Lucius. For an app that isn't in the directory and has no MCP server of its
+own, he looks up its API documentation and opens this form for you. He can't fill it in or see
+the key: you do that.
 
 ### Start from an OpenAPI document (optional)
 
 If the API publishes an OpenAPI or Swagger document, paste its address (often
-`…/openapi.json`) or the document itself into **OpenAPI document** and press **Read document**.
+`…/openapi.json`) or the document itself into **OpenAPI document** and press **Import**.
 The app fills in the base URL, the sign-in type and the list of endpoints. Everything it filled
 in can be changed, and you still type the key yourself — a document never contains it.
 
@@ -46,11 +52,11 @@ No document? Skip the box and fill the form in by hand.
 
 | Field | What to enter |
 |---|---|
-| **Name** | What you and Lucius call this API. |
+| **Name** | What you and Lucius call this API. Its **ID** is shown under the name as you type: it is made from the name (cut to 20 characters, between words), names the API's tools, and can't be changed after you first save. To pick your own, click **Change the ID** before saving. Renaming the API later keeps the ID. |
 | **Base URL** | The start of every address, such as `https://api.example.com/v1`. Lucius only chooses what comes after it. |
 | **Authentication** | How the API recognises you: none, a bearer token, an API key in a header, an API key in the URL, or a username and password. |
 | **Extra headers** | Optional. Sent with every request — an API version header, for example. |
-| **Endpoints** | What can be called: a method, a path such as `/accounts/{account_id}/transactions`, a line on what it returns, and its parameters. |
+| **Endpoints** | What can be called: a method, a path such as `/accounts/{account_id}/transactions`, a description Lucius reads to decide when to call it, and its parameters. The list is split into **Read-only tools** (GET) and **Write & delete tools** (POST, PUT, PATCH, DELETE), with a permission switch on each row and one on each group to set them all, so an API can be saved already permissioned. HEAD and OPTIONS aren't offered, and are skipped when a document lists them: they return no data for Lucius to read. |
 | **Notes for Lucius** | Optional. Anything that helps: how paging works, the date format, which sign means money out. |
 
 To change an API later, open its connector and choose **Edit configuration**. A saved key shows

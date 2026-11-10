@@ -35,7 +35,14 @@ function AddedNotice({ api, onAddAnother }: { api: RestApi; onAddAnother: () => 
   )
 }
 
-function NewRestApi() {
+interface NewRestApiProps {
+  /** Take the owner to the connector they just made. Without it (nothing to navigate) the
+   *  form gives way to a notice that says where the API went. */
+  onCreated?: (connectorId: string, name: string) => void
+  onSaveError?: (message: string) => void
+}
+
+function NewRestApi({ onCreated, onSaveError }: NewRestApiProps) {
   const [added, setAdded] = useState<RestApi | null>(null)
   const [draft, setDraft] = useState<RestApiDraft>(emptyDraft)
   // A fresh key per form, so "Add another" starts from an empty editor, not the last one.
@@ -53,10 +60,25 @@ function NewRestApi() {
       />
     )
   }
-  return <RestApiEditor key={round} initial={draft} onSaved={setAdded} />
+  // Saved: the API is a connector of its own now, so its own page is where to be — with its
+  // tools and their permissions. Staying here left the owner on this entry's page, which
+  // always reads "Not connected" and looked as if the save had not taken (owner, 2026-11-11).
+  return (
+    <RestApiEditor
+      key={round}
+      initial={draft}
+      onSaved={(api) => (onCreated ? onCreated(api.connector_id, api.name) : setAdded(api))}
+      onSaveError={onSaveError}
+    />
+  )
 }
 
-function SavedRestApi({ slug }: { slug: string }) {
+interface SavedRestApiProps {
+  slug: string
+  onSaveError?: (message: string) => void
+}
+
+function SavedRestApi({ slug, onSaveError }: SavedRestApiProps) {
   const [draft, setDraft] = useState<RestApiDraft | null>(null)
   const [failed, setFailed] = useState(false)
   const [version, setVersion] = useState(0)
@@ -100,11 +122,22 @@ function SavedRestApi({ slug }: { slug: string }) {
         setDraft(draftOf(api))
         setVersion((n) => n + 1)
       }}
+      onSaveError={onSaveError}
     />
   )
 }
 
-export function RestSection({ connectorId }: { connectorId: string }) {
+export interface RestSectionProps {
+  connectorId: string
+  onCreated?: (connectorId: string, name: string) => void
+  onSaveError?: (message: string) => void
+}
+
+export function RestSection({ connectorId, onCreated, onSaveError }: RestSectionProps) {
   const slug = restSlugOf(connectorId)
-  return slug ? <SavedRestApi slug={slug} /> : <NewRestApi />
+  return slug ? (
+    <SavedRestApi slug={slug} onSaveError={onSaveError} />
+  ) : (
+    <NewRestApi onCreated={onCreated} onSaveError={onSaveError} />
+  )
 }
