@@ -1,6 +1,9 @@
 {
   "_comment": "Code area → product doc pages a change there most likely affects. Used by scripts/docs_impact.py (commit-msg hook) to suggest pages. Order matters: first match wins per file.",
   "areas": [
+    { "glob": "backend/*/followed_portfolio*", "docs": ["docs/product/features/followed-portfolios.md"] },
+    { "glob": "backend/services/followed_portfolios/**", "docs": ["docs/product/features/followed-portfolios.md"] },
+    { "glob": "frontend/src/components/intel/following/**", "docs": ["docs/product/features/followed-portfolios.md"] },
     { "glob": "desktop/src/**", "docs": ["docs/product/operations/desktop.md", "desktop/README.md"] },
     { "glob": "scripts/install*", "docs": ["docs/product/getting-started/installation.md", "docs/product/operations/desktop.md"] },
     { "glob": "backend/*/terminal.py", "docs": ["docs/product/operations/terminal.md"] },

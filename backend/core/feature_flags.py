@@ -101,6 +101,18 @@ FLAGS: tuple[Flag, ...] = (
         kind="release",
     ),
     Flag(
+        name="followed_portfolios",
+        description=(
+            "Follow a famous fund or a House member in Investments, see what they hold, and "
+            "work out the trades to copy them."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 10),
+        remove_by=date(2027, 2, 28),
+        kind="release",
+    ),
+    Flag(
         name="intel_delivery_decider",
         description=(
             "Lucius decides which Intel news reaches you now, which waits for a roundup, "

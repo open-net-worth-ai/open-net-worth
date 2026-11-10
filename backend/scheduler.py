@@ -571,6 +571,22 @@ async def _run_linked_account_totals() -> None:
         logger.exception("scheduler: linked_account_totals error: %s", exc)
 
 
+async def _run_followed_portfolios() -> None:
+    """Re-read every followed portfolio's source for a new filing (flag-gated at run time, so
+    switching the flag needs no re-registration)."""
+    try:
+        from backend.services.feature_flags import enabled
+        from backend.services.followed_portfolios import service
+
+        if not enabled("followed_portfolios"):
+            return
+        result = await asyncio.to_thread(service.refresh_all)
+        if result["checked"]:
+            logger.info("scheduler: followed_portfolios — %s", result)
+    except Exception as exc:
+        logger.exception("scheduler: followed_portfolios error: %s", exc)
+
+
 def _outward_jobs_allowed() -> bool:
     """False on a QA/isolated run (ONW_QA_MODE) unless it opts in with ONW_QA_RUN_SCHEDULES=1.
 
@@ -663,6 +679,18 @@ def start() -> None:
             id="linked_account_totals",  # a balance read, not an ingest poll
             replace_existing=True,
             misfire_grace_time=120,
+            max_instances=1,
+        )
+
+    # Followed portfolios — filings land quarterly (13F) or a few times a month (House), so
+    # twice a day is generous. Calls SEC / House Clerk, hence not on a QA run.
+    if outward:
+        _scheduler.add_job(
+            _run_followed_portfolios,
+            trigger=IntervalTrigger(hours=12, start_date=datetime.now() + timedelta(minutes=10)),
+            id="followed_portfolios",
+            replace_existing=True,
+            misfire_grace_time=3600,
             max_instances=1,
         )
 

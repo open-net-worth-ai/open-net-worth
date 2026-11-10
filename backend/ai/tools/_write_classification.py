@@ -92,6 +92,8 @@ READ_ONLY_TOOLS = frozenset(
         "get_actions",
         "get_alert_channels",
         "get_alerts",
+        # Reads the stored follows (a `search` calls the public filing sources, writes nothing).
+        "get_followed_portfolios",
         "get_investment_theses",
         # Composes services.asset_detail.read_asset_detail (called with
         # record_price_history=False, persist_exchange=False — see that function's own

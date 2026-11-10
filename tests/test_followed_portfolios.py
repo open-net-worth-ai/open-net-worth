@@ -1,0 +1,357 @@
+"""Followed portfolios — the one write choke, the views, REST, the flag, the Intel story and the
+Lucius tools. Information only: nothing here reads an account or sizes a trade. Sources are
+faked: no test here reaches SEC or the House Clerk."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from backend.ai.tools import execute_tool
+from backend.core.errors import (
+    ConflictError,
+    ExternalServiceError,
+    NotFoundError,
+    ValidationError,
+)
+from backend.db.followed_portfolio_store import MAX_FOLLOWS, FollowedPortfolioStore
+from backend.db.intel_stories_store import IntelStoriesStore
+from backend.services.followed_portfolios import service, signals
+
+pytestmark = pytest.mark.flags(followed_portfolios=True)
+
+
+def _snap(filing_id, filed, *positions):
+    rows = [
+        {"key": s, "symbol": s, "name": f"{s.title()} Corp", "value": v, "qty": q}
+        for s, v, q in positions
+    ]
+    return {
+        "filing_id": filing_id,
+        "as_of": filed,
+        "filed_at": filed,
+        "total_value": sum(r["value"] for r in rows),
+        "positions": rows,
+        "unread_reports": 0,
+    }
+
+
+class FakeSource:
+    """Stands in for ``edgar_13f`` / ``house_ptr``: serves whatever ``filings`` holds."""
+
+    def __init__(self):
+        self.filings = [_snap("f1", "2026-10-01", ("ACME", 600, 60), ("BOLT", 400, 40))]
+        self.error: Exception | None = None
+
+    def fetch(self, ref, known=None):
+        if self.error:
+            raise self.error
+        current = self.filings[-1]
+        if known and (known.get("current") or {}).get("filing_id") == current["filing_id"]:
+            return {"unchanged": True}
+        previous = self.filings[-2] if len(self.filings) > 1 else None
+        return {
+            "name": "Acme Capital",
+            "subtitle": "13F filer",
+            "current": current,
+            "previous": previous,
+            "cusip_map": {},
+        }
+
+    def search(self, query):
+        return [
+            {
+                "kind": "fund_13f",
+                "source_ref": "777",
+                "name": "Acme Capital",
+                "subtitle": "13F filer",
+            }
+        ]
+
+
+@pytest.fixture
+def source(db_isolated, monkeypatch):
+    fake = FakeSource()
+    monkeypatch.setitem(service._SOURCES, "fund_13f", fake)
+    monkeypatch.setitem(service._SOURCES, "house_member", fake)
+    monkeypatch.setattr(service.house_ptr, "search", lambda q: [])
+    monkeypatch.setattr(service.edgar_13f, "search", fake.search)
+    return fake
+
+
+@pytest.fixture
+def client(source):
+    from backend.api.followed_portfolios import router
+
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def _apply(**change):
+    return service.apply_followed_portfolio_change(change)
+
+
+def _follow(ref="777"):
+    return _apply(op="follow", kind="fund_13f", source_ref=ref)["follow"]
+
+
+def call(tool, **inp):
+    text, _ = asyncio.run(execute_tool(tool, inp))
+    return json.loads(text)
+
+
+# ── the choke ───────────────────────────────────────────────────────────────────────
+
+
+def test_follow_stores_the_model_and_hides_the_caches(source):
+    follow = _follow()
+    assert follow["id"].startswith("fol_")
+    assert follow["status"] == "ok" and follow["error"] is None
+    assert [(h["symbol"], round(h["weight"], 2)) for h in follow["model"]["holdings"]] == [
+        ("ACME", 0.6),
+        ("BOLT", 0.4),
+    ]
+    assert "cusip_map" not in follow and "current" not in follow and "reports" not in follow
+    assert "sleeve" not in follow and "settings" not in follow
+    assert len(FollowedPortfolioStore().all()) == 1
+
+
+def test_follow_twice_is_refused(source):
+    _follow()
+    with pytest.raises(ConflictError, match="already follow"):
+        _follow("000777")
+
+
+def test_follow_refuses_a_portfolio_with_nothing_readable(source):
+    source.filings = [_snap("f1", "2026-10-01")]
+    with pytest.raises(ValidationError, match="no holdings"):
+        _follow()
+    assert FollowedPortfolioStore().all() == []
+
+
+def test_follow_is_capped(source, monkeypatch):
+    for i in range(MAX_FOLLOWS):
+        _follow(str(1000 + i))
+    with pytest.raises(ConflictError, match="Unfollow one first"):
+        _follow("5")
+
+
+def test_follow_source_failure_writes_nothing(source):
+    source.error = ExternalServiceError("Could not reach SEC EDGAR. Try again later.")
+    with pytest.raises(ExternalServiceError):
+        _follow()
+    assert FollowedPortfolioStore().all() == []
+
+
+def test_unknown_kind_and_op_are_refused(source):
+    with pytest.raises(ValidationError):
+        _apply(op="follow", kind="senator", source_ref="1")
+    for gone in ("launch", "update", "mark_placed"):
+        with pytest.raises(ValidationError):
+            _apply(op=gone, id="fol_x")
+    with pytest.raises(NotFoundError):
+        _apply(op="refresh", id="fol_missing")
+
+
+def test_refresh_with_no_new_filing_changes_nothing_and_raises_no_story(source):
+    fid = _follow()["id"]
+    out = _apply(op="refresh", id=fid)
+    assert out["new_filing"] is False
+    assert IntelStoriesStore().all() == []
+
+
+def test_refresh_new_filing_updates_the_model_and_raises_exactly_one_story(source):
+    fid = _follow()["id"]
+    source.filings.append(_snap("f2", "2026-11-01", ("ACME", 900, 90), ("COG", 100, 10)))
+    out = _apply(op="refresh", id=fid)
+    assert out["new_filing"] is True
+    changes = {h["symbol"]: h["change"] for h in out["follow"]["model"]["holdings"]}
+    assert changes == {"ACME": "increased", "COG": "new"}
+    assert out["follow"]["model"]["exited"] == [{"symbol": "BOLT", "name": "Bolt Corp"}]
+    stories = IntelStoriesStore().all()
+    assert len(stories) == 1
+    assert stories[0]["label"] == "Acme Capital filed a new 13F"
+    assert "1 new, 1 increased, 1 exited" in stories[0]["current_summary"].lower()
+    assert _apply(op="refresh", id=fid)["new_filing"] is False
+    row = FollowedPortfolioStore().find_by_id(fid)
+    assert signals.emit_new_filing_story(row, out["follow"]["model"]) is False
+    assert len(IntelStoriesStore().all()) == 1
+
+
+def test_refresh_failure_keeps_the_previous_model_and_shows_the_error(source):
+    fid = _follow()["id"]
+    source.error = ExternalServiceError("Could not reach SEC EDGAR. Try again later.")
+    out = _apply(op="refresh", id=fid)["follow"]
+    assert out["status"] == "error" and "SEC EDGAR" in out["error"]
+    assert [h["symbol"] for h in out["model"]["holdings"]] == ["ACME", "BOLT"]
+    source.error = None
+    assert _apply(op="refresh", id=fid)["follow"]["status"] == "ok"
+
+
+def test_refresh_never_replaces_a_good_model_with_an_empty_one(source):
+    fid = _follow()["id"]
+    source.filings.append(_snap("f2", "2026-11-01"))
+    out = _apply(op="refresh", id=fid)
+    assert out["new_filing"] is False
+    assert out["follow"]["status"] == "error"
+    assert [h["symbol"] for h in out["follow"]["model"]["holdings"]] == ["ACME", "BOLT"]
+
+
+def test_refresh_all_survives_one_failing_follow(source, monkeypatch):
+    a, b = _follow("1")["id"], _follow("2")["id"]
+    real = service.apply_followed_portfolio_change
+
+    def flaky(change):
+        if change["id"] == a:
+            raise RuntimeError("boom")
+        return real(change)
+
+    monkeypatch.setattr(service, "apply_followed_portfolio_change", flaky)
+    assert service.refresh_all() == {"checked": 1, "new_filings": 0}
+    assert b
+
+
+def test_unfollow_deletes(source):
+    fid = _follow()["id"]
+    _apply(op="unfollow", id=fid)
+    assert service.list_follows()["follows"] == []
+
+
+# ── directory, REST ──────────────────────────────────────────────────────
+
+
+def test_directory_lists_featured_then_searches_and_marks_followed(source):
+    featured = service.directory("")["results"]
+    assert featured and all(r["featured"] and not r["followed"] for r in featured)
+    _follow()
+    found = service.directory("acme")["results"]
+    assert found == [
+        {
+            "kind": "fund_13f",
+            "source_ref": "777",
+            "name": "Acme Capital",
+            "subtitle": "13F filer",
+            "featured": False,
+            "followed": True,
+        }
+    ]
+
+
+def test_directory_survives_a_source_that_is_down(source, monkeypatch):
+    def boom(q):
+        raise ExternalServiceError("down")
+
+    monkeypatch.setattr(service.edgar_13f, "search", boom)
+    assert service.directory("acme")["results"] == []
+
+
+def test_rest_round_trip(client):
+    assert client.get("/api/followed-portfolios").json() == {"follows": []}
+    found = client.get("/api/followed-portfolios/directory", params={"q": "acme"}).json()
+    assert found["results"][0]["source_ref"] == "777"
+    made = client.post("/api/followed-portfolios", json={"kind": "fund_13f", "source_ref": "777"})
+    assert made.status_code == 200
+    fid = made.json()["follow"]["id"]
+    again = client.post("/api/followed-portfolios", json={"kind": "fund_13f", "source_ref": "777"})
+    assert again.status_code == 409
+    listed = client.get("/api/followed-portfolios").json()["follows"]
+    assert set(listed[0]) == {
+        "id",
+        "kind",
+        "source_ref",
+        "name",
+        "subtitle",
+        "status",
+        "error",
+        "last_checked_at",
+        "model",
+        "activity",
+    }
+    assert client.post(f"/api/followed-portfolios/{fid}/refresh").json()["new_filing"] is False
+    assert client.patch(f"/api/followed-portfolios/{fid}", json={}).status_code == 405
+    assert client.get(f"/api/followed-portfolios/{fid}/mirror").status_code == 404
+    assert client.delete(f"/api/followed-portfolios/{fid}").status_code == 200
+    assert client.delete(f"/api/followed-portfolios/{fid}").status_code == 404
+    bad = client.post("/api/followed-portfolios", json={"kind": "senator", "source_ref": "1"})
+    assert bad.status_code == 422
+
+
+@pytest.mark.flags(followed_portfolios=False)
+def test_flag_off_hides_every_route_and_refuses_every_tool(client):
+    for method, path in [
+        ("get", "/api/followed-portfolios"),
+        ("get", "/api/followed-portfolios/directory"),
+        ("post", "/api/followed-portfolios/x/refresh"),
+        ("delete", "/api/followed-portfolios/x"),
+    ]:
+        assert getattr(client, method)(path).status_code == 404
+    for name in (
+        "get_followed_portfolios",
+        "set_followed_portfolios",
+    ):
+        text, _ = asyncio.run(execute_tool(name, {}))
+        assert "switched off" in text
+    assert FollowedPortfolioStore().all() == []
+
+
+def test_demo_refuses_every_write_and_the_directory():
+    from backend.api.demo_lockdown import is_demo_locked
+
+    assert is_demo_locked("GET", "/api/followed-portfolios/directory")
+    assert is_demo_locked("POST", "/api/followed-portfolios")
+    assert is_demo_locked("POST", "/api/followed-portfolios/fol_1/refresh")
+    assert is_demo_locked("DELETE", "/api/followed-portfolios/fol_1")
+    assert not is_demo_locked("GET", "/api/followed-portfolios")
+
+
+# ── the Lucius tools ────────────────────────────────────────────────────────────────
+
+
+def test_tools_search_follow_read_refresh_and_unfollow(source):
+    assert call("get_followed_portfolios", search="acme")["results"][0]["name"] == "Acme Capital"
+    made = call(
+        "set_followed_portfolios", follow_portfolios=[{"kind": "fund_13f", "source_ref": "777"}]
+    )
+    assert made["results"][0]["ok"] is True
+    listed = call("get_followed_portfolios", portfolios=["acme capital"], top_n=1)
+    assert [f["name"] for f in listed["follows"]] == ["Acme Capital"]
+    assert [h["symbol"] for h in listed["follows"][0]["model"]["holdings"]] == ["ACME"]
+    assert "sleeve" not in listed["follows"][0] and "execution" not in listed
+    fresh = call("set_followed_portfolios", refresh_portfolios=["Acme Capital"])
+    assert fresh["results"][0]["op"] == "refresh"
+    gone = call("set_followed_portfolios", unfollow_portfolios=["Acme Capital"])
+    assert gone["results"][0]["op"] == "unfollow"
+    assert call("get_followed_portfolios")["follows"] == []
+
+
+def test_a_search_is_refused_on_the_public_demo(source, monkeypatch):
+    from backend.ai.tools import followed_portfolios as tool_module
+
+    class Demo:
+        demo_mode = True
+
+    monkeypatch.setattr(tool_module, "get_settings", lambda: Demo())
+    assert "disabled on the public demo" in call("get_followed_portfolios", search="acme")["error"]
+    assert call("get_followed_portfolios") == {"follows": []}
+
+
+def test_tool_reports_each_failure_without_stopping(source):
+    out = call(
+        "set_followed_portfolios",
+        refresh_portfolios=["Nobody"],
+        follow_portfolios=[{"kind": "fund_13f", "source_ref": "777"}],
+    )
+    assert [r["ok"] for r in out["results"]] == [True, False]
+    assert "No followed portfolio 'Nobody'" in out["results"][1]["error"]
+
+
+def test_tools_are_write_classified():
+    from backend.ai.tools.registry import is_write_tool
+
+    assert is_write_tool("set_followed_portfolios")
+    assert not is_write_tool("get_followed_portfolios")

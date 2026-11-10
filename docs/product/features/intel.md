@@ -121,6 +121,12 @@ lets its news scans search the web too. Explained alerts and Lucius's reads need
 Want a daily summary of your money and portfolio? Start the **Daily briefing** template in
 [Automations](../lucius/automations.md).
 
+## Following (experimental)
+
+With **Followed portfolios** switched on (Settings → Developer → Experimental), Intel gains a
+**Following** tab: famous funds and US House members you follow, what they hold and what
+changed in their latest filing. See [Followed portfolios](followed-portfolios.md).
+
 ## Find your way around
 
 The tabs are **My holdings**, one tab for each of your watchlists, and **Topics & macro**.

@@ -62,6 +62,7 @@ vi.mock('../intel/WatchlistsSection', () => ({
 import { Intel } from './Intel'
 import { AssetNavProvider } from '../../state/assetNav'
 import { invalidateQueryCache } from '../../state/queryCache'
+import { overrideFlagsForTests } from '../../hooks/useFlag'
 import { requestIntelStoryFocus } from '../../hooks/useIntelStoryIndex'
 
 function story(id: string, type: StoryArc['type'], ticker?: string, read = false): StoryArc {
@@ -144,7 +145,9 @@ function ok(body: unknown) {
   return Promise.resolve({ ok: true, json: async () => body } as Response)
 }
 
+let restoreFlags = () => {}
 beforeEach(() => {
+  restoreFlags = overrideFlagsForTests({ followed_portfolios: false })
   invalidateQueryCache(() => true)
   localStorage.clear()
   sessionStorage.clear()
@@ -186,7 +189,10 @@ beforeEach(() => {
     return ok({})
   })
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  restoreFlags()
+})
 
 function mount(props: Partial<Parameters<typeof Intel>[0]> = {}) {
   return render(
@@ -202,6 +208,30 @@ const tabButton = (c: HTMLElement, label: string) =>
   )!
 
 describe('Intel tabs', () => {
+  it('offers Following only while its flag is on, after Topics & macro', async () => {
+    const off = mount()
+    await within(off.container).findByTestId('holdings-brief')
+    expect(tabButton(off.container, 'Following')).toBeUndefined()
+    cleanup()
+    overrideFlagsForTests({ followed_portfolios: true })
+    const base = mockAuthFetch.getMockImplementation()!
+    mockAuthFetch.mockImplementation((url: string) =>
+      url === '/api/followed-portfolios' ? ok({ follows: [] }) : base(url),
+    )
+    const on = mount({ subTabRequest: 'following' })
+    expect(await within(on.container).findByText('Follow a famous portfolio')).toBeTruthy()
+    const labels = [...on.container.querySelectorAll('[role="tab"]')].map((b) => b.textContent)
+    expect(labels.at(-1)).toBe('Following')
+    expect(on.container.querySelector('.intel-layout')).toBeNull()
+  })
+
+  it('sends a visit that remembered Following back to My holdings once the flag is off', async () => {
+    sessionStorage.setItem('intel-subtab', 'following')
+    const { container } = mount()
+    await within(container).findByTestId('holdings-brief')
+    expect(tabButton(container, 'My holdings').getAttribute('aria-selected')).toBe('true')
+  })
+
   it('has one tab per watchlist: My holdings, your lists in order, Topics & macro', async () => {
     const { findByTestId, container } = mount()
     await findByTestId('holdings-brief')

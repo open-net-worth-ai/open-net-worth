@@ -84,6 +84,7 @@ from backend.paths import (
     DASHBOARD_LAYOUT_JSON,
     EMAIL_SNAPSHOTS_JSON,
     ENVELOPES_JSON,
+    FOLLOWED_PORTFOLIOS_JSON,
     GRANTS_JSON,
     IMPORT_BATCHES_JSON,
     INCOME_EVENTS_JSON,
@@ -164,6 +165,8 @@ PORTABLE_FILES: list[Path] = [
     # Option contracts — portfolio truth, like lots/grants — checkpoint-INCLUDED and portable.
     OPTION_CONTRACTS_JSON,
     INVESTMENT_THESES_JSON,
+    # Followed portfolios — the follows and their sleeves are user intent, like a thesis.
+    FOLLOWED_PORTFOLIOS_JSON,
     ACTIONS_JSON,
     COMMITMENTS_JSON,
     # Owned-assets domain (ADR 2026-09-06-assets-tab-faithful-port) — a sibling of

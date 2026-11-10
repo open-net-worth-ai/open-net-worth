@@ -41,7 +41,9 @@ def test_discovers_every_write_choke_from_source():
     (``services.receipts.apply_receipt_change``) joined 2026-08-16 with the
     cross-channel-attachments RFC's Phase 4 (ReceiptStore). `owned_asset`
     (``services.owned_assets.apply_owned_asset_change``) joined 2026-09-06 with the
-    Assets tab domain (ADR 2026-09-06-assets-tab-faithful-port)."""
+    Assets tab domain (ADR 2026-09-06-assets-tab-faithful-port). `followed_portfolio`
+    (``services.followed_portfolios.service.apply_followed_portfolio_change``) joined
+    2026-11-10 (ADR 2026-11-10-followed-portfolios-mirror-through-the-broker-mcp)."""
     chokes = ast_engine.discover_chokes()
     families = {c.family for c in chokes}
     assert families == {
@@ -49,6 +51,7 @@ def test_discovers_every_write_choke_from_source():
         "automation",
         "budget",
         "equity",
+        "followed_portfolio",
         "income",
         "lot",
         "option",
@@ -67,12 +70,13 @@ def test_discovers_every_write_choke_from_source():
     # `owned_asset` dispatches everything but create/create_category/delete through its
     # `_ASSET_OPS` handler table, which the AST scan cannot see (so only those 3 are found
     # now), and `lot` gained amend, dispose_amend and dispose_undo; 63 once `income`
-    # gained `amend` (a dividend corrected from its holding's Dividends table, 2026-11-11).
-    assert sum(len(c.ops) for c in chokes) == 63
+    # gained `amend` (a dividend corrected from its holding's Dividends table, 2026-11-11); 66 once
+    # `followed_portfolio` joined with follow/refresh/unfollow (2026-11-10).
+    assert sum(len(c.ops) for c in chokes) == 66
 
 
-def test_discriminator_split_is_eight_type_two_op():
-    """8 families discriminate on ``type``, 2 on ``op``.
+def test_discriminator_split_is_eight_type_three_op():
+    """8 families discriminate on ``type``, 3 on ``op``.
 
     ``services.options`` assigns ``op = change.get("type")`` — the variable is named ``op``
     but the KEY is ``type``. Trusting the variable name would misreport 5 ops, so this
@@ -91,7 +95,11 @@ def test_discriminator_split_is_eight_type_two_op():
         "position",
         "receipt",
     ]
-    assert sorted(f for f, d in by_disc.items() if d == "op") == ["automation", "owned_asset"]
+    assert sorted(f for f, d in by_disc.items() if d == "op") == [
+        "automation",
+        "followed_portfolio",
+        "owned_asset",
+    ]
     assert by_disc["option"] == "type"
 
 

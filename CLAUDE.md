@@ -71,6 +71,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Planning / Equity | `planning.apply_budget_change` / `equity_service.apply_equity_change` |
 | Automations · Income · Receipts | `apply_automation_change` · `apply_income_change` · `receipts_service.apply_receipt_change` |
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
+| Followed portfolios (flag `followed_portfolios`; information only — no account, no trade sizing) | `followed_portfolios.service.apply_followed_portfolio_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
 | Intel delivery (now / later / skip, flag `intel_delivery_decider`) | `news_delivery.apply_delivery_change` |

@@ -13,7 +13,7 @@ import type { Watchlist, WatchlistItem } from './WatchlistsSection'
 // is per story, so a story on two tabs is marked read on both at once — the tab badges just no
 // longer add up.
 
-export type IntelTabKey = 'holdings' | 'macro' | `list:${string}`
+export type IntelTabKey = 'holdings' | 'macro' | 'following' | `list:${string}`
 
 export interface IntelTab {
   key: IntelTabKey
@@ -23,6 +23,10 @@ export interface IntelTab {
 }
 
 export const TOPICS_TAB_LABEL = 'Topics & macro'
+
+/** Famous portfolios you follow (flag `followed_portfolios`): a screen of its own, not a story
+ *  feed, so no story is ever partitioned onto it. Intel appends it after the feed tabs. */
+export const FOLLOWING_TAB: IntelTab = { key: 'following', label: 'Following' }
 
 export const listTabKey = (id: string): IntelTabKey => `list:${id}`
 
@@ -55,7 +59,7 @@ export function resolveTabKey(
   watchlists: Watchlist[],
   lastList?: string | null,
 ): IntelTabKey | null {
-  if (raw === 'holdings' || raw === 'macro') return raw
+  if (raw === 'holdings' || raw === 'macro' || raw === 'following') return raw
   const own = ownLists(watchlists)
   if (raw === 'watching') {
     const list = own.find((w) => w.id === lastList) ?? own[0]
@@ -82,7 +86,7 @@ export function partitionByTab(
   watched: Set<string>,
   tickersByList: Map<string, Set<string>>,
 ): Record<IntelTabKey, StoryArc[]> {
-  const out: Record<IntelTabKey, StoryArc[]> = { holdings: [], macro: [] }
+  const out: Record<IntelTabKey, StoryArc[]> = { holdings: [], macro: [], following: [] }
   for (const id of tickersByList.keys()) out[listTabKey(id)] = []
   for (const s of stories) {
     const scope = storyScope(s, held, watched)

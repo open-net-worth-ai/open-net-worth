@@ -130,6 +130,7 @@ from backend.api.favicon import router as favicon_router
 from backend.api.feature_flags import router as feature_flags_router
 from backend.api.fire import router as fire_router
 from backend.api.fixed_income import router as fixed_income_router
+from backend.api.followed_portfolios import router as followed_portfolios_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
 from backend.api.gocardless_api import router as gocardless_router
 from backend.api.ibkr_api import router as ibkr_router
@@ -1181,6 +1182,7 @@ app.include_router(options_router)
 app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
 app.include_router(investment_theses_router)
+app.include_router(followed_portfolios_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)
