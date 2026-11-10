@@ -82,9 +82,22 @@ Each row gets one of three decisions. Lucius picks a default; you can change any
 
 - The filter chips at the top — **Needs you**, **Will link**, **Import**, **Left out**, **Not in
   ledger**, **Not on statement** — narrow the list. Start with **Needs you**: those are rows Lucius
-  wasn't sure about, such as a possible match with a different amount or date.
+  wasn't sure about, such as a possible match with a different amount or date. The filter button
+  beside them narrows further by **Type** (Expense, Income, Transfer) and by **Category** — every
+  category the statement's rows carry, with counts, **Uncategorized** first. Transfers carry no
+  category, so use **Type → Transfer** to find those.
 - Click a row to expand it: you see the statement's version beside your ledger's, and can change
   the payee and category before it books.
+- **Link to existing** (or **Change match** on a row that's already matched) lets you pick the
+  ledger entry a row means yourself, on any row not already set to Link. From the other side, an
+  entry under **Not on statement** offers **Link to a new row**. If the entry or row you pick is
+  already linked elsewhere, the app asks **Move this link?** first, and the one that loses its link
+  goes back to being unlinked. If Lucius had booked the row as a transfer, left it out or matched it,
+  it asks **Undo Lucius's call?** first. A row whose amount the statement doesn't confirm is listed
+  greyed out until you fix its amount. Search in these lists ignores separators, so `2079620` finds
+  `2,079,620`.
+- Choosing **Import** on a matched row puts its ledger entry back under **Not on statement**, so you
+  can link it elsewhere or delete it instead of keeping both.
 - Under **Will link**, **Link all**, **Import all** and **Leave all out** apply one decision to
   every row in that list.
 - **Not on statement** lists transactions in your ledger for that period that the statement
@@ -96,7 +109,8 @@ Each row gets one of three decisions. Lucius picks a default; you can change any
 The **Imported** screen shows what the import did: how many rows were **added** (and how many of
 those as transfers), how many were **linked** to entries you already had, and how many you **left
 out**. New rows are marked to
-review in the register; **Mark all reviewed** clears that in one step. **View in register** opens
+review in the register, and a linked entry that was already marked to review keeps its mark — the
+screen counts both. **Mark all reviewed** clears them in one step. **View in register** opens
 the register filtered to this import's added and linked rows.
 
 **Undo import** takes the whole import back after asking: the added rows are removed, every entry
@@ -114,6 +128,10 @@ e-wallet, a payment to your credit card — book it as a transfer so it doesn't 
   (*"Payments to GRAB WALLET are transfers to my GrabPay account"*). The row then shows **Books as
   transfer: Checking → GrabPay**. If Lucius got one wrong, click **Not a transfer — book as an
   expense instead** (or *… as income instead*) on that row.
+- **On one row yourself:** click the row's pencil to open **Edit payee & category** and switch
+  **Type** to **Transfer**, then pick the other account (one in the same currency). A transfer
+  books no payee or category. Switch it back to **Expense** or **Income** to undo it; that also
+  overrides a transfer Lucius chose for the row.
 - **In a chat with Lucius:** when you import through Lucius, tell him which row is a transfer and
   to which account. He books it as a transfer in the same import.
 
@@ -196,3 +214,10 @@ usual cause.
 - [Bank & brokerage connections](../connectors/bank-brokerage.md)
 - [The ledger](../concepts/the-ledger.md)
 - [An import created duplicates](../troubleshooting/import-created-duplicates.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Import Bank Statements Into a Budget App: PDF to CAMT.053](https://opennetworth.ai/blog/import-bank-statements-budget-app/): bank statements from PDF to CAMT.053, with worked examples
+- [Firefly III Alternative: Open Net Worth vs Firefly III](https://opennetworth.ai/blog/firefly-iii-alternative/): moving a Firefly III export across

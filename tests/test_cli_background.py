@@ -4,6 +4,7 @@ file and the log file are real. The real thing was also run by hand: see the dec
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import threading
 import time
@@ -11,7 +12,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.cli import background, build_parser, main, self_update, serve, upgrade_request
+from backend.cli import (
+    background,
+    build_parser,
+    main,
+    self_update,
+    serve,
+    upgrade_request,
+    upgrade_steps,
+)
 from backend.cli import status as cli_status
 from backend.cli.upgrade_request import RequestWatcher, RunningServer
 from backend.core import config
@@ -247,7 +256,7 @@ def test_a_boot_service_is_not_stopped_only_to_come_back(running, monkeypatch, c
 
     assert background.stop(**FAST) == 1
 
-    assert "onw autostart stop" in capsys.readouterr().err
+    assert "onw autostart off" in capsys.readouterr().err
     assert not upgrade_request.stop_path().exists()
 
 
@@ -346,7 +355,7 @@ def run_watcher(tmp_path, *, write_after_ready, ready=lambda: True):
         ready=ready,
         poll=0.001,
         stop_file=stop_file,
-        request_stop=lambda: stops.append(1),
+        request_stop=stops.append,
     )
     if not write_after_ready:
         stop_file.write_text("stop\n", encoding="utf-8")
@@ -363,7 +372,7 @@ def run_watcher(tmp_path, *, write_after_ready, ready=lambda: True):
 def test_a_stop_request_reaches_the_server_and_is_removed(tmp_path):
     stops, stop_file = run_watcher(tmp_path, write_after_ready=True)
 
-    assert stops == [1]
+    assert stops == [False]
     assert not stop_file.exists()
 
 
@@ -389,7 +398,7 @@ def test_a_stop_it_cannot_remove_is_not_acted_on(tmp_path, monkeypatch):
         lambda: pytest.fail("no upgrade was asked for"),
         poll=0.001,
         stop_file=stop_file,
-        request_stop=lambda: stops.append(1),
+        request_stop=stops.append,
     )
     watcher.start()
     time.sleep(0.02)
@@ -475,3 +484,165 @@ def test_logs_is_a_command(log, capsys):
     assert main(["logs"]) == 0
 
     assert "hello" in capsys.readouterr().out
+
+
+# ── restarting ────────────────────────────────────────────────────────────────
+
+
+def test_restarting_nothing_says_how_to_start_it(root, monkeypatch, capsys):
+    monkeypatch.setattr(upgrade_request, "running_server", lambda: None)
+
+    assert background.restart() == 1
+
+    assert "onw start" in capsys.readouterr().err
+
+
+def test_a_restart_request_reaches_the_server_as_a_restart(tmp_path):
+    stop_file = tmp_path / upgrade_request.STOP_NAME
+    seen = []
+    watcher = RequestWatcher(
+        tmp_path / upgrade_request.REQUEST_NAME,
+        lambda: pytest.fail("no upgrade was asked for"),
+        poll=0.001,
+        stop_file=stop_file,
+        request_stop=seen.append,
+    )
+    watcher.start()
+    time.sleep(0.02)
+    stop_file.write_text(f"{upgrade_request.RESTART_WORD}\n", encoding="utf-8")
+    watcher.join(5)
+
+    assert seen == [True]
+    assert not stop_file.exists()
+
+
+def answering(monkeypatch, *versions):
+    answers = iter(versions)
+    last = versions[-1]
+    monkeypatch.setattr(background, "server_version", lambda _url: next(answers, last))
+
+
+def heard_at_once(monkeypatch):
+    monkeypatch.setattr(background, "_asked", lambda *_a, **_kw: True)
+
+
+def test_a_restart_waits_for_it_to_leave_and_come_back(running, monkeypatch, capsys):
+    heard_at_once(monkeypatch)
+    answering(monkeypatch, "9.9.9", None, None, "9.9.9")
+
+    assert background.restart(stop_wait=5, boot_wait=5, poll=0.001) == 0
+
+    assert f"Running 9.9.9 at {SERVER.url}" in capsys.readouterr().out
+
+
+def test_a_restart_that_never_comes_back_names_the_log(running, monkeypatch, capsys):
+    heard_at_once(monkeypatch)
+    monkeypatch.setattr(background, "server_version", lambda _url: None)
+
+    assert background.restart(stop_wait=5, boot_wait=0.01, poll=0.001) == 1
+
+    err = capsys.readouterr().err
+    assert "hasn't come back" in err
+    assert str(cli_status.log_file()) in err
+
+
+def test_a_boot_service_can_be_restarted(running, monkeypatch):
+    monkeypatch.setattr(
+        background, "boot_service_runs_this_folder", lambda: pytest.fail("no reason to refuse")
+    )
+    heard_at_once(monkeypatch)
+    answering(monkeypatch, None, "9.9.9")
+
+    assert background.restart(stop_wait=5, boot_wait=5, poll=0.001) == 0
+
+
+def test_a_restart_is_refused_while_upgrading(running, capsys):
+    path = upgrade_request.request_path()
+    upgrade_request.write_state(path, upgrade_request.WORKING, upgrade_request.INSTALLING)
+
+    assert background.restart(heard_wait=0.01, poll=0.001) == 1
+
+    assert "upgrading right now" in capsys.readouterr().err
+    assert not upgrade_request.stop_path().exists()
+
+
+def test_a_server_too_old_to_hear_a_restart_leaves_no_request(running, capsys):
+    assert background.restart(heard_wait=0.02, poll=0.001) == 1
+
+    assert "didn't answer" in capsys.readouterr().err
+    assert not upgrade_request.stop_path().exists()
+
+
+# ── how it comes back ─────────────────────────────────────────────────────────
+
+
+def test_in_a_terminal_it_replaces_itself(monkeypatch):
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
+    monkeypatch.setattr(self_update.sys, "argv", ["onw", "start", "--open", "--port", "9000"])
+    replaced = []
+    monkeypatch.setattr(self_update.os, "execv", lambda _path, argv: replaced.append(argv))
+
+    self_update.restart_this_process(service=False)
+
+    assert replaced[0][-3:] == ["start", "--port", "9000"]
+    assert "--open" not in replaced[0]
+
+
+def test_under_the_service_flag_it_exits_for_the_service_to_restart(monkeypatch):
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
+
+    assert self_update.restart_this_process(service=True) == self_update.RESTART_EXIT_CODE
+
+
+def test_windows_restarts_through_the_helper_and_exits_clean(monkeypatch, tmp_path):
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", True)
+    monkeypatch.setattr(self_update, "log_file", lambda: tmp_path / "app.log")
+    monkeypatch.setattr(self_update, "_windows_restart", lambda _service: (["again"], False))
+    helpers = []
+    monkeypatch.setattr(self_update, "spawn_windows_helper", lambda *a: helpers.append(a))
+
+    assert self_update.restart_this_process(service=True) == 0
+
+    job, directory, command, new_console = helpers[0]
+    assert job["restart_only"] is True
+    assert directory.parent == tmp_path
+    assert (command, new_console) == (["again"], False)
+
+
+def test_the_helper_restarts_without_installing_anything(tmp_path, monkeypatch):
+    finished = subprocess.Popen([sys.executable, "-c", "pass"])
+    finished.wait()
+    job_path = tmp_path / "job.json"
+    job_path.write_text(
+        json.dumps(
+            {
+                "restart_only": True,
+                "previous_version": "1.0.0",
+                "version": "1.0.0",
+                "wait_pid": finished.pid,
+                "restart": ["again"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        upgrade_steps, "install_and_confirm", lambda *_a, **_kw: pytest.fail("installed")
+    )
+    restarted = []
+    monkeypatch.setattr(
+        upgrade_steps, "_restart", lambda job, log: restarted.append(job["restart"])
+    )
+
+    assert upgrade_steps.run_job(job_path) == 0
+
+    assert restarted == [["again"]]
+
+
+def test_following_a_log_written_on_windows_does_not_double_its_line_endings(log, capsys):
+    log.write_bytes(b"old\r\n")
+
+    def add():
+        with log.open("ab") as file:
+            file.write(b"new\r\n")
+
+    assert follow_while(log, capsys, add) == "new\n"

@@ -85,6 +85,12 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 140px;
   }
+  /* A bubble turning from its estimate into its real height moves what's below it. Safari's engine
+     doesn't hold your place through that, whatever it says it supports, and the chat moved under
+     your finger as you scrolled up (owner, 2026-11-08; see utils/pwa.ts isWebKit). */
+  :root[data-onw-engine='webkit'] .msg-bubble:nth-last-child(n + 9) {
+    content-visibility: visible;
+  }
   .msg-user {
     align-items: flex-end;
   }
@@ -2040,6 +2046,11 @@
       opacity: 1;
       visibility: visible;
     }
+  }
+  .msg-unheard {
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--muted);
   }
   .msg-time {
     font-size: 10.5px;

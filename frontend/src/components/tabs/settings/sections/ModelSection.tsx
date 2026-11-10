@@ -26,7 +26,18 @@ import type { CliHostPlatform, CliSignInState } from '../../../shared/CliSubscri
 import { NO_LOCAL_MODELS_NOTE, isLocalOnlyProvider } from '../../../shared/privateCloudCopy'
 import { ModelPicker } from '../../../ui'
 import { ChevronRight, Eye, EyeOff, TriangleAlert, Plus } from '../../../../ui/icons'
-import { Badge, Btn, Empty, Field, Modal, Panel, Select, Toggle, useSectionBusy } from '../ds'
+import {
+  Badge,
+  Btn,
+  Empty,
+  Field,
+  Modal,
+  Panel,
+  Select,
+  Toggle,
+  useSaving,
+  useSectionBusy,
+} from '../ds'
 import type { SectionProps } from '../ds'
 import { TurnTimeLimitPanel } from './TurnTimeLimitPanel'
 
@@ -52,6 +63,18 @@ interface ConfiguredProvider {
   key_status?: 'valid' | 'invalid' | 'unreachable' | 'unchecked'
   checked_at?: string | null
   label?: string
+}
+
+// "Custom" is one catalog row, but the owner may keep several OpenAI-compatible endpoints:
+// each further one is stored as `custom_<id>` and shown as a copy of that row.
+const isCustomKey = (key: string) => /^custom(_[a-z0-9]{1,24})?$/.test(key)
+
+function newCustomKey(taken: string[]): string {
+  if (!taken.includes('custom')) return 'custom'
+  let key: string
+  do key = `custom_${Math.random().toString(36).slice(2, 10)}`
+  while (taken.includes(key))
+  return key
 }
 
 // A local CLI enrols by DETECTION, not by stored credentials — it has no api_key or base_url
@@ -205,6 +228,14 @@ const STATUS_BADGE: Record<string, [string, 'good' | 'bad']> = {
   unreachable: ["Can't connect", 'bad'],
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return ''
+  }
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const r = await authFetch(path)
   if (!r.ok) throw new Error(String(r.status))
@@ -223,6 +254,7 @@ function ProviderRow({
   onToggle,
   toast,
   subscription,
+  checking,
 }: {
   entry: CatalogEntry
   cfg: ConfiguredProvider
@@ -233,6 +265,7 @@ function ProviderRow({
   onEdit: (k: string) => void
   onToggle: (k: string, v: boolean) => void
   toast: SectionProps['toast']
+  checking?: string
   subscription?: {
     platform?: CliHostPlatform
     inContainer?: boolean
@@ -254,6 +287,14 @@ function ProviderRow({
     // whether its binary was even installed. The Default model row below names its provider,
     // so the chip was saying it twice and costing the useful fact.
     if (!enabled) return null
+    if (checking !== undefined)
+      return (
+        <span title="Asking the provider for its model list to confirm the address and key work. A slow provider can take up to 15 seconds.">
+          <Badge tone="neutral">
+            {checking ? `Contacting ${checking}…` : 'Contacting provider…'}
+          </Badge>
+        </span>
+      )
     // Binary presence does not prove the CLI's saved login can answer a turn, so the CLI's own
     // answer wins. "Installed" is left for a CLI we couldn't ask.
     if (isCli) {
@@ -372,11 +413,13 @@ function ProviderModal({
   onSave: (
     key: string,
     patch: { label: string; url: string; model: string; key: string; bin: string },
-  ) => void
+  ) => Promise<void>
   onRemove: (key: string) => void
   toast: SectionProps['toast']
 }) {
-  const available = catalog.filter((e) => e.key === 'custom' || !taken.includes(e.key))
+  const available = catalog.filter((e) =>
+    e.key === 'custom' ? true : !isCustomKey(e.key) && !taken.includes(e.key),
+  )
   const [sel, setSel] = useState(
     mode === 'edit' ? editKey || 'custom' : available[0]?.key || 'custom',
   )
@@ -401,6 +444,9 @@ function ProviderModal({
   }, [models, entry])
   const [armed, setArmed] = useState(false)
   const [testing, setTesting] = useState(false)
+  // The save is awaited: the server probes the provider before it answers (up to 15s on a slow
+  // one), so the dialog stays up with a visible wait instead of closing on a silent request.
+  const [busy, setBusy] = useState(false)
   // The toast is gone in two seconds; a failed connection test stays up, beside a way to report it.
   const [testFailure, setTestFailure] = useState<string | null>(null)
 
@@ -502,16 +548,30 @@ function ProviderModal({
               {armed ? 'Confirm remove' : 'Remove'}
             </Btn>
           ) : null}
-          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn onClick={onClose} disabled={busy}>
+            Cancel
+          </Btn>
           <Btn
             variant="primary"
-            disabled={urlMissing}
+            disabled={urlMissing || busy}
+            aria-busy={busy || undefined}
             onClick={() => {
-              onSave(sel, f)
-              onClose()
+              setBusy(true)
+              void onSave(sel, f).finally(() => {
+                setBusy(false)
+                onClose()
+              })
             }}
           >
-            {mode === 'edit' ? 'Save changes' : 'Add provider'}
+            {busy ? (
+              <>
+                <span className="ui-btn__spinner" aria-hidden="true" /> Checking connection…
+              </>
+            ) : mode === 'edit' ? (
+              'Save changes'
+            ) : (
+              'Add provider'
+            )}
           </Btn>
         </>
       }
@@ -522,7 +582,7 @@ function ProviderModal({
             label="Provider"
             span="full"
             help={
-              entry.key === 'custom'
+              isCustomKey(entry.key)
                 ? 'Any endpoint that speaks the OpenAI API — a self-hosted gateway, a proxy, anything'
                 : undefined
             }
@@ -536,7 +596,7 @@ function ProviderModal({
             </Select>
           </Field>
         )}
-        {entry.key === 'custom' && (
+        {isCustomKey(entry.key) && (
           <Field label="Display name" span="full">
             <input
               className="rd-input"
@@ -663,6 +723,13 @@ function ProviderModal({
           </div>
         )}
       </div>
+      {busy ? (
+        <div className="rd-help" role="status">
+          {isCli || !hostOf(f.url || entry.base_url)
+            ? 'Checking that this provider works…'
+            : `Contacting ${hostOf(f.url || entry.base_url)} to confirm the address and key work. A slow provider can take up to 15 seconds.`}
+        </div>
+      ) : null}
       {mode === 'edit' ? (
         <Btn size="xs" disabled={testing} onClick={() => void testConnection()}>
           {testing ? 'Testing…' : 'Test connection'}
@@ -877,6 +944,8 @@ export function PreferredModels({
 
 // ── the section ──────────────────────────────────────────────────────────────
 export function ModelSection({ toast, gatewayMode = false, openSection }: SectionProps) {
+  const judgePicker = useFlag('permissions_v2') === true
+  const track = useSaving()
   const [subscriptionKeys, setSubscriptionKeys] = useState<string[]>([])
   const providers = useCachedFetchState<ProvidersResponse>(
     '/api/model-config/providers',
@@ -920,10 +989,19 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
 
   const terminal =
     gatewayMode && openSection ? { onOpen: () => openSection('terminal') } : undefined
-  const catalog = (providers.data?.catalog ?? []).filter(
+  const baseCatalog = (providers.data?.catalog ?? []).filter(
     (entry) => !gatewayMode || !isLocalOnlyProvider(entry),
   )
   const configured = providers.data?.configured_providers ?? {}
+  const customRow = baseCatalog.find((entry) => entry.key === 'custom')
+  const catalog = customRow
+    ? [
+        ...baseCatalog,
+        ...Object.keys(configured)
+          .filter((key) => key !== 'custom' && isCustomKey(key))
+          .map((key) => ({ ...customRow, key })),
+      ]
+    : baseCatalog
   const detected = providers.data?.detected_clis ?? {}
   const detectedPaths = providers.data?.detected_cli_paths ?? {}
   const cliSignIn = providers.data?.cli_sign_in ?? {}
@@ -994,7 +1072,13 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     window.dispatchEvent(new Event(MODEL_CONFIG_CHANGED_EVENT))
   }
 
-  async function putProvider(key: string, body: Record<string, unknown>, message: string) {
+  // Keys whose save is in flight: the server probes the provider before it answers, and that
+  // can take several seconds on a slow API.
+  const [checking, setChecking] = useState<Record<string, string>>({})
+
+  async function putProviderNow(key: string, body: Record<string, unknown>, message: string) {
+    const validates = body.enabled !== false
+    if (validates) setChecking((c) => ({ ...c, [key]: hostOf(String(body.base_url ?? '')) }))
     try {
       const r = await authFetch(`/api/model-config/providers/${encodeURIComponent(key)}`, {
         method: 'PUT',
@@ -1006,18 +1090,29 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
         toast(b?.detail || `Could not save (HTTP ${r.status})`)
         return
       }
+      const saved = (await r.json().catch(() => null)) as {
+        key_status?: string
+        error?: string
+      } | null
       void providers.refresh()
       announceModelConfigChanged()
-      toast(message)
+      if (validates && (saved?.key_status === 'invalid' || saved?.key_status === 'unreachable')) {
+        toast(`Saved, but the check failed: ${saved.error || 'could not verify this provider'}`)
+      } else {
+        toast(message)
+      }
     } catch {
       toast('Could not reach the server. Try again.')
+    } finally {
+      if (validates)
+        setChecking((c) => Object.fromEntries(Object.entries(c).filter(([k]) => k !== key)))
     }
   }
 
   // DELETE /providers/{key}, not the sibling /providers/{key}/key — that one drops only the
   // API key and keeps `enabled: false`, so the provider never left the list however many
   // times you pressed Remove. (Removing only the key is `/key`, which nothing here calls.)
-  async function removeProvider(key: string) {
+  async function removeProviderNow(key: string) {
     try {
       const r = await authFetch(`/api/model-config/providers/${encodeURIComponent(key)}`, {
         method: 'DELETE',
@@ -1035,7 +1130,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putDefaultModel(ref: string) {
+  async function putDefaultModelNow(ref: string) {
     try {
       const r = await authFetch('/api/model-config', {
         method: 'PUT',
@@ -1055,7 +1150,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putPreferred(models: string[], message: string) {
+  async function putPreferredNow(models: string[], message: string) {
     try {
       const r = await authFetch('/api/preferred-models', {
         method: 'PUT',
@@ -1078,10 +1173,13 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putTaskModels(next: Record<string, string | null>) {
+  async function putTaskModelsNow(next: Record<string, string | null>) {
     // The endpoint takes the WHOLE map; an omitted task would silently keep its old pin.
+    // The judge's row exists only with permissions_v2; leaving it out while the flag is off keeps
+    // a pin made earlier. Sending TASK_ROWS alone dropped every judge pick, answered 200, and the
+    // picker snapped back to "Same as chat model" on the refresh.
     const full: Record<string, string | null> = {}
-    for (const [k] of TASK_ROWS) full[k] = next[k] || null
+    for (const [k] of judgePicker ? TASK_ROWS_V2 : TASK_ROWS) full[k] = next[k] || null
     try {
       const r = await authFetch('/api/model-config/task-models', {
         method: 'PUT',
@@ -1099,6 +1197,17 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
       toast('Could not reach the server. Try again.')
     }
   }
+
+  // Every write below shows the shell's "Saving…" pill while it is in flight.
+  const saving =
+    <A extends unknown[]>(write: (...args: A) => Promise<void>) =>
+    (...args: A) =>
+      track(() => write(...args))
+  const putProvider = saving(putProviderNow)
+  const removeProvider = saving(removeProviderNow)
+  const putDefaultModel = saving(putDefaultModelNow)
+  const putPreferred = saving(putPreferredNow)
+  const putTaskModels = saving(putTaskModelsNow)
 
   return (
     <>
@@ -1124,6 +1233,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   detectedPath={detectedPaths[entry.key] || ''}
                   signIn={cliSignIn[entry.key]}
                   toast={toast}
+                  checking={checking[entry.key]}
                   onEdit={(k) => setEditor({ mode: 'edit', key: k })}
                   onToggle={(k, v) =>
                     void putProvider(k, { enabled: v }, v ? 'Enabled' : 'Disabled')
@@ -1275,13 +1385,16 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
           toast={toast}
           onClose={() => setEditor(null)}
           onSave={(key, patch) => {
-            const entry = catalog.find((e) => e.key === key)
+            // Adding "Custom" when one exists must not overwrite it: it gets its own key.
+            if (editor.mode === 'add' && key === 'custom') key = newCustomKey(takenKeys)
+            const entry = catalog.find((e) => e.key === key) ?? customRow
             const body: Record<string, unknown> = { enabled: true }
+            if (isCustomKey(key)) body.label = patch.label
             if (entry?.cli_binary) body.base_url = patch.bin
             else body.base_url = patch.url
             if (patch.model) body.model = patch.model
             if (patch.key) body.api_key = patch.key
-            void putProvider(key, body, configured[key] ? 'Provider updated' : 'Provider added')
+            return putProvider(key, body, configured[key] ? 'Provider updated' : 'Provider added')
           }}
           onRemove={(key) => void removeProvider(key)}
         />

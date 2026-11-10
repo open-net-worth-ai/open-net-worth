@@ -72,6 +72,12 @@ class GetSpendingBreakdownInput(ToolInput):
     input_schema=schema_of(GetSpendingBreakdownInput, tool_name="get_spending_breakdown"),
 )
 async def get_spending_breakdown(input_data: dict):
+    # Dispatch can't enforce ``required``, and a KeyError reached the model as just "'date_from'",
+    # which told it nothing to correct (live call, 2026-11-07).
+    missing = [key for key in ("date_from", "date_to") if not input_data.get(key)]
+    if missing:
+        needed = " and ".join(missing)
+        return json.dumps({"error": f"{needed} required: ISO dates (YYYY-MM-DD)."}), None
     # OFF THE LOOP: the service scans the book and runs recurring detection, all synchronous.
     result = await asyncio.to_thread(
         breakdown_service.spending_breakdown,

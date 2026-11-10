@@ -291,3 +291,10 @@ been quiet for a long time, click **‹ Back** at the top, check the command, an
 - [Permissions](../lucius/permissions.md) — Needs approval, Always allow and Blocked
 - [Confirm cards](../lucius/confirm-cards.md) — what approving a call does
 - [Web search](web-search.md) — built-in search, no MCP server needed
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Personal Finance MCP Server: Use Your Ledger from Claude](https://opennetworth.ai/blog/personal-finance-mcp-server/): using your ledger from Claude and other MCP clients
+- [Open Source Monarch Money Alternative: Your Own AI Agent](https://opennetworth.ai/blog/open-net-worth-vs-monarch-money/): how this compares with Monarch's AI and MCP setup

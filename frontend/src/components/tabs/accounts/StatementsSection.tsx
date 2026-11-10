@@ -317,10 +317,12 @@ export function StatementViewer({
   }, [stmtProp])
 
   const facts = [
-    stmt.period_start ? `${stmt.period_start} → ${stmt.period_end || '…'}` : null,
-    stmt.statement_date ? `Issued ${stmt.statement_date}` : null,
+    stmt.period_start
+      ? `${fDate(stmt.period_start, 'short', 'always')} → ${stmt.period_end ? fDate(stmt.period_end, 'short', 'always') : '…'}`
+      : null,
+    stmt.statement_date ? `Issued ${fDate(stmt.statement_date, 'short', 'always')}` : null,
     stmt.amount_due != null
-      ? `Due ${stmt.payment_due_date || '—'} • ${fCur(stmt.amount_due, stmt.currency || 'SGD', { cents: true })}`
+      ? `Due ${stmt.payment_due_date ? fDate(stmt.payment_due_date, 'short', 'always') : '—'} • ${fCur(stmt.amount_due, stmt.currency || 'SGD', { cents: true })}`
       : null,
     stmt.minimum_payment != null && stmt.minimum_payment > 0
       ? `min ${fCur(stmt.minimum_payment, stmt.currency || 'SGD', { cents: true })}`
@@ -404,7 +406,7 @@ export function StatementViewer({
           {diffOpen &&
             diff.map((d) => (
               <div key={d.id} className="acct-stmtview-check-row">
-                <span className="nums">{d.date}</span>
+                <span className="nums">{d.date ? fDate(d.date, 'short', 'always') : ''}</span>
                 <span className="acct-stmtview-check-note">{d.note || '—'}</span>
                 <Badge tone="muted">{d.source || d.kind || 'row'}</Badge>
                 <Money className="nums">

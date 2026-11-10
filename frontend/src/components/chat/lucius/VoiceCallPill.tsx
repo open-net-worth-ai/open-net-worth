@@ -39,6 +39,7 @@ const PROBLEM: Record<CallProblemKind, { label: string; action: string }> = {
   service: { label: 'LiveKit refused the call', action: 'Try again' },
   insecure: { label: "Call couldn't start", action: 'Try again' },
   other: { label: "Call couldn't start", action: 'Try again' },
+  conversation: { label: "Can't call from this conversation", action: 'Try again' },
 }
 
 const IN_CALL_MODES: PillMode[] = ['calling', 'live', 'attention', 'reconnecting', 'poor']

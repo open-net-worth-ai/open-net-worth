@@ -94,3 +94,66 @@ def test_human_edit_still_overrides_the_default(env):
     assert row["category"] == "cat_f2ff09940000"
     edited = svc.update_transaction(row["id"], {"category": "cat_f2ff09940000"})
     assert edited["category"] == "cat_f2ff09940000"
+
+
+def test_override_payee_default_keeps_the_instructed_category(env):
+    # A standing user instruction (e.g. meal-by-time) chose this category: the flag lets it
+    # survive the pinned default; without the flag the default still wins (tests above).
+    p = _anthropic_payee("cat_f2ff09940000")
+    other = next(c["id"] for c in BUILTIN_CATEGORIES if c["id"] != "cat_f2ff09940000")
+    item = {**_ai_item("Anthropic Claude API", other), "override_payee_default": True}
+    data = _txn_data_from_ai(item, "2026-06-18")
+    assert data["category"] == other
+    row = svc.create_transaction(data)
+    assert row["category"] == other
+    assert row["payee_id"] == p["id"]
+
+
+def test_a_dropped_category_is_reported_and_an_override_is_not(env):
+    from backend.ai.tools.ledger import _category_dropped_warning
+
+    _anthropic_payee("cat_f2ff09940000")
+    other = next(c["id"] for c in BUILTIN_CATEGORIES if c["id"] != "cat_f2ff09940000")
+    dropped: dict = {}
+    _txn_data_from_ai(_ai_item("Anthropic Claude API", other), "2026-06-18", derived_out=dropped)
+    warning = _category_dropped_warning(dropped, {"category_label": "Startup"})
+    assert warning["type"] == "category_replaced_by_payee_default"
+    assert warning["requested"] == other and warning["applied"] == "Startup"
+    assert "override_payee_default=true" in warning["message"]
+
+    kept: dict = {}
+    item = {**_ai_item("Anthropic Claude API", other), "override_payee_default": True}
+    _txn_data_from_ai(item, "2026-06-18", derived_out=kept)
+    assert _category_dropped_warning(kept, {"category_label": "x"}) is None
+
+
+def test_a_multi_row_add_reports_the_replaced_category_per_row(env):
+    import asyncio
+    import json
+
+    from backend.ai.tools import execute_tool
+
+    _anthropic_payee("cat_f2ff09940000")
+    other = next(c["id"] for c in BUILTIN_CATEGORIES if c["id"] != "cat_f2ff09940000")
+    rows = [
+        {**_ai_item("Anthropic Claude API", other), "amount": 14.06},
+        {**_ai_item("Corner Cafe", other), "amount": 4.5},
+    ]
+    text, _ = asyncio.run(execute_tool("add_transactions", {"transactions": rows}))
+    body = json.loads(text)
+    replaced = [
+        w for w in body.get("warnings", []) if w["type"] == "category_replaced_by_payee_default"
+    ]
+    assert len(replaced) == 1
+    assert replaced[0]["requested"] == other
+    created_ids = {r["id"] for r in body["results"] if r.get("id")}
+    assert replaced[0]["txn_id"] in created_ids
+
+
+def test_asking_for_the_pinned_category_itself_is_not_reported_as_replaced(env):
+    _anthropic_payee("cat_f2ff09940000")
+    dropped: dict = {}
+    _txn_data_from_ai(
+        _ai_item("Anthropic Claude API", "cat_f2ff09940000"), "2026-06-18", derived_out=dropped
+    )
+    assert "category_dropped" not in dropped

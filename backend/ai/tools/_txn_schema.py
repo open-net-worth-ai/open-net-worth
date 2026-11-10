@@ -208,6 +208,14 @@ _FIELDS: dict[str, dict[str, Any]] = {
             "the leg account ids for a transfer."
         ),
     },
+    "override_payee_default": {
+        "type": "boolean",
+        "description": (
+            "A payee's pinned default category replaces your `category` unless this is true. "
+            "Set it ONLY when a standing user instruction decides the category; never for a "
+            "guess."
+        ),
+    },
     "account_id": {
         "type": "string",
         "description": (
@@ -365,6 +373,7 @@ def create_item_properties() -> dict[str, dict[str, Any]]:
         "original_amount",
         "original_currency",
         "category",
+        "override_payee_default",
         "account_id",
         "to_account_id",
         "from_account_id",

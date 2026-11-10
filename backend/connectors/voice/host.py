@@ -20,6 +20,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Optional
 
+from backend.connectors.voice.call_log import AFTER, PLACES
 from backend.core.child_env import scrubbed_environ
 from backend.core.process_tree import kill_tree, spawn_kwargs
 
@@ -29,6 +30,7 @@ CALLS = frozenset(
     {
         "is_expected",
         "call_settings",
+        "note_isolation",
         "stop_request",
         "calls_allowed",
         "claim_call",
@@ -39,6 +41,10 @@ CALLS = frozenset(
         "part_of_day",
         "record_said",
         "record_exchange",
+        "record_lines",
+        "answer_unheard",
+        "waiting_cards",
+        "answer_card",
     }
 )
 STREAMS = frozenset({"ask", "follow_next_turn"})
@@ -50,12 +56,17 @@ _PACKAGE_ROOT = str(Path(__file__).resolve().parents[3])
 CALL_TTL_S = 2 * 3600  # a call's conversation stays reachable this long at most
 MAX_ASKS_PER_MINUTE = 10  # the chat channels' per-sender ceiling
 MAX_LINE = 1 << 20  # bytes; a longer line from the worker is a broken (or hostile) worker
+MAX_LINES = 50  # spoken lines at once
+MAX_LINE_CHARS = 4000
+MAX_LINE_AGE_S = 24 * 3600
+MAX_CALL_LINE_CHARS = 200_000
 
 
 class Host:
     """The app's side of one worker process's link."""
 
     def __init__(self, tx: BinaryIO, app_loop: asyncio.AbstractEventLoop) -> None:
+        self._line_chars: dict[str, int] = {}
         self._tx, self._loop = tx, app_loop
         self._send_lock = threading.Lock()
         self._tasks: dict[int, Any] = {}
@@ -116,7 +127,7 @@ class Host:
             pass
 
     async def _call(self, method: str, args: dict) -> Any:
-        from backend.connectors.voice import desk, service
+        from backend.connectors.voice import desk, isolation, service
         from backend.services import demo_calls
 
         if method == "is_expected":
@@ -128,7 +139,10 @@ class Host:
         if method == "calls_allowed":
             return service.calls_allowed()
         if method == "call_settings":
-            return service.call_settings()
+            return await asyncio.to_thread(service.call_settings)
+        if method == "note_isolation":
+            note = isolation.note_working if args.get("working") else isolation.note_refused
+            return await asyncio.to_thread(note)
         if method == "stop_request":
             desk.stop_call_turn(self._owned(args))
             return None
@@ -164,6 +178,23 @@ class Host:
             return None
         if method == "record_said":
             await desk.record_said(self._owned(args), str(args.get("said") or ""))
+            return None
+        if method == "waiting_cards":
+            return await asyncio.to_thread(desk.waiting_cards, self._owned(args))
+        if method == "answer_card":
+            session_id = self._owned(args)
+            self._count_ask(session_id)
+            if _out_of_budget(session_id):
+                return "busy"
+            return await desk.answer_card(
+                session_id, str(args.get("card_id") or ""), str(args.get("decision") or "")
+            )
+        if method == "record_lines":
+            session_id = self._owned(args)
+            await desk.record_lines(session_id, self._within_budget(session_id, args.get("lines")))
+            return None
+        if method == "answer_unheard":
+            await desk.answer_unheard(self._owned(args), str(args.get("text") or ""))
             return None
         await desk.record_exchange(
             self._owned(args), str(args.get("said") or ""), str(args.get("reply") or "")
@@ -211,7 +242,9 @@ class Host:
                 understood=str(args.get("understood") or ""),
                 shown=bool(args.get("shown")),
                 unheard=bool(args.get("unheard")),
+                heard_part=str(args.get("heard_part") or "")[: desk.HEARD_PART_MAX],
                 continues=bool(args.get("continues")),
+                task_id=str(args.get("task_id") or "")[:32],
             )
         return desk.follow_next_turn(session_id)
 
@@ -242,12 +275,51 @@ class Host:
         rooms = [r for r, s in self._rooms.items() if s == session_id]
         return bool(rooms) and all(demo_calls.over(r, grace_s=demo_calls.GRACE_S) for r in rooms)
 
+    def _within_budget(self, session_id: str, raw: object) -> list[dict]:
+        """A call can't grow a conversation without end, however long its worker keeps sending."""
+        left = self._line_chars.get(session_id, MAX_CALL_LINE_CHARS)
+        lines = []
+        for line in _spoken_lines(raw):
+            left -= len(line["text"])
+            if left < 0:
+                log.warning("voice: a call's spoken lines went past their limit")
+                break
+            lines.append(line)
+        self._line_chars[session_id] = max(0, left)
+        return lines
+
     def _count_ask(self, session_id: str) -> None:
         now = time.monotonic()
         recent = [t for t in self._asks.get(session_id, []) if now - t < 60]
         if len(recent) >= MAX_ASKS_PER_MINUTE:
             raise PermissionError("too many requests on this call")
         self._asks[session_id] = [*recent, now]
+
+
+def _line_time(value: object) -> float:
+    """A line's time, if it could be one: a stored timestamp a date can't be made from fails every
+    later save of the conversation."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return float(value) if abs(value - time.time()) <= MAX_LINE_AGE_S else 0.0
+
+
+def _spoken_lines(raw: object) -> list[dict]:
+    """A worker's lines, as only what a line can be: shown in the chat, never read by a model."""
+    lines = []
+    for line in raw[:MAX_LINES] if isinstance(raw, list) else []:
+        if not isinstance(line, dict) or not str(line.get("text") or "").strip():
+            continue
+        lines.append(
+            {
+                "text": str(line["text"])[:MAX_LINE_CHARS],
+                "speaker": "owner" if line.get("speaker") == "owner" else "lucius",
+                "task_id": str(line.get("task_id") or "")[:32] or None,
+                "place": line.get("place") if line.get("place") in PLACES else AFTER,
+                "started_at": _line_time(line.get("started_at")),
+            }
+        )
+    return lines
 
 
 def _out_of_budget(session_id: str) -> str:

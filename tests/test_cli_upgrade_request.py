@@ -1086,3 +1086,39 @@ def test_a_stuck_write_cannot_hold_a_stop_forever(monkeypatch, plain_serve):
     FakeUvicorn(monkeypatch, during)
 
     assert plain_serve.run() == 0
+
+
+def test_a_restart_request_to_a_plain_start_replaces_the_process(
+    monkeypatch, tmp_path, plain_serve
+):
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
+    monkeypatch.setattr(self_update.sys, "argv", ["onw", "start"])
+    monkeypatch.setattr(self_update, "find_installer", lambda: pytest.fail("no upgrade was asked"))
+    replaced = []
+    monkeypatch.setattr(self_update.os, "execv", lambda _path, argv: replaced.append(argv))
+    stop_file = upgrade_request.stop_path()
+
+    def during(server):
+        time.sleep(0.02)
+        stop_file.write_text(f"{upgrade_request.RESTART_WORD}\n", encoding="utf-8")
+        assert wait_until(lambda: server.should_exit)
+
+    FakeUvicorn(monkeypatch, during)
+
+    plain_serve.run()
+
+    assert replaced[0][-1] == "start"
+
+
+def test_a_stop_request_does_not_restart(monkeypatch, plain_serve):
+    monkeypatch.setattr(self_update.os, "execv", lambda *_a: pytest.fail("restarted"))
+    stop_file = upgrade_request.stop_path()
+
+    def during(server):
+        time.sleep(0.02)
+        stop_file.write_text("stop\n", encoding="utf-8")
+        assert wait_until(lambda: server.should_exit)
+
+    FakeUvicorn(monkeypatch, during)
+
+    assert plain_serve.run() == 0

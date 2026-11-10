@@ -8,8 +8,14 @@ import { revealConnectorSecret } from './secrets'
 import { Badge } from '../../ui/Badge'
 import {
   sttHears,
+  DEFAULT_NOISE_FILTER,
+  freeMinutesEstimate,
+  isolationStandInLine,
   LANGUAGE_OPTIONS,
   languagePatch,
+  NOISE_FILTER_OPTIONS,
+  noiseFilterHelp,
+  onLiveKitCloud,
   voiceCostLine,
   voiceIdAfterChange,
   voiceOptions,
@@ -27,6 +33,8 @@ interface WorkerStatus {
   libraries_installed: boolean
   /** Why calls can't run here for want of the voice libraries; "" when installed. */
   libraries_problem?: string
+  /** Which Krisp filters this install has; a call runs without one that's missing. */
+  noise_installed?: Record<string, boolean>
   running: boolean
   error: string
 }
@@ -40,6 +48,8 @@ interface VoiceConfig {
   tts_model: string
   tts_voice: string
   language: string
+  noise_filter: string
+  isolation_standard_until?: string
   has_api_key: boolean
   has_api_secret: boolean
   worker: WorkerStatus
@@ -54,6 +64,7 @@ interface VoiceForm {
   tts_model: string
   tts_voice: string
   language: string
+  noise_filter: string
 }
 
 // LiveKit Cloud's built-in models — no extra key. The front voice must answer in about a
@@ -88,7 +99,14 @@ function formOf(c: VoiceConfig): VoiceForm {
     tts_model: c.tts_model,
     tts_voice: c.tts_voice || '',
     language: c.language || 'en',
+    noise_filter: c.noise_filter || DEFAULT_NOISE_FILTER,
   }
+}
+
+/** A filter chosen but missing from this install: calls still run, without it, and you're told. */
+export function noiseMissing(c: VoiceConfig, choice: string): string {
+  if (choice === 'off' || c.worker.noise_installed?.[choice] !== false) return ''
+  return 'Krisp isn’t installed on this computer, so calls run without noise cancelling. Reinstall Open Net Worth to add it.'
 }
 
 function workerLine(c: VoiceConfig): { tone: 'faint' | 'warn' | 'good'; text: string } {
@@ -140,6 +158,7 @@ export function VoiceSection() {
         tts_model: form.tts_model,
         tts_voice: form.tts_voice.trim(),
         language: form.language,
+        noise_filter: form.noise_filter,
       }
       if (form.api_key.trim()) body.api_key = form.api_key.trim()
       if (form.api_secret.trim()) body.api_secret = form.api_secret.trim()
@@ -150,8 +169,8 @@ export function VoiceSection() {
           body: JSON.stringify(body),
         })
       let r!: Response
-      // A call reads its language once, when it starts: a new one restarts a call that's on.
-      if (form.language !== cfg.language) {
+      // A call reads these once, when it starts: a new one restarts a call that's on.
+      if (form.language !== cfg.language || form.noise_filter !== cfg.noise_filter) {
         await restartCall(async () => {
           r = await put()
         })
@@ -236,6 +255,12 @@ export function VoiceSection() {
     setForm((f) => f && { ...f, language, ...languagePatch(f, language) })
   const pickVoice = (model: string) => setForm((f) => f && { ...f, ...withVoiceModel(f, model) })
   const status = workerLine(cfg)
+  const onCloud = onLiveKitCloud(form.livekit_url)
+  const standIn =
+    cfg.noise_filter === 'isolation' && form.noise_filter === 'isolation'
+      ? isolationStandInLine(cfg.isolation_standard_until ?? '')
+      : ''
+  const estimate = onCloud ? freeMinutesEstimate(form) : undefined
 
   return (
     <Stack gap="--space-4">
@@ -346,6 +371,22 @@ export function VoiceSection() {
           onChange={(e) => set('stt_model', e.target.value)}
         />
       </FormField>
+      {onCloud && (
+        <FormField
+          label="Noise cancelling"
+          htmlFor="conn-voice-noise"
+          help={
+            noiseMissing(cfg, form.noise_filter) || standIn || noiseFilterHelp(form.noise_filter)
+          }
+        >
+          <FieldSelect
+            id="conn-voice-noise"
+            value={form.noise_filter}
+            options={NOISE_FILTER_OPTIONS}
+            onChange={(e) => set('noise_filter', e.target.value)}
+          />
+        </FormField>
+      )}
       <FormField label="Voice model" htmlFor="conn-voice-tts" help={voiceCostLine(form.tts_model)}>
         <FieldSelect
           id="conn-voice-tts"
@@ -360,6 +401,14 @@ export function VoiceSection() {
         voiceId={form.tts_voice}
         onChange={(voiceId) => set('tts_voice', voiceId)}
       />
+      {estimate && (
+        <Stack gap="--space-1">
+          <Text size="sm">{estimate.headline}</Text>
+          <Text size="xs" tone="faint">
+            {estimate.detail}
+          </Text>
+        </Stack>
+      )}
 
       {saveErr && (
         <Text size="xs" tone="bad">

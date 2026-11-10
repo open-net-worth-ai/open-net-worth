@@ -84,6 +84,7 @@ def test_create_link_token_returns_hosted_url(monkeypatch):
     assert "hosted_link" in captured["json"]
     assert captured["json"]["redirect_uri"] == "https://app/connectors"
     assert captured["json"]["client_id"] == "cid"
+    assert captured["json"]["country_codes"] == ["US", "CA"]
 
 
 def test_create_link_token_requires_creds():

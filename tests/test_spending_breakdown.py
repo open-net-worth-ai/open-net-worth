@@ -812,3 +812,14 @@ def test_a_bill_says_what_it_was_for_beyond_the_payee(book):
         "APPLE.COM/BILL iCloud+ 200GB",
         "family storage",
     )
+
+
+def test_a_breakdown_with_no_dates_says_what_to_send():
+    """A live call got only "'date_from'" back, which told the model nothing to correct."""
+    from backend.ai.tools.spending import get_spending_breakdown
+
+    handler = getattr(get_spending_breakdown, "__wrapped__", get_spending_breakdown)
+    text, _ = asyncio.run(handler({"date_to": "2026-10-31"}))
+    assert json.loads(text) == {"error": "date_from required: ISO dates (YYYY-MM-DD)."}
+    text, _ = asyncio.run(handler({}))
+    assert "date_from and date_to required" in json.loads(text)["error"]

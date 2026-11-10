@@ -42,7 +42,7 @@ describe('VoiceCallAttach', () => {
     await waitFor(() => expect(chat.sendMessage).toHaveBeenCalledOnce())
     const [text, attachments, effort, silent, model] = chat.sendMessage.mock.calls[0] as unknown[]
     expect([text, effort, silent, model]).toEqual(['', 'medium', false, 'acme-model'])
-    expect((attachments as { ref_id: string }[])[0].ref_id).toBe('r1')
+    expect((attachments as { ref_id: string }[])[0]?.ref_id).toBe('r1')
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })
 

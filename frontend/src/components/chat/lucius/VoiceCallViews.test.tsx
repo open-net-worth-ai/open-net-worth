@@ -60,6 +60,13 @@ function call(over: Partial<CallState>): CallState {
     quality: null,
     offline: false,
     luciusWorking: false,
+    heard: '',
+    heardDone: false,
+    heardShown: false,
+    spoken: '',
+    spokenDone: false,
+    luciusSpeaking: false,
+    spokenLines: [],
     ...over,
   }
 }

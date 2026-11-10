@@ -32,6 +32,21 @@ describe('fBaseCompact — canonical compact base-currency formatter', () => {
 
     expect(fBaseCompact(2_008_437_944)).toBe('₫2.01B')
   })
+  it('keeps K/M/B suffixes in a German-style format (never Mio./Mrd.)', () => {
+    setBaseCurrency('VND')
+    setDisplayFormats({ number_format: 'dot' })
+
+    const out = fBaseCompact(2_802_502_000)
+    expect(out).toContain('2,8')
+    expect(out).toContain('B')
+    expect(out).not.toMatch(/Mio|Mrd/)
+    expect(fCompact(1_500_000)).not.toMatch(/Mio/)
+  })
+  it('rolls 999,999 up to 1M, not 1000K', () => {
+    setBaseCurrency('VND')
+    setDisplayFormats({ number_format: 'comma' })
+    expect(fBaseCompact(999_999)).toBe('₫1M')
+  })
 })
 
 describe('fCompact — B/M/K magnitude suffix (crypto market cap / supply)', () => {

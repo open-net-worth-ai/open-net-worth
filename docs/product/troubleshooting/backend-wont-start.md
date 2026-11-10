@@ -33,7 +33,7 @@ port 8080.
 **Fix:**
 
 1. If an earlier copy is still running (another terminal, or a boot service from
-   `onw autostart install`), use that one, or stop it first: `onw autostart stop` for the boot
+   `onw autostart on`), use that one, or stop it first: `onw autostart off` for the boot
    service, <kbd>Ctrl</kbd>+<kbd>C</kbd> in its terminal otherwise.
 2. Or start on another port: `onw start --port 8081` (from a checkout:
    `PORT=8081 make start`; Docker: `PORT=8081 docker compose up -d`), then open
@@ -54,7 +54,7 @@ Usually the other copy is a server you started earlier, a boot service, or the d
 **Fix:**
 
 1. Find and stop the other copy (the message names its port — open `http://localhost:<port>`
-   to see it). Close the desktop app if it has this book open; run `onw autostart stop` if you
+   to see it). Close the desktop app if it has this book open; run `onw autostart off` if you
    installed the boot service.
 2. Start again. In the desktop app, click **Retry startup**.
 3. If you meant to run a **second, separate** book, give it its own folder:
@@ -99,7 +99,7 @@ as it was before the upgrade.**
    with it — and [report the problem](reporting-a-problem.md), including the message.
 
 **If it runs as a boot service with `--auto-upgrade`**, it keeps restarting into this same error,
-and it can't upgrade itself while it does. Run `onw autostart stop`. Once a fixed version is out,
+and it can't upgrade itself while it does. Run `onw autostart off`. Once a fixed version is out,
 run `onw upgrade`, then `onw start --autostart --auto-upgrade`.
 
 **If the message also says `the automatic restore ALSO failed`**, it names the safety copy to

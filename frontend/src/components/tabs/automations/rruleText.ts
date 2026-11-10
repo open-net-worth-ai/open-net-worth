@@ -84,8 +84,9 @@ function timeSuffix(parts: Parts): string | null {
   if (!parts.BYHOUR) return parts.BYMINUTE ? null : ''
   const hours = numbers(parts.BYHOUR, 0, 23)
   const minutes = numbers(parts.BYMINUTE ?? '0', 0, 59)
-  if (!hours || !minutes || minutes.length !== 1) return null
-  return ` at ${joined(hours.map((hour) => clockLabel(hour, minutes[0])))}`
+  const minute = minutes?.[0]
+  if (!hours || minute === undefined || minutes?.length !== 1) return null
+  return ` at ${joined(hours.map((hour) => clockLabel(hour, minute)))}`
 }
 
 function everyUnit(interval: number, unit: string) {
@@ -101,7 +102,7 @@ function weeklyText(parts: Parts, interval: number): string | null {
   if (!parts.BYDAY) return everyUnit(interval, 'week')
   const days = plainDays(parts.BYDAY)
   if (!days) return null
-  const names = joined(days.map((day) => WEEKDAYS[day]))
+  const names = joined(days.map((day) => WEEKDAYS[day] ?? day))
   return interval === 1 ? `Every ${names}` : `${everyUnit(interval, 'week')} on ${names}`
 }
 
@@ -121,8 +122,10 @@ function monthlyDay(parts: Parts): string | null {
     return WEEKDAYS[parts.BYDAY] ? `the ${position} ${WEEKDAYS[parts.BYDAY]}` : null
   }
   const match = /^(-?\d)([A-Z]{2})$/.exec(parts.BYDAY)
-  if (!match || !POSITIONS[match[1]] || !WEEKDAYS[match[2]]) return null
-  return `the ${POSITIONS[match[1]]} ${WEEKDAYS[match[2]]}`
+  const position = POSITIONS[match?.[1] ?? '']
+  const weekday = WEEKDAYS[match?.[2] ?? '']
+  if (!position || !weekday) return null
+  return `the ${position} ${weekday}`
 }
 
 function monthlyText(parts: Parts, interval: number): string | null {
@@ -134,25 +137,30 @@ function monthlyText(parts: Parts, interval: number): string | null {
 function yearlyText(parts: Parts, interval: number): string | null {
   const month = numbers(parts.BYMONTH ?? '', 1, 12)
   const day = numbers(parts.BYMONTHDAY ?? '', 1, 31)
+  const monthNumber = month?.[0]
+  const dayNumber = day?.[0]
   if (interval !== 1 || month?.length !== 1 || day?.length !== 1) return null
-  return `Every year on ${MONTHS[month[0] - 1]} ${day[0]}`
+  if (monthNumber === undefined || dayNumber === undefined) return null
+  return `Every year on ${MONTHS[monthNumber - 1]} ${dayNumber}`
 }
 
 export function rruleText(rrule: string): string | null {
   const parts = parse(rrule)
-  const allowed = parts && ALLOWED_BY_FREQ[parts.FREQ]
-  if (!parts || !allowed) return null
+  const freq = parts?.FREQ
+  const allowed = freq ? ALLOWED_BY_FREQ[freq] : undefined
+  if (!parts || !freq || !allowed) return null
   if (Object.keys(parts).some((key) => !['FREQ', 'INTERVAL', ...allowed].includes(key))) return null
   const interval = numbers(parts.INTERVAL ?? '1', 1, 9999)?.[0]
   if (!interval || parts.INTERVAL?.includes(',')) return null
-  if (parts.FREQ === 'MINUTELY') return everyUnit(interval, 'minute')
-  if (parts.FREQ === 'HOURLY') return everyUnit(interval, 'hour')
-  const text = {
+  if (freq === 'MINUTELY') return everyUnit(interval, 'minute')
+  if (freq === 'HOURLY') return everyUnit(interval, 'hour')
+  const byFreq: Record<string, (parts: Parts, interval: number) => string | null> = {
     DAILY: dailyText,
     WEEKLY: weeklyText,
     MONTHLY: monthlyText,
     YEARLY: yearlyText,
-  }[parts.FREQ]?.(parts, interval)
+  }
+  const text = byFreq[freq]?.(parts, interval)
   const time = timeSuffix(parts)
   return text == null || time === null ? null : `${text}${time}`
 }

@@ -25,11 +25,7 @@ function pngsToIco(images) {
 }
 
 // `appIcon` (optional) is the app icon's own artwork; `logo` still drives the tray template.
-// `badge` (optional, a PNG) is laid under the mark from 128 px up; smaller icons stay plain,
-// where its text would be unreadable. Its box is a fraction of the artwork, so it lands in the
-// same place on the inset macOS icon and the full-bleed Windows one.
-const BADGE = { width: 0.234, height: 0.078, top: 0.893 };
-export async function buildBrandAssets(logo, output, { appIcon = logo, badge = null } = {}) {
+export async function buildBrandAssets(logo, output, { appIcon = logo } = {}) {
   const svg = Buffer.from(appIcon);
   const icon = async (size, rounded = process.platform === "darwin") => {
     const artwork = rounded ? Math.round(size * 824 / 1024) : size;
@@ -39,11 +35,7 @@ export async function buildBrandAssets(logo, output, { appIcon = logo, badge = n
       bottom: size - artwork - inset, right: size - artwork - inset,
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     });
-    if (!badge || size < 128) return base.png().toBuffer();
-    const width = Math.round(artwork * BADGE.width), height = Math.round(artwork * BADGE.height);
-    const tag = await sharp(badge).resize(width, height).png().toBuffer();
-    const flat = await base.png().toBuffer();
-    return sharp(flat).composite([{ input: tag, left: inset + Math.round((artwork - width) / 2), top: inset + Math.round(artwork * BADGE.top) }]).png().toBuffer();
+    return base.png().toBuffer();
   };
   await writeFile(join(output, "icon.png"), await icon(512));
   const windowsSizes = [16, 24, 32, 48, 64, 128, 256];

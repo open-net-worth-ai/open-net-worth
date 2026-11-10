@@ -6,6 +6,7 @@ without coupling to the HTTP layer (api → services → db → core).
 
 from __future__ import annotations
 
+import difflib
 import math
 import time
 from datetime import date, datetime
@@ -406,6 +407,24 @@ def currency_sensitive_fields(profile: dict) -> list[dict]:
             sum(float(cb.get("limit") or 0) for cb in budgets.values()),
         )
     return out
+
+
+def text_diff(before: object, after: object) -> dict:
+    """Line diff of a free-text field: ``{"added": [...], "removed": [...]}``, both empty when
+    the text is unchanged. Blank lines are not content and never appear."""
+    old = str(before or "").splitlines()
+    new = str(after or "").splitlines()
+    added: list[str] = []
+    removed: list[str] = []
+    for line in difflib.ndiff(old, new):
+        text = line[2:].strip()
+        if not text:
+            continue
+        if line.startswith("+ "):
+            added.append(text)
+        elif line.startswith("- "):
+            removed.append(text)
+    return {"added": added, "removed": removed}
 
 
 def handle_base_currency_change(

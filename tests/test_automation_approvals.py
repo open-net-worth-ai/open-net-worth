@@ -181,7 +181,7 @@ def automation_dispatch(tmp_path, monkeypatch):
 
     async def fake_notify(message: str, *, channels=None, title=None):
         calls.append((message, channels))
-        return ["in_app"]
+        return {"in_app": {"sent": 1}}
 
     monkeypatch.setattr("backend.paths.PENDING_PLANS_JSON", tmp_path / "pending_plans.json")
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "automation")

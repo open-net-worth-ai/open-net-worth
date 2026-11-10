@@ -99,7 +99,7 @@ token and paste it into the same field. Leaving the field blank keeps the saved 
 
 ## Plaid
 
-US banks and cards, through your own Plaid developer account.
+US and Canadian banks and cards, through your own Plaid developer account.
 
 1. Create a developer account at [Plaid](https://dashboard.plaid.com). Under **Developers →
    Keys**, copy your **client_id** and the **secret** for the environment you want. *Sandbox*
@@ -502,3 +502,9 @@ paused.
 - [Importing](../features/importing.md) — the statement-file alternative (CSV, OFX, QIF, PDF…)
 - [What Lucius can do](../lucius/overview.md) — and what he can't
 - [Email](email-ingestion.md) — book transactions from your bank's notification emails instead
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Open Source Monarch Money Alternative: Your Own AI Agent](https://opennetworth.ai/blog/open-net-worth-vs-monarch-money/): bank connections compared with Monarch Money

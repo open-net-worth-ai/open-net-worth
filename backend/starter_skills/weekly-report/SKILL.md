@@ -8,7 +8,8 @@ today, in the profile's timezone — unless the invoking instructions name anoth
 
 ## Gotchas
 
-- **Read-only.** Never create, edit, delete or move a record or money.
+- **Read-only.** Never create, edit, delete or move a record or money. The one exception is
+  keeping the finished report in Documents (see "Keep it").
 - **The week, and nothing after it.** Every figure and sentence is about the week: balances,
   net worth and holdings as at its last day, never today's. Nothing that happened after it.
 - **Never guess how a tool computed a figure.** Explain a number only from what a tool
@@ -109,6 +110,14 @@ The **filename is short** — chat apps cut long names: `Weekly report 28 Sep-4 
 short month, plain hyphen, no year, no apostrophes). Only when the instructions ask for a PDF,
 also `create_artifact` with `artifact_type` "pdf", `source_artifact_id` = the html's id, no
 `content`, and the same name ending `.pdf`.
+
+## Keep it
+
+Once the report is created (and its PDF, if one was asked for), call `save_to_documents` for
+the html report's `artifact_id` and, when there is one, the PDF's — every time, without being
+asked, so each report is kept in Documents and not left in the one conversation that made it.
+The skill's instruction is the user's standing ask; it overrides the tool's "only when asked". Keeping it again changes nothing.
+If it fails, say so in one line and carry on to delivery.
 
 ## Deliver
 

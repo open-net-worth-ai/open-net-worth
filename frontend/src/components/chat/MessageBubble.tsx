@@ -966,6 +966,9 @@ export function MessageBubble({
 
   return (
     <div className={`msg-bubble ${isUser ? 'msg-user' : 'msg-assistant'}`}>
+      {!isUser && m.unheard && (
+        <div className="msg-unheard">Not read aloud, as you started talking first</div>
+      )}
       {/* The "still working" indicator is NOT here any more — it lives above the composer
           (TurnActivity), where it cannot scroll away mid-turn and sits next to Stop. */}
       {/* One merged block above the turn, in two cases: the reader asked for it (Settings →

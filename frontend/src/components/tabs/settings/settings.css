@@ -970,6 +970,10 @@
     border-color 0.12s ease,
     background 0.12s ease;
 }
+/* PasswordField's eye sits inside the input; keep room for it over the shared padding. */
+.onw-settings .ui-password > .rd-input {
+  padding-right: 40px;
+}
 /* A field must read lighter than the surface it sits on — that is what says "you can type here".
    `--surface2` preserves that step in every named theme; disabled controls use the recessed
    `--bg-2` step instead. */
@@ -2663,16 +2667,61 @@
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
   color: var(--toast-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 9px 18px;
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
   box-shadow: var(--shadow-toast);
   /* Sized to its text, never squeezed: centred with left 50% + translate, a shrink-to-fit box
      only gets half the viewport, so a long message wrapped into a tall pill-shaped oval. */
   width: max-content;
   max-width: min(520px, calc(100vw - 32px));
   text-align: center;
-  border-radius: 14px;
+  border-radius: var(--toast-radius);
+}
+
+/* "Saving…": the shell's one pill for any settings write in flight (useSaving). It takes the
+   toast's place and is gone before the result toast replaces it, so the two never overlap. */
+.onw-settings .rd-saving {
+  position: fixed;
+  bottom: 22px;
+  left: calc(50% - var(--chat-width, 0px) / 2);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
+  color: var(--toast-ink);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
+  box-shadow: var(--shadow-toast);
+  width: max-content;
+  border-radius: var(--toast-radius);
+}
+.onw-settings .rd-saving__spin {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: rd-saving-spin 0.7s linear infinite;
+}
+/* Confirmation, not progress: the toast's own look, with the check riding the text. */
+.onw-settings .rd-saving--done {
+  gap: 6px;
+}
+@keyframes rd-saving-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onw-settings .rd-saving__spin {
+    animation-duration: 2s;
+  }
 }
 
 /* an inline SVG used as a flex child can collapse to 0px width (its flex min-content
@@ -2712,9 +2761,12 @@
 }
 /* …except in an installed iOS app: it has no browser chrome to hide behind, and with the
    `default` status bar iOS resolves 100dvh to the FULL screen while the web view starts below
-   the status bar, so the pane's bottom fell off the screen. The fixed overlay IS the web view. */
+   the status bar, so the pane's bottom fell off the screen. The fixed overlay IS the web view.
+   Not on a phone: there Settings is a bottom sheet sized from the visible viewport (below),
+   and this rule's higher specificity made it full-height — the white card reached the top
+   edge, so the status-bar tint (utils/statusBarTint.ts) sampled white (owner, 2026-11-09). */
 @supports (-webkit-touch-callout: none) {
-  @media (max-width: 1023.98px) {
+  @media (min-width: 640px) and (max-width: 1023.98px) {
     :root[data-onw-display-mode='standalone'] .ui-modal-card--workspace.onw-settings {
       height: 100%;
       max-height: 100%;
@@ -3592,7 +3644,8 @@
   flex-wrap: wrap;
 }
 @media (max-width: 700px) {
-  .onw-settings .rd-toast {
+  .onw-settings .rd-toast,
+  .onw-settings .rd-saving {
     bottom: calc(96px + env(safe-area-inset-bottom));
   }
 }

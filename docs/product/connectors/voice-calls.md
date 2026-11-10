@@ -33,14 +33,20 @@ every request with Lucius's answer — so you can scroll back through it later, 
 what was said on the call next time you talk.
 
 When you ask for something real, the front voice hands it to Lucius and says something short
-about what you asked (*"okay, let me check your grocery spending"* — never a promise of how long it takes, or a hint of the answer). Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
+about what you asked (*"okay, let me check your grocery spending"* — never a promise of how long it takes, or a hint of the answer). When you're following on from what he just said, like *"yes, please"*, it's just *"sure"*. Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
 you hear that it's taking longer than usual — once, and only when it's true. After about 10 seconds
 of hearing nothing, he tells you he's still on it (*"still working on your grocery spending"*), then
 again every 30 to 45 seconds until the answer starts. He stays quiet while you're talking or after
 you've asked him to wait. These lines repeat what you asked, never a figure. To cut him off, say at
 least two words (*"hold on"*, *"stop there"*): a lone *"okay"* or background noise doesn't.
 Correct him (*"no, I meant the other card"*) and he moves on to what you meant, skipping the first
-answer if it hasn't been read out yet; he also knows you never heard it. Asking something different
+answer if it hasn't been read out yet; he also knows you never heard it. Start talking just as an
+answer begins, before any of it has played, and he knows you missed it: if what you said was a
+question, he includes whatever you still need in the reply, and if it was only a cough or an *"mm"*,
+he says the answer a moment later. An answer you never heard any of stays in the chat, marked
+*"Not read aloud"*. Add to a request (*"…and Uber"*) and he says what he caught (*"Got it, Uber
+too."*). Cut him off partway and he knows how far he got; if it was only a
+cough or an *"mm"*, he picks up again from that sentence. Asking something different
 keeps the first answer, in order. A change can't be taken back this way: if the first request did
 change something, you always hear how it went, then he gets to your correction.
 Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its
@@ -48,8 +54,16 @@ name, and on a line of its own you don't hear it at all.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
 
 **Changes follow your usual approvals**, which depend on the conversation's mode and the tool's
-permission. When one waits for you, he says so, and the approval card appears in the chat on your
-screen. Tap **Approve** and he tells you on the call when it's done.
+permission. When one waits for you, he reads out what it is and asks whether to go ahead, and the
+approval card appears in the chat on your screen. Answer out loud (*"yes, go ahead"*, *"no, leave it"*)
+or tap the card: either does the same thing, and he tells you on the call how it went. Your voice
+counts for any card, including one that moves money. Anyone near your phone can answer too, and
+voices aren't told apart. So a yes only counts if you start saying it after he's finished reading that
+card, and it's a plain yes: *"hmm"*, a question, or half a sentence approves nothing, and he reads the card
+again. A yes takes effect about a second and a half after you stop, so you can still go on: *"yes... wait,
+not that one"* doesn't approve it. *"No"* always works. A card he can't read out in full, such as a transfer or a
+long list, needs a tap. While a card
+waits, anything else you ask waits too, and he comes back to it once you've answered.
 Your [permission settings](../lucius/permissions.md) apply exactly as they do in the chat.
 
 **He can look at your screen.** Ask *"what am I looking at?"* and he reads the screen open in the
@@ -125,7 +139,15 @@ attach a file, and it goes to Lucius like any other message — and he reads his
 call, as well as showing it in the chat. The same goes for a change you approve on screen: what
 happens next is read out.
 
-**You see the call as it happens.** Your words appear as you speak, and Lucius's as he says them: above the mic on the full call screen, and in the chat. When the voice hasn't started or you cut him off, the chat shows his whole answer.
+**A call is a normal conversation.** It's saved like any other, and it's named from the first thing you asked rather than your greeting. Switch to another app for a moment and you come back to the same conversation; the installed app starts a new one only after about 30 minutes away.
+
+**The screen stays on during a call**, where your browser allows it, and goes back to normal when the call ends. A phone held to your ear can still turn its screen off, as it does on any call.
+
+**You see the call as it happens.** Your words appear as you speak, and Lucius's as he says them: above the mic on the full call screen, and in the chat. When the voice hasn't started or you cut him off, the chat shows his whole answer. Everything you hear is in the chat, in the order you heard it, including short lines like *"one sec"* said while he works; those are for you to read, and Lucius's model doesn't see them.
+
+**Only Lucius states facts.** The voice that picks up instantly handles only small talk. If it tries to answer with a figure, or to say something is done, that reply is thrown away and your question goes to Lucius instead. If you pause partway through a sentence, it says *"mm-hm?"* and waits for the rest.
+
+**It learns your merchants.** The names you spend with most, up to 20, are passed to the speech-to-text service as word hints on each call, so it hears them correctly.
 
 **Carrying on, correcting, or changing the subject.** Say more after you've asked something and the call decides which it is. If you're finishing the same question, Lucius's current attempt is stopped and he starts again on the whole of it, and your words stay one message in the chat. If you correct yourself, the old attempt is stopped and its answer is dropped. A different question waits its turn. A change he has already started, or a task, always runs to the end first, and he tells you what it did. Nothing waits before Lucius starts: stopping is what saves the wasted work.
 
@@ -151,13 +173,16 @@ works; from another device the app must be reachable over HTTPS (see
 | **Front voice** | The model that holds the conversation. *Gemma 4* is the default: it's LiveKit's replacement for the retired Gemini 2.5 models, and in testing it asked what a bare "sure" was agreeing to instead of guessing. A setting saved with a retired model moves to it by itself. |
 | **Language** | In beta: how good a language sounds depends on the voice, so try yours before relying on it. What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
 | **Speech to text** | Which service turns your voice into text. *Automatic* uses Deepgram Nova-3, which hears every language here. The AssemblyAI models hear fewer (*Universal* hears English only), so picking a language they can't hear moves you to Automatic. All of these are told the common finance words to expect in your language, so they mishear them less. Those are general words: nothing from your own accounts goes with them. |
+| **Noise cancelling** | LiveKit Cloud only, and there's no extra account or key. *Standard* (the default) uses Krisp to remove fans, traffic and music, and keeps every voice it hears, at no extra cost. *Voice isolation* also removes other people talking near you; LiveKit's free plan includes 100 minutes of it a month. When LiveKit refuses it, new calls use Standard and this setting says so: the app tries voice isolation again after an hour, then next month if it's still refused, or as soon as you pick it again. The call that's refused carries on without Krisp. *Off* leaves only your browser's own noise suppression, which stays on with the others too. On your own LiveKit server this setting isn't shown and calls go on as before. Change it during a call and the call restarts with it. |
 | **Voice model** | Which service speaks and what it costs. *Inworld 2.0 Flash* is the default for a new setup: it's the cheapest model that speaks every language here. A setup you've already saved keeps its choice until you change it. Only models that speak your language are offered. |
 | **Voice** | Who speaks: a sample of male and female voices, marked with the gender the docs state. The default is a calm male voice where one is documented (*Dennis* on Inworld), and a setup with no voice picked uses it. Pick **Another voice…** to paste an id from that service's library, which has many more. Picking another service goes back to its default voice. A voice may not sound natural in every language, so try it with a short call. |
 
 **What a call costs.** Lucius's voice is most of it, and it's charged by the character, so the price
-beside each voice and the length of his answers matter most. Settings shows an estimate for the voice
-you pick: on LiveKit's free $2.50 credit, about 80 minutes at $50 per million characters, about 140 at
-$25 and about 200 at $15. A call that talks more uses it faster, and LiveKit sets the prices.
+beside each voice and the length of his answers matter most. At the bottom, settings shows **Estimated
+free minutes**: how long LiveKit's free plan should last each month with what you've picked. A new setup comes to about 200 minutes on its $2.50 monthly credit. With voice isolation on,
+about the first 100 of those use it and the rest use Standard. A call that talks more uses the credit
+faster, and LiveKit sets the prices. Lucius's own model isn't counted: your AI provider
+bills that.
 
 The LiveKit key and secret are stored like every connector credential: never shown to Lucius,
 readable back only by you through the eye on the field. Pausing the connector stops taking calls.

@@ -252,15 +252,39 @@ function makeConversation(): ConversationMeta {
 // exactly when that instance is actually terminated and relaunched, so a plain reload or
 // backgrounding within the SAME still-alive instance keeps it and still resumes normally.
 // Runs once at module load, before any readActiveId()/readPendingConversation() call below.
+//
+// iOS also terminates an app it merely sent to the background, so a quick look at another app came
+// back as a "relaunch" on a new conversation, away from the call just held (owner, 2026-11-07). So
+// a relaunch only starts fresh once the app has really been away.
 const PWA_SESSION_SEEN_KEY = 'lucius_pwa_session_seen'
+const PWA_LAST_AWAY_KEY = 'lucius_pwa_last_away'
+export const PWA_FRESH_AFTER_MS = 30 * 60 * 1000
+
+export function pwaLaunchStartsFresh(lastAway: number, now: number): boolean {
+  return !(lastAway > 0) || now - lastAway >= PWA_FRESH_AFTER_MS
+}
+
 if (isStandalonePwa()) {
   try {
     if (!sessionStorage.getItem(PWA_SESSION_SEEN_KEY)) {
       sessionStorage.setItem(PWA_SESSION_SEEN_KEY, '1')
-      const draft = makeConversation()
-      writePendingConversation(draft)
-      localStorage.setItem(ACTIVE_KEY, draft.id)
+      const lastAway = Number(localStorage.getItem(PWA_LAST_AWAY_KEY))
+      if (pwaLaunchStartsFresh(lastAway, Date.now())) {
+        const draft = makeConversation()
+        writePendingConversation(draft)
+        localStorage.setItem(ACTIVE_KEY, draft.id)
+      }
     }
+    const noteAway = () => {
+      if (document.visibilityState !== 'hidden') return
+      try {
+        localStorage.setItem(PWA_LAST_AWAY_KEY, String(Date.now()))
+      } catch {
+        /* storage unavailable — the next launch starts fresh, as it did before */
+      }
+    }
+    document.addEventListener('visibilitychange', noteAway)
+    window.addEventListener('pagehide', noteAway)
   } catch {
     /* storage unavailable — falls back to the normal resume behavior */
   }

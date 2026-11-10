@@ -1,10 +1,11 @@
-"""`onw start --background`, `onw stop` and `onw logs`: a server with no terminal, without a service.
+"""`onw start --background`, `onw stop`, `onw restart` and `onw logs`: a server with no terminal.
 
 Running in the background and starting at login are separate choices. `--background` is this run
 only: it leaves the terminal free and is gone after a reboot. `--autostart` installs a service.
 
-`onw stop` asks through a file beside the instance lock, as `onw upgrade` does (`upgrade_request`),
-so it works the same on every OS and never signals a pid the lock may have outlived.
+`onw stop` and `onw restart` ask through a file beside the instance lock, as `onw upgrade` does
+(`upgrade_request`), so they work the same on every OS and never signal a pid the lock may have
+outlived.
 
 Output goes nowhere: `app.log` already rotates, and a server's stdout in a plain file grows for the
 life of the install (see `autostart`). That's why `start_in_background` waits and reports, and why
@@ -160,6 +161,25 @@ def _wait_until(condition: Callable[[], bool], wait: float, poll: float) -> bool
     return False
 
 
+def _asked(
+    server: upgrade_request.RunningServer, word: str, doing: str, *, heard_wait: float, poll: float
+) -> bool:
+    """Writes the request and waits for the server to hear it, or says why it can't."""
+    if upgrade_request.read_state(upgrade_request.request_path())[0] == upgrade_request.WORKING:
+        print("It's upgrading right now. Try again once it's finished.", file=sys.stderr)
+        print("See how it's going with: onw status", file=sys.stderr)
+        return False
+    path = upgrade_request.stop_path()
+    path.write_text(f"{word}\n", encoding="utf-8")
+    print(f"==> {doing} the server at {server.url} ...", flush=True)
+    if _wait_until(lambda: not path.exists(), heard_wait, poll):
+        return True
+    upgrade_request.clear(path)
+    print("It didn't answer: it's on a version from before it could be asked,", file=sys.stderr)
+    print("or it wasn't started with `onw start`. Do this where it runs.", file=sys.stderr)
+    return False
+
+
 def stop(
     *,
     heard_wait: float = STOP_HEARD_SECONDS,
@@ -173,24 +193,41 @@ def stop(
         return 0
     if boot_service_runs_this_folder():
         print("It runs as the boot service, which would only start it again.", file=sys.stderr)
-        print("To stop it and remove the service, run: onw autostart stop", file=sys.stderr)
+        print("To stop it and turn autostart off, run: onw autostart off", file=sys.stderr)
         return 1
-    if upgrade_request.read_state(upgrade_request.request_path())[0] == upgrade_request.WORKING:
-        print("It's upgrading right now. Try again once it's finished.", file=sys.stderr)
-        print("See how it's going with: onw status", file=sys.stderr)
-        return 1
-    path = upgrade_request.stop_path()
-    path.write_text("stop\n", encoding="utf-8")
-    print(f"==> Stopping the server at {server.url} ...", flush=True)
-    if not _wait_until(lambda: not path.exists(), heard_wait, poll):
-        upgrade_request.clear(path)
-        print("It didn't answer: it's on a version from before it could be asked,", file=sys.stderr)
-        print("or it wasn't started with `onw start`. Stop it where it runs.", file=sys.stderr)
+    if not _asked(server, "stop", "Stopping", heard_wait=heard_wait, poll=poll):
         return 1
     if _wait_until(lambda: server_version(server.url) is None, stop_wait, poll):
         print("==> Stopped.")
         return 0
     print("It hasn't stopped yet. Check with: onw status", file=sys.stderr)
+    return 1
+
+
+def restart(
+    *,
+    heard_wait: float = STOP_HEARD_SECONDS,
+    stop_wait: float = STOP_WAIT_SECONDS,
+    boot_wait: float = BOOT_WAIT_SECONDS,
+    poll: float = POLL_SECONDS,
+) -> int:
+    """`onw restart`: comes back the way it was running, in its terminal, in the background or as
+    the boot service, so unlike `onw stop` a service is no reason to refuse."""
+    server = upgrade_request.running_server()
+    if server is None:
+        print("Open Net Worth isn't running. Start it with: onw start", file=sys.stderr)
+        return 1
+    if not _asked(
+        server, upgrade_request.RESTART_WORD, "Restarting", heard_wait=heard_wait, poll=poll
+    ):
+        return 1
+    if _wait_until(lambda: server_version(server.url) is None, stop_wait, poll) and _wait_until(
+        lambda: server_version(server.url) is not None, boot_wait, poll
+    ):
+        print(f"==> Running {server_version(server.url)} at {server.url}.")
+        return 0
+    print("It hasn't come back. Check with: onw status", file=sys.stderr)
+    print(f"Its log says why: {log_file()}", file=sys.stderr)
     return 1
 
 
@@ -206,7 +243,9 @@ def _follow(path: Path, *, position: int, poll: float, stopped: Callable[[], boo
                     file.seek(position)
                     data = file.read()
                     position = file.tell()
-                sys.stdout.write(data.decode("utf-8", errors="replace"))
+                # A text stream adds Windows's line ending itself: doubled, it'd show as a blank line.
+                text = data.decode("utf-8", errors="replace").replace("\r\n", "\n")
+                sys.stdout.write(text)
                 sys.stdout.flush()
         time.sleep(poll)
 
