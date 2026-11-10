@@ -58,7 +58,7 @@ What each change tells you depends on the source:
   the dollar range reported. Members do not report share counts or prices.
 
 Filings are checked twice a day. A new one updates the portfolio and adds a story to **Intel**.
-Use **Refresh** to check now. If a check fails, the last portfolio stays and the screen says
+Use **Refresh** in the **⋯** menu beside the buttons to check now; **Unfollow** is in the same menu. If a check fails, the last portfolio stays and the screen says
 what went wrong. A fund whose latest filing is more than about two quarters old, or a member
 with no report for a year, is marked out of date.
 

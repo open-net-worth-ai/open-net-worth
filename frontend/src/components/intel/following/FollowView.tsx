@@ -1,7 +1,15 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import { Badge, Button, ConfirmDialog, EmptyState } from '../../ui'
-import { RefreshCw, Sparkles } from '../../../ui/icons'
+import {
+  ActionMenu,
+  Badge,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  SummaryBar,
+  type StatCard,
+} from '../../ui'
+import { Sparkles } from '../../../ui/icons'
 import { fPct } from '../../../utils/format'
 import { refreshFollow, unfollowPortfolio, type Follow } from '../../../api/followedPortfolios'
 import { COPY, askPrompt } from './following.copy'
@@ -18,55 +26,45 @@ interface Props {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="fol-stat">
-      <dt>{label}</dt>
-      <dd>
-        {value}
-        {sub && <small>{sub}</small>}
-      </dd>
-    </div>
-  )
-}
-
-function Stats({ follow }: { follow: Follow }) {
+function statCards(follow: Follow): StatCard[] {
   const model = follow.model
-  if (!model) return null
+  if (!model) return []
   const top = model.holdings[0]
   const member = follow.kind === 'house_member'
-  return (
-    <dl className="fol-stats">
-      <Stat
-        label={member ? COPY.statLastReport : COPY.statFiled}
-        value={shortDate(model.filed_at)}
-        sub={ageText(model.age_days)}
-      />
-      <Stat
-        label={COPY.statHoldings}
-        value={String(model.holdings.length)}
-        sub={member ? COPY.statEstimated : `as of ${shortDate(model.as_of)}`}
-      />
-      {top && (
-        <Stat
-          label={COPY.statTop}
-          value={top.symbol}
-          sub={`${fPct(top.weight, { fraction: true })} of the portfolio`}
-        />
-      )}
-      <Stat
-        label={member ? COPY.statChangesMember : COPY.statChanges}
-        value={changeSummary(model) ?? COPY.noChanges}
-        sub={
-          member
-            ? `${follow.activity.length} trades listed`
-            : model.prev_as_of
-              ? `${shortDate(model.prev_as_of)} to ${shortDate(model.as_of)}`
-              : undefined
-        }
-      />
-    </dl>
-  )
+  const pct = (n: number) => fPct(n, { fraction: true })
+  const topFive = model.holdings.slice(0, 5).reduce((sum, h) => sum + h.weight, 0)
+  const cards: StatCard[] = []
+  if (top)
+    cards.push({
+      label: COPY.statTop,
+      value: top.symbol,
+      caption: `${pct(top.weight)} of the portfolio`,
+    })
+  if (model.holdings.length > 5)
+    cards.push({
+      label: COPY.statTopFive,
+      value: pct(topFive),
+      caption: `of the ${model.holdings.length} holdings shown`,
+    })
+  cards.push({
+    label: member ? COPY.statChangesMember : COPY.statChanges,
+    value: changeSummary(model) ?? COPY.noChanges,
+    caption: member
+      ? `${follow.activity.length} trades listed`
+      : model.prev_as_of
+        ? `${shortDate(model.prev_as_of)} to ${shortDate(model.as_of)}`
+        : undefined,
+  })
+  return cards
+}
+
+/** One line under the name: who, and how old the data is. Never a claim that it is current. */
+function metaLine(follow: Follow): string {
+  const model = follow.model
+  if (!model) return follow.subtitle
+  const filed = `${follow.kind === 'house_member' ? 'Last report' : 'Filed'} ${shortDate(model.filed_at)}, ${ageText(model.age_days)}`
+  const asOf = follow.kind === 'fund_13f' ? ` · Holdings as of ${shortDate(model.as_of)}` : ''
+  return `${follow.subtitle} · ${filed}${asOf}`
 }
 
 function Notes({ follow, error }: { follow: Follow; error: string | null }) {
@@ -118,29 +116,24 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
     if (await run(() => unfollowPortfolio(follow.id), COPY.saveFailed)) onUnfollowed(follow.id)
   }
   const refreshButton = (
-    <Button
-      variant="ghost"
-      size="sm"
-      loading={refreshing}
-      iconLeft={<RefreshCw size={14} />}
-      onClick={() => void refresh()}
-    >
+    <Button size="sm" loading={refreshing} onClick={() => void refresh()}>
       {COPY.refresh}
     </Button>
   )
+  const cards = statCards(follow)
 
   return (
     <>
       <section className="fol-hero" aria-label={follow.name}>
         <div className="fol-hero-top">
-          <div>
+          <div className="fol-id">
             <h2 className="fol-name">
               {follow.name}
               {model?.estimated && <Badge tone="warn">{COPY.estimated}</Badge>}
               {follow.status === 'stale' && <Badge tone="warn">{COPY.outOfDate}</Badge>}
               {follow.status === 'error' && <Badge tone="neg">{COPY.couldNotUpdate}</Badge>}
             </h2>
-            <div className="fol-by">{follow.subtitle}</div>
+            <div className="fol-by">{refreshing ? COPY.refreshing : metaLine(follow)}</div>
           </div>
           <div className="fol-actions">
             <Button
@@ -161,13 +154,17 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
             >
               {COPY.setUpAutomation}
             </Button>
-            {refreshButton}
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
-              {COPY.unfollow}
-            </Button>
+            <ActionMenu
+              label={COPY.moreActions(follow.name)}
+              title={follow.name}
+              items={[
+                { label: COPY.refresh, onSelect: () => void refresh(), disabled: refreshing },
+                { label: COPY.unfollow, onSelect: () => setConfirming(true), tone: 'danger' },
+              ]}
+            />
           </div>
         </div>
-        <Stats follow={follow} />
+        {cards.length > 0 && <SummaryBar cards={cards} />}
       </section>
       <Notes follow={follow} error={actionError} />
       {model && model.holdings.length > 0 ? (

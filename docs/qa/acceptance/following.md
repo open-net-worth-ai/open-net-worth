@@ -31,8 +31,8 @@ the `copy-followed-portfolio` automation template. Every control on the screen h
 
 ### FOLLOWING-SUMMARY
 - GIVEN a fund is selected
-- WHEN I read the summary card
-- THEN it shows the filing date with its age ("88 days ago"), the number of holdings shown with the as-of date, the largest holding with its weight, and what changed since the last filing ("1 new · 1 added · 1 trimmed · 1 sold out", or "No changes")
+- WHEN I read the header
+- THEN the line under the name gives who it is, the filing date with its age ("88 days ago") and the as-of date, and three cards show the largest position with its weight, the weight of the top five, and what changed since the last filing with its period ("1 new · 1 added · 1 trimmed · 1 sold out", or "No changes")
 
 ### FOLLOWING-HOLDINGS-FILTER
 - GIVEN a fund whose latest filing changed
@@ -71,8 +71,8 @@ the `copy-followed-portfolio` automation template. Every control on the screen h
 
 ### FOLLOWING-REFRESH
 - GIVEN a follow is selected
-- WHEN I click "Refresh"
-- THEN the button shows a spinner, the source is re-read and the list reloads; a failure shows "Couldn't refresh." with the reason
+- WHEN I open the "More actions" menu beside the buttons and choose "Refresh"
+- THEN the line under the name reads "Checking for a newer filing…", the source is re-read and the list reloads; a failure shows "Couldn't refresh." with the reason
 
 ### FOLLOWING-ASK-LUCIUS
 - GIVEN a follow is selected
@@ -86,7 +86,7 @@ the `copy-followed-portfolio` automation template. Every control on the screen h
 
 ### FOLLOWING-UNFOLLOW
 - GIVEN a follow is selected
-- WHEN I click "Unfollow" and confirm
+- WHEN I open the "More actions" menu, choose "Unfollow" and confirm
 - THEN it leaves the chip row and the next follow is shown; Cancel changes nothing
 
 ### FOLLOWING-DIALOG-SEARCH

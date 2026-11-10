@@ -27,6 +27,12 @@ function setup(follows = [fund(), member()]) {
   return render(<FollowingTab onAskLucius={onAskLucius} />)
 }
 
+/** Refresh and Unfollow live in the header's "More actions" menu. */
+async function pick(item: string) {
+  fireEvent.click(screen.getByRole('button', { name: /^More actions for/ }))
+  fireEvent.click(await screen.findByRole('menuitem', { name: item }))
+}
+
 const calls = (method: string, part: string) =>
   mockFetch.mock.calls.filter(
     ([url, init]) =>
@@ -73,8 +79,10 @@ describe('list and detail', () => {
     setup()
     expect(await screen.findByRole('heading', { name: 'Acme Capital' })).toBeTruthy()
     const hero = screen.getByRole('region', { name: 'Acme Capital' })
-    expect(within(hero).getByText(shortDate('2026-08-14'))).toBeTruthy()
-    expect(within(hero).getByText('88 days ago')).toBeTruthy()
+    expect(
+      within(hero).getByText(new RegExp(`Filed ${shortDate('2026-08-14')}, 88 days ago`)),
+    ).toBeTruthy()
+    expect(within(hero).getByText('Largest position')).toBeTruthy()
     expect(within(hero).getByText('1 new · 1 added · 1 trimmed · 1 sold out')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: /Pat Placeholder/ }))
     expect(await screen.findByRole('heading', { name: /Pat Placeholder/ })).toBeTruthy()
@@ -86,7 +94,7 @@ describe('list and detail', () => {
   it('filters the holdings by change and lists the sold-out and unmatched disclosures', async () => {
     setup([fund()])
     expect(await screen.findByText('Crux Holdings')).toBeTruthy()
-    expect(screen.getByText('22.40%')).toBeTruthy()
+    expect(screen.getAllByText('22.40%').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('tab', { name: /^New\s*1$/ }))
     expect(screen.getByText('Crux Holdings')).toBeTruthy()
     expect(screen.queryByText('Acme Corp')).toBeNull()
@@ -140,7 +148,7 @@ describe('refresh and unfollow', () => {
     const before = calls('GET', '/api/followed-portfolios').filter(
       ([u]) => u === '/api/followed-portfolios',
     ).length
-    fireEvent.click(screen.getByRole('button', { name: COPY.refresh }))
+    await pick(COPY.refresh)
     await waitFor(() => expect(calls('POST', '/fol_fund/refresh')).toHaveLength(1))
     await waitFor(() =>
       expect(
@@ -154,17 +162,17 @@ describe('refresh and unfollow', () => {
     setup([fund()])
     await screen.findByRole('heading', { name: 'Acme Capital' })
     mockFetch.mockImplementationOnce(async () => json({ detail: 'try later' }, 503))
-    fireEvent.click(screen.getByRole('button', { name: COPY.refresh }))
+    await pick(COPY.refresh)
     expect(await screen.findByText(COPY.refreshFailed('try later'))).toBeTruthy()
   })
 
   it('removes a follow only after the confirmation, then selects the next one', async () => {
     setup()
     await screen.findByRole('heading', { name: 'Acme Capital' })
-    fireEvent.click(screen.getByRole('button', { name: COPY.unfollow }))
+    await pick(COPY.unfollow)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(calls('DELETE', '/fol_fund')).toHaveLength(0)
-    fireEvent.click(screen.getByRole('button', { name: COPY.unfollow }))
+    await pick(COPY.unfollow)
     expect(screen.getByText(COPY.unfollowTitle('Acme Capital'))).toBeTruthy()
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: COPY.unfollow }))
     await waitFor(() => expect(calls('DELETE', '/fol_fund')).toHaveLength(1))
