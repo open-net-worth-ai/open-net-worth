@@ -312,6 +312,17 @@ describe('a caller that already said "set this up" lands ON the form', () => {
 })
 
 describe('the kebab', () => {
+  it('offers no View details for a REST API the owner added: it has no directory page', () => {
+    // It opened a plain Browse & add, since the directory lists only the entry that adds one.
+    const { container } = renderDetail(
+      entry({ id: 'rest:acme_bank', kind: 'rest', name: 'Acme Bank', families: ['API'] }),
+    )
+    openKebab(container)
+    const items = [...container.querySelectorAll('.rd-kebab-item')].map((b) => b.textContent)
+    expect(items).not.toContain('View details')
+    expect(items).toContain('Remove connector')
+  })
+
   it('offers View details • Refresh tools list • Remove connector for a native connector', () => {
     const { container } = renderDetail(entry())
     const items = Array.from(openKebab(container).querySelectorAll('.rd-kebab-item')).map(

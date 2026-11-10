@@ -275,7 +275,10 @@ export function ConnectorDetail({
       : []
   const kebabItems: KebabItem[] = [
     ...phoneRunningItems,
-    { label: 'View details', onClick: onViewDetails },
+    // A directory landing page, which a REST API the owner added does not have: the directory
+    // lists only the entry that adds one, so this opened a plain Browse & add (owner,
+    // 2026-11-11). Its own page already shows everything about it.
+    ...(entry.kind === 'rest' ? [] : [{ label: 'View details', onClick: onViewDetails }]),
     ...(configForm
       ? [{ label: 'Edit configuration', onClick: () => setConfiguringId(entry.id) }]
       : entry.mcp
