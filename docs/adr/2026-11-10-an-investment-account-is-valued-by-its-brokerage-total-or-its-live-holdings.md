@@ -221,3 +221,40 @@ Not changed, by design:
 - **"Not updating" after 7 days.** An investment total unchanged for 7 days means a stuck feed.
 - **Booking only on a changed figure.** Re-booking every tick would chase tracked holdings' price
   moves; the next changed figure corrects any drift.
+
+## Amendment 2 (2026-11-10): the untracked part is its own band, Untracked holdings
+
+The first version filed a Brokerage total account's ledger balance under `settlement_cash` (or
+`retirement` for a retirement account), the band every reader takes as cash. A linked brokerage
+at $123,456.78 with no holdings entered read as 100% settlement cash on the Dashboard, the Assets
+card, the allocation, the rebalance plan and in Lucius's answers. Net worth and cash on hand were
+right; only the bucketing was wrong. The owner approved this design.
+
+- **The band.** With the flag on, a Brokerage total investment or retirement account's ledger
+  balance bands as `untracked_holdings`: invested at the brokerage, holdings not entered, no asset
+  class. The one seam is `ledger.account_kind_and_band(account, untracked)`, with the set from
+  `services/untracked_holdings.account_ids`, which asks `account_value.source_of`. A Live
+  holdings account is unchanged. There are no cash holdings in the data model, so on a Brokerage
+  total account all of the ledger balance is untracked: settlement cash there is only cash the
+  app knows about, which today is none.
+- **History uses the current source.** Every chart point bands each account by its value source
+  today, so switching an account doesn't make the chart jump on that day.
+- **Retirement stays retirement.** A retirement account's untracked part is in `retirement_base`
+  and is subtracted by `net_worth_excl_retirement` as before. `retirement_untracked_base`
+  (present only when non-zero) names that part so the Assets cards can split Retirement from
+  Investments.
+- **Readers.** The Assets Investments and Retirement cards show an **Untracked holdings** row,
+  and the composition counts it under the right card. The Dashboard allocation counts it as
+  invested (`portfolio_rows` gives the account row the band). The net-worth chart draws it as its
+  own band. The report and the mention descriptor label it, and Lucius's snapshot and tool
+  descriptions say it's invested, not cash.
+- **Book-level figures leave it out and say so.** The investments book (weights, sections,
+  concentration, today's move), the Overview's drift and `rebalance_plan` are worked out over
+  broken-down holdings only. An unknown slice in the denominator would make every known class
+  look underweight. Each reports `untracked_excluded` (one fold of the projected rows, so no
+  second valuation). `project_invested`, `concentration_by_name` and `today_move` are unchanged:
+  they already took only instrument-backed rows. The Investments tab shows a **Not broken down**
+  slice (its share of everything invested) and a line under Concentration and Rebalancing.
+- **Flag off** leaves every output as it was. The new keys are absent, not zero.
+
+This resolves the first Negative consequence and the first follow-up above.

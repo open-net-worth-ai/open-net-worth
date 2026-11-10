@@ -22,7 +22,7 @@
 
 import { useMemo } from 'react'
 import type { ComputedRow } from '../../../types/portfolio'
-import type { InvestedBookRow } from '../../../types/aggregates'
+import type { InvestedBookRow, UntrackedExcluded } from '../../../types/aggregates'
 import { usePortfolioAnalytics } from '../../../hooks/serverState'
 import {
   ASSET_CLASS_COLOR,
@@ -117,6 +117,15 @@ export interface DerivedBook extends Book {
   portfolioTotal: number
   /** One row per instrument, cross-account sums already done by the server. */
   mergedRows?: BookRow[]
+  /** Brokerage total accounts' holdings not entered yet — invested, but left out of every
+   *  figure above (the server says how much). Null when there is none, or the flag is off. */
+  untracked: UntrackedExcluded | null
+}
+
+/** The server's `untracked_excluded`, or null when nothing was left out. */
+function untrackedOf(server: { untracked_excluded?: UntrackedExcluded } | null) {
+  const u = server?.untracked_excluded
+  return u && u.accounts.length > 0 ? u : null
 }
 
 // ── Server → BookRow ───────────────────────────────────────────────────────
@@ -187,6 +196,7 @@ export function useInvestmentsBook(invRows: ComputedRow[]): DerivedBook {
         totalPLPct: 0,
         pctOfPortfolio: 0,
         portfolioTotal: 0,
+        untracked: untrackedOf(server),
       }
     }
 
@@ -232,6 +242,7 @@ export function useInvestmentsBook(invRows: ComputedRow[]): DerivedBook {
         : null,
       /** One row per instrument — the cross-account sum happens on the server. */
       mergedRows: server.merged_rows.map((r) => toBookRow(r, rawByKey)),
+      untracked: untrackedOf(server),
     } as DerivedBook
   }, [server, invRows, loading])
 }

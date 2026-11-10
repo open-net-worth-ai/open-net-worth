@@ -447,6 +447,7 @@ def test_breakdown_as_of_splits_settlement_cash_from_bank_cash(isolated):
             "id": "ibkr",
             "kind": "asset",
             "type": "investment",
+            "value_source": "holdings",  # its balance is cash
             "currency": "USD",
             "initial_balance": -300,  # drawn margin debit
             "initial_balance_date": "2000-01-01",
@@ -455,6 +456,7 @@ def test_breakdown_as_of_splits_settlement_cash_from_bank_cash(isolated):
             "id": "coinbase",
             "kind": "asset",
             "type": "investment",
+            "value_source": "holdings",  # its balance is cash
             "currency": "USD",
             "initial_balance": 400,
             "initial_balance_date": "2000-01-01",

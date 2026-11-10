@@ -6,6 +6,7 @@ import { ASSET_CLASS_COLOR, ASSET_CLASS_LABEL } from '../../../utils/constants'
 import { EntityRow } from '../../../lucius/EntityRow'
 import type { DerivedBook } from './useInvestmentsBook'
 import { Button } from '../../ui'
+import { UntrackedSlice } from './UntrackedHoldings'
 
 function clsDisplayName(cls: string): string {
   return ASSET_CLASS_LABEL[cls] ?? cls.charAt(0).toUpperCase() + cls.slice(1).replace(/_/g, ' ')
@@ -176,6 +177,7 @@ export function Allocation({ alloc, d, onSaveTargets }: Props) {
             </EntityRow>
           )
         })}
+        {d.untracked && <UntrackedSlice u={d.untracked} />}
       </div>
       <div className="mk-alloc-foot">
         {hasTargets ? (

@@ -497,6 +497,11 @@ def build_system_prompt(
             "fixed_deposit": "fixed deposits",
             "settlement_cash": "brokerage/exchange settlement cash (negative = margin drawn)",
             "retirement": "retirement account cash (locked)",
+            # A Brokerage total account's balance (ADR 2026-11-10, amendment 2).
+            "untracked_holdings": (
+                "invested at a brokerage/retirement account, holdings not entered "
+                "(NOT cash, no asset class)"
+            ),
             "receivable": "loans receivable",
         }
         for cls, val in bd.get("account_classes", {}).items():

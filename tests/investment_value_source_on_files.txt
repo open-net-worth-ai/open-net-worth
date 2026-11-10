@@ -50,6 +50,14 @@ tests/test_demo_route_classification.py
 tests/test_tool_schema_budget.py
 tests/test_schema_from_model.py
 tests/test_domain_introspect.py
+tests/test_untracked_holdings_band.py
+tests/test_owned_assets_page.py
+tests/test_owned_assets_service.py
+tests/test_portfolio_brief.py
+tests/test_investments_book.py
+tests/test_rebalance_service.py
+tests/test_portfolio_analytics.py
+tests/test_prompt_networth.py
 tests/test_account_value_fixes.py
 tests/test_account_value_uat_flag_fx.py
 tests/test_account_value_uat_hold_feed.py

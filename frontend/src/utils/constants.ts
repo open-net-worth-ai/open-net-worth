@@ -26,6 +26,7 @@ export function paletteAt(i: number): string {
 // chart's `classes` map on a `HistoryPoint`, never a portfolio-row `asset_class` (usePortfolio
 // still folds brokerage/crypto account rows into 'cash', unchanged). Mirrors the backend's band
 // vocabulary: `cash, fixed_deposit, settlement_cash, retirement, receivable, credit, loan` +
+// `untracked_holdings` (a Brokerage total account's balance, flag investment_value_source) +
 // `equity/bond/crypto/commodity/option/property/other_asset`. Credit and loan are their OWN
 // bands in the Overview's allocation, matching the backend's breakdown — folding them into
 // `cash` as a negative made the "Cash" figure disagree with both the backend and the Accounts
@@ -36,6 +37,10 @@ export const ASSET_CLASS_COLOR: Record<string, string> = {
   commodity: '#c8921a',
   crypto: '#9a7fd0',
   option: '#22b8cf',
+  // A Brokerage total account's holdings not entered yet (investment_value_source, ADR
+  // 2026-11-10 amendment 2): invested, in no known class. A pale tint of `equity`'s blue — the
+  // investing family, visibly not a priced class of its own.
+  untracked_holdings: '#9db8d9',
   property: '#bd7a1a',
   other_asset: '#a08a6a',
   receivable: '#d4537e',
@@ -61,6 +66,7 @@ export const ASSET_CLASS_LABEL: Record<string, string> = {
   commodity: 'Commodities',
   crypto: 'Crypto',
   option: 'Options',
+  untracked_holdings: 'Untracked holdings',
   property: 'Property',
   other_asset: 'Other assets',
   receivable: 'Receivables',
@@ -78,6 +84,7 @@ export const ASSET_CLASS_ORDER = [
   'crypto',
   'commodity',
   'option',
+  'untracked_holdings',
   'property',
   'other_asset',
   'receivable',
