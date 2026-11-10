@@ -56,7 +56,7 @@ In Settings, a found tool appears in **AI providers** with an **Installed** badg
 its models under **Default model** to make Lucius use it.
 
 Other install methods are in the official [Claude Code setup](https://code.claude.com/docs/en/setup)
-and [Codex](https://developers.openai.com/codex/cli) instructions.
+and [Codex](https://learn.chatgpt.com/docs/codex/cli) instructions.
 
 **Google Antigravity:** if Google's Antigravity CLI (`agy`) is installed and signed in on that
 computer, it's offered as **Antigravity CLI** the same way.
@@ -131,7 +131,7 @@ file](../operations/upgrading.md#docker), or mount your own volumes at `/home/on
 | Provider (as listed in the app) | Where to get a key |
 |---|---|
 | **OpenRouter** | [openrouter.ai](https://openrouter.ai) → sign in → **Keys** → **Create key**. Add credits under **Credits**. One key reaches models from many companies. Pick a model on par with Claude Sonnet, such as GLM or Kimi — weaker models slip on long tasks. |
-| **Anthropic** | [console.anthropic.com](https://console.anthropic.com) → **API keys** → **Create key**. Add credit under **Billing**. Keys start with `sk-ant-`. On a Claude Max or Team plan, claim the plan's monthly API credits first: on [claude.ai](https://claude.ai), **Settings → Billing** → **API credits** → **Link organization**, then create the key in that Console organization. Credits expire at the end of each billing cycle. Pro includes none. |
+| **Anthropic** | [platform.claude.com](https://platform.claude.com/) → **API keys** → **Create key**. Add credit under **Billing**. Keys start with `sk-ant-`. On a Claude Max or Team plan, claim the plan's monthly API credits first: on [claude.ai](https://claude.ai), **Settings → Billing** → **API credits** → **Link organization**, then create the key in that Console organization. Credits expire at the end of each billing cycle. Pro includes none. |
 | **OpenAI** | [platform.openai.com](https://platform.openai.com) → **API keys** → **Create new secret key**. Add credit under **Billing**. |
 | **Google Gemini** | [aistudio.google.com](https://aistudio.google.com) → **Get API key** → **Create API key**. |
 | **xAI (Grok)** | [console.x.ai](https://console.x.ai) → **API keys** → create a key. |

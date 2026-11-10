@@ -84,7 +84,7 @@ and he waits quietly for as long as you asked (up to 10 minutes) before checking
 
 ## Set it up
 
-Voice calls run on your own [LiveKit](https://livekit.io) project. LiveKit carries the call's
+Voice calls run on your own [LiveKit](https://livekit.com/) project. LiveKit carries the call's
 audio and runs the speech-to-text, the voice and the front voice model, so there is no other
 account to create. Its free plan includes a monthly allowance. Everything voice calls need comes
 with Open Net Worth on a Mac with Apple Silicon (macOS 14 or later), Linux (x86_64 or aarch64) and
