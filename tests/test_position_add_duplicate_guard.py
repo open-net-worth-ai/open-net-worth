@@ -228,6 +228,10 @@ def test_lot_acquire_same_idempotency_key_is_noop(isolated):
     assert float(PositionStore().find_by_id(added["position_id"])["quantity"]) == 10.0
 
 
+# Flag off: an unfunded buy is told to add the cash transaction. With `investment_value_source`
+# on, the account is a Brokerage total and the carve-out holds the cost instead (UAT LUC-08,
+# tests/test_account_value_uat_luc.py).
+@pytest.mark.flags(investment_value_source=False)
 def test_apply_lot_acquire_tool_idempotent_replay_warns_off_cash_txn(isolated):
     inst = _seed_instrument()
     acc = _seed_account()

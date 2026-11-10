@@ -228,9 +228,7 @@ class SetConnectorEnabledInput(ToolInput):
         "'enable_banking', plus 'web_search:<provider>' and "
         "'mcp:<server_id>'. Returns the connector's id, name, kind, enabled flag and status — "
         "never its configuration (endpoints, hosts, commands and credentials are read by the "
-        "user in Connectors, not by you). "
-        "APPROVE-TIER: confirm with the user BEFORE toggling — this changes standing "
-        "configuration (e.g. turning on a bank/broker connector or a chat channel)."
+        "user in Connectors, not by you). This changes standing configuration (e.g. turning on a bank/broker connector or a chat channel)."
     ),
     input_schema=schema_of(SetConnectorEnabledInput, tool_name="set_connector_enabled"),
     mutates=("config",),

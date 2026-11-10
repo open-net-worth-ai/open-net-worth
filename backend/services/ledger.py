@@ -52,7 +52,7 @@ from backend.db.tables import rejected_identities as rejected_identities_table
 from backend.db.tables import transactions as transactions_table
 from backend.db.tables import txn_audit as txn_audit_table
 from backend.db.transaction_store import TransactionStore
-from backend.models.account import ACCOUNT_BAND, band_of, kind_of
+from backend.models.account import ACCOUNT_BAND, UNTRACKED_HOLDINGS_BAND, band_of, kind_of
 from backend.models.transaction import SPLIT
 from backend.services import transaction_links
 from backend.services.review_approval import acting_as_automation, refuse_automation_approval
@@ -569,7 +569,7 @@ def account_with_balance(
     cutoff = row.get("date") if row else None
     bal = account_balance(account, txns, cutoff)
     cleared = cleared_account_balance(account, txns, cutoff)
-    return _hydrate_account(account, row, bal, cleared)
+    return _decorate_value([_hydrate_account(account, row, bal, cleared)])[0]
 
 
 def accounts_with_balances(
@@ -583,9 +583,17 @@ def accounts_with_balances(
     cutoffs = {a["id"]: row.get("date") if row else None for a, row in zip(accts, rows)}
     bals = balances_by_account(accts, txns, cutoffs)
     cleared = cleared_balances_by_account(accts, txns, cutoffs)
-    return [
-        _hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)
-    ]
+    return _decorate_value(
+        [_hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)]
+    )
+
+
+def _decorate_value(rows: list[dict]) -> list[dict]:
+    """How each investment/retirement account is valued and what its connector last reported
+    (``services.account_value``, ADR 2026-11-10) — unchanged rows while the flag is off."""
+    from backend.services import account_value
+
+    return account_value.decorate(rows)
 
 
 def _hydrated_external_ids(ids: list[dict]) -> list[dict]:
@@ -612,7 +620,9 @@ def _hydrated_external_ids(ids: list[dict]) -> list[dict]:
 # ── Net worth ──────────────────────────────────────────────────────────────────
 
 
-def account_kind_and_band(account: dict) -> tuple[str, str]:
+def account_kind_and_band(
+    account: dict, untracked: frozenset[str] = frozenset()
+) -> tuple[str, str]:
     """``(kind, band)`` for a STORED account row, refusing a type this build cannot classify.
 
     A row typed outside the seven can only arrive by restoring a pre-2026-09-07 backup or by a
@@ -620,10 +630,14 @@ def account_kind_and_band(account: dict) -> tuple[str, str]:
     on it, which reached the client as an opaque 500 naming nothing, from whichever read
     happened to touch the row first. This names the account, so the person holding the broken
     book knows which row to fix. Every services-tier classification of a stored row goes through
-    here."""
+    here.
+
+    ``untracked`` (``untracked_holdings.account_ids``, empty while investment_value_source is
+    off): a Brokerage total account's balance is its holdings not entered yet, so it bands as
+    ``untracked_holdings`` — never settlement or retirement cash."""
     type_ = account.get("type")
     try:
-        return kind_of(type_), band_of(type_)
+        kind, band = kind_of(type_), band_of(type_)
     except ValueError as exc:
         raise DataIntegrityError(
             f"account {account.get('id')!r} ({account.get('name') or 'unnamed'}) has unknown "
@@ -631,6 +645,9 @@ def account_kind_and_band(account: dict) -> tuple[str, str]:
             "predates the seven-type account schema (2026-09-07) — restore that backup on a "
             "build from before that date, let it upgrade, then export again."
         ) from exc
+    if account.get("id") in untracked:
+        return kind, UNTRACKED_HOLDINGS_BAND
+    return kind, band
 
 
 def row_base_value(
@@ -742,7 +759,7 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
     `account_classes` by band (property/commodity/other_asset) so `net_worth` moves
     with them for free; `breakdown.owned_assets` additionally surfaces their Σ so a
     caller can label that contribution on its own."""
-    from backend.services import owned_assets_valuation
+    from backend.services import owned_assets_valuation, untracked_holdings
     from backend.services.fx_cache import load_fx_cache
 
     base = (base or base_currency()).upper()
@@ -761,10 +778,12 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
     liabilities_rows: list[dict] = []
     liability_total = 0.0  # stored raw-negative; summed as-is
     retirement_base = 0.0
+    retirement_untracked = 0.0
+    untracked = untracked_holdings.account_ids(accts)
     native = balances_by_account(accts, txns, cutoffs)
     for a in accts:
         bal_base = to_base(native[a["id"]], a.get("currency", base), base, rates=rates)
-        kind, band = account_kind_and_band(a)
+        kind, band = account_kind_and_band(a, untracked)
         if kind == "liability":
             liability_total += bal_base
             liability_classes[band] = liability_classes.get(band, 0.0) + bal_base
@@ -781,6 +800,8 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
             account_classes[band] = account_classes.get(band, 0.0) + bal_base
             if band == "retirement":
                 retirement_base += bal_base
+            elif a.get("type") == "retirement":  # a Brokerage total retirement account
+                retirement_untracked += bal_base
     liabilities_rows.sort(key=lambda r: r["balance_base"])
 
     owned_assets_by_band = owned_assets_valuation.values_by_band(base, rates=rates)
@@ -794,24 +815,30 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
     options_mark = _compute_options_mark_base(base)
     unvested_base = _unvested_value_base(base, rates=rates)
     net = round(asset_total + liability_total + market_total + options_mark, 2)
-    retirement_base = round(retirement_base + retirement_positions, 2)
+    retirement_base = round(retirement_base + retirement_untracked + retirement_positions, 2)
+    breakdown = {
+        "accounts_asset": round(asset_total, 2),
+        "accounts_liability": round(liability_total, 2),
+        "account_classes": {k: round(v, 2) for k, v in account_classes.items()},
+        "liability_classes": {k: round(v, 2) for k, v in liability_classes.items()},
+        "liabilities": liabilities_rows,
+        "retirement_base": retirement_base,
+        "retirement_positions_base": retirement_positions,
+        "owned_assets": owned_assets_total,
+        "market_positions": market_total,
+        "options_mark": round(options_mark, 2),
+    }
+    if retirement_untracked:
+        # The part of `retirement_base` that bands as untracked_holdings, for a reader that
+        # splits Retirement from Investments (owned_assets_summary). Absent while
+        # investment_value_source is off: the old payload, byte for byte.
+        breakdown["retirement_untracked_base"] = round(retirement_untracked, 2)
     return {
         "base_currency": base,
         "net_worth": net,
         "net_worth_excl_retirement": round(net - retirement_base, 2),
         "unvested_base": unvested_base,
-        "breakdown": {
-            "accounts_asset": round(asset_total, 2),
-            "accounts_liability": round(liability_total, 2),
-            "account_classes": {k: round(v, 2) for k, v in account_classes.items()},
-            "liability_classes": {k: round(v, 2) for k, v in liability_classes.items()},
-            "liabilities": liabilities_rows,
-            "retirement_base": retirement_base,
-            "retirement_positions_base": retirement_positions,
-            "owned_assets": owned_assets_total,
-            "market_positions": market_total,
-            "options_mark": round(options_mark, 2),
-        },
+        "breakdown": breakdown,
     }
 
 
@@ -4640,6 +4667,7 @@ def _breakdown_as_of(
     balances: dict[str, float] | None = None,
     rates: dict | None = None,
     market_fx_approximate: bool = False,
+    untracked: frozenset[str] | None = None,
 ) -> dict:
     """Net worth at a historical date, decomposed into positive asset-class bands plus a
     (raw-negative) liabilities figure — the data behind the stacked area chart.
@@ -4647,6 +4675,9 @@ def _breakdown_as_of(
     Accounts classify by `band_of(type)`: `cash` (bank/e-wallet) / `fixed_deposit` /
     `settlement_cash` (an `investment` account's brokerage/exchange cash, margin debit
     included) / `retirement` / `receivable` — `credit`/`loan` accounts are liabilities instead;
+    under investment_value_source a Brokerage total investment or retirement account bands as
+    `untracked_holdings` (``untracked``: ``untracked_holdings.account_ids``, from each account's
+    CURRENT source, so every past point bands the way today's does; computed here if omitted);
     market positions add to `equity` / `crypto` / `commodity` / `property` (only when
     `market_tracked`). See ADR 2026-07-31-liquid-net-worth-bands: `cash` used to also catch
     brokerage/crypto settlement cash, mislabeling it as plain "cash" to callers (the AI, the
@@ -4688,6 +4719,10 @@ def _breakdown_as_of(
     classes: dict[str, float] = {}
     liabilities = 0.0
     fx_approximate = False
+    if untracked is None:
+        from backend.services import untracked_holdings
+
+        untracked = untracked_holdings.account_ids(accts)
     for a in accts:
         # `balances` (optional): this date's per-account fold, already computed for EVERY
         # charted date in one pass by account_balances_over_dates. Without it each account
@@ -4701,7 +4736,7 @@ def _breakdown_as_of(
         if raw and ccy != base:
             fx_approximate = True
         bal = to_base(raw, ccy, base, rates=rates)
-        kind, band = account_kind_and_band(a)
+        kind, band = account_kind_and_band(a, untracked)
         if kind == "liability":
             liabilities += bal  # stored raw-negative
         else:
@@ -4818,8 +4853,10 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
 
     `classes` maps asset-class band → value (cash [bank-only]/fixed_deposit/settlement_cash
     [an `investment` account's brokerage/exchange cash, margin debit included]/retirement/
-    receivable always; equity/crypto/commodity/property once price collection has begun
-    on/before that date — see ADR 2026-07-31-liquid-net-worth-bands). `market_tracked` flags
+    receivable always — plus untracked_holdings [a Brokerage total account's balance, banded by
+    the account's CURRENT source at every point] under investment_value_source; equity/crypto/
+    commodity/property once price collection has begun on/before that date — see ADR
+    2026-07-31-liquid-net-worth-bands). `market_tracked` flags
     the point as including market value. `accounts` =
     cash+fixed_deposit+settlement_cash+retirement+receivable+liabilities (the account-only
     figure, before any market value — a consistent basis for the headline delta). `net_worth`
@@ -4838,7 +4875,7 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
     """
     from backend.db.owned_assets_store import OwnedAssetsStore
     from backend.db.price_history_store import PriceHistoryStore
-    from backend.services import owned_assets_valuation
+    from backend.services import owned_assets_valuation, untracked_holdings
     from backend.services import portfolio_history as ph
     from backend.services import positions as positions_service
 
@@ -4945,6 +4982,8 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
     # Compute current option mark once; injected only into the "today" data point (no historical
     # option feed in v1 — same limitation as computed-mark bonds on the rows path).
     options_mark = _compute_options_mark_base(base)
+    # Each account's CURRENT source bands every point (one read for the whole series).
+    untracked = untracked_holdings.account_ids(accts)
     result = []
     for as_of in as_ofs:
         tracked = bool(market_since and as_of >= market_since)
@@ -4971,6 +5010,7 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
             balances=balances_by_date[as_of],
             rates=rates,
             market_fx_approximate=overlay_fx_approximate if tracked else False,
+            untracked=untracked,
         )
         result.append({"date": as_of, "market_tracked": tracked, **bd})
     return _from_first_tracked_point(result)

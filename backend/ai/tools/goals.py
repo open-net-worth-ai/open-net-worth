@@ -68,7 +68,7 @@ class GetGoalAllocationInput(ToolInput):
         "earmark needed (total_required_monthly_base), the user's monthly free cash "
         "(income − expenses), what's left after funding goals (free_after_targets_base), the "
         "liquid-cash baseline, and any shortfall. This is a SUGGESTION ONLY — it never moves "
-        "money. To actually contribute, propose a normal transfer the user confirms."
+        "money. To actually contribute, add a normal transfer."
     ),
     input_schema=schema_of(GetGoalAllocationInput, tool_name="get_goal_allocation"),
 )
@@ -113,7 +113,7 @@ class CreateGoalInput(ToolInput):
         "current_amount is what's saved so far (0 if starting fresh). Optionally link one or more "
         "savings accounts (linked_account_ids — an array of account ids from list_accounts); their "
         "SUMMED live balance then becomes the progress, overriding current_amount. Optionally tie "
-        "it to a budget category. Confirm the amount + deadline with the user before creating."
+        "it to a budget category."
     ),
     input_schema=schema_of(CreateGoalInput, tool_name="create_goal"),
     mutates=("budget",),
@@ -184,8 +184,7 @@ class UpdateGoalInput(ToolInput):
             "Declared lifecycle state. 'cancelled' is terminal and passes through to reads "
             "verbatim. NOTE: reads DERIVE the displayed verdict — a target whose progress "
             "meets its amount reads 'completed' whether or not you set it here, and an "
-            "unmet one reads ahead/on_track/behind/past_due from its pace regardless. Omit "
-            "to leave it unchanged; confirm cancelled/completed with the user first."
+            "unmet one reads ahead/on_track/behind/past_due from its pace regardless. Omit to leave it unchanged."
         ),
     )
     note: Optional[str] = Field(
@@ -202,8 +201,7 @@ class UpdateGoalInput(ToolInput):
     description=(
         "Update a savings goal — change its amount, deadline, current saved amount, linked "
         "accounts, category, priority, note, or mark it completed/cancelled (status). Pass only "
-        "the fields to change. Call get_goals first for the id. Confirm a status change "
-        "(completed/cancelled) with the user first."
+        "the fields to change. Call get_goals first for the id."
     ),
     input_schema=schema_of(UpdateGoalInput, tool_name="update_goal"),
     mutates=("budget",),
@@ -260,7 +258,7 @@ class DeleteGoalInput(ToolInput):
 
 @tool(
     "delete_goal",
-    description="Delete a savings goal. Confirm with the user first — this removes the goal entirely.",
+    description="Delete a savings goal. This removes the goal entirely.",
     input_schema=schema_of(DeleteGoalInput, tool_name="delete_goal"),
     mutates=("budget",),
 )

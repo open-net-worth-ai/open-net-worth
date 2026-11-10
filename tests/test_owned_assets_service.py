@@ -638,7 +638,9 @@ def test_summary_cards_rows_rule(isolated, monkeypatch):
     from backend.services import ledger as ledger_service
 
     dbs = _account(name="DBS", type="cash")
-    ibkr = _account(name="IBKR", type="investment")
+    # Live holdings: its balance is settlement cash (tests/test_untracked_holdings_band.py has
+    # the Brokerage total side).
+    ibkr = _account(name="IBKR", type="investment", value_source="holdings")
     ledger_service.set_account_opening(dbs["id"], amount=37756.31)
     ledger_service.set_account_opening(ibkr["id"], amount=-11269.0)
 

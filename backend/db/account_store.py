@@ -370,6 +370,11 @@ def _make_account(data: dict) -> dict:
         # dedicated payment envelope. Set later via update_by_id by
         # services.planning.sync_card_payment_envelopes — never by a caller of create().
         "payment_envelope_id": data.get("payment_envelope_id") or None,
+        # How an investment/retirement account is valued — "total" (Brokerage total) or
+        # "holdings" (Live holdings); absent = not yet decided (services.account_value, ADR
+        # 2026-11-10). Additive: written only when the caller sets it, read only while the
+        # `investment_value_source` flag is on.
+        **({"value_source": data["value_source"]} if data.get("value_source") else {}),
     }
 
 

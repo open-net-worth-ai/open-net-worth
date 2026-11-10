@@ -17,9 +17,11 @@ def test_bands_follow_type(db_isolated):
     _open(a, 37756.31)
     b = _acct("FD", "fixed_deposit")
     _open(b, 20000)
-    c = _acct("IBKR SGD", "investment")
+    # Live holdings: the balance is cash (a Brokerage total one is untracked_holdings instead —
+    # tests/test_untracked_holdings_band.py).
+    c = _acct("IBKR SGD", "investment", value_source="holdings")
     _open(c, -11269)
-    d = _acct("CPF", "retirement")
+    d = _acct("CPF", "retirement", value_source="holdings")
     _open(d, 90000)
     e = _acct("Owed", "receivable")
     _open(e, 1500)
@@ -97,7 +99,7 @@ def test_retirement_value_includes_vested_holdings_without_changing_net_worth(
 def test_breakdown_as_of_uses_same_bands(db_isolated, monkeypatch):
     a = _acct("DBS", "cash")
     _open(a, 100)
-    c = _acct("IBKR", "investment")
+    c = _acct("IBKR", "investment", value_source="holdings")
     _open(c, -40)
     bands = ledger.net_worth_bands("SGD")
     assert bands["classes"]["cash"] == 100

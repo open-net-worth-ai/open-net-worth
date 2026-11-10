@@ -462,6 +462,40 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
     }
 
 
+def fetch_balances(store: PlaidConfigStore) -> dict:
+    """Every linked bank's accounts with their balances, from ``/accounts/get`` — free, and the
+    one Plaid endpoint documented to list EVERY account type (``/transactions/*`` omits
+    investment accounts). Its balances are Plaid's cache, refreshed about once a day. A bank
+    that fails leaves its accounts out and marks the result incomplete; only when every bank
+    fails does this raise. Returns ``{accounts: [common shape], complete}``
+    (ADR 2026-11-10-an-investment-account-is-valued-by-its-brokerage-total-or-its-live-holdings)."""
+    items = store.items()
+    if not items:
+        raise ValidationError("Plaid is not linked (no access token)")
+    accounts: list[dict] = []
+    complete = True
+    first_error: Optional[ValidationError] = None
+    needed, answered = set(), set()
+    for item in items:
+        key = bank_key(item.get("item_id") or "")
+        try:
+            data = _post(store, "/accounts/get", {"access_token": item["access_token"]})
+        except ValidationError as exc:
+            first_error = first_error or exc
+            if exc.context.get("plaid_error_code") in _RECONNECT_CODES:
+                needed.add(key)
+            complete = False
+            continue
+        answered.add(key)
+        institution = item.get("institution_name") or bank_name(item)
+        for acct in data.get("accounts") or []:
+            accounts.append(_account_to_common({**acct, "_institution": institution}))
+    store.mark_reconnect(needed=needed, ok=answered)
+    if first_error is not None and not answered:
+        raise first_error
+    return {"accounts": accounts, "complete": complete}
+
+
 # ── normalize + fetch_window ─────────────────────────────────────────────────────────
 
 

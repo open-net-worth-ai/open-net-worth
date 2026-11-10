@@ -18,6 +18,8 @@ const SERVER_BAND_KEYS = [
   'receivable',
   'credit',
   'loan',
+  // a Brokerage total account's balance (investment_value_source)
+  'untracked_holdings',
   // instrument bands
   'equity',
   'bond',

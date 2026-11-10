@@ -556,6 +556,21 @@ async def _run_ynab_sync() -> None:
         logger.exception("scheduler: ynab_sync error: %s", exc)
 
 
+async def _run_linked_account_totals() -> None:
+    """Tick of the linked-total sync (ADR 2026-11-10): reads each balance-reporting connector's
+    account list when due and moves a linked Brokerage total account to the total it reports.
+    Books no connector transaction and calls no model — a balance, not an ingest poll."""
+    try:
+        from backend.services import account_value_cost, account_value_sync
+
+        # A holding carved out before it had a price is trued up once its price lands.
+        await asyncio.to_thread(account_value_cost.settle)
+        if await asyncio.to_thread(account_value_sync.run_if_due):
+            logger.info("scheduler: linked_account_totals ran")
+    except Exception as exc:
+        logger.exception("scheduler: linked_account_totals error: %s", exc)
+
+
 def _outward_jobs_allowed() -> bool:
     """False on a QA/isolated run (ONW_QA_MODE) unless it opts in with ONW_QA_RUN_SCHEDULES=1.
 
@@ -640,6 +655,16 @@ def start() -> None:
             max_instances=1,
         )
         logger.info("scheduler: ynab_sync scheduled — checked every 60s")
+        # Linked investment totals — one tick a minute; due every 6h, or at once for an account
+        # never read on its link. No-op unless `investment_value_source` is on.
+        _scheduler.add_job(
+            _run_linked_account_totals,
+            trigger=IntervalTrigger(seconds=60),
+            id="linked_account_totals",  # a balance read, not an ingest poll
+            replace_existing=True,
+            misfire_grace_time=120,
+            max_instances=1,
+        )
 
     # Batch reap sweep — polls pending batch ledger rows and applies results.
     # Runs every 5 minutes; no-op when the ledger is empty.

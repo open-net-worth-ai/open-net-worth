@@ -751,6 +751,31 @@
   border-radius: 1px;
   opacity: 0.8;
 }
+/* "Not broken down" — a Brokerage total account's holdings not entered yet: invested, in no
+   class, so it sits under the class bars as a hatched share of everything invested. */
+.mk-atl-untracked {
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.mk-atl-fill--untracked {
+  background: repeating-linear-gradient(
+    135deg,
+    #9db8d9 0 4px,
+    color-mix(in srgb, #9db8d9 45%, transparent) 4px 8px
+  );
+}
+.mk-atl-untracked-sub {
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+.mk-untracked-note {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--faint);
+}
 .mk-alloc-foot {
   margin-top: 11px;
   font-size: 11px;

@@ -232,9 +232,7 @@ _CREATE_FIELDS = (
         "Add a new owned asset — property, vehicle, watch/jewellery, art, precious metal, "
         "cash-value policy, or a user-created category. Only name, category and value are "
         "required; `value` (BOOK'S BASE CURRENCY) becomes its first valuation — do NOT follow "
-        "this with record_asset_value, which is only for a LATER re-appraisal. CONFIRM THE "
-        "DETAILS (name, category, value, and cost if given) WITH THE USER BEFORE CALLING THIS "
-        "— it immediately counts toward net worth. Unknown category raises; use "
+        "this with record_asset_value, which is only for a LATER re-appraisal. It immediately counts toward net worth. Unknown category raises; use "
         "create_asset_category first for a genuinely new kind of thing."
     ),
     input_schema=schema_of(CreateAssetInput, tool_name="create_asset"),
@@ -345,9 +343,8 @@ class DisposeAssetInput(ToolInput):
         "Sell or otherwise dispose of an owned asset. THIS POSTS A REAL LEDGER TRANSACTION "
         "for the proceeds into the given cash account (skipped when proceeds=0), then "
         "archives the asset — it stops counting toward net worth but its history is kept. "
-        "Confirm the proceeds amount and destination account with the user first; this is "
-        "not reversible the way an ordinary transaction edit is. A sale whose proceeds row was "
-        "deleted can be disposed again."
+        "This is not reversible the way an ordinary transaction edit is. A sale whose proceeds "
+        "row was deleted can be disposed again."
     ),
     input_schema=schema_of(DisposeAssetInput, tool_name="dispose_asset"),
     mutates=("assets", "ledger"),
@@ -382,7 +379,7 @@ class DeleteAssetInput(ToolInput):
     description=(
         "Permanently remove an owned asset that should never have been added — a hard "
         "delete with no undo, unlike dispose_asset (which keeps history and posts real "
-        "sale proceeds). Confirm with the user first."
+        "sale proceeds)."
     ),
     input_schema=schema_of(DeleteAssetInput, tool_name="delete_asset"),
     mutates=("assets",),

@@ -4,6 +4,8 @@
 import { useState } from 'react'
 import { fBase } from '../../../utils/format'
 import { Button, Badge } from '../../ui'
+import type { UntrackedExcluded } from '../../../types/aggregates'
+import { UntrackedNote } from './UntrackedHoldings'
 
 interface RiskRow {
   nm: string
@@ -17,6 +19,8 @@ interface Props {
   grand: number
   guideline?: number
   dropPct?: number
+  /** Brokerage total accounts' holdings not entered — out of the shares, said under them. */
+  untracked?: UntrackedExcluded | null
   onSaveSettings?: (s: { guideline: number; dropPct: number }) => void
 }
 
@@ -40,7 +44,7 @@ function Card({
   )
 }
 
-export function Risk({ risk, guideline = 20, dropPct = 30, onSaveSettings }: Props) {
+export function Risk({ risk, guideline = 20, dropPct = 30, untracked, onSaveSettings }: Props) {
   const [editing, setEditing] = useState(false)
   const [g, setG] = useState(guideline)
   const [dp, setDp] = useState(dropPct)
@@ -174,6 +178,7 @@ export function Risk({ risk, guideline = 20, dropPct = 30, onSaveSettings }: Pro
           </span>
         </div>
       )}
+      {untracked && <UntrackedNote u={untracked} action="measure concentration across" />}
     </Card>
   )
 }

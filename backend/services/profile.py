@@ -427,6 +427,18 @@ def text_diff(before: object, after: object) -> dict:
     return {"added": added, "removed": removed}
 
 
+def refuse_base_currency_change_on_demo(old_base: Optional[str], new_base: Optional[str]) -> None:
+    """A public demo's book is shared by every visitor, so one visitor switching the base
+    currency re-denominates it for all of them. Raise before anything is written."""
+    from backend.core.config import get_settings
+    from backend.core.errors import ValidationError
+
+    if not new_base or new_base.upper() == (old_base or "").upper():
+        return
+    if get_settings().demo_mode:
+        raise ValidationError("The base currency is locked on the public demo.")
+
+
 def handle_base_currency_change(
     profile: dict, old_base: Optional[str], new_base: Optional[str]
 ) -> None:

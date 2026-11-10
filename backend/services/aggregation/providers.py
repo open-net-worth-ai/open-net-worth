@@ -152,6 +152,21 @@ class Provider:
             self.store(), since, before, account, accounts_only=accounts_only, **extra
         )
 
+    def account_balances(self) -> dict:
+        """The provider's accounts with their balances, no transactions — ``{accounts,
+        complete}``. A provider module may offer a cheaper ``fetch_balances(store)`` (Plaid's
+        free ``/accounts/get``); otherwise this is the accounts-only ``fetch_window`` the link
+        picker already uses. Raises like ``fetch_window``."""
+        module = importlib.import_module(self._fetch[0])
+        reader = getattr(module, "fetch_balances", None)
+        if reader is not None:
+            return reader(self.store())
+        from backend.core.user_time import user_today
+
+        today = user_today().isoformat()
+        window = self.fetch_window(since=today, before=today, account=None, accounts_only=True)
+        return {"accounts": list(window.accounts), "complete": bool(window.complete)}
+
     def classify_error(self, exc: Exception) -> str:
         """This provider's own exception → status taxonomy (``auth_error`` |
         ``rate_limited`` | ``connect_error`` | ``error`` | a provider-specific status like
