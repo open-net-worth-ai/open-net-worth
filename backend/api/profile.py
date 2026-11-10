@@ -126,6 +126,7 @@ from backend.services.profile import (  # noqa: E402 — re-export for callers t
     handle_base_currency_change,
     normalize_target_allocation,
     read_profile,
+    refuse_base_currency_change_on_demo,
     set_timezone,
     write_profile,
 )
@@ -386,6 +387,12 @@ def put_profile(body: ProfileBody):
         }
     old_base = current.get("base_currency")
     new_base = updates.get("base_currency")
+    try:
+        refuse_base_currency_change_on_demo(old_base, new_base)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=403, detail={"code": "demo_locked", "message": exc.message}
+        ) from exc
     current.update(updates)
     # Clears the stale FX cache + flags non-converting manual amounts for review.
     handle_base_currency_change(current, old_base, new_base)

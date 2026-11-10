@@ -512,6 +512,13 @@ async def update_profile(input_data: dict):
         }
     old_base = profile.get("base_currency")
     old_notes = profile.get("notes")
+    from backend.core.errors import ValidationError
+    from backend.services.profile import refuse_base_currency_change_on_demo
+
+    try:
+        refuse_base_currency_change_on_demo(old_base, changes.get("base_currency"))
+    except ValidationError as exc:
+        return json.dumps({"ok": False, "error": exc.message}), None
     profile.update(changes)
     # Same side effects as the REST path: clear the stale FX cache + flag the manual
     # base-denominated amounts that don't auto-convert (so the user is reminded to revisit).
