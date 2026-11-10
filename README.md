@@ -66,7 +66,7 @@ you press Send.
 | **Can it act?** | No, it reads your accounts | No, it can't change your accounts | Yes: books transactions, runs your budget, places trades through your broker (approval by default) |
 | **Comes to you first** | No, it waits for you to ask | No, it waits for you to ask | Daily briefings, weekly and monthly reports, Telegram pings when news hits what you hold |
 | **Investment advice** | Not meant to give it | Planning questions | Judges a ticker against your own investment thesis |
-| **Where it works** | US only, through Plaid (up to 16 accounts) | US only, through Plaid | Any country and currency, from your bank emails and statements |
+| **Where it works** | US only, through Plaid (up to 16 accounts) | US only, through Plaid | Any country and currency: bank and broker connectors, or your bank emails and statements |
 | **Where your data lives** | Anthropic's cloud | OpenAI's cloud | Your own machine |
 | **Your AI** | Claude only | ChatGPT only | Your Claude Code or Codex subscription, an API key, or a local model |
 | **What it covers** | Spending, bills, balances | Spending, cash flow, investments, loans | Everything you own, including property, cars and RSUs |
