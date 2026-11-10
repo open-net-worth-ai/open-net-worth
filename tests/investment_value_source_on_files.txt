@@ -50,3 +50,12 @@ tests/test_demo_route_classification.py
 tests/test_tool_schema_budget.py
 tests/test_schema_from_model.py
 tests/test_domain_introspect.py
+tests/test_account_value_fixes.py
+tests/test_account_value_uat_flag_fx.py
+tests/test_account_value_uat_hold_feed.py
+tests/test_account_value_uat_inv_rob.py
+tests/test_account_value_uat_link.py
+tests/test_account_value_uat_luc.py
+tests/test_account_value_uat_rec_switch.py
+tests/test_account_value_uat_trade.py
+tests/test_account_value_uat_typed.py

@@ -561,8 +561,10 @@ async def _run_linked_account_totals() -> None:
     account list when due and moves a linked Brokerage total account to the total it reports.
     Books no connector transaction and calls no model — a balance, not an ingest poll."""
     try:
-        from backend.services import account_value_sync
+        from backend.services import account_value_cost, account_value_sync
 
+        # A holding carved out before it had a price is trued up once its price lands.
+        await asyncio.to_thread(account_value_cost.settle)
         if await asyncio.to_thread(account_value_sync.run_if_due):
             logger.info("scheduler: linked_account_totals ran")
     except Exception as exc:

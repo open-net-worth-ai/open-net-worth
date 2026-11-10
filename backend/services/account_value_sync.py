@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -37,6 +38,7 @@ INTERVAL = timedelta(hours=6)
 HOLD_DROP = 0.25  # a drop of more than a quarter is held
 HOLD_JUMP = 4.0  # so is a total more than 4× the reference
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
+_RUN_LOCK = threading.Lock()
 
 
 class _RunState(NamespacedSettingsStore):
@@ -88,7 +90,18 @@ def run_if_due(now: Optional[datetime] = None) -> bool:
 
 
 def run(accounts: Optional[list[dict]] = None) -> dict:
-    """Read and apply. Returns ``{changed: [account ids], checked: n}``."""
+    """Read and apply. Returns ``{changed: [account ids], checked: n}``. One run at a time: a
+    second caller while one is in progress skips (``skipped: True``) rather than booking the same
+    difference twice (UAT ROB-03 — ``max_instances=1`` guards only the scheduler's own tick)."""
+    if not _RUN_LOCK.acquire(blocking=False):
+        return {"changed": [], "checked": 0, "skipped": True}
+    try:
+        return _run(accounts)
+    finally:
+        _RUN_LOCK.release()
+
+
+def _run(accounts: Optional[list[dict]]) -> dict:
     from backend.core import audit_context, data_events
 
     accounts = eligible_accounts() if accounts is None else accounts
@@ -164,7 +177,7 @@ def _apply(account: dict, reading: dict) -> bool:
     if total is None:
         return _record(account, prev, {**prev, **base, "status": "no_balance"})
     own = (account.get("currency") or "").upper()
-    if currency != own:
+    if not currency or currency != own:
         # Fails CLOSED: a missing currency, a non-ISO one (Plaid's "DOGE", SimpleFIN's URL for a
         # points currency) or another ISO code is never booked as the account's own (security
         # review 2026-11-10). Only a clean ISO code is echoed back for the account to show.
@@ -183,6 +196,8 @@ def _reported(found: dict) -> tuple[Optional[float], str]:
     """The reported total (None when missing, unparseable or not finite — NaN/Infinity survive
     ``float()``) and its currency, raw and upper-cased ("" when absent)."""
     raw, currency = found.get("balance"), str(found.get("currency") or "").strip().upper()
+    if found.get("currency_inferred"):
+        currency = ""  # the provider sent none; its module filled in the base (Yodlee)
     try:
         total = float(raw) if raw is not None else None
     except (TypeError, ValueError):
@@ -210,6 +225,9 @@ def _apply_total(account: dict, prev: dict, base: dict, total: float) -> bool:
         recovered = {**prev, **base, "status": "fresh"}
         recovered.pop("error_code", None)
         recovered.pop("held_total", None)  # the figure we held came back to the applied one
+        # ...and so did the one the user kept their value over: if it is reported AGAIN later,
+        # that is a new event to ask about, never one to ignore silently (UAT SB-04).
+        recovered.pop("dismissed_total", None)
         return _record(account, prev, recovered)
     if total in (prev.get("dismissed_total"), prev.get("held_total")):
         return False  # the user already kept the old value over this figure, or is deciding
@@ -244,6 +262,10 @@ def _suspicious(total: float, last: Optional[float], current: float) -> bool:
     if total == 0:
         return round(current, 2) != 0
     ref = last if last is not None else current
+    if total < 0:
+        # A brokerage worth less than nothing is margin debt — real only if it was already so
+        # (UAT SB-09: a first −500 on an empty account was booked without asking).
+        return not (last is not None and last < 0)
     if not ref or ref <= 0:
         return False
     return total < ref * (1 - HOLD_DROP) or total > ref * HOLD_JUMP

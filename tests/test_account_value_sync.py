@@ -324,7 +324,7 @@ def test_confirm_is_refused_once_the_account_is_on_live_holdings(plaid):
 
 @pytest.mark.flags(investment_value_source=True)
 def test_a_failed_edit_never_clears_the_untracked_part(plaid, monkeypatch):
-    """The switch runs only after the rest of the patch commits."""
+    """The edit, the switch and its adjustment commit or roll back together."""
     acct = _account()
     _add_holding(acct["id"], _instrument())
 

@@ -296,6 +296,16 @@ def update_position(
     clean = _validated_position_update(position_id, changes, _grant_managed_ok=_grant_managed_ok)
     if "account_id" not in clean:
         return PositionStore().touch(position_id, clean)
+    from backend.services import account_value
+
+    # A Brokerage total account on either side keeps its total (ADR 2026-11-10); a
+    # pass-through while `investment_value_source` is off.
+    return account_value.around_position_move(
+        position_id, clean["account_id"], lambda: _move_position(position_id, clean)
+    )
+
+
+def _move_position(position_id: str, clean: dict) -> dict | None:
     from backend.db.engine import locked_unit_of_work
     from backend.db.tables import lots as lots_tbl
     from backend.db.tables import positions as positions_tbl
@@ -697,6 +707,9 @@ def _book_add_lot(
     if lot_res.get("error"):
         return {"error": lot_res["error"]}
     out = {"lot_id": lot_res.get("lot_id")}
+    # A Brokerage total account's carve-out (ADR 2026-11-10) — what it booked, or why the total
+    # is now off — reaches the caller, Lucius included (UAT TRADE-11, LUC-10).
+    out.update({k: v for k, v in lot_res.items() if k.startswith("value_carve_out")})
     if dated:
         out["note"] = "buy lot already recorded for this trade — do NOT call acquire_lots for it"
     else:

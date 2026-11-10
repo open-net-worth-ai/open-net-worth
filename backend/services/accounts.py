@@ -356,22 +356,26 @@ def update_account(
         changes.update(_link_fill(existing, raw_ids))
         changes["external_ids"] = normalized
     new_source = changes.pop("value_source", None)
+    plan = None
     if new_source is not None:
         from backend.services import account_value
 
         # Refused up front (wrong type, flag off, bad value) so a refused switch writes nothing.
-        account_value.check_switch(existing, new_source)
-    with locked_unit_of_work(accounts_table, institutions_table) as conn:
+        plan = account_value.plan_switch(existing, new_source)
+    tables = (accounts_table, institutions_table)
+    if plan is not None:
+        tables += (transactions_table, txn_audit_table)
+    # ONE transaction: the edit, a source switch and its adjustment commit or roll back
+    # together (ADR 2026-11-10; security review + UAT SB-13).
+    with locked_unit_of_work(*tables) as conn:
         changes = _resolve_institution_patch(changes, conn=conn)
         result = ledger_service.accounts.update_by_id(account_id, changes, conn=conn)
+        if result is not None and plan is not None:
+            switch = account_value.write_switch(existing, plan, conn=conn)
+            if side_effects is not None:
+                side_effects["value_switch"] = switch
     if result is None:
         return None
-    if new_source is not None:
-        # AFTER the rest of the patch has committed (security review 2026-11-10): a failed
-        # rename must never leave the untracked part already cleared — ADR 2026-11-10.
-        switch = account_value.apply_switch(existing, new_source)
-        if side_effects is not None:
-            side_effects["value_switch"] = switch
     return ledger_service.accounts.find_by_id(account_id) or result
 
 

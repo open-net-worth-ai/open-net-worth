@@ -839,6 +839,13 @@ def _apply_lot_acquire_one(input_data: dict) -> dict:
         result["_next_step"] = (
             "Lot recorded and cash debited from funding_account_id — do NOT add a second cash transaction."
         )
+    elif result.get("value_carve_out") or result.get("value_carve_out_error"):
+        # A Brokerage total account (ADR 2026-11-10): the total already holds this purchase —
+        # a cash transaction on top would count it twice (UAT LUC-08).
+        result["_next_step"] = (
+            "Lot recorded and carved out of the account's Brokerage total — do NOT add a cash "
+            "transaction for it."
+        )
     elif kind == "buy":
         qty = input_data["quantity"]
         unit_cost = input_data.get("unit_cost") or 0

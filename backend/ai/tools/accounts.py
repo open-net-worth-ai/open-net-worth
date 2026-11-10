@@ -959,6 +959,7 @@ class ReconcileItem(ToolInput):
     )
     real_total: Optional[float] = Field(
         default=None,
+        allow_inf_nan=False,
         description="value_source='total' accounts: their whole value, instead of real_balance.",
     )
     against: Optional[Literal["cleared", "working"]] = Field(
@@ -986,6 +987,7 @@ class ReconcileAccountsInput(ToolInput):
     )
     real_total: Optional[float] = Field(
         default=None,
+        allow_inf_nan=False,
         description="value_source='total' accounts: their whole value, instead of real_balance.",
     )
     accounts: Optional[List[ReconcileItem]] = Field(

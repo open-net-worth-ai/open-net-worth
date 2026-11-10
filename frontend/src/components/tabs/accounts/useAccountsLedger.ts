@@ -933,8 +933,12 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       } else {
         setAccounts((prev) => [...prev, acct])
       }
-      // A switch to Live holdings may book one adjustment (ADR 2026-11-10) — show it now.
-      if (raw.value_switch?.txn_id) await loadTxns(filters, 0, false)
+      // A switch to Live holdings may book one adjustment (ADR 2026-11-10) — show it now, and
+      // tell every screen: a REST write is not broadcast, so net worth would keep the old value.
+      if (raw.value_switch?.txn_id) {
+        await loadTxns(filters, 0, false)
+        emitDataChanged(['ledger'])
+      }
       fireMutate()
       return acct
     },
@@ -1081,7 +1085,11 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         throw new Error(typeof detail === 'string' && detail ? detail : `Failed (${res.status})`)
       }
       await refreshAccount(id)
-      if (accept) await loadTxns(filters, 0, false)
+      if (accept) {
+        // Use books the held total: net worth moves on every screen, not just this one.
+        await loadTxns(filters, 0, false)
+        emitDataChanged(['ledger'])
+      }
       fireMutate()
     },
     [refreshAccount, filters, loadTxns],

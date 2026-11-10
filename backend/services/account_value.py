@@ -100,16 +100,21 @@ def holdings_value(account: dict, rows: list[dict] | None = None) -> float:
     """The account's vested holdings at last-known prices, in the ACCOUNT's own currency — the
     same canonical per-row fold net worth uses (``ledger.row_base_value``). ``rows``: hydrated
     vested rows a caller valuing several accounts already read."""
-    from backend.core.fx import base_currency
     from backend.services import ledger as ledger_service
 
-    currency = (account.get("currency") or base_currency()).upper()
+    currency = account_currency(account)
     total = sum(
         _row_value(r, currency, ledger_service.row_base_value)
         for r in (_vested_rows() if rows is None else rows)
         if r.get("account_id") == account.get("id")
     )
     return round(total, 2)
+
+
+def account_currency(account: dict) -> str:
+    from backend.core.fx import base_currency
+
+    return (account.get("currency") or base_currency()).upper()
 
 
 def _row_value(row: dict, currency: str, fold) -> float:
@@ -320,6 +325,7 @@ def around_lot_change(change: dict, dispatch: Callable[[dict], dict]) -> dict:
     if before is None or after is None:
         result["value_carve_out_error"] = _NO_RATE
         return result
+    _note_unpriced(account)
     delta = round(after - before, 2)
     if delta == 0:
         return result
@@ -328,10 +334,7 @@ def around_lot_change(change: dict, dispatch: Callable[[dict], dict]) -> dict:
         txn = book_adjustment(account, -delta, description, on_date=_carve_date(account, change))
     except Exception:  # noqa: BLE001 — the lot is written; say the total is off, never hide it
         logger.exception("account_value: carve-out failed for %s", account.get("id"))
-        result["value_carve_out_error"] = (
-            f"The holding was saved, but its {abs(delta):,.2f} wasn't moved out of the account's "
-            "untracked part, so the account's total is off by that much. Reconcile the account."
-        )
+        result["value_carve_out_error"] = _carve_failed(delta)
         return result
     result["value_carve_out"] = {
         "account_id": account["id"],
@@ -368,7 +371,11 @@ def around_position_remove(position_id: str, remove: Callable[[], bool]) -> tupl
     delta = round(after - before, 2)
     if delta == 0:
         return removed, {}
-    txn = book_adjustment(account, -delta, "Holding returned to the total")
+    try:
+        txn = book_adjustment(account, -delta, "Holding returned to the total")
+    except Exception:  # noqa: BLE001 — the holding is gone; say the total is off, never hide it
+        logger.exception("account_value: carve-out failed for %s", account.get("id"))
+        return removed, {"value_carve_out_error": _carve_failed(delta)}
     return removed, {
         "value_carve_out": {
             "account_id": account["id"],
@@ -376,6 +383,40 @@ def around_position_remove(position_id: str, remove: Callable[[], bool]) -> tupl
             "txn_id": (txn or {}).get("id"),
         }
     }
+
+
+def around_position_move(position_id: str, new_account_id: str, move: Callable[[], object]):
+    """Moving a holding to another account moves no money, so each Brokerage total account on
+    either side keeps its total: the one it left gets the value back into its untracked part,
+    the one it joined has it carved out (UAT TRADE-18, owner decision 2026-11-10). Returns
+    ``move()``'s own result; a carve that can't be booked is logged, the move stands."""
+    if not enabled():
+        return move()
+    from backend.db.position_store import PositionStore
+    from backend.services import ledger as ledger_service
+
+    pos = PositionStore().find_by_id(position_id) or {}
+    ids = {pos.get("account_id"), new_account_id} - {None, ""}
+    sides = [ledger_service.accounts.find_by_id(i) for i in ids]
+    sides = [a for a in sides if applies(a) and ensure_source(a) == TOTAL]
+    if not sides or pos.get("account_id") == new_account_id:
+        return move()
+    before = {a["id"]: _value_or_none(a) for a in sides}
+    result = move()
+    if result is None:
+        return result
+    for account in sides:
+        after = _value_or_none(account)
+        if before[account["id"]] is None or after is None:
+            logger.warning("account_value: no rate to keep %s's total on a move", account["id"])
+            continue
+        _note_unpriced(account)
+        delta = round(after - before[account["id"]], 2)
+        try:
+            book_adjustment(account, -delta, "Holding moved — total kept")
+        except Exception:  # noqa: BLE001 — the move stands; the total is off until reconciled
+            logger.exception("account_value: move carve-out failed for %s", account["id"])
+    return result
 
 
 def _lot_change_account(change: dict) -> Optional[dict]:
@@ -412,6 +453,25 @@ def _carve_date(account: dict, change: dict) -> Optional[str]:
     return max(acquired, start) if start else acquired
 
 
+def _note_unpriced(account: dict) -> None:
+    """Remember what each still-unpriced holding was carved at, so its first price trues the
+    total up (``account_value_cost``). Never fails the write it follows."""
+    from backend.services import account_value_cost
+
+    try:
+        account_value_cost.note(account, _vested_rows())
+    except Exception:  # noqa: BLE001 — the carve-out stands; only the later true-up is lost
+        logger.exception("account_value: could not note unpriced holdings for %s", account["id"])
+
+
+def _carve_failed(delta: float) -> str:
+    return (
+        f"The holding was saved, but its {abs(delta):,.2f} wasn't moved in or out of the "
+        "account's untracked part, so the account's total is off by that much. Reconcile the "
+        "account."
+    )
+
+
 _NO_RATE = (
     "The holding was saved, but its value couldn't be worked out in this account's currency (no "
     "exchange rate yet), so it wasn't moved out of the account's untracked part and the total may "
@@ -436,7 +496,9 @@ def _keep_proceeds_home(change: dict, account: dict) -> dict:
     brokerage — the same account — instead of booking no cash and sinking the total. Only when
     the cash can be booked there: a sale in a currency with no rate into the account's keeps the
     old behaviour (no cash leg), and the carve-out returns its value instead."""
-    if change.get("type") != "dispose":
+    # A sale edit rebooks the sale from the edit's own fields, so it needs the same rule — else
+    # amending a kept-at-the-brokerage sale drops its cash (UAT TRADE-13).
+    if change.get("type") not in ("dispose", "dispose_amend"):
         return change
     if change.get("proceeds_account_id") or change.get("transfer_to_account_id"):
         return change
@@ -452,8 +514,12 @@ def _proceeds_currency(change: dict) -> Optional[str]:
         return change["proceeds_currency"]
     from backend.core.fx import base_currency
     from backend.db.position_store import PositionStore
+    from backend.db.realized_event_store import RealizedEventStore
 
-    pos = PositionStore().find_by_id(change.get("position_id") or "") or {}
+    pos_id = change.get("position_id")
+    if not pos_id and change.get("event_id"):
+        pos_id = (RealizedEventStore().find_by_id(change["event_id"]) or {}).get("position_id")
+    pos = PositionStore().find_by_id(pos_id or "") or {}
     return pos.get("cost_currency") or base_currency()
 
 
@@ -545,25 +611,29 @@ def preview_switch(account: dict, new_source: str) -> dict:
     return {**switch_effect(account, new_source), "from": current, "to": new_source}
 
 
-def apply_switch(account: dict, new_source: str) -> dict:
-    """Store the new source and book its one adjustment (Live holdings with a large untracked
-    part only). Called by ``accounts.update_account`` before the rest of the patch."""
-    new_source = validate_source(new_source)
-    if not applies(account):
-        raise ValidationError("Only investment and retirement accounts have a value source.")
-    if not enabled():
-        raise ValidationError("Choosing how an account is valued isn't turned on.")
+def plan_switch(account: dict, new_source: object) -> dict:
+    """What a switch will write, read BEFORE the write's transaction opens (it values the
+    holdings): ``check_switch``'s refusals plus ``switch_effect``."""
+    new_source = check_switch(account, new_source)
     current = source_of(account)
     effect = switch_effect(account, new_source) if current != new_source else {"adjustment": 0.0}
+    return {**effect, "from": current, "to": new_source}
+
+
+def write_switch(account: dict, plan: dict, *, conn) -> dict:
+    """Store the new source and book its one adjustment (Live holdings with a large untracked
+    part only) on the caller's open transaction — ``accounts.update_account`` holds the
+    accounts, transactions and txn_audit locks, so the edit, the source and the adjustment
+    commit or roll back together (UAT SB-13, 2026-11-10)."""
     from backend.services import ledger as ledger_service
 
-    ledger_service.accounts.update_by_id(account["id"], {"value_source": new_source})
+    ledger_service.accounts.update_by_id(account["id"], {"value_source": plan["to"]}, conn=conn)
     txn = None
-    if effect["adjustment"]:
+    if plan.get("adjustment"):
         txn = book_adjustment(
-            account, effect["adjustment"], "Untracked part cleared — Live holdings"
+            account, plan["adjustment"], "Untracked part cleared — Live holdings", conn=conn
         )
-    return {**effect, "from": current, "to": new_source, "txn_id": (txn or {}).get("id")}
+    return {**plan, "txn_id": (txn or {}).get("id")}
 
 
 # ── reconcile: a Brokerage total account reconciles its TOTAL ──────────────────────────

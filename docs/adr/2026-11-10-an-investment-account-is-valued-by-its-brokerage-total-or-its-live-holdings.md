@@ -163,3 +163,61 @@ Lucius. Whether Plaid gets a built-in transaction sync is still open (#67, PLD-4
 - **Driving artifacts:** issues #67, #68, #69, #70; the user report of a $0.00 linked brokerage.
 - **Why this way (one line):** the number people type and the number brokerages report are both the
   total, so the total is the default and holdings are carved out of it.
+
+## Amendment 1 (2026-11-10): findings of the user-acceptance pass
+
+A 250-scenario user-acceptance pass, written as user journeys with exact figures, found these gaps
+before merge. The owner approved each fix.
+
+- **Every remove goes through the carve-out.** `DELETE /api/positions/{id}` called
+  `remove_position` directly and dropped a Brokerage total account by the holding's value. It now
+  uses `apply_position_change("remove")`. A remove whose carve-out can't be booked reports
+  `value_carve_out_error`, as a lot write does, instead of raising after the holding is gone.
+- **A moved holding keeps both totals** (owner decision). Moving a position to another account
+  moves no money. Each Brokerage total account on either side books a **Holding moved — total
+  kept** adjustment; a Live holdings account it joins grows by the holding's value.
+- **An unpriced holding is trued up when priced.** A holding with no price yet is carved out at
+  cost (or 0). `services/account_value_cost.py` remembers that figure, and the scheduler tick
+  books the difference once, as **Holding priced — total kept**, when the first price lands.
+  Before this, the account drifted by (market − cost) × quantity for good: 5 ACME bought at 400
+  and priced at 604 read 9,020 against an 8,000 total. The remembered figures are runtime state,
+  and they're dropped when the holding is gone or the account is no longer Brokerage total.
+- **A switch is one database transaction** with the rest of the account edit: `plan_switch`
+  reads before it, and `write_switch` writes the source and the adjustment on the edit's
+  connection. Before, the source was stored before the adjustment was booked.
+- **Sync holds:**
+  - A negative reading is held unless the last applied total was negative.
+  - A figure the user kept their value over is forgotten once the feed reports the applied total
+    again, so a later genuine 0 is asked about instead of ignored for good.
+  - A missing reported currency fails closed even against an account with none stored.
+  - Yodlee marks a currency it inferred (`currency_inferred`), and the sync treats it as missing.
+- **`real_total` refuses NaN and Infinity** at the REST body and the tool input.
+- **An amended sale keeps its cash home too.** `dispose_amend` rebooks the sale from the edit's
+  own fields, so on a Brokerage total account it gets the same rule as a sale: no proceeds account
+  means the cash stays in the account. Before, amending such a sale dropped the account by its
+  proceeds.
+- **Lucius is never told to book the cash twice.** `acquire_lots` on a Brokerage total account
+  with no funding account no longer says "REQUIRED: call add_transaction"; the total already holds
+  the purchase. `add_positions` (and `POST /api/positions`) now return the carve-out, or why it
+  failed, as lot writes do.
+- **One sync run at a time.** A second `run()` while one is in progress skips instead of booking
+  the same difference twice. `max_instances=1` covered only the scheduler's own tick.
+- **The screens refresh.** A switch that books an adjustment, and **Use** on a held total,
+  broadcast a ledger change, so net worth updates on every screen without a reload.
+
+Known limitation, left open:
+- **A user edit landing mid-tick.** If a holding or opening balance changes in the milliseconds
+  between the tick's read of the account and its booking, the booked difference is off by that
+  change until the connector's next changed total corrects it. The window is a few milliseconds
+  every 6 hours. Two strict xfail tests document it (UAT ROB-01, ROB-02). Closing it means
+  reading and booking under one unit of work that holds the positions, lots and transactions
+  locks.
+
+Not changed, by design:
+- **Share vests.** Both live vest paths mint the lot on their own connection, so a vest raises the
+  account's value and books no transaction, as CLAUDE.md requires. A test pins it.
+- **Switching with holdings worth more than the total.** The account becomes worth its holdings;
+  the negative untracked part isn't cash.
+- **"Not updating" after 7 days.** An investment total unchanged for 7 days means a stuck feed.
+- **Booking only on a changed figure.** Re-booking every tick would chase tracked holdings' price
+  moves; the next changed figure corrects any drift.
