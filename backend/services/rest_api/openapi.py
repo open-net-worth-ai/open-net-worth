@@ -135,6 +135,10 @@ def _auth(doc: dict) -> tuple[dict, str]:
     return {"type": "none", "name": ""}, ""
 
 
+# The same room the saved instructions get (`apis.MAX_INSTRUCTIONS`).
+_MAX_INSTRUCTIONS = 8_000
+
+
 def _shape(doc: dict, schema: Any) -> str:
     """What a value must look like, from its schema, in words: its type, the values it may take,
     an example. The document says this in the schema, not the description, so without it a tool
@@ -285,6 +289,11 @@ def draft_from_spec(text: str, *, source_url: Optional[str] = None) -> dict:
         "auth": auth,
         "endpoints": clean_endpoints(endpoints),
         "note": note.strip(),
+        # The document's own account of the API, for the owner's Instructions for Lucius: the
+        # OpenAPI counterpart of an MCP server's instructions. A pre-fill, never saved unread.
+        "instructions": sanitize_untrusted(
+            str(info.get("description") or "").strip(), max_len=_MAX_INSTRUCTIONS
+        ),
     }
 
 

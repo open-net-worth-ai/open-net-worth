@@ -488,6 +488,17 @@ def test_an_imported_parameter_says_what_its_value_must_look_like():
     assert add["name"]["required"] and not add["id"]["required"]
 
 
+def test_a_documents_description_is_offered_as_instructions_for_lucius():
+    """``info.description`` is the document's own account of the API — the OpenAPI
+    counterpart of an MCP server's instructions — so Import offers it for the field."""
+    doc = {**_OAS3, "info": {"title": "Acme Bank API", "description": "Amounts are in cents.\x00"}}
+    draft = openapi.draft_from_spec(json.dumps(doc), source_url="https://api.acme.test/x")
+    assert draft["instructions"] == "Amounts are in cents."
+    long_doc = {**_OAS3, "info": {"title": "Acme", "description": "x" * 20_000}}
+    assert len(openapi.draft_from_spec(json.dumps(long_doc))["instructions"]) <= 8_000
+    assert openapi.draft_from_spec(json.dumps(_OAS3))["instructions"] == ""
+
+
 def test_a_swagger_2_yaml_document_reads_too():
     text = """
 swagger: "2.0"

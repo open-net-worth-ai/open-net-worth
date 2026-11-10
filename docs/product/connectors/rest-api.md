@@ -42,6 +42,7 @@ If the API publishes an OpenAPI or Swagger document, paste its address (often
 `…/openapi.json`) or the document itself into **OpenAPI document** and press **Import**.
 The app fills in the base URL, the sign-in type and the list of endpoints, and each parameter's
 description says what its value must look like (its type, the values it may take, an example).
+If **Instructions for Lucius** is empty, the document's own description of the API goes there.
 Everything it filled in can be changed, and you still type the key yourself — a document never contains it.
 
 A very large document is read up to its first 500 endpoints. Remove the ones you don't need:

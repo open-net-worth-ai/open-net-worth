@@ -157,6 +157,9 @@ export interface RestSpecDraft {
   auth: { type: RestAuthType; name: string }
   endpoints: RestEndpoint[]
   note: string
+  /** The document's own description of the API (`info.description`), for Instructions for
+   *  Lucius — the OpenAPI counterpart of an MCP server's instructions. */
+  instructions?: string
 }
 
 export function emptyDraft(): RestApiDraft {
@@ -205,6 +208,8 @@ export function applySpec(draft: RestApiDraft, spec: RestSpecDraft): RestApiDraf
     auth_name: spec.auth.type === 'none' ? draft.auth_name : spec.auth.name,
     auth_saved: authChanged ? false : draft.auth_saved,
     endpoints: spec.endpoints,
+    // Only into an empty field: what the owner wrote is never replaced by the document's.
+    notes: draft.notes.trim() ? draft.notes : (spec.instructions ?? ''),
   }
 }
 

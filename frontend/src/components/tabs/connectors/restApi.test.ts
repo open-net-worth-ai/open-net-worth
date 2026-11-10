@@ -166,3 +166,22 @@ describe('a REST tool on its own API’s page', () => {
     expect(restToolLabel('mcp__acme__rest__x')).toBe('mcp__acme__rest__x')
   })
 })
+
+describe('importing a document fills Instructions for Lucius', () => {
+  const spec: RestSpecDraft = {
+    name: 'Pets',
+    base_url: 'https://pets.test',
+    auth: { type: 'none', name: '' },
+    endpoints: [],
+    note: '',
+    instructions: 'Amounts are in cents.',
+  }
+
+  it('from its description, when the field is empty', () => {
+    expect(applySpec(emptyDraft(), spec).notes).toBe('Amounts are in cents.')
+  })
+
+  it('never over what the owner already wrote', () => {
+    expect(applySpec({ ...emptyDraft(), notes: 'Mine.' }, spec).notes).toBe('Mine.')
+  })
+})
