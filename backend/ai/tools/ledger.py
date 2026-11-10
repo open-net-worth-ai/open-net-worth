@@ -1723,9 +1723,7 @@ class DeleteTransactionsInput(ToolInput):
         "Call get_transactions first to find the IDs. "
         "Use for duplicate entries, rows logged in error, or bulk cleanup. "
         "REFUSES the whole batch if any id is an account's Starting Balance row "
-        "(source='opening') — change the opening balance via update_accounts instead. "
-        "Records linked to a deleted row stay and can still be corrected; `released_links` says "
-        "what changed. Tell the user."
+        "(source='opening') — change the opening balance via update_accounts instead."
     ),
     input_schema=schema_of(DeleteTransactionsInput, tool_name="delete_transactions"),
     mutates=("ledger",),
