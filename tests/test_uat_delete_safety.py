@@ -234,8 +234,12 @@ def test_DS_DUP_REBOOK_choosing_an_account_again_says_why_it_cant(app, book):
     refused = amend(app, bought["lot_id"], fees=1.0, funding_account_id=book["cash"])
 
     assert refused.status_code == 409, (refused.status_code, refused.text)
-    assert "already in your ledger" in refused.json()["detail"]
-    assert twin in refused.json()["detail"]
+    said = refused.json()["detail"]
+    assert "already in your ledger" in said
+    assert all(fact in said for fact in ("Bought 10 ACME", "2026-01-05", "200.00", "Broker cash"))
+    # Written for the person at the form, not for an agent: no retry flag, no tool to call.
+    assert not any(word in said for word in ("allow_duplicate", "get_transactions", "retry"))
+    assert row(twin)["from_amount"] == 200.0
     assert lot(bought["lot_id"])["fees"] == 0
     assert ok(amend(app, bought["lot_id"], fees=1.0))
     assert lot(bought["lot_id"])["fees"] == 1.0
@@ -269,11 +273,21 @@ def test_DS_LOT_FEE_the_same_transaction_takes_the_fee_and_keeps_everything_else
     after = row(bought["cash_leg_id"])
     assert lot(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
     assert after["from_amount"] == 201.0
-    for field in ("memo", "cleared", "source"):
+    # The description is the user's own words here, so a fee doesn't overwrite it.
+    for field in ("memo", "cleared", "source", "description"):
         assert after[field] == before[field], field
     history = ok(app.get(f"/api/transactions/{bought['cash_leg_id']}/activity"))["activity"]
     assert history, "the edit shows in the transaction's history"
     assert bought["cash_leg_id"] in live_ids()
+
+
+def test_DS_LOT_FEE_the_apps_own_description_follows_the_new_figures(app, book):
+    bought = buy(app, book)
+    assert row(bought["cash_leg_id"])["description"] == "Bought 10 ACME @ 20.00 SGD"
+
+    ok(amend(app, bought["lot_id"], fees=1.0))
+
+    assert row(bought["cash_leg_id"])["description"] == "Bought 10 ACME @ 20.00 SGD · fees 1.00 SGD"
 
 
 def test_DS_LOT_AUTOMATION_a_fee_on_an_automation_booked_lot_saves(app, book):

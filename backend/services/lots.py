@@ -1265,6 +1265,10 @@ def _funding_account_from_txn(txn_id: str | None) -> Optional[str]:
     return None if transaction_links.is_gone(txn) else txn.get("from_account_id")
 
 
+# What a cash leg is called before its trade is known; always the app's own words.
+_PLACEHOLDER_TEXT = ("", "Share purchase", "Sale proceeds")
+
+
 def _edit_cash_row(
     row_id: str,
     *,
@@ -1275,6 +1279,7 @@ def _edit_cash_row(
     currency: str,
     day: Optional[str],
     traded: dict,
+    generated: Optional[str],
     payee_id: Optional[str],
     shared: bool,
     conn: Connection,
@@ -1283,6 +1288,9 @@ def _edit_cash_row(
     and reconciled state, source and refs, and a re-delivered email is still recognised. A base
     value only moves when the amount does, and then at the row's own exchange rate, not today's.
     A row other records share moves by the difference and keeps its description.
+
+    ``generated`` is the description the app wrote for the record as it was. The new trade text
+    replaces only that: words the user or a broker's email put there stay (UAT DS-LOT-FEE).
 
     A row that no longer has this leg, or was merged into a transfer, isn't this cash any more:
     it's left alone and the correction still saves, because a correction must never fail on it."""
@@ -1306,6 +1314,8 @@ def _edit_cash_row(
             rate = stored / before
         amount = round(stored + (after - before) * rate, 2)
     final_currency = row_currency if other_units else currency
+    if (row.get("description") or "") not in {generated or "", *_PLACEHOLDER_TEXT}:
+        traded = {k: v for k, v in traded.items() if k != "description"}
     changes: dict = {
         f"{leg}_account_id": account_id,
         f"{leg}_amount": amount,
@@ -1374,6 +1384,14 @@ def _sync_purchase_cash(
         )
         if figures_changed
         else {},
+        generated=_traded(
+            lot.get("instrument_id"),
+            lot.get("original_qty"),
+            verb="Bought",
+            price=lot.get("unit_cost"),
+            currency=(lot.get("cost_currency") or currency).upper(),
+            fees=lot.get("fees"),
+        ).get("description"),
         payee_id=payee_id,
         shared=_shares_cash_row(LotStore(), txn_id, lot["id"], conn=conn),
         conn=conn,
@@ -1421,6 +1439,14 @@ def _sync_proceeds_cash(
         )
         if figures_changed
         else {},
+        generated=_traded(
+            ev.get("instrument_id"),
+            ev.get("quantity"),
+            verb="Sold",
+            price=ev.get("proceeds_per_unit"),
+            currency=(ev.get("proceeds_currency") or currency).upper(),
+            fees=ev.get("disposal_fees"),
+        ).get("description"),
         payee_id=payee_id,
         shared=_shares_cash_row(RealizedEventStore(), txn_id, ev["id"], conn=conn),
         conn=conn,

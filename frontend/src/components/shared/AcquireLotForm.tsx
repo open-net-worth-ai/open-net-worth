@@ -23,6 +23,7 @@ import {
 } from '../ui'
 import type { ConfirmDialogData } from '../ui'
 import { toLocalISODate } from './DisposalForm'
+import { FormError } from './FormError'
 
 // `extends AccountLike` supplies the index signature `useAccounts<T>()`'s constraint demands.
 export interface AccountLite extends AccountLike {
@@ -458,7 +459,8 @@ export function AcquireLotForm({
     if (!lot) return
     setConfirm({
       title: 'Remove this lot?',
-      body: `This will permanently remove ${lot.original_qty} units acquired on ${lot.acquired_at ? fDate(lot.acquired_at, 'short', 'always') : 'an unknown date'}. Unrealized P&L and cost basis will update.`,
+      // Removing a lot also removes its purchase transaction, and frees what it paid (UAT DS-LOT-REMOVE).
+      body: `This will permanently remove ${lot.original_qty} units acquired on ${lot.acquired_at ? fDate(lot.acquired_at, 'short', 'always') : 'an unknown date'}. Unrealized P&L and cost basis will update.${lot.txn_id ? ' Its purchase transaction is removed too, and anything it paid, such as an installment, goes back to unpaid.' : ''}`,
       confirmLabel: 'Remove',
       danger: true,
       confirmDisabled: removing,
@@ -742,13 +744,19 @@ export function AcquireLotForm({
                       : `${fAmountNative(gross, costCcy)} will be deducted from ${accountName(fundingAccountId)}.`}
                   </span>
                 )
+              ) : lot?.txn_id && fundingTouched ? (
+                // Saving deletes the purchase this lot has, and frees what it paid (UAT DS-LOT-NODEDUCT).
+                <span className="disposal-warn">
+                  Saving removes this lot's purchase transaction from the ledger. Anything it paid,
+                  such as an installment, goes back to unpaid.
+                </span>
               ) : (
                 <span className="disposal-deposit-hint muted">
                   Funding not linked — your cash balance won't change when you add this lot.
                 </span>
               )}
             </label>
-            {error && <div className="disposal-error">{error}</div>}
+            <FormError message={error} />
           </>
         )}
       </Modal>

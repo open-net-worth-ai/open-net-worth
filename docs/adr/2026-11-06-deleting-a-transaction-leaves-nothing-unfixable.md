@@ -87,6 +87,8 @@ records share moves by the difference. A row is deleted only when the correction
 all, and a new one is booked, with the duplicate guard on, only when a record has none and an account
 was chosen. A row that no longer has that leg, or was merged into a transfer, is left alone and the
 correction still saves, so the correction and that row can disagree until the user fixes the row.
+The description is rewritten only while it is still the app's own trade text: one the user or a
+broker's email wrote stays when the figures change (found in hand UAT, 2026-11-10).
 
 The amount on a reconciled row can now change, where before it was replaced. Nothing refuses that,
 and the row stays marked reconciled. No linked row in the owner's book is reconciled.

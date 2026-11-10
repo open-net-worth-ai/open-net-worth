@@ -5,6 +5,7 @@ import { authFetch } from '../../api/client'
 import { ACCOUNTS_KEY, fetchJson, notifyPortfolioChanged } from '../../hooks/serverState'
 import { fetchCachedQuery } from '../../state/queryCache'
 import { DateField, Modal } from '../ui'
+import { FormError } from './FormError'
 
 /** Enough of a holding to open the sale form from Investments or the quote page. */
 export type DisposalTarget = Pick<ComputedRow, 'position_id' | 'symbol' | 'label' | 'currency'> &
@@ -557,7 +558,7 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
                   for a gift / transfer with no value received, tick "transfer-out" below.
                 </div>
               )}
-              {error && <div className="disposal-error">{error}</div>}
+              <FormError message={error} />
             </>
           )}
         </>

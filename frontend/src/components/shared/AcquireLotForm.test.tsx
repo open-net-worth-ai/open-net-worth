@@ -427,6 +427,77 @@ describe('AcquireLotForm — a lot whose purchase date is unknown', () => {
   })
 })
 
+describe('AcquireLotForm — a lot with a purchase transaction (UAT DS-LOT-NODEDUCT)', () => {
+  const paid = {
+    id: 'lot-paid',
+    position_id: 'pos-1',
+    instrument_id: 'inst-1',
+    account_id: 'acc-1',
+    acquired_at: '2026-02-06',
+    original_qty: 2,
+    remaining_qty: 2,
+    unit_cost: 50,
+    cost_currency: 'SGD',
+    fees: 0,
+    kind: 'buy',
+    note: '',
+    txn_id: 'txn-paid',
+    effective_unit_cost: 50,
+    remaining_basis: 100,
+    term_to_date: 'short' as const,
+  }
+
+  beforeEach(() => {
+    mockAuthFetch.mockImplementation((url: string) => {
+      if (url === '/api/accounts' || url.startsWith('/api/accounts?'))
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            ...ACCOUNTS,
+            { id: 'cash-1', name: 'Everyday Cash', kind: 'asset', type: 'cash' },
+          ],
+        })
+      if (url === '/api/transactions/txn-paid')
+        return Promise.resolve({ ok: true, json: async () => ({ from_account_id: 'cash-1' }) })
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+    })
+  })
+
+  it('warns that choosing no account removes the purchase and what it paid', async () => {
+    const { findByLabelText, queryByText, findByText } = render(
+      <AcquireLotForm
+        symbol="ACME"
+        costCcy="SGD"
+        lot={paid}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    const funding = (await findByLabelText(/Deduct from/)) as HTMLSelectElement
+    await waitFor(() => expect(funding.value).toBe('cash-1'))
+    expect(queryByText(/removes this lot's purchase transaction/)).toBeNull()
+
+    fireEvent.change(funding, { target: { value: '' } })
+
+    expect(await findByText(/removes this lot's purchase transaction/)).toBeTruthy()
+    expect(queryByText(/won't change when you add this lot/)).toBeNull()
+  })
+
+  it('says removing the lot removes its purchase and frees what it paid (UAT DS-LOT-REMOVE)', async () => {
+    const { findByRole, findByText } = render(
+      <AcquireLotForm
+        symbol="ACME"
+        costCcy="SGD"
+        lot={paid}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    fireEvent.click(await findByRole('button', { name: 'Remove lot' }))
+    expect(await findByText(/Its purchase transaction is removed too/)).toBeTruthy()
+  })
+})
+
 describe('AcquireLotForm — dates (found driving Add holding, 2026-10-12)', () => {
   // The dialog renders in a portal, outside the render container.
   const setDate = (iso: string) =>

@@ -132,7 +132,8 @@ can add, edit or re-flag a transaction, but can never clear the flag.
   IBKR) — set automatically when the trade is recorded against an account with an institution,
   and editable in the drawer like any other payee. A buy or sale recorded against a holding
   writes what it traded as the description — for example **Sold 60 KSTL @ 150.00 USD · fees
-  1.25 USD** — and leaves the memo free for your own note.
+  1.25 USD** — and leaves the memo free for your own note. Correcting the trade later updates
+  that description to match; a description you or a broker's email wrote is kept as it is.
 - A **balance adjustment** (created when you reconcile) never has a category and is left out of
   spending reports.
 - The **Starting Balance** can't be deleted, uncleared, freely edited or merged — change the
