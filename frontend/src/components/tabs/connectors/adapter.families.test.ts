@@ -49,7 +49,7 @@ describe('a connected connector’s family', () => {
     // Not all the same colour: the point of the tint.
     expect(new Set(ids.map((id) => tileTint(`rest:${id}`))).size).toBeGreaterThan(3)
     // The entry that ADDS an API keeps the kind's own tint.
-    expect(toEntry({ ...native('rest'), kind: 'rest' }).hue).toBe('var(--cash-c)')
+    expect(toEntry({ ...native('rest'), kind: 'rest' }).hue).toBe('var(--accent)')
   })
 
   it('shows an added API by its initial, since they all share one glyph', () => {

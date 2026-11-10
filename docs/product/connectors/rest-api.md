@@ -57,7 +57,7 @@ No document? Skip the box and fill the form in by hand.
 | **Authentication** | How the API recognises you: none, a bearer token, an API key in a header, an API key in the URL, or a username and password. |
 | **Extra headers** | Optional. Sent with every request — an API version header, for example. |
 | **Endpoints** | What can be called: a method, a path such as `/accounts/{account_id}/transactions`, a description Lucius reads to decide when to call it, and its parameters. The list is split into **Read-only tools** (GET) and **Write & delete tools** (POST, PUT, PATCH, DELETE), with a permission switch on each row and one on each group to set them all, so an API can be saved already permissioned. HEAD and OPTIONS aren't offered, and are skipped when a document lists them: they return no data for Lucius to read. |
-| **Notes for Lucius** | Optional. Anything that helps: how paging works, the date format, which sign means money out. |
+| **Instructions for Lucius** | Given to Lucius in every conversation while the API is on, like an MCP server's own instructions. Say what the endpoints don't: which one to use for what, what to call first, how paging and dates work, units and signs, and which of your accounts the data is for. Up to 8,000 characters. |
 
 To change an API later, open its connector and choose **Edit configuration**. A saved key shows
 as dots; leave it blank to keep it, or type a new one to replace it.
@@ -72,16 +72,8 @@ The connector's page lists the tools under **Tool permissions**, one row per end
 decide endpoint by endpoint: a POST that only searches can be **Always allow** while a POST that
 moves money stays **Needs approval**.
 
-Three more tools come with every API:
-
-| Tool | What it does |
-|---|---|
-| `…__list_endpoints` | Shows Lucius the endpoints and your notes. |
-| `…__get_data` | A GET to any path under the base URL, for a path you didn't list. |
-| `…__send_request` | A POST, PUT, PATCH or DELETE to any path under the base URL. |
-
-If you want the endpoints you listed to be all Lucius can call, set `…__get_data` and
-`…__send_request` to **Blocked**.
+The endpoints you list are all Lucius can call on that API: there is no general "any path"
+tool. To let him reach another endpoint, add it.
 
 Editing an endpoint keeps its tool, so an Automation that names it carries on working. If you
 change an endpoint's method or path, an **Always allow** on it goes back to **Needs approval**:
@@ -109,7 +101,7 @@ rather than doing something else.
 Lucius gets the whole answer or none of it — the app never hands over part of a list, because
 half a month of transactions looks like a whole one. An answer over 1 MB is refused with a
 message asking for less, and Lucius tries again with a smaller page or date range. If your API
-can't page or filter, say so in **Notes for Lucius** and name the smallest request that works.
+can't page or filter, say so in **Instructions for Lucius** and name the smallest request that works.
 
 ## Running it on a schedule
 

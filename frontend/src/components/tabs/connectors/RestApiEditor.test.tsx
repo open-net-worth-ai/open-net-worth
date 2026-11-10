@@ -51,10 +51,12 @@ describe('a failed save of the REST API form', () => {
     expect(screen.getByRole('alert').textContent).toBe(reason)
   })
 
-  it('says nothing to the toast for what is merely not filled in yet', () => {
+  it('says nothing for what is merely not filled in yet: the field is marked required', () => {
+    // A line about the Name field at the foot of a long form read as out of place.
     const onSaveError = vi.fn()
     render(<Dialog onSaveError={onSaveError} />)
-    expect(screen.getByText('Give the API a name.')).toBeTruthy()
+    expect(screen.queryByText('Give the API a name.')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(onSaveError).not.toHaveBeenCalled()
   })
 })

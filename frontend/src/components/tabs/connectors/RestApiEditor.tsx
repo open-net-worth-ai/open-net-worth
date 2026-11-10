@@ -199,6 +199,24 @@ export function RestApiEditor({ initial, onSaved, onSaveError }: RestApiEditorPr
         </span>
       )}
 
+      {/* First, where it is seen: what Lucius is told about this API in every conversation
+          (owner, 2026-11-11). */}
+      <RestField
+        label="Instructions for Lucius"
+        htmlFor="rest-notes"
+        help="Given to Lucius in every conversation while this API is on, like an MCP server's own instructions. Tell him what the endpoints don't: which one to use for what, what to call first, how paging and dates work, units and signs, and which of your accounts the data is for."
+      >
+        <textarea
+          id="rest-notes"
+          maxLength={8000}
+          className="rd-textarea"
+          rows={3}
+          placeholder="Call GET /accounts first for an account id. Transactions are paged with ?page= and dated YYYY-MM-DD. Amounts are in cents; negative is money out. This is my Acme Bank checking account."
+          value={draft.notes}
+          onChange={(e) => set('notes', e.target.value)}
+        />
+      </RestField>
+
       <ImportBox onRead={readSpec} />
 
       <RestField
@@ -319,7 +337,7 @@ export function RestApiEditor({ initial, onSaved, onSaveError }: RestApiEditorPr
 
       <RestField
         label="Endpoints"
-        help="Each endpoint becomes a tool Lucius can call, with its own permission. Lucius can also request any other path under the base URL unless you block the connector's two general tools."
+        help="Each endpoint becomes a tool Lucius can call, with its own permission. These are all he can call on this API."
       >
         <RestEndpointsEditor
           endpoints={draft.endpoints}
@@ -327,27 +345,11 @@ export function RestApiEditor({ initial, onSaved, onSaveError }: RestApiEditorPr
         />
       </RestField>
 
-      <RestField
-        label="Notes for Lucius (optional)"
-        htmlFor="rest-notes"
-        help="Anything that helps Lucius use this API: how paging works, the date format, which account a feed belongs to."
-      >
-        <textarea
-          id="rest-notes"
-          className="rd-textarea"
-          rows={3}
-          placeholder="Transactions are paged with ?page=. Amounts are in cents; negative means money out."
-          value={draft.notes}
-          onChange={(e) => set('notes', e.target.value)}
-        />
-      </RestField>
-
-      {(saveErr || problem) && (
-        <span
-          className={'rd-help full' + (saveErr ? ' rd-help--bad' : '')}
-          role={saveErr ? 'alert' : undefined}
-        >
-          {saveErr || problem}
+      {/* Only why a save FAILED: what is still missing is marked on its own field (the *), and
+          a line a screen below about the Name field read as out of place (owner, 2026-11-11). */}
+      {saveErr && (
+        <span className="rd-help rd-help--bad full" role="alert">
+          {saveErr}
         </span>
       )}
     </div>

@@ -45,7 +45,7 @@ const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   telegram: { icon: 'chat', hue: 'var(--accent)' },
   voice: { icon: 'voice', hue: 'var(--cta)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
-  rest: { icon: 'link', hue: 'var(--cash-c)' },
+  rest: { icon: 'link2', hue: 'var(--accent)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
   actual_budget: { icon: 'accounts', hue: 'var(--accent)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },

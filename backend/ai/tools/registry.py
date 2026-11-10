@@ -185,8 +185,8 @@ def tool(
 
 
 def is_rest_send(name: str) -> bool:
-    """True for a REST connector tool that is not a plain read: its generic ``send_request``,
-    or an endpoint declared with POST / PUT / PATCH / DELETE. These tools are named at runtime,
+    """True for a REST connector tool that is not a plain read: an endpoint declared with
+    POST / PUT / PATCH / DELETE. These tools are named at runtime,
     so the reviewed NAME lists that mark "acts outside this install" (the old gate's
     ``EXTERNAL_EFFECT_TOOLS``, the discovery gate's never-auto-execute set, the inbound MCP
     annotations) cannot list them and ask this instead. The answer is the tool's own

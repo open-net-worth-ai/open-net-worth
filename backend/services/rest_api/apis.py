@@ -8,8 +8,8 @@ Two projections, never mixed:
 
   * ``operator_view`` — the owner's own settings screen: the base URL as typed, header NAMES,
     ``has_value`` for the credential. Never a credential VALUE.
-  * ``model_view``    — what Lucius reads to form a request: the host only (a base URL is a
-    credential — ``models.mcp_client.redact_endpoint``), the auth TYPE, endpoints and notes.
+  * ``enabled_instructions`` — the owner's instructions for Lucius, for his system prompt.
+    Nothing else about an API reaches him: its tools carry their own endpoint.
 """
 
 from __future__ import annotations
@@ -22,10 +22,12 @@ from backend.core import rest_tools
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.db.rest_config_store import RestConfigStore
-from backend.models.mcp_client import redact_endpoint
 from backend.services import tool_permissions
 
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+# The owner's instructions for Lucius ride in every turn's system prompt, so they get the same
+# room as an MCP server's (`mcp.client.MAX_SERVER_INSTRUCTIONS_CHARS`).
+MAX_INSTRUCTIONS = 8_000
 AUTH_TYPES = ("none", "bearer", "basic", "header", "query")
 PARAM_PLACES = ("path", "query", "body")
 # Bounds on what ONE API can declare — each endpoint is a tool of its own. They exist for a
@@ -35,7 +37,6 @@ MAX_ENDPOINTS = 500
 MAX_PARAMS = 100
 # Past this many endpoints in one answer, Lucius gets them as "METHOD /path" lines and
 # narrows with ``search`` to read the parameters.
-COMPACT_OVER = 100
 
 _HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+$")
 # Headers the client sets itself, or that would re-route the request.
@@ -296,8 +297,8 @@ def find_endpoint(api: dict, tool: str) -> dict:
     hit = next((e for e in api["endpoints"] if e["tool"] == tool), None)
     if hit is None:
         raise NotFoundError(
-            f"'{api['name']}' no longer has the endpoint '{tool}'. Its list_endpoints tool "
-            "shows what it has now."
+            f"'{api['name']}' no longer has the endpoint '{tool}'. The tools it has now are "
+            "its endpoints: find them with find_tools."
         )
     return hit
 
@@ -338,32 +339,15 @@ def _with_levels(api: dict) -> list[dict]:
     ]
 
 
-def _matches(endpoint: dict, words: list[str]) -> bool:
-    text = f"{endpoint.get('method')} {endpoint.get('path')} {endpoint.get('description')}"
-    return all(w in f"{text} {endpoint.get('tool')}".lower() for w in words)
-
-
-def model_view(api: dict, *, search: str = "") -> dict:
-    """What Lucius may read about one API. ``search`` keeps the endpoints whose method, path
-    or description contains every word of it."""
-    words = [w for w in search.lower().split() if w]
-    endpoints = [e for e in api["endpoints"] if _matches(e, words)] if words else api["endpoints"]
-    view: dict = {
-        "name": api["name"],
-        "host": redact_endpoint("http", url=api["base_url"]),
-        "auth": api["auth"].get("type") or "none",
-        "notes": api["notes"],
-        "endpoint_count": len(api["endpoints"]),
-    }
-    if len(endpoints) > COMPACT_OVER:
-        view["endpoints"] = [f"{e['tool']}: {e['method']} {e['path']}" for e in endpoints]
-        view["endpoints_note"] = (
-            f"{len(endpoints)} endpoints, shown as tool id, method and path only. Pass "
-            "`search` to narrow to the ones you need and see their parameters."
-        )
-    else:
-        view["endpoints"] = endpoints
-    return view
+def enabled_instructions() -> list[tuple[str, str, str]]:
+    """``(slug, name, instructions)`` for every switched-on API whose owner wrote instructions
+    for Lucius — placed in his system prompt as an MCP server's instructions are
+    (``ai.prompts._fmt_rest_api_instructions``). A paused API's are left out, as its tools are."""
+    return [
+        (api["id"], api["name"], api["notes"][:MAX_INSTRUCTIONS])
+        for api in load_all()
+        if api["enabled"] and api["notes"].strip()
+    ]
 
 
 def get_operator_api(slug: str) -> dict:
@@ -417,7 +401,9 @@ def save_api(payload: dict, slug: Optional[str] = None) -> dict:
         "auth": _clean_auth(payload.get("auth"), saved["auth"] if saved else None),
         "headers": _clean_headers(payload.get("headers"), saved["headers"] if saved else None),
         "endpoints": clean_endpoints(payload.get("endpoints"), chosen),
-        "notes": sanitize_untrusted(str(payload.get("notes") or "").strip(), max_len=20_000),
+        "notes": sanitize_untrusted(
+            str(payload.get("notes") or "").strip(), max_len=MAX_INSTRUCTIONS
+        ),
     }
     store = RestConfigStore()
     if saved is None:

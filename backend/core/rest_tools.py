@@ -2,8 +2,7 @@
 
 Each REST API the owner adds is its own connector, ``rest:<slug>``, and brings its own tools,
 ``rest__<slug>__<tool>``: one per endpoint the owner declared (``<tool>`` is that endpoint's
-stable id) plus three generic ones (``GENERIC``) for reading the list and for a path that was
-not declared. They are ordinary registry tools (registered while the connector exists,
+stable id), and nothing else. They are ordinary registry tools (registered while the connector exists,
 ``ai.tools.rest_api.sync_rest_tools``), so a permission level, a confirm card and an
 Automation's lists all work per connector AND per endpoint with no special case.
 
@@ -23,11 +22,6 @@ KIND = "rest"
 LAUNCHER_ID = "rest"
 CONNECTOR_PREFIX = "rest:"
 TOOL_PREFIX = "rest__"
-
-LIST_ENDPOINTS = "list_endpoints"
-GET_DATA = "get_data"
-SEND_REQUEST = "send_request"
-GENERIC = (LIST_ENDPOINTS, GET_DATA, SEND_REQUEST)
 
 # A tool name is at most 64 characters at every provider: ``rest__`` + slug + ``__`` + tool.
 MAX_SLUG = 20
@@ -70,14 +64,8 @@ def slug_of(connector: str) -> Optional[str]:
 
 
 def is_endpoint_id(value: str) -> bool:
-    """A usable endpoint id: slug-shaped, short enough for a tool name, and not one of the
-    generic tools' own names."""
-    return (
-        bool(value)
-        and len(value) <= MAX_ENDPOINT_ID
-        and bool(_SLUG.match(value))
-        and value not in GENERIC
-    )
+    """A usable endpoint id: slug-shaped and short enough for a tool name."""
+    return bool(value) and len(value) <= MAX_ENDPOINT_ID and bool(_SLUG.match(value))
 
 
 def endpoint_id_from(method: str, path: str, operation_id: str = "") -> str:
@@ -94,13 +82,11 @@ def tool_name(slug: str, tool: str) -> str:
 
 
 def split_tool(name: str) -> Optional[tuple[str, str]]:
-    """``(slug, tool)`` for a REST connector tool name — a generic tool or an endpoint's —
-    else ``None``. Neither part can hold ``__``, so the split is unambiguous."""
+    """``(slug, tool)`` for a REST connector tool name — an endpoint's — else ``None``. Neither part can hold ``__``, so the split is unambiguous."""
     if not name.startswith(TOOL_PREFIX):
         return None
     slug, sep, tool = name[len(TOOL_PREFIX) :].partition("__")
-    known = tool in GENERIC or is_endpoint_id(tool)
-    return (slug, tool) if sep and known and is_slug(slug) else None
+    return (slug, tool) if sep and is_endpoint_id(tool) and is_slug(slug) else None
 
 
 def is_rest_tool(name: str) -> bool:

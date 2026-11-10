@@ -326,7 +326,7 @@ One line each — full reasoning and the scar behind each is in
   touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
 - The REST connector (`services/rest_api/`): each API is its own connector `rest:<slug>`, everything
   it holds a secret, and its tools are ordinary registry tools REGISTERED AT RUNTIME
-  (`ai/tools/rest_api.py`: one per declared endpoint plus three generic, `rest__<slug>__<tool>`), so
+  (`ai/tools/rest_api.py`: one per declared endpoint and nothing else, `rest__<slug>__<tool>`), so
   permissions and cards work per API and per endpoint with no gate change. The registry is therefore
   not fixed at import: a runtime tool must also be in `TOOL_SCHEMAS`, a name list that marks sends
   asks `registry.is_rest_send`, and a test that adds an API clears them

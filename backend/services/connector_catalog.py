@@ -315,19 +315,9 @@ def _mcp_config(row: Row, have: Have, ctx: dict) -> dict:
     return {k: v for k, v in public.items() if k not in skip}
 
 
-_REST_GENERIC_COPY = {
-    rest_tools.LIST_ENDPOINTS: (
-        "See what this API can be asked: its endpoints and your notes.",
-        True,
-    ),
-    rest_tools.GET_DATA: ("Read any path of this API (a GET request).", True),
-    rest_tools.SEND_REQUEST: ("Send a POST, PUT, PATCH or DELETE request to any path.", False),
-}
-
-
 def _rest_tools(row: Row, ctx: dict) -> list[ConnectorTool]:
     """One REST API's tools: one per endpoint the owner declared (a GET is a read, anything
-    else a write), then the three generic ones. Mirrors what ``ai.tools.rest_api`` registers.
+    else a write). Mirrors what ``ai.tools.rest_api`` registers.
     The launcher instance has none: it is not an API."""
     slug = rest_tools.slug_of(row["id"])
     if slug is None:
@@ -337,7 +327,7 @@ def _rest_tools(row: Row, ctx: dict) -> list[ConnectorTool]:
 
         ctx["rest_secrets"] = ConnectorStore().secrets_by_kind(rest_tools.KIND)
     endpoints = (ctx["rest_secrets"].get(row["id"]) or {}).get("endpoints")
-    tools = [
+    return [
         ConnectorTool(
             name=rest_tools.tool_name(slug, str(e["tool"])),
             description=" — ".join(
@@ -350,12 +340,6 @@ def _rest_tools(row: Row, ctx: dict) -> list[ConnectorTool]:
         )
         for e in (endpoints if isinstance(endpoints, list) else [])
         if isinstance(e, dict) and rest_tools.is_endpoint_id(str(e.get("tool") or ""))
-    ]
-    return tools + [
-        ConnectorTool(
-            name=rest_tools.tool_name(slug, tool), description=text, source="native", read_only=ro
-        )
-        for tool, (text, ro) in _REST_GENERIC_COPY.items()
     ]
 
 

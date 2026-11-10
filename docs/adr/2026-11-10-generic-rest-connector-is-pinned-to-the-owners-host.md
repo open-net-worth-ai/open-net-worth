@@ -46,10 +46,12 @@ that can read the ledger (`run_sql_query`) and send a request anywhere can take 
   catalog's flat list, with no section, summary or roster line however many there are, the way
   Claude Code lists tools it has not loaded (owner, 2026-11-11): `find_tools` and the discovery
   gate load a schema when it is needed.
-- **Three generic tools per API as well**: `list_endpoints` (the endpoints and the owner's notes),
-  `get_data` (GET any path) and `send_request` (POST/PUT/PATCH/DELETE any path), for what was not
-  declared. Setting the last two to Blocked makes the declared list the whole of what Lucius may
-  call, so the allowlist is the owner's choice and uses the control that already exists.
+- **The declared endpoints are the whole API.** There were first three generic tools per API
+  as well (`list_endpoints`, `get_data` for any path, `send_request` for any path); the owner
+  removed them (2026-11-11): an MCP server has no such tools, and "any path" made the declared
+  list a suggestion. The owner's **Instructions for Lucius** reach him in the system prompt,
+  fenced per API (`ai.prompts._fmt_rest_api_instructions`), as an MCP server's instructions do,
+  capped at the same 8,000 characters.
 - **The host is the boundary.** Whatever tool is called, `services/rest_api/client.py` builds the URL
   from the saved base, re-checks the origin and path prefix after joining, refuses `..` (however
   encoded), `//`, a scheme, a backslash or a control character, and follows a redirect only while it

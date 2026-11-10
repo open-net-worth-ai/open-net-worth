@@ -482,8 +482,8 @@ export const CATALOG: CatalogEntry[] = [
     families: ['API'],
     // What it is FOR depends on the API it is pointed at, so the label says only what it is.
     categories: ['Custom API'],
-    icon: 'link',
-    hue: 'var(--cash-c)',
+    icon: 'link2',
+    hue: 'var(--accent)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["rest"]`.
     publisher: 'Open Net Worth',
     verification: 'unverified',
