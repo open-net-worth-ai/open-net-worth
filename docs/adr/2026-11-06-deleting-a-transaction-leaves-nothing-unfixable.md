@@ -91,6 +91,9 @@ correction still saves, so the correction and that row can disagree until the us
 The amount on a reconciled row can now change, where before it was replaced. Nothing refuses that,
 and the row stays marked reconciled. No linked row in the owner's book is reconciled.
 
+The owner chose this on 2026-11-10: a corrected row stays reconciled. The alternatives were
+un-reconciling the row on a correction, or refusing the correction.
+
 ## Alternatives considered
 
 - **Database cascades or triggers** — rejected for the reasons in Context. The foreign key on
