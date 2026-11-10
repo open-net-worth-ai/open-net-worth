@@ -15,15 +15,32 @@ import {
   DateField,
   NumberField,
   Stack,
-  Cluster,
   Text,
+  RadioGroup,
 } from '../../ui'
+import { fCur } from './format'
 import { authFetch } from '../../../api/client'
 import { fDate, getBaseCurrency } from '../../../utils/format'
-import type { Account, AccountCreate, AccountUpdate, AccountPrefill, ExternalId } from './types'
-import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, TYPE_ICON, LIABILITY_TYPES } from './categories'
+import { useFlag } from '../../../hooks/useFlag'
+import { isWaiting } from './valuation'
+import type {
+  Account,
+  AccountCreate,
+  AccountUpdate,
+  AccountPrefill,
+  ExternalId,
+  ValueSource,
+} from './types'
+import {
+  ACCOUNT_TYPES,
+  TYPE_LABELS,
+  TYPE_MEANING,
+  TYPE_ICON,
+  TYPE_COLOR,
+  LIABILITY_TYPES,
+} from './categories'
 import type { AccountType } from './categories'
-import { ChevronRight } from '../../../ui/icons'
+import { ChevronRight, Link2 } from '../../../ui/icons'
 
 export interface AccountModalProps {
   open: boolean
@@ -137,9 +154,17 @@ export default function AccountModal({
   // (`onSave` here would close the whole modal and toast "Saved …", which Unlink must not).
   const [externalIds, setExternalIds] = useState<ExternalId[]>([])
   const [unlinkingIdx, setUnlinkingIdx] = useState<number | null>(null)
+  const [confirmUnlink, setConfirmUnlink] = useState<number | null>(null)
   const [unlinkErr, setUnlinkErr] = useState<string | null>(null)
   const [scrollbarActive, setScrollbarActive] = useState(false)
   const scrollbarIdleTimer = useRef<number | null>(null)
+  // How an investment/retirement account is valued (ADR 2026-11-10) — edit mode only; a new
+  // account starts as Brokerage total, which the server decides.
+  const valuation = mode === 'edit' ? (account?.valuation ?? null) : null
+  const valueFlag = useFlag('investment_value_source') === true
+  const [valueSource, setValueSource] = useState<ValueSource>('total')
+  const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(null)
+  const money = (n: number) => fCur(n, form.currency, { cents: true })
   const institutionOptions: InstitutionOption[] = institutions.map((institution) =>
     typeof institution === 'string'
       ? { id: institution.toLowerCase(), name: institution, accountCount: 0 }
@@ -178,9 +203,12 @@ export default function AccountModal({
     setSaving(false)
     setSaveErr('')
     setUnlinkErr(null)
+    setConfirmUnlink(null)
     if (mode === 'edit' && account) {
       setStep('details')
       setExternalIds(account.externalIds ?? [])
+      if (account.valuation) setValueSource(account.valuation.source)
+      setSwitchPreview(null)
       const type = (ACCOUNT_TYPES as readonly string[]).includes(account.type)
         ? (account.type as AccountType)
         : 'cash'
@@ -318,8 +346,10 @@ export default function AccountModal({
         initial_balance_date: _initialBalanceDate,
         ...rest
       }: AccountCreate = payload
+      const update: AccountUpdate = { ...(rest as AccountUpdate) }
+      if (valuation && valueSource !== valuation.source) update.value_source = valueSource
       try {
-        await onSave(rest as AccountUpdate, account.id)
+        await onSave(update, account.id)
       } catch {
         setSaveErr('We couldn’t save these details. Try again.')
       } finally {
@@ -332,6 +362,8 @@ export default function AccountModal({
   const isLoan = form.type === 'loan'
   const isYield = form.type === 'cash' || form.type === 'fixed_deposit'
   const isAsset = !LIABILITY_TYPES.has(form.type)
+  // An investment account's typed balance is its total, holdings included (ADR 2026-11-10).
+  const isInvestment = valueFlag && (form.type === 'investment' || form.type === 'retirement')
   const apyProjection = (() => {
     const bal = parseFloat(form.initial.replace(/[^0-9.-]/g, '')),
       rate = parseFloat(form.apy)
@@ -462,10 +494,20 @@ export default function AccountModal({
                 <CurrencyPicker value={form.currency} onChange={(c) => set('currency', c)} />
               </FormField>
               <FormField
-                label={isAsset ? 'Current balance' : 'Amount currently owed'}
+                label={
+                  isInvestment
+                    ? 'Total value'
+                    : isAsset
+                      ? 'Current balance'
+                      : 'Amount currently owed'
+                }
                 htmlFor="f-balance"
                 required
-                help="We’ll record this as today’s Starting Balance transaction. You can edit it later."
+                help={
+                  isInvestment
+                    ? 'Holdings and cash together, as your brokerage shows it. You can add holdings later.'
+                    : 'We’ll record this as today’s Starting Balance transaction. You can edit it later.'
+                }
               >
                 <div className="acct-balance-inline">
                   <NumberField
@@ -556,7 +598,14 @@ export default function AccountModal({
               <div className="acct-layout">
                 <div className="acct-identity-header">
                   <div className="acct-avatar-row">
-                    <div className="acct-avatar">
+                    <div
+                      className="acct-avatar"
+                      style={{
+                        color: TYPE_COLOR[form.type],
+                        background: `color-mix(in srgb, ${TYPE_COLOR[form.type]} 12%, var(--surface))`,
+                        borderColor: `color-mix(in srgb, ${TYPE_COLOR[form.type]} 30%, var(--line))`,
+                      }}
+                    >
                       <AccIcon name={ICON[form.type]} size={24} />
                     </div>
                     <div
@@ -788,24 +837,58 @@ export default function AccountModal({
                       <div className="acct-section-label">Linked to</div>
                       <Stack gap="--space-2">
                         {externalIds.map((entry, i) => (
-                          <Cluster
-                            key={`${entry.source}:${entry.ref}`}
-                            justify="between"
-                            align="center"
-                          >
-                            <Text size="xs" tone="faint">
-                              {entry.providerLabel} · {entry.name}
-                              {entry.mask ? ` ••${entry.mask}` : ''}
-                            </Text>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              loading={unlinkingIdx === i}
-                              onClick={() => void unlink(i)}
-                            >
-                              Unlink
-                            </Button>
-                          </Cluster>
+                          <div key={`${entry.source}:${entry.ref}`} className="acct-link-row">
+                            <Link2 size={16} strokeWidth={1.75} aria-hidden="true" />
+                            <div className="acct-link-main">
+                              <div className="acct-link-name">
+                                {entry.name}
+                                {entry.mask ? ` ••${entry.mask}` : ''}
+                              </div>
+                              <div className="acct-link-sub">
+                                {confirmUnlink === i
+                                  ? `Unlink from ${entry.providerLabel}? ${
+                                      valuation?.source === 'total'
+                                        ? 'The balance stops updating and keeps its current value.'
+                                        : 'Nothing booked so far is removed.'
+                                    }`
+                                  : `Through ${entry.providerLabel}${
+                                      entry.linkedAt
+                                        ? ` · linked ${fDate(new Date(entry.linkedAt))}`
+                                        : ''
+                                    }`}
+                              </div>
+                            </div>
+                            {confirmUnlink === i ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setConfirmUnlink(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  loading={unlinkingIdx === i}
+                                  onClick={() => {
+                                    setConfirmUnlink(null)
+                                    void unlink(i)
+                                  }}
+                                >
+                                  Unlink
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setConfirmUnlink(i)}
+                              >
+                                Unlink
+                              </Button>
+                            )}
+                          </div>
                         ))}
                         {unlinkErr && (
                           <Text size="xs" tone="bad">
@@ -814,6 +897,21 @@ export default function AccountModal({
                         )}
                       </Stack>
                     </section>
+                  )}
+                  {valuation && account && (
+                    <ValueSourceSection
+                      account={account}
+                      valuation={valuation}
+                      value={valueSource}
+                      preview={switchPreview}
+                      money={money}
+                      onChange={(next) => {
+                        setValueSource(next)
+                        setSwitchPreview(null)
+                        if (next !== valuation.source)
+                          void fetchSwitchPreview(account.id, next).then(setSwitchPreview)
+                      }}
+                    />
                   )}
                   {mode === 'edit' && (
                     <div className="acct-opening-compact">
@@ -869,5 +967,99 @@ export default function AccountModal({
         />
       )}
     </>
+  )
+}
+
+interface SwitchPreview {
+  holdings: number
+  untracked: number
+  total: number
+  adjustment: number
+  value_after: number
+}
+
+/** What switching the value source would do — the server's figures, nothing written. */
+async function fetchSwitchPreview(id: string, to: ValueSource): Promise<SwitchPreview | null> {
+  try {
+    const res = await authFetch(`/api/accounts/${id}/value-switch?to=${to}`)
+    return res.ok ? ((await res.json()) as SwitchPreview) : null
+  } catch {
+    return null
+  }
+}
+
+interface ValueSourceSectionProps {
+  account: Account
+  valuation: NonNullable<Account['valuation']>
+  value: ValueSource
+  preview: SwitchPreview | null
+  money: (n: number) => string
+  onChange: (next: ValueSource) => void
+}
+
+/** "Value this account by": Brokerage total or Live holdings (ADR 2026-11-10). */
+function ValueSourceSection({
+  account,
+  valuation,
+  value,
+  preview,
+  money,
+  onChange,
+}: ValueSourceSectionProps) {
+  const syncing = !!valuation.sync && valuation.linkStatus === 'connected'
+  const waiting = isWaiting(valuation)
+  const siblings = valuation.siblings
+  return (
+    <section>
+      <div className="acct-section-label">Value this account by</div>
+      <Stack gap="--space-2">
+        <RadioGroup
+          name={`acct-src-${account.id}`}
+          ariaLabel="Value this account by"
+          value={value}
+          onChange={(next) => onChange(next as ValueSource)}
+          disabled={waiting}
+          options={[
+            {
+              value: 'total',
+              label: 'Brokerage total',
+              description: syncing
+                ? `The total your brokerage shows, synced via ${valuation.provider}. Holdings you add are part of it.`
+                : 'The total on your brokerage statement. Holdings you add are part of it.',
+            },
+            {
+              value: 'holdings',
+              label: 'Live holdings',
+              description:
+                'Each holding at live market prices, plus cash. Needs every holding added.',
+            },
+          ]}
+        />
+        {valuation.sync && siblings.length > 0 && value === 'total' && (
+          <Text size="xs" tone="bad">
+            Counted twice: this total already includes{' '}
+            {siblings.length === 1 ? siblings[0] : `${siblings.length} of your other accounts`}.
+          </Text>
+        )}
+        {waiting && (
+          <Text size="xs" tone="faint">
+            You can choose once the first total arrives.
+          </Text>
+        )}
+        {value !== valuation.source && preview && (
+          <Text size="xs" tone={preview.adjustment !== 0 ? 'bad' : 'faint'}>
+            {value === 'total'
+              ? `The value stays ${money(preview.total)}. Your holdings become a breakdown of that total${
+                  syncing ? `, and ${valuation.provider}’s next total replaces it` : ''
+                }.`
+              : preview.adjustment === 0
+                ? preview.untracked !== 0
+                  ? `The ${money(preview.untracked)} that’s untracked will count as cash in this account.`
+                  : `The value stays ${money(preview.total)}.`
+                : `This account will be worth ${money(preview.value_after)}, because that’s all the holdings you’ve added. Add your holdings first, or keep Brokerage total.`}
+          </Text>
+        )}
+      </Stack>
+    </section>
   )
 }

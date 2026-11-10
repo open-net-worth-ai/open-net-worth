@@ -440,6 +440,7 @@ export function InvestmentsTab({
       <Risk
         risk={d.risk}
         grand={d.grand}
+        untracked={d.untracked}
         guideline={guideline}
         dropPct={dropPct}
         onSaveSettings={({ guideline: g, dropPct: dp }) => {
@@ -455,7 +456,7 @@ export function InvestmentsTab({
           }).catch(() => {})
         }}
       />
-      <Rebalance alloc={alloc} thresholdPp={d.thresholdPp} />
+      <Rebalance alloc={alloc} thresholdPp={d.thresholdPp} untracked={d.untracked} />
     </>
   )
 
@@ -472,7 +473,11 @@ export function InvestmentsTab({
         onRetry={refresh}
       />
     ) : (
-      <EmptyHoldings onAddHolding={() => setAddHolding(true)} onAskLucius={onAskLucius} />
+      <EmptyHoldings
+        onAddHolding={() => setAddHolding(true)}
+        onAskLucius={onAskLucius}
+        untracked={d.untracked}
+      />
     )
   ) : (
     <div className="intel-layout">

@@ -99,7 +99,9 @@ class ListAccountsInput(ToolInput):
         "unfiltered call returns everything — the most wasteful way to answer 'what is my "
         "Meridian Bank balance'. Every response reports `showing`/`total`.\n\n"
         "For a card's due date/overdue status do NOT use `payment_due_day`/"
-        "`statement_close_day` here — call get_card_statement_status instead."
+        "`statement_close_day` here — call get_card_statement_status instead.\n\n"
+        "value_source='total': `balance` is the UNTRACKED part of the total, not cash — read "
+        "`value_breakdown`. `value_sync`: what a linked connector last reported."
     ),
     input_schema=schema_of(ListAccountsInput, tool_name="list_accounts"),
 )
@@ -122,7 +124,9 @@ async def list_accounts(input_data: dict):
     bals = svc.balances(include_archived=True)
     txns = svc.transactions.all()  # shared read for the derived-opening projection below
     idx = svc.opening_index(txns, accts)
-    projected = [_project_account(a, bals.get(a["id"]), txns, idx) for a in rows]
+    projected = _with_value_breakdown(
+        [_project_account(a, bals.get(a["id"]), txns, idx) for a in rows]
+    )
 
     out: dict = {"accounts": projected, "showing": len(projected), "total": total}
     notes: list[str] = []
@@ -197,6 +201,16 @@ def _select_accounts(
         unmatched,
         ambiguous,
     )
+
+
+def _with_value_breakdown(projected: list[dict]) -> list[dict]:
+    """How each investment/retirement account is valued (ADR 2026-11-10). A Brokerage total
+    account also carries `value_breakdown` — tracked holdings + untracked == total, at
+    last-known prices — so 'what is this account worth' never reads the untracked part as
+    cash. Unchanged rows while `investment_value_source` is off."""
+    from backend.services import account_value
+
+    return account_value.decorate(projected)
 
 
 def _project_account(a: dict, balance, txns: list[dict], idx: dict | None = None) -> dict:
@@ -312,7 +326,10 @@ class CreateAccountInput(ToolInput):
             "Required current balance today, in the account's currency; use 0 when empty. Signed as "
             "written — pass a NEGATIVE number for money owed (a card carrying 5000 of "
             "debt is -5000); the sign is not flipped for you. Stored as a dated "
-            "Starting Balance transaction, not a field on the account."
+            "Starting Balance transaction, not a field on the account. Investment/retirement: "
+            "the account's TOTAL (holdings + cash). Result value_source='total': holdings added "
+            "later are carved out of it. No value_source: a holding counts on top unless its "
+            "funding account is this one."
         ),
     )
     initial_balance_date: Optional[str] = Field(
@@ -457,6 +474,7 @@ _ACCOUNT_UPDATE_FIELDS = frozenset(
         "apy",
         "statement_close_day",
         "payment_due_day",
+        "value_source",
     }
 )
 
@@ -579,6 +597,14 @@ class UpdateAccountItem(ToolInput):
     payment_due_day: Optional[int] = Field(
         default=None, description="Credit: payment due day of month (1–31)."
     )
+    value_source: Optional[Literal["total", "holdings"]] = Field(
+        default=None,
+        description=(
+            "Investment/retirement: 'total' (worth the brokerage's total) or 'holdings' "
+            "(holdings + cash). To 'holdings' clears an untracked part over 2% of the total; "
+            "tell the user first (result: value_switch)."
+        ),
+    )
 
 
 class UpdateAccountsInput(ToolInput):
@@ -644,11 +670,12 @@ def _apply_one_account_update(item: dict, rows: list[dict]) -> dict:
             )
             as_of = item.get("initial_balance_date") or cur_date
             svc.set_account_opening(account_id, amount, as_of)
+        side_effects: dict = {}
         acc = (
             # Routed through accounts_service.update_account, not the bare store, so the
             # external_ids uniqueness guard and link-time fill apply here too (RFC
             # connectors-as-data-sources §D — UI/Lucius parity with the REST PATCH route).
-            accounts_service.update_account(account_id, changes)
+            accounts_service.update_account(account_id, changes, side_effects=side_effects)
             if changes
             else svc.accounts.find_by_id(account_id)
         )
@@ -663,6 +690,8 @@ def _apply_one_account_update(item: dict, rows: list[dict]) -> dict:
     if _account_write_snapshot(hydrated) == before:
         return {"account": hydrated, "no_op": True, "unchanged": True}
     out = {"account": hydrated}
+    if side_effects.get("value_switch"):
+        out["account"] = {**hydrated, "value_switch": side_effects["value_switch"]}
     return out
 
 
@@ -897,7 +926,8 @@ class GetNetWorthInput(ToolInput):
         "Get the user's total net worth in the base currency: account balances (assets "
         "positive, liabilities negative) plus market-valued positions (equities, crypto, "
         "commodities, property). Returns net_worth plus a breakdown: account_classes "
-        "(cash/fixed_deposit/settlement_cash/retirement/receivable), liability_classes "
+        "(cash/fixed_deposit/settlement_cash/retirement/receivable; untracked_holdings = "
+        "invested, holdings not entered, never cash), liability_classes "
         "(credit/loan), liabilities (each debt: id/name/type/apr/balance_base), "
         "retirement_base (cash plus vested holdings) and market_positions. "
         "net_worth_excl_retirement is the value outside retirement accounts, not a "
@@ -919,11 +949,17 @@ class ReconcileItem(ToolInput):
     """One account's target in a batch ``reconcile_accounts`` call."""
 
     account_id: str = Field(description="Account ID or name from list_accounts.")
-    real_balance: float = Field(
+    real_balance: Optional[float] = Field(
+        default=None,
         description=(
             "The true current balance in the account's native currency (negative for a "
             "card you owe on)."
-        )
+        ),
+    )
+    real_total: Optional[float] = Field(
+        default=None,
+        allow_inf_nan=False,
+        description="value_source='total' accounts: their whole value, instead of real_balance.",
     )
     against: Optional[Literal["cleared", "working"]] = Field(
         default=None,
@@ -947,6 +983,11 @@ class ReconcileAccountsInput(ToolInput):
             "Single-account form: the true current balance in the account's native "
             "currency (negative for a card you owe on)."
         ),
+    )
+    real_total: Optional[float] = Field(
+        default=None,
+        allow_inf_nan=False,
+        description="value_source='total' accounts: their whole value, instead of real_balance.",
     )
     accounts: Optional[List[ReconcileItem]] = Field(
         default=None,
@@ -974,6 +1015,41 @@ class ReconcileAccountsInput(ToolInput):
             "this first to show the user what will change before applying."
         ),
     )
+
+
+def _reconcile_figure(
+    account_id: str, item: dict, default_against: str
+) -> tuple[float, str, Optional[str]]:
+    """``(ledger balance to reconcile to, against, refusal)`` for one item. A Brokerage total
+    account reconciles its TOTAL: the ledger balance is the total less its tracked holdings,
+    diffed against the working balance (ADR 2026-11-10)."""
+    from backend.core.errors import ValidationError
+    from backend.services import account_value
+
+    acct = svc.accounts.find_by_id(account_id) or {}
+    if item.get("real_total") is not None:
+        try:
+            return account_value.reconcile_target(acct, item["real_total"]), "working", None
+        except ValidationError as exc:
+            return 0.0, "", exc.message or str(exc)
+    if item.get("real_balance") is None:
+        return 0.0, "", "real_balance is required"
+    by_total = (
+        account_value.applies(acct)
+        and account_value.enabled()
+        and account_value.source_of(acct) == account_value.TOTAL
+    )
+    if by_total:
+        return (
+            0.0,
+            "",
+            (
+                "This is a Brokerage total account: its balance is the part of the total not "
+                "tracked as holdings, not cash. Pass real_total — the account's whole value as the "
+                "brokerage shows it."
+            ),
+        )
+    return float(item["real_balance"]), item.get("against") or default_against, None
 
 
 def _reconcile_one(
@@ -1047,7 +1123,9 @@ async def reconcile_accounts(input_data: dict):
     is_batch = bool(batch_items)
     if not is_batch:
         account_id_in = input_data.get("account_id")
-        if not account_id_in or input_data.get("real_balance") is None:
+        if not account_id_in or (
+            input_data.get("real_balance") is None and input_data.get("real_total") is None
+        ):
             return json.dumps(
                 {
                     "ok": False,
@@ -1060,7 +1138,8 @@ async def reconcile_accounts(input_data: dict):
         batch_items = [
             {
                 "account_id": account_id_in,
-                "real_balance": input_data["real_balance"],
+                "real_balance": input_data.get("real_balance"),
+                "real_total": input_data.get("real_total"),
                 "against": input_data.get("against"),
                 "date": input_data.get("date"),
             }
@@ -1084,12 +1163,14 @@ async def reconcile_accounts(input_data: dict):
         if not account_id or not svc.accounts.find_by_id(account_id):
             not_found.append(ref)
             continue
-        if item.get("real_balance") is None:
-            errors.append({"account_id": account_id, "reason": "real_balance is required"})
+        target, against, reason = _reconcile_figure(account_id, item, default_against)
+        if reason:
+            errors.append({"account_id": account_id, "reason": reason})
             continue
-        against = item.get("against") or default_against
         date = item.get("date") or default_date
-        payload = _reconcile_one(account_id, float(item["real_balance"]), against, date, dry_run)
+        payload = _reconcile_one(account_id, target, against, date, dry_run)
+        if item.get("real_total") is not None:
+            payload["real_total"] = float(item["real_total"])
         results.append({"account_id": account_id, **payload})
 
     if not is_batch:

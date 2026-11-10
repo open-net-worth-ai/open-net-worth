@@ -46,6 +46,10 @@ It deliberately leaves out:
   your **Investments**. If it's negative because you're trading on margin, that's a loan secured
   by your holdings: it reduces what your investments are worth, never your spendable cash.
 - **Credit card balances** — they're debt, handled by your budget, not subtracted here.
+- **Untracked holdings** — on an account valued by its **Brokerage total** (experimental), the
+  part of the total you haven't entered as holdings. It's invested, not cash, so it counts with
+  your **Investments** (or **Retirement**) and never as settlement cash. See
+  [Accounts](../features/accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).
 
 ## Where each kind of money shows up
 

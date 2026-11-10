@@ -144,6 +144,15 @@ The app records the trade and takes no view on how it's taxed.
   received yet isn't included.
 - **To receive a dividend you must own the shares before the ex-dividend date.**
 - **Unvested equity never appears here** — see [Equity compensation](equity-compensation.md).
+- **A Brokerage total account's holdings you haven't entered aren't in the shares.** With the
+  experimental **Brokerage total** valuation on, the rest of such an account's total is
+  **Untracked holdings**: invested, but in no asset class. Allocation shows it as a **Not broken
+  down** slice of everything invested, under the class bars. The class shares, concentration,
+  today's move and **Rebalancing** are worked out over the holdings you've entered, because an
+  unknown slice would make every class look underweight; each says how much it left out ("…
+  isn't broken into holdings — add holdings to rebalance it"). With no holdings entered at all,
+  Holdings says **No holdings entered yet** and names the amount. See
+  [Accounts](accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).
 - **Bought shares already managed by lots or a grant?** Correct the lot (from the asset's
   **Position** tab) or the grant, not the holding's total.
 

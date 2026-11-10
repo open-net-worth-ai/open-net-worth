@@ -15,6 +15,7 @@ import { accountValue, fBase, fCur } from './data'
 import { TYPE_ORDER, typeLabel } from './categories'
 import { ChevronRight, Link2 } from '../../../ui/icons'
 import { countNeedsReconciling, needReconcilingLabel, needsReconciling } from './reconcileDue'
+import { sidebarLine } from './valuation'
 
 // ── Local icon helpers (SVG, pixel-centered) ─────────────────────────────────
 
@@ -101,7 +102,10 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
   // A securities account reads in BASE, because `accountValue` sums two base figures
   // (positions + settlement cash); a plain account reads in its own currency.
   const value = accountValue(a)
+  // A Brokerage total account says where its total comes from (unless it's due a reconcile):
+  // a linked one is kept by its connector, an unlinked one by the total the user enters.
   const due = needsReconciling(a)
+  const valueLine = due ? null : sidebarLine(a)
   const linked = [...new Set((a.externalIds ?? []).map((e) => e.providerLabel))].join(', ')
   // Green only while every link is live — a paused or removed connector syncs nothing.
   const linkLive = (a.externalIds ?? []).every((e) => e.status === 'connected')
@@ -131,7 +135,7 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
       <span className="acct-row-id">
         <span className="acct-row-name">{a.name}</span>
         {/* No type: the group heading above already says it. */}
-        {(a.lastFour || due || linked) && (
+        {(a.lastFour || due || linked || valueLine) && (
           <span className="acct-row-sub">
             {a.lastFour && '•••' + a.lastFour}
             {linked && (
@@ -144,6 +148,12 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
             )}
             {a.lastFour && due && ' · '}
             {due && <span className="acct-due">Needs reconciling</span>}
+            {valueLine && (
+              <span className={'acct-row-src' + (valueLine.warn ? ' acct-row-src--warn' : '')}>
+                {a.lastFour ? ' · ' : ''}
+                {valueLine.text}
+              </span>
+            )}
           </span>
         )}
       </span>

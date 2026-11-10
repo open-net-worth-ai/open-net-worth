@@ -52,7 +52,9 @@ export function useFlag(name: string): boolean | undefined {
   const overridden = testOverrides.has(name)
   const { data } = useQueryCache(FEATURE_FLAGS_KEY, fetchFeatureFlags, { enabled: !overridden })
   if (overridden) return testOverrides.get(name)
-  if (!data) return undefined
+  // A response that isn't a flag list (a stubbed fetch, a proxy error page) is "not loaded",
+  // never a crash of whatever screen asked — the screen keeps its old path, as before loading.
+  if (!data || !Array.isArray(data.flags)) return undefined
   const flag = data.flags.find((f) => f.name === name)
   if (!flag) throw new Error(`Unknown feature flag "${name}" — declare it in core/feature_flags.py`)
   return flag.enabled

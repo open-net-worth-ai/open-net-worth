@@ -678,7 +678,7 @@ _ACQ_KIND_DESC = "buy (default) | drp (dividend reinvestment) | transfer_in | gr
 # Shared by the root field and each acquisitions[] item — the refusal is enforced at the
 # choke point (services.lots._find_identical_open_lot), not just previewed.
 _ALLOW_DUPLICATE_ACQUIRE_DESC = "true ONLY for genuinely separate identical fills — otherwise a FULLY-OPEN lot on this position with the same kind, acquired_at, quantity and unit_cost is REFUSED as a double-book (returns existing_lot_id). A partially-sold match counts as a real earlier fill, not a duplicate."
-_ACQ_FUNDING_DESC = "Cash account to debit for qty × unit_cost + fees, booked WITH the lot (ticker, quantity, memo). Omit only when that debit is already in the ledger. Unknown unit_cost skips the debit."
+_ACQ_FUNDING_DESC = "Cash account to debit for qty × unit_cost + fees, booked WITH the lot (ticker, quantity, memo). Omit only when that debit is already in the ledger. Unknown unit_cost skips the debit. value_source='total' account: omit it, don't ask — the holding is carved out of the total."
 
 
 class ApplyLotAcquireItem(ToolInput):
@@ -838,6 +838,13 @@ def _apply_lot_acquire_one(input_data: dict) -> dict:
     elif result.get("cash_leg_id"):
         result["_next_step"] = (
             "Lot recorded and cash debited from funding_account_id — do NOT add a second cash transaction."
+        )
+    elif result.get("value_carve_out") or result.get("value_carve_out_error"):
+        # A Brokerage total account (ADR 2026-11-10): the total already holds this purchase —
+        # a cash transaction on top would count it twice (UAT LUC-08).
+        result["_next_step"] = (
+            "Lot recorded and carved out of the account's Brokerage total — do NOT add a cash "
+            "transaction for it."
         )
     elif kind == "buy":
         qty = input_data["quantity"]

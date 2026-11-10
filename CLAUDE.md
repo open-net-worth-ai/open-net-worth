@@ -132,6 +132,12 @@ One line each — full reasoning and the scar behind each is in
   settlement cash (margin included) belongs to `investment`, never netted into cash. Dashboard
   net worth includes retirement accounts; the Assets breakdown groups their cash and vested
   holdings together, and `net_worth_excl_retirement` subtracts both from the full total.
+- An investment/retirement account is still holdings + ledger balance; under `investment_value_source`
+  a Brokerage total (`value_source=total`) account's balance is its UNTRACKED part, kept by the
+  carve-out around `apply_lot_change` and the linked-total sync — never read it as cash: it bands
+  as `untracked_holdings` (`ledger.account_kind_and_band(account, untracked)`), and book-level
+  figures leave it out and report `untracked_excluded` (ADR
+  `2026-11-10-an-investment-account-is-valued-by-its-brokerage-total-or-its-live-holdings`).
 - Unvested equity is EXCLUDED from net worth, reported separately as `unvested_base`.
 - A vest books NO ledger transaction, whatever the grant's `tax_event` — it is paid in SHARES,
   so only the FMV lot is written; an income leg into the custodian account counted the vest

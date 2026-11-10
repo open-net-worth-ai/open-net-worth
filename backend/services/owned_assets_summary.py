@@ -18,6 +18,8 @@ from backend.core.fx import to_base
 from backend.db.account_store import AccountStore
 from backend.services import ledger as ledger_service
 from backend.services.owned_assets_valuation import value_as_of, values_by_category_from_rows
+from backend.services.untracked_holdings import BAND as UNTRACKED_BAND
+from backend.services.untracked_holdings import LABEL as UNTRACKED_LABEL
 
 
 class LedgerSnapshot:
@@ -108,8 +110,19 @@ def _return_pct(value: float, gain: float) -> float:
     return round(gain / (value - gain) * 100, 4) if value != gain else 0.0
 
 
-def _investments_card(bd: dict, book: dict, brokerages: set, retirement_ids: set[str]) -> dict:
+def _untracked_row(value: float) -> list[dict]:
+    """A Brokerage total account's untracked part, as a card row — invested, holdings not
+    entered (ADR 2026-11-10, amendment 2). None of it while investment_value_source is off."""
+    if not value:
+        return []
+    return [{"key": UNTRACKED_BAND, "label": UNTRACKED_LABEL, "value": value}]
+
+
+def _investments_card(
+    bd: dict, book: dict, brokerages: set, retirement_ids: set[str], retirement_untracked: float
+) -> dict:
     settlement_cash = round(bd.get("settlement_cash") or 0.0, 2)
+    untracked = round((bd.get(UNTRACKED_BAND) or 0.0) - retirement_untracked, 2)
     non_retirement = [r for r in book["rows"] if r.get("account_id") not in retirement_ids]
     retirement_value = sum(
         r["value"] for r in book["rows"] if r.get("account_id") in retirement_ids
@@ -118,14 +131,16 @@ def _investments_card(bd: dict, book: dict, brokerages: set, retirement_ids: set
     gain = round(sum(r["pl"] for r in non_retirement if r.get("pl") is not None), 2)
     gain_pct = _return_pct(positions, gain)
     rows = None
-    if settlement_cash != 0:
-        rows = [
-            {"key": "positions", "label": "Positions", "value": positions, "pct": gain_pct},
-            {"key": "settlement_cash", "label": "Settlement cash", "value": settlement_cash},
-        ]
+    if settlement_cash != 0 or untracked != 0:
+        rows = [{"key": "positions", "label": "Positions", "value": positions, "pct": gain_pct}]
+        if settlement_cash != 0:
+            rows.append(
+                {"key": "settlement_cash", "label": "Settlement cash", "value": settlement_cash}
+            )
+        rows += _untracked_row(untracked)
         gain_pct = None
     return {
-        "value": round(positions + settlement_cash, 2),
+        "value": round(positions + settlement_cash + untracked, 2),
         "sub": f"{len(brokerages)} brokerages · {len(non_retirement)} positions",
         "gain": gain,
         "gain_pct": gain_pct,
@@ -135,10 +150,14 @@ def _investments_card(bd: dict, book: dict, brokerages: set, retirement_ids: set
     }
 
 
-def _retirement_card(bd: dict, book: dict, accounts: list[dict]) -> dict | None:
+def _retirement_card(
+    bd: dict, book: dict, accounts: list[dict], untracked: float = 0.0
+) -> dict | None:
     """The retirement accounts: what they hold and the cash beside it. Once both are there it
     splits into Positions and Cash rows, the return moving onto Positions — the Investments
-    card's own rule; all cash (a pension with nothing invested) stays one figure, no return."""
+    card's own rule; all cash (a pension with nothing invested) stays one figure, no return.
+    A Brokerage total retirement account's untracked part (`untracked`) is its own row,
+    never Cash."""
     if not accounts:
         return None
     ids = {a["id"] for a in accounts}
@@ -148,15 +167,22 @@ def _retirement_card(bd: dict, book: dict, accounts: list[dict]) -> dict | None:
     priced = [r["pl"] for r in held if r.get("pl") is not None]
     gain = round(sum(priced), 2) if priced else None
     gain_pct = _return_pct(positions, gain) if gain is not None else None
+    untracked = round(untracked, 2)
+    parts = [
+        *(
+            [{"key": "positions", "label": "Positions", "value": positions, "pct": gain_pct}]
+            if held
+            else []
+        ),
+        *([{"key": "cash", "label": "Cash", "value": cash}] if cash != 0 else []),
+        *_untracked_row(untracked),
+    ]
     rows = None
-    if held and cash != 0:
-        rows = [
-            {"key": "positions", "label": "Positions", "value": positions, "pct": gain_pct},
-            {"key": "cash", "label": "Cash", "value": cash},
-        ]
+    if len(parts) >= 2:
+        rows = parts
         gain_pct = None
     return {
-        "value": round(positions + cash, 2),
+        "value": round(positions + cash + untracked, 2),
         "count_label": f"{len(accounts)} accounts",
         "gain": gain,
         "gain_pct": gain_pct,
@@ -170,15 +196,19 @@ def _simple_class_card(bd: dict, band: str, accounts: list[dict]) -> dict | None
     return {"value": round(bd.get(band) or 0.0, 2), "count_label": f"{len(accounts)} accounts"}
 
 
-def _class_cards(bd: dict, book: dict, ledger: LedgerSnapshot, brokerages: set) -> dict:
+def _class_cards(breakdown: dict, book: dict, ledger: LedgerSnapshot, brokerages: set) -> dict:
+    bd = breakdown["account_classes"]
+    retirement_untracked = breakdown.get("retirement_untracked_base") or 0.0
     cash_accts = _cash_card_accounts(ledger)
     has_deposits = bool(ledger.of_type("fixed_deposit"))
     retirement_accounts = ledger.of_type("retirement")
     retirement_ids = {a["id"] for a in retirement_accounts}
     return {
         "cash": _cash_card(bd, _cash_sub(cash_accts), cash_accts, has_deposits),
-        "investments": _investments_card(bd, book, brokerages, retirement_ids),
-        "retirement": _retirement_card(bd, book, retirement_accounts),
+        "investments": _investments_card(
+            bd, book, brokerages, retirement_ids, retirement_untracked
+        ),
+        "retirement": _retirement_card(bd, book, retirement_accounts, retirement_untracked),
         "receivable": _simple_class_card(bd, "receivable", ledger.of_type("receivable")),
     }
 
@@ -257,15 +287,24 @@ def _composition(breakdown: dict, rows: list[dict], base: str, rates: dict, *, o
     own), so `total` exceeds `own` only then. Ordered by value, classes before categories,
     then key."""
     ac = breakdown["account_classes"]
+    # A Brokerage total account's untracked part is invested: Investments, or Retirement for a
+    # retirement account (both 0 while investment_value_source is off).
+    retirement_untracked = breakdown.get("retirement_untracked_base", 0.0)
     classes = {
         "cash": ac.get("cash", 0.0) + ac.get("fixed_deposit", 0.0),
         "investments": (
             ac.get("settlement_cash", 0.0)
+            + ac.get(UNTRACKED_BAND, 0.0)
+            - retirement_untracked
             + breakdown["market_positions"]
             - breakdown.get("retirement_positions_base", 0.0)
             + breakdown["options_mark"]
         ),
-        "retirement": ac.get("retirement", 0.0) + breakdown.get("retirement_positions_base", 0.0),
+        "retirement": (
+            ac.get("retirement", 0.0)
+            + retirement_untracked
+            + breakdown.get("retirement_positions_base", 0.0)
+        ),
         "receivable": ac.get("receivable", 0.0),
     }
     parts = [(key, "class", round(value, 2)) for key, value in classes.items()]
@@ -351,7 +390,6 @@ def summary(
     rates; ``ledger.net_worth()`` loads the FX cache itself a moment later, so the composition
     is reconciled to `own` to the cent."""
     breakdown = net_worth["breakdown"]
-    bd = breakdown["account_classes"]
     own = round(
         breakdown["accounts_asset"] + breakdown["market_positions"] + breakdown["options_mark"], 2
     )
@@ -374,7 +412,7 @@ def summary(
         "net_worth": net_worth["net_worth"],
         "unrealized": unrealized,
         "classes": {
-            **_class_cards(bd, book, ledger, brokerages),
+            **_class_cards(breakdown, book, ledger, brokerages),
             "debt": _debt_card(owe, breakdown.get("liability_classes", {}), ledger),
         },
         "debt": _debt_rows(breakdown.get("liability_classes", {})),
