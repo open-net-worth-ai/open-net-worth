@@ -58,3 +58,12 @@ tests/test_investments_book.py
 tests/test_rebalance_service.py
 tests/test_portfolio_analytics.py
 tests/test_prompt_networth.py
+tests/test_account_value_fixes.py
+tests/test_account_value_uat_flag_fx.py
+tests/test_account_value_uat_hold_feed.py
+tests/test_account_value_uat_inv_rob.py
+tests/test_account_value_uat_link.py
+tests/test_account_value_uat_luc.py
+tests/test_account_value_uat_rec_switch.py
+tests/test_account_value_uat_trade.py
+tests/test_account_value_uat_typed.py

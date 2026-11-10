@@ -1,7 +1,7 @@
 """The Untracked holdings band — what a Brokerage total account's ledger balance IS.
 
 ADR 2026-11-10-an-investment-account-is-valued-by-its-brokerage-total-or-its-live-holdings
-(amendment 1). On a Brokerage total account (``account_value.TOTAL``) the ledger balance is the
+(amendment 2). On a Brokerage total account (``account_value.TOTAL``) the ledger balance is the
 part of the total not entered as holdings: invested at the brokerage, asset class unknown. It
 bands as ``untracked_holdings`` — never as settlement cash, never as retirement cash. A Live
 holdings account is unchanged: its balance is still its cash.

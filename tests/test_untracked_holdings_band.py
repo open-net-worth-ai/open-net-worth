@@ -1,4 +1,4 @@
-"""The Untracked holdings band (ADR 2026-11-10, amendment 1) — synthetic data only.
+"""The Untracked holdings band (ADR 2026-11-10, amendment 2) — synthetic data only.
 
 On a Brokerage total account the ledger balance is the part of the total not entered as
 holdings: invested, in no known class. With ``investment_value_source`` on it bands as
@@ -245,6 +245,39 @@ def test_a_live_holdings_account_keeps_its_balance_as_settlement_cash(offline):
     assert b["untracked_excluded"] == {"total": 0.0, "accounts": [], "pct_of_invested": 0.0}
     assert rebalance_service.rebalance_plan()["untracked_note"] is None
     assert "untracked_excluded" not in _tool(portfolio_tools.get_portfolio, {})["today"]
+
+
+# ── the "total kept" rows are part of the untracked part ───────────────────────────────
+
+
+@pytest.mark.flags(investment_value_source=True)
+def test_a_priced_true_up_stays_in_the_untracked_band(offline):
+    from backend.db.instrument_store import InstrumentStore
+    from backend.services import account_value_cost as cost
+
+    acct = _brokerage(total=8000.0)
+    inst = _instrument(price=None)
+    _add_holding(acct["id"], inst, qty=5, cost=400.0)  # carved at cost: 6,000 untracked
+    assert _classes() == {"untracked_holdings": 6000.0}
+    InstrumentStore().update_by_id(inst["id"], {"manual_price": 604.0})
+    assert cost.settle() == [acct["id"]]  # books "Holding priced — total kept"
+    nw = ledger_service.net_worth("USD")
+    assert nw["breakdown"]["account_classes"] == {"untracked_holdings": 4980.0}
+    assert nw["net_worth"] == 8000.0
+
+
+@pytest.mark.flags(investment_value_source=True)
+def test_a_moved_holding_keeps_both_untracked_parts_in_the_band(offline):
+    from backend.services import positions as positions_service
+
+    a = _brokerage(total=8000.0)
+    b = _account(name="ACME 401(k)", type_="retirement", total=5000.0)
+    added = _add_holding(a["id"], _instrument())
+    positions_service.update_position(added["position_id"], {"account_id": b["id"]})
+    nw = ledger_service.net_worth("USD")  # each side books "Holding moved — total kept"
+    assert nw["breakdown"]["account_classes"] == {"untracked_holdings": 9980.0}
+    assert nw["breakdown"]["retirement_untracked_base"] == 1980.0
+    assert nw["net_worth"] == 13000.0
 
 
 # ── the chart: every point bands by the account's CURRENT source ───────────────────────

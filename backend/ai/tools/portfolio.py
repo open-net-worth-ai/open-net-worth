@@ -193,7 +193,7 @@ def _book_today(base: str) -> dict:
     }
     # A Brokerage total account's untracked part: invested at the brokerage, its holdings not
     # entered — in no row above and left out of today's move. Said, so it is never read as
-    # cash or as nothing (ADR 2026-11-10, amendment 1). Absent while the flag is off.
+    # cash or as nothing (ADR 2026-11-10, amendment 2). Absent while the flag is off.
     excluded = untracked_holdings.untracked_excluded(rows)
     if excluded and excluded["accounts"]:
         out["untracked_excluded"] = excluded

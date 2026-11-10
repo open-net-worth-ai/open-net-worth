@@ -112,7 +112,7 @@ def _return_pct(value: float, gain: float) -> float:
 
 def _untracked_row(value: float) -> list[dict]:
     """A Brokerage total account's untracked part, as a card row — invested, holdings not
-    entered (ADR 2026-11-10, amendment 1). None of it while investment_value_source is off."""
+    entered (ADR 2026-11-10, amendment 2). None of it while investment_value_source is off."""
     if not value:
         return []
     return [{"key": UNTRACKED_BAND, "label": UNTRACKED_LABEL, "value": value}]

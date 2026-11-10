@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Untracked holdings (flag investment_value_source, ADR 2026-11-10 amendment 1): a Brokerage
+// Untracked holdings (flag investment_value_source, ADR 2026-11-10 amendment 2): a Brokerage
 // total account's holdings not entered. The server leaves them out of the book and says so in
 // `untracked_excluded`; these surfaces say it to the user. Synthetic figures only.
 

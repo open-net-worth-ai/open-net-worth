@@ -125,13 +125,18 @@ def patch_position(position_id: str, body: PositionUpdate):
 
 @router.delete("/api/positions/{position_id}")
 def delete_position(position_id: str):
+    # Through the remove choke, so a Brokerage total account keeps its total (ADR 2026-11-10).
     try:
-        removed = positions_service.remove_position(position_id)
+        result = positions_service.apply_position_change(
+            {"type": "remove", "position_id": position_id}
+        )
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
-    if not removed:
+    if result.get("error") == "position not found":
         raise HTTPException(404, "Position not found")
-    return {"ok": True}
+    if result.get("error"):
+        raise HTTPException(400, result["error"])
+    return {"ok": True, **{k: v for k, v in result.items() if k.startswith("value_carve_out")}}
 
 
 @router.get("/api/portfolio/book")

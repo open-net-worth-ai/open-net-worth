@@ -38,7 +38,7 @@ export const ASSET_CLASS_COLOR: Record<string, string> = {
   crypto: '#9a7fd0',
   option: '#22b8cf',
   // A Brokerage total account's holdings not entered yet (investment_value_source, ADR
-  // 2026-11-10 amendment 1): invested, in no known class. A pale tint of `equity`'s blue — the
+  // 2026-11-10 amendment 2): invested, in no known class. A pale tint of `equity`'s blue — the
   // investing family, visibly not a priced class of its own.
   untracked_holdings: '#9db8d9',
   property: '#bd7a1a',

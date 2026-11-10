@@ -193,7 +193,8 @@ class InstitutionRename(BaseModel):
 class ReconcileBody(BaseModel):
     # asserted native-currency balance — or, on a Brokerage total account, `real_total`
     real_balance: Optional[float] = None
-    real_total: Optional[float] = None  # the account's real TOTAL (Brokerage total only)
+    # the account's real TOTAL (Brokerage total only); NaN/Infinity refused (UAT SB-16)
+    real_total: Optional[float] = Field(default=None, allow_inf_nan=False)
     date: Optional[str] = None
     against: str = "cleared"  # "cleared" (YNAB reconcile-to-cleared) | "working" (legacy true-up)
     expected_balance: Optional[float] = None  # the figure the user was shown; 409 if stale

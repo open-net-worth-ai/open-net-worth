@@ -441,7 +441,7 @@ def investments_book(
         # A Brokerage total account's untracked part: invested, but in no known class, so it is
         # NOT in `grand` — the denominator of every weight, section, concentration and today's
         # move above. It is the allocation's "Not broken down" slice, its share taken of
-        # everything invested (ADR 2026-11-10, amendment 1). Absent while the flag is off.
+        # everything invested (ADR 2026-11-10, amendment 2). Absent while the flag is off.
         invested = grand + excluded["total"]
         out["untracked_excluded"] = {
             **excluded,

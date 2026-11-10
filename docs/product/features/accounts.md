@@ -168,6 +168,13 @@ $4,980.00 as **Untracked holdings** (see "Where the untracked part shows" below)
 move as a **Holding tracked from the total** adjustment. Removing a holding puts its value back
 the same way.
 
+- **A holding with no price yet** (a ticker added a moment ago) is taken out at what you paid for
+  it. Once its first price arrives, usually within minutes, the difference is booked once as
+  **Holding priced — total kept**, so the total stays put.
+- **Moving a holding to another account** moves no money. A Brokerage total account on either
+  side keeps its total (**Holding moved — total kept**); a Live holdings account it joins grows
+  by its value.
+
 Money that really moves still counts. A purchase paid from another account raises the total by
 what you paid, and a sale whose proceeds go to another account lowers it. A sale with no proceeds
 account leaves the cash in this account, because that's where a brokerage keeps it.
@@ -208,13 +215,15 @@ day.
   holdings move with the market, so the total can differ slightly from Plaid's until the next one.
 - Each change is booked as one **Total from Plaid** adjustment. It moves net worth only, never
   spending, income or the budget.
-- **A suspicious total waits for you.** If the connector reports **0**, a drop of more than a
-  quarter, or a total more than 4 times the last one, nothing is booked. The first total after
+- **A suspicious total waits for you.** If the connector reports **0**, a negative total (unless
+  the account was already negative), a drop of more than a quarter, or a total more than 4 times
+  the last one, nothing is booked. After you press **Keep**, the same figure reported again
+  later, once the connector has recovered, is asked about again. The first total after
   you link is checked against the value the account already has, so linking the wrong account
   can't quietly replace a total you typed. An account that's still at $0 takes its first total. The account asks *"Plaid reported $0.00. That looks wrong, so it
   wasn't used. Is it real?"* with **Keep** and **Use**.
-- **Nothing is booked** when the connector reports another currency, can't be read, or no longer
-  lists the account. The account says so and keeps its value. An expired bank sign-in offers
+- **Nothing is booked** when the connector reports another currency or no currency, can't be
+  read, or no longer lists the account. The account says so and keeps its value. An expired bank sign-in offers
   **Reconnect**.
 - A paused or removed connector stops the updates. The account keeps its last value, and you
   update it with Reconcile.
@@ -234,8 +243,10 @@ brokerage's next update").
 
 Switching to **Brokerage total** books nothing: the value stays, and your holdings become a
 breakdown of it. Switching to **Live holdings** keeps a small untracked part (2% of the total or
-less) as cash. A larger one isn't cash, so it's cleared with one adjustment. Edit account says
-what the account will be worth before you save.
+less) as cash. A larger one isn't cash, so it's cleared with one adjustment. If your holdings are
+worth more than the total, the account's value rises to its holdings' value. Edit account says
+what the account will be worth before you save, and the switch is saved together with the rest
+of the edit, or not at all.
 
 ## Import a statement or connect a bank
 
