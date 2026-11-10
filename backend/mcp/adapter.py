@@ -30,7 +30,7 @@ import json as _json
 from typing import Optional, Tuple
 
 from backend.ai.tools import TOOL_SCHEMAS, execute_tool
-from backend.ai.tools.registry import mutated_domains
+from backend.ai.tools.registry import is_rest_send, mutated_domains
 
 
 def _annotations_for(name: str) -> dict:
@@ -52,7 +52,7 @@ def _annotations_for(name: str) -> dict:
     """
     if name.startswith("propose_"):
         return {"readOnlyHint": True}
-    if name in _SIDE_EFFECT_NO_DOMAIN:
+    if name in _SIDE_EFFECT_NO_DOMAIN or is_rest_send(name):
         return {"readOnlyHint": False}
     if not mutated_domains(name):
         return {"readOnlyHint": True, "idempotentHint": True}

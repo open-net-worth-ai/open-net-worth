@@ -32,7 +32,12 @@ from backend.ai.tool_text import (
 )
 from backend.ai.tools import TOOL_SCHEMAS, _skill_scope, call_log, execute_tool
 from backend.ai.tools.display import describe_tool_call
-from backend.ai.tools.registry import external_args_error, mutated_domains, validation_error
+from backend.ai.tools.registry import (
+    external_args_error,
+    is_rest_send,
+    mutated_domains,
+    validation_error,
+)
 from backend.ai.turn_completion import MAX_COMPLETION_NUDGES, completion_nudge
 from backend.core import mcp_external
 from backend.core.chat_context_markers import is_model_context_block
@@ -261,7 +266,9 @@ def _discovery_gate_verdict(
     if mcp_external.is_external(name):
         return _external_gate_verdict(name, args)
     problem = validation_error(name, args)
-    if mutated_domains(name) or name in _GATE_NEVER_AUTO_EXECUTE:
+    # A REST connector's send tool is named at runtime, so it cannot be in the set: a guessed
+    # path or body is a different request, sent for real.
+    if mutated_domains(name) or name in _GATE_NEVER_AUTO_EXECUTE or is_rest_send(name):
         # Validated anyway (cheap) so the telemetry can answer "how many bounces would the
         # write-conservatism have saved?" — the number that would justify revisiting it.
         return False, "bounced_write", problem, problem is None

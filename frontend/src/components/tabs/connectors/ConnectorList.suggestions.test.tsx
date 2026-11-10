@@ -92,7 +92,7 @@ describe('the list', () => {
     )
     expect(screen.getAllByText('Suggested')).toHaveLength(1)
     expect(screen.getByLabelText('Suggested connectors')).toBeTruthy()
-    expect(screen.queryByLabelText('Suggested mcp')).toBeNull()
+    expect(screen.queryByLabelText('Suggested mcp servers')).toBeNull()
   })
 
   it('on a family tab, shows that section’s suggestions under its rows, and opens one', () => {
@@ -110,7 +110,7 @@ describe('the list', () => {
         sectionSuggestions={suggestions}
       />,
     )
-    const group = screen.getByLabelText('Suggested mcp')
+    const group = screen.getByLabelText('Suggested mcp servers')
     const first = suggestions.mcp![0]
     fireEvent.click(group.querySelector('.cn-dircard.suggested') as HTMLElement)
     expect(onSuggest).toHaveBeenCalledWith(first)
@@ -162,9 +162,11 @@ describe('promoted until set up', () => {
         sectionSuggestions={suggestionsBySection([])}
       />,
     )
-    expect(screen.getByText(/Nothing in MCP yet/)).toBeTruthy()
+    expect(screen.getByText(/Nothing in MCP servers yet/)).toBeTruthy()
     expect(screen.queryByText('Suggested')).toBeNull()
-    expect(screen.getByLabelText('Start with MCP').textContent).toContain('Interactive Brokers')
+    expect(screen.getByLabelText('Start with MCP servers').textContent).toContain(
+      'Interactive Brokers',
+    )
     expect(screen.getByRole('button', { name: 'Browse & add' })).toBeTruthy()
   })
 })

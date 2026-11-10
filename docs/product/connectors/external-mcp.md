@@ -49,8 +49,10 @@ anything; Lucius just tells you what to set up.
 The directory is a curated list, not everything you can connect. Ask about an app that isn't in
 it and Lucius looks for the vendor's own MCP server on the web first. He calls one official only
 when it's on the vendor's own site or official GitHub, and gives you the link and address. Then
-he offers the **Add custom server** form, or another way in (a statement import, email, or
-recording it by hand) if there's no official server.
+he offers the **Add MCP server** form. If there's no official server but the app has an API you
+can get a key for, he points you to its documentation and offers the
+[**Add REST API**](rest-api.md) form instead. Failing both, he suggests another way in (a
+statement import, email, or recording it by hand).
 
 ## Add a server from the directory
 
@@ -62,7 +64,7 @@ Avalara AvaTax, Twelve Data, SEC EDGAR and FRED. Monarch works the same way but 
 
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
 **Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
-category in the row of small tags under the **All · Channels · Data sources · Web · MCP** tabs, or click
+category in the row of small tags under the **All · Channels · Data sources · Web · MCP servers · REST APIs** tabs, or click
 a tag on any card, to see only that kind; click it again to clear it. Each tab and tag shows how many
 connectors it holds. On a phone the
 category tags sit behind the filter icon beside search, which lights up while one is picked. A server you've
@@ -126,8 +128,9 @@ marked **from your connection**. A long list shows its first nine tools; **Show 
 
 ## Add any other server
 
-1. **Connectors → Browse & add → Add custom server** — in the row pinned at the top of the list
-   ("Don't see yours?") or beside **Close** at the bottom. A search that finds nothing offers it too.
+1. **Connectors → Browse & add → Add MCP server** — in the row pinned at the top of the list
+   ("Don't see yours?"). **Add your own**, beside **Close** at the bottom, offers it too, and so
+   does a search that finds nothing.
 2. If the server's README has a JSON config block (the `"mcpServers": { … }` kind), click **Paste
    from a config snippet** and paste it — the fields below fill themselves in. Otherwise:
 3. Pick a **Transport**:

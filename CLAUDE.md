@@ -324,6 +324,16 @@ One line each — full reasoning and the scar behind each is in
   a DERIVED snapshot of the frontend `catalog.ts` (`npm run sync:connector-directory`; a vitest fails on drift).
   Setup is the human-only screen command `connectors.open_setup`: it opens a form, never writes config or
   touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
+- The REST connector (`services/rest_api/`): each API is its own connector `rest:<slug>`, everything
+  it holds a secret, and its tools are ordinary registry tools REGISTERED AT RUNTIME
+  (`ai/tools/rest_api.py`: one per declared endpoint plus three generic, `rest__<slug>__<tool>`), so
+  permissions and cards work per API and per endpoint with no gate change. The registry is therefore
+  not fixed at import: a runtime tool must also be in `TOOL_SCHEMAS`, a name list that marks sends
+  asks `registry.is_rest_send`, and a test that adds an API clears them
+  (`reset_registered_for_tests`). `client.send` builds every URL from the saved base, refuses anything
+  that leaves it, adds the key itself and returns the body whole or fails (1 MB fuse) — never give a
+  REST tool a URL or header argument. ADR
+  `2026-11-10-generic-rest-connector-is-pinned-to-the-owners-host`.
 - The YNAB two-way sync (`services/ynab_sync/`) writes only through the chokes above, always under
   the audit surface `ynab_sync` (that is how its own writes are skipped on the next scan); its YNAB
   traffic is `aggregation.ynab._safe_send` and nothing else. A YNAB category pairs with one of OUR

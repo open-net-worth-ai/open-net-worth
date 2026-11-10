@@ -61,11 +61,13 @@ export function stampGroup(
 
 // ── families ────────────────────────────────────────────────────────────────
 
-/** Four lanes — a trust and ownership boundary, not a cosmetic split (spec §1). */
-export type ConnectorFamily = 'Channel' | 'Data source' | 'Web' | 'MCP'
+/** Five lanes — a trust and ownership boundary, not a cosmetic split (spec §1). `API` is a
+ *  REST API the owner points Lucius at: like an MCP server it is theirs, reads AND sends, and
+ *  is nothing we built, so it is not a data source (owner, 2026-11-10). */
+export type ConnectorFamily = 'Channel' | 'Data source' | 'Web' | 'MCP' | 'API'
 
 /** The family tab / list-section keys. `all` is the tab only, never a section. */
-export type FamilyKey = 'channels' | 'data' | 'web' | 'mcp'
+export type FamilyKey = 'channels' | 'data' | 'web' | 'mcp' | 'apis'
 export type FamilyTab = FamilyKey | 'all'
 
 export interface FamilySection {
@@ -96,7 +98,22 @@ export const FAMILY_SECTIONS: FamilySection[] = [
     add: 'Add a data source',
   },
   { key: 'web', family: 'Web', title: 'Web', chipLabel: 'Web', add: 'Add a web provider' },
-  { key: 'mcp', family: 'MCP', title: 'MCP', chipLabel: 'MCP', add: 'Add an MCP server' },
+  // Named as the things they hold, like Channels and Data sources, and as their add links
+  // name them: "MCP" beside "APIs" named a protocol on one tab and things on the next.
+  {
+    key: 'mcp',
+    family: 'MCP',
+    title: 'MCP servers',
+    chipLabel: 'MCP servers',
+    add: 'Add an MCP server',
+  },
+  {
+    key: 'apis',
+    family: 'API',
+    title: 'REST APIs',
+    chipLabel: 'REST APIs',
+    add: 'Add a REST API',
+  },
 ]
 
 export const FAMILY_BY_KEY: Record<FamilyKey, ConnectorFamily> = {
@@ -104,6 +121,7 @@ export const FAMILY_BY_KEY: Record<FamilyKey, ConnectorFamily> = {
   data: 'Data source',
   web: 'Web',
   mcp: 'MCP',
+  apis: 'API',
 }
 
 /** Membership test — a connector appears under EVERY family it holds (spec §1). */
@@ -135,6 +153,8 @@ export const CONNECTOR_CATEGORIES = [
   // category that repeats the lane says nothing (every search provider read "Search · Web").
   'Browsing',
   'Crypto',
+  // An API the owner connects themselves: what it is FOR depends on where they point it.
+  'Custom API',
   'Economic data',
   'Email',
   'Expenses',
@@ -158,6 +178,7 @@ export const CATEGORY_HUE: Record<ConnectorCategory, string> = {
   Brokerage: 'var(--ibkr)',
   Browsing: 'var(--bad-light)',
   Crypto: 'var(--crypto)',
+  'Custom API': 'var(--cash-c)',
   'Economic data': 'var(--cat-retirement)',
   Email: 'var(--overfunded)',
   Expenses: 'var(--apt)',
@@ -262,6 +283,9 @@ export interface ConnectorEntry {
   icon: string
   /** A token reference (`var(--ibkr)`) used to tint the icon tile. */
   hue: string
+  /** A letter drawn in the tile in place of the glyph: a REST API the owner added has no
+   *  mark and shares one glyph with every other, so its own initial is what tells it apart. */
+  letter?: string
   /** The connector's real brand mark, when one is licensed and on disk (`logos.ts`, D25).
    *  Absent for everything else, which renders the tinted glyph instead. */
   logo?: string
@@ -416,6 +440,9 @@ export interface ConnectorDetailEntry extends ConnectorEntry {
   /** The URL or local command, verbatim — what you are actually trusting (spec §5). */
   url?: string
   toolGroups: ToolGroup[]
+  /** A line under a tool's name on the permission list, by tool name: for a REST API, the
+   *  request the tool makes (`GET /accounts — Accounts`). Absent where the name says it all. */
+  toolSubs?: Record<string, string>
   /** Flat tool list, in wire order, before grouping. */
   tools: string[]
   /** Tappable example prompts that seed the composer (spec §3). */

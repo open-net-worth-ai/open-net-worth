@@ -26,6 +26,8 @@ from typing import Any, Awaitable, Callable, Optional, Protocol, Tuple
 
 import jsonschema
 
+from backend.core import rest_tools
+
 logger = logging.getLogger(__name__)
 
 Handler = Callable[[dict], Awaitable[Tuple[str, Optional[dict]]]]
@@ -180,6 +182,26 @@ def tool(
         return fn
 
     return deco
+
+
+def is_rest_send(name: str) -> bool:
+    """True for a REST connector tool that is not a plain read: its generic ``send_request``,
+    or an endpoint declared with POST / PUT / PATCH / DELETE. These tools are named at runtime,
+    so the reviewed NAME lists that mark "acts outside this install" (the old gate's
+    ``EXTERNAL_EFFECT_TOOLS``, the discovery gate's never-auto-execute set, the inbound MCP
+    annotations) cannot list them and ask this instead. The answer is the tool's own
+    ``external_effect`` declaration, set from the endpoint's method when it is registered."""
+    return rest_tools.is_rest_tool(name) and has_external_effect(name)
+
+
+def unregister_tool(name: str) -> bool:
+    """Drop a tool registered at RUNTIME — a REST connector's own, when the connector is
+    removed or renamed (``ai.tools.rest_api.sync_rest_tools``). The tools a module declares at
+    import are never unregistered. Returns whether it was there."""
+    removed = _REGISTRY.pop(name, None) is not None
+    if removed:
+        _validator_for.cache_clear()
+    return removed
 
 
 def tool_preview_adapter(name: str) -> Optional[PreviewAdapter]:
@@ -960,6 +982,13 @@ async def _dispatch_call(
     set_tool_use_id(tool_use_id)
     input_data = gate.clean_input(input_data, tool_use_id)
     entry = _REGISTRY.get(name)
+    if entry is None and rest_tools.is_rest_tool(name):
+        # A REST connector's tools are registered when the connector exists; one added in
+        # another worker since this one last looked is registered here, on first use.
+        from backend.ai.tools.rest_api import sync_quietly
+
+        sync_quietly()
+        entry = _REGISTRY.get(name)
     if entry is None:
         unknown = json.dumps({"error": f"unknown tool: {name}"})
         # Domains are hardcoded () on both early-return paths: the handler never ran, so
@@ -1082,7 +1111,10 @@ _DEMO_REFUSED_TOOLS = frozenset(
 def _demo_refusal(name: str) -> Optional[Tuple[Optional[str], Optional[dict]]]:
     from backend.core.config import get_settings
 
-    if name not in _DEMO_REFUSED_TOOLS or not get_settings().demo_mode:
+    # A REST connector's tools are named at runtime, so they cannot be listed above: every
+    # one is an outbound request with a key the instance holds.
+    refused = name in _DEMO_REFUSED_TOOLS or rest_tools.is_rest_tool(name)
+    if not refused or not get_settings().demo_mode:
         return None
     text = json.dumps(
         {

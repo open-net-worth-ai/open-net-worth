@@ -120,6 +120,8 @@ export function ConnectorsTab(): JSX.Element {
     return wire ? toMcpEditTarget(wire) : null
   }, [editMcpId, connectors])
 
+  const justCreated = useRef(false)
+
   const openDirectory = (family: FamilyTab) => {
     setDetailId(null)
     setDirectoryPreviewId(null)
@@ -501,12 +503,26 @@ export function ConnectorsTab(): JSX.Element {
           onSetGroupPermission={(tools, level) => persist(detail, tools, level)}
           configForm={
             detailWire && hasConfigForm(detailWire) ? (
-              <ConnectorConfig connector={detailWire} initialCountry={routedCountry} />
+              <ConnectorConfig
+                connector={detailWire}
+                initialCountry={routedCountry}
+                onCreated={(id, name) => {
+                  // The list has to hold the new connector before its page can open.
+                  void reload().then(() => openConnector(id))
+                  justCreated.current = true
+                  toast(`${name} added`)
+                }}
+                onSaveError={toast}
+              />
             ) : undefined
           }
           configureOnOpen={configureOnOpen}
           onConfigClosed={() => void reload()}
-          onSaved={() => toast('Configuration saved')}
+          onSaved={() => {
+            // A save that CREATED a connector has already said so, by name.
+            if (justCreated.current) justCreated.current = false
+            else toast('Configuration saved')
+          }}
         />
       ) : null}
 

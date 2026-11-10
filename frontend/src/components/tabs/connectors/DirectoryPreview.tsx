@@ -216,7 +216,7 @@ function Details({ d }: { d: DirectoryRow }): JSX.Element | null {
             // calls — so it reads "Vendor" instead (owner correction, 2026-08-21; same
             // `mcp`-bound distinction as `PublisherLine`'s "Developed by"/"Powered by" verb).
             <Field label={d.mcp || d.publisher === FIRST_PARTY_PUBLISHER ? 'Author' : 'Vendor'}>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+              <span style={{ fontSize: 'var(--text-base)', color: 'var(--muted)' }}>
                 {href ? <ExternalLink href={href}>{d.publisher}</ExternalLink> : d.publisher}
               </span>
             </Field>
@@ -229,7 +229,7 @@ function Details({ d }: { d: DirectoryRow }): JSX.Element | null {
                   flexDirection: 'column',
                   alignItems: 'flex-start',
                   gap: 5,
-                  fontSize: 13,
+                  fontSize: 'var(--text-base)',
                 }}
               >
                 {links.map(([label, url]) => (
@@ -314,7 +314,11 @@ export function DirectoryPreview({
         }
       />
 
-      <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>{d.desc}</p>
+      <p
+        style={{ fontSize: 'var(--text-base)', color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}
+      >
+        {d.desc}
+      </p>
 
       <PublisherLine
         publisher={d.publisher}

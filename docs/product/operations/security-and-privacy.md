@@ -87,7 +87,7 @@ These happen **only because you set them up**:
 | What | Sends |
 |---|---|
 | Your AI provider | Your conversation with Lucius and the data he looks up for it, using your own key or subscription — see [Models and cost](../lucius/models-and-cost.md). Nothing goes through a server run by this project. |
-| Connectors | [Email](../connectors/email-ingestion.md) (read-only), [Telegram](../connectors/telegram.md), a [web search provider](../connectors/web-search.md), a [bank or brokerage sync](../connectors/bank-brokerage.md), [external MCP servers](../connectors/external-mcp.md). Each page says what it sends. None is on by default. |
+| Connectors | [Email](../connectors/email-ingestion.md) (read-only), [Telegram](../connectors/telegram.md), a [web search provider](../connectors/web-search.md), a [bank or brokerage sync](../connectors/bank-brokerage.md), [external MCP servers](../connectors/external-mcp.md), a [REST API](../connectors/rest-api.md) you point it at. Each page says what it sends. None is on by default. |
 | A problem report | Only when you open **Report a problem** and press **Send report** — see below. |
 
 ### Problem reports

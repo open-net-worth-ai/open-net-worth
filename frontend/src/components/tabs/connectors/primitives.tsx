@@ -85,12 +85,14 @@ export interface MonoProps {
   hue: string
   /** A real brand mark, from `connectorLogo(id)`. */
   logo?: string
+  /** One character drawn in place of the glyph when there is no mark (see `ConnectorEntry`). */
+  letter?: string
   /** `lg` (52px) is the header tile; the default 34px is the one a list row and a directory
    *  card use. */
   size?: 'lg'
 }
 
-export function Mono({ icon: iconKey, hue, logo, size }: MonoProps): JSX.Element {
+export function Mono({ icon: iconKey, hue, logo, letter, size }: MonoProps): JSX.Element {
   const Ic = icon(iconKey)
   // A file can 404 or decode-fail at runtime — a broken-image glyph in place of a connector's
   // identity is worse than the tinted glyph we already have, so a failure falls back rather
@@ -117,6 +119,11 @@ export function Mono({ icon: iconKey, hue, logo, size }: MonoProps): JSX.Element
         // `alt=""` on purpose: the connector's name is always beside the tile, so a screen
         // reader announcing the mark again would only repeat it.
         <img className="cn-tile-logo" src={logo} alt="" onError={() => setBroken(logo)} />
+      ) : letter ? (
+        // Decorative, like the glyph it stands in for: the name is always beside the tile.
+        <span className="cn-tile-letter" aria-hidden>
+          {letter}
+        </span>
       ) : (
         <Ic />
       )}
@@ -357,26 +364,25 @@ export function Modal({
   // React's own `style` reconciliation never touches a key (`overflowY`) it has never itself
   // written into the `style` object below.
   const measure = useCallback(() => {
-    const card = cardRef.current
     const body = bodyRef.current
     const content = contentRef.current
-    if (!card || !body || !content) return
+    if (!body || !content) return
     const bodyStyle = getComputedStyle(body)
     const paddingV = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom)
-    const natural = content.scrollHeight + paddingV
-    const cardStyle = getComputedStyle(card)
-    const maxTotal = parseFloat(cardStyle.maxHeight)
-    // Everything in the card but the body counts, the phone sheet's drag handle (a real child,
-    // hidden on desktop) and the card's border included. Not `card.offsetHeight - body.offsetHeight`:
-    // once the body is pinned, a card clipped at its max height would hand the pinned height back.
-    let chrome = parseFloat(cardStyle.borderTopWidth) + parseFloat(cardStyle.borderBottomWidth)
-    for (const el of Array.from(card.children)) {
-      if (el !== body) chrome += (el as HTMLElement).offsetHeight
-    }
-    const available = Number.isFinite(maxTotal) ? Math.max(0, maxTotal - chrome) : Infinity
-    const next = Math.min(natural, available)
+    // The content's own height, and nothing else. The card's max-height is NOT subtracted
+    // here any more: the body is allowed to shrink (`flex: 0 1 auto` below), so the card's
+    // CSS cap clips it to what fits, live, with no number of ours to go stale. It used to be
+    // capped in this function against the card's max-height at the moment of measuring — and
+    // on a phone that moment could be while the keyboard had the screen. Typing a key changed
+    // the form's height, the body was pinned to the half-screen that was left, and when the
+    // keyboard went away nothing measured again: the sheet stayed half-height (owner,
+    // 2026-11-11, with a screenshot).
+    const next = content.scrollHeight + paddingV
     setBodyHeight((prev) => {
-      if (prev != null && prev !== next) body.style.overflowY = 'hidden'
+      // A body the card is already clipping is a scrolling one: its drawn height will not
+      // move, so there is no resize to hide a scrollbar for, and it must stay scrollable.
+      const clipped = prev != null && body.offsetHeight < prev - 1
+      if (prev != null && prev !== next && !clipped) body.style.overflowY = 'hidden'
       return next
     })
   }, [])
@@ -469,7 +475,7 @@ export function Modal({
         <div
           className="rd-modal-body"
           ref={bodyRef}
-          style={bodyHeight != null ? { flex: 'none', height: bodyHeight } : undefined}
+          style={bodyHeight != null ? { flex: '0 1 auto', height: bodyHeight } : undefined}
         >
           <div ref={contentRef}>{children}</div>
         </div>

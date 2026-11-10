@@ -56,6 +56,7 @@ def test_empty_state_has_builtin_transports_no_mcp():
         "yodlee",
         "alpaca",
         "ibkr",
+        "rest",
         "yahoo_finance",
         "coingecko",
     }
