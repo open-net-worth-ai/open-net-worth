@@ -26,7 +26,8 @@ wherever this page says <kbd>Ctrl</kbd>.
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>/</kbd> | Show the keyboard shortcuts. |
 
 Hide amounts stays on after a reload until you turn it off. You can also switch it from the
-sidebar footer (**Hide amounts** / **Show amounts**).
+sidebar footer (**Hide amounts** / **Show amounts**). Its eye icon shows the current state: an
+open eye while amounts are showing, a crossed-out eye while they're hidden.
 
 ## In an account's register
 
@@ -65,7 +66,8 @@ The desktop app's menus add these:
 | Shortcut | What it does |
 |---|---|
 | <kbd>Ctrl</kbd> <kbd>L</kbd> | Open Lucius. |
-| <kbd>Ctrl</kbd> <kbd>N</kbd> | New transaction. |
+| <kbd>Ctrl</kbd> <kbd>N</kbd> | New Lucius conversation — in the Lucius side panel when it's open, otherwise on the Lucius screen. |
+| <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> | New transaction. |
 | <kbd>Ctrl</kbd> <kbd>O</kbd> | Import a statement or receipt. |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>E</kbd> | Export your book. |
 | <kbd>Ctrl</kbd> <kbd>,</kbd> | Settings. |

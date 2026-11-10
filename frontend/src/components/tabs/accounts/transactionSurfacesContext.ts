@@ -8,8 +8,9 @@ import type { Txn } from './types'
 
 export interface TransactionSurfaces {
   /** The review cards. `automation`: rows an automation run created (Lucius's door);
-   *  `all`: everything flagged for review (the Accounts tab's door). */
-  openReview: (scope: ReviewScope) => void
+   *  `all`: everything flagged for review (the Accounts tab's door). `accountId` narrows
+   *  either to one account's rows — Start review on an account page. */
+  openReview: (scope: ReviewScope, accountId?: string | null) => void
   /** The transaction drawer, read-only or straight into editing. */
   openTransaction: (txn: Txn, mode?: 'view' | 'edit') => void
   /** The drawer for a row the caller knows only by id (a receipt chip, a deep link): the

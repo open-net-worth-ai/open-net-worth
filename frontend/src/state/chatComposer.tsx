@@ -54,7 +54,10 @@ interface ChatComposerValue {
    *  ACTIVE composer exactly like pendingMentions, so it lands in whichever surface is
    *  visible (dock or side panel), mounted or not. */
   pendingText: string | null
-  setPendingText: (text: string) => void
+  /** With ``keepChips``, the prefill is added after any staged mention chips instead of
+   *  replacing the editor — for a caller that stages a chip AND a request in one tap. */
+  setPendingText: (text: string, opts?: { keepChips?: boolean }) => void
+  pendingTextKeepsChips: boolean
   clearPendingText: () => void
 
   pendingMentions: MentionRef[]
@@ -99,6 +102,7 @@ function restoredDraft(): ComposerDraft {
 export function ChatComposerProvider({ children }: { children: ReactNode }) {
   const [pendingMentions, setPendingMentions] = useState<MentionRef[]>([])
   const [pendingText, setPendingText] = useState<string | null>(null)
+  const [pendingTextKeepsChips, setPendingTextKeepsChips] = useState(false)
   const [respondingAgent, setRespondingAgent] = useState<RespondingAgent | null>(null)
   const [pendingSkills, setPendingSkills] = useState<PendingSkill[]>([])
   const [composerDraft, setComposerDraftState] = useState<ComposerDraft>(restoredDraft)
@@ -149,8 +153,14 @@ export function ChatComposerProvider({ children }: { children: ReactNode }) {
     setPendingSkills([])
   }, [])
 
-  const setPendingTextCb = useCallback((text: string) => setPendingText(text), [])
-  const clearPendingText = useCallback(() => setPendingText(null), [])
+  const setPendingTextCb = useCallback((text: string, opts?: { keepChips?: boolean }) => {
+    setPendingTextKeepsChips(Boolean(opts?.keepChips))
+    setPendingText(text)
+  }, [])
+  const clearPendingText = useCallback(() => {
+    setPendingText(null)
+    setPendingTextKeepsChips(false)
+  }, [])
 
   const setComposerDraft = useCallback((draft: ComposerDraft) => {
     composerDraftRef.current = draft
@@ -181,6 +191,7 @@ export function ChatComposerProvider({ children }: { children: ReactNode }) {
       clearComposerDraft,
       pendingText,
       setPendingText: setPendingTextCb,
+      pendingTextKeepsChips,
       clearPendingText,
     }),
     [
@@ -197,6 +208,7 @@ export function ChatComposerProvider({ children }: { children: ReactNode }) {
       setComposerDraft,
       clearComposerDraft,
       pendingText,
+      pendingTextKeepsChips,
       setPendingTextCb,
       clearPendingText,
     ],

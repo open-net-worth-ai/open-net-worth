@@ -286,12 +286,14 @@ describe('ImportModal — no AI-provenance chrome on a Lucius-touched row (SI-68
     expect(document.querySelector('.imp3-routed')).toBeNull()
     expect(screen.queryByRole('button', { name: 'undo' })).toBeNull()
     // A Lucius-skipped row is excluded, so its row-level control offers the single Import override
-    // — the SAME plain override every other excluded row gets, nothing AI-specific.
+    // — the SAME plain override every other excluded row gets, nothing AI-specific. It lives in
+    // the row's open part, like everything else there.
+    const row = openRow(screen.getByText(/CashOut\.a1/).closest('.imp3-arow') as HTMLElement)
     const importBtn = screen.getByRole('button', { name: 'Import' })
     expect(importBtn.className).toContain('imp3-actbtn')
     fireEvent.click(importBtn)
     // Included: the row now offers the two-way radiogroup instead.
-    const row = openRow(screen.getByText(/CashOut\.a1/).closest('.imp3-arow') as HTMLElement)
+    openRow(row)
     expect(within(row).getByRole('radio', { name: 'Import' }).getAttribute('aria-checked')).toBe(
       'true',
     )
@@ -304,6 +306,7 @@ describe('ImportModal — no AI-provenance chrome on a Lucius-touched row (SI-68
     const { onDecisionCommit } = await openPreview(skipPreview())
     const row = screen.getByText(/CashOut\.a1/).closest('.imp3-arow') as HTMLElement
     // Include → leave out → include again, all through the row's one decision control.
+    openRow(row)
     fireEvent.click(screen.getByRole('button', { name: 'Import' }))
     fireEvent.click(within(openRow(row)).getByRole('radio', { name: 'Leave out' }))
     fireEvent.click(screen.getByRole('button', { name: 'Import' }))

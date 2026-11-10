@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopClientBridge, DesktopCommand } from './contracts';
+import type { DesktopClientBridge, DesktopCommand, DesktopUpdateState } from './contracts';
 
 const client: DesktopClientBridge = {
   version: 1,
@@ -10,6 +10,21 @@ const client: DesktopClientBridge = {
   openActivitySettings: () => ipcRenderer.invoke('desktop-client:activity-settings'),
   reportProblem: (error?: string) => ipcRenderer.invoke('desktop-report:open', error),
   reportHistory: state => ipcRenderer.send('desktop-client:history', state),
+  getUpdateState: () => ipcRenderer.invoke('desktop-client:update-state'),
+  onUpdateState: listener => {
+    const handler = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => listener(state);
+    ipcRenderer.on('desktop-client:update-state', handler);
+    return () => ipcRenderer.removeListener('desktop-client:update-state', handler);
+  },
+  restartToUpdate: () => ipcRenderer.invoke('desktop-client:restart-to-update'),
+  offerUpdate: () => ipcRenderer.invoke('desktop-client:offer-update'),
+  takeWhatsNew: () => ipcRenderer.invoke('desktop-client:whats-new'),
+  // Only where there is a system dictation to start: the page offers its mic by this being present.
+  ...(process.platform === 'darwin' ? {
+    startDictation: () => ipcRenderer.invoke('desktop-client:start-dictation'),
+    stopDictation: () => ipcRenderer.invoke('desktop-client:stop-dictation'),
+    openMicrophoneSettings: () => ipcRenderer.invoke('desktop-client:microphone-settings'),
+  } : {}),
   onCommand: listener => {
     const handler = (_event: Electron.IpcRendererEvent, command: DesktopCommand) => listener(command);
     ipcRenderer.on('desktop-client:command', handler);
@@ -90,6 +105,6 @@ if (process.isMainFrame) {
     resize: (height: number) => ipcRenderer.invoke('desktop-connection:resize', height),
     back: () => ipcRenderer.invoke('desktop-connection:back'),
     retry: () => ipcRenderer.invoke('desktop-connection:retry'),
-    useLocal: () => ipcRenderer.invoke('desktop-connection:use-local'),
+    onReconnectIn: (callback: (ms: number) => void) => { ipcRenderer.on('desktop-connection:reconnect-in', (_event, ms: unknown) => { if (typeof ms === 'number' && Number.isFinite(ms) && ms >= 0) callback(ms); }); },
   }));
 }

@@ -245,14 +245,14 @@ export function Chart({ timeline, floor, gapIdx }: ChartProps) {
         </svg>
 
         <span className="c2-chart-zero" style={{ bottom: `calc(${(1 - zeroY / H) * 100}% + 6px)` }}>
-          $0 cash
+          <span className="money">$0</span> cash
         </span>
         {floor > 0 && (
           <span
             className="c2-chart-floor"
             style={{ bottom: `calc(${(1 - balY(floor) / H) * 100}% + 6px)` }}
           >
-            cash floor {fCompact(floor)}
+            cash floor <span className="money">{fCompact(floor)}</span>
           </span>
         )}
 

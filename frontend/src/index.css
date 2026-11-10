@@ -76,6 +76,10 @@
      The page still scrolls — we just don't render the bar. Inner .app-shell /
      .lx-side scroll areas keep their own thin styled scrollbars below. */
     scrollbar-width: none; /* Firefox */
+    /* iOS Safari inflates multi-line text blocks in landscape ("text autosizing"),
+     so paragraphs render far larger than the short labels beside them. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   html::-webkit-scrollbar {
     display: none; /* WebKit (Chrome/Safari/Edge) */
@@ -131,6 +135,23 @@
       background: var(--muted);
     }
   }
+  /* The square where two scrollbars meet, and a text box's resize grip, were the browser's own:
+     a light block and a hard diagonal on every dark text box. The corner is clear; the grip is
+     two short lines in the muted ink. */
+  body *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  /* Two short, faint strokes tucked into the corner — the box is the scrollbar's 10px square. */
+  body textarea::-webkit-resizer {
+    background: linear-gradient(
+      135deg,
+      transparent 0 66%,
+      color-mix(in srgb, var(--muted) 45%, transparent) 66% 71%,
+      transparent 71% 82%,
+      color-mix(in srgb, var(--muted) 45%, transparent) 82% 87%,
+      transparent 87%
+    );
+  }
   /* Phones: no visible scrollbar at all. The document bar is already hidden above, but inner
      areas kept a 10px styled one, which on a touch screen is a permanent line down the right
      edge that nobody can drag. Touch already has momentum scrolling and the OS draws its own
@@ -173,7 +194,7 @@
   select {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 8px 12px;
     color: var(--ink);
     font: inherit;
@@ -301,22 +322,15 @@
     background: var(--bg);
     display: flex;
     min-height: 100vh;
-    transition: margin-right 0.25s ease;
+    min-height: 100dvh;
   }
+  /* The margin is NOT transitioned: the content takes its new width ONCE, when the panel opens or
+     closes, while the panel itself slides on a transform (.lx-side). Easing the margin re-laid-out
+     the whole screen every frame for 0.25s — columns re-squeezed, labels folded and cells
+     re-truncated mid-slide, which read as a janky animation (owner, 2026-10-25). It also lagged
+     the shell behind the panel edge during a drag-resize (2026-09-15). */
   .app-shell.chat-open {
     margin-right: var(--chat-width, 400px);
-  }
-  /* The transition above is for the panel OPENING/CLOSING (one discrete 400px move). During a
-     drag-resize it is actively harmful: ChatPanel republishes `--chat-width` on every pointer
-     move, so the margin is forever easing toward a target that already moved, leaving the
-     shell ~0.25s behind the panel edge — a gap that opens while you drag inward and only
-     "settles" once you let go (owner-reported, 2026-09-15). ChatPanel already marks the drag
-     with `body.chat-resizing`; this is the rule that class was missing. Note plan.css's
-     `.onw-root` comment has claimed since it was written that dragging kills transitions "via
-     lx-resizing on body" — no such class is set anywhere in the app, so the kill-switch was
-     described but never implemented. Both selectors are handled now. */
-  body.chat-resizing .app-shell {
-    transition: none;
   }
   @media (max-width: 639.98px) {
     /* Was `16px !important` to stop iOS focus-zoom; redundant because index.html ships
@@ -345,6 +359,7 @@
   .sidebar {
     width: 52px;
     min-height: 100vh;
+    min-height: 100dvh;
     /* App chrome tracks the PAGE, not the card surface. --surface happens to equal --bg
        today, but the sidebar is page-level chrome and must follow --bg if they diverge. */
     background: var(--bg);
@@ -356,6 +371,7 @@
     position: sticky;
     top: 0;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     z-index: var(--z-dropdown);
   }
@@ -629,11 +645,27 @@
   .app-layout--wide {
     max-width: none;
   }
+  /* List pages (Automations, Skills, Inbox, Connectors) read as a centred column, not a
+     full-width spread: the column caps at 960px and side space grows with the room the PAGE
+     has — not the window, which still counted the rail and the docked Lucius panel and left a
+     narrow page boxed in. Below ~800px of page it is the shared 24px gutter and nothing more,
+     reaching 96px at ~1400px. Phones keep the shared 16px gutter: the max-width: 640px block
+     below sets .app-layout's padding later in this file, so it wins. The container is scoped
+     to these tabs so no other tab's unnamed @container query starts matching .app-main. */
+  .app-main:has(> .app-layout--narrow) {
+    container-type: inline-size;
+  }
+  .app-layout--narrow {
+    --narrow-gutter: clamp(24px, calc(12cqi - 72px), 96px);
+    max-width: calc(960px + 2 * var(--narrow-gutter));
+    padding-inline: var(--narrow-gutter);
+  }
   /* Two-panel tabs (Accounts): bound the height so panels scroll independently. The bound is
      on .app-main — .app-layout is no longer the top of the column, so its own `height: 100vh`
      would overflow by the topbar's height. */
   .app-main:has(.app-layout--panel) {
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
   .app-layout--panel {
@@ -1506,7 +1538,7 @@
     min-width: 140px;
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 13px;
     color: var(--ink);
     font: inherit;
@@ -1518,7 +1550,7 @@
   .toolbar select {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 12px;
     color: var(--ink);
     font: inherit;
@@ -1930,7 +1962,9 @@
     padding: calc(var(--safe-t) + var(--space-8)) calc(var(--safe-r) + var(--space-6))
       calc(var(--safe-b) + var(--space-9)) calc(var(--safe-l) + var(--space-6));
   }
-  body.hide-amounts tbody td:not(:first-child),
+  /* A table masks every cell but its first: a cell that holds no figure (a status, a date, the
+     row's buttons) opts out with `.not-money`, and an empty one has nothing to mask. */
+  body.hide-amounts tbody td:not(:first-child, :empty, .not-money),
   body.hide-amounts tfoot td:not([colspan]),
   body.hide-amounts .total span:not(.cur),
   body.hide-amounts .split .v,
@@ -1940,8 +1974,21 @@
     position: relative;
     user-select: none;
   }
-  body.hide-amounts tbody td:not(:first-child)::after,
+  /* A child with its own colour would stay readable under the `***`; controls stay usable. */
+  body.hide-amounts
+    tbody
+    td:not(:first-child, :empty, .not-money)
+    *:not(button, button *, a, a *, input, select, textarea),
+  body.hide-amounts
+    tfoot
+    td:not([colspan])
+    *:not(button, button *, a, a *, input, select, textarea) {
+    color: transparent !important;
+    user-select: none;
+  }
+  body.hide-amounts tbody td:not(:first-child, :empty, .not-money)::after,
   body.hide-amounts tfoot td:not([colspan])::after {
+    pointer-events: none;
     content: '***';
     position: absolute;
     inset: 0;
@@ -1972,17 +2019,28 @@
    The `***` overlay follows the element's own `text-align`, so a right-aligned
    table cell stays right-aligned and a left-aligned hero stays left. */
   body.hide-amounts .money,
+  body.hide-amounts .mask,
 /* also blank any nested element that sets its OWN color (a toned <Text>, a
    colored link/button), so the amount can't leak through a child. The `***`
    overlay below sits on the .money element itself. */
-body.hide-amounts .money * {
+body.hide-amounts .money *,
+body.hide-amounts .mask * {
     color: transparent !important;
     user-select: none;
   }
-  body.hide-amounts .money {
+  /* No fade: a `transition: color` on the element would show the figure on its way out. */
+  body.hide-amounts .money,
+  body.hide-amounts .mask {
     position: relative;
+    transition: none !important;
   }
-  body.hide-amounts .money::after {
+  /* A figure in an input has no box to overlay, and typing into it must stay possible. */
+  body.hide-amounts .pl-lever--money input:not(:focus),
+  body.hide-amounts .rd-moneyfield input:not(:focus) {
+    color: transparent;
+  }
+  body.hide-amounts .money::after,
+  body.hide-amounts .mask::after {
     content: '***';
     position: absolute;
     inset: 0;
@@ -1991,6 +2049,9 @@ body.hide-amounts .money * {
     color: var(--muted);
     font-weight: 400;
     pointer-events: none;
+  }
+  body.hide-amounts .mask.l::after {
+    text-align: left;
   }
 
   /* ── Misc ── */
@@ -2081,7 +2142,7 @@ body.hide-amounts .money * {
     width: 2rem;
     height: 1.125rem;
     border-radius: var(--radius-pill);
-    background: var(--line);
+    background: var(--line-strong);
     transition: background 0.15s;
     flex-shrink: 0;
   }
@@ -2095,7 +2156,9 @@ body.hide-amounts .money * {
     width: 0.875rem;
     height: 0.875rem;
     border-radius: 50%;
-    background: var(--ink);
+    /* Every switch shares one knob: white with a soft shadow, on or off. */
+    background: var(--ink-on-accent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     transition: transform 0.15s;
   }
   .ui-switch input:checked + .ui-switch__track .ui-switch__thumb {
@@ -2142,8 +2205,9 @@ body.hide-amounts .money * {
     }
   }
   .preset-chip--active {
-    border-color: var(--accent);
     color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
 
   .profile-field {
@@ -2163,7 +2227,7 @@ body.hide-amounts .money * {
   .profile-field textarea {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 13px;
     color: var(--ink);
     font: inherit;
@@ -2200,23 +2264,33 @@ body.hide-amounts .money * {
   .btn-primary {
     font-size: 14px;
     font-weight: 600;
-    color: var(--ink-on-accent);
-    background: var(--primary);
+    color: var(--ink-on-cta);
+    background: var(--cta);
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 11px 24px;
     cursor: pointer;
     font-family: inherit;
-    transition: opacity 0.15s;
+    transition:
+      background 0.15s,
+      opacity 0.15s;
   }
   @media (hover: hover) {
-    .btn-primary:hover {
-      opacity: 0.87;
+    .btn-primary:hover:not(:disabled) {
+      background: var(--cta-hover);
     }
   }
+  /* A faded ink fill reads as "almost ready", so an unavailable CTA drops to a quiet grey
+     well instead. A loading one (aria-busy) keeps its ink so the spinner stays legible. */
   .btn-primary:disabled {
-    opacity: 0.5;
     cursor: not-allowed;
+  }
+  .btn-primary:disabled:not([aria-busy]) {
+    color: var(--faint);
+    background: var(--bg-2);
+  }
+  .btn-primary[aria-busy]:disabled {
+    opacity: 0.7;
   }
   .btn-danger {
     font-size: 14px;
@@ -2224,7 +2298,7 @@ body.hide-amounts .money * {
     color: var(--ink-on-accent);
     background: var(--bad);
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 11px 24px;
     cursor: pointer;
     font-family: inherit;
@@ -2245,7 +2319,7 @@ body.hide-amounts .money * {
     color: var(--text);
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 11px 24px;
     cursor: pointer;
     font-family: inherit;
@@ -2421,7 +2495,7 @@ body.hide-amounts .money * {
     color: var(--ink);
   }
   .cmdk-item.active {
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
   }
   .cmdk-item-label {
     font-size: var(--text-base);
@@ -2529,12 +2603,12 @@ body.hide-amounts .money * {
       width 0.2s;
   }
   .onb-progress__dot.is-done {
-    background: color-mix(in srgb, var(--accent, #3b86dd) 55%, transparent);
+    background: color-mix(in srgb, var(--ink) 55%, transparent);
   }
   .onb-progress__dot.is-current {
     width: 22px;
     border-radius: var(--radius-pill);
-    background: var(--accent, #3b86dd);
+    background: var(--ink);
   }
   /* Onboarding: decorative icons on welcome and done steps. */
   .onb-welcome-icon,
@@ -2860,6 +2934,9 @@ body.hide-amounts .money * {
     border: none;
     cursor: pointer;
     transition: color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .firstrun-back:focus-visible {
     color: var(--fr-gold-soft);
@@ -3057,6 +3134,8 @@ body.hide-amounts .money * {
   .firstrun-pick__tick {
     flex-shrink: 0;
     color: var(--fr-gold-soft);
+    display: inline-flex;
+    align-items: center;
   }
   .firstrun-pick__row.is-current .firstrun-pick__name {
     color: inherit;
@@ -3352,12 +3431,12 @@ body.hide-amounts .money * {
   @media (hover: hover) {
     .onb-choice-card:hover {
       border-color: var(--hover-line);
-      background: color-mix(in srgb, var(--accent, #3b86dd) 4%, var(--surface2, #1a1f2a));
+      background: color-mix(in srgb, var(--ink) 4%, var(--surface2, #1a1f2a));
     }
   }
   .onb-choice-card.is-selected {
-    border-color: var(--accent, #3b86dd);
-    background: color-mix(in srgb, var(--accent, #3b86dd) 8%, var(--surface2, #1a1f2a));
+    border-color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 6%, var(--surface2, #1a1f2a));
   }
   .onb-choice-card__tag {
     font-size: var(--text-xs, 11px);
@@ -3371,7 +3450,7 @@ body.hide-amounts .money * {
   textarea {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 13px;
     color: var(--ink);
     font: inherit;
@@ -3476,6 +3555,9 @@ body.hide-amounts .money * {
     border-radius: 4px;
     transition: color 0.15s;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   @media (hover: hover) {
     .briefing-refresh-btn:hover:not(:disabled) {
@@ -3493,6 +3575,9 @@ body.hide-amounts .money * {
     cursor: pointer;
     font-size: 0.68rem;
     padding: 2px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   /* Settings popover */
   .briefing-settings-wrap {
@@ -3510,13 +3595,16 @@ body.hide-amounts .money * {
     border-radius: 4px;
     line-height: 1;
     transition: color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .briefing-settings-btn.active {
-    color: color-mix(in srgb, var(--muted) 50%, var(--primary));
+    color: var(--ink);
   }
   @media (hover: hover) {
     .briefing-settings-btn:hover {
-      color: color-mix(in srgb, var(--muted) 50%, var(--primary));
+      color: var(--ink);
     }
   }
   .briefing-settings-pop {
@@ -3559,12 +3647,12 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .briefing-toggle:hover {
-      background: color-mix(in srgb, var(--primary) 9%, var(--surface2));
+      background: color-mix(in srgb, var(--ink) 6%, var(--surface2));
     }
   }
   .briefing-toggle input {
     margin: 2px 0 0;
-    accent-color: var(--primary);
+    accent-color: var(--ink);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -3588,7 +3676,7 @@ body.hide-amounts .money * {
     box-sizing: border-box;
     background: color-mix(in srgb, var(--primary) 5%, var(--bg-2));
     border: 1px solid var(--modal-border);
-    border-radius: 6px;
+    border-radius: var(--radius-lg);
     color: color-mix(in srgb, var(--ink) 75%, var(--primary));
     font: inherit;
     font-size: 13px;
@@ -3775,6 +3863,19 @@ body.hide-amounts .money * {
     padding: 0 3px;
     line-height: 1;
   }
+  .sidebar-attention-dot {
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--bad);
+  }
+
+  .sidebar-attention-dot-warn {
+    background: var(--warn);
+  }
 
   @media (max-width: 720px) {
     .intel-header-actions {
@@ -3828,11 +3929,11 @@ body.hide-amounts .money * {
     z-index: var(--z-sticky);
   }
   .acct-list-resize-handle:active {
-    background: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--ink) 25%, transparent);
   }
   @media (hover: hover) {
     .acct-list-resize-handle:hover {
-      background: color-mix(in srgb, var(--accent) 40%, transparent);
+      background: color-mix(in srgb, var(--ink) 25%, transparent);
     }
   }
   .acct-list-toggle {
@@ -4238,11 +4339,11 @@ body.hide-amounts .money * {
     padding: 14px 18px;
     min-width: 140px;
   }
-  /* Net Balance is the headline figure (= the sum of the other cards) — give it a quiet accent so
+  /* Net Balance is the headline figure (= the sum of the other cards) — give it a quiet tint so
    it leads the same row instead of needing its own. */
   .acct-overview-card--primary {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--ink) 4%, var(--surface));
   }
   .acct-overview-label {
     font-size: 11px;
@@ -4353,7 +4454,7 @@ body.hide-amounts .money * {
   @media (hover: hover) {
     .acct-txn-resize:hover::after {
       width: 2px;
-      background: var(--accent, #3b86dd);
+      background: var(--muted);
     }
   }
   .acct-txn-row {
@@ -4371,7 +4472,7 @@ body.hide-amounts .money * {
     }
   }
   .acct-txn-row.selected {
-    background: color-mix(in srgb, var(--accent, #3b86dd) 8%, transparent);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
   }
   .acct-txn-check {
     display: flex;
@@ -4583,7 +4684,7 @@ body.hide-amounts .money * {
     gap: 6px;
     padding: 6px 8px;
     border: 1px solid var(--modal-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--bg-2);
   }
   .txn-tag-input input {
@@ -4738,7 +4839,7 @@ body.hide-amounts .money * {
     .acct-txn-ask-lucius:hover,
     .acct-txn-rule:hover,
     .acct-txn-edit:hover {
-      color: var(--accent, #3b86dd) !important;
+      color: var(--ink) !important;
     }
   }
   /* Touch devices never fire hover → keep the ✦ tappable (UI spec adds this carve-out). */
@@ -4779,7 +4880,7 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .sumcard-ask-btn:hover {
-      color: var(--accent);
+      color: var(--ink);
     }
   }
   @media (hover: none) {
@@ -4816,7 +4917,7 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .hold-ask-btn:hover {
-      color: var(--accent);
+      color: var(--ink);
     }
   }
   @media (hover: none) {
@@ -4867,9 +4968,9 @@ body.hide-amounts .money * {
     }
   }
   .acct-date-preset.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--ink-on-accent);
+    color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
   /* Custom-range popup anchored to the Custom chip. */
   .acct-date-custom-wrap {
@@ -4971,8 +5072,8 @@ body.hide-amounts .money * {
     gap: 4px;
     padding: 3px 6px 3px 10px;
     border-radius: 20px;
-    border: 1px solid var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid var(--line-strong);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
     color: var(--ink);
     font-size: 12px;
     white-space: nowrap;
@@ -4994,8 +5095,8 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .acct-filter-chip-x:hover {
-      background: var(--accent);
-      color: var(--ink-on-accent);
+      background: var(--ink);
+      color: var(--bg);
     }
   }
   .acct-filter-clear-all {
@@ -5047,8 +5148,8 @@ body.hide-amounts .money * {
     height: 16px;
     padding: 0 4px;
     border-radius: var(--radius-pill);
-    background: var(--accent);
-    color: var(--ink-on-accent);
+    background: var(--ink);
+    color: var(--bg);
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
@@ -5097,7 +5198,7 @@ body.hide-amounts .money * {
     width: 120px;
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 6px 8px;
     color: var(--text);
   }
@@ -5190,9 +5291,10 @@ body.hide-amounts .money * {
     color: var(--muted);
   }
   .realized-caret {
-    display: inline-block;
     width: 14px;
     color: var(--faint);
+    display: inline-flex;
+    align-items: center;
   }
   .realized-detail-row > td {
     background: var(--surface2);
@@ -5268,10 +5370,16 @@ body.hide-amounts .money * {
     text-align: center;
   }
   .hold-drill-caret {
-    display: inline-block;
     width: 14px;
     color: var(--faint);
     font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .hold-group-caret {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
   }
   @media (hover: hover) {
     .hold-drill-row:hover {
@@ -5317,6 +5425,9 @@ body.hide-amounts .money * {
     cursor: pointer;
     padding: 0 6px 0 0;
     font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .lots-consumption-row > td {
     padding-top: 0;
@@ -5749,7 +5860,7 @@ body.hide-amounts .money * {
   .ui-btn--sm {
     font-size: var(--text-sm);
     padding: var(--space-2) var(--space-5);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
   }
   .ui-btn--ghost {
     background: none;
@@ -5791,6 +5902,14 @@ body.hide-amounts .money * {
   /* The tallest a phone sheet may be RIGHT NOW: the shared ceiling, or — with the keyboard
      up — what is visible above it. iOS never shrinks the layout viewport for the keyboard;
      --visual-viewport-height is useVisualViewportVars' measurement of what is visible. */
+  /* One toast: the update notice's full pill. Every message toast reads these; the colours are
+     already shared (--toast-bg / --toast-ink). */
+  :root {
+    --toast-radius: var(--radius-pill);
+    --toast-font-size: 13px;
+    --toast-font-weight: 500;
+    --toast-padding: 10px 18px;
+  }
   :root {
     --sheet-visible-max-height: min(
       var(--sheet-max-height),
@@ -6149,6 +6268,25 @@ body.hide-amounts .money * {
     line-height: 1.45;
     color: var(--faint);
   }
+  /* Dialog-wide controls beside the close button (Modal `headerActions`). */
+  .ui-modal__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+    margin-right: var(--space-2);
+  }
+  /* A phone's header has no room beside the title: the controls take their own row under it. */
+  @media (max-width: 640px) {
+    .ui-modal__head:has(> .ui-modal__actions) {
+      flex-wrap: wrap;
+    }
+    .ui-modal__actions {
+      order: 3;
+      flex-basis: 100%;
+      margin: var(--space-2) 0 0;
+    }
+  }
   .ui-modal__close {
     all: unset;
     display: inline-flex;
@@ -6310,6 +6448,63 @@ body.hide-amounts .money * {
     color: var(--muted);
     font-weight: 600;
   }
+  /* SwipeActions (touch only): the face slides by --ui-swipe-x and the actions follow it in from
+     the right edge. `clip`, not `hidden`, so focusing a hidden action can't scroll the row. */
+  .ui-swipe {
+    position: relative;
+    overflow: hidden;
+    overflow: clip;
+  }
+  .ui-swipe-face {
+    position: relative;
+    touch-action: pan-y;
+    transform: translateX(var(--ui-swipe-x, 0px));
+    transition: transform 0.22s ease;
+  }
+  .ui-swipe-acts {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    transform: translateX(calc(100% + var(--ui-swipe-x, 0px)));
+    transition: transform 0.22s ease;
+  }
+  .ui-swipe[data-dragging] .ui-swipe-face,
+  .ui-swipe[data-dragging] .ui-swipe-acts {
+    transition: none;
+  }
+  /* Square and flush, one block behind the row (the global `button` radius made each a chip). */
+  .ui-swipe-act {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(var(--space-9) * 2);
+    padding: 0 var(--space-5);
+    border: 0;
+    border-radius: 0;
+    background: var(--muted);
+    color: var(--bg);
+    font: inherit;
+    font-size: var(--text-base);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .ui-swipe-act--danger {
+    background: var(--bad);
+    color: var(--ink-on-accent);
+  }
+  .ui-swipe-act:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-swipe-face,
+    .ui-swipe-acts {
+      transition: none;
+    }
+  }
   .ui-input:focus,
   .ui-textarea:focus,
   .ui-select:focus {
@@ -6442,7 +6637,7 @@ body.hide-amounts .money * {
   .ui-btn--dense {
     font-size: 12.5px;
     padding: 8px 13px;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     gap: 7px;
     transition:
       color 0.14s,
@@ -6464,19 +6659,18 @@ body.hide-amounts .money * {
   .ui-btn--dense.btn-secondary:disabled {
     opacity: 0.4;
   }
-  /* dense primary = accent fill + 1px accent border, color-mix hover. */
+  /* dense primary = CTA fill + 1px CTA border (the border keeps its height equal to the
+     bordered secondary beside it). */
   .ui-btn--dense.btn-primary {
-    border: 1px solid var(--accent);
+    border: 1px solid var(--cta);
   }
   @media (hover: hover) {
     .ui-btn--dense.btn-primary:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--accent) 86%, var(--ink-on-accent));
-      border-color: var(--hover-line);
-      opacity: 1;
+      border-color: var(--cta-hover);
     }
   }
-  .ui-btn--dense.btn-primary:disabled {
-    opacity: 0.45;
+  .ui-btn--dense.btn-primary:disabled:not([aria-busy]) {
+    border-color: var(--line);
   }
   /* dense danger = tinted --bad fill on --bg-2, 10px radius, --bad-light text. */
   .ui-btn--dense.btn-danger {
@@ -6495,24 +6689,24 @@ body.hide-amounts .money * {
     cursor: not-allowed;
   }
 
-  /* Switch: 34×20 bordered track on --bg-2, grey thumb, translucent-accent on. */
+  /* Switch: 34×20 grey track, white thumb, accent on. */
   .ui-switch--dense .ui-switch__track {
     width: 34px;
     height: 20px;
-    background: var(--bg-2);
+    background: var(--line-strong);
     border: 1px solid var(--line-strong);
     transition:
       background 0.16s,
       border-color 0.16s;
   }
   .ui-switch--dense .ui-switch__thumb {
-    background: var(--muted);
+    background: var(--ink-on-accent);
     transition:
       transform 0.16s,
       background 0.16s;
   }
   .ui-switch--dense input:checked + .ui-switch__track {
-    background: color-mix(in srgb, var(--accent) 80%, transparent);
+    background: var(--accent);
     border-color: var(--accent);
   }
   .ui-switch--dense input:checked + .ui-switch__track .ui-switch__thumb {
@@ -6521,12 +6715,29 @@ body.hide-amounts .money * {
 
   /* Select: 13px field on --bg-2 with a --line-strong border + accent focus glow.
    The custom chevron stays a sibling <span> at the call site (unchanged). */
+  /* Voice calls settings: selects drawing the model picker's chevron (14px, faint, 12px in). */
+  .vc-select-wrap {
+    position: relative;
+  }
+  .vc-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: calc(var(--space-5) + 14px + var(--space-3));
+  }
+  .vc-select-chev {
+    position: absolute;
+    right: var(--space-5);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--faint);
+    pointer-events: none;
+  }
   .ui-select--dense {
     appearance: none;
     -webkit-appearance: none;
     background: var(--bg-2);
     border: 1px solid var(--line-strong);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     color: var(--ink);
     font: inherit;
     font-size: 13px;
@@ -6602,7 +6813,8 @@ body.hide-amounts .money * {
     cursor: pointer;
   }
   /* Custom rounded-square checkbox (promoted from the accounts register's .acct-cb) — the canonical
-   design-system checkbox: 16px rounded box, accent fill + white tick when on. */
+   design-system checkbox: 16px rounded box, ink fill + a tick that contrasts with it when on
+   (dark tick on the dark theme's light ink, white on the light/warm themes' dark ink). */
   .ui-check input[type='checkbox'] {
     appearance: none;
     -webkit-appearance: none;
@@ -6627,13 +6839,21 @@ body.hide-amounts .money * {
   }
   .ui-check input[type='checkbox']:checked,
   .ui-check input[type='checkbox']:indeterminate {
-    background-color: var(--accent);
-    border-color: var(--accent);
+    background-color: var(--ink);
+    border-color: var(--ink);
   }
   .ui-check input[type='checkbox']:checked {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%230e1014' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
   }
   .ui-check input[type='checkbox']:indeterminate {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%230e1014' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3C/svg%3E");
+  }
+  :root:is([data-theme='light'], [data-theme='warm']) .ui-check input[type='checkbox']:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  }
+  :root:is([data-theme='light'], [data-theme='warm'])
+    .ui-check
+    input[type='checkbox']:indeterminate {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3C/svg%3E");
   }
   .ui-check input[type='checkbox']:focus-visible {
@@ -6683,7 +6903,7 @@ body.hide-amounts .money * {
       background 0.15s;
   }
   .ui-radiogroup__opt:has(input:checked) {
-    border-color: var(--accent);
+    border-color: var(--ink);
     background: var(--surface2);
   }
   @media (hover: hover) {
@@ -6697,7 +6917,7 @@ body.hide-amounts .money * {
     width: 1.125rem;
     height: 1.125rem;
     cursor: pointer;
-    accent-color: var(--accent);
+    accent-color: var(--ink);
   }
   .ui-radiogroup__opt input[type='radio']:disabled {
     cursor: default;
@@ -6797,7 +7017,7 @@ body.hide-amounts .money * {
     margin-top: 2px;
     flex: none;
     cursor: pointer;
-    accent-color: var(--accent);
+    accent-color: var(--ink);
   }
   .ui-checkgroup__opt-text {
     display: flex;
@@ -7109,6 +7329,8 @@ body.hide-amounts .money * {
   .equity-add-advanced__chevron {
     color: var(--muted);
     font-size: var(--text-xs);
+    display: inline-flex;
+    align-items: center;
   }
   .equity-add-advanced__body {
     padding: var(--space-4) var(--space-5);
@@ -7163,7 +7385,7 @@ body.hide-amounts .money * {
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--modal-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     background: var(--bg);
   }
   .ui-taginput input {
@@ -7215,7 +7437,9 @@ body.hide-amounts .money * {
      with many segments (e.g. the 5-tab Investments sub-nav) is narrower than its
      content. A 2–3 segment control still fits one row, so this is a no-op there. */
     flex-wrap: wrap;
-    background: var(--bg);
+    /* A sunken track the selected segment sits raised on: --bg/--surface/--surface2 are the
+       same white in the light theme, so a --bg track left the selection as a 1px outline. */
+    background: var(--bg-2);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     padding: 3px;
@@ -7228,8 +7452,9 @@ body.hide-amounts .money * {
   }
   .ui-segmented__seg {
     background: none;
-    border: none;
-    color: var(--faint);
+    /* Transparent, not none: the active segment's border then never shifts its neighbours. */
+    border: 1px solid transparent;
+    color: var(--muted);
     font-size: var(--text-sm);
     font-weight: 500;
     padding: var(--space-2) var(--space-6);
@@ -7241,22 +7466,25 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .ui-segmented__seg:hover:not(.ui-segmented__seg--active) {
-      color: var(--muted);
+      color: var(--ink);
     }
   }
   .ui-segmented__seg--active {
     background: var(--surface2);
     color: var(--ink);
-    /* Selection must not rely on background contrast alone — --surface2 equals --bg in at
-     least one theme, making the "active" pill invisible (white-on-white). A border + shadow
-     make the selected segment legible regardless of how close those two tokens are. */
-    border: 1px solid var(--line);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+    border-color: var(--line-strong);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.08),
+      0 1px 1px rgb(0 0 0 / 0.04);
+  }
+  /* Dark: --surface2 is darker than the --bg-2 track, which would read as pressed in, not
+     selected — lift the active segment above the track instead. */
+  :root:not([data-theme='light']):not([data-theme='warm']) .ui-segmented__seg--active {
+    background: color-mix(in srgb, var(--ink) 9%, var(--bg-2));
   }
   .ui-segmented--primary .ui-segmented__seg--active {
-    background: var(--primary);
-    border-color: var(--primary);
-    color: var(--ink-on-accent);
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-sm);
   }
 
   /* ── PageTabs ── underline tab bar for primary page-section navigation.
@@ -7283,7 +7511,9 @@ body.hide-amounts .money * {
   }
   .ui-page-tabs__tab {
     display: inline-flex;
-    align-items: center;
+    /* baseline, not center: a count's small digits centred on the label's capitals sit high
+       beside its lowercase; on the baseline they fill the lowercase band */
+    align-items: baseline;
     gap: var(--space-2);
     padding: var(--space-4) var(--space-5);
     background: none;
@@ -7311,7 +7541,7 @@ body.hide-amounts .money * {
   }
   .ui-page-tabs__tab--active {
     color: var(--ink);
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--ink);
   }
   .ui-page-tabs__tab:focus-visible {
     outline: 2px solid var(--accent);
@@ -7323,14 +7553,15 @@ body.hide-amounts .money * {
     background: var(--surface2);
     color: var(--muted);
     border-radius: var(--radius-pill);
-    padding: 1px var(--space-2);
+    line-height: 1;
+    padding: 2px var(--space-2);
     transition:
       background 0.15s,
       color 0.15s;
   }
   .ui-page-tabs__badge--active {
-    background: var(--accent);
-    color: var(--ink-on-accent);
+    background: var(--ink);
+    color: var(--bg);
   }
   @media (max-width: 640px) {
     /* Subtle right-edge fade hints at horizontal overflow without hiding tabs */
@@ -8786,6 +9017,14 @@ body.hide-amounts .money * {
     gap: var(--space-3);
     flex: none;
   }
+  /* A header CTA is one size on every screen — the 30px Automations / Connectors toolbar button. */
+  .ui-page-header__actions .ui-btn--sm {
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 13px;
+    gap: 7px;
+    font-size: 12.5px;
+  }
   @media (max-width: 640px) {
     /* Actions drop below the title on phones. */
     .ui-page-header {
@@ -9023,6 +9262,358 @@ body.hide-amounts .money * {
     flex-wrap: wrap;
   }
 
+  /* Linked banks (connectors/PlaidBanksStep, GoCardlessBanks) — one row per bank with its own
+     Remove. */
+  .plaid-banks {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .plaid-bank {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .plaid-bank + .plaid-bank {
+    border-top: 1px solid var(--line);
+  }
+  .plaid-bank-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .plaid-bank-name {
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
+  .plaid-bank-rename {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .plaid-bank-rename .ui-input,
+  .plaid-bank-rename input {
+    min-width: 0;
+    max-width: 260px;
+  }
+  .plaid-bank-rename-btn {
+    margin-left: var(--space-1);
+    opacity: 0.7;
+  }
+  .plaid-bank-rename-btn:hover,
+  .plaid-bank-rename-btn:focus-visible {
+    opacity: 1;
+  }
+  .plaid-bank-sub {
+    color: var(--faint);
+    font-size: var(--text-xs);
+  }
+  .plaid-bank-sub--warn {
+    color: var(--warn);
+  }
+  /* A bank row's Remove is destructive, so it never looks like the row's other action: red
+     text at rest, a red tint on hover (the ghost default would turn it ink). */
+  .plaid-bank-remove.ui-btn--ghost {
+    color: var(--bad);
+  }
+  @media (hover: hover) {
+    .plaid-bank-remove.ui-btn--ghost:hover:not(:disabled) {
+      color: var(--bad);
+      background: color-mix(in srgb, var(--bad) 12%, transparent);
+    }
+  }
+  /* GoCardless's bank sections (Your banks / Add a bank) sit a step further from the fields above
+     than their own rows sit from each other, so each reads as one group. */
+  .gc-section {
+    margin-top: var(--space-3);
+  }
+  /* GoCardless form: every small button takes the modal footer's Save size (30px / 12.5px —
+     the same values .ui-page-header__actions uses), instead of .ui-btn--sm's 31–33px, so no
+     button in the form is bigger than Save and none differ from each other. */
+  .gc-form .ui-btn--sm {
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 13px;
+    font-size: 12.5px;
+  }
+  /* A field paired with a button in one row takes the button's height, so the pair is one
+     line. */
+  .gc-pick-row .ui-input,
+  .gc-pick-row .ui-select {
+    height: 30px;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: var(--text-sm);
+  }
+  /* GoCardless's bank picker takes the row's width beside its Link button. */
+  .gc-bank-pick {
+    flex: 1;
+    min-width: 12rem;
+  }
+
+  /* Connector setup steps (connectors/SetupStep) — ① keys → ② link a bank → ③ choose accounts.
+     The number carries the state: accent ring for the current step, a green check once done,
+     faint for a step that can't start yet. */
+  .setup-step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
+  .setup-step--current {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  }
+  .setup-step-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 28px;
+  }
+  .setup-step-n {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line-strong);
+    color: var(--faint);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .setup-step--current .setup-step-n {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .setup-step--done .setup-step-n {
+    border-color: var(--good);
+    background: var(--good);
+    color: var(--surface);
+  }
+  .setup-step-title {
+    flex: 1;
+    margin: 0;
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+  .setup-step--todo .setup-step-title {
+    color: var(--muted);
+  }
+  .setup-step-aside {
+    flex: none;
+  }
+  .setup-step-body {
+    padding-left: calc(22px + var(--space-2));
+  }
+  .setup-step--todo .setup-step-body {
+    opacity: 0.7;
+  }
+
+  /* Connector "Accounts" list (connectors/ConnectorAccountRow) — one compact row per provider
+     account, grouped by type: icon · name over •mask · balance · its one next step. */
+  /* Account header — "• Plaid" with a link glyph when the account is linked to a connector. */
+  .acct-head-linked {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--good);
+    font: inherit;
+    cursor: pointer;
+  }
+  .acct-head-linked:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .acct-row-linked {
+    display: inline-flex;
+    margin-left: 4px;
+    color: var(--good);
+    vertical-align: -1px;
+  }
+  .acct-head-linked--off,
+  .acct-row-linked--off {
+    color: var(--faint);
+  }
+
+  .conn-acct-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .conn-acct-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .conn-acct-group {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .conn-acct-group-label {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .conn-acct-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    min-height: 52px;
+  }
+  .conn-acct-row + .conn-acct-row {
+    border-top: 1px solid var(--line);
+  }
+  .conn-acct-ico {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    color: var(--muted);
+  }
+  .conn-acct-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .conn-acct-name {
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .conn-acct-sub {
+    color: var(--faint);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+  .conn-acct-linked {
+    color: var(--good);
+  }
+  .conn-acct-linked--off {
+    color: var(--faint);
+  }
+  .conn-acct-bal {
+    flex: none;
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .conn-acct-owed {
+    color: var(--faint);
+    font-size: var(--text-xs);
+  }
+  .conn-acct-actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  /* A prompt suggestion chip DOES something (hands the prompt to Lucius) — the arrow and hover
+     set it apart from tool/category chips, which are labels. */
+  .cn-promptchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .cn-promptchip-arrow {
+    flex: none;
+    color: var(--faint);
+    transition:
+      transform 120ms ease,
+      color 120ms ease;
+  }
+  .cn-promptchip:hover,
+  .cn-promptchip:focus-visible {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+    color: var(--ink);
+  }
+  .cn-promptchip:hover .cn-promptchip-arrow,
+  .cn-promptchip:focus-visible .cn-promptchip-arrow {
+    color: var(--accent);
+    transform: translateX(2px);
+  }
+
+  .conn-file-fix {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .conn-file-fix-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .conn-next {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  }
+  .conn-next-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .conn-next-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .conn-acct-pick {
+    min-width: 220px;
+  }
+  @media (max-width: 640px) {
+    .conn-acct-row {
+      flex-wrap: wrap;
+    }
+    .conn-acct-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
+
   /* CollapsibleSection — a disclosure over a Panel-shaped body (ui/CollapsibleSection). */
   .ui-collapsible__head {
     display: flex;
@@ -9194,16 +9785,23 @@ body.hide-amounts .money * {
      elementFromPoint over the menu's own box. */
     z-index: var(--z-modal);
   }
+  /* Icon and label sit apart on one line — an icon used to touch its label (owner, 2026-10-26). */
   .kebab-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     background: none;
     border: none;
     text-align: left;
     color: var(--text);
     font-size: var(--text-sm);
-    padding: var(--space-2) var(--space-3);
+    padding: 8px var(--space-3);
     border-radius: var(--radius-xs);
     cursor: pointer;
     white-space: nowrap;
+  }
+  .kebab-item > svg {
+    flex: none;
   }
   @media (hover: hover) {
     .kebab-item:hover:not(:disabled) {
@@ -9523,10 +10121,12 @@ body.hide-amounts .money * {
     border-color: var(--accent);
   }
 
+  /* The bubble and its scrim are portaled to <body>, so they stack above any modal the "i" sits
+     in (a bubble under --z-overlay opened behind the modal, unseen); toasts stay on top. */
   .info-pop-scrim {
     position: fixed;
     inset: 0;
-    z-index: var(--z-dropdown);
+    z-index: calc(var(--z-modal) + 1);
   }
 
   /* Explain's hover tooltip (a pulse flag, trend line, "× usual" note): fixed to the viewport
@@ -9551,11 +10151,12 @@ body.hide-amounts .money * {
   .explain-tip--above {
     transform: translateY(-100%);
   }
+  /* Fixed to the viewport and portaled to <body>; InfoPopover places it beside its trigger,
+     clamped inside the screen — so no ancestor's overflow clips it and no screen needs its own
+     "open leftward" override. */
   .info-pop-bubble {
-    position: absolute;
-    top: calc(100% + var(--space-1));
-    left: 0;
-    z-index: var(--z-overlay);
+    position: fixed;
+    z-index: calc(var(--z-modal) + 2);
     background: var(--surface2);
     border: 1px solid var(--modal-border);
     border-radius: var(--radius-lg);
@@ -9567,7 +10168,10 @@ body.hide-amounts .money * {
     box-shadow: var(--shadow-modal);
     white-space: normal;
     text-wrap: pretty;
-    min-width: 220px;
+    min-width: min(220px, calc(100vw - 16px));
+  }
+  .info-pop-bubble--above {
+    transform: translateY(-100%);
   }
 
   /* ================================================================
@@ -9712,7 +10316,7 @@ body.hide-amounts .money * {
     /* Rail scales with the pane (clamp) instead of a rigid 340px: pinned at 340 on a
      wide pane, shrinks toward a 240 floor as the pane narrows, so both columns give
      ground together rather than the chart shouldering it all. */
-    grid-template-columns: minmax(0, 1fr) clamp(240px, 30%, 340px);
+    grid-template-columns: minmax(0, 1fr) var(--asd-rail-w, clamp(240px, 30%, 340px));
     gap: var(--space-7);
     /* stretch (not start): .asd-main must match the row's real height — usually set by
      the taller .asd-rail (Your Position/Key Facts/Peers) — so the sticky .asd-ask-bar
@@ -9737,6 +10341,55 @@ body.hide-amounts .money * {
     flex-direction: column;
     gap: var(--space-5);
     min-width: 0;
+    position: relative;
+  }
+
+  /* Drag handle on the rail's left edge (useRailResize sets --asd-rail-w on .asd-body). It
+     hangs into the grid gap, centred on it, with a 1px line that shows on hover/drag. */
+  .asd-rail-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--space-7) / -2 - 3px);
+    width: 7px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 1;
+  }
+  .asd-rail-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 1px;
+    background: transparent;
+    transition: background-color 0.14s;
+  }
+  @media (hover: hover) {
+    .asd-rail-handle:hover::after {
+      background: var(--line-strong);
+    }
+  }
+  .asd-rail-handle:active::after {
+    background: var(--ink);
+  }
+  /* Snapped to the automatic width mid-drag — a wider accent line says "this is the default". */
+  .asd-rail-handle--snapped::after,
+  .asd-rail-handle--snapped:active::after {
+    left: 2px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+  @media (pointer: coarse) {
+    .asd-rail-handle {
+      left: calc(var(--space-7) / -2 - 12px);
+      width: 24px;
+    }
+    .asd-rail-handle::after {
+      left: 12px;
+    }
   }
 
   /* A rail card rendered TWICE (index.css companion: AssetDetailView.tsx) — once for
@@ -10106,12 +10759,12 @@ body.hide-amounts .money * {
     height: 16px;
     border-radius: var(--radius-xs);
     border: 1.5px solid var(--line-strong);
-    color: var(--ink-on-accent);
+    color: var(--bg);
   }
 
   .asd-wl-check--on {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--ink);
+    border-color: var(--ink);
   }
 
   .asd-wl-nm {
@@ -10213,7 +10866,7 @@ body.hide-amounts .money * {
     bottom: -1px;
     height: 2px;
     border-radius: 2px 2px 0 0;
-    background: var(--accent);
+    background: var(--ink);
   }
 
   .asd-subtabs .rd-tab-count {
@@ -10856,11 +11509,11 @@ body.hide-amounts .money * {
     opacity: 0.5;
   }
   .asd-cht-row--active {
-    background: color-mix(in srgb, var(--primary) 12%, transparent);
-    color: var(--primary);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink);
   }
   .asd-cht-row--active .asd-cht-icon {
-    color: var(--primary);
+    color: var(--ink);
   }
 
   .asd-cht-icon {
@@ -11432,7 +12085,7 @@ body.hide-amounts .money * {
     gap: var(--space-1);
     min-height: 22px;
     padding: 1px 8px 1px 4px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-md);
     border: 1px solid var(--line);
     background: var(--bg-2);
     color: var(--muted);
@@ -11654,6 +12307,8 @@ body.hide-amounts .money * {
     color: var(--muted);
     flex-shrink: 0;
     transition: transform 0.2s;
+    display: inline-flex;
+    align-items: center;
   }
 
   .asd-ki-question {
@@ -12607,6 +13262,178 @@ body.hide-amounts .money * {
     color: var(--muted);
   }
 
+  /* ── Your Thesis (rail card, YourThesisCard.tsx) — reason, breaks-if, price levels ── */
+  .asd-thesis-card .ui-panel__badge {
+    background: none;
+    padding: 0;
+  }
+  /* `.panel h2` gives the title a 16px bottom margin that outranks `.ui-panel__title`,
+     so a centred row drops the role chip below the title text; sit it on the baseline. */
+  .asd-thesis-card .ui-panel__titlerow {
+    align-items: baseline;
+  }
+  .asd-thesis-role-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .asd-thesis-role {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--bg-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    padding: 1px var(--space-3);
+  }
+  .asd-thesis-body,
+  .asd-thesis-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+  .asd-thesis-form {
+    gap: var(--space-6);
+  }
+  .asd-thesis-reason {
+    margin: 0;
+    font-size: var(--text-base);
+    line-height: 1.55;
+    color: var(--ink);
+    text-wrap: pretty;
+  }
+  .asd-thesis-breaks {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-5);
+  }
+  .asd-thesis-breaks-label {
+    margin: 0 0 var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+  .asd-thesis-bar {
+    position: relative;
+    height: 40px;
+  }
+  .asd-thesis-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 24px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line);
+  }
+  .asd-thesis-zone {
+    position: absolute;
+    top: 21px;
+    height: 10px;
+    box-sizing: border-box;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--good) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--good) 60%, transparent);
+  }
+  .asd-thesis-tick {
+    position: absolute;
+    top: 19px;
+    width: 2px;
+    height: 14px;
+    margin-left: -1px;
+    border-radius: 1px;
+  }
+  .asd-thesis-tick--stop {
+    background: var(--bad);
+  }
+  .asd-thesis-tick--fair {
+    background: var(--muted);
+  }
+  .asd-thesis-tick--trim {
+    background: var(--primary);
+  }
+  .asd-thesis-now {
+    position: absolute;
+    top: 19px;
+    width: 14px;
+    height: 14px;
+    margin-left: -7px;
+    border-radius: 50%;
+    background: var(--ink);
+    box-shadow: 0 0 0 3px var(--surface);
+  }
+  .asd-thesis-now-label {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .asd-thesis-levels {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .asd-thesis-key {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: var(--space-2);
+  }
+  .asd-thesis-key--stop {
+    background: var(--bad);
+  }
+  .asd-thesis-key--zone {
+    background: color-mix(in srgb, var(--good) 60%, transparent);
+  }
+  .asd-thesis-key--fair {
+    background: var(--muted);
+  }
+  .asd-thesis-key--trim {
+    background: var(--primary);
+  }
+  .asd-thesis-dist {
+    margin-left: var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--faint);
+  }
+  /* Columns sized by label, then stretched: equal thirds clip "Speculative" in the narrow rail. */
+  .asd-thesis-form .ui-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    align-self: stretch;
+  }
+  .asd-thesis-form .ui-segmented__seg {
+    padding-inline: var(--space-2);
+  }
+  /* The form reads at the card's own 13px, not the 14px default a full-width form uses. */
+  .asd-thesis-form .ui-input,
+  .asd-thesis-form .ui-money-field__prefix {
+    font-size: var(--text-base);
+  }
+  .asd-thesis-text {
+    font-size: var(--text-base);
+    line-height: 1.55;
+    min-height: 0;
+    resize: none;
+    overflow: hidden;
+  }
+  .asd-thesis-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-5) var(--space-4);
+  }
+  .asd-thesis-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+  }
+
   /* Unvested (locked-bucket) exposure — a distinct sub-block inside "Your Position" /
    the Position subtab, visually separated so non-sellable units never read as sellable qty. */
   .asd-pos-unvested {
@@ -12627,6 +13454,9 @@ body.hide-amounts .money * {
     /* Plain navigation, NOT an AI affordance — --lucius is reserved for Lucius identity. */
     color: var(--accent);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   @media (hover: hover) {
@@ -12645,10 +13475,12 @@ body.hide-amounts .money * {
   .lots-table--accts th:nth-child(3),
   .lots-table--accts th:nth-child(4),
   .lots-table--accts th:nth-child(5),
+  .lots-table--accts th:nth-child(6),
   .lots-table--accts td:nth-child(2),
   .lots-table--accts td:nth-child(3),
   .lots-table--accts td:nth-child(4),
-  .lots-table--accts td:nth-child(5) {
+  .lots-table--accts td:nth-child(5),
+  .lots-table--accts td:nth-child(6) {
     text-align: right;
   }
 
@@ -12923,6 +13755,161 @@ body.hide-amounts .money * {
     font-size: var(--text-sm);
     line-height: 1.6;
     color: var(--ink);
+  }
+
+  /* The take's verdict (PositionVerdictLine), under the reasoning: the call as a small inline tag
+     leading its reason (muted, wrapping under the tag like ordinary text), then the chips. */
+  .asd-verdict {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-top: var(--space-3);
+  }
+
+  .asd-verdict-action {
+    display: inline-block;
+    margin-right: var(--space-3);
+    vertical-align: 1px;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--lucius) 22%, transparent);
+  }
+
+  .asd-verdict-why {
+    font-size: var(--text-sm);
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  .asd-verdict-action--add,
+  .asd-verdict-action--buy {
+    color: var(--pos);
+    background: color-mix(in srgb, var(--pos) 16%, transparent);
+  }
+
+  /* Trim and Sell are both "reduce" — amber, never red: selling a winner is good news, and a
+     red tag read it as an alarm. */
+  .asd-verdict-action--trim,
+  .asd-verdict-action--sell,
+  .asd-verdict-action--wait {
+    color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 16%, transparent);
+  }
+
+  .asd-verdict-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-5);
+  }
+
+  /* A suggestion: a rounded pill with a soft lift, in Lucius's tint — tapping it hands the
+     request to Lucius's composer. */
+  .asd-verdict-chip {
+    padding: 5px 12px;
+    border: 1px solid color-mix(in srgb, var(--lucius) 28%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--lucius) 12%, var(--card));
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+    color: var(--ink);
+    font: inherit;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition:
+      background 0.14s,
+      box-shadow 0.14s;
+  }
+
+  @media (hover: hover) {
+    .asd-verdict-chip:hover {
+      background: color-mix(in srgb, var(--lucius) 20%, var(--card));
+      box-shadow: 0 2px 6px rgb(0 0 0 / 0.22);
+    }
+  }
+
+  .asd-verdict-chip:focus-visible {
+    outline: 2px solid var(--lucius);
+    outline-offset: 2px;
+  }
+
+  .asd-pi-disclaimer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
+    font-size: var(--text-2xs);
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .asd-pi-disclaimer svg {
+    flex: none;
+  }
+
+  /* The empty thesis card: a line on what a thesis holds, then the same pill pair as an empty
+     alerts card (Build with Lucius, then the manual way). */
+  .asd-thesis-start {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  /* An empty alerts or thesis card: Build with Lucius beside the manual way. */
+  .asd-alerts-start {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .asd-alerts-start--center {
+    justify-content: center;
+  }
+
+  /* Both ways in share one shape: pills, like Build with Lucius. */
+  .asd-alerts-start > button {
+    border-radius: var(--radius-pill);
+  }
+
+  .asd-thesis-start-blurb {
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .asd-thesis-lucius {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 14px;
+    border: 1px solid color-mix(in srgb, var(--lucius) 40%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--lucius) 16%, transparent);
+    color: var(--lucius);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  @media (hover: hover) {
+    .asd-thesis-lucius:hover {
+      background: color-mix(in srgb, var(--lucius) 24%, transparent);
+    }
+  }
+
+  .asd-thesis-lucius:focus-visible {
+    outline: 2px solid var(--lucius);
+    outline-offset: 2px;
   }
 
   /* Stands in for .asd-pi-body while generating (owner ask 2026-08-30) — shimmering line
@@ -13509,6 +14496,8 @@ body.hide-amounts .money * {
   }
   .intel-brief-ask-spark {
     color: var(--lucius);
+    display: inline-flex;
+    align-items: center;
   }
   /* Pushes Ask Lucius and the time to the right of the shared card header (IntelCardHead). */
   .intel-brief-head-gap {
@@ -13702,8 +14691,8 @@ body.hide-amounts .money * {
   }
   .intel-story--active {
     background: var(--surface2);
-    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 45%, var(--line));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
     opacity: 1;
   }
   /* Lifecycle dimming — read cards recede; archived (dismissed/resolved) recede more. */
@@ -14063,30 +15052,13 @@ body.hide-amounts .money * {
   .intel-pulse-trend--empty .intel-pulse-trend-cap {
     font-style: italic;
   }
-  /* Tap-to-explain (touch): the bubble anchors to the row's grid (or the chip strip), not to the
-     cell or chip that opened it — a cell mid-row would push a 260px bubble off a phone's edge. */
-  .intel-pulse-grid,
-  .intel-pulse-chips {
-    position: relative;
-  }
-  .intel-pulse-grid > .info-pop-wrap,
-  .intel-pulse-chips > .info-pop-wrap,
-  .intel-pulse-today > .info-pop-wrap {
-    position: static;
-  }
+  /* Tap-to-explain (touch): each cell is its own trigger; the bubble keeps itself on screen. */
   .intel-pulse-grid > .info-pop-wrap {
     display: flex;
     min-width: 0;
   }
   .intel-pulse-grid .info-pop-trigger {
     width: 100%;
-  }
-  .intel-pulse-grid .info-pop-bubble {
-    left: auto;
-    right: 0;
-  }
-  .intel-pulse-row .info-pop-bubble {
-    max-width: 100%;
   }
   .intel-pulse-next-main {
     font-size: 12px;
@@ -14392,7 +15364,7 @@ body.hide-amounts .money * {
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface);
     color: var(--muted);
     transition:
@@ -14625,27 +15597,6 @@ body.hide-amounts .money * {
     font-size: 11px;
     color: var(--faint);
   }
-  .watch-intent-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px 12px;
-  }
-  .watch-intent-grid > :first-child {
-    grid-column: 1 / -1;
-  }
-  .watch-intent-err {
-    margin-top: 8px;
-  }
-  .watch-intent-saved {
-    font-size: 12px;
-    color: var(--good);
-  }
-  @media (max-width: 560px) {
-    .watch-intent-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
   /* ── Intel tabs: per-tab lead cards ─────────────────────────────────────────── */
   .intel-tab-lead {
     display: flex;
@@ -14779,6 +15730,8 @@ body.hide-amounts .money * {
   .intel-story-source-arrow {
     color: var(--fg-3);
     font-size: 10px;
+    display: inline-flex;
+    align-items: center;
   }
   /* footer */
   .intel-story-foot {
@@ -15407,6 +16360,9 @@ body.hide-amounts .money * {
     color: var(--faint);
     background: none;
     border: 1px solid var(--line);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .intel-lx-empty {
     padding: 12px 14px;
@@ -15421,6 +16377,9 @@ body.hide-amounts .money * {
     border: none;
     cursor: pointer;
     padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .intel-lx-sugs {
     display: flex;
@@ -15479,18 +16438,23 @@ body.hide-amounts .money * {
   }
   .intel-lx-sug-add {
     padding: 5px 12px;
-    border-radius: 7px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font: inherit;
     font-size: 12px;
     font-weight: 600;
-    color: var(--ink-on-accent);
-    background: var(--primary);
+    color: var(--ink-on-cta);
+    background: var(--cta);
     border: none;
+  }
+  @media (hover: hover) {
+    .intel-lx-sug-add:hover {
+      background: var(--cta-hover);
+    }
   }
   .intel-lx-sug-skip {
     padding: 4px 12px;
-    border-radius: 7px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font: inherit;
     font-size: 11.5px;
@@ -15615,9 +16579,9 @@ body.hide-amounts .money * {
     max-width: min(560px, 92vw);
     padding: 12px 16px;
     border-radius: 12px;
-    background: var(--surface2);
-    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong));
-    box-shadow: 0 16px 50px rgba(0, 0, 0, 0.5);
+    background: var(--toast-bg);
+    border: 1px solid var(--toast-bg);
+    box-shadow: var(--shadow-toast);
   }
   .intel-scan-pill--done {
     border-color: color-mix(in srgb, var(--good) 40%, var(--line-strong));
@@ -15663,28 +16627,28 @@ body.hide-amounts .money * {
     gap: 6px;
     font-size: 13px;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--toast-ink);
   }
   .intel-scan-spark {
     color: var(--warn);
   }
   .intel-scan-sub {
     font-size: 12px;
-    color: var(--muted);
+    color: var(--toast-muted);
     margin-top: 1px;
   }
   .intel-scan-close {
     margin-left: 8px;
     display: inline-flex;
     padding: 4px;
-    color: var(--muted);
+    color: var(--toast-muted);
     background: none;
     border: none;
     cursor: pointer;
   }
   @media (hover: hover) {
     .intel-scan-close:hover {
-      color: var(--ink);
+      color: var(--toast-ink);
     }
   }
 
@@ -15724,8 +16688,8 @@ body.hide-amounts .money * {
     }
   }
   .intel-mm-rail-item--active {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    border-color: var(--line-strong);
   }
   .intel-mm-rail-label {
     font-size: 12.5px;
@@ -15836,7 +16800,7 @@ body.hide-amounts .money * {
   }
   .intel-mm-subtab--active {
     color: var(--ink);
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--ink);
   }
   .intel-mm-find {
     margin-bottom: 12px;
@@ -15862,9 +16826,9 @@ body.hide-amounts .money * {
     cursor: pointer;
   }
   .intel-mm-review-filter--active {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+    color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
   .intel-mm-detail-tabs-spacer {
     flex: 1;
@@ -16137,15 +17101,20 @@ body.hide-amounts .money * {
     font: inherit;
     font-size: 12.5px;
     font-weight: 500;
-    color: var(--ink-on-accent);
-    background: var(--accent);
+    color: var(--ink-on-cta);
+    background: var(--cta);
     border: none;
     white-space: nowrap;
   }
+  @media (hover: hover) {
+    .intel-wlc-add-btn:hover:not(:disabled) {
+      background: var(--cta-hover);
+    }
+  }
   .intel-wlc-add-btn:disabled {
     cursor: default;
-    color: var(--fg-3);
-    background: var(--surface2);
+    color: var(--faint);
+    background: var(--bg-2);
   }
 
   /* INTEL-REDESIGN-END */
@@ -16526,7 +17495,7 @@ body.hide-amounts .money * {
 }
 .inv-seg-chip.active {
   background: var(--selected);
-  border-color: var(--accent, #3b86dd);
+  border-color: var(--ink);
   color: var(--ink);
 }
 
@@ -16815,13 +17784,22 @@ body.hide-amounts .money * {
      One knob for every page; raise it if a table needs more room. */
   --content-max: 1400px;
 }
-/* Installed iPad web apps can lay out under the status bar while reporting a zero
-   safe-area-inset-top. Give touch-capable tablets the 24px iPad status-bar floor; the real
-   env() value still wins when it is larger. Keeping this on --safe-t makes every top-level
-   chrome owner (topbar, nav rail, and Lucius) consume the same inset. */
-@media (min-width: 640px) and (any-pointer: coarse) and (display-mode: standalone) {
+/* The installed app (`default` status-bar style, index.html) is laid out BELOW the status bar,
+   so the page reserves only what the OS reports — and never more than 32px of it. A 24px
+   iPad "floor" used to sit here; it double-reserved the strip the system already leaves and
+   pushed the ticker row down (owner, 2026-11-09). Every top-level chrome owner (topbar, nav
+   rail, Lucius) reads --safe-t, so the cap keeps a large inset (foldables) from inflating them. */
+@media (min-width: 640px) and (any-pointer: coarse) {
   :root {
-    --safe-t: max(env(safe-area-inset-top, 0px), 24px);
+    --safe-t: min(env(safe-area-inset-top, 0px), 32px);
+  }
+}
+/* On the foldable iPhone (UA says iPhone, portrait) the page starts under the system status area with no edge of its own, so the
+   strip above the rail and the top bar reads as part of the page. An inset line draws that edge
+   without adding height (owner, 2026-11-09). */
+@media (orientation: portrait) {
+  :root[data-onw-device='iphone'] :is(.sidebar-header, .topbar, .lx-side-head) {
+    box-shadow: inset 0 1px 0 var(--line);
   }
 }
 /* Desktop-only: the mobile shell hides `.sidebar` via CSS but never unmounts it, so
@@ -17275,7 +18253,7 @@ body.hide-amounts .money * {
     right: 22%;
     height: 2px;
     border-radius: var(--radius-pill);
-    background: var(--primary);
+    background: var(--ink);
     opacity: 0;
   }
   .mb-tab.active .mb-tab-indicator {
@@ -17673,6 +18651,26 @@ body.hide-amounts .money * {
   }
 }
 
+/* An installed iOS app with the `default` status bar (index.html) lays out BELOW the status
+   bar, but iOS still resolves 100vh/100dvh to the FULL screen height — so the shell ran a
+   status bar's height past the bottom and pushed the tab bar off the screen (owner,
+   2026-10-19). Percentages resolve against the initial containing block, which IS the real
+   web view, so size the shell from it: every ancestor of the shell (whatever wrappers sit
+   between it and #root) fills its parent, and the shell fills that. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 639.98px) {
+    :root[data-onw-display-mode='standalone']:has(.app-shell.mb-shell),
+    :root[data-onw-display-mode='standalone'] body:has(.app-shell.mb-shell),
+    :root[data-onw-display-mode='standalone'] body *:has(.app-shell.mb-shell) {
+      height: 100%;
+    }
+    :root[data-onw-display-mode='standalone'] .app-shell.mb-shell {
+      height: 100%;
+      min-height: 0;
+    }
+  }
+}
+
 /* An Automation run's opening message is its instruction sheet — collapsed to one line so
    the run itself is what you see on opening the conversation. A BUTTON, not a label: it
    links through to the run in the Automations tab, because the panel is usually open over
@@ -17772,6 +18770,24 @@ body.hide-amounts .money * {
   flex-direction: column;
   gap: var(--space-2);
 }
+/* The model pill on the phone's call screen: frosted like the buttons beside it. Here, not in
+   lucius.css, whose layer can't outrank the trigger's own rules. */
+.lx-callstage--screen .lx-callstage-model .mp-trigger {
+  width: auto;
+  max-width: 100%;
+  height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+.lx-callstage-model .mp-trigger-prov {
+  display: none;
+}
 .mp-trigger {
   display: inline-flex;
   min-width: 0;
@@ -17787,7 +18803,7 @@ body.hide-amounts .money * {
      different tone from the effort <select> sitting right beside it in the chat toolbar. */
   background: var(--surface2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
 }
 .mp-trigger[aria-expanded='true'] {
@@ -17805,6 +18821,18 @@ body.hide-amounts .money * {
 .mp-trigger--sm {
   padding: 3px var(--space-2);
   font-size: var(--text-xs);
+}
+/* A form field: the size of the .ui-select beside it (Voice calls settings, 2026-11-03). */
+.mp-wrap--field {
+  display: flex;
+  width: 100%;
+}
+.mp-trigger--field {
+  width: 100%;
+  /* The voice settings' selects draw the same chevron now (.vc-select): same padding, same
+     height (owner, 2026-11-03). */
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-md);
 }
 .mp-trigger-text {
   overflow: hidden;
@@ -17829,6 +18857,8 @@ body.hide-amounts .money * {
   flex: none;
   color: var(--faint);
   font-size: 10px;
+  display: inline-flex;
+  align-items: center;
 }
 /* Trigger suffix — the chat surfaces put the effort tier here so one control reads
    `sonnet High ⌄`. Never truncates: it is two to five characters and it is the second half of
@@ -17885,6 +18915,8 @@ body.hide-amounts .money * {
 .mp-menu-row-chev {
   flex: none;
   color: var(--faint);
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Pane header — back to the root. flex:none so it stays put while the pane's list scrolls. */
@@ -17964,6 +18996,8 @@ body.hide-amounts .money * {
   box-shadow: var(--shadow-modal);
   animation: mb-sheet-in 0.26s cubic-bezier(0.32, 0.72, 0, 1);
   padding-bottom: var(--safe-b);
+  /* Pull down to dismiss (useSheetDragToDismiss): the root drags, the list inside scrolls natively. */
+  touch-action: none;
 }
 .mp-sheet-handle-wrap {
   display: flex;
@@ -18037,7 +19071,7 @@ body.hide-amounts .money * {
   font-size: var(--text-sm);
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 .mp-search:focus {
   border-color: var(--accent);
@@ -18110,8 +19144,10 @@ body.hide-amounts .money * {
 .mp-opt-tick {
   flex: none;
   margin-left: auto;
-  color: var(--accent);
+  color: var(--ink);
   opacity: 0;
+  display: inline-flex;
+  align-items: center;
 }
 .mp-opt.is-on .mp-opt-tick {
   opacity: 1;
@@ -18287,7 +19323,7 @@ body.hide-amounts .money * {
   gap: 7px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--surface2);
   color: var(--ink);
   font: inherit;
@@ -18403,7 +19439,7 @@ body.hide-amounts .money * {
 .pm-mode-check {
   flex: none;
   margin-left: auto;
-  color: var(--accent);
+  color: var(--ink);
 }
 .pm-mode-tooltip-target[data-tooltip]::after {
   content: attr(data-tooltip);
@@ -18437,6 +19473,10 @@ body.hide-amounts .money * {
   top: 50%;
   left: calc(100% + 8px);
   transform: translateY(-50%);
+}
+.pm-mode-menu--tips-left .pm-mode-option[data-tooltip]::after {
+  left: auto;
+  right: calc(100% + 8px);
 }
 .pm-mode-tooltip-target[data-tooltip]:focus-visible::after {
   opacity: 1;
@@ -18592,6 +19632,161 @@ body.hide-amounts .money * {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+/* Desktop "update ready" pill (DesktopUpdateNotices): Later reads as strongly as Restart,
+   only without the fill. */
+.app-update-later {
+  flex: none;
+  min-height: 29px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.app-update-later:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* What's new after a desktop update: one celebratory moment (the burst), everything else quiet. */
+.whats-new .ui-modal__heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.whats-new .ui-modal__head {
+  position: relative;
+  z-index: 1; /* the X stays clickable above the hero it overlaps */
+  justify-content: flex-end;
+  margin-bottom: -28px;
+}
+.whats-new__hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 12px 0 24px;
+  outline: none;
+}
+.whats-new__burst {
+  position: absolute;
+  left: 50%;
+  top: 48px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.whats-new__confetti {
+  position: absolute;
+  width: 6px;
+  height: 10px;
+  margin: -5px 0 0 -3px;
+  border-radius: 1.5px;
+  background: var(--hue);
+  opacity: 0;
+  animation-name: whats-new-confetti;
+  animation-fill-mode: forwards;
+}
+.whats-new__confetti--round {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+/* Out and up fast (decelerating), then a gravity fall (accelerating) while it tumbles and fades. */
+@keyframes whats-new-confetti {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg) rotateX(0deg) scale(0.5);
+    animation-timing-function: cubic-bezier(0.15, 0.65, 0.35, 1);
+  }
+  8% {
+    opacity: 1;
+  }
+  35% {
+    transform: translate(calc(var(--x) * 0.7), calc(var(--peak) * -1))
+      rotate(calc(var(--spin) * 0.35)) rotateX(calc(var(--flip) * 0.35)) scale(1);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.75, 0.55);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), calc(var(--fall) - var(--peak))) rotate(var(--spin))
+      rotateX(var(--flip)) scale(1);
+  }
+}
+.whats-new__badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--good) 18%, var(--surface));
+  color: var(--good);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 8%, transparent);
+  animation: whats-new-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes whats-new-pop {
+  from {
+    transform: scale(0.6) rotate(-12deg);
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+  }
+}
+.whats-new__headline {
+  position: relative;
+  margin: 18px 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.whats-new__lede {
+  position: relative;
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.whats-new-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+.whats-new-list__item {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
+  align-items: center; /* the tile sits centred on the whole item, one line or two */
+  line-height: 1.45;
+}
+.whats-new-list__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
+  color: var(--hue);
+}
+@media (prefers-reduced-motion: reduce) {
+  .whats-new__confetti,
+  .whats-new__badge {
+    animation: none;
+  }
+  .whats-new__confetti {
+    opacity: 0;
+  }
 }
 
 /* ── Money flow (Sankey) marks — shared by Plan's Money flow modal and the Dashboard card
@@ -18890,6 +20085,11 @@ body.hide-amounts .mf-lbl-amt {
   margin: 0;
   overflow-wrap: anywhere;
 }
+.report-problem__community {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 .report-problem__exact summary {
   cursor: pointer;
   color: var(--muted);
@@ -18914,4 +20114,277 @@ body.hide-amounts .mf-lbl-amt {
   color: var(--ink);
   font-weight: 600;
   user-select: text;
+}
+
+/* YNAB import review: the plan in three tabs over a pane of fixed height, so switching tabs or
+   the read finishing never resizes the window. Its header row stays put while the rows scroll. */
+.ynr-meta {
+  font-variant-numeric: tabular-nums;
+}
+.ynr-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ynr-note {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--warn);
+}
+.ynr-note--bad {
+  color: var(--ink);
+  border-left-color: var(--bad);
+}
+.ynr-pane {
+  height: min(400px, 44vh);
+  overflow: auto;
+}
+.ynr-footer {
+  width: 100%;
+}
+.pm-select.ynr-sync {
+  width: auto;
+  min-width: 210px;
+}
+.ynr-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--modal-bg);
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border-bottom: 1px solid var(--line);
+}
+/* One line under the column names; rows and groups are set apart by space, not rules. */
+.ynr-table td {
+  border-bottom: 0;
+}
+.ynr-table .ynr-group th {
+  position: static;
+  padding-top: var(--space-5);
+  border-bottom: 0;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.ynr-table tbody:first-of-type .ynr-group th {
+  padding-top: var(--space-3);
+}
+/* Categories: every row a chip or a dropdown in each column, centred on one line. */
+.imp-table.ynr-cats td {
+  vertical-align: middle;
+}
+.ynr-count {
+  margin-left: var(--space-2);
+  color: var(--faint);
+  font-weight: 500;
+}
+.ynr-groupnote {
+  margin-left: var(--space-4);
+  color: var(--faint);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.ynr-table tfoot td {
+  border-bottom: 0;
+}
+.ynr-dim {
+  color: var(--faint);
+}
+.ynr-nowrap {
+  white-space: nowrap;
+}
+.ynr-empty {
+  margin: 0;
+  padding: var(--space-6) var(--space-4);
+  color: var(--faint);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+.ynr-placeholder {
+  padding: var(--space-5) var(--space-4);
+}
+.pm-select.ynr-dest {
+  width: 220px;
+  max-width: 100%;
+}
+/* A linked account's line under its row: what it matches and adds, and the pairs to check. */
+.ynr-table .ynr-link td {
+  padding-top: 0;
+  font-size: var(--text-sm);
+}
+.ynr-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+/* A category or envelope of yours, shown rather than asked: the dropdown's size and padding, no
+   frame, so its name sits exactly where a dropdown's would. */
+.ynr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  max-width: 220px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.ynr-chip--faint {
+  color: var(--faint);
+}
+.ynr-chip-nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ynr-glyph {
+  flex: none;
+}
+/* Something to check about a choice: hover or tap it to read why. */
+.ynr-warn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  color: var(--warn);
+  cursor: help;
+}
+.ynr-pairs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Imports & sync: the run history and report tables. A row is a <tr>; on a phone it stacks into
+   labelled lines (each cell carries its column name in data-label). */
+.imp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.imp-table th,
+.imp-table td {
+  text-align: left;
+  white-space: normal;
+  vertical-align: top;
+  padding: var(--space-3) var(--space-4);
+}
+.imp-table th {
+  cursor: default;
+}
+.imp-table .imp-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.imp-table__wrap {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 639.98px) {
+  .imp-table thead {
+    display: none;
+  }
+  .imp-table,
+  .imp-table tbody,
+  .imp-table tr,
+  .imp-table td {
+    display: block;
+    width: 100%;
+  }
+  .imp-table tr {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .imp-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-1) 0;
+    border: 0;
+    text-align: right;
+  }
+  .imp-table td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--faint);
+    font-size: var(--text-xs);
+    text-align: left;
+  }
+  .imp-table .imp-table__num {
+    text-align: right;
+  }
+}
+
+/* Actual's review: every account row holds a dropdown, so cells centre on it as Categories' do. */
+.imp-table.ynr-accts td {
+  vertical-align: middle;
+}
+.ynr-phone-only {
+  display: none;
+}
+/* Section 8 of the Actual spec: a note someone decides by isn't --faint. The count stays. */
+.ynr-table.ynr-accts .ynr-groupnote {
+  color: var(--muted);
+}
+.ynr-table.ynr-accts .ynr-count {
+  letter-spacing: normal;
+}
+@media (max-width: 1023.98px) {
+  .imp-table.ynr-accts .ynr-roomy {
+    display: none;
+  }
+}
+@media (max-width: 639.98px) {
+  .imp-table.ynr-accts td.ynr-wide-only {
+    display: none;
+  }
+  .imp-table.ynr-accts .ynr-phone-only {
+    display: inline;
+  }
+  .ynr-table.ynr-accts .ynr-group th {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .ynr-table.ynr-accts .ynr-groupnote {
+    display: block;
+    margin-left: 0;
+    margin-top: var(--space-1);
+  }
+  .imp-table.ynr-accts td[data-label] {
+    align-items: center;
+  }
+  /* Cells with no label to sit opposite (a row's name, a link's summary) read from the left. */
+  .imp-table.ynr-accts td:not([data-label]) {
+    text-align: left;
+  }
+  .ynr-currency .pm-select.ynr-dest {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+  /* The sheet is the one scroller here: a fixed pane inside it left a row and a third in view. */
+  .ynr-pane--flow {
+    height: auto;
+    min-height: min(400px, 44vh);
+    overflow: visible;
+  }
+}
+@media (pointer: coarse) and (max-width: 767.98px) {
+  .ynr-accts .pm-select .acct-acctsel-btn {
+    min-height: var(--tap-min);
+  }
+  .ynr-more {
+    min-height: var(--tap-min);
+  }
 }

@@ -14,6 +14,8 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import NamedTuple, Optional
 
+from backend.core.errors import ToolCallLimitError
+
 # A deprecated restrictive scope retained for explicit legacy callers. Instruction
 # skills never set it.
 _active_invocation_ids: ContextVar[tuple[str, ...]] = ContextVar(
@@ -45,6 +47,23 @@ _active_bundles: ContextVar[dict[str, dict]] = ContextVar("skill_active_bundles"
 # (a pure completion that must reach zero tools) — which is why ``None`` and ``frozenset()``
 # mean different things here and must never be collapsed with ``or``.
 _offer_scope: ContextVar[Optional[frozenset]] = ContextVar("offer_scope", default=None)
+
+# Whether THIS turn's offer is a real ceiling. An offer is advisory on every other turn (ADR
+# 2026-07-18); a turn that reads untrusted text unattended cannot rest on that (ADR
+# 2026-11-06-a-fired-price-alert-can-run-lucius-with-enforced-read-only-tools).
+_offer_enforced: ContextVar[bool] = ContextVar("offer_enforced", default=False)
+# The tool calls such a turn may make: text written by strangers must not be able to burn the
+# owner's search quota. A list so a task copied from this context shares the one count.
+ENFORCED_OFFER_MAX_CALLS = 8
+# A refused call starts another model round, so a turn that keeps calling is ended outright.
+ENFORCED_OFFER_MAX_ATTEMPTS = 16
+_offer_calls: ContextVar[Optional[list]] = ContextVar("offer_calls", default=None)
+
+# The tool names a feature flag retires from every offer THIS turn, resolved once when the turn
+# starts (``assistant.run``) so an offer build or a dispatch never re-reads the flag. ``None`` =
+# not resolved: ``catalog.hidden_tools`` then resolves it on the spot. A failed read resolves to
+# the empty set (nothing retired), never to "no restriction" on anything else.
+_turn_retired: ContextVar[Optional[frozenset]] = ContextVar("turn_retired_tools", default=None)
 
 # Is there a user in the loop this turn? ``False`` (the default) = interactive.
 #
@@ -127,7 +146,19 @@ def clear_scope() -> None:
     ``restore_scope`` below, which a NESTED turn needs instead (CONC-H5)."""
     _active_invocation_ids.set(())
     _offer_scope.set(None)
+    _offer_enforced.set(False)
     _active_bundles.set({})
+    _turn_retired.set(None)
+
+
+def set_turn_retired(names) -> None:
+    """Pin the flag-retired tool names for this turn (see ``_turn_retired``)."""
+    _turn_retired.set(frozenset(names))
+
+
+def turn_retired() -> Optional[frozenset]:
+    """The names pinned for this turn, or None when none were."""
+    return _turn_retired.get()
 
 
 def clear_inline_activation() -> None:
@@ -147,6 +178,8 @@ class ScopeSnapshot(NamedTuple):
     active_bundles: dict[str, dict]
     offer_scope: Optional[frozenset]
     active_invocation_ids: tuple[str, ...]
+    turn_retired: Optional[frozenset] = None
+    offer_enforced: bool = False
 
 
 def snapshot_scope() -> ScopeSnapshot:
@@ -166,6 +199,8 @@ def snapshot_scope() -> ScopeSnapshot:
         active_bundles=dict(_active_bundles.get()),
         offer_scope=_offer_scope.get(),
         active_invocation_ids=_active_invocation_ids.get(),
+        turn_retired=_turn_retired.get(),
+        offer_enforced=_offer_enforced.get(),
     )
 
 
@@ -177,6 +212,8 @@ def restore_scope(snapshot: ScopeSnapshot) -> None:
     _active_bundles.set(dict(snapshot.active_bundles))
     _offer_scope.set(snapshot.offer_scope)
     _active_invocation_ids.set(snapshot.active_invocation_ids)
+    _turn_retired.set(snapshot.turn_retired)
+    _offer_enforced.set(snapshot.offer_enforced)
 
 
 def set_offer_scope(tool_names) -> None:
@@ -185,6 +222,34 @@ def set_offer_scope(tool_names) -> None:
     An empty iterable is meaningful — it offers nothing — and is NOT the same as never
     calling this, which leaves the normal interactive offer in place."""
     _offer_scope.set(frozenset(tool_names))
+
+
+def enforce_offer() -> None:
+    """Make this turn's offer a ceiling: the tool loop refuses every other name, and any call past
+    ``ENFORCED_OFFER_MAX_CALLS``."""
+    _offer_enforced.set(True)
+    _offer_calls.set([0])
+
+
+def offer_is_enforced() -> bool:
+    return _offer_enforced.get()
+
+
+def offer_refuses(tool_name: str) -> bool:
+    """True when this turn's enforced offer excludes ``tool_name`` or its calls are used up, and
+    raises once the turn has plainly stopped listening. Call once per tool call: every call counts.
+    Enforced with no offer at all refuses everything, so a caller's slip fails closed."""
+    if not _offer_enforced.get():
+        return False
+    calls = _offer_calls.get()
+    if calls is None:
+        return True
+    calls[0] += 1
+    if calls[0] > ENFORCED_OFFER_MAX_ATTEMPTS:
+        raise ToolCallLimitError("this turn kept calling tools after being refused")
+    if tool_name not in (offer_tool_names() or frozenset()):
+        return True
+    return calls[0] > ENFORCED_OFFER_MAX_CALLS
 
 
 def offer_tool_names() -> Optional[frozenset]:
@@ -201,9 +266,10 @@ def offer_tool_names() -> Optional[frozenset]:
     ``snapshot_scope``/``restore_scope`` round-trip the caller's raw list unchanged; every
     real consumer reads through this getter. Deferred import mirrors
     ``ai/tools/_groups.py``'s ``_candidate_schemas`` (avoids a load-order cycle)."""
-    from backend.ai.tools.catalog import _CATALOG_HIDDEN
+    from backend.ai.tools.catalog import hidden_tools
 
     offer = _offer_scope.get()
-    if offer is None or not _CATALOG_HIDDEN:
+    hidden = hidden_tools() if offer is not None else None
+    if not hidden:
         return offer
-    return offer - _CATALOG_HIDDEN
+    return offer - hidden

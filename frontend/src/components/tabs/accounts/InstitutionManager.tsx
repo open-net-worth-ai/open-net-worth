@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, ConfirmDialog, Modal, TextField } from '../../ui'
+import { Pencil, Trash2 } from '../../../ui/icons'
 import type { InstitutionOption } from './ds'
 
 export interface InstitutionDeleteResult {
@@ -16,6 +17,14 @@ interface InstitutionManagerProps {
   onDelete: (id: string) => Promise<InstitutionDeleteResult>
   onRenamed?: (previous: InstitutionOption, renamed: InstitutionOption) => void
   onDeleted?: (result: InstitutionDeleteResult) => void
+}
+
+// "Checking, Savings" — WHICH accounts a rename or delete touches; the count alone when the
+// names aren't known (an older server) or there are none.
+function accountsLine(institution: InstitutionOption): string {
+  const names = institution.accountNames
+  if (names && names.length > 0) return names.join(', ')
+  return institution.accountCount === 1 ? '1 account' : `${institution.accountCount} accounts`
 }
 
 export function InstitutionManager({
@@ -70,7 +79,7 @@ export function InstitutionManager({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title="Manage institutions" size="sm">
+      <Modal open={open} onClose={onClose} title="Manage institutions" size="md">
         <div className="acct-inst-manager">
           <p className="acct-inst-manager-copy">
             Rename a shared institution, or remove it from the saved list. Deleting only unlinks
@@ -111,20 +120,35 @@ export function InstitutionManager({
                     </div>
                   ) : (
                     <>
-                      <div>
+                      <div className="acct-inst-manager-main">
                         <div className="acct-inst-manager-name">{institution.name}</div>
-                        <div className="acct-inst-manager-count">
-                          {institution.accountCount === 1
-                            ? '1 account'
-                            : `${institution.accountCount} accounts`}
+                        <div
+                          className="acct-inst-manager-count"
+                          title={institution.accountNames?.join(', ') || undefined}
+                        >
+                          {accountsLine(institution)}
                         </div>
                       </div>
                       <div className="acct-inst-manager-actions">
-                        <Button size="sm" variant="ghost" onClick={() => startRename(institution)}>
-                          Rename
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="acct-inst-manager-icon"
+                          aria-label={`Rename ${institution.name}`}
+                          title="Rename"
+                          onClick={() => startRename(institution)}
+                        >
+                          <Pencil size={15} strokeWidth={1.75} aria-hidden="true" />
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => setDeleting(institution)}>
-                          Delete
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="acct-inst-manager-icon acct-inst-manager-delete"
+                          aria-label={`Delete ${institution.name}`}
+                          title="Delete"
+                          onClick={() => setDeleting(institution)}
+                        >
+                          <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                         </Button>
                       </div>
                     </>

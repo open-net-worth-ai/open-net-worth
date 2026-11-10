@@ -144,12 +144,15 @@ export function useStatementParseStatus(
   statementId: string | null,
   active: boolean,
   intervalMs: number = 1000,
+  /** Bump to poll again after it stopped on a terminal status — a caller told the read is
+   *  still running (a reopen that attached to the live job) resumes watching it. */
+  epoch: number = 0,
 ): StatementParseStatusState {
   const [snapshot, setSnapshot] = useState<ParseStatusSnapshot | null>(null)
   const [stale, setStale] = useState(false)
   const [elapsedS, setElapsedS] = useState(0)
   const [trackedKey, setTrackedKey] = useState('')
-  const key = `${statementId ?? ''}:${active}`
+  const key = `${statementId ?? ''}:${active}:${epoch}`
   if (key !== trackedKey) {
     setTrackedKey(key)
     setSnapshot(null)
@@ -184,7 +187,7 @@ export function useStatementParseStatus(
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [statementId, active, intervalMs])
+  }, [statementId, active, intervalMs, epoch])
 
   useEffect(() => {
     if (!active || !statementId) return

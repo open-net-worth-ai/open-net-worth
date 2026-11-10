@@ -31,6 +31,7 @@ from backend.services import briefing_context as facts
 from backend.services import investments_book as investments_book_service
 from backend.services import ledger as ledger_service
 from backend.services import portfolio_rows as portfolio_rows_service
+from backend.services import thesis_judgment
 from backend.services.fx_cache import load_fx_cache
 
 router = APIRouter()
@@ -316,6 +317,19 @@ def _attention_section(base_ccy: str) -> Optional[str]:
     )
 
 
+def _thesis_section(theses: tuple[dict, dict]) -> Optional[str]:
+    judgments, names = theses
+    if not judgments:
+        return None
+    return (
+        "\nYOUR INVESTMENT THESES (the client's own reasons and price levels — any line about "
+        "one of these tickers that says what to do cites its thesis):\n"
+        + chr(10).join(facts.thesis_lines(judgments, names))
+        + "\n"
+        + thesis_judgment.THESIS_RULE
+    )
+
+
 def _build_context(total_nw: float, book: Optional[dict] = None) -> str:
     now = user_now()
     today = now.strftime("%A, %d %B %Y")
@@ -406,6 +420,9 @@ def _build_context(total_nw: float, book: Optional[dict] = None) -> str:
                 "strongest holding is named HERE, not by scanning the list above, which "
                 "shows only the largest positions):\n" + chr(10).join(movers_lines)
             )
+        thesis_section = _thesis_section(facts.thesis_judgments(book))
+        if thesis_section:
+            sections.append(thesis_section)
     if prefs.get("fx", True):
         sections.append(
             "\nCURRENT FX RATES (for holdings with foreign currency exposure):\n" + fx_block

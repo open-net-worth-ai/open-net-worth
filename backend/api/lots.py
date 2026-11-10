@@ -90,11 +90,15 @@ def _raise_lot_write(result: dict) -> dict:
 
 
 @router.get("/api/positions/{position_id}/lots")
-def get_position_lots(position_id: str):
+def get_position_lots(position_id: str, with_predecessors: bool = False):
     """Open + closed lots for a position, FIFO-ordered, each annotated with effective
     unit cost, remaining basis, and term-to-date (long/short as of today). A pure read:
-    viewing a position never writes a lot (the KSTL placeholder, 2026-10-07)."""
-    return {"position_id": position_id, "lots": lots_service.lots_for_position(position_id)}
+    viewing a position never writes a lot (the KSTL placeholder, 2026-10-07).
+    with_predecessors adds a sold-out-then-rebought holding's earlier lots."""
+    return {
+        "position_id": position_id,
+        "lots": lots_service.lots_for_position(position_id, with_predecessors=with_predecessors),
+    }
 
 
 @router.post("/api/positions/{position_id}/lots")
@@ -175,12 +179,14 @@ def get_realized_pnl(
     instrument_id: Optional[str] = None,
     account_id: Optional[str] = None,
     position_id: Optional[str] = None,
+    with_predecessors: bool = False,
 ):
     """Realized gains over a date range / instrument / account / position. Base figures are
     recomputed from the native gain + current FX in the service (the stored snapshot is
     only a write-time cache), so a base-currency change can't stale the report. Pass
     position_id to scope disposals to a single position (so a disposal never bleeds onto a
-    sibling position of the same instrument — e.g. an unvested grant). Returns
+    sibling position of the same instrument — e.g. an unvested grant); add with_predecessors
+    to keep the sale of a holding sold out and rebought at the same account. Returns
     {base_currency, events, realized_total_base, by_term, by_instrument}."""
     return lots_service.realized_pnl(
         date_from=date_from,
@@ -188,4 +194,5 @@ def get_realized_pnl(
         instrument_id=instrument_id,
         account_id=account_id,
         position_id=position_id,
+        with_predecessors=with_predecessors,
     )

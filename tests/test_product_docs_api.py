@@ -307,3 +307,20 @@ def test_embedded_docs_keep_previous_build_assets():
         "build:embed must go through the retaining script, not a bare `astro build` — a bare "
         "build wipes the previous assets and reintroduces the unstyled-docs failure"
     )
+
+
+def test_connector_logos_are_cached_for_a_day():
+    """Logos re-checked on every Browse & add open arrived late (owner, 2026-10-31): with no
+    ``Cache-Control`` the browser guessed a few hours from the files' recent mtime. They are
+    not content-hashed, so a day fresh — never immutable, or a replaced logo would never show."""
+    from starlette.responses import Response
+
+    from backend.main import _with_cache_policy
+
+    logo = _with_cache_policy(Response(b"x", media_type="image/png"), "connector-logos/kraken.png")
+    policy = logo.headers["cache-control"]
+    assert "max-age=86400" in policy and "stale-while-revalidate" in policy
+    assert "immutable" not in policy
+
+    other = _with_cache_policy(Response(b"x", media_type="image/png"), "favicon.png")
+    assert "cache-control" not in other.headers

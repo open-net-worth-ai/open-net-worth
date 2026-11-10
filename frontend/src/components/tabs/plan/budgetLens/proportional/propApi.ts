@@ -20,7 +20,16 @@ export interface PropEnvelope {
   activity: number
   /** Out of the split on its own — still in its group, its spend uncounted. */
   excluded?: boolean
-  history: { last: number; avg3: number; last_by_day: number; avg3_by_day: number }
+  history: {
+    last: number
+    avg3: number
+    last_by_day: number
+    avg3_by_day: number
+    /** The median month, and the median of what each month added after this day — the running
+     *  month's projection reads these, so one outlier month is never "usual". */
+    median3?: number
+    rest_median3?: number
+  }
 }
 
 /** One of the book's Zero-Based groups, as 50/30/20 measures it. */

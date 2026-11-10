@@ -1,9 +1,11 @@
+from .actual_budget_config_store import ActualBudgetConfigStore
 from .alert_store import AlertStore
 from .alpaca_config_store import AlpacaConfigStore
 from .automation_store import AutomationStore
 from .channel_config_store import ChannelConfigStore
 from .email_config_store import EmailConfigStore
 from .enable_banking_config_store import EnableBankingConfigStore
+from .gocardless_config_store import GoCardlessConfigStore
 from .ibkr_config_store import IbkrConfigStore
 from .instrument_store import InstrumentStore
 from .intel_stories_store import IntelStoriesStore
@@ -22,6 +24,7 @@ from .ynab_config_store import YnabConfigStore
 from .yodlee_config_store import YodleeConfigStore
 
 __all__ = [
+    "ActualBudgetConfigStore",
     "AlertStore",
     "AutomationStore",
     "AlpacaConfigStore",
@@ -33,6 +36,7 @@ __all__ = [
     "MemoryStore",
     "EmailConfigStore",
     "EnableBankingConfigStore",
+    "GoCardlessConfigStore",
     "IbkrConfigStore",
     "InstrumentStore",
     "LunchMoneyConfigStore",

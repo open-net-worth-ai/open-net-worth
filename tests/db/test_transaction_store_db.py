@@ -90,6 +90,19 @@ def test_bulk_append_empty_is_noop(db_isolated):
     assert TransactionStore().bulk_append([]) == []
 
 
+def test_earliest_date_is_the_min_day_of_the_live_rows(db_isolated):
+    store = TransactionStore()
+    assert store.earliest_date() is None
+    store.append(_txn(id="gone", date="2025-01-01", deleted=True))
+    assert store.earliest_date() is None
+    store.append(_txn(id="b", date="2026-03-05T10:00:00"))
+    store.append(_txn(id="a", date="2026-02-01"))
+    live = [t for t in store.all() if not t.get("deleted")]
+    assert store.earliest_date() == min((t["date"] or "")[:10] for t in live) == "2026-02-01"
+    store.soft_delete("a")
+    assert store.earliest_date() == "2026-03-05"
+
+
 def test_all_returns_in_seq_order(db_isolated):
     store = TransactionStore()
     ids = [store.append(_txn(id=f"t{i}"))["id"] for i in range(5)]
@@ -487,6 +500,43 @@ def test_query_by_batch(db_isolated):
     _seed_query_fixture(store)
     assert {t["id"] for t in store.query_by_batch("batch-1")} == {"a"}
     assert store.query_by_batch("no-such-batch") == []
+
+
+def test_query_by_batch_matches_a_full_scan_through_deletes_and_batch_moves(db_isolated):
+    store = TransactionStore()
+    store.bulk_append(
+        [
+            _txn("b1", batch_id="imp-1"),
+            _txn("b2", batch_id="imp-1"),
+            _txn("b3", batch_id="imp-2"),
+            _txn("b4"),
+        ]
+    )
+    store.bulk_soft_delete(["b2"])
+    store.update_by_id("b3", {"batch_id": "imp-1"})
+
+    def scan(batch, include_deleted):
+        rows = [t for t in store.all() if t.get("batch_id") == batch]
+        return rows if include_deleted else [t for t in rows if not t.get("deleted")]
+
+    for batch in ("imp-1", "imp-2", "missing"):
+        for include_deleted in (True, False):
+            assert store.query_by_batch(batch, include_deleted=include_deleted) == scan(
+                batch, include_deleted
+            )
+
+
+def test_query_by_batch_reads_only_the_batch_not_the_whole_ledger(db_isolated, monkeypatch):
+    # The Statements list asks once per import; decoding every transaction each time was most
+    # of its cost (2026-10-26).
+    store = TransactionStore()
+    store.bulk_append([_txn("c1", batch_id="imp-9"), _txn("c2")])
+
+    def no_full_read(*_a, **_k):
+        raise AssertionError("query_by_batch must not decode the whole ledger")
+
+    monkeypatch.setattr(store, "all", no_full_read)
+    assert [t["id"] for t in store.query_by_batch("imp-9")] == ["c1"]
 
 
 # ── select_where / bulk_delete_where — shared predicate, protected_ids ───────────────

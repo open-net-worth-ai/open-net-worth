@@ -4,12 +4,15 @@
 // is one click away on the detail page. Deliberately absent, and not to be re-added: a
 // Configure button (the whole row already opens the detail page), an enable/disable toggle
 // (destructive-adjacent — it belongs where the consequences are visible), a Test button,
-// a family label and a sub-line.
+// a family label and a sub-line. The category chips (what it is FOR — `Brokerage`, `Search`)
+// are the one exception, added on owner request (2026-10-29): with several MCP servers in one
+// list, the name alone did not say what each was for.
 
 import type { JSX, KeyboardEvent } from 'react'
 import { EntityRow } from '../../../lucius/EntityRow'
 import { Badge, Btn, Mono } from './primitives'
 import { Icons } from './icons'
+import { CategoryChips } from './DirectoryCard'
 import type { ConnectorEntry } from './model'
 
 export interface ConnectorRowProps {
@@ -49,7 +52,9 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
         enabled: it.enabled ? 'on' : 'off',
         status: it.statusText,
       })}
-      sublabel={`${entry.statusText} • ${entry.enabled ? 'on' : 'off'}`}
+      // "Connected" already means on and "Not connected"/"Disconnected" off — a trailing
+      // lowercase "• on" only repeated it (the server's picker row says the same words).
+      sublabel={entry.statusText}
       // Every connector chip rendered as the same grey glyph — the glyph identifies the TYPE,
       // and per-entity distinction comes from color, which this row never forwarded.
       color={entry.hue}
@@ -63,16 +68,32 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
         <div className="cn-name">
           <b>{entry.name}</b>
           {entry.tag ? <span className="cn-tag">{entry.tag}</span> : null}
+          {entry.categories?.length ? <CategoryChips categories={entry.categories} /> : null}
         </div>
+        {/* The sub-line's one exception: a connector that is failing says why without a hover.
+            `data-ctx-ignore`: a server's error text reaches Lucius only through
+            `get_connector_status`, which withholds a local server's. */}
+        {entry.lastError ? (
+          <div
+            className={entry.tone === 'warn' ? 'cn-rowerror cn-rowerror-warn' : 'cn-rowerror'}
+            title={entry.lastError}
+            data-ctx-ignore
+          >
+            {entry.lastError}
+          </div>
+        ) : null}
       </div>
       <div className="cn-meta">
         {entry.tone === 'good' ? (
           <span className="cn-statusgood" title={entry.statusText}>
-            <Icons.checkcircle /> {entry.statusText}
+            <Icons.checkcircle /> <span className="cn-statusgood-label">{entry.statusText}</span>
           </span>
-        ) : entry.tone === 'bad' ? (
-          <span className="cn-statusbad" title={entry.statusText}>
-            <Icons.warn /> {entry.statusText}
+        ) : entry.tone === 'bad' || entry.tone === 'warn' ? (
+          <span
+            className={entry.tone === 'warn' ? 'cn-statuswarn' : 'cn-statusbad'}
+            title={entry.statusText}
+          >
+            <Icons.warn /> <span className="cn-statusbad-label">{entry.statusText}</span>
           </span>
         ) : (
           <Badge tone={entry.tone}>{entry.statusText}</Badge>
@@ -80,7 +101,7 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
         {entry.attention ? (
           <span onClick={(e) => e.stopPropagation()}>
             <Btn size="xs" variant="primary" onClick={() => onReconnect(entry)}>
-              Reconnect
+              {entry.fixLabel}
             </Btn>
           </span>
         ) : null}

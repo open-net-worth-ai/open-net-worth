@@ -23,6 +23,7 @@ from backend.services.statements import decisions as svc
 from backend.services.statements.decisions import _parse_withheld_reason, _withheld_ledger_check
 from backend.services.statements.ledger_diff import uncovered_ledger_rows
 from backend.services.statements.lucius_pass import _link_targets
+from tests.conftest import drop_stored_review
 
 
 @pytest.fixture(autouse=True)
@@ -196,6 +197,7 @@ def test_decision_preview_withholds_when_the_cached_parse_is_incomplete(monkeypa
     store.update_by_id(res["statement_id"], {"import_meta": meta})
 
     _forbid_preview_ledger_check(monkeypatch)
+    drop_stored_review(res["statement_id"])  # the gate is read on the recompute path
     # Same content/format/account, no force flags — hits the CACHED reuse branch, so this
     # exercises the gate reading the flags off the record, not a fresh parse.
     res2 = _preview(monkeypatch, _META_OK, filename="june-again.pdf")

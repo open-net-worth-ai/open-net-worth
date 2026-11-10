@@ -6,6 +6,7 @@
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { FileViewerBody, useFileViewerState } from './StatementsSection'
+import { Download } from '../../../ui/icons'
 
 export interface ReceiptViewerTarget {
   id: string
@@ -41,7 +42,7 @@ export function ReceiptViewer({
             a.click()
           }}
         >
-          ↓ Download original
+          <Download size={14} aria-hidden="true" /> Download original
         </Button>
       }
     >

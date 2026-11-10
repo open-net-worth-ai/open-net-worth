@@ -50,7 +50,27 @@ While a statement is being read, click **Continue in background** and carry on a
 app. When the read finishes, a popup says **Ready to review** — tap **Review** to jump back in —
 or **Couldn't read**, in which case re-run it from the account's **Statements** list.
 
+**Ready to review** means the whole review is done and saved with the statement — the rows, the
+matches against your ledger and the check of what your ledger has that the statement doesn't.
+Review opens it straight away, even after a restart, exactly as it was built. **Confirm books
+exactly what the review showed and what you decided** — nothing is re-checked or second-guessed at
+that point. Only two things are never booked twice: a statement row that is already in your ledger
+by its own reference (so pressing Confirm twice, or importing the same file again, is safe), and a
+row you deleted before.
+Choosing a different account, changing the instructions or **Re-read** builds a new review.
+**Back** from a reopened statement's review shows that statement's own file, accounts and
+instructions: **Back to review** returns to it exactly as you left it, **Read again** re-reads the
+file with what's on screen and opens the new review when it's done.
+
 ## Review the rows
+
+**Show file**, next to the filter above the rows, puts the statement's own file beside them, shown the same way as in
+**Documents**: a CSV or Excel file as a spreadsheet with its column letters and row numbers, a PDF
+as its pages. It's off each time a review opens. Click a row in the review and the file scrolls to
+the line it came from and highlights it (for a CSV, or an Excel file's first sheet). Drag the line
+between the two to give either side more room — the app remembers the width, and double-clicking
+the line puts it back. When the review gets narrow, every row moves its decision and category onto
+a second line, so the columns stay lined up. On a phone, switch between **Review** and **File** at the top.
 
 Each row gets one of three decisions. Lucius picks a default; you can change any of them.
 
@@ -62,14 +82,42 @@ Each row gets one of three decisions. Lucius picks a default; you can change any
 
 - The filter chips at the top — **Needs you**, **Will link**, **Import**, **Left out**, **Not in
   ledger**, **Not on statement** — narrow the list. Start with **Needs you**: those are rows Lucius
-  wasn't sure about, such as a possible match with a different amount or date.
+  wasn't sure about, such as a possible match with a different amount or date. The filter button
+  beside them narrows further by **Type** (Expense, Income, Transfer) and by **Category** — every
+  category the statement's rows carry, with counts, **Uncategorized** first. Transfers carry no
+  category, so use **Type → Transfer** to find those.
 - Click a row to expand it: you see the statement's version beside your ledger's, and can change
   the payee and category before it books.
+- **Link to existing** (or **Change match** on a row that's already matched) lets you pick the
+  ledger entry a row means yourself, on any row not already set to Link. From the other side, an
+  entry under **Not on statement** offers **Link to a new row**. If the entry or row you pick is
+  already linked elsewhere, the app asks **Move this link?** first, and the one that loses its link
+  goes back to being unlinked. If Lucius had booked the row as a transfer, left it out or matched it,
+  it asks **Undo Lucius's call?** first. A row whose amount the statement doesn't confirm is listed
+  greyed out until you fix its amount. Search in these lists ignores separators, so `2079620` finds
+  `2,079,620`.
+- Choosing **Import** on a matched row puts its ledger entry back under **Not on statement**, so you
+  can link it elsewhere or delete it instead of keeping both.
 - Under **Will link**, **Link all**, **Import all** and **Leave all out** apply one decision to
   every row in that list.
 - **Not on statement** lists transactions in your ledger for that period that the statement
   doesn't have — often a duplicate you entered by hand. You can mark them for deletion here; they
   are only deleted when you click **Confirm**.
+
+### After you confirm
+
+The **Imported** screen shows what the import did: how many rows were **added** (and how many of
+those as transfers), how many were **linked** to entries you already had, and how many you **left
+out**. New rows are marked to
+review in the register, and a linked entry that was already marked to review keeps its mark — the
+screen counts both. **Mark all reviewed** clears them in one step. **View in register** opens
+the register filtered to this import's added and linked rows.
+
+**Undo import** takes the whole import back after asking: the added rows are removed, every entry
+it linked goes back to exactly how it was, ledger entries you deleted in that import come back,
+and the statement returns to **Ready to review**. **Review again** then reopens the same review, with your
+decisions, so you can change a row and confirm again. You can undo a past import the same way by
+asking Lucius.
 
 ### Book a row as a transfer
 
@@ -80,6 +128,10 @@ e-wallet, a payment to your credit card — book it as a transfer so it doesn't 
   (*"Payments to GRAB WALLET are transfers to my GrabPay account"*). The row then shows **Books as
   transfer: Checking → GrabPay**. If Lucius got one wrong, click **Not a transfer — book as an
   expense instead** (or *… as income instead*) on that row.
+- **On one row yourself:** click the row's pencil to open **Edit payee & category** and switch
+  **Type** to **Transfer**, then pick the other account (one in the same currency). A transfer
+  books no payee or category. Switch it back to **Expense** or **Income** to undo it; that also
+  overrides a transfer Lucius chose for the row.
 - **In a chat with Lucius:** when you import through Lucius, tell him which row is a transfer and
   to which account. He books it as a transfer in the same import.
 
@@ -89,11 +141,17 @@ of one currency conversion are recognised and folded into a single transfer auto
 
 ## Statements history
 
-Every imported statement is kept in the account's **⋯** menu → **Statements**. Each one shows its
-status: **parsing…** while it's being read, **parsed** when it's ready (**Review →**), **imported**
-once booked, or **failed** / **interrupted** (**Re-run**). From there you can download the
-original file, check whether its balance still ties out with your ledger, or **Delete** the
-record — deleting the record keeps its transactions.
+Every imported statement is kept in the account's **⋯** menu → **Statements**. Each one shows one
+status — **Reading…** (with the stage it's on; **Open** shows its progress), **Ready to review**
+(**Review**), **Imported** with the date it was booked, or **Couldn't read** / **Reading stopped**
+(**Re-run**) — and the same facts on every row: the statement period, how many rows it holds
+(and, once booked, how many it added and linked to entries you already had), when you uploaded it
+and what the AI read cost. A booked statement also says whether its balance checks out against
+the closing balance it prints (**Balance matches** or **Balance off by …**); a file that prints no
+balances shows nothing there. Card statements show the amount due. Each booked row's **⋯** menu
+lets you download the original file or **Delete** the record — deleting the record keeps its
+transactions. Click a statement's name to open it in the same viewer **Documents** uses — a CSV or
+Excel statement as a spreadsheet, a PDF as its pages.
 
 **Importing the same file twice is safe.** Rows already booked are left out and the review tells
 you when you imported it before. If there's nothing new, the button reads **Close**. A *new* file
@@ -140,8 +198,9 @@ which under **Tell Lucius** (*"Dates are DD/MM"*) and read it again.
 
 **"file too large"** — the file is over 25 MB. Split it, or export a shorter date range.
 
-**A row was booked as a duplicate of something you really have twice** — undo the import (ask
-Lucius to roll it back), then import again and set that row to **Import**.
+**A row was booked as a duplicate of something you really have twice** — click **Undo import**
+right after confirming (or ask Lucius to roll back an older import), then **Review again**, set
+that row to **Import** and confirm.
 
 **The balance check fails** — open the statement under **Statements** to see which transactions
 differ. A row missing from your ledger, or one in your ledger that isn't on the statement, is the
@@ -155,3 +214,10 @@ usual cause.
 - [Bank & brokerage connections](../connectors/bank-brokerage.md)
 - [The ledger](../concepts/the-ledger.md)
 - [An import created duplicates](../troubleshooting/import-created-duplicates.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Import Bank Statements Into a Budget App: PDF to CAMT.053](https://opennetworth.ai/blog/import-bank-statements-budget-app/): bank statements from PDF to CAMT.053, with worked examples
+- [Firefly III Alternative: Open Net Worth vs Firefly III](https://opennetworth.ai/blog/firefly-iii-alternative/): moving a Firefly III export across

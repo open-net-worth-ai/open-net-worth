@@ -34,6 +34,7 @@ from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 
 from backend.core.io import fire_db_write_hook
+from backend.core.timestamps import to_utc_iso
 from backend.db.engine import _lock_for_table
 from backend.db.tables import intel_stories, signal_timeline_entries
 
@@ -50,6 +51,16 @@ _STORY_PROMOTED_DEFAULTS: dict[str, Any] = {
     "updated_at": "",
 }
 _STORY_BOOL_FIELDS = ("analyzed", "read", "dismissed", "resolved", "archived")
+_STORY_TIME_FIELDS = ("created_at", "updated_at")
+
+
+def _read_story(payload: dict) -> dict:
+    """A stored story as every reader sees it: its stamps aware UTC. Rows ``intel_agent`` /
+    ``risk_signals`` stamped before 2026-11-01 are NAIVE server-local, which a browser reads
+    as its OWN local time (a story "13h in the future" read "-46755s ago") — converted by
+    ``core.timestamps``' one naive→local rule. The next write of the story stores it healed."""
+    fixed = {f: to_utc_iso(payload[f]) for f in _STORY_TIME_FIELDS if payload.get(f)}
+    return {**payload, **fixed} if fixed else payload
 
 
 def _story_insert_values(seq: int, story: dict) -> dict:
@@ -155,23 +166,19 @@ class IntelStoriesStore:
     # ── Story CRUD ────────────────────────────────────────────────────────────────
 
     def all(self, *, conn: Connection | None = None) -> list[dict]:
+        q = select(intel_stories).order_by(intel_stories.c.seq)
         if conn is not None:
-            return [
-                r.payload for r in conn.execute(select(intel_stories).order_by(intel_stories.c.seq))
-            ]
+            return [_read_story(r.payload) for r in conn.execute(q)]
         with self._eng().connect() as owned_conn:
-            return [
-                r.payload
-                for r in owned_conn.execute(select(intel_stories).order_by(intel_stories.c.seq))
-            ]
+            return [_read_story(r.payload) for r in owned_conn.execute(q)]
 
     def find_by_id(self, id_val: str, *, conn: Connection | None = None) -> dict | None:
         if conn is not None:
             row = self._story_row(conn, id_val)
-            return row["payload"] if row else None
+            return _read_story(row["payload"]) if row else None
         with self._eng().connect() as owned_conn:
             row = self._story_row(owned_conn, id_val)
-        return row["payload"] if row else None
+        return _read_story(row["payload"]) if row else None
 
     def query(self, **filters: Any) -> list[dict]:
         items = self.all()
@@ -185,10 +192,11 @@ class IntelStoriesStore:
         """Case-insensitive ticker scan — every row in this store IS a story now (the old
         multi-shape ``intel_signals`` table's ``is_story_row`` filter has no successor here,
         RFC intel-signals-data-model). The only caller is ``intel_agent._persist_story``'s
-        existing-story lookup."""
+        existing-story lookup. Macro/sector/geography stories store ``ticker`` as None — the
+        key exists, so ``.get``'s default never applies."""
         ticker_up = ticker.upper()
         for story in self.all():
-            if story.get("ticker", "").upper() == ticker_up:
+            if (story.get("ticker") or "").upper() == ticker_up:
                 return story
         return None
 
@@ -196,7 +204,7 @@ class IntelStoriesStore:
         """Label counterpart to ``find_story_by_ticker`` — same story-row scan."""
         label_lo = label.lower()
         for story in self.all():
-            if story.get("label", "").lower() == label_lo:
+            if (story.get("label") or "").lower() == label_lo:
                 return story
         return None
 
@@ -233,7 +241,7 @@ class IntelStoriesStore:
             existing = self._story_row(c, id_val)
             if existing is None:
                 return None
-            merged = {**existing["payload"], **changes}
+            merged = {**_read_story(existing["payload"]), **changes}
             self._fire_story_hook(c, [(id_val, existing)])
             values = _story_insert_values(existing["seq"], merged)
             values.pop("seq")

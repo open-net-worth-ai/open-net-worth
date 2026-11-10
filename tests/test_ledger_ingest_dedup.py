@@ -88,7 +88,8 @@ def test_default_now_REFUSES_a_semantic_duplicate_and_reports_why(isolated):
     assert created == []
     assert len(skipped) == 1
     assert skipped[0]["_duplicate_of"]  # names the row it collided with
-    assert "force=true" in skipped[0]["_duplicate_reason"]  # tells the caller how to proceed
+    # Tells the caller how to proceed.
+    assert "allow_duplicate=true" in skipped[0]["_duplicate_reason"]
     assert len(svc.transactions.all()) == 1  # the duplicate was NOT written
 
 
@@ -98,7 +99,7 @@ def test_force_restores_the_old_insert_everything_behaviour(isolated):
     svc.bulk_create_transactions([_draft(isolated, external_ref="1")])
 
     created, skipped = svc.bulk_create_transactions(
-        [_draft(isolated, external_ref="1")], force=True
+        [_draft(isolated, external_ref="1")], allow_duplicate=True
     )
 
     assert len(created) == 1

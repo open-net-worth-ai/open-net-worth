@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { helpMenu, historyMenu, reloadItems } from '../src/main/app-menu';
+import { helpMenu, historyMenu, newItems, reloadItems } from '../src/main/app-menu';
+import type { DesktopCommand } from '../src/contracts';
 import { MAC_CHROME_ARGUMENT, nativeChrome, qaInactiveMode } from '../src/main/window-chrome';
 import { safeServerCommand } from '../src/main/security';
 
@@ -49,6 +50,15 @@ test('history commands are allowed for a server connection', () => {
   assert.equal(safeServerCommand('history-back'), true);
   assert.equal(safeServerCommand('history-forward'), true);
   assert.equal(safeServerCommand('import-files'), false);
+});
+
+test('Cmd/Ctrl+N starts a Lucius conversation; New transaction moves to Shift', () => {
+  const sent: DesktopCommand[] = [];
+  const items = newItems(command => sent.push(command));
+  assert.deepEqual(items.map(item => [item.label, item.accelerator]), [['New conversation', 'CmdOrCtrl+N'], ['New transaction', 'CmdOrCtrl+Shift+N']]);
+  for (const item of items) (item.click as () => void)();
+  assert.deepEqual(sent, [{ type: 'new-conversation' }, { type: 'new-transaction' }]);
+  assert.equal(safeServerCommand('new-conversation'), true);
 });
 
 test('native title bar is macOS-only and leaves Windows and Linux frames untouched', () => {

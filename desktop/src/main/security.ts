@@ -11,7 +11,7 @@ export function serverHeaders(input: Record<string, string>): Record<string, str
 }
 
 export function safeServerCommand(type: string): boolean {
-  return ['open-activity', 'open-intel', 'new-transaction', 'search', 'open-lucius', 'open-settings', 'resume', 'history-back', 'history-forward', 'go', 'toggle-sidebar', 'open-help', 'show-shortcuts'].includes(type);
+  return ['open-activity', 'open-intel', 'new-transaction', 'new-conversation', 'search', 'open-lucius', 'open-settings', 'resume', 'history-back', 'history-forward', 'go', 'toggle-sidebar', 'open-help', 'show-shortcuts'].includes(type);
 }
 
 // A `go` command carries a destination, so the type alone is not enough: only the listed screens may be named.
@@ -21,6 +21,27 @@ export function validCommand(command: { type: string; tab?: unknown }): boolean 
 
 export function clipboardWriteAllowed(origin: string | null, ownedContentsId: number, requestContentsId: number | undefined, permission: string, details: { isMainFrame: boolean; requestingUrl?: string }): boolean {
   return Boolean(origin && permission === 'clipboard-sanitized-write' && requestContentsId === ownedContentsId && details.isMainFrame && appDocument(origin, details.requestingUrl ?? ''));
+}
+
+// Voice calls (the app's `voice_calls` flag) need the microphone — and only that: audio, from the
+// app's own document in the window this host owns. Camera, screen and every other permission stay
+// refused, and the app page itself still decides whether a call starts.
+export function microphoneAllowed(origin: string | null, ownedContentsId: number, requestContentsId: number | undefined, permission: string, details: { isMainFrame?: boolean; requestingUrl?: string; securityOrigin?: string; mediaTypes?: string[]; mediaType?: string }): boolean {
+  if (!origin || permission !== 'media' || requestContentsId !== ownedContentsId) return false;
+  const types = details.mediaTypes ?? (details.mediaType ? [details.mediaType] : []);
+  if (types.length === 0 || types.some((t) => t !== 'audio')) return false;
+  return details.isMainFrame !== false && appDocument(origin, details.requestingUrl ?? details.securityOrigin ?? '');
+}
+
+// Two policies both apply, so the window's own `connect-src 'self'` refused the voice server the app's
+// page allows. The window takes that one directive from its own backend's policy, which names only
+// the owner's LiveKit server and only while the voice calls flag is on (`core/spa_csp.py`).
+export function connectSources(serverPolicies: string[] | undefined): string {
+  for (const policy of serverPolicies ?? []) {
+    const directive = policy.split(';').map((d) => d.trim()).find((d) => /^connect-src\s/i.test(d));
+    if (directive) return directive;
+  }
+  return "connect-src 'self'";
 }
 
 function urlOrigin(value: string): string | null {

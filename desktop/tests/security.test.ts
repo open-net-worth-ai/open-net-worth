@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { clipboardWriteAllowed, credentialHeaders, externalUrl, safeServerCommand, serverHeaders, serverRecoveryAllowed, trustedFrame, initialNavigationTrusted } from '../src/main/security';
+import { clipboardWriteAllowed, connectSources, credentialHeaders, externalUrl, safeServerCommand, serverHeaders, serverRecoveryAllowed, trustedFrame, initialNavigationTrusted } from '../src/main/security';
 
 const origin = 'http://127.0.0.1:40123';
 
@@ -81,4 +81,12 @@ test('only the navigation the host started is trusted as the first app load', ()
   assert.equal(initialNavigationTrusted(`${origin}/setup/folder`, { ...request, webContentsId: 8 }, 7), false);
   assert.equal(initialNavigationTrusted(`${origin}/setup/folder`, { ...request, url: 'http://127.0.0.1:1/setup/folder' }, 7), false);
   assert.equal(initialNavigationTrusted('not a url', request, 7), false);
+});
+
+test('the window takes connect-src from its own backend, so voice calls can reach LiveKit', () => {
+  const server = "default-src 'self'; connect-src 'self' https://*.livekit.cloud wss://*.livekit.cloud; object-src 'none'";
+  assert.equal(connectSources([server]), "connect-src 'self' https://*.livekit.cloud wss://*.livekit.cloud");
+  assert.equal(connectSources(["default-src 'self'"]), "connect-src 'self'");
+  assert.equal(connectSources([]), "connect-src 'self'");
+  assert.equal(connectSources(undefined), "connect-src 'self'");
 });

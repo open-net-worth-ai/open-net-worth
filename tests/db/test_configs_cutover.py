@@ -170,6 +170,9 @@ MEMORY = [
     }
 ]
 
+# Revision 202610271200 files every pre-existing fact as unsorted, with no section or topic yet.
+MEMORY_AT_HEAD = [{**fact, "state": "unsorted", "section": None, "topic": None} for fact in MEMORY]
+
 STATEMENT_FORMATS = [
     {
         "id": "fmt_1",
@@ -555,6 +558,8 @@ def test_each_config_store_round_trips_exactly(tmp_path, db_url, monkeypatch):
             exported = exporters[attr](conn)
             if attr == "PAYEES_SOURCE":
                 original = PAYEES_AT_HEAD
+            if attr == "MEMORY_SOURCE":
+                original = MEMORY_AT_HEAD
             # Plain ``==`` on two lists is already ORDER-sensitive in Python, so this is the
             # full round-trip AND order check; the signals-specific prepend-order proof lives
             # in test_signals_prepend_order_survives_cutover.

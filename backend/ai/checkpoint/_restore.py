@@ -28,7 +28,7 @@ from pathlib import Path
 
 from backend.core.io import _atomic_write_bytes
 
-from . import _context, _index
+from . import _context, _index, _replay
 
 logger = logging.getLogger("backend.ai.checkpoint")
 
@@ -57,11 +57,18 @@ def _blob_bytes(blob_ref: str) -> bytes:
 
 
 def _session_label(session_id: str | None) -> str:
-    """Human label for a session: 'Telegram', 'web', etc. Restore is point-in-time
-    and reverts GLOBAL data files, so changes from other channels matter.
-    """
+    """Human label for a session: 'Telegram', 'web', an Automation's name, etc."""
     if not session_id:
         return "another session"
+    try:
+        from backend.services.automations import runs as automation_runs
+
+        if automation_runs.is_automation_session(session_id):
+            found = automation_runs.automation_run_for_session(session_id)
+            name = (found[1].get("name") or "").strip() if found else ""
+            return f"the {name} Automation" if name else "an Automation"
+    except Exception:
+        return "an Automation"
     try:
         from backend.connectors import session_map
 
@@ -117,13 +124,15 @@ def _pk_param(pk_col, pk: str):
 def preview(checkpoint_id: str) -> dict:
     """What would change if this checkpoint were restored (per-file row deltas).
 
-    Also surfaces cross_session_changes: turns from OTHER sessions made after this
-    checkpoint. Because restore is point-in-time over global data files, restoring
-    here also undoes those — e.g. transactions you later added from Telegram.
+    Also surfaces cross_session_changes: later turns from OTHER sessions that wrote a file
+    or row this restore puts back, so restoring here changes their work too — e.g. a
+    transaction Lucius booked from Telegram and this message later edited. A later turn that
+    touched none of those is left alone and not listed (`_overlapping_later_turns`).
     """
-    cp = _index.find_checkpoint(checkpoint_id)
-    if cp is None:
+    target = _index.find_checkpoint(checkpoint_id)
+    if target is None:
         raise FileNotFoundError(checkpoint_id)
+    cp = _restore_scope(_restore_chain(target))
     changes: list[dict] = []
     for name, blob_ref in cp.get("files", {}).items():
         dest = _restore_dest(name)
@@ -139,24 +148,15 @@ def preview(checkpoint_id: str) -> dict:
         )
     changes.extend(_db_preview_rows(cp))
 
-    # Newer turns from a different session that this restore would also unwind.
-    this_session = cp.get("session_id")
-    cutoff = cp.get("created_at", "")
     cross: list[dict] = []
-    for e in _index._read_index():
-        if (
-            e.get("kind") == "turn"
-            and e.get("status") == "active"
-            and e.get("created_at", "") > cutoff
-            and e.get("session_id") != this_session
-        ):
-            cross.append(
-                {
-                    "session_label": _session_label(e.get("session_id")),
-                    "message_preview": e.get("message_preview", ""),
-                    "created_at": e.get("created_at", ""),
-                }
-            )
+    for e in _overlapping_later_turns(cp):
+        cross.append(
+            {
+                "session_label": _session_label(e.get("session_id")),
+                "message_preview": e.get("message_preview", ""),
+                "created_at": e.get("created_at", ""),
+            }
+        )
     cross.sort(key=lambda c: c["created_at"])
 
     return {
@@ -164,6 +164,52 @@ def preview(checkpoint_id: str) -> dict:
         "changes": changes,
         "cross_session_changes": cross,
     }
+
+
+def _overlapping_later_turns(cp: dict) -> list[dict]:
+    """Later turns of OTHER conversations that this restore really changes: ones that wrote a
+    file or a (table, pk) row the restore puts back. A restore replays only the rows its own
+    chain recorded, so a later Automation or Telegram turn that wrote other rows is untouched —
+    warning about every later turn told the owner a restore would undo email imports it never
+    reaches (2026-11-04)."""
+    this_session = cp.get("session_id")
+    cutoff = cp.get("created_at", "")
+    candidates = [
+        e
+        for e in _index._read_index()
+        if e.get("kind") == "turn"
+        and e.get("status") == "active"
+        and e.get("created_at", "") > cutoff
+        and e.get("session_id") != this_session
+    ]
+    if not candidates:
+        return []
+    files = set(cp.get("files") or {})
+    rows_by_cp = _touched_rows(_scope_ids(cp) + [e["id"] for e in candidates])
+    restored_rows = set().union(*(rows_by_cp.get(cp_id, set()) for cp_id in _scope_ids(cp)))
+    return [
+        e
+        for e in candidates
+        if files & set(e.get("files") or {}) or restored_rows & rows_by_cp.get(e["id"], set())
+    ]
+
+
+def _touched_rows(checkpoint_ids: list[str]) -> dict[str, set[tuple[str, str]]]:
+    from sqlalchemy import select
+
+    from backend.db import tables as db_tables
+    from backend.db.engine import get_engine
+
+    wl = db_tables.write_log
+    out: dict[str, set[tuple[str, str]]] = {}
+    with get_engine().connect() as conn:
+        for cp_id, table_name, pk in conn.execute(
+            select(wl.c.checkpoint_id, wl.c.table_name, wl.c.pk).where(
+                wl.c.checkpoint_id.in_(checkpoint_ids)
+            )
+        ):
+            out.setdefault(cp_id, set()).add((table_name, pk))
+    return out
 
 
 def _db_preview_rows(cp: dict) -> list[dict]:
@@ -186,7 +232,6 @@ def _db_preview_rows(cp: dict) -> list[dict]:
     from backend.db import tables as db_tables
     from backend.db.engine import get_engine
 
-    wl = db_tables.write_log
     out: list[dict] = []
     with get_engine().connect() as conn:
         for table_name in table_names:
@@ -202,12 +247,8 @@ def _db_preview_rows(cp: dict) -> list[dict]:
             pk_col = _single_pk_col(table)
             existing = {str(v) for v in conn.execute(select(pk_col)).scalars()}
             delta = 0
-            rows = conn.execute(
-                select(wl.c.pk, wl.c.before_payload).where(
-                    wl.c.checkpoint_id == cp["id"], wl.c.table_name == table_name
-                )
-            )
-            for pk, before_payload in rows:
+            images = _chain_images(conn, _scope_ids(cp), table_names=[table_name])
+            for pk, before_payload in images.get(table_name, []):
                 existed_now = pk in existing
                 if before_payload is None and existed_now:
                     delta -= 1  # restore would DELETE this pk
@@ -272,28 +313,38 @@ def restore(checkpoint_id: str, mode: str = "data") -> dict:
     superseded: list[str] = []
     revived: list[str] = []
 
+    # "Before this message" means before EVERY turn of it (a card approved after its turn
+    # paused is a checkpoint of its own on the same message) and undoes every later turn of
+    # the conversation too — `_restore_chain`. `head` is that message's first checkpoint.
+    chain = _restore_chain(cp)
+    head = chain[0]
+    scope = _restore_scope(chain)
+    chain_ids = _scope_ids(scope)
+
     if mode in ("data", "both"):
-        # Pin the restore TARGET (and, below, its pre_restore snapshot's own id) for
+        # Pin every replayed checkpoint (and, below, the pre_restore snapshot's own id) for
         # the whole data-restore sequence (I2, shape a) — see _context._pinned_ids' module
         # comment for the self-destruct this closes: capturing the pre_restore
         # snapshot a few lines down finalises a NEW checkpoint, whose own prune must
-        # never be allowed to evict the very checkpoint being replayed right after.
-        _context._pin_checkpoint(checkpoint_id)
+        # never be allowed to evict the very checkpoints being replayed right after.
+        for pinned in chain_ids:
+            _context._pin_checkpoint(pinned)
         try:
             pre_restore_ctx_id = _ckpt_pkg.new_id("ckpt")
             _context._pin_checkpoint(pre_restore_ctx_id)
             try:
-                pre_restore_id = _capture_pre_restore_snapshot(cp, checkpoint_id=pre_restore_ctx_id)
+                pre_restore_id = _capture_pre_restore_snapshot(
+                    scope, checkpoint_id=pre_restore_ctx_id
+                )
                 # Restore hardening (Plan 3 task 1): stage every file's restored
                 # bytes to a temp path BEFORE the DB replay commits — see
                 # _stage_restore_files. This shrinks the split-world window from
                 # "however long the read+decompress+write loop takes" down to just
                 # the fast rename/unlink loop in _commit_staged_restore_files.
-                staged = _stage_restore_files(cp, checkpoint_id)
+                staged = _stage_restore_files(scope, checkpoint_id)
                 try:
-                    _ckpt_pkg._replay_write_log(
-                        checkpoint_id
-                    )  # DB half — aborts before any file touch
+                    # DB half — aborts before any file touch
+                    _ckpt_pkg._replay_write_log(checkpoint_id, chain_ids=chain_ids)
                 except BaseException:
                     _cleanup_staged_restore_files(staged)
                     raise
@@ -301,17 +352,21 @@ def restore(checkpoint_id: str, mode: str = "data") -> dict:
                 # Only a "data" restore keeps the later turns revivable: "both" rewinds
                 # their messages out of the transcript, so nothing could show them again.
                 superseded = _index._mark_orphaned_after(
-                    cp, revive_holder=pre_restore_id if mode == "data" else None
+                    head, revive_holder=pre_restore_id if mode == "data" else None
                 )
-                revived = _record_restore_mark(cp, mode, pre_restore_id)
+                revived = _record_restore_mark(head, mode, pre_restore_id)
             finally:
                 _context._unpin_checkpoint(pre_restore_ctx_id)
         finally:
-            _context._unpin_checkpoint(checkpoint_id)
+            for pinned in chain_ids:
+                _context._unpin_checkpoint(pinned)
 
     rewound_to: int | None = None
     if mode in ("conversation", "both"):
-        rewound_to = _truncate_session_history(session_id, cp.get("anchor_history_len", 0))
+        anchor = head.get("anchor_history_len", 0)
+        rewound_to = _truncate_session_history(session_id, anchor)
+        if rewound_to is not None and head.get("kind", "turn") == "turn":
+            _index._mark_rewound(session_id, anchor)
 
     logger.info(
         "restore checkpoint=%s mode=%s files=%d rewound_to=%s",
@@ -331,6 +386,89 @@ def restore(checkpoint_id: str, mode: str = "data") -> dict:
         "superseded_checkpoint_ids": superseded,
         "revived_checkpoint_ids": revived,
     }
+
+
+def _restore_chain(cp: dict) -> list[dict]:
+    """The checkpoints a restore of ``cp`` replays, oldest first.
+
+    Restoring a message puts the data back as it was before it, so the chain is every turn
+    checkpoint of that message — an approved card's write and the turn it resumed are their
+    own checkpoints, anchored on the same message — plus every later turn of the conversation
+    still on the live timeline. Replaying only ``cp`` left every later message's writes in
+    place behind a dialog that says "undoes this and any later changes" (owner, 2026-11-03).
+    A rewound message's checkpoints still hold live data, so they stay in a later chain, but
+    never group with the new message now sitting at their index. A pre_restore (Undo)
+    snapshot already covers everything its restore touched — it replays alone."""
+    if cp.get("kind", "turn") != "turn":
+        return [cp]
+    sid, anchor = cp.get("session_id"), cp.get("anchor_history_len")
+    live = [
+        e
+        for e in _index._read_index()
+        if e["id"] != cp["id"]
+        and e.get("session_id") == sid
+        and e.get("kind", "turn") == "turn"
+        and e.get("status", "active") == "active"
+    ]
+    same_message = [
+        e
+        for e in live
+        if not cp.get("rewound") and not e.get("rewound") and e.get("anchor_history_len") == anchor
+    ]
+    cutoff = min([cp.get("created_at", "")] + [e.get("created_at", "") for e in same_message])
+    chain = [cp] + [e for e in live if e.get("created_at", "") >= cutoff]
+    chain.sort(key=lambda e: e.get("created_at", ""))
+    return chain
+
+
+def _restore_scope(chain: list[dict]) -> dict:
+    """One manifest for the whole chain, labelled as its first checkpoint: each file at the
+    OLDEST snapshot taken of it (its state before the chain began), every DB table any of
+    them touched, and the ids whose write_log rows the replay merges (``chain_ids``)."""
+    files: dict[str, str | None] = {}
+    tables: set[str] = set()
+    for e in chain:
+        for name, blob_ref in (e.get("files") or {}).items():
+            files.setdefault(name, blob_ref)
+        tables.update(e.get("db_tables") or [])
+    return {
+        **chain[0],
+        "files": files,
+        "db_tables": sorted(tables),
+        "chain_ids": [e["id"] for e in chain],
+    }
+
+
+def _scope_ids(cp: dict) -> list[str]:
+    return list(cp.get("chain_ids") or [cp["id"]])
+
+
+def _chain_images(
+    conn, chain_ids: list[str], table_names: list[str] | None = None
+) -> dict[str, list[tuple[str, dict | None]]]:
+    """Per table, each touched pk's before-image from the OLDEST checkpoint in ``chain_ids``
+    (oldest first) that recorded it — the row as it was before the chain began. A single
+    checkpoint records each pk once, so with one id this is exactly its own write_log."""
+    from sqlalchemy import select
+
+    from backend.db import tables as db_tables
+
+    wl = db_tables.write_log
+    rank = {cid: i for i, cid in enumerate(chain_ids)}
+    query = select(
+        wl.c.checkpoint_id, wl.c.table_name, wl.c.pk, wl.c.before_payload, wl.c.seq
+    ).where(wl.c.checkpoint_id.in_(chain_ids))
+    if table_names is not None:
+        query = query.where(wl.c.table_name.in_(table_names))
+    rows = sorted(conn.execute(query).all(), key=lambda r: (rank[r[0]], -r[4]))
+    seen: set[tuple[str, str]] = set()
+    out: dict[str, list[tuple[str, dict | None]]] = {}
+    for _cid, table_name, pk, before_payload, _seq in rows:
+        if (table_name, pk) in seen:
+            continue
+        seen.add((table_name, pk))
+        out.setdefault(table_name, []).append((pk, before_payload))
+    return out
 
 
 def _record_restore_mark(cp: dict, mode: str, pre_restore_id: str | None) -> list[str]:
@@ -416,9 +554,9 @@ def _capture_db_pre_restore(cp: dict, ctx: "_context.CheckpointContext") -> None
     by_table: dict[str, list[str]] = defaultdict(list)
     with get_engine().connect() as conn:
         touched = conn.execute(
-            select(wl.c.table_name, wl.c.pk).where(
-                wl.c.checkpoint_id == cp["id"], wl.c.table_name.in_(table_names)
-            )
+            select(wl.c.table_name, wl.c.pk)
+            .where(wl.c.checkpoint_id.in_(_scope_ids(cp)), wl.c.table_name.in_(table_names))
+            .distinct()
         ).all()
         for table_name, pk in touched:
             by_table[table_name].append(pk)
@@ -485,8 +623,8 @@ def _assert_restorable_accounts(images: list[tuple[str, dict | None]]) -> None:
 
     A checkpoint taken before the seven-type migration holds images typed `brokerage`,
     `savings`, `mortgage`… Replaying one puts a row back that `band_of` raises on, so every
-    net-worth read fails afterwards with nothing pointing at the cause. Checked BEFORE phase 1
-    deletes anything, so the whole restore aborts with both worlds untouched — the file phase
+    net-worth read fails afterwards with nothing pointing at the cause. Checked BEFORE the
+    replay changes anything, so the whole restore aborts with both worlds untouched — the file phase
     runs only after this transaction commits."""
     from backend.core.errors import DataIntegrityError
     from backend.models.account import ACCOUNT_BAND
@@ -504,23 +642,18 @@ def _assert_restorable_accounts(images: list[tuple[str, dict | None]]) -> None:
             )
 
 
-def _replay_write_log(cp_id: str) -> None:
+def _replay_write_log(cp_id: str, chain_ids: list[str] | None = None) -> None:
     """Replay `cp_id`'s write_log rows (DB pre-turn images, spec D7) inside ONE
-    transaction, TWO-PHASE (I2, reproduced — amends the single-phase delete-then-
-    insert-per-row description in the write_log ADR): phase 1 deletes every row
-    this checkpoint touched (by pk, regardless of before_payload — a None image
-    means the pk was NEW this turn, so restore must remove it too); phase 2
-    re-inserts every non-None before-image. A turn whose write PERMUTED row order
-    (e.g. ``PayloadTableStore.replace_all([b, a])`` on a table that had ``[a, b]``,
-    which reassigns both rows' ``seq`` under the new order) could not be restored
-    under the old single-phase, reverse-seq, per-row delete-then-insert: reinserting
-    row A at its ORIGINAL seq collided with row B, which still occupied that seq
-    because it had not been touched yet — IntegrityError on the table's unique seq
-    index, restore fail-closed but broken for that whole turn class. Splitting into
-    two phases makes row ORDER irrelevant WITHIN one table: by the time phase 2
-    runs, every touched row is already gone, so the original per-table seqs —
-    mutually unique in the pre-turn data by construction — can never collide with
-    each other or with an untouched row's seq.
+    transaction — or, given ``chain_ids`` (oldest first), every one of those checkpoints'
+    rows merged, each pk back to its image from the oldest that touched it (`_chain_images`),
+    so a restore of a message and every later turn commits or fails as one. The row steps live in ``_replay.apply_images``: park unique columns,
+    insert rows the turn deleted, UPDATE rows it edited IN PLACE, delete rows it created.
+    It used to delete every touched pk and re-insert its image — which fired every FK
+    from an UNTOUCHED row at an edited one: RESTRICT failed the restore (a transaction
+    on an edited account), CASCADE silently took the children with it (2026-11-01).
+    Parking keeps the permutation guarantee the old two-phase delete gave (I2): a turn
+    whose write PERMUTED row order (``PayloadTableStore.replace_all([b, a])`` swapping
+    two rows' ``seq``) restores without a unique-index collision.
 
     TABLE ORDER, ACROSS tables, is NOT arbitrary either (plan 3 task 4 — found the
     hard way, by a real cross-table restore, once the money core gave this mechanism
@@ -533,10 +666,9 @@ def _replay_write_log(cp_id: str) -> None:
     table's own seq-desc row order — the permutation proof above still holds), and
     the TABLES themselves are ordered by ``metadata.sorted_tables`` — SQLAlchemy's
     own FK-dependency topological sort (parents before children; the order a fresh
-    ``create_all`` would use). Phase 1 walks tables in REVERSE of that order
-    (children first, so no parent delete can be blocked by a still-live child);
-    phase 2 walks it FORWARD (parents first, so no child insert can be blocked by a
-    not-yet-restored parent). No schema in this app has a real FK cycle (the two
+    ``create_all`` would use). Inserts and updates walk it FORWARD (parents first, so
+    no child can point at a not-yet-restored parent); deletes walk it in REVERSE
+    (children first, so no parent delete is blocked by a still-live child). No schema in this app has a real FK cycle (the two
     circular-shaped relationships — ``accounts.opening_txn_id`` and
     ``transactions.merged_into`` — are deliberately NOT modeled as FKs for exactly
     this reason, per tables.py's own comments), so ``sorted_tables`` always succeeds.
@@ -550,8 +682,9 @@ def _replay_write_log(cp_id: str) -> None:
     from backend.db.engine import locked_unit_of_work, unit_of_work
 
     wl = db_tables.write_log
+    ids = chain_ids or [cp_id]
     # FR-M4 — hold the per-table write locks for exactly the tables this checkpoint touched
-    # while the two-phase DELETE/re-INSERT runs, so a restore is mutually excluded against a
+    # while the replay runs, so a restore is mutually excluded against a
     # live turn's locked_unit_of_work money choke (and any other single-writer table choke).
     # Discover the touched-table set with a short read FIRST — a committed checkpoint's
     # write_log rows are immutable, so the set can't change before the locked replay below
@@ -563,7 +696,7 @@ def _replay_write_log(cp_id: str) -> None:
         touched = {
             name
             for (name,) in conn.execute(
-                select(wl.c.table_name).where(wl.c.checkpoint_id == cp_id).distinct()
+                select(wl.c.table_name).where(wl.c.checkpoint_id.in_(ids)).distinct()
             )
         }
     if not touched:
@@ -571,37 +704,38 @@ def _replay_write_log(cp_id: str) -> None:
     lock_tables = [t for t in db_tables.metadata.sorted_tables if t.name in touched]
 
     with locked_unit_of_work(*lock_tables) as conn:
-        rows = conn.execute(
-            select(wl.c.table_name, wl.c.pk, wl.c.before_payload)
-            .where(wl.c.checkpoint_id == cp_id)
-            .order_by(wl.c.seq.desc())
-        ).all()
-        by_table: dict[str, list[tuple[str, dict | None]]] = {}
-        for table_name, pk, before_payload in rows:
-            by_table.setdefault(table_name, []).append((pk, before_payload))
-        # Parents-before-children order; reversed for phase 1, as-is for phase 2 — see
+        by_table = _chain_images(conn, ids)
+        # Parents-before-children order; reversed for deletes, as-is otherwise — see
         # the TABLE ORDER docstring section above.
         table_order = [t.name for t in db_tables.metadata.sorted_tables if t.name in by_table]
 
         _assert_restorable_accounts(by_table.get("accounts") or [])
+        txn_ids = [pk for pk, _ in by_table.get("transactions") or []]
+        txn_images = _txn_images(txn_ids, conn)
 
-        # Phase 1: delete every touched pk, CHILD TABLES FIRST — including the
-        # before_payload=None ones (a pk this turn newly inserted, so restore must
-        # remove it too).
-        for table_name in reversed(table_order):
-            table = db_tables.metadata.tables[table_name]
-            pk_col = _single_pk_col(table)
-            for pk, _before_payload in by_table[table_name]:
-                conn.execute(table.delete().where(pk_col == _pk_param(pk_col, pk)))
-        # Phase 2: re-insert every non-None before-image, PARENT TABLES FIRST. Every
-        # touched row (every table) is already gone by now, so no original seq can
-        # collide with another row still in flight.
-        for table_name in table_order:
-            table = db_tables.metadata.tables[table_name]
-            for pk, before_payload in by_table[table_name]:
-                if before_payload is None:
-                    continue
-                conn.execute(table.insert().values(**before_payload))
+        _replay.apply_images(conn, by_table, table_order)
+        if txn_ids:
+            _record_txn_reverts(cp_id, txn_images, _txn_images(txn_ids, conn), conn)
+
+
+def _txn_images(txn_ids: list[str], conn) -> dict[str, dict | None]:
+    from backend.db.transaction_store import TransactionStore
+
+    store = TransactionStore()
+    return {tid: store.find_by_id(tid, conn=conn) for tid in txn_ids}
+
+
+def _record_txn_reverts(cp_id: str, current: dict, restored: dict, conn) -> None:
+    """``txn_audit`` is checkpoint-excluded, so the replay leaves the reverted edit as each
+    row's last audited word — append a ``revert`` per changed transaction, inside the
+    replay's own transaction so the trail and the data land together."""
+    from backend.services import audit
+
+    cp = _index.find_checkpoint(cp_id) or {}
+    note = "Undid a restore" if cp.get("kind") == "pre_restore" else "Restored to before a change"
+    audit.record_txn_reverts(
+        {tid: (current.get(tid), restored.get(tid)) for tid in current}, note=note, conn=conn
+    )
 
 
 def _commit_staged_restore_files(staged: list[tuple[str, Path, Path | None]]) -> list[str]:

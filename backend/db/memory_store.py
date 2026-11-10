@@ -21,6 +21,21 @@ TIERS = ("durable", "time_bound")
 SOURCES = ("implicit", "explicit")
 
 
+def is_expired(fact: dict, today: str) -> bool:
+    """True when the fact's ``expires_at`` is before ``today``.
+
+    Only Open items expire once filed: a fact filed anywhere else never does, whatever date a
+    legacy row still carries (amendment 9). A legacy fact not yet filed keeps the old rule: it
+    expires when it was ``time_bound`` (a ``durable`` fact with a stray date never did).
+    """
+    exp = fact.get("expires_at")
+    if not exp or str(exp)[:10] >= today[:10]:
+        return False
+    if fact.get("state") == "live" or fact.get("section"):
+        return fact.get("section") == "open_items"
+    return fact.get("tier", "time_bound") == "time_bound"
+
+
 class MemoryStore(PayloadTableStore):
     def __init__(self, engine=None):
         super().__init__(memory, id_field="id", engine=engine)
@@ -33,19 +48,19 @@ class MemoryStore(PayloadTableStore):
             reverse=True,
         )
 
-    def active_facts(self, today: str | None = None) -> list[dict]:
-        """
-        All items except time_bound ones whose expires_at is in the past.
-        This is what the system prompt injects.
-        """
+    def remembered_facts(self, today: str | None = None) -> list[dict]:
+        """Every fact that still counts — live and not yet sorted, not retired, not expired. A
+        fact with no ``state`` predates the migration and is waiting to be sorted. This is what
+        recall searches and what the prompt counts."""
         today = today or user_today().isoformat()
-        out = []
-        for f in self.all_facts():
-            exp = f.get("expires_at")
-            if f.get("tier") == "time_bound" and exp and exp < today:
-                continue
-            out.append(f)
-        return out
+        return [
+            f for f in self.all_facts() if f.get("state") != "retired" and not is_expired(f, today)
+        ]
+
+    def active_facts(self, today: str | None = None) -> list[dict]:
+        """The live facts — the ones Lucius is shown in full. A fact with no ``state`` is not
+        live: the migration stamps it ``unsorted`` until it is filed."""
+        return [f for f in self.remembered_facts(today) if f.get("state") == "live"]
 
     def remove_by_id(self, id_val: str) -> bool:
         return self.delete(id_val)

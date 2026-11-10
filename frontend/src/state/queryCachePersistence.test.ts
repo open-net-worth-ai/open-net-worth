@@ -32,6 +32,18 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+describe('queryCache — what never reaches localStorage', () => {
+  it('the Actual connector’s status, which carries the server’s address', async () => {
+    const first = await reopenApp()
+    await first.fetchCachedQuery('/api/actual-budget/status', async () => ({ server_host: 'x' }))
+    await first.fetchCachedQuery('/api/accounts', async () => [{ id: 'a1' }])
+    first.flushQueryCachePersistence()
+    expect(localStorage.getItem(storageKey())).not.toContain('server_host')
+    const second = await reopenApp()
+    expect(second.getCachedQueryData('/api/actual-budget/status')).toBeUndefined()
+  })
+})
+
 describe('queryCache — survives a cold start', () => {
   it('hydrates a previous session’s data, so nothing reports initialLoading', async () => {
     const first = await reopenApp()
@@ -83,6 +95,23 @@ describe('queryCache — survives a cold start', () => {
 
     const second = await reopenApp()
     expect(second.getCachedQueryData('/api/accounts')).toBeUndefined()
+  })
+
+  it('never persists or hydrates the feature-flag list — a flag must not paint from last session', async () => {
+    const first = await reopenApp()
+    await first.fetchCachedQuery('/api/feature-flags', async () => ({ flags: [], locked: false }))
+    await first.fetchCachedQuery('/api/accounts', async () => [{ id: 'a1' }])
+    first.flushQueryCachePersistence()
+    expect(localStorage.getItem(storageKey())).not.toContain('/api/feature-flags')
+
+    // Even a mirror written by some other build is not trusted for it.
+    const blob = JSON.parse(localStorage.getItem(storageKey()) ?? '{}')
+    blob['/api/feature-flags'] = { data: { flags: [], locked: false }, updatedAt: Date.now() }
+    localStorage.setItem(storageKey(), JSON.stringify(blob))
+
+    const second = await reopenApp()
+    expect(second.getCachedQueryData('/api/feature-flags')).toBeUndefined()
+    expect(second.getCachedQueryData('/api/accounts')).toEqual([{ id: 'a1' }])
   })
 
   it('refuses to persist an oversized entry, and keeps the rest', async () => {

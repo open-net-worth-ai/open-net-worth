@@ -97,16 +97,3 @@
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
-
-/* The Close/Delete actions cell holds BUTTONS, not a monetary value — opt it out of
-   the global privacy-mode table mask (index.css blanket rule masks every non-first
-   tbody cell with an absolutely-positioned '***' overlay that would sit ON TOP of
-   the buttons and swallow their clicks). Found by the deterministic options E2E
-   under demo privacy mode. */
-body.hide-amounts .opt-tbl td.opt-row-actions::after {
-  content: none;
-}
-body.hide-amounts .opt-tbl td.opt-row-actions {
-  color: inherit !important;
-  user-select: auto;
-}

@@ -9,6 +9,7 @@ import {
 import { ModelPicker } from '../../ui'
 import { fUsd, sumSessionCost } from '../../../utils/costFormat'
 import type { Message } from '../../../types/chat'
+import { Check } from '../../../ui/icons'
 
 // The model/effort/cost cluster: [cost] [model picker] [effort dropdown].
 //
@@ -160,7 +161,7 @@ export function EffortChoices({
         >
           <span className="mp-opt-name">{effortChoiceLabel(lvl)}</span>
           <span className="mp-opt-tick" aria-hidden="true">
-            ✓
+            <Check size={14} />
           </span>
         </button>
       ))}

@@ -84,11 +84,109 @@ def test_create_link_token_returns_hosted_url(monkeypatch):
     assert "hosted_link" in captured["json"]
     assert captured["json"]["redirect_uri"] == "https://app/connectors"
     assert captured["json"]["client_id"] == "cid"
+    assert captured["json"]["country_codes"] == ["US", "CA"]
 
 
 def test_create_link_token_requires_creds():
     with pytest.raises(ValidationError):
         svc.create_link_token("")
+
+
+# ── complete_hosted_link (Hosted Link never shows the user a public token) ─────────────
+
+
+def _route(responses: dict, calls: list):
+    def fake_post(url, json=None, timeout=None):
+        path = url.split(".plaid.com", 1)[1]
+        calls.append((path, json))
+        return _Resp(responses.get(path, {}))
+
+    return fake_post
+
+
+def test_create_link_token_stores_the_link_token_server_side(monkeypatch):
+    from backend.db.plaid_config_store import PlaidConfigStore
+
+    PlaidConfigStore().update({"client_id": "cid", "secret": "skey"})
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        lambda *a, **k: _Resp({"link_token": "link-1", "hosted_link_url": "https://h/1"}),
+    )
+    svc.create_link_token("")
+    assert PlaidConfigStore().link_token() == "link-1"
+    assert "link_token" not in PlaidConfigStore().public()
+
+
+def test_complete_hosted_link_is_pending_until_the_user_finishes(monkeypatch):
+    _configured_store(link_token="link-1")
+    calls: list = []
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        _route({"/link/token/get": {"link_sessions": [{"link_session_id": "s1"}]}}, calls),
+    )
+    assert svc.complete_hosted_link() == {"status": "pending"}
+    assert calls == [
+        ("/link/token/get", {"client_id": "cid", "secret": "skey", "link_token": "link-1"})
+    ]
+
+
+def test_complete_hosted_link_exchanges_the_session_public_token(monkeypatch):
+    from backend.db.plaid_config_store import PlaidConfigStore
+
+    PlaidConfigStore().update({"client_id": "cid", "secret": "skey", "link_token": "link-1"})
+    calls: list = []
+    session = {"results": {"item_add_results": [{"public_token": "public-prod-1"}]}}
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        _route(
+            {
+                "/link/token/get": {"link_sessions": [session]},
+                "/item/public_token/exchange": {"access_token": "access-7", "item_id": "item-7"},
+            },
+            calls,
+        ),
+    )
+    out = svc.complete_hosted_link()
+    assert out == {
+        "status": "linked",
+        "item_id": "item-7",
+        "institution_name": "",
+        "has_access_token": True,
+    }
+    assert calls[1] == (
+        "/item/public_token/exchange",
+        {"client_id": "cid", "secret": "skey", "public_token": "public-prod-1"},
+    )
+    store = PlaidConfigStore()
+    assert store.access_token() == "access-7"
+    assert store.link_token() == ""
+
+
+def test_complete_hosted_link_reads_the_legacy_on_success_shape(monkeypatch):
+    _configured_store(link_token="link-1")
+    calls: list = []
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        _route(
+            {
+                "/link/token/get": {"link_sessions": [{"on_success": {"public_token": "pub-2"}}]},
+                "/item/public_token/exchange": {"access_token": "access-8", "item_id": "i"},
+            },
+            calls,
+        ),
+    )
+    assert svc.complete_hosted_link()["status"] == "linked"
+    assert calls[1][1]["public_token"] == "pub-2"
+
+
+def test_complete_hosted_link_without_a_link_in_flight_refuses():
+    _configured_store()
+    with pytest.raises(ValidationError):
+        svc.complete_hosted_link()
 
 
 # ── exchange_public_token ──────────────────────────────────────────────────────────────
@@ -103,10 +201,10 @@ def test_exchange_public_token_persists_access(monkeypatch):
         svc.httpx, "post", lambda *a, **k: _Resp({"access_token": "access-9", "item_id": "item-9"})
     )
     out = svc.exchange_public_token("public-token-xyz")
-    assert out == {"item_id": "item-9", "has_access_token": True}
-    cfg = PlaidConfigStore().get()
-    assert cfg["access_token"] == "access-9"
-    assert cfg["item_id"] == "item-9"
+    assert out == {"item_id": "item-9", "institution_name": "", "has_access_token": True}
+    store = PlaidConfigStore()
+    assert store.access_token() == "access-9"
+    assert [i["item_id"] for i in store.items()] == ["item-9"]
 
 
 def test_exchange_requires_token():
@@ -148,7 +246,31 @@ class TestNormalizeHelpers:
             "mask": "0000",
             "currency": "USD",
             "balance": 150.25,
+            "account_type": None,
+            "institution": None,
         }
+
+    @pytest.mark.parametrize(
+        ("plaid_type", "subtype", "expected"),
+        [
+            ("depository", "checking", "cash"),
+            ("depository", "savings", "cash"),
+            ("depository", "cd", "fixed_deposit"),
+            ("credit", "credit card", "credit"),
+            ("loan", "mortgage", "loan"),
+            ("loan", "student", "loan"),
+            ("investment", "401k", "retirement"),
+            ("investment", "ira", "retirement"),
+            ("investment", "brokerage", "investment"),
+            ("other", None, None),
+            (None, None, None),
+        ],
+    )
+    def test_account_to_common_suggests_the_app_account_type(self, plaid_type, subtype, expected):
+        from backend.services.aggregation.plaid import _account_to_common
+
+        account = {"account_id": "A1", "type": plaid_type, "subtype": subtype, "balances": {}}
+        assert _account_to_common(account)["account_type"] == expected
 
     def test_account_to_common_falls_back_to_name_and_unofficial_currency(self):
         from backend.services.aggregation.plaid import _account_to_common
@@ -359,6 +481,8 @@ class TestFetchWindow:
                 "mask": None,
                 "currency": "USD",
                 "balance": 100.0,
+                "account_type": None,
+                "institution": None,
             }
         ]
         assert len(window.rows) == 1
@@ -499,3 +623,52 @@ class TestClassifyError:
 
     def test_generic_exception_is_error(self):
         assert svc.classify_error(RuntimeError("unexpected")) == "error"
+
+
+# ── category_hint — the bank's own category, offered as a hint ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("pfc", "expected"),
+    [
+        (
+            {
+                "primary": "FOOD_AND_DRINK",
+                "detailed": "FOOD_AND_DRINK_FAST_FOOD",
+                "confidence_level": "VERY_HIGH",
+            },
+            "Food and drink: Fast food",
+        ),
+        (
+            {"primary": "TRANSPORTATION", "detailed": "TRANSPORTATION_TAXIS_AND_RIDE_SHARES"},
+            "Transportation: Taxis and ride shares",
+        ),
+        ({"primary": "TRAVEL", "detailed": "", "confidence_level": "HIGH"}, "Travel"),
+        ({"primary": "GENERAL_MERCHANDISE", "detailed": "X", "confidence_level": "LOW"}, None),
+        ({"primary": "GENERAL_MERCHANDISE", "confidence_level": "UNKNOWN"}, None),
+        ({}, None),
+    ],
+)
+def test_category_hint_is_readable_and_only_offered_when_plaid_is_confident(pfc, expected):
+    txn = {
+        "transaction_id": "t1",
+        "amount": 10,
+        "date": "2026-10-20",
+        "name": "x",
+        "personal_finance_category": pfc,
+    }
+    row = svc._txn_to_row(txn, {}, "acct-1")
+    assert row["category_hint"] == expected
+
+
+def test_a_transaction_without_plaid_categories_has_no_hint():
+    row = svc._txn_to_row({"transaction_id": "t1", "amount": 5, "date": "2026-10-20"}, {}, "a")
+    assert row["category_hint"] is None
+
+
+def test_the_hint_survives_the_fetch_pipelines_text_sanitizer_unchanged():
+    from backend.core.untrusted import sanitize_untrusted
+
+    pfc = {"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_FAST_FOOD"}
+    hint = svc._category_hint({"personal_finance_category": pfc})
+    assert sanitize_untrusted(hint) == hint == "Food and drink: Fast food"

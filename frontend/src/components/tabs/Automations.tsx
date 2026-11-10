@@ -16,17 +16,33 @@ import { AUTOMATIONS_REVIEW_DRAFT_SPEC } from '../../lucius/screenCommands'
 import { useRegisterScreenCommands } from '../../lucius/useScreenContract'
 import { useDataVersion } from '../../hooks/useDataVersion'
 import { useViewScroll } from '../../hooks/useViewScroll'
-import { Button, ErrorState, Modal, PageHeader, TabSkeleton } from '../ui'
-import { AutomationDetail } from './automations/AutomationDetail'
+import { Button, ErrorState, Modal, PageHeader, PageTabs, TabSkeleton } from '../ui'
+import { AutomationDetailSwitch } from './automations/AutomationDetailSwitch'
 import { AutomationEditorModal } from './automations/AutomationEditorModal'
 import { AutomationList, type AutomationSort } from './automations/AutomationList'
+import { useKeepAwakeSettled } from './automations/KeepAwakeBanner'
 import { ALL_TEMPLATES } from './automations/automationTemplates'
+import { DataSyncView } from './automations/datasync/DataSyncView'
+import { YnabSyncDetail } from './automations/datasync/YnabSyncDetail'
+import { useDataSyncs } from './automations/datasync/useDataSyncs'
 import {
   EMPTY_AUTOMATION_OPTIONS,
   missingTriggerFields,
   type AutomationOptions,
 } from './automations/AutomationTriggerSummary'
 import './automations.css'
+
+type AutomationsView = 'lucius' | 'sync'
+
+// The masthead while no data sync is on offer: one list, no Data sync tab.
+const LUCIUS_ONLY_SUBTITLE =
+  'Run on a schedule or when something happens. Every run is a conversation you can pick back up.'
+
+const VIEW_SUBTITLES: Record<AutomationsView, string> = {
+  lucius:
+    'Lucius runs these on a schedule or when something happens. Every run is a conversation you can pick back up.',
+  sync: 'Keep this book and your other apps in step, by fixed rules. No AI involved and nothing to pay.',
+}
 
 interface AutomationsProps {
   onOpenChat?: (prefill: string) => void
@@ -36,10 +52,27 @@ interface AutomationsProps {
 export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const search = location.search as { automation?: string; run?: string; template?: string }
+  const search = location.search as {
+    automation?: string
+    run?: string
+    template?: string
+    view?: string
+    sync?: string
+    report?: string
+  }
   const selectedAutomationId = typeof search.automation === 'string' ? search.automation : null
   const selectedRunId = typeof search.run === 'string' ? search.run : null
   const templateKey = typeof search.template === 'string' ? search.template : null
+  // Two views: Lucius's Automations, and data syncs (fixed rules, no AI): the two-way sync with a
+  // budget app, whose page `?sync=<app>` opens (`report` = one of its runs). Each behind its own
+  // flag: all off (or still loading), only the Lucius list, as before.
+  const dataSyncs = useDataSyncs()
+  const syncOn = dataSyncs.length > 0
+  const syncEntry = dataSyncs.find((e) => e.app.key === search.sync) ?? null
+  const syncKey = syncEntry?.app.key ?? null
+  const view: AutomationsView = syncOn && (syncKey || search.view === 'sync') ? 'sync' : 'lucius'
+  const reportId = syncKey && typeof search.report === 'string' ? search.report : null
+  const toReview = dataSyncs.reduce((total, e) => total + e.sync.toReview, 0)
   const [automations, setAutomations] = useState<Automation[]>([])
   const automationsRef = useRef(automations)
   useEffect(() => {
@@ -48,6 +81,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   const [options, setOptions] = useState<AutomationOptions>(EMPTY_AUTOMATION_OPTIONS)
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const keepAwakeSettled = useKeepAwakeSettled()
   const [loadError, setLoadError] = useState<string | null>(null)
   const [runs, setRuns] = useState<AutomationRun[]>([])
   const [runsLoading, setRunsLoading] = useState(false)
@@ -313,6 +347,36 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
     } as never)
   }
 
+  const openSync = (key: string | null, report: string | null = null) => {
+    void navigate({
+      to: '/automations',
+      search: ((previous: Record<string, unknown>) => ({
+        ...previous,
+        automation: undefined,
+        run: undefined,
+        view: 'sync',
+        sync: key || undefined,
+        report: key && report ? report : undefined,
+      })) as never,
+      replace: key === null,
+    } as never)
+  }
+
+  const setView = (next: AutomationsView) => {
+    void navigate({
+      to: '/automations',
+      search: ((previous: Record<string, unknown>) => ({
+        ...previous,
+        automation: undefined,
+        run: undefined,
+        sync: undefined,
+        report: undefined,
+        view: next === 'sync' ? 'sync' : undefined,
+      })) as never,
+      replace: true,
+    } as never)
+  }
+
   const save = async (draft: AutomationDraft) => {
     if (editor?.automation) {
       const saved = await updateAutomation(editor.automation.id, draft)
@@ -438,13 +502,28 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           title, and the detail's breadcrumb (desktop only — a phone backs out by swipe or
           the tab bar) is the way back, so repeating "Automations" here is redundancy. */}
       {/* Up while the list loads too — only the data is a skeleton; the title never pops in. */}
-      {!selectedAutomationId && (
-        <div className="rd-masthead" data-od-id="automations-masthead">
+      {!selectedAutomationId && !syncKey && (
+        <div
+          className={syncOn ? 'rd-masthead a3-masthead--tabs' : 'rd-masthead'}
+          data-od-id="automations-masthead"
+        >
           <PageHeader
             className="a3-masthead-head"
             title="Automations"
-            subtitle="Run on a schedule or when something happens. Every run is a conversation you can pick back up."
+            subtitle={syncOn ? VIEW_SUBTITLES[view] : LUCIUS_ONLY_SUBTITLE}
           />
+          {syncOn && (
+            <PageTabs
+              className="a3-views"
+              ariaLabel="Kind of automation"
+              value={view}
+              onChange={setView}
+              tabs={[
+                { key: 'lucius', label: 'Lucius' },
+                { key: 'sync', label: 'Data sync', badge: toReview || undefined },
+              ]}
+            />
+          )}
         </div>
       )}
       {actionError && (
@@ -452,7 +531,22 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           {actionError}
         </div>
       )}
-      {loading ? (
+      {syncEntry ? (
+        <YnabSyncDetail
+          app={syncEntry.app}
+          reportId={reportId}
+          onBack={() => openSync(null)}
+          onOpenReport={(id) => openSync(syncEntry.app.key, id)}
+        />
+      ) : view === 'sync' ? (
+        <DataSyncView
+          entries={dataSyncs}
+          onOpen={(key) => {
+            rememberScroll()
+            openSync(key)
+          }}
+        />
+      ) : loading || !keepAwakeSettled ? (
         <div className="a3-wrap">
           <TabSkeleton variant="automations" label="Loading automations…" header={false} />
         </div>
@@ -493,7 +587,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           />
         </div>
       ) : selected ? (
-        <AutomationDetail
+        <AutomationDetailSwitch
           automation={selected}
           runs={runs}
           options={options}
@@ -527,6 +621,18 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
               setAutomations((rows) => rows.map((row) => (row.id === saved.id ? saved : row)))
             } catch (error) {
               setActionError(messageOf(error, 'Permission could not be revoked.'))
+            } finally {
+              setBusyId(null)
+            }
+          }}
+          onSaveToolLists={async (lists) => {
+            setBusyId(selected.id)
+            setActionError(null)
+            try {
+              const saved = await updateAutomation(selected.id, lists)
+              setAutomations((rows) => rows.map((row) => (row.id === saved.id ? saved : row)))
+            } catch (error) {
+              setActionError(messageOf(error, 'Tool permissions could not be saved.'))
             } finally {
               setBusyId(null)
             }

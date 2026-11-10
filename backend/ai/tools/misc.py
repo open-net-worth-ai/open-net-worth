@@ -12,6 +12,7 @@ from typing import List, Literal, Optional
 from pydantic import Field
 
 from backend.ai.search import get_search_provider
+from backend.ai.search.switch import search_results
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of, schema_of_no_required
 from backend.core.untrusted import sanitize_untrusted
@@ -225,6 +226,16 @@ def sanitize_search_results(results: list[dict]) -> list[dict]:
     return cleaned
 
 
+# The tools that run the ACTIVE search provider instead of naming one, and which of that
+# provider's own tools (``<id>_search`` / ``<id>_fetch_page``) each one IS for permission
+# purposes under ``permissions_v2``: they belong to the search connector, so its page is their one
+# control (``web_search_providers.active_provider_tool``, ``_connector_gate.permission_key``).
+ACTIVE_PROVIDER_VERBS: dict[str, str] = {
+    "web_search": "search",
+    "fetch_page": "fetch",
+}
+
+
 class WebSearchInput(ToolInput):
     query: str = Field(
         description="Search query — be specific, include tickers/company names/locations",
@@ -255,7 +266,7 @@ async def web_search(input_data: dict):
     max_results = min(int(input_data.get("max_results", 8)), 15)
     logger.info("web_search: %s", query)
     try:
-        results = await get_search_provider().search(query, max_results)
+        results = await search_results(get_search_provider(), query, max_results)
     except Exception as exc:
         logger.error("web_search failed: %s", exc)
         raise

@@ -149,10 +149,10 @@ export function Allocation({ alloc, d, onSaveTargets }: Props) {
               <div className="mk-atl-top">
                 <span className="mk-atl-dot" style={{ background: clsColor(a.cls) }} />
                 <span className="mk-atl-nm">{clsDisplayName(a.cls)}</span>
-                <span className="mk-atl-cur">{a.cur}%</span>
+                <span className="mk-atl-cur money">{a.cur}%</span>
                 {hasTargets && (
                   <span
-                    className="mk-atl-drift"
+                    className="mk-atl-drift money"
                     style={{
                       color: off ? 'var(--warn)' : 'var(--faint)',
                       background: off

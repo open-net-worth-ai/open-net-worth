@@ -22,6 +22,7 @@ import { GLYPH_SVG, TYPE_MARKER_SVG } from '../../lucius/identity'
 import { colorFor, C } from '../../lucius/mentionColors'
 import { isSafeCssColor } from '../../utils/mentionable'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { connectorLook } from './toolActivity/useToolOwnerLogos'
 
 export type ComposerTrigger = { kind: '@' | '/'; query: string }
 
@@ -38,6 +39,10 @@ export interface MentionComposerHandle {
   setText(text: string): void
   /** Append plain text at the end of the editor WITHOUT clearing existing chips. */
   appendText(text: string, opts?: InsertOpts): void
+  /** Dictation: show `text` as what this dictation has heard so far, revised in place until
+   *  `final`; the next dictation starts after it. Never touches what was typed before, and never
+   *  moves the caret — on a phone that reads as focusing the box and hides the tab bar. */
+  dictate(text: string, final: boolean): void
   /** Insert a "@"/"/" trigger char at the caret (with a word-boundary space when needed) so the
    *  composer's own detection opens the picker — used by the toolbar @ / / buttons. */
   insertTrigger(mode: '@' | '/'): void
@@ -165,7 +170,16 @@ function buildChipEl(m: MentionRef): HTMLElement {
   // Transaction direction and account color are passed as item.dot so colorFor()
   // returns them at step 1 (explicit per-item override).
   const glEl = document.createElement('span')
-  if (isScope || isSource) {
+  // The picker loaded the connectors read before this chip could be picked, so the mark is
+  // already resolvable here — the same one the Connectors card shows.
+  const logo = m.type === 'connector' ? connectorLook(m.ref).logo : undefined
+  if (logo) {
+    const img = document.createElement('img')
+    img.className = 'chip-logo'
+    img.src = logo
+    img.alt = ''
+    chip.appendChild(img)
+  } else if (isScope || isSource) {
     glEl.className = 'chip-glyph'
     glEl.textContent = '◉'
   } else if (isAgent) {
@@ -189,7 +203,7 @@ function buildChipEl(m: MentionRef): HTMLElement {
     else if (TYPE_MARKER_SVG[m.type] !== undefined) glEl.innerHTML = TYPE_MARKER_SVG[m.type] ?? ''
     else glEl.textContent = iconFor(m.type)
   }
-  chip.appendChild(glEl)
+  if (!logo) chip.appendChild(glEl)
 
   const nameEl = document.createElement('span')
   nameEl.className = 'chip-name'
@@ -304,6 +318,9 @@ export const MentionComposer = forwardRef<MentionComposerHandle, MentionComposer
     ref,
   ) {
     const editorRef = useRef<HTMLDivElement>(null)
+    // The phrase dictation is revising (``dictate``), and the space it starts with.
+    const dictationNode = useRef<Text | null>(null)
+    const dictationLead = useRef('')
     const isMobile = useIsMobile()
     // Latest props captured in a ref so the document-level selectionchange listener (mounted once)
     // always calls through to current callbacks without re-subscribing.
@@ -642,6 +659,23 @@ export const MentionComposer = forwardRef<MentionComposerHandle, MentionComposer
         if (!editor || !text) return
         editor.appendChild(document.createTextNode(text))
         if (opts?.focus ?? true) placeCaretAtEnd(editor)
+        refresh()
+        cb.current.onTrigger(null)
+      },
+      dictate(text: string, final: boolean) {
+        const editor = editorRef.current
+        if (!editor) return
+        let node = dictationNode.current
+        if (!node || !editor.contains(node)) {
+          // A space before it when it follows other words, so phrases don't run together.
+          const before = editor.textContent ?? ''
+          node = document.createTextNode('')
+          editor.appendChild(node)
+          dictationNode.current = node
+          dictationLead.current = before && !/\s$/.test(before) ? ' ' : ''
+        }
+        node.textContent = text ? dictationLead.current + text : ''
+        if (final) dictationNode.current = null
         refresh()
         cb.current.onTrigger(null)
       },

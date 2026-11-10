@@ -62,6 +62,10 @@ your plan shows it beside its odds ("49% at 45"), so its odds aren't read agains
   **Building wealth** before retirement and **Drawing down** after. Switch to **Outcomes by
   age** to see, at each age, the share of outcomes where you still have money, your money has
   run out, or you are no longer living. **Condition on survival** sets the odds of dying aside.
+  The figure at the end of the line is where the typical path finishes; when it lands on a row
+  of the money scale, that scale figure is hidden so the two don't print over each other.
+- **Big amounts** read the same way on the chart, the tiles under it and **Cash Flow**: in
+  millions, billions or trillions (₫24.95B, not ₫24946.08M), in your chosen number format.
 - **Ask about it** — the suggested questions (*"What is my chance of outliving my money?"*, *"What
   if I retire 5 years earlier?"*) send the question to Lucius.
 

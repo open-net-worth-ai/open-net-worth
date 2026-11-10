@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client(db_isolated, monkeypatch):
     # PATCH/DELETE now best-effort hot-reload the live Telegram bot for connector_id ==
-    # "telegram" (see connectors_api._reload_telegram_if_needed) — a non-primary boot
+    # "telegram" (see connectors_api._reload_live_connector) — a non-primary boot
     # never runs the poller, which is exactly what a test process is. Without this a
     # telegram-enabling test here would spawn a real background connect-with-retry
     # supervisor against api.telegram.org with a fake token (test_telegram_bot_lifecycle.py
@@ -39,6 +39,7 @@ def test_list_has_builtins_never_500(client):
     assert len(web_search_ids) == 6  # one card per web-search provider (incl. key-free DuckDuckGo)
     assert ids - web_search_ids == {
         "email",
+        "voice",
         "webhook",
         "telegram",
         "simplefin",
@@ -47,6 +48,7 @@ def test_list_has_builtins_never_500(client):
         "lunch_flow",
         "ynab",
         "enable_banking",
+        "gocardless",
         "yodlee",
         "alpaca",
         "ibkr",
@@ -296,7 +298,7 @@ def test_delete_mcp_connector_via_generic_route_delegates_to_remove_mcp_server(c
 
 # ── the Telegram bot reload (PATCH enable/disable + DELETE) ──────────────────────
 #
-# `_reload_telegram_if_needed` is exercised here with `reload_best_effort` MOCKED — the
+# `_reload_live_connector` is exercised here with `reload_best_effort` MOCKED — the
 # real one is covered by test_telegram_bot_lifecycle.py, with `bot._connect` mocked
 # instead, so nothing in this suite ever opens a real socket to api.telegram.org.
 
@@ -498,6 +500,8 @@ def test_get_connector_accounts_returns_the_linked_block_even_when_not_configure
             "mask": "4242",
             "currency": None,
             "balance": None,
+            "account_type": None,
+            "institution": None,
             "linked_account_id": "acc_1",
         }
     ]

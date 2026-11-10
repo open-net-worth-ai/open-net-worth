@@ -7,6 +7,7 @@ import {
   type ReportRequest,
 } from '../state/reportProblem'
 import {
+  COMMUNITY_URL,
   emailHref,
   REPORT_LIMITS,
   reportText,
@@ -19,6 +20,7 @@ import { FormField } from './ui/FormField'
 import { Modal } from './ui/Modal'
 import { Loading } from './ui'
 import { Stack } from './ui/Stack'
+import { openExternal } from '../platform/desktop'
 import { Text } from './ui/Text'
 import { TextArea } from './ui/TextArea'
 import { TextField } from './ui/TextField'
@@ -249,7 +251,11 @@ function ReportProblemDialog({
               autoFocus
             />
           </FormField>
-          <FormField label="Email (optional)" htmlFor="report-email">
+          <FormField
+            label="Email (optional)"
+            htmlFor="report-email"
+            help="We’ll only use it to tell you when the fix is out."
+          >
             <TextField
               id="report-email"
               type="email"
@@ -309,6 +315,20 @@ function ReportProblemDialog({
             <summary>Show exactly what is sent</summary>
             <pre>{JSON.stringify(report, null, 2)}</pre>
           </details>
+          <p className="report-problem__community">
+            Prefer to chat?{' '}
+            <a
+              href={COMMUNITY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => {
+                event.preventDefault()
+                void openExternal(COMMUNITY_URL)
+              }}
+            >
+              Join us on Discord
+            </a>
+          </p>
         </Stack>
       )}
     </Modal>

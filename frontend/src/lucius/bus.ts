@@ -1,5 +1,5 @@
 // lucius/bus.ts — the Lucius frontend event bus (framework-free leaf; no React imports).
-// Two event kinds:
+// Three event kinds:
 //  • data_changed(domains): the backend turn executed write tools (SSE `data_changed`,
 //    domains registry-tagged server-side) — subscribers refetch. See useDataVersion.
 //  • screen commands: an ephemeral UI command (`plan.stage_whatif`, …) dispatched by the
@@ -8,13 +8,20 @@
 //    non-passive subscriber (screen hidden/unmounted, navigation mid-turn, chip from
 //    another tab). Passive subscribers observe without consuming (e.g. Plan's sub-tab
 //    auto-switch).
+//  • screen requests: read_screen asks the open app what is on screen, over GET /api/events.
 
 export interface ScreenCommandInvocation {
   name: string
   args: Record<string, unknown>
 }
 
+export interface ScreenRequest {
+  request_id: string
+  session_id: string
+}
+
 type DataChangedCb = (domains: string[]) => void
+type ScreenRequestCb = (request: ScreenRequest) => void
 type CommandHandler = (cmd: ScreenCommandInvocation) => void
 interface CommandSub {
   prefix: string
@@ -23,6 +30,7 @@ interface CommandSub {
 }
 
 const dataSubs = new Set<DataChangedCb>()
+const screenRequestSubs = new Set<ScreenRequestCb>()
 const cmdSubs = new Set<CommandSub>()
 const parked = new Map<string, ScreenCommandInvocation>()
 
@@ -40,6 +48,25 @@ export function onDataChanged(cb: DataChangedCb): () => void {
   dataSubs.add(cb)
   return () => {
     dataSubs.delete(cb)
+  }
+}
+
+/** The server asks what is on screen (read_screen). Not sticky: a request nobody hears now is
+ *  one nobody should answer later. */
+export function emitScreenRequest(request: ScreenRequest): void {
+  for (const cb of [...screenRequestSubs]) {
+    try {
+      cb(request)
+    } catch {
+      /* a subscriber error must never break the bus */
+    }
+  }
+}
+
+export function onScreenRequest(cb: ScreenRequestCb): () => void {
+  screenRequestSubs.add(cb)
+  return () => {
+    screenRequestSubs.delete(cb)
   }
 }
 
@@ -129,4 +156,31 @@ export function _resetBusForTests(): void {
   parked.clear()
   liveSubs.clear()
   liveSessions = []
+}
+
+// ── Conversation changed ──────────────────────────────────────────────────────
+// A turn this browser did not send can start AND finish between two live polls — a voice
+// call's small talk is recorded in milliseconds — so the open chat never saw it. Whoever
+// knows a conversation may have changed (a voice call, while it is on) says so here, and the
+// chat showing it catches up: joins a running turn live, or re-reads a finished one.
+
+type ConversationChangedCb = (sessionId: string) => void
+
+const conversationSubs = new Set<ConversationChangedCb>()
+
+export function emitConversationChanged(sessionId: string): void {
+  for (const cb of [...conversationSubs]) {
+    try {
+      cb(sessionId)
+    } catch {
+      /* a subscriber error must never break the bus */
+    }
+  }
+}
+
+export function onConversationChanged(cb: ConversationChangedCb): () => void {
+  conversationSubs.add(cb)
+  return () => {
+    conversationSubs.delete(cb)
+  }
 }

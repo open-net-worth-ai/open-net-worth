@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from backend.core.errors import NotFoundError
@@ -215,6 +215,9 @@ def update_mcp_client(server_id: str, body: McpServerUpdate):
     endpoint_changed = _endpoint_changed(before, updated)
     spawn_changed = _spawn_signature_changed(before, updated)
     if endpoint_changed:
+        # A failed read keeps the tool list, so this is the one place an answer stops applying:
+        # another endpoint's tools must never stand in for this one's.
+        store.record_discovery(server_id, [], updated.last_status, updated.last_error)
         revoked = tool_permissions.revoke_allowed_tools(mcp_connector_id(server_id))
         logger.info(
             "mcp server '%s' endpoint changed — %d 'allow' permission(s) withdrawn",
@@ -237,6 +240,8 @@ def update_mcp_client(server_id: str, body: McpServerUpdate):
         endpoint_changed or spawn_changed or before.enabled != updated.enabled
     ):
         get_manager().reconcile_pooled_connection(server_id)
+    if before is not None and not before.enabled and updated.enabled:
+        connector_catalog.discover_mcp_tools_if_unlisted(server_id)
     return store.public_one(server_id)
 
 
@@ -298,6 +303,26 @@ def probe_mcp_client_progress(probe_id: str):
     return probe_progress.snapshot(probe_id)
 
 
+@router.get("/api/mcp-clients/{server_id}/icon")
+def mcp_client_icon(server_id: str):
+    """The server's cached display icon (``mcp.site_identity``) — raster bytes typed by their
+    magic, never by the site's header, served with ``nosniff`` and a script-free CSP so the
+    bytes can never be reinterpreted as a page on our origin. 404 when there is none."""
+    found = _store().site_icon(server_id)
+    if found is None:
+        raise HTTPException(404, "no icon")
+    data, mime = found
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "private, max-age=86400",
+        },
+    )
+
+
 @router.post("/api/mcp-clients/{server_id}/test")
 def test_mcp_client(server_id: str):
     """Connect + ``tools/list`` against an EXISTING server; cache + return discovered tools.
@@ -306,7 +331,7 @@ def test_mcp_client(server_id: str):
     has no record yet, use ``/api/mcp-clients/probe``.
 
     Never raises on a connection failure — the result carries ``last_status`` /
-    ``last_error`` and an empty ``discovered_tools`` so the UI can show the error.
+    ``last_error`` so the UI can show the error, and the last good ``discovered_tools``.
     """
     result = get_manager().test_connect(server_id)
     if isinstance(result, dict) and result.get("error"):

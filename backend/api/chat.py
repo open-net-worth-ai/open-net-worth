@@ -21,8 +21,9 @@ from backend.ai import (
     turns,
 )
 from backend.ai.attachments import build_user_content
+from backend.ai.permissions import engine as permission_engine
 from backend.ai.prompts import build_system_prompt
-from backend.ai.tool_text import ONBOARDING_INIT
+from backend.ai.tool_text import ONBOARDING_INIT, is_harness_note
 from backend.api import demo_visitor
 from backend.api._deps import _bearer_token
 from backend.core.errors import ConfigurationError, ValidationError
@@ -35,13 +36,7 @@ from backend.services.mentions import (
     resolve_mentions,
     session_brief_block,
 )
-from backend.services.screen_context import (
-    MAX_SCREEN_COMMAND_PARAMS,
-    MAX_SCREEN_COMMANDS,
-    MAX_SCREEN_HANDLES,
-    SCREEN_COMMAND_NAME_RE,
-    format_screen_context,
-)
+from backend.services.screen_context import format_screen_context, session_manifests
 from backend.services.slash_command import resolve_slash_skills
 
 logger = logging.getLogger(__name__)
@@ -198,12 +193,13 @@ def _friendly_error(exc: BaseException) -> tuple[str, bool]:
     Never leaks a key, stack trace, or raw SDK dict.
     """
     from backend.core.errors import (
+        CliNotSignedInError,
         ProviderDisabledError,
         ProviderTimeoutError,
         UnsupportedModalityError,
     )
 
-    if isinstance(exc, ProviderDisabledError):
+    if isinstance(exc, (ProviderDisabledError, CliNotSignedInError)):
         return str(exc), True
     if isinstance(exc, ProviderTimeoutError):
         # The provider's own words ("Claude Code CLI timed out after 300s (raise
@@ -360,6 +356,43 @@ def _merge_mention_context(message: dict, block: str) -> dict:
         text = content if isinstance(content, str) else json.dumps(content)
         message["content"] = [{"type": "text", "text": text}, note] if text else [note]
     return message
+
+
+def _announce_user_message(session_id: str, turn_id: str, req: ChatRequest, text: str) -> None:
+    """Put the message that started this turn on the live stream. A device watching the
+    conversation otherwise sees only the reply — its own bubble never shows the message
+    another device sent (a phone's photo) until the transcript is re-read. Keyed by the
+    sender's own id, so the sending device recognises its optimistic copy."""
+    if req.retry or is_harness_note(text):
+        return
+    from backend.services.attachments import attachment_file_meta
+
+    ref_ids = list(req.attachments or [])
+    meta = attachment_file_meta(ref_ids) if ref_ids else {}
+    attachments = [
+        {
+            "ref_id": ref_id,
+            "kind": "image"
+            if (meta[ref_id].get("media_type") or "").startswith("image/")
+            else "text",
+            "summary": meta[ref_id].get("filename") or "file",
+        }
+        for ref_id in ref_ids
+        if ref_id in meta
+    ]
+    if not text.strip() and not attachments:
+        return
+    live_sessions.publish(
+        session_id,
+        {
+            "type": "user_message",
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "message_id": req.client_message_id or f"srv_{uuid.uuid4().hex[:12]}",
+            "text": text,
+            "attachments": attachments,
+        },
+    )
 
 
 @router.post("/api/chat")
@@ -544,28 +577,16 @@ async def chat(req: ChatRequest, request: Request):
             screen_block = format_screen_context(req.screen)
             if screen_block:
                 new_messages[-1] = _merge_mention_context(new_messages[-1], screen_block)
-            # Stash caps: outer lists AND each command's params list — a hostile client
-            # can't bloat the session index or the per-call validation walk. The name
-            # regex gates the STASH too, so a command the prose renderer would drop is
-            # equally un-invocable via run_screen_command (one invariant, two doors).
-            _cmds = []
-            for c in req.screen.commands:
-                if len(_cmds) >= MAX_SCREEN_COMMANDS:
-                    break
-                if not SCREEN_COMMAND_NAME_RE.match(c.name or ""):
-                    continue
-                d = c.model_dump()
-                d["params"] = (d.get("params") or [])[:MAX_SCREEN_COMMAND_PARAMS]
-                _cmds.append(d)
+            _handles, _cmds = session_manifests(req.screen)
             assistant.upsert_session_meta(
-                session_id,
-                screen_handles=[h.model_dump() for h in req.screen.handles][:MAX_SCREEN_HANDLES],
-                screen_commands=_cmds,
+                session_id, screen_handles=_handles, screen_commands=_cmds
             )
             # The screen's own tools (Plan → Budget's envelope/cap tools) join the offer.
             assistant.load_screen_tools(session_id, req.screen.title)
         else:
             assistant.upsert_session_meta(session_id, screen_handles=[], screen_commands=[])
+            # Screen awareness off sends no snapshot; he can still look if the owner means it.
+            assistant.load_session_tools(session_id, frozenset({"read_screen"}))
 
     # Resolve direct skills into structured host requests. The assistant renders and
     # persists them before its first provider call; no imperative user-text shim asks
@@ -694,6 +715,7 @@ async def chat(req: ChatRequest, request: Request):
         handle.task.add_done_callback(
             lambda _task, claimed=_residue_claim: pending_injection.nack(claimed)
         )
+    _announce_user_message(session_id, handle.turn_id, req, _original_user_text)
     if _is_opening_message and automation_owned is None and not _residue:
         session_titles.schedule_title(session_id, _original_user_text)
     # Onboarding opens with a hidden trigger and Lucius speaking first, so there is no first
@@ -769,6 +791,9 @@ async def stop_chat(session_id: str, request: Request, body: StopRequest = StopR
 class ResolvePendingRequest(BaseModel):
     tool_use_id: str
     decision: str  # "approve" | "deny"
+    # Under ``permissions_v2`` the card's Always allow: the standing permission was written by its
+    # own request; this only says which answer the card was, so a reload can label it.
+    always: bool = False
 
 
 @router.post("/api/chat/{session_id}/resolve")
@@ -788,6 +813,7 @@ async def resolve_pending(session_id: str, req: ResolvePendingRequest):
     from backend.services.automations.runs import automation_run_for_session
 
     automation_owned = automation_run_for_session(session_id) is not None
+    permission_engine().record_resolution(session_id, req.tool_use_id, req.decision, req.always)
 
     async def _events(turn_id: str) -> AsyncGenerator[dict, None]:
         if automation_owned:
@@ -850,10 +876,18 @@ class SessionMetaUpdate(BaseModel):
     # normalization) rather than the person typing it — it then yields to an AI title and
     # to a rename instead of overwriting them. See `SessionStore.write_title`.
     auto: bool = False
+    # The conversation's model, chosen on a call: no typed message will carry it to the server,
+    # and the next spoken answer reads it from there. Blank clears it back to the default.
+    model: Optional[str] = None
 
 
 @router.patch("/api/sessions/{session_id}")
 def update_session_meta(session_id: str, body: SessionMetaUpdate):
+    if body.model is not None:
+        try:
+            conversation.select_session_model(session_id, body.model)
+        except ConfigurationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if body.title is None:
         assistant.upsert_session_meta(session_id)
     else:
@@ -905,9 +939,10 @@ def set_session_permission_mode(session_id: str, body: PermissionModeUpdate):
     """Set one conversation's approval mode — ``manual`` | ``auto`` | ``skip``.
 
     HUMAN-ONLY, and that is the security property this whole feature rests on, not a
-    nicety. It is reachable from an authenticated browser and from nowhere else: no tool
-    writes it, no tool schema advertises it, and ``services.conversation_approval`` is the
-    only writer (swept by ``tests/test_conversation_approval.py``). A conversation reads
+    nicety. It is reachable from an authenticated browser and a Telegram owner's
+    ``/approvals`` and from nowhere else: no tool writes it, no tool schema advertises it, and
+    ``services.conversation_approval`` is the only writer (swept by
+    ``tests/test_conversation_approval.py``). A conversation reads
     untrusted text all day — a fetched page, an email body, an MCP result — so a model able
     to set its own mode would turn a prompt injection into an approvals-off switch.
     Automations' ``permission_mode`` carries the identical rule for the identical reason

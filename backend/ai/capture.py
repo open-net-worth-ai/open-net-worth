@@ -62,6 +62,19 @@ Book it now. Nobody is watching this turn, so do not ask clarifying questions:
 - Resolve the account from the card, wallet or app name if one is mentioned;
   look up the accounts if you need to.
 - If the text names a date or time, use it — it is when it actually happened.
+- If an entry under Recent in your memory is about this money (a payment it expects,
+  how to book it), book it the way that entry says — it is what the owner agreed, and
+  it wins over past transactions and a payee's default category — then close that entry
+  with close_recent_items.
+- A payee's pinned default category replaces the category you pass. When a standing
+  instruction from the owner decides the category (e.g. a meal-by-time rule), pass that
+  category with override_payee_default=true. If the result says your category was replaced
+  and an instruction requires it, fix it with update_transactions BEFORE you reply — never
+  just describe the fix.
+- description is the merchant or bank string as the text gives it. Leave memo
+  empty unless the text says something the row doesn't already show (items
+  bought, what it was for) — never a retelling of the notification, its sender,
+  time or card number.
 - A one-time code, a promotion, a statement or balance notice, or anything that
   is not money moving: write nothing and say so.
 - If you genuinely cannot tell what moved, write nothing and say why.
@@ -149,7 +162,7 @@ async def run_capture(
         prompt += _REF_CLAUSE.format(source=source, ref=ref)
 
     # The conversation is KEPT — it is the record of what came in and what Lucius booked —
-    # but stays out of the chat list unless the person asks to see background conversations.
+    # but is listed under Captures, never among the chats you switch between.
     upsert_session_meta(session_id, title=capture_title(text), origin="capture")
 
     try:

@@ -20,15 +20,27 @@ import { ArtifactCard } from './ArtifactCard'
 import { WriteReceiptChip } from './WriteReceiptChip'
 import { useAnchoredPopover } from './anchoredPopover'
 import { ScreenCommandChip } from './ScreenCommandChip'
-import { ChangePreview } from './ChangePreview'
+import { CodeBlock } from './CodeBlock'
+import { ChangePreviewSwitch } from './ChangePreviewSwitch'
 import { DuplicateReview } from './DuplicateReview'
-import { Search, Check, Clock, Copy, FileText, RotateCcw } from '../../ui/icons'
+import {
+  Search,
+  Check,
+  Clock,
+  Copy,
+  FileText,
+  RotateCcw,
+  ChevronUp,
+  ChevronDown,
+} from '../../ui/icons'
 import { makeMentionTokenRE } from '../../types/mentions'
 import type { MentionRef, MentionType } from '../../types/mentions'
 import { CitationChips } from './lucius/CitationChips'
 import { stripFence, stripScreenContext, stripConfirmHandshake } from '../../utils/untrusted'
 import { Chip } from './lucius/Chip'
 import { ToolActivity } from './toolActivity/ToolActivity'
+import { useFlag } from '../../hooks/useFlag'
+import { failureOf } from './toolActivity/cluster'
 import type { ActionItem, ThinkingItem } from './toolActivity/cluster'
 import { ThinkingBlock } from './toolActivity/ThinkingRow'
 import { MentionDetail } from './lucius/MentionDetail'
@@ -180,7 +192,11 @@ interface Props {
   // Resolve a paused (awaiting-approval) tool_use — RFC 2026-07-22. Present on every real
   // chat surface; optional only so a read-only render (Inbox / agent findings, which use
   // ProposedChangeDiff instead) never needs to supply one.
-  onResolvePendingToolUse?: (toolUseId: string, decision: 'approve' | 'deny') => void
+  onResolvePendingToolUse?: (
+    toolUseId: string,
+    decision: 'approve' | 'deny',
+    options?: { always?: boolean },
+  ) => void
   onRespondToChange?: (
     messageId: string,
     changeId: string | undefined,
@@ -214,7 +230,12 @@ function SearchCallItem({ s }: { s: SearchCall }) {
         <span className="msg-search-query">{s.query}</span>
         {!s.loading && s.results.length > 0 && (
           <span className="msg-search-count">
-            {s.results.length} sources {open ? '▲' : '▼'}
+            {s.results.length} sources{' '}
+            {open ? (
+              <ChevronUp size={11} aria-hidden="true" />
+            ) : (
+              <ChevronDown size={11} aria-hidden="true" />
+            )}
           </span>
         )}
       </button>
@@ -269,6 +290,7 @@ function actionItemFor(block: MessageBlock): ActionItem | null {
     result: block.result,
     resultElided: block.resultElided,
     inputElided: block.inputElided,
+    ...(block.autoApproval ? { autoApproval: block.autoApproval } : {}),
   }
 }
 
@@ -359,6 +381,19 @@ function firstUnansweredChangeId(m: Message): string | undefined {
   return changes.find((c) => !c.status)?.id
 }
 
+/** Each failed call's error, keyed by its tool_use_id — the id its confirm card shares — so an
+ *  approved card whose call then failed says so instead of keeping a green "✓ Approved". */
+function callFailures(m: Message, declinedIsNotFailure: boolean): Map<string, string> {
+  const failures = new Map<string, string>()
+  for (const block of m.blocks || []) {
+    const item = actionItemFor(block)
+    if (item?.type !== 'tool') continue
+    const { failed, message } = failureOf(item, declinedIsNotFailure)
+    if (failed) failures.set(item.id, message)
+  }
+  return failures
+}
+
 /** Is this card the one to show? Answered cards stay (they carry the ✓ / ✗ record). */
 function changeIsVisible(change: ProposedChange, firstUnanswered: string | undefined): boolean {
   return Boolean(change.status) || change.id === firstUnanswered
@@ -369,7 +404,11 @@ function renderGroupedBlock(
   i: number,
   onSendMessage: (text: string) => void,
   onRespond?: (changeId: string | undefined, status: 'confirmed' | 'dismissed') => void,
-  onResolvePendingToolUse?: (toolUseId: string, decision: 'approve' | 'deny') => void,
+  onResolvePendingToolUse?: (
+    toolUseId: string,
+    decision: 'approve' | 'deny',
+    options?: { always?: boolean },
+  ) => void,
   sessionId?: string,
   firstUnansweredChange?: string,
 ) {
@@ -406,6 +445,7 @@ function renderGroupedBlock(
           components={{
             ...SAFE_MARKDOWN_COMPONENTS,
             a: ChatLink,
+            pre: CodeBlock,
             table: ({ children }) => (
               <div className="table-wrap">
                 <table>{children}</table>
@@ -463,7 +503,7 @@ function renderGroupedBlock(
     if (!changeIsVisible(block.change, firstUnansweredChange)) return null
     return (
       <div key={i} className="msg-proposed-changes">
-        <ChangePreview
+        <ChangePreviewSwitch
           change={block.change}
           onResolvePendingToolUse={onResolvePendingToolUse}
           onRespond={onRespond && ((status) => onRespond(block.change.id, status))}
@@ -647,10 +687,27 @@ const FILE_LABELS: Record<string, string> = {
   'memory.json': 'assistant memory',
 }
 
+// DB-backed stores preview as `db:<table>`. Names a person would not recognise get a
+// readable one; every other table reads as its name with spaces ("import batches").
+const TABLE_LABELS: Record<string, string> = {
+  automation_runs: 'Automation run history',
+  transaction_external_refs: 'transaction references',
+  connector_snapshots: 'connection snapshots',
+  intel_stories: 'intel stories',
+  memory: 'assistant memory',
+}
+
+function previewLabel(file: string): string {
+  if (FILE_LABELS[file]) return FILE_LABELS[file]
+  if (!file.startsWith('db:')) return file
+  const table = file.slice(3)
+  return TABLE_LABELS[table] ?? table.replace(/_/g, ' ')
+}
+
 function summarisePreview(changes: CheckpointFileChange[]): string {
   const parts: string[] = []
   for (const c of changes) {
-    const label = FILE_LABELS[c.file] || c.file
+    const label = previewLabel(c.file)
     if (c.delta > 0) parts.push(`restore ${c.delta} ${label}`)
     else if (c.delta < 0) parts.push(`remove ${-c.delta} ${label}`)
     else parts.push(`revert ${label}`)
@@ -813,7 +870,9 @@ function RestoreControl({
                 <ul>
                   {cross.map((c, i) => (
                     <li key={i}>
-                      {c.session_label}: “{c.message_preview.slice(0, 40)}”
+                      {c.message_preview.trim()
+                        ? `${c.session_label}: “${c.message_preview.slice(0, 40)}”`
+                        : c.session_label}
                     </li>
                   ))}
                 </ul>
@@ -897,6 +956,8 @@ export function MessageBubble({
 
   // One decision on screen at a time — see firstUnansweredChangeId.
   const firstUnanswered = firstUnansweredChangeId(m)
+  const declinedIsNotFailure = useFlag('permissions_v2') === true
+  const failures = callFailures(m, declinedIsNotFailure)
 
   const respond = onRespondToChange
     ? (changeId: string | undefined, status: 'confirmed' | 'dismissed') =>
@@ -905,6 +966,9 @@ export function MessageBubble({
 
   return (
     <div className={`msg-bubble ${isUser ? 'msg-user' : 'msg-assistant'}`}>
+      {!isUser && m.unheard && (
+        <div className="msg-unheard">Not read aloud, as you started talking first</div>
+      )}
       {/* The "still working" indicator is NOT here any more — it lives above the composer
           (TurnActivity), where it cannot scroll away mid-turn and sits next to Stop. */}
       {/* One merged block above the turn, in two cases: the reader asked for it (Settings →
@@ -971,10 +1035,11 @@ export function MessageBubble({
                 if (!changeIsVisible(block.change, firstUnanswered)) return null
                 return (
                   <div key={i} className="msg-proposed-changes">
-                    <ChangePreview
+                    <ChangePreviewSwitch
                       change={block.change}
                       onResolvePendingToolUse={onResolvePendingToolUse}
                       onRespond={respond && ((status) => respond(block.change.id, status))}
+                      failure={failures.get(block.change.id ?? '')}
                     />
                   </div>
                 )
@@ -1015,6 +1080,7 @@ export function MessageBubble({
                   components={{
                     ...SAFE_MARKDOWN_COMPONENTS,
                     a: ChatLink,
+                    pre: CodeBlock,
                     table: ({ children }) => (
                       <div className="table-wrap">
                         <table>{children}</table>
@@ -1069,7 +1135,7 @@ export function MessageBubble({
             {m.proposedChanges
               .filter((change) => changeIsVisible(change, firstUnanswered))
               .map((change, i) => (
-                <ChangePreview
+                <ChangePreviewSwitch
                   key={i}
                   change={change}
                   onResolvePendingToolUse={onResolvePendingToolUse}
@@ -1103,7 +1169,7 @@ export function MessageBubble({
           )}
           {onRetry && (
             <button className="msg-retry-btn" onClick={onRetry}>
-              ↺ Retry
+              <RotateCcw size={12} aria-hidden="true" /> Retry
             </button>
           )}
         </div>

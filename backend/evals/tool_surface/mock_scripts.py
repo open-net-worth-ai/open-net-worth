@@ -385,7 +385,7 @@ _SLOPPY: dict[str, list[Step]] = {
     # Re-books the Cold Storage row that is already in the ledger.
     # Books the already-present row anyway. Since the pre-write duplicate guard (ADR
     # 2026-08-01) the ledger REFUSES that row, so the planted bug is now committed the only
-    # way it still can be: force=True, past a refusal that named the existing transaction.
+    # way it still can be: allow_duplicate=True, past a refusal that named the existing transaction.
     # That IS the realistic careless behaviour now, and the scorer must still catch it —
     # this task exists to prove the scorer discriminates, not to prove the guard works.
     "statement_import_with_dup": [
@@ -393,7 +393,7 @@ _SLOPPY: dict[str, list[Step]] = {
         Step(
             op="txn.add_many",
             resolver="account",
-            params={"transactions": [], "_rows": "import_with_dup", "force": True},
+            params={"transactions": [], "_rows": "import_with_dup", "allow_duplicate": True},
         ),
         say("Added all 4 rows."),
     ],
@@ -479,7 +479,7 @@ def _expand_import(step: Step, ref: dict, include_dup: bool) -> Step:
     card = ref["account_ids"]["UOB One Card"]
     rows = ([_DUP_ROW] if include_dup else []) + _IMPORT_ROWS
     # Carry the step's OTHER params through — this used to rebuild `params` from scratch, so
-    # anything the script set beside `_rows` (e.g. the sloppy arm's `force`) was silently
+    # anything the script set beside `_rows` (e.g. the sloppy arm's `allow_duplicate`) was silently
     # dropped and the planted behaviour never reached the op.
     carried = {k: v for k, v in (step.params or {}).items() if k not in ("_rows", "transactions")}
     return Step(

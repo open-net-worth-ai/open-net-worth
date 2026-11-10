@@ -27,10 +27,12 @@ MENTION_FORBIDDEN_STORES: frozenset[str] = frozenset(
         "SimpleFinConfigStore",
         "PlaidConfigStore",
         "EnableBankingConfigStore",
+        "GoCardlessConfigStore",
         "YodleeConfigStore",
         "IbkrConfigStore",
         "LunchMoneyConfigStore",
         "YnabConfigStore",
+        "ActualBudgetConfigStore",
         "ImapConfigStore",
         "EmailConfigStore",
         # The connectors table (connectors-table RFC): the one data-access class and every
@@ -44,6 +46,7 @@ MENTION_FORBIDDEN_STORES: frozenset[str] = frozenset(
         "McpClientStore",
         "SearchConfigStore",
         "TelegramConfigStore",
+        "VoiceConfigStore",
     }
 )
 

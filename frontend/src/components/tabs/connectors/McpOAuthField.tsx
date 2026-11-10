@@ -8,7 +8,8 @@
 // never a button of its own to start one. Renders nothing at all while idle with nothing to
 // report.
 //
-//   pending   — popup open, polling → "Waiting for sign-in…" + Cancel.
+//   pending   — popup open, polling → "Waiting for sign-in…" + Cancel, plus a link to the
+//               authorize URL for a window the browser opened without a handle (Arc, Dia).
 //   error     — `begin()`/poll failed, the popup was blocked, or it was closed early → the
 //               backend's own message (§4.6), plus the two reason-specific affordances the
 //               table calls for: a Client ID field (`no_registration`) or the redirect URIs to
@@ -56,6 +57,14 @@ export function McpOAuthField({ flow }: { flow: McpAddFlow }): JSX.Element | nul
           <Btn size="xs" onClick={oauth.cancel}>
             Cancel sign-in
           </Btn>
+          {oauth.authorizeUrl ? (
+            <span className="rd-help" style={{ flexBasis: '100%' }}>
+              No sign-in window?{' '}
+              <a href={oauth.authorizeUrl} target="_blank" rel="noreferrer">
+                Open the sign-in page
+              </a>
+            </span>
+          ) : null}
         </div>
       ) : oauth.status === 'signed_in' ? (
         <div style={ROW} role="status">

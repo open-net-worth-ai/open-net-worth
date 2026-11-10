@@ -42,6 +42,7 @@ async function fetchConnectors(): Promise<Connector[]> {
  *  them an envelope in their own colour. Same connector, two identities (owner, 2026-08-23). */
 export interface OwnerLook {
   logo?: string
+  name?: string
   icon?: IconKey
   hue?: string
 }
@@ -59,6 +60,7 @@ function loadOwnerLooks(): void {
       const next: Record<string, OwnerLook> = {}
       for (const entry of toEntries(connectors)) {
         next[entry.id] = {
+          ...(entry.name ? { name: entry.name } : {}),
           ...(entry.logo ? { logo: entry.logo } : {}),
           ...(entry.icon ? { icon: entry.icon as IconKey } : {}),
           ...(entry.hue ? { hue: entry.hue } : {}),
@@ -75,6 +77,19 @@ function loadOwnerLooks(): void {
       inFlight = null
       listeners.forEach((fn) => fn())
     })
+}
+
+/** A connector's look from what is already loaded: a native id resolves its brand mark with
+ *  no network; an MCP server's mark needs the connectors read (`useToolOwnerLogos`) to have
+ *  landed first. For callers that render outside React — the composer builds its chips as DOM. */
+export function connectorLook(id: string): OwnerLook {
+  if (!id || id === CORE_OWNER) return {}
+  const look = ownerLooks?.[id] ?? {}
+  if (!look.logo && !id.startsWith(MCP_PREFIX)) {
+    const direct = connectorLogo(id)
+    if (direct) return { ...look, logo: direct }
+  }
+  return look
 }
 
 /**
@@ -103,15 +118,7 @@ export function useToolOwnerLogos(ownerIds: string[]): (ownerId: string) => Owne
     }
   }, [needsFetch])
 
-  return (ownerId: string) => {
-    if (!ownerId || ownerId === CORE_OWNER) return {}
-    const look = ownerLooks?.[ownerId] ?? {}
-    // A native connector's id IS its catalog id, so its mark resolves with no network at
-    // all; an MCP server's cannot (see the header note) and comes from the read.
-    if (!look.logo && !ownerId.startsWith(MCP_PREFIX)) {
-      const direct = connectorLogo(ownerId)
-      if (direct) return { ...look, logo: direct }
-    }
-    return look
-  }
+  // A native connector's id IS its catalog id, so its mark resolves with no network at all;
+  // an MCP server's cannot (see the header note) and comes from the read.
+  return connectorLook
 }

@@ -16,6 +16,9 @@
 - [ ] I read [`CONTRIBUTING.md`](../CONTRIBUTING.md) and, for anything non-trivial,
       [`CLAUDE.md`](../CLAUDE.md).
 - [ ] `make check` passes locally (lint → type → test → build).
+- [ ] If this changes a memory prompt, the routing guide, the memory write choke or the model a
+      memory pass runs on, I ran `make memory-eval REPEATS=3` (live, opt-in) and the gate passed —
+      see [`docs/ai/MEMORY_EVAL.md`](../docs/ai/MEMORY_EVAL.md).
 - [ ] New/changed behavior has a test (a bug fix includes a regression test that fails without
       the fix).
 - [ ] I did **not** commit anything from my own financial data — no real account numbers,

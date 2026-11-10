@@ -362,6 +362,56 @@ describe('getScreenSnapshot — form-harvest', () => {
   })
 })
 
+// ── Tests: what a dialog says ─────────────────────────────────────────────────
+
+describe('getScreenSnapshot — what a dialog says', () => {
+  const rows = (n: number) =>
+    Array.from(
+      { length: n },
+      (_, i) =>
+        `<div data-ctx data-entity-id="t${i}" data-ctx-type="txn"
+              data-ctx-fields='{"payee":"ACME payee with a long enough label ${i}"}'>row ${i}</div>`,
+    ).join('')
+  const page = (n: number) => `<main data-ctx-region="content" data-ctx-title="X">${rows(n)}</main>`
+
+  it('reads a text-only dialog over a full list, ahead of the rows the size cap would cut', () => {
+    document.body.innerHTML = `${page(200)}<div role="dialog" aria-label="Confirm"><p>Delete ACME?</p></div>`
+    const { raw } = getScreenSnapshot(new Set())
+    expect(raw).toContain('Delete ACME?')
+    expect(raw.indexOf('Delete ACME?')).toBeLessThan(raw.indexOf('ALSO ON THIS SCREEN'))
+  })
+
+  it('says it once over a short page', () => {
+    document.body.innerHTML = `${page(1)}<div role="dialog" aria-label="Confirm"><p>Delete ACME?</p></div>`
+    const { raw } = getScreenSnapshot(new Set())
+    expect(raw.split('Delete ACME?')).toHaveLength(2)
+  })
+
+  it('treats the top of a stack as the dialog in focus, and still reads the one beneath', () => {
+    document.body.innerHTML = `${page(0)}
+      <div role="dialog" aria-label="Documents"><p>Beneath text</p></div>
+      <div role="dialog" aria-label="Rename"><p>Top text</p></div>`
+    const { raw, facts } = getScreenSnapshot(new Set())
+    expect(facts).toContainEqual(['Open dialog', 'Rename'])
+    expect(raw.indexOf('Top text')).toBeLessThan(raw.indexOf('Beneath text'))
+    expect(raw).toContain('Beneath text')
+  })
+
+  it('keeps a secret region inside a dialog out', () => {
+    document.body.innerHTML = `${page(0)}<div role="dialog" aria-label="File"><p>Shown</p><pre data-ctx-secret="">Hidden text</pre></div>`
+    const { raw } = getScreenSnapshot(new Set())
+    expect(raw).toContain('Shown')
+    expect(raw).not.toContain('Hidden text')
+  })
+
+  it('never reads an intro guide as a dialog, though it is one', () => {
+    document.body.innerHTML = `${page(0)}<div class="fi-modal" role="dialog" aria-label="Example"><p>Sample figures</p></div>`
+    const { raw, facts } = getScreenSnapshot(new Set())
+    expect(raw).not.toContain('Sample figures')
+    expect(facts.some(([k]) => k === 'Open dialog')).toBe(false)
+  })
+})
+
 // ── Tests: modal occlusion ────────────────────────────────────────────────────
 
 describe('getScreenSnapshot — modal occlusion', () => {

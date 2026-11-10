@@ -160,6 +160,35 @@ def _needs(secrets: tuple[str, ...] = (), config: tuple[str, ...] = ()) -> Calla
     return configured
 
 
+def _actual_budget_configured(row: Row, have: Have) -> bool:
+    """An address and one way to sign in: a password, or a token for a server without one."""
+    return "server_url" in have and ("password" in have or "token" in have)
+
+
+def _plaid_configured(row: Row, have: Have) -> bool:
+    """Keys plus at least one linked bank — the multi-bank list, or the legacy single token."""
+    return bool(
+        "secret" in have
+        and ("items" in have or "access_token" in have)
+        and _text(row["config"].get("client_id"))
+    )
+
+
+def _remove_plaid(connector_id: str) -> None:
+    """Revoke every linked bank at Plaid BEFORE clearing the local row — the same
+    revoke-before-delete shape as Lunch Flow. Best effort: a bank Plaid can't be reached for
+    is still erased locally (the Remove dialog says access may stay live at Plaid)."""
+    from backend.services.aggregation.plaid import remove_all_banks
+
+    try:
+        remove_all_banks()
+    except Exception:
+        logger.warning("plaid: revoking linked banks on Remove failed", exc_info=True)
+    from backend.db.plaid_config_store import PlaidConfigStore
+
+    PlaidConfigStore().reset()
+
+
 def _always(row: Row, have: Have) -> bool:
     return True
 
@@ -343,6 +372,60 @@ def remove_mcp_server(server_id: str) -> None:
     get_manager().reconcile_pooled_connection(server_id)
 
 
+def discover_mcp_tools_if_unlisted(server_id: str) -> None:
+    """Run the "Refresh tools list" handshake for an ENABLED server that has never listed its
+    tools. A server saved without the add flow's test step (an OAuth sign-in finished after the
+    add screen gave up) read Connected with an empty tool list, and nothing said why. Never
+    raises — ``test_connect`` records a failure as ``last_status``/``last_error``, so the row
+    reads Error instead of Connected. Same ai-free ``services → mcp`` edge as above."""
+    from backend.db.mcp_client_store import McpClientStore
+    from backend.mcp.client_manager import get_manager
+
+    server = McpClientStore().find(server_id)
+    if server is None or not server.enabled or server.discovered_tools:
+        return
+    get_manager().test_connect(server_id)
+
+
+def _gocardless_configured(row: Row, have: Have) -> bool:
+    """Credentials plus at least one bank, linked or not: an unfinished or expired link stays a
+    list row that reads as an error (``_gocardless_error``), never drops back into the
+    directory as if it had never been set up."""
+    return bool({"secret_key", "requisitions"} <= have and _text(row["config"].get("secret_id")))
+
+
+def _gocardless_error(row: Row, ctx: dict) -> Optional[str]:
+    """A bank whose access ended needs the user, even while the others still sync — so it is
+    an error naming how many. An unfinished link is one only when no bank is linked yet (the
+    user may be mid-consent for one more)."""
+    from backend.db.gocardless_config_store import ENDED, LINKED
+
+    banks = [b for b in (row["state"].get("banks") or {}).values() if isinstance(b, dict)]
+    ended = [b for b in banks if b.get("status") in ENDED]
+    if ended and len(banks) == 1:
+        return f"Bank access {ENDED[ended[0]['status']]} — link the bank again"
+    if ended:
+        return f"{len(ended)} of {len(banks)} banks need linking again"
+    if banks and not any(b.get("status") == LINKED for b in banks):
+        return "Bank link not finished — open the connector and select Check links"
+    return row["state"].get("last_error")
+
+
+def _remove_gocardless(connector_id: str) -> None:
+    """Delete every bank's requisition at GoCardless BEFORE clearing the local row
+    (revoke-before-delete, like Plaid and Lunch Flow). Best effort: the local credentials are
+    erased either way."""
+    from backend.db.gocardless_config_store import GoCardlessConfigStore
+    from backend.services.aggregation.gocardless import remove_all_banks
+
+    store = GoCardlessConfigStore()
+    try:
+        remove_all_banks(store)
+    except Exception:
+        logger.warning("gocardless: revoking linked banks on Remove failed", exc_info=True)
+    store.reset()
+
+
 def _remove_mcp(connector_id: str) -> None:
     remove_mcp_server(connector_id[len(MCP_CONNECTOR_PREFIX) :])
 
@@ -407,6 +490,23 @@ _KINDS: tuple[ConnectorKind, ...] = (
         notify_channel="telegram",
     ),
     _kind(
+        # Voice calls with Lucius (ADR 2026-11-03-voice-calls-are-a-fast-front-voice-over-lucius).
+        # The LiveKit project's key and secret are the credentials; everything else is a
+        # plain setting (which models, which voice) and carries none.
+        "voice",
+        "Voice calls",
+        _needs(secrets=("api_key", "api_secret"), config=("livekit_url",)),
+        secret_fields=_secrets("api_key", "api_secret"),
+        config_keys=(
+            "livekit_url",
+            "front_model",
+            "stt_model",
+            "tts_model",
+            "tts_voice",
+            "noise_filter",
+        ),
+    ),
+    _kind(
         "simplefin",
         "SimpleFIN",
         _needs(secrets=("access_url",)),
@@ -415,9 +515,10 @@ _KINDS: tuple[ConnectorKind, ...] = (
     _kind(
         "plaid",
         "Plaid",
-        _needs(secrets=("secret", "access_token"), config=("client_id",)),
-        secret_fields=_secrets("secret", minted=("access_token", "item_id")),
+        _plaid_configured,
+        secret_fields=_secrets("secret", minted=("access_token", "item_id", "link_token", "items")),
         config_keys=("client_id", "environment"),
+        remove=_remove_plaid,
     ),
     _kind(
         "lunch_money",
@@ -443,11 +544,35 @@ _KINDS: tuple[ConnectorKind, ...] = (
         moved_state=("budget_name", "budget_currency"),
     ),
     _kind(
+        # Import and two-way sync of an Actual Budget server (flag ``actual_budget_sync``). The
+        # address is a secret too: it can carry credentials, and an endpoint is one. No Lucius
+        # tools - the connector is driven from the Data sync tab.
+        "actual_budget",
+        "Actual Budget",
+        _actual_budget_configured,
+        secret_fields=_secrets("server_url", "password", "token", "encryption_password"),
+        config_keys=("budget_id",),
+        moved_state=("budget_name", "budget_currency"),
+    ),
+    _kind(
         "enable_banking",
         "Enable Banking",
         _needs(secrets=("private_key", "session_id"), config=("application_id",)),
         secret_fields=_secrets("private_key", minted=("session_id",)),
         config_keys=("application_id", "aspsp", "country"),
+    ),
+    _kind(
+        "gocardless",
+        "GoCardless",
+        _gocardless_configured,
+        secret_fields=_secrets("secret_key", minted=("access_token", "requisitions")),
+        config_keys=("secret_id",),
+        private_state=("accounts_meta", "banks"),
+        # The moved requisitions are still linked at GoCardless; without each bank's name and
+        # status the receiver would show unnamed, unlinked banks until someone checked them.
+        moved_state=("banks", "accounts_meta"),
+        error=_gocardless_error,
+        remove=_remove_gocardless,
     ),
     _kind(
         "yodlee",
@@ -465,13 +590,23 @@ _KINDS: tuple[ConnectorKind, ...] = (
         _needs(secrets=("api_key_id", "secret_key")),
         secret_fields=_secrets("api_key_id", "secret_key"),
         config_keys=("environment",),
+        # Retired 2026-10-29 for Alpaca's own MCP server (directory entry `mcp-alpaca`), which
+        # reads AND trades where this only imported positions. Code kept; flip to bring back.
+        # ADR `2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server` (its Alpaca amendment).
+        disabled=True,
     ),
     _kind(
         "ibkr",
-        "Interactive Brokers",
+        # "IBKR Flex", not "Interactive Brokers": IBKR's own MCP server names itself that, and
+        # this is the Flex report import (the directory card has always said "IBKR Flex").
+        "IBKR Flex",
         _needs(secrets=("flex_token",), config=("flex_query_id",)),
         secret_fields=_secrets("flex_token"),
         config_keys=("flex_query_id", "base_url"),
+        # Retired 2026-10-29: IBKR's own hosted MCP server (directory entry `mcp-ibkr`) reads
+        # live positions and trades where Flex is a day-late batch report. Code kept; flip this
+        # to bring it back. ADR `2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server`.
+        disabled=True,
     ),
     _kind(
         "yahoo_finance",

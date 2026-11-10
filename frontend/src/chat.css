@@ -62,9 +62,9 @@
     }
   }
   .conv-seg-btn.on {
-    background: var(--selected);
+    background: var(--surface);
     color: var(--ink);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-sm);
   }
 
   /* ── Message bubbles ── */
@@ -84,6 +84,12 @@
   .msg-bubble:nth-last-child(n + 9) {
     content-visibility: auto;
     contain-intrinsic-size: auto 140px;
+  }
+  /* A bubble turning from its estimate into its real height moves what's below it. Safari's engine
+     doesn't hold your place through that, whatever it says it supports, and the chat moved under
+     your finger as you scrolled up (owner, 2026-11-08; see utils/pwa.ts isWebKit). */
+  :root[data-onw-engine='webkit'] .msg-bubble:nth-last-child(n + 9) {
+    content-visibility: visible;
   }
   .msg-user {
     align-items: flex-end;
@@ -259,6 +265,65 @@
     font-family: monospace;
   }
 
+  /* A fenced block is ONE box. Without its own rule the inline-code style above landed on the
+     <code> inside it and, being inline, painted a pill per line — four commands read as four
+     separate snippets (owner, 2026-10-31). The block gets the box; the code inside resets. */
+  .msg-assistant .msg-text pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    line-height: 1.55;
+  }
+  /* The Copy button sits in the block's corner: on hover (or keyboard focus) with a mouse,
+     always on a touch screen, which can't hover. */
+  .msg-code {
+    position: relative;
+  }
+  .msg-code-copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .msg-code:hover .msg-code-copy,
+  .msg-code-copy:focus-visible,
+  .msg-code-copy.copied {
+    opacity: 1;
+  }
+  .msg-code-copy.copied {
+    color: var(--good);
+  }
+  @media (hover: none) {
+    .msg-code-copy {
+      opacity: 1;
+    }
+  }
+  .msg-assistant .msg-text pre code {
+    display: block;
+    background: none;
+    border: 0;
+    padding: 0;
+    border-radius: 0;
+    font-size: 12.5px;
+    white-space: pre;
+  }
+
   /* Links in Lucius's own prose (e.g. "Sources: Reuters, Bloomberg, ..."). Browsers'
    default blue/visited-purple has no relation to this palette and reads as broken
    on the dark surface — style with the Lucius identity color instead (this text IS
@@ -299,6 +364,12 @@
     display: inline-block;
     max-width: 100%;
     overflow-x: auto;
+    /* `body *` sets scrollbar-width/color, which makes Chromium ignore ::-webkit-scrollbar
+     and fall back to a macOS overlay bar that only appears mid-scroll — a table cut off at
+     the edge then shows nothing a mouse can grab. Back to `auto` so the styled, always-
+     visible bar applies (phones still hide it via the ≤600px rule). */
+    scrollbar-width: auto;
+    scrollbar-color: auto;
     margin: 8px 0;
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -332,10 +403,21 @@
   .msg-assistant .msg-text .table-wrap th:empty::after {
     content: '\00a0';
   }
+  /* Cells wrap so a long one (a note, an amount with its conversion) fits the table to the
+   message width instead of pushing columns off the edge; the wrapper's scroll is only the
+   fallback for tables whose words alone don't fit. Word breaking is reset from .msg-text's
+   `anywhere`, which would otherwise crush columns to a few letters rather than scroll.
+   Left-aligned to sit under their left-aligned headers (the global td rule is right). */
   .msg-assistant .msg-text .table-wrap td {
     padding: 5px 10px;
     border-bottom: 1px solid var(--line);
     color: var(--ink);
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .msg-assistant .msg-text .table-wrap td:first-child {
     white-space: nowrap;
   }
   /* Numeric columns are right-aligned to match the house table convention
@@ -612,6 +694,64 @@
   }
   .msg-toolact__head--static {
     cursor: default;
+  }
+  /* A row the Auto judge let through: the head shrinks to its content so the "i" sits right
+     after the sentence instead of at the far edge of the rail. */
+  .msg-toolact__line {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+  .msg-toolact__line > .msg-toolact__head {
+    flex: 0 1 auto;
+    width: auto;
+  }
+  /* Scoped under the line so it outranks `.info-pop-trigger`'s reset, whichever sheet loads last. */
+  .msg-toolact__line .msg-toolact__hint {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--faint);
+    font: inherit;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.7;
+    position: relative;
+  }
+  /* A 14px circle is too small to tap; the hit area is not. */
+  .msg-toolact__hint::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .msg-toolact__line .msg-toolact__hint:hover,
+  .msg-toolact__line .msg-toolact__hint:focus-visible,
+  .msg-toolact__line .msg-toolact__hint[aria-expanded='true'] {
+    opacity: 1;
+    color: var(--muted);
+  }
+  .msg-toolact__hint:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .msg-toolact__hint-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .msg-toolact__hint-title {
+    color: var(--muted);
+    font-weight: 600;
   }
   .msg-toolact__icon {
     flex: 0 0 auto;
@@ -916,6 +1056,13 @@
     width: max-content;
     max-width: 100%;
   }
+  /* The reader's own photos sit in the same lane as their text bubble — capped at its 82% and
+     wrapped toward the right. At 100% a batch of six screenshots spanned the panel edge to
+     edge and read as Lucius's content, not the owner's message (owner report, 2026-10-26). */
+  .msg-user .msg-attachments {
+    max-width: 82%;
+    justify-content: flex-end;
+  }
   .msg-attachment-pill {
     max-width: 100%;
     overflow: hidden;
@@ -1031,6 +1178,9 @@
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   @media (hover: hover) {
     .msg-retry-btn:hover {
@@ -1106,6 +1256,12 @@
   .change-preview-header--danger {
     color: var(--bad);
   }
+  /* An external MCP card is titled by the tool's own name, as the server spells it. */
+  .change-preview-tool {
+    font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
   .change-preview-label {
     font-size: var(--ac-caps);
     font-weight: 500;
@@ -1149,7 +1305,7 @@
     font-size: var(--ac-text);
     font-weight: 600;
     padding: 5px 14px;
-    border-radius: 7px;
+    border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -1167,7 +1323,7 @@
     background: none;
     border: 1px solid var(--line);
     color: var(--muted);
-    border-radius: 5px;
+    border-radius: var(--radius-lg);
     padding: 5px 14px;
     font-size: var(--ac-text);
     cursor: pointer;
@@ -1186,6 +1342,11 @@
     color: var(--good);
     font-weight: 500;
     margin-top: 6px;
+  }
+  /* The approved call ran and came back with an error — never a green tick over a failure. */
+  .change-confirmed--failed {
+    color: var(--bad);
+    overflow-wrap: anywhere;
   }
 
   /* ── Approval-card design system (docs/APPROVAL_CARDS.md) ──
@@ -1404,6 +1565,26 @@
   .ac-diff-context {
     color: var(--muted);
   }
+  .ac-diff-edited {
+    color: var(--ink);
+  }
+  .ac-diff-word {
+    border-radius: 2px;
+  }
+  .ac-diff-word-removed {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 14%, transparent);
+    text-decoration: line-through;
+  }
+  .ac-diff-word-added {
+    color: var(--good);
+    background: color-mix(in srgb, var(--good) 14%, transparent);
+    text-decoration: underline;
+  }
+  /* A swap ("550" → "600") must not read as one figure ("550600"). */
+  .ac-diff-word-removed + .ac-diff-word-added {
+    margin-left: 3px;
+  }
   .ac-details {
     margin-top: 8px;
     font-size: var(--ac-text);
@@ -1489,7 +1670,7 @@
   }
   .dup-review-table input[type='checkbox'] {
     cursor: pointer;
-    accent-color: var(--accent, #9a7fd0);
+    accent-color: var(--ink);
   }
   .dup-row--selected td {
     background: color-mix(in srgb, var(--lucius) 8%, transparent);
@@ -1742,6 +1923,9 @@
     font-size: 10px;
     margin-top: 2px;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .msg-search-loading {
     display: flex;
@@ -1862,6 +2046,11 @@
       opacity: 1;
       visibility: visible;
     }
+  }
+  .msg-unheard {
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--muted);
   }
   .msg-time {
     font-size: 10.5px;
@@ -2005,29 +2194,37 @@
   .msg-restore-actions button {
     font-size: 11.5px;
     padding: 5px 9px;
-    border-radius: 5px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     text-align: left;
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
-    background: var(--accent, #9a7fd0);
-    color: var(--ink-on-accent);
+    border: 1px solid var(--cta);
+    background: var(--cta);
+    color: var(--ink-on-cta);
     transition: all 0.15s;
   }
   .msg-restore-actions button:nth-child(2) {
     background: transparent;
+    border-color: var(--line);
     color: var(--text);
   }
   @media (hover: hover) {
-    .msg-restore-actions button:hover:not(:disabled) {
-      filter: brightness(1.1);
+    .msg-restore-actions button:first-child:hover:not(:disabled) {
+      background: var(--cta-hover);
+      border-color: var(--cta-hover);
+    }
+    .msg-restore-actions button:nth-child(2):hover:not(:disabled) {
+      background: var(--hover);
     }
   }
   .msg-restore-actions button:disabled {
-    opacity: 0.5;
+    background: var(--bg-2);
+    border-color: var(--bg-2);
+    color: var(--faint);
     cursor: default;
   }
   .msg-restore-cancel {
     background: transparent !important;
+    border-color: var(--line) !important;
     color: var(--muted) !important;
   }
   .msg-restore-hint {
@@ -2097,6 +2294,91 @@
   }
   .screen-cmd-chip-arrow {
     font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* The card a suggested connector gets in place of the chip (ConnectorSetupCard): its own
+     logo on a white tile, name + Verified, publisher, and one Set up / Connect button. */
+  .cmd-setup-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 460px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  /* The Connectors tile, exactly (connectors.css .cn-tile / .plate / .cn-tile-logo): a 34px
+     plate with a hairline, the mark inset 6px — edge to edge it looked crushed (owner, 2026-10-31). */
+  .cmd-setup-logo {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid var(--line);
+    color: var(--lucius);
+  }
+  .cmd-setup-logo img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    padding: 6px;
+    box-sizing: border-box;
+    object-fit: contain;
+  }
+  .cmd-setup-logo svg {
+    width: 17px;
+    height: 17px;
+    display: block;
+  }
+  .cmd-setup-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .cmd-setup-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cmd-setup-badge {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--good);
+    background: color-mix(in srgb, var(--good) 14%, transparent);
+    border-radius: 999px;
+    padding: 2px 7px;
+  }
+  .cmd-setup-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .cmd-setup-btn {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--ink);
+    color: var(--surface);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
   }
 
   /* ── Inline artifact (Lucius-generated HTML/SVG document) ──────────────────────
@@ -2145,7 +2427,7 @@
      touching that shared, much-higher-blast-radius message-bubble hover CSS, not this file. */
   @media (hover: hover) {
     .artifact-chip:hover {
-      border-color: var(--accent);
+      border-color: var(--line-strong);
       background: var(--hover-surface2);
     }
   }
@@ -2209,7 +2491,7 @@
   @media (hover: hover) {
     .artifact-chip-open:hover {
       border-color: var(--hover-line);
-      color: var(--accent);
+      color: var(--ink);
       background: var(--hover-surface);
     }
   }
@@ -2431,6 +2713,9 @@
     color: var(--lucius);
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   @media (hover: hover) {
     .screen-ctx__attach:hover {
@@ -2492,6 +2777,8 @@
 .wr-chip__glyph {
   color: var(--pos, #3fb950);
   font-size: 10px;
+  display: inline-flex;
+  align-items: center;
 }
 .wr-chip__counts {
   white-space: nowrap;
@@ -2501,6 +2788,8 @@
   padding-left: 2px;
   color: var(--faint);
   font-size: 9px;
+  display: inline-flex;
+  align-items: center;
 }
 .wr-chip__detail {
   border-top: 1px solid var(--border);
@@ -2564,26 +2853,32 @@
    checkpoint-excluded, so nothing else takes it back. */
 .change-grant-btn {
   padding: 6px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   letter-spacing: 0.01em;
 }
 .change-grant-btn--once {
-  background: color-mix(in srgb, var(--accent) 88%, black);
-  border-color: color-mix(in srgb, var(--accent) 88%, black);
-  color: var(--ink-on-accent);
+  background: var(--cta);
+  border-color: var(--cta);
+  color: var(--ink-on-cta);
 }
 @media (hover: hover) {
   .change-grant-btn--once:not(:disabled):hover {
-    background: var(--accent);
-    border-color: var(--hover-line);
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
   }
+}
+.change-grant-btn--once:disabled {
+  background: var(--bg-2);
+  border-color: var(--bg-2);
+  color: var(--faint);
+  opacity: 1;
 }
 /* `--session` / `--always` modifiers lived here until the split-button redesign moved both
    scopes behind the caret menu, where they are styled as menu items rather than buttons. */
-/* Standing permission, as its own button on a wide card: a quiet secondary in the primary
-   colour (owner, 2026-10-11: a warn tint read as an error). Its durability is in the title. */
+/* Standing permission, as its own button on a wide card: a quiet secondary in plain ink
+   (owner, 2026-10-11: a warn tint read as an error). Its durability is in the title. */
 .change-grant-btn--always {
-  color: var(--primary);
+  color: var(--ink);
 }
 /* Declining must never look like the dangerous option. It sits apart, at the row's right
    end, so it is never the button under the thumb that reached for "Allow". */
@@ -2619,26 +2914,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--accent) 88%, black);
-  border: 1px solid color-mix(in srgb, var(--accent) 88%, black);
-  border-left-color: color-mix(in srgb, #fff 22%, transparent);
-  color: var(--ink-on-accent);
+  background: var(--cta);
+  border: 1px solid var(--cta);
+  border-left-color: color-mix(in srgb, var(--ink-on-cta) 22%, transparent);
+  color: var(--ink-on-cta);
   padding: 0 9px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  border-top-right-radius: 8px;
-  border-bottom-right-radius: 8px;
+  border-top-right-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.15s;
 }
 @media (hover: hover) {
   .grant-split__caret:not(:disabled):hover {
-    background: var(--accent);
-    border-color: var(--hover-line);
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
+    border-left-color: color-mix(in srgb, var(--ink-on-cta) 22%, transparent);
   }
 }
 .grant-split__caret:disabled {
-  opacity: 0.4;
+  background: var(--bg-2);
+  border-color: var(--bg-2);
+  color: var(--faint);
   cursor: default;
 }
 .grant-split__menu {
@@ -2673,7 +2971,7 @@
 }
 @media (hover: hover) {
   .grant-split__item:not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    background: var(--hover);
   }
 }
 .grant-split__item:disabled {
@@ -2685,10 +2983,9 @@
   font-weight: 600;
   color: var(--ink);
 }
-/* "Always" in the primary colour, matching the wide card's button; the note underneath says
-   what it commits you to. */
+/* "Always" matches the wide card's button; the note underneath says what it commits you to. */
 .grant-split__item--always .grant-split__item-label {
-  color: var(--primary);
+  color: var(--ink);
 }
 .grant-split__item-note {
   font-size: var(--ac-text);
@@ -2743,16 +3040,6 @@
   padding: 0 16px 10px;
   border-bottom: 1px solid var(--line);
 }
-/* Search box with the background-conversations switch at its end. */
-.conv-browser-searchrow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.conv-browser-searchrow .conv-browser-search {
-  flex: 1;
-  min-width: 0;
-}
 .conv-browser-search {
   display: flex;
   align-items: center;
@@ -2760,7 +3047,7 @@
   padding: 0 10px;
   height: 34px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   background: var(--bg-2);
   color: var(--faint);
 }
@@ -2821,7 +3108,7 @@
   }
 }
 .conv-browser-row.on {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--selected);
 }
 .conv-browser-ic {
   flex: none;
@@ -2829,7 +3116,7 @@
   color: var(--faint);
 }
 .conv-browser-row.on .conv-browser-ic {
-  color: var(--accent);
+  color: var(--ink);
 }
 .conv-browser-title {
   flex: 1;
@@ -2897,7 +3184,7 @@
   margin: 4px 0 4px 10px;
   padding: 5px 8px;
   border: 1px solid var(--accent);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: var(--bg-2);
   color: var(--ink);
   font: inherit;
@@ -3108,15 +3395,15 @@
 }
 .conv-menu-plus {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   border: none;
   border-radius: 6px;
   background: none;
   color: var(--muted);
-  font: inherit;
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
 }
 @media (hover: hover) {
@@ -3232,7 +3519,7 @@
   }
 }
 .conv-menu-row.on {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--selected);
 }
 /* Per-row type glyph — same treatment as .conv-browser-ic (View all), optional so the dock's
    own ConversationMenu (which never passes ConversationRow's `icon` prop) is unaffected. */
@@ -3242,7 +3529,7 @@
   color: var(--faint);
 }
 .conv-menu-row.on .conv-menu-row-ic {
-  color: var(--accent);
+  color: var(--ink);
 }
 .conv-menu-row-ic svg {
   display: block;
@@ -3325,28 +3612,18 @@
   color: var(--muted);
   font-size: var(--text-xs);
 }
-/* "Show background conversations" — an icon switch in the Chats header (and the browser's
-   tools row), same 22px footprint as .conv-menu-viewall. Lit while captures are listed. */
-.conv-menu-bgtoggle {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-.conv-menu-bgtoggle.on {
+
+/* ── permissions_v2 approval card ────────────────────────────────────────────────────────
+   Deny on the left as a real outlined button; the allow scopes grouped at the right end
+   (owner, 2026-10-12: a borderless faint Deny didn't read as a button). */
+.change-grant-btn--deny-v2 {
+  padding: 6px 14px;
+  border-radius: 8px;
   color: var(--ink);
-  background: var(--hover);
 }
-@media (hover: hover) {
-  .conv-menu-bgtoggle:hover {
-    background: var(--hover);
-    color: var(--ink);
-  }
+.change-grant-allow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }

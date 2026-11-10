@@ -8,7 +8,7 @@ import { DateField, Modal } from '../ui'
 
 /** Enough of a holding to open the sale form from Investments or the quote page. */
 export type DisposalTarget = Pick<ComputedRow, 'position_id' | 'symbol' | 'label' | 'currency'> &
-  Partial<Pick<ComputedRow, 'account_id' | 'category' | 'liquidity' | 'note'>>
+  Partial<Pick<ComputedRow, 'account_id' | 'category' | 'liquidity'>>
 
 interface Props {
   row: DisposalTarget
@@ -252,11 +252,11 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
   }
 
   const name = row.symbol || row.label
-  // INV1-4: account + reachability + note disambiguate WHICH tranche this is when the same
+  // INV1-4: account + reachability disambiguate WHICH tranche this is when the same
   // symbol is held more than once (e.g. two ONWAI lots in one account). Shown as a subtitle
   // under the name. `bucket` was split by ADR 2026-07-31; on the frontend it meant
   // REACHABILITY, so `liquidity` is its successor here (entitlement is `vesting_state`).
-  const subtitleParts = [row.category, row.liquidity, row.note].filter(Boolean)
+  const subtitleParts = [row.category, row.liquidity].filter(Boolean)
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name || ''
 
   return (

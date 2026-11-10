@@ -722,6 +722,36 @@
     "type": "object",
     "required": []
   },
+  "get_asset_fundamentals": {
+    "additionalProperties": false,
+    "properties": {
+      "ticker": {
+        "type": "string",
+        "description": "Ticker, or pass instrument_id."
+      },
+      "instrument_id": {
+        "type": "string",
+        "description": "Instrument id, or pass ticker."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "get_asset_technicals": {
+    "additionalProperties": false,
+    "properties": {
+      "ticker": {
+        "type": "string",
+        "description": "Ticker, or pass instrument_id."
+      },
+      "instrument_id": {
+        "type": "string",
+        "description": "Instrument id, or pass ticker."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
   "list_assets": {
     "additionalProperties": false,
     "properties": {
@@ -1270,12 +1300,67 @@
         "default": 0,
         "description": "Skip this many matching rows before returning.",
         "type": "integer"
+      },
+      "plan_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The YNAB plan's id from ynab_list_plans. Omit when the token sees one plan."
       }
     },
     "type": "object",
     "required": []
   },
   "enable_banking_fetch_transactions": {
+    "additionalProperties": false,
+    "properties": {
+      "since": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+      },
+      "before": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for today."
+      },
+      "account": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Limit to one provider account id (from this tool's own 'accounts' list, or a prior call). Omit for every linked account."
+      },
+      "include_booked": {
+        "default": false,
+        "description": "False (default): only rows NOT already booked — 'new' means no live ledger row carries the row's ref, never 'since the last run', so a re-fetch of the same window is safe. True: also return already-booked rows, each carrying its booked_txn_id — use this to list a window's full activity.",
+        "type": "boolean"
+      },
+      "include_pending": {
+        "default": false,
+        "description": "False (default): skip not-yet-posted/pending rows. True: include them too — a pending row that later posts may carry supersedes_ref pointing at the pending row it replaces.",
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 200,
+        "description": "Max transactions to return (hard cap 500). Use offset to page further.",
+        "type": "integer"
+      },
+      "offset": {
+        "default": 0,
+        "description": "Skip this many matching rows before returning.",
+        "type": "integer"
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "gocardless_fetch_transactions": {
     "additionalProperties": false,
     "properties": {
       "since": {
@@ -2508,7 +2593,7 @@
           "type": "string"
         },
         "type": "array",
-        "description": "Connector ids as Connectors shows them: 'email', 'telegram', 'webhook', 'plaid', 'ibkr', 'yahoo_finance', 'web_search:tavily', 'mcp:<server>'… Omit for all."
+        "description": "Connector ids as Connectors shows them: 'email', 'telegram', 'webhook', 'plaid', 'yahoo_finance', 'web_search:tavily', 'mcp:<server>'… Omit for all."
       }
     },
     "type": "object",
@@ -2563,6 +2648,12 @@
     "required": []
   },
   "enable_banking_get_status": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "gocardless_get_status": {
     "additionalProperties": false,
     "properties": {},
     "type": "object",
@@ -3977,11 +4068,11 @@
             },
             "description": {
               "type": "string",
-              "description": "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name plus any reference/trace code the bank itself stamped on it. Read by dedup, rules and payee matching. Personal detail belongs in memo."
+              "description": "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name plus any reference/trace code the bank itself stamped on it. Read by dedup, rules and payee matching."
             },
             "memo": {
               "type": "string",
-              "description": "Personal note, e.g. 'dinner with Sam'. Display-only — never read by dedup, rules or payees. Omit when there is no personal detail; never put a bank reference code here."
+              "description": "Your own note — what you'd jot down yourself: what was bought, who it was with, what it was for. Not a copy of the alert: no alert text, times, card or account numbers, or anything another field already shows. Leave it empty when there's nothing worth noting."
             },
             "to_amount": {
               "type": "number",
@@ -4197,11 +4288,11 @@
             },
             "description": {
               "type": "string",
-              "description": "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name plus any reference/trace code the bank itself stamped on it. Read by dedup, rules and payee matching. Personal detail belongs in memo."
+              "description": "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name plus any reference/trace code the bank itself stamped on it. Read by dedup, rules and payee matching."
             },
             "memo": {
               "type": "string",
-              "description": "Personal note, e.g. 'dinner with Sam'. Display-only — never read by dedup, rules or payees. Omit when there is no personal detail; never put a bank reference code here."
+              "description": "Your own note — what you'd jot down yourself: what was bought, who it was with, what it was for. Not a copy of the alert: no alert text, times, card or account numbers, or anything another field already shows. Leave it empty when there's nothing worth noting."
             },
             "amount": {
               "type": "number",
@@ -4234,6 +4325,10 @@
             "category": {
               "type": "string",
               "description": "Spending label — a category's label ('Food & Dining') or its id; both resolve. OPTIONAL: unset records the row as 'Uncategorized'. 'income'/'transfer'/'investment' are transaction KINDS, not categories — use direction='credit' for income and the leg account ids for a transfer."
+            },
+            "override_payee_default": {
+              "type": "boolean",
+              "description": "A payee's pinned default category replaces your `category` unless this is true. Set it ONLY when a standing user instruction decides the category; never for a guess."
             },
             "account_id": {
               "type": "string",
@@ -4384,7 +4479,7 @@
     "properties": {
       "position_id": {
         "type": "string",
-        "description": "position_id from get_portfolio. Required unless `position_ids` (the batch form) is used instead."
+        "description": "position_id from get_portfolio. Required unless `position_ids` or `ticker` is used."
       },
       "position_ids": {
         "items": {
@@ -4392,6 +4487,10 @@
         },
         "type": "array",
         "description": "Batch form: lots for SEVERAL positions in one call — e.g. every AAPL position held across custodians. `limit`/`offset`/`open_only` apply to EACH position individually (not across the combined set); each position gets its OWN `totals` block — a cost basis is never meaningfully summed across different instruments/currencies, so there is no combined grand total. Omit the single `position_id` field when using this."
+      },
+      "ticker": {
+        "type": "string",
+        "description": "Every position holding this ticker, at every custodian."
       },
       "open_only": {
         "type": "boolean",
@@ -4703,7 +4802,7 @@
             },
             "description": {
               "type": "string",
-              "description": "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name plus any reference/trace code the bank itself stamped on it. Read by dedup, rules and payee matching. Personal detail belongs in memo."
+              "description": "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name plus any reference/trace code the bank itself stamped on it. Read by dedup, rules and payee matching."
             },
             "amount": {
               "type": "number",
@@ -4948,24 +5047,40 @@
     "additionalProperties": false,
     "properties": {
       "content": {
-        "description": "The fact to remember, as a concise statement (e.g. 'Wants to retire at 45')",
+        "description": "The fact, one concise self-contained statement under 280 characters (never over 500), in the third person (e.g. 'Rents a flat in Tampines')",
         "type": "string"
       },
-      "tier": {
+      "section": {
+        "description": "Where it is filed: you (about the user, how they like to work), money (their money life: housing, family, investing, tax, cards, income and work), plans (an intention or upcoming event), open_items (Recent: what the user decided or set in motion over the next two weeks, ready to act on; lapses), other.",
         "enum": [
-          "durable",
-          "time_bound"
+          "you",
+          "money",
+          "plans",
+          "open_items",
+          "other"
         ],
+        "type": "string"
+      },
+      "topic": {
         "type": "string",
-        "description": "'durable' = standing preference/truth; 'time_bound' = tied to a date/event. Default durable."
+        "description": "A short name for the subject (e.g. 'Housing'); reuse one from the remembered facts when it fits. Omit for open_items."
       },
       "expires_at": {
         "type": "string",
-        "description": "ISO date (YYYY-MM-DD) after which a time_bound fact is stale. Omit for durable facts."
+        "description": "ISO date (YYYY-MM-DD) a Recent entry lapses on; only Recent entries expire. They default to 14 days and never run past 30; a date on any other section is ignored."
+      },
+      "sensitive": {
+        "type": "boolean",
+        "description": "Set true for health, religion, political views, sexuality, ethnicity, or criminal and legal facts. Refused unless the user allows sensitive topics in Settings → Memory."
+      },
+      "user_asked": {
+        "type": "boolean",
+        "description": "true only when the user, in their latest message, explicitly asked you to remember this"
       }
     },
     "required": [
-      "content"
+      "content",
+      "section"
     ],
     "type": "object"
   },
@@ -4986,8 +5101,12 @@
     "additionalProperties": false,
     "properties": {
       "query": {
-        "description": "Specific words for what to look up, e.g. 'apartment', 'retirement plans', or the nickname the user used",
-        "type": "string"
+        "type": "string",
+        "description": "Specific words for what to look up, e.g. 'apartment', 'retirement plans', or the nickname the user used. Optional when topic is given."
+      },
+      "topic": {
+        "type": "string",
+        "description": "A topic name from the remembered facts (e.g. 'Housing'): returns that topic's facts."
       },
       "limit": {
         "type": "integer",
@@ -4995,10 +5114,8 @@
         "description": "Max facts to return (default 10, max 25)."
       }
     },
-    "required": [
-      "query"
-    ],
-    "type": "object"
+    "type": "object",
+    "required": []
   },
   "calculate": {
     "additionalProperties": false,
@@ -5187,12 +5304,12 @@
     "additionalProperties": false,
     "properties": {
       "message": {
-        "description": "The message body (sent verbatim).",
+        "description": "The message body (sent verbatim). It must make sense on its own — a channel without a title slot shows the message alone.",
         "type": "string"
       },
       "title": {
         "type": "string",
-        "description": "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown as the notification's title where the channel has one, and as the message's first line where it does not."
+        "description": "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown only where the channel has a title slot (the in-app feed), never added to the message — so put any fact the reader needs in the message too."
       },
       "artifact_id": {
         "type": "string",
@@ -5208,12 +5325,12 @@
     "additionalProperties": false,
     "properties": {
       "message": {
-        "description": "The message body (sent verbatim).",
+        "description": "The message body (sent verbatim). It must make sense on its own — a channel without a title slot shows the message alone.",
         "type": "string"
       },
       "title": {
         "type": "string",
-        "description": "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown as the notification's title where the channel has one, and as the message's first line where it does not."
+        "description": "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown only where the channel has a title slot (the in-app feed), never added to the message — so put any fact the reader needs in the message too."
       }
     },
     "required": [
@@ -7051,7 +7168,7 @@
               "type": "string"
             },
             "changes": {
-              "description": "Fields to change: note, account_id, account_name. Any other key is REFUSED. quantity, cost_basis and cost_currency are NEVER editable — they are derived from the position's records (its lots; for a grant, its vesting schedule and vests), so record what happened instead with acquire_lots / dispose_lots, correct a wrong lot with update_lots, or use the grant tools. vesting_state is set only by the grant tools.",
+              "description": "Fields to change: account_id, account_name. Any other key is REFUSED. quantity, cost_basis and cost_currency are NEVER editable — they are derived from the position's records (its lots; for a grant, its vesting schedule and vests), so record what happened instead with acquire_lots / dispose_lots, correct a wrong lot with update_lots, or use the grant tools. vesting_state is set only by the grant tools.",
               "type": "object"
             }
           },
@@ -7127,9 +7244,6 @@
             "idempotency_key": {
               "type": "string",
               "description": "Per-item dedupe key (e.g. the broker order id) — never one key for the whole batch."
-            },
-            "note": {
-              "type": "string"
             }
           },
           "required": [
@@ -8324,7 +8438,7 @@
           },
           "notes": {
             "type": "string",
-            "description": "Free-text catch-all for anything genuinely personal that no structured field covers — pronouns, preferred tone/communication style, or any other standing instruction the user states about themselves. Not for one-off facts about their finances or holdings; those belong in the relevant tool or memory instead."
+            "description": "The user's Instructions for Lucius — standing rules for how you should behave. Change them when asked, or when the user states a rule they'd expect to find here; edit or add a line, never rewrite their text wholesale. Only standing rules for how you should behave — a fact with a profile field goes there; anything else worth keeping goes to remember_fact."
           },
           "fire_expected_return_pct": {
             "type": "number"
@@ -8768,7 +8882,7 @@
     "additionalProperties": false,
     "properties": {
       "sql": {
-        "description": "ONE read-only SELECT (or WITH … SELECT) statement. Writes are refused by the database itself, not just by validation.",
+        "description": "ONE read-only SELECT (or WITH … SELECT) statement.",
         "type": "string"
       },
       "limit": {
@@ -9257,7 +9371,7 @@
             },
             "note": {
               "type": "string",
-              "description": "The user's angle to focus on when news breaks (e.g. 'watch M&A activity'). Feeds the news scan and shows in the UI. Ask before saving; empty if nothing."
+              "description": "The user's angle to focus on when news breaks (e.g. 'watch M&A activity'). Feeds the news scan and shows in the UI. Empty if nothing."
             },
             "search_queries": {
               "items": {
@@ -9378,7 +9492,7 @@
       },
       "note": {
         "type": "string",
-        "description": "The user's angle to focus on when news breaks. Ask before saving."
+        "description": "The user's angle to focus on when news breaks."
       },
       "intent": {
         "properties": {
@@ -9400,7 +9514,7 @@
           }
         },
         "type": "object",
-        "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Propose values and ask before saving — they're the user's call."
+        "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Record the user's own values, never your estimate."
       },
       "search_queries": {
         "items": {
@@ -9441,7 +9555,7 @@
             },
             "note": {
               "type": "string",
-              "description": "The user's angle to focus on when news breaks. Ask before saving."
+              "description": "The user's angle to focus on when news breaks."
             },
             "intent": {
               "properties": {
@@ -9463,7 +9577,7 @@
                 }
               },
               "type": "object",
-              "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Propose values and ask before saving — they're the user's call."
+              "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Record the user's own values, never your estimate."
             },
             "search_queries": {
               "items": {
@@ -9595,6 +9709,10 @@
       "watchlist_brief_verbosity": {
         "type": "integer",
         "description": "Detail of each watchlist tab's brief, same 1–5 scale. Default 3."
+      },
+      "delivery_instructions": {
+        "type": "string",
+        "description": "The user's words on what Intel should tell them (max 1000 chars; '' clears)."
       }
     },
     "type": "object",
@@ -10381,5 +10499,290 @@
     "required": [
       "guide"
     ]
+  },
+  "get_investment_theses": {
+    "additionalProperties": false,
+    "properties": {
+      "tickers": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Only these tickers, e.g. ['AAPL']. Omit for every thesis."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "set_investment_theses": {
+    "additionalProperties": false,
+    "properties": {
+      "updates": {
+        "description": "One entry per ticker. Fields you omit keep their current value; `clear` blanks fields. Prices are in the instrument's quote currency.",
+        "items": {
+          "properties": {
+            "ticker": {
+              "description": "The ticker whose thesis to write, e.g. 'AAPL'.",
+              "type": "string"
+            },
+            "role": {
+              "enum": [
+                "core",
+                "satellite",
+                "speculative"
+              ],
+              "type": "string",
+              "description": "core = long-term base of the portfolio; satellite = an active bet around it; speculative = a small, high-risk bet."
+            },
+            "reason": {
+              "type": "string",
+              "description": "Why they own it, or would buy it, and how long they plan to hold if they said, e.g. 'holding to 2029'. At most 280 characters."
+            },
+            "breaks_if": {
+              "type": "string",
+              "description": "The business fact that would break the thesis and make them sell. At most 280 characters."
+            },
+            "stop_below": {
+              "type": "number",
+              "description": "Sell-review price floor."
+            },
+            "buy_below": {
+              "type": "number",
+              "description": "Top of the buy zone."
+            },
+            "buy_above": {
+              "type": "number",
+              "description": "Optional floor of the buy zone (needs buy_below)."
+            },
+            "fair_value": {
+              "type": "number",
+              "description": "What they think it's worth."
+            },
+            "trim_above": {
+              "type": "number",
+              "description": "Price to trim or sell at."
+            },
+            "clear": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "description": "Field names to blank, e.g. ['stop_below']."
+            }
+          },
+          "required": [
+            "ticker"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "updates"
+    ],
+    "type": "object"
+  },
+  "delete_investment_theses": {
+    "additionalProperties": false,
+    "properties": {
+      "tickers": {
+        "description": "Tickers whose theses to delete.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "tickers"
+    ],
+    "type": "object"
+  },
+  "search_past_conversations": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "description": "A few words, e.g. 'house deposit' or a name; \"double quotes\" keep a phrase whole.",
+        "type": "string"
+      },
+      "limit": {
+        "type": "integer",
+        "default": 5,
+        "description": "Max conversations to return (default 5, max 10)."
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
+  },
+  "read_past_conversation": {
+    "additionalProperties": false,
+    "properties": {
+      "session_id": {
+        "description": "The conversation's id, as search_past_conversations returns it.",
+        "type": "string"
+      },
+      "offset": {
+        "type": "integer",
+        "default": 0,
+        "description": "Messages to skip from the start."
+      },
+      "limit": {
+        "type": "integer",
+        "default": 20,
+        "description": "Max messages to return (default 20, max 50)."
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "type": "object"
+  },
+  "close_recent_items": {
+    "additionalProperties": false,
+    "properties": {
+      "handles": {
+        "description": "The handles of the Recent entries this run has done what they said, as shown beside each entry in your memory block (e.g. 'm7a88f8').",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "handles"
+    ],
+    "type": "object"
+  },
+  "simplefin_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "plaid_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "lunch_money_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "lunch_flow_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "ynab_list_accounts": {
+    "additionalProperties": false,
+    "properties": {
+      "plan_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The YNAB plan's id from ynab_list_plans. Omit when the token sees one plan."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "enable_banking_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "gocardless_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "yodlee_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "search_connector_directory": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Names or keywords. Several in one search is fine, e.g. 'bybit webull' — any word matches, best matches first."
+      },
+      "category": {
+        "type": "string",
+        "description": "One category, e.g. Brokerage, Banking, Crypto, Accounting."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "get_untold_news": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "ynab_list_plans": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "ynab_get_plan": {
+    "additionalProperties": false,
+    "properties": {
+      "plan_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The plan's id from ynab_list_plans. Omit when the token sees one plan."
+      },
+      "month": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "YYYY-MM. Omit for YNAB's current month."
+      },
+      "include_hidden": {
+        "default": false,
+        "description": "Also list hidden categories.",
+        "type": "boolean"
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "plaid_reconnect_bank": {
+    "additionalProperties": false,
+    "properties": {
+      "bank": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The linked bank's name as plaid_get_status lists it. Omit when only one bank needs reconnecting."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "read_screen": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
   }
 }

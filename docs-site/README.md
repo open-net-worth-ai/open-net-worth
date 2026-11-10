@@ -78,3 +78,7 @@ deployment and the public page before reporting a docs change as live.
 
 `SITE_URL` and `SITE_BASE` can override the production origin and root base;
 the defaults in `astro.config.mjs` already target the public docs site.
+
+`PUBLIC_GA_MEASUREMENT_ID` (`G-…`, set in the Cloudflare Pages build env) turns on Google
+Analytics 4 for the public site. Unset means no tag. The in-app embed build never gets it —
+the app promises no analytics.

@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { DRAG_IGNORE_PROPS } from '../../../hooks/useSheetDragToDismiss'
+import { Check, Plus } from '../../../ui/icons'
 
 // ── Icon paths (Lucide-style) ─────────────────────────────────────────────
 
@@ -283,6 +284,8 @@ export interface InstitutionOption {
   id: string
   name: string
   accountCount: number
+  /** The accounts filed under it, sorted — shown in Manage institutions. */
+  accountNames?: string[]
 }
 export function InstitutionPicker({
   id,
@@ -401,7 +404,9 @@ export function InstitutionPicker({
                 <span className="acct-ccyp-name" style={{ color: 'var(--ink)' }}>
                   {o.name}
                 </span>
-                {o.name === value && <span className="acct-ccyp-check">✓</span>}
+                {o.name === value && (
+                  <Check className="acct-ccyp-check" size={12} aria-hidden="true" />
+                )}
               </button>
             ))}
             {showCreate && (
@@ -416,7 +421,7 @@ export function InstitutionPicker({
                   acceptInst(value)
                 }}
               >
-                <span className="acct-payf-plus">+</span>
+                <Plus className="acct-payf-plus" size={12} aria-hidden="true" />
                 <span>
                   Use “<b>{value.trim()}</b>”
                 </span>
@@ -813,7 +818,9 @@ export function CurrencyPicker({ value, onChange, defaultOpen }: CurrencyPickerP
                 >
                   <span className="acct-ccyp-code">{c}</span>
                   <span className="acct-ccyp-name">{n}</span>
-                  {c === value && <span className="acct-ccyp-check">✓</span>}
+                  {c === value && (
+                    <Check className="acct-ccyp-check" size={12} aria-hidden="true" />
+                  )}
                 </button>
               ))}
             </div>
@@ -961,7 +968,9 @@ export function CcyPicker({ value, onChange }: CcyPickerProps) {
               >
                 <span className="acct-ccyp-code">{o.code || '—'}</span>
                 <span className="acct-ccyp-name">{o.name}</span>
-                {o.code === value && <span className="acct-ccyp-check">✓</span>}
+                {o.code === value && (
+                  <Check className="acct-ccyp-check" size={12} aria-hidden="true" />
+                )}
               </button>
             ))}
           </div>
@@ -975,12 +984,21 @@ export function CcyPicker({ value, onChange }: CcyPickerProps) {
 
 export interface PMSelectProps {
   value: string
-  options: Array<{ value: string; label: string }>
+  /** ``icon`` is drawn before the label, in the list and on the button (a category's coloured tag). */
+  options: Array<{ value: string; label: string; icon?: React.ReactNode }>
   onChange: (v: string) => void
   placeholder?: string
   className?: string
   searchable?: boolean
+  /** The search box's placeholder and the line shown when nothing matches (payee wording by default). */
+  searchPlaceholder?: string
+  emptyText?: string
   compact?: boolean
+  /** The trigger's accessible name, when no visible label names it. */
+  ariaLabel?: string
+  disabled?: boolean
+  /** The list's least width, when its names are longer than the trigger is wide. */
+  menuWidth?: number
 }
 
 export function PMSelect({
@@ -990,7 +1008,12 @@ export function PMSelect({
   placeholder,
   className,
   searchable,
+  searchPlaceholder = 'Search payees…',
+  emptyText = 'No payees match.',
   compact,
+  ariaLabel,
+  disabled,
+  menuWidth = 168,
 }: PMSelectProps) {
   const [open, setOpen] = useState(false),
     [pos, setPos] = useState<React.CSSProperties | null>(null)
@@ -1004,13 +1027,16 @@ export function PMSelect({
     if (!btnRef.current) return
     const r = btnRef.current.getBoundingClientRect(),
       below = window.innerHeight - r.bottom
-    const width = Math.round(Math.max(r.width, 168))
+    const width = Math.round(Math.min(Math.max(r.width, menuWidth), window.innerWidth - 16))
     let left = Math.round(r.left)
     if (left + width > window.innerWidth - 8) left = window.innerWidth - 8 - width
     const base: React.CSSProperties = { position: 'fixed', left, width, zIndex: 600 }
+    // Opening upward must clear the stylesheet's `top` too, or top and bottom both apply and
+    // the list stretches from the top of the screen down to the button.
     if (below < 260)
       setPos({
         ...base,
+        top: 'auto',
         bottom: Math.round(window.innerHeight - r.top) + 4,
         maxHeight: Math.round(r.top - 12),
       })
@@ -1091,6 +1117,10 @@ export function PMSelect({
         type="button"
         className={'acct-acctsel-btn' + (open ? ' open' : '')}
         title={compact ? 'Sort' : undefined}
+        aria-label={ariaLabel}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => {
           if (open) setOpen(false)
           else openMenu()
@@ -1112,6 +1142,7 @@ export function PMSelect({
           </svg>
         ) : (
           <>
+            {cur?.icon}
             <span className="acct-acctsel-nm">{cur ? cur.label : placeholder || ''}</span>
             <svg
               className="acct-acctsel-caret"
@@ -1135,7 +1166,7 @@ export function PMSelect({
             <input
               ref={searchRef}
               className="pm-select-search"
-              placeholder="Search payees…"
+              placeholder={searchPlaceholder}
               value={q}
               onChange={(e) => {
                 setQ(e.target.value)
@@ -1149,6 +1180,8 @@ export function PMSelect({
             <button
               type="button"
               key={o.value}
+              role="option"
+              aria-selected={o.value === value}
               className={
                 'acct-acctsel-item' + (o.value === value ? ' sel' : '') + (i === hi ? ' hi' : '')
               }
@@ -1159,12 +1192,15 @@ export function PMSelect({
                 setOpen(false)
               }}
             >
-              <span className="acct-acctsel-check">{o.value === value ? '✓' : ''}</span>
+              <span className="acct-acctsel-check">
+                {o.value === value ? <Check size={12} aria-hidden="true" /> : null}
+              </span>
+              {o.icon}
               <span className="acct-acctsel-nm">{o.label}</span>
             </button>
           ))}
           {searchable && shown.filter((o) => o.value !== '').length === 0 && (
-            <div className="pm-select-noresult">No payees match.</div>
+            <div className="pm-select-noresult">{emptyText}</div>
           )}
         </div>
       )}

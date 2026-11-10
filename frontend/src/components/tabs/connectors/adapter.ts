@@ -6,7 +6,7 @@
 // servers. Family grouping, install state, status vocabulary and tool grouping are all
 // derived here so every screen reads one truth.
 
-import { catalogProvenanceFor } from './catalog'
+import { CATALOG, catalogProvenanceFor } from './catalog'
 import { connectorLogo } from './logos'
 import type { McpEditTarget } from './mcpConfig'
 import type { OAuthSummary } from './mcpApi'
@@ -28,38 +28,27 @@ const WEB_SEARCH_PREFIX = 'web_search:'
  *  vs. `auth_error` is the MCP-specific fact `statusOf` needs and `status` cannot carry. */
 const ERROR_STATUSES = new Set(['error', 'connect_error', 'auth_error', 'failed'])
 
-/** Family membership per connector kind. An ARRAY: a connector appears under every
- *  section it belongs to, and both the section and the filter test membership rather
- *  than a single primary family (spec §1).
- *
- *  Email is ONE connector under Data sources, not an "Email (SMTP)" channel plus an
- *  "Email import (IMAP)" data source (spec §8). Webhook is a Channel here — it is only
- *  the DIRECTORY that never offers it as an addable card. */
-const FAMILIES: Record<string, ConnectorFamily[]> = {
-  telegram: ['Channel'],
+/** The family of a connector the directory never shows as a card. Every other one sits under
+ *  the family its catalog entry gives it, so the connected list and Browse can't disagree, and
+ *  only an MCP server is ever under MCP. An ARRAY: a connector appears under every section it
+ *  belongs to (spec §1). Webhook is a Channel here; only the directory never offers it (§8). */
+const UNLISTED_FAMILIES: Record<string, ConnectorFamily[]> = {
   webhook: ['Channel'],
-  email: ['Data source'],
-  plaid: ['Data source'],
-  lunch_flow: ['Data source'],
-  enable_banking: ['Data source'],
   yodlee: ['Data source'],
-  alpaca: ['Data source'],
-  ibkr: ['Data source'],
-  yahoo_finance: ['Data source'],
-  coingecko: ['Data source'],
-  web_search: ['Web'],
-  mcp: ['MCP'],
 }
 
 /** The fallback category glyph + tint per kind. A connector with a licensed brand mark shows
  *  that instead — see `logos.ts` and D25; these stay as the answer for everything else. */
 const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   telegram: { icon: 'chat', hue: 'var(--accent)' },
+  voice: { icon: 'voice', hue: 'var(--cta)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
+  actual_budget: { icon: 'accounts', hue: 'var(--accent)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },
   lunch_flow: { icon: 'accounts', hue: 'var(--good)' },
   enable_banking: { icon: 'accounts', hue: 'var(--cash-c)' },
+  gocardless: { icon: 'accounts', hue: 'var(--recv)' },
   yodlee: { icon: 'accounts', hue: 'var(--good)' },
   alpaca: { icon: 'investments', hue: 'var(--crypto)' },
   ibkr: { icon: 'investments', hue: 'var(--ibkr)' },
@@ -85,6 +74,7 @@ const PRESENTATION: Record<string, { icon: string; hue: string }> = {
  *  any of them once installed. */
 const DEVELOPERS: Record<string, { name: string; url: string }> = {
   telegram: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
+  voice: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   webhook: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   email: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   simplefin: { name: 'SimpleFIN', url: 'https://www.simplefin.org/' },
@@ -92,9 +82,14 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
   lunch_money: { name: 'Lunch Money', url: 'https://lunchmoney.app' },
   lunch_flow: { name: 'Lunch Flow', url: 'https://lunchflow.app' },
   ynab: { name: 'YNAB', url: 'https://www.ynab.com' },
+  actual_budget: { name: 'Actual Budget', url: 'https://actualbudget.org' },
   enable_banking: {
     name: 'Enable Banking',
     url: 'https://enablebanking.com/docs/api/reference/',
+  },
+  gocardless: {
+    name: 'GoCardless',
+    url: 'https://docs.gocardless.com/bank-account-data/overview',
   },
   yodlee: { name: 'Yodlee (Envestnet)', url: 'https://www.yodlee.com/' },
   alpaca: {
@@ -137,6 +132,7 @@ const PROMPTS: Record<string, string[]> = {
   plaid: ['Reconnect my bank account', 'Show all accounts linked through Plaid'],
   lunch_flow: ['Sync my Lunch Flow accounts now', 'Show accounts linked through Lunch Flow'],
   enable_banking: ['Sync my EU bank accounts', 'Show accounts linked through Enable Banking'],
+  gocardless: ['Fetch my GoCardless transactions', 'Show accounts linked through GoCardless'],
   yodlee: ['Sync my Yodlee accounts now', 'Show all accounts linked through Yodlee'],
   alpaca: ['Import my Alpaca positions', 'Show my Alpaca cash balance'],
   ibkr: ['Import today’s IBKR trades', 'Show my IBKR cash balance'],
@@ -175,6 +171,21 @@ export function mcpOAuthSummary(c: Connector): OAuthSummary | null {
   return raw as OAuthSummary
 }
 
+/** Whether Reconnect should open the sign-in window at once: an OAuth server that never signed
+ *  in, or whose sign-in the backend knows is dead. Anything else retries the connection first,
+ *  because a failed read says nothing about the sign-in. */
+export function mcpNeedsSignIn(c: Connector): boolean {
+  if (mcpAuthType(c) !== 'oauth') return false
+  const oauth = mcpOAuthSummary(c)
+  return !oauth?.connected || oauth.needs_reauth
+}
+
+/** An OAuth server with no sign-in yet: there is nothing to reconnect, so its button authenticates.
+ *  A sign-in that expired reads Reconnect, though it opens the same window. */
+function mcpNeverSignedIn(c: Connector): boolean {
+  return mcpAuthType(c) === 'oauth' && !mcpOAuthSummary(c)?.connected
+}
+
 /** Installed = it exists on this instance. A `not_configured` card is a DIRECTORY entry,
  *  not a list row — otherwise a fresh instance shows 13 rows of nothing. An MCP server is
  *  installed by virtue of being in the store, even before its first successful probe. */
@@ -195,9 +206,18 @@ export function statusOf(c: Connector): {
 } {
   const cfg = configOf(c)
   const lastStatus = str(cfg, 'last_status')
+  // A bank that wants its sign-in renewed: the keys are fine, nothing syncs until Reconnect.
+  if (lastStatus === 'reconnect_needed') {
+    return { statusText: 'Sign-in needed', tone: 'warn', attention: true }
+  }
   if (ERROR_STATUSES.has(c.status) || ERROR_STATUSES.has(lastStatus)) {
     const authError = c.status === 'auth_error' || lastStatus === 'auth_error'
-    return { statusText: authError ? 'Auth error' : 'Error', tone: 'bad', attention: true }
+    if (!authError) return { statusText: 'Error', tone: 'bad', attention: true }
+    return {
+      statusText: c.id.startsWith(MCP_PREFIX) ? 'Authentication issue' : 'Auth error',
+      tone: 'warn',
+      attention: true,
+    }
   }
   if (c.enabled) return { statusText: 'Connected', tone: 'good', attention: false }
   // "Disconnected" implies a connection that existed and then dropped — wrong for a
@@ -226,6 +246,13 @@ function permsOf(c: Connector): PermissionMap {
 function displayName(c: Connector): string {
   // "Web search · Tavily" → "Tavily"; the family section already says Web.
   if (c.id.startsWith(WEB_SEARCH_PREFIX)) return c.name.replace(/^Web search\s*•\s*/, '') || c.name
+  // An MCP server still named what its handshake called itself ("gemini-mcp") shows the
+  // human title the same handshake gave ("Gemini"); a name the user typed always wins.
+  if (c.id.startsWith(MCP_PREFIX)) {
+    const cfg = configOf(c)
+    const title = str(cfg, 'server_info_title')
+    if (title && c.name === str(cfg, 'server_info_name')) return title
+  }
   return c.name || c.id
 }
 
@@ -243,6 +270,14 @@ function endpointOf(c: Connector): string | undefined {
   return [command, ...args].join(' ')
 }
 
+/** A user-added MCP server's own icon, served from our origin (`mcp.site_identity` fetched,
+ *  sniffed and cached it). `icon_version` busts the browser's cache when it is re-fetched. */
+function mcpIconUrl(c: Connector): string | undefined {
+  const version = configOf(c).icon_version
+  if (typeof version !== 'number') return undefined
+  return `/api/mcp-clients/${encodeURIComponent(c.id.slice(MCP_PREFIX.length))}/icon?v=${version}`
+}
+
 /** Fold one wire connector into the shape every screen renders. */
 export function toEntry(c: Connector): ConnectorDetailEntry {
   const kind = kindOf(c)
@@ -253,6 +288,10 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
   const status = statusOf(c)
   // Matched by ENDPOINT — the thing being trusted, and the one part a user can't rename.
   const provenance = mcp ? catalogProvenanceFor(endpointOf(c)) : null
+  // A server that describes itself (handshake `serverInfo.description`) is believed first; the
+  // directory's text beats the rest — the instructions' first sentence is guidance for an AI,
+  // and the generic line says nothing.
+  const selfDescribed = mcp ? str(cfg, 'server_info_description') : ''
   // id-before-kind: web-search's six providers share one `kind` ("web_search") but
   // each has its own real publisher, so the specific id wins when it has its own entry —
   // same lookup order `connector_catalog.copy_for` uses backend-side for description/tools.
@@ -267,21 +306,38 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // A native connector's id IS its catalog id, so it resolves directly. An MCP server's is
     // whatever the user named it, so it never resolves directly and inherits from the catalog
     // entry its ENDPOINT matches instead — the same join, and the same reason, as provenance:
-    // a server calling itself `stripe` must not be able to borrow Stripe's mark.
-    logo: provenance?.logo ?? (mcp ? undefined : connectorLogo(c.id)),
-    families: FAMILIES[kind] ?? ['MCP'],
+    // a server calling itself `stripe` must not be able to borrow Stripe's mark. Absent a
+    // catalog match, a server shows the icon IT or its website declared — never ours.
+    logo: provenance?.logo ?? (mcp ? mcpIconUrl(c) : connectorLogo(c.id)),
+    families: mcp
+      ? (provenance?.families ?? ['MCP'])
+      : (CATALOG.find((e) => e.id === c.id)?.families ?? UNLISTED_FAMILIES[kind] ?? []),
+    categories: mcp
+      ? (provenance?.categories ?? [])
+      : (CATALOG.find((e) => e.id === c.id)?.categories ?? []),
     tag: c.id.startsWith(WEB_SEARCH_PREFIX) && cfg.is_active === true ? 'Default' : undefined,
     statusText: status.statusText,
     tone: status.tone,
     attention: status.attention,
+    fixLabel: mcp && mcpNeverSignedIn(c) ? 'Authenticate' : 'Reconnect',
+    lastError: status.attention ? c.error || str(cfg, 'last_error') || undefined : undefined,
     enabled: c.enabled,
     // An MCP server is configured the moment it is in the store — its endpoint WAS the
     // setup. Everything else earns it by holding credentials.
     configured: mcp || c.status !== 'not_configured',
-    sub: c.short_description || endpointOf(c) || '',
-    desc: c.long_description || c.short_description || '',
+    sub: selfDescribed || provenance?.sub || c.short_description || endpointOf(c) || '',
+    desc: selfDescribed
+      ? ''
+      : provenance?.desc || c.long_description || (mcp ? '' : c.short_description) || '',
+    service: mcp ? undefined : CATALOG.find((e) => e.id === c.id)?.service,
+    version: mcp ? str(cfg, 'server_info_version') || undefined : undefined,
+    instructions: mcp ? str(cfg, 'server_info_instructions') || undefined : undefined,
     developer: provenance?.publisher ?? developer?.name,
-    developerUrl: mcp ? undefined : developer?.url,
+    // An MCP server we recognise links its publisher exactly as its directory card does
+    // (homepage, else repository) — the two screens must not disagree (D26).
+    developerUrl: mcp
+      ? (provenance?.homepageUrl ?? provenance?.repoUrl ?? undefined)
+      : developer?.url,
     mcp,
     // The wire view carries no provenance of its own, so this is honest about what it knows:
     // a publisher we recognise reads `unverified`, and a server the user pointed us at reads

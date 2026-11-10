@@ -41,15 +41,16 @@ async def notify(message: str, channels: list[str] | None = None, title: str | N
     (not an error) and reported as ``{"skipped": "unknown_channel"}``. A channel
     that raises is isolated and reported as ``{"error": "<msg>"}``.
 
-    ``title`` is the notification's subject line. A channel that has a real title slot
-    (the in-app signal feed) takes it as one — the feed used to label every notification
-    the literal word "Notification". A plain-text channel has nowhere to put it, so it
-    becomes the message's first line, which is what a reader would expect to see anyway.
+    ``title`` is the notification's subject line, shown only by a channel with a real title
+    slot (the in-app signal feed). A plain-text channel gets the message alone, so the
+    message must stand on its own: pasting the title above it read as a stray heading line
+    ("Capture", blank line, "Booked: …") on Telegram. Only an empty message falls back to
+    the title, so nothing is ever sent blank.
     """
     available = registered_channels()
     targets = channels if channels is not None else list(available)
     subject = (title or "").strip()
-    body = f"{subject}\n\n{message}" if subject else message
+    body = message if message.strip() else subject
     results: dict[str, dict] = {}
     for name in targets:
         fn = available.get(name)
@@ -94,13 +95,10 @@ async def notify_document(
 
     meta = artifacts_service.get_meta(artifact_id)
     content = artifacts_service.read_bytes(artifact_id)
-    # The caption is the sender's own words; the file already shows its name, so the
-    # artifact title is only a fallback for a send with no message at all.
+    # The caption is the sender's own words, standing alone as in notify(); the title, then
+    # the artifact's title, are only fallbacks for a send with no message at all.
     subject = (title or "").strip()
-    if message.strip():
-        caption = f"{subject}\n\n{message}".strip() if subject else message.strip()
-    else:
-        caption = subject or str(meta.get("title") or "")
+    caption = message.strip() or subject or str(meta.get("title") or "")
     documents = registered_document_channels()
     results: dict[str, dict] = {}
     for name in channels:

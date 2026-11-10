@@ -48,7 +48,7 @@ app="$(find desktop/out -maxdepth 3 -type d -path '*/Open Net Worth.app' | head 
 codesign --verify --deep --strict "$app"
 spctl --assess --type execute --verbose=2 "$app"
 xcrun stapler validate "$app"
-(cd desktop && node qa/packaged-smoke.mjs "$(cd .. && pwd)/$app/Contents/MacOS/open-net-worth")
+(cd desktop && node qa/packaged-smoke.mjs "$(cd .. && pwd)/$app/Contents/MacOS/Open Net Worth")
 
 stage="desktop/out/release"
 rm -rf "$stage" && mkdir -p "$stage"

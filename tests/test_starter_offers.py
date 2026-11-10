@@ -31,7 +31,12 @@ def isolated(tmp_path, monkeypatch):
     return tmp_path
 
 
-ADDED = ["daily-briefing", "log-transactions-from-email", "balance-mismatch-tracer"]
+ADDED = [
+    "daily-briefing",
+    "log-transactions-from-email",
+    "balance-mismatch-tracer",
+    "email-finance-digest",
+]
 
 
 def test_the_added_starters_ship():

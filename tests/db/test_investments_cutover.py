@@ -94,6 +94,11 @@ POSITIONS = [
     },
 ]
 
+# The legacy positions.json above still carries a ``note`` (the cutover revision absorbs
+# whatever the file holds); revision 202610292000_positions_drop_note then deletes that key from
+# every stored position. So at head the store holds the fixture WITHOUT it.
+POSITIONS_AT_HEAD = [{k: v for k, v in p.items() if k != "note"} for p in POSITIONS]
+
 LOTS = [
     {
         "id": "lot_1",
@@ -586,7 +591,8 @@ def test_all_eight_stores_round_trip_exactly_through_the_real_migration(
     }
     with eng.get_engine().connect() as conn:
         for attr, (_filename, original) in files.items():
-            assert exporters[attr](conn) == original, f"{attr} did not round-trip exactly"
+            expected = POSITIONS_AT_HEAD if attr == "POSITIONS_SOURCE" else original
+            assert exporters[attr](conn) == expected, f"{attr} did not round-trip exactly"
 
     eng.dispose_engine()
 
@@ -611,7 +617,7 @@ def test_asset_brief_absent_is_a_clean_skip_other_seven_still_absorb(tmp_path, d
 
     with eng.get_engine().connect() as conn:
         assert iio.export_payload_list(conn, asset_brief) == []
-        assert iio.export_payload_list(conn, positions) == POSITIONS
+        assert iio.export_payload_list(conn, positions) == POSITIONS_AT_HEAD
         assert iio.export_watchlist(conn) == WATCHLIST
         count = conn.execute(
             select(func.count())

@@ -34,10 +34,13 @@
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { ArrowRight } from '../../../ui/icons'
 import { templateKeyForConnector } from '../automations/automationTemplates'
 import { BackTitle, Badge, Btn, Kebab, Modal, Mono, type KebabItem } from './primitives'
 import { useConnectorSaveHost } from './formSave'
-import { PermissionLadder } from './PermissionLadder'
+import { useFlag } from '../../../hooks/useFlag'
+import { useIsMobile } from '../../../hooks/useIsMobile'
+import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
   stampGroup,
@@ -104,6 +107,9 @@ export interface ConnectorDetailProps {
    *
    *  Ignored when there is nothing to set up — see `setupPending`. */
   configureOnOpen?: boolean
+  /** With `configureOnOpen`: open on the form whatever the connector's health, for a caller whose
+   *  link is about changing what the form holds. */
+  formFirst?: boolean
   /** Fired when the config view is left, so the caller can refetch — a saved credential
    *  changes `status`, and the page behind is showing it. */
   onConfigClosed?: () => void
@@ -131,9 +137,12 @@ export function ConnectorDetail({
   alwaysOn = false,
   configForm,
   configureOnOpen = false,
+  formFirst = false,
   onConfigClosed,
   onSaved,
 }: ConnectorDetailProps): JSX.Element {
+  // permissions_v2 names the level Ask; the dialog below must use the word the ladder shows.
+  const askLabel = useFlag('permissions_v2') === true ? 'Ask' : 'Needs approval'
   // Optimistic mirror of the saved levels: the ladder must respond to a click without
   // waiting for a round trip. Reseeded whenever a different connector is shown, and
   // whenever the server's own view of the levels changes underneath us.
@@ -178,7 +187,9 @@ export function ConnectorDetail({
   // row action's target — its actual fix lives in its credentials, so this seed also fires
   // for `configureOnOpen` there, alongside the already-unconfigured `setupPending` case.
   const [configuringId, setConfiguringId] = useState<string | null>(
-    configureOnOpen && (setupPending || (Boolean(configForm) && entry.attention)) ? entry.id : null,
+    configureOnOpen && (setupPending || (Boolean(configForm) && (entry.attention || formFirst)))
+      ? entry.id
+      : null,
   )
   const configuring = configuringId === entry.id
   // The config view's footer is the credential form's OWN Save (see ./formSave) — there is
@@ -189,6 +200,7 @@ export function ConnectorDetail({
   const openTemplate = (key: string) =>
     void navigate({ to: '/automations', search: { template: key } as never } as never)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const isMobile = useIsMobile()
   const [removing, setRemoving] = useState(false)
   const [confirmingPause, setConfirmingPause] = useState(false)
   const [pausing, setPausing] = useState(false)
@@ -249,7 +261,19 @@ export function ConnectorDetail({
     })
   }
 
+  // A healthy, running connector's actions (Automate, Pause) are occasional — on a phone they
+  // live in the ⋮ rather than earn a footer slot beside Done. Only a FIX (Reconnect / Connect
+  // / Resume) is promoted to the footer there, since it is the one thing the page is for.
+  const running = !alwaysOn && !entry.attention && entry.enabled
+  const phoneRunningItems: KebabItem[] =
+    isMobile && running
+      ? [
+          ...(automateKey ? [{ label: 'Automate', onClick: () => openTemplate(automateKey) }] : []),
+          { label: 'Pause connector', onClick: () => setConfirmingPause(true) },
+        ]
+      : []
   const kebabItems: KebabItem[] = [
+    ...phoneRunningItems,
     { label: 'View details', onClick: onViewDetails },
     ...(configForm
       ? [{ label: 'Edit configuration', onClick: () => setConfiguringId(entry.id) }]
@@ -299,7 +323,7 @@ export function ConnectorDetail({
                 ? `the ${entry.tools.length} tool${entry.tools.length === 1 ? '' : 's'} it offers`
                 : 'access to it'}
               , and every permission level you set for them is forgotten — so adding this server
-              again starts it back at Needs approval rather than inheriting what you allowed before.
+              again starts it back at {askLabel} rather than inheriting what you allowed before.
               Nothing else on this instance is touched. This can&apos;t be undone. If you just want
               to pause it without losing your saved credentials, use Pause instead.
             </>
@@ -374,6 +398,50 @@ export function ConnectorDetail({
     )
   }
 
+  // `lg` matches the landing page's Add — this page's primary action is the same weight of
+  // decision. On a phone it moves to the footer beside Done (the header keeps only the ⋮
+  // inline), so it never hangs on a row of its own under the name.
+  const stateAction = alwaysOn ? null : entry.attention ? (
+    configForm ? (
+      // A native connector's "Reconnect" here is ALWAYS an already-enabled,
+      // already-configured connector (that's the only way `attention` is true —
+      // see `services/connectors.py::_status`), so there is nothing to flip and
+      // no connection test to run yet (EmailUnifiedSection's own note: "a real
+      // cross-connector test flow is a future addition"). The fix lives in its
+      // credentials, so this opens the same config view "Edit configuration"
+      // does, rather than routing through `onReconnect`'s enable-flip/OAuth path.
+      <Btn size="lg" variant="primary" onClick={() => setConfiguringId(entry.id)}>
+        Reconnect
+      </Btn>
+    ) : (
+      <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
+        {!reconnecting
+          ? entry.fixLabel
+          : entry.fixLabel === 'Authenticate'
+            ? 'Authenticating…'
+            : 'Reconnecting…'}
+      </Btn>
+    )
+  ) : entry.enabled ? (
+    <>
+      {automateKey ? (
+        // Puts the connector to work: opens its Automation template (logging from
+        // the mailbox, a bank or broker sync) as an unsaved draft.
+        <Btn size="lg" onClick={() => openTemplate(automateKey)}>
+          Automate
+        </Btn>
+      ) : null}
+      <Btn size="lg" variant="danger" onClick={() => setConfirmingPause(true)}>
+        Pause
+      </Btn>
+    </>
+  ) : (
+    <Btn size="lg" variant="primary" onClick={connect}>
+      {setupPending ? 'Connect' : 'Resume'}
+    </Btn>
+  )
+  const phoneFix = isMobile && !running ? stateAction : null
+
   return (
     <>
       <Modal
@@ -382,9 +450,16 @@ export function ConnectorDetail({
         size="lg"
         escapeDisabled={confirmingRemove || confirmingPause}
         footer={
-          <Btn variant="primary" onClick={onClose}>
-            Done
-          </Btn>
+          <>
+            <Btn
+              size={isMobile ? 'lg' : undefined}
+              variant={phoneFix ? 'secondary' : 'primary'}
+              onClick={onClose}
+            >
+              Done
+            </Btn>
+            {phoneFix}
+          </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -393,51 +468,40 @@ export function ConnectorDetail({
             // `lg` matches the landing page's Add — this page's primary action is the same
             // weight of decision, and the two headers are now the same block. The kebab keeps
             // its dense icon size: spec §9 excludes small icon-only actions from any bump.
+            compact={isMobile}
             actions={
-              <>
-                {alwaysOn ? null : entry.attention ? (
-                  configForm ? (
-                    // A native connector's "Reconnect" here is ALWAYS an already-enabled,
-                    // already-configured connector (that's the only way `attention` is true —
-                    // see `services/connectors.py::_status`), so there is nothing to flip and
-                    // no connection test to run yet (EmailUnifiedSection's own note: "a real
-                    // cross-connector test flow is a future addition"). The fix lives in its
-                    // credentials, so this opens the same config view "Edit configuration"
-                    // does, rather than routing through `onReconnect`'s enable-flip/OAuth path.
-                    <Btn size="lg" variant="primary" onClick={() => setConfiguringId(entry.id)}>
-                      Reconnect
-                    </Btn>
-                  ) : (
-                    <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
-                      {reconnecting ? 'Reconnecting…' : 'Reconnect'}
-                    </Btn>
-                  )
-                ) : entry.enabled ? (
-                  <>
-                    {automateKey ? (
-                      // Puts the connector to work: opens its Automation template (logging from
-                      // the mailbox, a bank or broker sync) as an unsaved draft.
-                      <Btn size="lg" onClick={() => openTemplate(automateKey)}>
-                        Automate
-                      </Btn>
-                    ) : null}
-                    <Btn size="lg" variant="danger" onClick={() => setConfirmingPause(true)}>
-                      Pause
-                    </Btn>
-                  </>
-                ) : (
-                  <Btn size="lg" variant="primary" onClick={connect}>
-                    {setupPending ? 'Connect' : 'Resume'}
-                  </Btn>
-                )}
+              isMobile ? (
                 <Kebab items={kebabItems} />
-              </>
+              ) : (
+                <>
+                  {stateAction}
+                  <Kebab items={kebabItems} />
+                </>
+              )
             }
           />
 
+          {entry.lastError ? (
+            <div
+              className={entry.tone === 'warn' ? 'cn-errorbox cn-errorbox-warn' : 'cn-errorbox'}
+              data-ctx-ignore
+            >
+              <div className="cn-errorbox-text">{entry.lastError}</div>
+              {entry.mcp ? (
+                <div className="cn-errorbox-note">
+                  {entry.fixLabel === 'Authenticate'
+                    ? 'Lucius can’t use these tools until you sign in with Authenticate.'
+                    : entry.tone === 'warn'
+                      ? 'Lucius can’t use these tools until you reconnect.'
+                      : 'Lucius can’t use these tools until this connects again. Open Net Worth tries again by itself every hour; Reconnect tries now.'}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {entry.desc ? (
             <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
-              {entry.desc}
+              <LinkedDesc desc={entry.desc} service={entry.service} />
             </p>
           ) : null}
 
@@ -476,6 +540,13 @@ export function ConnectorDetail({
             </div>
           ) : null}
 
+          {entry.instructions ? (
+            <details className="cn-fold">
+              <summary>The server&rsquo;s instructions for AI</summary>
+              <p>{entry.instructions}</p>
+            </details>
+          ) : null}
+
           {entry.mcp ? (
             <VendorTrust
               developer={entry.developer}
@@ -493,11 +564,12 @@ export function ConnectorDetail({
                 {entry.prompts.map((p) => (
                   <button
                     key={p}
-                    className="cn-tagchip"
-                    style={{ cursor: 'pointer' }}
+                    type="button"
+                    className="cn-tagchip cn-promptchip"
                     onClick={() => onUsePrompt(p)}
                   >
                     {p}
+                    <ArrowRight size={12} aria-hidden="true" className="cn-promptchip-arrow" />
                   </button>
                 ))}
               </div>
@@ -513,7 +585,7 @@ export function ConnectorDetail({
                 <div className="rd-help" style={{ marginBottom: 8, fontSize: 12.5 }}>
                   Choose when Lucius is allowed to use these tools.
                 </div>
-                <PermissionLadder
+                <PermissionLadderSwitch
                   groups={entry.toolGroups}
                   perms={perms}
                   onSetTool={(tool, level) =>
@@ -549,16 +621,22 @@ export function ConnectorDetail({
 function Identity({
   entry,
   actions,
+  compact = false,
 }: {
   entry: ConnectorDetailEntry
   actions?: ReactNode
+  /** Phone layout: the only action is the ⋮, kept inline at the top right. */
+  compact?: boolean
 }): JSX.Element {
   return (
-    <div className="cn-idhead">
+    <div className={compact ? 'cn-idhead cn-idhead-compact' : 'cn-idhead'}>
       <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} size="lg" />
       <div className="cn-idhead-main">
         <div className="cn-idhead-name">
           {entry.name}
+          {entry.version ? (
+            <span className="cn-version">v{entry.version.replace(/^v/i, '')}</span>
+          ) : null}
           {entry.tag ? <span className="cn-tag">{entry.tag}</span> : null}
           <Badge tone={entry.tone}>{entry.statusText}</Badge>
         </div>
@@ -604,4 +682,23 @@ function removeProviderRevokeNote(entry: ConnectorDetailEntry): string {
   }
   const label = providerLabel[entry.id]
   return label ? `You may also want to revoke access from your ${label} account directly. ` : ''
+}
+
+/** The description, its outside service's name (its first mention) linked to it. */
+function LinkedDesc({
+  desc,
+  service,
+}: {
+  desc: string
+  service?: { name: string; url: string }
+}): JSX.Element {
+  const at = service ? desc.indexOf(service.name) : -1
+  if (!service || at < 0) return <>{desc}</>
+  return (
+    <>
+      {desc.slice(0, at)}
+      <ExternalLink href={service.url}>{service.name}</ExternalLink>
+      {desc.slice(at + service.name.length)}
+    </>
+  )
 }

@@ -20,8 +20,10 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup, act, renderHook } from '@testing-library/react'
 import {
   CATALOG,
+  RETIRED_CATALOG,
   MCP_INSTALL_PRESETS,
   catalogProvenanceFor,
+  filterDirectory,
   previewEndpoint,
   type CatalogEntry,
   type DirectoryRow,
@@ -152,15 +154,9 @@ describe('categories describe the connector; families are the lane', () => {
     expect(cats('mcp-quickbooks')).toEqual(['Accounting'])
     expect(cats('mcp-xero')).toEqual(['Accounting'])
     expect(cats('plaid')).toEqual(['Banking'])
-    expect(cats('web_search:serper')).toEqual(['Search', 'Web'])
+    expect(cats('web_search:serper')).toEqual(['Web search'])
+    expect(cats('mcp-playwright')).toEqual(['Browsing'])
     expect(cats('telegram')).toEqual(['Messaging'])
-  })
-
-  it('does not tag a positions-import feed as market data', () => {
-    // Alpaca and IBKR both SELL market data; neither connector here imports any. A category
-    // is what the connector is for in this app, not what the vendor's catalogue covers.
-    expect(byId('alpaca').categories).not.toContain('Market data')
-    expect(byId('ibkr').categories).not.toContain('Market data')
   })
 
   it('does not tag a read-only banking server as payments', () => {
@@ -213,14 +209,6 @@ describe('native entries carry links too, and every one was fetched', () => {
     const expected: [string, 'homepageUrl' | 'supportUrl' | 'privacyUrl', string][] = [
       ['plaid', 'homepageUrl', 'https://plaid.com/docs/link/'],
       ['plaid', 'privacyUrl', 'https://plaid.com/legal/#end-user-privacy-policy'],
-      ['alpaca', 'privacyUrl', 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf'],
-      // The URLs search engines point at (`ibkrcampus.com/...`, `/campus/ibkr-api-page/...`)
-      // all 301 into a 404. This is the path that answers.
-      [
-        'ibkr',
-        'homepageUrl',
-        'https://www.interactivebrokers.com/docs/web-api/flex-web-service/introduction',
-      ],
       ['enable_banking', 'homepageUrl', 'https://enablebanking.com/docs/api/reference/'],
       ['web_search:serper', 'privacyUrl', 'https://serper.dev/privacy'],
       [
@@ -270,6 +258,29 @@ describe('MCP provenance — what we confirmed, stated exactly', () => {
     ['mcp-quickbooks', 'Intuit', 'verified'],
     ['mcp-xero', 'Xero', 'verified'],
     ['mcp-mercury', 'Mercury', 'verified'],
+    // help.monarch.com publishes the endpoint (2026-10-30 article).
+    ['mcp-monarch', 'Monarch', 'verified'],
+    // IBKR publishes this endpoint itself (ai-integrations page, connector v1.1.5 release notes,
+    // 2026-07-28 press release) and serves it from api.ibkr.com.
+    ['mcp-ibkr', 'Interactive Brokers', 'verified'],
+    // Each vendor's own docs publish the endpoint: Robinhood's Help Center, moomoo's OpenAPI docs.
+    ['mcp-robinhood', 'Robinhood', 'verified'],
+    ['mcp-moomoo', 'moomoo', 'verified'],
+    // Local servers each vendor publishes from its own org: alpacahq, @coinbase, okx.
+    ['mcp-alpaca', 'Alpaca', 'verified'],
+    ['mcp-coinbase', 'Coinbase', 'verified'],
+    ['mcp-okx', 'OKX', 'verified'],
+    ['mcp-kraken', 'Kraken', 'verified'],
+    // Each published on the broker's own domain (docs or support pages, 2026-10-31).
+    ['mcp-webull', 'Webull', 'verified'],
+    ['mcp-longbridge', 'Longbridge', 'verified'],
+    ['mcp-tiger', 'Tiger Brokers', 'verified'],
+    ['mcp-zerodha', 'Zerodha', 'verified'],
+    ['mcp-upstox', 'Upstox', 'verified'],
+    // Local server released from PublicDotCom's own repo via a PyPI trusted publisher.
+    ['mcp-public', 'Public.com', 'verified'],
+    // Bybit's GitHub-verified org; npm maintainers are @bybit.com accounts.
+    ['mcp-bybit', 'Bybit', 'verified'],
     ['mcp-expensify', 'Expensify', 'verified'],
     ['mcp-avalara', 'Avalara', 'verified'],
     ['mcp-twelvedata', 'Twelve Data', 'verified'],
@@ -374,21 +385,31 @@ describe('install presets', () => {
       expect(catalogProvenanceFor(previewEndpoint(rowFor(id))), id).toEqual({
         publisher: entry.publisher,
         verification: entry.verification,
+        families: entry.families,
         repoUrl: entry.repoUrl,
         homepageUrl: entry.homepageUrl,
         // Identity travels with provenance and for the same reason (D14): an installed server
         // must not read one thing on its card and another on its detail page.
         logo: connectorLogo(entry.id),
         categories: entry.categories,
+        sub: entry.sub,
+        desc: entry.desc,
       })
     }
   })
+
+  // The ONLY values a preset may ship: named, non-secret settings a server cannot start
+  // without. Coinbase's CLI refuses every call with "no environment configured" unless one is
+  // named, and in server mode it reads only COINBASE_ENV (its --env flag is ignored there).
+  const NON_SECRET_PRESET_VALUES: Record<string, string> = { COINBASE_ENV: 'live' }
 
   it('pre-seed env KEYS with no values — a preset must never ship a credential', () => {
     for (const [id, preset] of Object.entries(MCP_INSTALL_PRESETS)) {
       if (!preset.env) continue
       for (const line of preset.env.split('\n')) {
-        expect(line, id).toMatch(/^[A-Z][A-Z0-9_]*=$/)
+        const [key, value] = [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]
+        expect(key, id).toMatch(/^[A-Z][A-Z0-9_]*$/)
+        expect(value, `${id} ${key}`).toBe(NON_SECRET_PRESET_VALUES[key] ?? '')
       }
     }
   })
@@ -512,5 +533,40 @@ describe('a hosted server with no repo renders cleanly', () => {
       <DirectoryPreview d={rowFor('mcp-sec-edgar')} onAdd={noop} onConfigure={noop} />,
     )
     expect(hrefs(container)).toContain('https://github.com/stefanoamorelli/sec-edgar-mcp')
+  })
+})
+
+describe('retired entries', () => {
+  it('keeps IBKR Flex and the Alpaca data source out, their entries set aside not deleted', () => {
+    expect(CATALOG.some((e) => e.id === 'ibkr' || e.id === 'alpaca')).toBe(false)
+    expect(RETIRED_CATALOG.map((e) => e.id).sort()).toEqual(['alpaca', 'ibkr'])
+  })
+})
+
+describe('Sort: Popular', () => {
+  // Owner, 2026-11-02: what you already have no longer jumps the queue.
+  it('lists the popular picks, then the rest — each A–Z, installed or not', () => {
+    const plaid = {
+      id: 'plaid',
+      kind: 'plaid',
+      name: 'Plaid',
+      enabled: true,
+      status: 'active' as const,
+      pausable: true,
+      config: {},
+      secrets_public: {},
+      tools: [],
+    }
+    const rows = filterDirectory(resolveDirectory([plaid]), 'data', '', 'popular')
+    expect(rows.some((r) => r.installed)).toBe(true)
+    const rank = (r: (typeof rows)[number]) => (r.popular ? 0 : 1)
+    for (let i = 1; i < rows.length; i++) {
+      const a = rows[i - 1]
+      const b = rows[i]
+      if (!a || !b) throw new Error(`no directory row at ${i}`)
+      expect(rank(a) < rank(b) || (rank(a) === rank(b) && a.name.localeCompare(b.name) <= 0)).toBe(
+        true,
+      )
+    }
   })
 })

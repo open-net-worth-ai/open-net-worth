@@ -149,6 +149,22 @@ def set_title(session_id: str, title: str, *, auto: bool) -> bool:
         return False
 
 
+def title_from_request(session_id: str, request: str) -> bool:
+    """Name a call from its first real request. Its opening words are a greeting, and every call
+    came out titled "Hi, Lucius. How are you doing?" (owner, 2026-11-07). Best-effort, like any title;
+    once a title is the AI's or the person's, no model is asked again."""
+    from backend.ai.assistant import _store
+
+    try:
+        meta = _store().get_meta(session_id) or {}
+    except Exception:  # noqa: BLE001 — listing metadata never fails the request
+        logger.warning("could not read the title of session %s", session_id, exc_info=True)
+        return False
+    if meta.get("title_source") in ("user", "ai"):
+        return False
+    return schedule_title(session_id, request)
+
+
 def schedule_title(session_id: str, opening_message: str) -> bool:
     """Start titling ``session_id`` in the background. Returns whether a task was started.
 

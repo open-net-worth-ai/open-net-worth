@@ -6,6 +6,8 @@ import { useCallback, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import type { Attachment } from '../../../types/chat'
 
+export const ATTACH_ACCEPT = 'image/*,.pdf,.csv,.txt,.xlsx,.docx'
+
 export interface AttachmentItem {
   id: string
   name: string

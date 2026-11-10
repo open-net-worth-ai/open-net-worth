@@ -1,10 +1,12 @@
 // Settings → Developer. Ported from the DeveloperSection in
 // design_handoffs/settings_handoff/prototype/redesign/settings.jsx. Connecting other AI apps
 // (Settings → MCP) and iPhone Shortcuts are everyday features with their own sections.
+// Experimental (feature flags) is generated from the backend registry — ExperimentalPanel.
 import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
 import { Zap } from '../../../../ui/icons'
+import { ExperimentalPanel } from '../ExperimentalPanel'
 import { SqlAccessPanel } from '../SqlAccessPanel'
 import { Btn, Panel, Select, Toggle, row, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
@@ -26,7 +28,7 @@ async function getJson<T>(path: string): Promise<T> {
   return r.json() as Promise<T>
 }
 
-function LogViewer({ toast }: SectionProps) {
+export function LogViewer({ toast }: SectionProps) {
   const [level, setLevel] = useState('INFO')
   const [q, setQ] = useState('')
   const key = `/api/logs?lines=500&level=${level}&q=${encodeURIComponent(q)}`
@@ -157,7 +159,7 @@ function CodeExecution({ toast }: SectionProps) {
   )
 }
 
-function Extensions({ toast }: SectionProps) {
+export function Extensions({ toast }: SectionProps) {
   const { data, initialLoading, refresh } = useCachedFetchState<ExtensionRow[]>(
     '/api/extensions',
     () => getJson<ExtensionRow[]>('/api/extensions'),
@@ -340,6 +342,7 @@ function ScriptSkills({ toast }: SectionProps) {
 export function DeveloperSection({ toast }: SectionProps) {
   return (
     <>
+      <ExperimentalPanel toast={toast} />
       <LogViewer toast={toast} />
       <CodeExecution toast={toast} />
       <SqlAccessPanel toast={toast} />

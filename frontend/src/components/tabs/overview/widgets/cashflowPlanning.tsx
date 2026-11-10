@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType, ReactNode, RefObject, SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { fBase, fBaseCompact, fDate, fMonth } from '../../../../utils/format'
-import { Badge, Money, Skeleton, Text } from '../../../ui'
+import { Badge, MaskedText, Money, Skeleton, Text } from '../../../ui'
 import type { WidgetContentProps } from '../types'
 import { WidgetShell } from '../WidgetShell'
 import { rowCap } from '../widgetDisplayShared'
@@ -142,7 +142,11 @@ const Spending: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate
           <Money as="span">{fBase(totalSpent)}</Money> spent
         </>
       }
-      subtitle={`Month to date • ${budgetLine} • ${pace}% through the month`}
+      subtitle={
+        <>
+          Month to date • <MaskedText>{budgetLine}</MaskedText> • {pace}% through the month
+        </>
+      }
       footer={footer}
     >
       {visible.length ? (
@@ -165,7 +169,13 @@ const Spending: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate
                 </span>
                 <span className="ov-env-amt">
                   <Money as="span">{fBase(r.spent)}</Money>{' '}
-                  <span>{budgeted ? `/ ${fBase(r.assigned)}` : '· no budget'}</span>
+                  {budgeted ? (
+                    <span>
+                      / <Money as="span">{fBase(r.assigned)}</Money>
+                    </span>
+                  ) : (
+                    <span>· no budget</span>
+                  )}
                 </span>
               </div>
             )
@@ -687,7 +697,7 @@ const Goals: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate })
                       <Badge tone="warn">{g.status === 'past_due' ? 'past due' : 'behind'}</Badge>
                     )}
                   </span>
-                  <span className="ov-goal-pct">{pct}%</span>
+                  <span className="ov-goal-pct money">{pct}%</span>
                 </div>
                 <div className="ov-env-bar ov-goal-bar">
                   <span

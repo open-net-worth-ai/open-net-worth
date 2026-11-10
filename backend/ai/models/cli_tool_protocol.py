@@ -82,6 +82,14 @@ _ECHO_CLOSE_RE = re.compile(r"</tool[_a-z]*result>")
 ID_ECHO_OPENS = ("<tool_call_id>", "<tool_use_id>")
 _ID_ECHO_CLOSE_RE = re.compile(r"</tool[_a-z]*id>")
 
+# A call's arguments with no `<invoke>` around them. Live 2026-11-06 (Automation run,
+# claude_cli:sonnet): `<parameter name="transactions">[…]</parameter>` streamed to the screen,
+# then the model said "Wait" and made the call properly. With no tool name there is nothing to
+# run, so it is dropped like the other echoes. Inside a real call the block branch reads it
+# first. The opener includes `name=` so prose mentioning `<parameter>` stays visible.
+PARAMETER_OPEN = "<parameter name="
+_PARAMETER_CLOSE_RE = re.compile(r"</parameter>")
+
 # The bare XML dialect, WITHOUT the `<function_calls>` wrapper — the shape Claude is trained
 # on. Live 2026-09-30 (chat, claude_cli): a reply opened with
 #
@@ -101,13 +109,23 @@ INVOKE_CLOSE_TAG = "</invoke>"
 SHORT_OPEN_TAG = "<call>"
 SHORT_CLOSE_TAG = "</call>"
 
+# A closing tag with nothing open — the model closes a call twice (`…}</tool_call></tool_call>`).
+# Live 2026-10-30 (chat, claude_cli): handed on as text, its head was flushed above the call's
+# row and its tail streamed below it ("</tool_" / "call>"); the saved reply was clean because
+# strip_tool_syntax drops it. Dropped here so the live stream agrees. `</call>` is already
+# rewritten to CLOSE_TAG by _normalize_short_fence.
+STRAY_CLOSERS = (CLOSE_TAG, ALT_CLOSE_TAG, INVOKE_CLOSE_TAG)
+
 _SENTINELS = (
     OPEN_TAG,
     ALT_OPEN_TAG,
     INVOKE_OPEN_TAG,
     ECHO_OPEN,
     *ID_ECHO_OPENS,
+    PARAMETER_OPEN,
     SHORT_OPEN_TAG,
+    SHORT_CLOSE_TAG,
+    *STRAY_CLOSERS,
 )
 
 # (open, close) pairs the scanner accepts, longest opener first so `<function_calls>` is
@@ -484,8 +502,8 @@ def parse_tool_calls(text: str) -> list[dict]:
     for match in _TOOL_CALL_RE.finditer(_normalize_short_fence(text)):
         raw = next((g for g in match.groups() if g), "")
         try:
-            obj = json.loads(raw.strip())
-        except (TypeError, ValueError):
+            obj = _loads_call(raw.strip())
+        except (TypeError, ValueError) as exc:
             # The XML dialect: a bare `<invoke>` block, or `<function_calls>` wrapping one.
             invoked = _invoke_calls(match.group(0))
             if invoked:
@@ -498,7 +516,7 @@ def parse_tool_calls(text: str) -> list[dict]:
                 for body in inner:
                     calls.extend(parse_tool_calls(OPEN_TAG + body + CLOSE_TAG))
                 continue
-            log.warning("cli_tools: malformed tool-call block ignored: %.120s", raw)
+            _log_malformed_block(match.group(0), raw.strip(), exc)
             continue
         for item in obj if isinstance(obj, list) else [obj]:
             if not isinstance(item, dict):
@@ -539,6 +557,70 @@ def parse_tool_calls(text: str) -> list[dict]:
                 log.warning("cli_tools: implausible tool name %r in block: %.500s", name, raw)
             calls.append({"name": name, "input": payload})
     return _drop_placeholders(calls, text)
+
+
+def _loads_call(body: str):
+    """``json.loads``, except that a body which is whole but for its last closing brackets
+    is closed and read. Live 2026-10-29 (claude_cli:sonnet, a Capture): every
+    ``add_transactions`` ended ``]}]}`` — one ``}`` short — so three attempts in a row were
+    dropped and nothing was booked. Only a body that runs out while every string is closed
+    is completed; anything broken earlier stays malformed."""
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        closers = _missing_closers(body) if exc.pos >= len(body.rstrip()) else None
+        if not closers:
+            raise
+        obj = json.loads(body + closers)
+        log.info("cli_tools: tool-call block was missing %r at its end — closed it", closers)
+        return obj
+
+
+def _missing_closers(body: str) -> str | None:
+    """The brackets still open at the end of ``body``, closed innermost first; None when the
+    end falls inside a string or a bracket closes what it did not open."""
+    stack: list[str] = []
+    in_string = escaped = False
+    for ch in body:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if not stack or stack.pop() != ch:
+                return None
+    if in_string or not stack:
+        return None
+    return "".join(reversed(stack))
+
+
+_MALFORMED_LOG_CHARS = 4_000
+_MALFORMED_CONTEXT_CHARS = 200
+
+
+def _log_malformed_block(block: str, body: str, exc: Exception) -> None:
+    """Log the block as written, tags included, with where its JSON broke. A 120-char
+    preview hid every live failure (2026-10-26: each capture's ``add_transactions`` preview
+    was well-formed). ``%r`` keeps it on one log line — a newline in the block used to cut
+    the warning short — and the excerpt around the break survives the length cap."""
+    pos = getattr(exc, "pos", None)
+    if isinstance(pos, int):
+        near = body[max(0, pos - _MALFORMED_CONTEXT_CHARS) : pos + _MALFORMED_CONTEXT_CHARS]
+        where = f"{getattr(exc, 'msg', exc)} at char {pos} of {len(body)}; near {near!r}"
+    else:
+        where = str(exc)
+    log.warning(
+        "cli_tools: malformed tool-call block ignored (%s): %r",
+        where,
+        block[:_MALFORMED_LOG_CHARS],
+    )
 
 
 def _drop_placeholders(calls: list[dict], raw: str) -> list[dict]:
@@ -652,6 +734,11 @@ class ToolCallScanner:
         # so the fence's closing ``` after it is dropped the same way.
         self._fenced = False
 
+    @property
+    def mid_block(self) -> bool:
+        """True while a call block has opened and not yet closed."""
+        return self._in_block
+
     def _eat_trailing_fence(self) -> bool:
         """Drop a lone ``` line at the head of the buffer. False = need more text to decide."""
         stripped = self._buf.lstrip(" \t\n")
@@ -747,12 +834,22 @@ class ToolCallScanner:
                 for i, o, r in (
                     (self._buf.find(ECHO_OPEN), ECHO_OPEN, _ECHO_CLOSE_RE),
                     *((self._buf.find(o), o, _ID_ECHO_CLOSE_RE) for o in ID_ECHO_OPENS),
+                    (self._buf.find(PARAMETER_OPEN), PARAMETER_OPEN, _PARAMETER_CLOSE_RE),
                 )
                 if i >= 0
             )
             echo, echo_open, echo_close_re = (
                 echoes[0] if echoes else (-1, ECHO_OPEN, _ECHO_CLOSE_RE)
             )
+            stray = min(
+                ((i, c) for c in STRAY_CLOSERS if (i := self._buf.find(c)) >= 0),
+                default=(-1, ""),
+            )
+            if stray[0] >= 0 and all(i < 0 or stray[0] < i for i in (start, echo)):
+                if stray[0]:
+                    yield self._buf[: stray[0]]
+                self._buf = self._buf[stray[0] + len(stray[1]) :]
+                continue
             if echo >= 0 and (start < 0 or echo < start):
                 if echo:
                     yield self._buf[:echo]

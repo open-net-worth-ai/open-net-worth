@@ -34,7 +34,7 @@ const acquireLotFormSource = readFileSync(
 
 describe('affected mobile views', () => {
   it('uses the concise Intel action label in the portfolio brief', () => {
-    expect(briefSource).toMatch(/>\s*Intel\s*<span className="intel-brief-ask-spark">/)
+    expect(briefSource).toMatch(/>\s*Intel(\{' '\})?\s*<span className="intel-brief-ask-spark">/)
     expect(briefSource).not.toContain('See more in Intel')
   })
 
@@ -134,7 +134,7 @@ describe('affected mobile views', () => {
     expect(indexCss).not.toMatch(/font-size:\s*16px\s*!important/)
     // With the blanket override gone, a component CAN now size its own control — the
     // phone toolbar sizes both its search box and its selects to the 14px scale.
-    const phoneSearch = investmentsCss.match(/\.mk-search \{[^}]*border-radius: 9px[^}]*\}/)
+    const phoneSearch = investmentsCss.match(/\.mk-search \{[^}]*height: 100%[^}]*\}/)
     expect(phoneSearch?.[0]).toMatch(/font-size:\s*var\(--text-md\)/)
     expect(investmentsCss).toMatch(
       /@media \(max-width: 640px\)\s*\{[\s\S]*?\.mk-toolbar > \.mk-toolsel\s*\{[^}]*font-size:\s*var\(--text-md\);/,

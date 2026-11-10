@@ -22,12 +22,13 @@ from backend.core.llm_seam import (
     submit_batch,
 )
 from backend.core.urls import hostname as _hostname
-from backend.core.user_time import user_now
+from backend.core.user_time import user_now, user_today
 from backend.db.evidence_store import EvidenceStore
+from backend.db.instrument_store import InstrumentStore
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.monitoring.collect import gather_evidence, gather_rss
 from backend.services import ledger as ledger_service
-from backend.services import run_ledger
+from backend.services import run_ledger, thesis_judgment
 from backend.services.countries import country_name
 from backend.services.evidence import prune_evidence
 from backend.services.feeds import resolve_intel_feeds, resolve_opportunity_feeds
@@ -424,6 +425,13 @@ def _build_context(rows: list[dict], fx: dict, profile: dict, watchlist: dict, b
         or "(no foreign-currency holdings)"
     )
 
+    theses = thesis_judgment.book_judgments(market_rows, _watched_items(watchlist, held_tickers))
+    theses_section = (
+        f"\nYOUR INVESTMENT THESES (the user's own — judge every move and entry against them):\n"
+        f"{thesis_judgment.theses_block(theses)}"
+        if theses
+        else ""
+    )
     return f"""Date: {user_now().strftime("%A, %d %B %Y %H:%M")}
 Base currency: {base}
 FX: {fx_pairs}
@@ -448,7 +456,7 @@ PROFILE:
   Country of residence: {", ".join(country_name(c) for c in profile.get("countries_of_residence") or []) or "not set"}
   Goals: {_active_goals_summary()}
   Notes: {profile.get("notes", "")}
-"""
+{theses_section}"""
 
 
 def _existing_stories_block(stories: list[dict]) -> str:
@@ -471,10 +479,10 @@ def _existing_stories_block(stories: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _timeline_event(new_event_data: dict, now: str) -> dict:
+def _timeline_event(new_event_data: dict) -> dict:
     return {
         "id": str(uuid.uuid4()),
-        "date": new_event_data.get("date", now[:10]),
+        "date": new_event_data.get("date", user_today().isoformat()),
         "title": new_event_data.get("title", ""),
         "summary": new_event_data.get("summary", ""),
         "sources": new_event_data.get("sources", []),
@@ -548,6 +556,44 @@ def _reviewed_stories(stories: list[dict], evidence_urls: dict[str, str]) -> lis
     return accepted
 
 
+def _base_symbol(ticker: object) -> str:
+    """`RR.L` → `RR`, `BTC-USD` → `BTC`: listing and pair suffixes don't change the subject."""
+    return re.split(r"[.\-/]", str(ticker or "").strip().upper(), maxsplit=1)[0]
+
+
+def _story_symbol(story: dict) -> str:
+    """The symbol a story is really about — its instrument's, else its own stored ticker (which
+    an earlier mis-match may already have overwritten)."""
+    iid = story.get("instrument_id")
+    if iid:
+        try:
+            symbol = (InstrumentStore().find_by_id(iid) or {}).get("symbol")
+        except Exception:
+            logger.debug("intel_agent: instrument lookup failed for %s", iid, exc_info=True)
+            symbol = None
+        if symbol:
+            return _base_symbol(symbol)
+    return _base_symbol(story.get("ticker"))
+
+
+def _same_subject_or_none(existing: dict | None, s: dict) -> dict | None:
+    """`existing` unless the model's ticker names a different company than the story is about.
+    A model that echoes the wrong story id must not file one company's news on another's story."""
+    if not existing:
+        return None
+    theirs, mine = _base_symbol(s.get("ticker")), _story_symbol(existing)
+    if theirs and mine and theirs != mine:
+        logger.warning(
+            "intel_agent: rejected match — %s (%s) is about %s, model said %s",
+            existing.get("id"),
+            existing.get("label"),
+            mine,
+            theirs,
+        )
+        return None
+    return existing
+
+
 def _persist_story(
     store: IntelStoriesStore,
     s: dict,
@@ -574,15 +620,15 @@ def _persist_story(
                 src["published_at"] = url_to_date.get(src["url"], "")
             if not src.get("domain") and src.get("url"):
                 src["domain"] = _hostname(src["url"])
-    new_entry = _timeline_event(new_event_data, now) if new_event_data else None
+    new_entry = _timeline_event(new_event_data) if new_event_data else None
 
     existing = None
     if s.get("id"):
-        existing = store.find_by_id(s["id"])
+        existing = _same_subject_or_none(store.find_by_id(s["id"]), s)
     if not existing and s.get("ticker"):
-        existing = store.find_story_by_ticker(s["ticker"])
+        existing = _same_subject_or_none(store.find_story_by_ticker(s["ticker"]), s)
     if not existing:
-        existing = store.find_story_by_label(s["label"])
+        existing = _same_subject_or_none(store.find_story_by_label(s["label"]), s)
 
     story_type = s.get("type") or default_type or "asset"
     # For macro stories, attach the deterministic computed exposure (never from the LLM).
@@ -593,11 +639,14 @@ def _persist_story(
         # row's own type — never silently fall back to the create-only default (I11).
         effective_type = s.get("type") or existing.get("type") or default_type or "asset"
 
+        # The story's subject is fixed: its ticker never changes, and a new label is taken only
+        # when the model named a ticker that _same_subject_or_none just vouched for.
+        vouched = bool(s.get("ticker")) or not _story_symbol(existing)
         update: dict = {
             **existing,
             "type": effective_type,
-            "label": s.get("label") or existing["label"],
-            "ticker": s.get("ticker") or existing.get("ticker", ""),
+            "label": (s.get("label") if vouched else None) or existing["label"],
+            "ticker": existing.get("ticker") or s.get("ticker", ""),
             "status": s["status"],
             "current_summary": s["summary"],
             "portfolio_impact": s.get("portfolio_impact", ""),
@@ -644,9 +693,9 @@ def _archive_stale_stories(store: IntelStoriesStore, days: int = STALE_STORY_DAY
             last = datetime.fromisoformat(ts)
         except (ValueError, TypeError):
             continue
-        # Stories written by intel_agent carry naive local timestamps; the Analyst writes
-        # tz-aware UTC ones. Normalize naive → aware local so the comparison below can never
-        # raise on a mixed-timestamp store (see I6).
+        # Stories intel_agent wrote before 2026-11-01 carry naive local timestamps; every
+        # writer now stamps tz-aware UTC. Normalize naive → aware local so the comparison
+        # below can never raise on a mixed-timestamp store (see I6).
         if last.tzinfo is None:
             last = last.astimezone()
         if last < cutoff:
@@ -872,7 +921,7 @@ def apply_intel_batch_results(results: list, handle: str, ledger_row: dict) -> i
         return 0
 
     store = IntelStoriesStore()
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     reviewed = _reviewed_stories(stories_data, url_to_date)
     for s in reviewed:
         _persist_story(store, s, url_to_date, now, default_type=default_type)
@@ -1111,8 +1160,8 @@ async def run_intel_scan(*, raise_on_incomplete: bool = False) -> int:
     )
     opp_rss_feeds = resolve_opportunity_feeds(opportunity_queries)
     await asyncio.gather(
-        gather_rss(rss_feeds, store=evidence_store),
-        gather_rss(opp_rss_feeds, store=evidence_store),
+        gather_rss(rss_feeds, store=evidence_store, read_back=False),
+        gather_rss(opp_rss_feeds, store=evidence_store, read_back=False),
     )
 
     # Structured movers (free) — Yahoo predefined screeners inject top movers as a compact
@@ -1225,7 +1274,7 @@ async def run_intel_scan(*, raise_on_incomplete: bool = False) -> int:
             raise IntelScanIncomplete("Analysis returned no result")
         return 0
 
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     reviewed = _reviewed_stories(stories_data, url_to_date)
     for s in reviewed:
         affected: list[dict] | None = None
@@ -1257,7 +1306,7 @@ async def run_opportunity_scan() -> int:
 
     # RSS (free, always runs) — populate scan:opportunity evidence before the optional paid search.
     opp_rss_feeds = resolve_opportunity_feeds(opportunity_queries)
-    await gather_rss(opp_rss_feeds, store=evidence_store)
+    await gather_rss(opp_rss_feeds, store=evidence_store, read_back=False)
 
     # Structured movers (free) — Yahoo screeners inject top movers as compact context for the LLM.
     movers: dict[str, list[dict]] = {}
@@ -1346,7 +1395,7 @@ async def run_opportunity_scan() -> int:
     if stories_data is None:
         return 0
 
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     reviewed = _reviewed_stories(stories_data, url_to_date)
     for s in reviewed:
         _persist_story(store, s, url_to_date, now, default_type="opportunity")

@@ -27,7 +27,12 @@ from backend.ai.models.claude_cli_tools import (
     render_tool_manifest,
 )
 from backend.ai.models.cli_tool_protocol import looks_like_an_unfenced_tool_call
-from backend.core.errors import ConfigurationError, ExternalServiceError, ValidationError
+from backend.core.errors import (
+    CliNotSignedInError,
+    ConfigurationError,
+    ExternalServiceError,
+    ValidationError,
+)
 from backend.db.model_telemetry_store import ModelTelemetryStore
 
 
@@ -665,6 +670,76 @@ def test_a_narration_retry_is_cost_reported_only_if_both_rounds_were():
     assert merge(reported, unreported)["cost_reported"] is False
 
 
+def _message_start(input_tokens: int, cache_creation: int, cache_read: int) -> dict:
+    return {
+        "type": "stream_event",
+        "event": {
+            "type": "message_start",
+            "message": {
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "cache_creation_input_tokens": cache_creation,
+                    "cache_read_input_tokens": cache_read,
+                }
+            },
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_usage_carries_the_largest_single_request_and_the_reported_window(tmp_path):
+    # Regression (2026-10-22): the compaction check read the round's SUMMED usage as one
+    # prompt, against a 200K table fallback for the bare "sonnet" alias — while the CLI
+    # was really running a 1M-window model. The usage event now carries both facts.
+    result = _result_event("x")
+    result["modelUsage"] = {
+        "claude-haiku-5-5": {"inputTokens": 50, "contextWindow": 200_000},
+        "claude-sonnet-5-5": {
+            "inputTokens": 4,
+            "cacheReadInputTokens": 400,
+            "cacheCreationInputTokens": 300,
+            "contextWindow": 1_000_000,
+        },
+    }
+    cli = _fake_cli(
+        tmp_path,
+        [
+            _init_event(),
+            _message_start(2, 100, 200),
+            _message_start(2, 200, 200),
+            *_text_deltas("x"),
+            result,
+        ],
+    )
+    events = await _collect(
+        ClaudeCliProvider(cli_path=str(cli)),
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[],
+        system="",
+        model="sonnet",
+    )
+    usage = next(e for e in events if e["type"] == "usage")
+    assert usage["prompt_tokens"] == 402
+    assert usage["context_window"] == 1_000_000
+
+
+def test_a_result_without_model_usage_reports_no_window_or_peak():
+    usage = ccp._usage_event({"usage": {}}, "sonnet", None, 0.0)
+    assert usage["prompt_tokens"] is None
+    assert usage["context_window"] is None
+
+
+def test_a_narration_retry_keeps_the_larger_prompt_not_the_sum():
+    merge = ccp._merge_narration_retry_usage
+    merged = merge(
+        {"prompt_tokens": 300, "context_window": 1_000_000},
+        {"prompt_tokens": 250, "context_window": 1_000_000},
+    )
+    assert merged["prompt_tokens"] == 300
+    assert merged["context_window"] == 1_000_000
+    assert merge({"prompt_tokens": None}, {"prompt_tokens": 7})["prompt_tokens"] == 7
+
+
 def test_cost_basis_classification():
     assert cost_basis_for("none") == "plan_included"
     assert cost_basis_for("") == "plan_included"
@@ -1242,7 +1317,9 @@ async def test_login_error_never_displays_the_success_protocol_subtype(
                 system="",
                 model="haiku",
             )
-    assert str(raised.value) == f"Claude Code CLI reported an error: {detail}"
+    assert isinstance(raised.value, CliNotSignedInError)
+    assert "success" not in str(raised.value)
+    assert "Claude Code isn't signed in" in str(raised.value)
 
 
 @pytest.mark.asyncio
@@ -2186,6 +2263,42 @@ def test_an_invoke_whose_body_cannot_be_read_is_logged_with_its_raw_block(caplog
     assert len(warnings) == 1 and "lot L1" in warnings[0]  # a genuinely empty invoke is quiet
 
 
+def test_a_malformed_block_is_logged_whole_with_where_the_json_broke(caplog):
+    """2026-10-26: 28 of 76 captures lost their first add_transactions to an unparsable block,
+    and the log kept 120 chars of it — all well-formed — so the fault was never visible."""
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    body = (
+        '{"name": "add_transactions", "input": {"transactions": [{"date": "2026-10-26", '
+        '"description": "Green SM", "amount": 79000, "currency": "VND", '
+        '"memo": "line one\nline two"}]}}'
+    )
+    with caplog.at_level("WARNING", logger="backend.ai.models.cli_tool_protocol"):
+        calls = parse_tool_calls(f"<tool_call>{body}</tool_call>")
+
+    assert calls == []
+    (warning,) = [
+        r.getMessage() for r in caplog.records if "malformed tool-call block" in r.getMessage()
+    ]
+    assert "\n" not in warning
+    assert "<tool_call>" in warning and "line one\\nline two" in warning
+    assert "Invalid control character" in warning
+    assert f"char {body.index(chr(10))}" in warning
+
+
+def test_a_huge_malformed_block_is_logged_bounded(caplog):
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    body = '{"name": "add_transactions", "input": {"note": "' + "x" * 20_000 + '"}}}'
+    with caplog.at_level("WARNING", logger="backend.ai.models.cli_tool_protocol"):
+        parse_tool_calls(f"<tool_call>{body}</tool_call>")
+
+    (warning,) = [
+        r.getMessage() for r in caplog.records if "malformed tool-call block" in r.getMessage()
+    ]
+    assert len(warning) < 6_000 and "Extra data" in warning and '"}}}' in warning
+
+
 def test_an_empty_placeholder_before_the_real_call_is_dropped(caplog):
     """Live 2026-10-13: one reply dispatched ``update_lots {}`` then the real call — the empty
     one failed ("lot not found") and showed the user an error for a write nobody asked for."""
@@ -2212,3 +2325,68 @@ def test_a_lone_empty_call_and_different_tools_still_dispatch():
         '<tool_call>{"name": "get_lots", "input": {"position_id": "P"}}</tool_call>'
     )
     assert [c["name"] for c in mixed] == ["list_grants", "get_lots"]
+
+
+def test_a_block_short_of_its_last_closing_brace_is_closed_and_read():
+    """Live 2026-10-29 (claude_cli:sonnet, a Capture): every add_transactions ended ``]}]}``,
+    one ``}`` short, so three attempts were dropped and nothing was booked."""
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    body = (
+        '{"name": "add_transactions", "input": {"transactions": [{"date": "2026-10-29", '
+        '"amount": 540, "splits": [{"category": "Rent", "amount": 500}, '
+        '{"category": "Utilities", "amount": 40}]}]}'
+    )
+    assert parse_tool_calls(f"<tool_call>{body}</tool_call>") == [
+        {
+            "name": "add_transactions",
+            "input": {
+                "transactions": [
+                    {
+                        "date": "2026-10-29",
+                        "amount": 540,
+                        "splits": [
+                            {"category": "Rent", "amount": 500},
+                            {"category": "Utilities", "amount": 40},
+                        ],
+                    }
+                ]
+            },
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"name": "add_transactions", "input": {"memo": "cut off mid-str',  # ends in a string
+        '{"name": "add_transactions", "input": {"a": [1, 2}}',  # a bracket closes the wrong one
+        '{"name": "add_transactions", "input": {"a": 1,, "b": 2}}',  # broken before the end
+    ],
+)
+def test_a_block_broken_anywhere_but_its_last_brackets_stays_malformed(body):
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    assert parse_tool_calls(f"<tool_call>{body}</tool_call>") == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_with_no_login_says_sign_in(tmp_path):
+    """The event is what `claude` 2.1 really emits with an empty home: subtype "success",
+    is_error true, and the reason in `result`."""
+    cli = _fake_cli(
+        tmp_path,
+        [_result_event("Not logged in · Please run /login", is_error=True, subtype="success")],
+        exit_code=1,
+    )
+    provider = ClaudeCliProvider(cli_path=str(cli))
+
+    with pytest.raises(CliNotSignedInError, match="Claude Code isn't signed in"):
+        async for _ in provider.stream_chat(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            system="s",
+            model="sonnet",
+            effort="low",
+        ):
+            pass

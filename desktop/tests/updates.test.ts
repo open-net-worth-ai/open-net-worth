@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
-import { UpdateController, updateFeedUrl, updatesSupported, type UpdateHooks } from '../src/main/updates';
+import { UpdateController, releaseHighlights, releasePage, updateFeedUrl, updatesSupported, type UpdateHooks } from '../src/main/updates';
 
 class FakeUpdater extends EventEmitter {
   feed = '';
@@ -70,7 +70,7 @@ test('the feed is handed to the updater, but a check never calls it: detection i
   assert.equal(updater.checks, 0);
 });
 
-test('a background find downloads quietly, and the menu offers Restart to Update with the version', async () => {
+test('a background find downloads quietly, and the menu offers Restart to Update', async () => {
   const { updater, calls, updates } = started();
   await background(updates);
   assert.equal(updater.checks, 1);
@@ -80,7 +80,7 @@ test('a background find downloads quietly, and the menu offers Restart to Update
   updater.emit('update-downloaded', {}, '', 'v0.2.0');
   await tick();
   assert.equal(updates.phase, 'ready');
-  assert.equal(updates.menuLabel, 'Restart to Update to Open Net Worth 0.2.0');
+  assert.equal(updates.menuLabel, 'Restart to Update');
   assert.equal(updates.pending, true);
   assert.deepEqual(calls.asked, []);
   assert.deepEqual(calls.notified, ['Open Net Worth 0.2.0 is ready. Restart to update, or it installs the next time you quit.']);
@@ -88,6 +88,82 @@ test('a background find downloads quietly, and the menu offers Restart to Update
   await updates.checkNow();
   assert.equal(calls.installed, 1);
   assert.deepEqual(calls.asked, []);
+});
+
+async function staged(options: Options = {}) {
+  const run = started(options);
+  await background(run.updates);
+  run.updater.emit('update-downloaded', {}, '', 'v0.2.0');
+  await tick();
+  assert.equal(run.updates.readyVersion, '0.2.0');
+  return run;
+}
+
+test('a release that comes out after one is staged replaces it in the background instead of being left for later', async () => {
+  const { updater, calls, state, updates } = await staged();
+  state.found = '0.3.0';
+  await background(updates);
+  assert.equal(updater.checks, 2);
+  updater.emit('checking-for-update');
+  updater.emit('update-available');
+  assert.equal(updates.phase, 'ready');
+  assert.equal(updates.menuLabel, 'Restart to Update');
+  updater.emit('update-downloaded', {}, '', 'v0.3.0');
+  await tick();
+  assert.equal(updates.readyVersion, '0.3.0');
+  assert.equal(calls.notified.at(-1), 'Open Net Worth 0.3.0 is ready. Restart to update, or it installs the next time you quit.');
+  await background(updates);
+  assert.equal(updater.checks, 2);
+  await updates.checkNow();
+  assert.equal(calls.installed, 1);
+});
+
+test('Restart to Update downloads a newer release first, then asks to restart into it', async () => {
+  const { updater, calls, state, updates } = await staged({ answers: [0] });
+  state.found = '0.3.0';
+  await updates.checkNow();
+  assert.equal(calls.installed, 0);
+  assert.equal(updater.checks, 2);
+  assert.equal(calls.asked.at(-1)!.message, 'Downloading Open Net Worth 0.3.0…');
+  updater.emit('update-downloaded', {}, '', 'v0.3.0');
+  await tick();
+  assert.equal(calls.asked.at(-1)!.message, 'Open Net Worth 0.3.0 is ready to install.');
+  assert.equal(calls.installed, 1);
+  assert.equal(updates.readyVersion, '0.3.0');
+});
+
+test('a newer release that fails to download keeps the staged one installable', async () => {
+  const quiet = await staged();
+  quiet.state.found = '0.3.0';
+  await background(quiet.updates);
+  quiet.updater.emit('error', new Error('net::ERR_INTERNET_DISCONNECTED'));
+  await tick();
+  assert.equal(quiet.updates.phase, 'ready');
+  assert.equal(quiet.updates.readyVersion, '0.2.0');
+  assert.deepEqual(quiet.calls.asked, []);
+
+  const waiting = await staged({ answers: [0] });
+  waiting.state.found = '0.3.0';
+  await waiting.updates.checkNow();
+  waiting.updater.emit('error', new Error('net::ERR_INTERNET_DISCONNECTED'));
+  await tick();
+  assert.equal(waiting.calls.asked.at(-1)!.message, 'The newer update could not be downloaded.');
+  assert.equal(waiting.calls.installed, 1);
+  assert.equal(waiting.updates.readyVersion, '0.2.0');
+});
+
+test('Restart to Update installs the staged version when it is still the newest or the newer one was skipped', async () => {
+  const same = await staged();
+  await same.updates.checkNow();
+  assert.equal(same.calls.installed, 1);
+  assert.equal(same.updater.checks, 1);
+
+  const skipped = await staged();
+  skipped.state.found = '0.3.0';
+  skipped.state.skipped = '0.3.0';
+  await skipped.updates.checkNow();
+  assert.equal(skipped.calls.installed, 1);
+  assert.equal(skipped.updater.checks, 1);
 });
 
 test('Download and Install says the download started, labels the menu, and ends in the restart dialog', async () => {
@@ -102,7 +178,7 @@ test('Download and Install says the download started, labels the menu, and ends 
   updater.emit('update-downloaded', {}, '', 'v0.2.0');
   await tick();
   assert.equal(updates.phase, 'ready');
-  assert.equal(updates.menuLabel, 'Restart to Update to Open Net Worth 0.2.0');
+  assert.equal(updates.menuLabel, 'Restart to Update');
   assert.equal(calls.asked.at(-1)!.message, 'Open Net Worth 0.2.0 is ready to install.');
   assert.deepEqual(calls.notified, []);
   assert.equal(calls.installed, 0);
@@ -315,6 +391,53 @@ test('the first launch after an update says so once; a fresh install or the same
   assert.equal(clicked.releases, 1);
 });
 
+test('announceUpdate says whether this launch is the first after an update, so the page can show What\'s new once', () => {
+  const updated = (previous: string | null, earlierInstall: boolean) => new UpdateController(new FakeUpdater(), harness().hooks, '0.1.7').announceUpdate(previous, earlierInstall);
+  assert.equal(updated('0.1.6', true), true);
+  assert.equal(updated(null, true), true);
+  assert.equal(updated(null, false), false);
+  assert.equal(updated('0.1.7', true), false);
+  assert.equal(updated('0.1.8', true), false);
+});
+
+test('What\'s new reads the release\'s Highlights as plain text, the same bullets the release page leads with', () => {
+  const notes = '## Highlights\n\n- You can **split** a transaction from [Accounts](https://x.test)\n- `Import` reads PDFs\n\n## New\n\n- **Accounts:** other line\n\n## Fixes\n\n- **Budget:** fix\n\nSource: abc';
+  assert.deepEqual(releaseHighlights(notes), ['You can split a transaction from Accounts', 'Import reads PDFs']);
+});
+
+test('notes without Highlights fall back to New then Fixes, scope labels dropped, at most six', () => {
+  const notes = '## New\n\n- **Accounts:** a\n- b\n\n## Fixes\n\n- **Budget:** c\n- d\n- e\n- f\n- g\n\n## Polish\n\n- p';
+  assert.deepEqual(releaseHighlights(notes), ['a', 'b', 'c', 'd', 'e', 'f']);
+  assert.deepEqual(releaseHighlights(''), []);
+  assert.deepEqual(releaseHighlights('## Polish\n\n- only polish'), []);
+  assert.equal(releaseHighlights(`## Highlights\n\n- ${'x'.repeat(400)}`)[0].length, 280);
+});
+
+test('very long notes or lines are skipped before any pattern runs on them', () => {
+  const started = Date.now();
+  assert.deepEqual(releaseHighlights(`## Highlights\n\n- ${'['.repeat(10_000)}\n- kept`), ['kept']);
+  assert.deepEqual(releaseHighlights(`## ${' '.repeat(500_000)}x\n- a`), []);
+  assert.deepEqual(releaseHighlights(`${'x'.repeat(70_000)}\n## Highlights\n- late`), []);
+  assert.ok(Date.now() - started < 1000);
+});
+
+test('the restart confirm never stacks: a second request while it is open is ignored', async () => {
+  let release: (choice: number) => void = () => {};
+  const { calls, hooks } = harness();
+  hooks.ask = (message) => { calls.asked.push({ message, buttons: [] }); return new Promise(done => { release = done; }); };
+  const controller = new UpdateController(new FakeUpdater(), hooks, '0.1.0');
+  const first = controller.offerRestart();
+  await controller.offerRestart();
+  assert.equal(calls.asked.length, 1);
+  release(1);
+  await first;
+  assert.equal(calls.installed, 0);
+});
+
+test('the release link names the installed version, not the latest', () => {
+  assert.equal(releasePage('0.1.7'), 'https://github.com/open-net-worth-ai/open-net-worth-releases/releases/tag/v0.1.7');
+});
+
 test('the install progress page names the version, runs no script, and escapes what it shows', async () => {
   const { updateProgressPage } = await import('../src/main/update-progress');
   const restart = updateProgressPage('0.2.0', true, 'dark');
@@ -325,4 +448,14 @@ test('the install progress page names the version, runs no script, and escapes w
   assert.doesNotMatch(restart, /<script|script-src|<button|<svg/);
   assert.match(updateProgressPage(null, false, 'light'), /<h1>Installing update…<\/h1><p>Closing your book safely first\.<\/p>/);
   assert.doesNotMatch(updateProgressPage('<b>', true, 'dark'), /<b>/);
+});
+
+test('the progress window stops blocking the quit before the installer is asked to quit and relaunch', async () => {
+  const { handOverToInstaller } = await import('../src/main/update-progress');
+  const steps: string[] = [];
+  handOverToInstaller({ isDestroyed: () => false, setClosable: (closable: boolean) => { steps.push(`closable=${closable}`); } }, () => steps.push('quitAndInstall'));
+  assert.deepEqual(steps, ['closable=true', 'quitAndInstall']);
+  const gone: string[] = [];
+  handOverToInstaller({ isDestroyed: () => true, setClosable: () => { gone.push('setClosable'); } }, () => gone.push('quitAndInstall'));
+  assert.deepEqual(gone, ['quitAndInstall']);
 });

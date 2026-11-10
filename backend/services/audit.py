@@ -203,6 +203,45 @@ def record_txn_events(
         logger.exception("audit: failed to record bulk %s events (%d rows)", op, len(rows))
 
 
+def record_txn_reverts(
+    images: dict[str, tuple[Optional[dict], Optional[dict]]],
+    *,
+    note: str,
+    conn: object | None = None,
+) -> None:
+    """One ``revert`` event per transaction a checkpoint restore changed — ``images`` maps
+    a txn id to its ``(current, restored)`` payloads, either side ``None`` when the row is
+    absent. ``txn_audit`` is checkpoint-excluded so the replay never rewinds the trail, which
+    left the reverted edit reading as the row's last word; this is the row that says it was
+    undone. Not a write-receipt entry: the restore reports itself. Best-effort: NEVER raises.
+    """
+    try:
+        scope = get_audit_scope()
+        events = []
+        for txn_id, (current, restored) in images.items():
+            if current is None and restored is None:
+                continue
+            if current is not None and restored is not None:
+                if changed_fields(current, restored) == (None, None):
+                    continue
+            row = restored or current or {}
+            events.append(
+                _build_event(
+                    scope,
+                    "revert",
+                    txn_id,
+                    source=row.get("source"),
+                    before=current,
+                    after=restored,
+                    note=note,
+                )
+            )
+        if events:
+            _audit.append_many(events, conn=conn)
+    except Exception:  # pragma: no cover - defensive: provenance never breaks a restore
+        logger.exception("audit: failed to record revert events (%d rows)", len(images))
+
+
 # ── Reading (trace + forensic fallback) ─────────────────────────────────────────
 
 
@@ -246,6 +285,7 @@ _OP_VERB = {
     "update": "updated",
     "delete": "deleted",
     "restore": "restored",
+    "revert": "reverted",
     "merge": "merged",
     "unmerge": "unmerged",
     "attach_refs": "linked a source",

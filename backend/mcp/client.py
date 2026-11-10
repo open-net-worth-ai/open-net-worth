@@ -34,11 +34,11 @@ import urllib.parse
 import urllib.request
 from typing import Any, Literal, Optional, Tuple
 
-from backend.core.net_guard import UnsafeUrlError, resolve_owner_url
+from backend.core.net_guard import UnresolvableHostError, UnsafeUrlError, resolve_owner_url
 from backend.core.pinned_http import pinned_opener
 from backend.core.redact_error import redact_error
 from backend.core.untrusted import sanitize_untrusted
-from backend.mcp.sse import parse_rpc_body
+from backend.mcp.sse import USER_AGENT, parse_rpc_body
 from backend.models.mcp_client import McpServerConfig, ServerInfo, redact_endpoint
 
 logger = logging.getLogger(__name__)
@@ -83,12 +83,12 @@ MAX_ERROR_BODY_BYTES = 8192
 # hostile one could answer with megabytes; a name is a label, not a payload.
 MAX_SERVER_INFO_CHARS = 200
 
-# The spec's ``instructions`` field is meant as a paragraph, not a label, so it gets a looser
-# cap than name/version/publisher — but it is still bounded, and unlike those short identity
-# fields it goes through ``sanitize_untrusted`` (see ``parse_server_info``): it is rendered as
-# a connector's description text, and a hostile server's free-text is exactly where a forged
-# fence/confusable-homoglyph attempt would hide.
-MAX_SERVER_INSTRUCTIONS_CHARS = 600
+# The spec's ``instructions`` field is a server's notes to the model calling its tools — several
+# paragraphs, often with its safety rules last — so it is kept whole up to a generous bound. It
+# goes through ``sanitize_untrusted`` (see ``parse_server_info``): it is shown on the server's
+# page and handed to Lucius (``ai.prompts._fmt_mcp_server_instructions``), and a hostile
+# server's free-text is exactly where a forged fence/confusable-homoglyph attempt would hide.
+MAX_SERVER_INSTRUCTIONS_CHARS = 8000
 
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_INFO = {"name": "open-net-worth-client", "version": "1"}
@@ -165,9 +165,18 @@ class McpCallError(Exception):
     carry it: the synchronous probe's own ephemeral HTTP response.
     """
 
-    def __init__(self, message: str, *, safe_summary: Optional[str] = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        safe_summary: Optional[str] = None,
+        auth_challenge: Optional[str] = None,
+    ):
         super().__init__(message)
         self._safe_summary = safe_summary
+        # What a 401 asked for (``auth_challenge_of``): ``oauth`` / ``key`` / ``None``. Lets the
+        # add flow say "this server needs you to sign in" instead of a bare HTTP 401.
+        self.auth_challenge = auth_challenge
 
     @property
     def safe_summary(self) -> str:
@@ -378,10 +387,21 @@ class McpClientConnection:
             detail = _error_detail(_safe_read(exc))
             if exc.code == 401 and self._config.auth_type == "oauth":
                 raise _OAuthUnauthorized(
-                    f"server '{self._config.id}' returned HTTP 401: {detail}"
+                    f"server '{self._config.id}' returned HTTP 401: {detail}",
+                    auth_challenge="oauth",
                 ) from exc
             raise McpCallError(
-                f"server '{self._config.id}' returned HTTP {exc.code}: {detail}"
+                f"server '{self._config.id}' returned HTTP {exc.code}: {detail}",
+                auth_challenge=(
+                    auth_challenge_of(exc.headers.get("WWW-Authenticate") if exc.headers else None)
+                    if exc.code == 401
+                    else None
+                ),
+            ) from exc
+        except UnresolvableHostError as exc:
+            raise McpCallError(
+                "Can't reach this server: its address could not be looked up. "
+                "This is usually a network problem."
             ) from exc
         except UnsafeUrlError as exc:
             raise McpCallError(f"server '{self._config.id}' url is not allowed: {exc}") from exc
@@ -433,6 +453,7 @@ class McpClientConnection:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            "User-Agent": USER_AGENT,
         }
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
@@ -454,12 +475,25 @@ class McpClientConnection:
         return headers
 
 
+def auth_challenge_of(header: Optional[str]) -> Optional[str]:
+    """What a 401's ``WWW-Authenticate`` asks for: ``"oauth"`` when it points at OAuth
+    protected-resource metadata (MCP's sign-in discovery, RFC 9728's ``resource_metadata``),
+    ``"key"`` for any other Bearer challenge (a token you paste), else ``None``. Only a hint for
+    the add flow's copy — never a decision about what to send."""
+    value = (header or "").lower()
+    if "resource_metadata" in value:
+        return "oauth"
+    if "bearer" in value:
+        return "key"
+    return None
+
+
 def parse_server_info(result: Any) -> ServerInfo:
     """Extract the ``serverInfo`` block — plus the top-level ``instructions`` field — from an
     ``initialize`` result.
 
     Per the MCP spec the handshake answers with ``serverInfo: {name, version}`` (newer
-    revisions add ``title``/``websiteUrl``); the add flow pre-fills its Name field from that
+    revisions add ``title``/``websiteUrl``/``icons``); the add flow pre-fills its Name field from that
     name (§7 step 2) instead of guessing from a URL host. ``publisher``/``repositoryUrl`` are
     NOT in the spec — some servers volunteer them, so we keep them when present and leave
     them ``None`` when not, rather than fabricating provenance. ``instructions`` is a
@@ -481,6 +515,9 @@ def parse_server_info(result: Any) -> ServerInfo:
     return ServerInfo(
         name=_clean_info_field(info.get("name")),
         version=_clean_info_field(info.get("version")),
+        title=_clean_info_field(info.get("title")),
+        description=_clean_description(info.get("description")),
+        icons=_clean_info_icons(info.get("icons")),
         publisher=_clean_info_field(info.get("publisher") or info.get("vendor")),
         homepage_url=_clean_info_url(info.get("websiteUrl") or info.get("homepageUrl")),
         repo_url=_clean_info_url(info.get("repositoryUrl") or info.get("repository")),
@@ -496,6 +533,25 @@ def _clean_info_field(value: Any) -> Optional[str]:
     return cleaned[:MAX_SERVER_INFO_CHARS] if cleaned else None
 
 
+def _clean_info_icons(value: Any) -> tuple[str, ...]:
+    """``serverInfo.icons`` as at most four ``https:``/``data:image`` sources. Only the URI is
+    kept: the bytes are fetched, size-capped and typed by magic later (``mcp.site_identity``),
+    so a declared ``mimeType`` (an SVG, say) is never trusted."""
+    if not isinstance(value, list):
+        return ()
+    out: list[str] = []
+    for entry in value:
+        src = entry.get("src") if isinstance(entry, dict) else None
+        if not isinstance(src, str):
+            continue
+        src = src.strip()
+        if src.lower().startswith("https://") and len(src) <= 2048:
+            out.append(src)
+        elif src.lower().startswith("data:image/") and len(src) <= 256 * 1024:
+            out.append(src)
+    return tuple(out[:4])
+
+
 def _clean_instructions(value: Any) -> Optional[str]:
     """The handshake's ``instructions`` field, sanitized + capped — or ``None`` if unusable.
 
@@ -508,6 +564,15 @@ def _clean_instructions(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
     cleaned = sanitize_untrusted(value, max_len=MAX_SERVER_INSTRUCTIONS_CHARS).strip()
+    return cleaned or None
+
+
+def _clean_description(value: Any) -> Optional[str]:
+    """``serverInfo.description``: prose a person reads, so sanitized like ``instructions``,
+    but a subtitle — capped at a short label's length."""
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(sanitize_untrusted(value, max_len=MAX_SERVER_INFO_CHARS).split())
     return cleaned or None
 
 

@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import time
 
+import pytest
+
 
 def test_instant_freshen_calls_gather_rss_with_resolved_feeds(monkeypatch):
     import backend.monitoring.price_monitor as pm
@@ -137,6 +139,9 @@ def test_alert_fire_triggers_instant_freshen(monkeypatch):
     assert freshen_calls == ["AAPL"]
 
 
+# Asserts the sender's own push before the price check returns, so it pins both flags off; the
+# flag-on paths are in tests/test_delivery_seam.py and tests/test_price_alert_run.py.
+@pytest.mark.flags(intel_delivery_decider=False, price_alert_lucius_run=False)
 def test_freshen_task_does_not_delay_push_or_alert_ordering(monkeypatch):
     """BLOCKER regression (code review): a SLOW _instant_news_freshen must not delay
     _push_external_alert's own ordering or run_price_check()'s return. Before the fix,
@@ -182,8 +187,10 @@ def test_freshen_task_does_not_delay_push_or_alert_ordering(monkeypatch):
 
     events: list = []
 
+    # Far slower than the check itself, so "faster than half of it" proves the check never
+    # waited, even on a loaded runner (a 0.2s sleep against a 0.15s bound flaked under xdist).
     async def _slow_freshen(ticker, row, label):
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(5.0)
         events.append("freshen_done")
 
     async def _fake_push(signal, channels):
@@ -197,5 +204,5 @@ def test_freshen_task_does_not_delay_push_or_alert_ordering(monkeypatch):
     elapsed = time.monotonic() - start
 
     assert fired == 1
-    assert elapsed < 0.15  # must NOT have waited on the freshen's 0.2s sleep
+    assert elapsed < 2.5  # must NOT have waited on the freshen's 5s sleep
     assert events == ["push"]  # the push landed; the slow freshen's own completion is unobserved

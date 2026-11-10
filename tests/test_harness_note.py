@@ -81,6 +81,63 @@ def test_a_harness_note_is_not_drawn_as_the_owners_message(content, monkeypatch,
     assert not any("harness_note" in (m.get("text") or "") for m in rendered)
 
 
+def test_a_note_beside_the_owners_words_hides_only_the_note(monkeypatch, db_isolated):
+    """A voice call's message is what the owner said + a note for Lucius; the chat lost the
+    owner's whole side of the call by hiding the message for its note (live call, 2026-11-03)."""
+    sid = "test-harness-note-beside"
+    assistant._store().upsert_meta(sid, {"id": sid})
+    monkeypatch.setattr(assistant, "_rehydrated_turn_usage", lambda *a, **k: {})
+    said = [
+        {"type": "text", "text": "how are you doing"},
+        {"type": "text", "text": harness_note("This message came by voice.")},
+    ]
+    monkeypatch.setattr(
+        assistant,
+        "_load_session",
+        lambda _s: [
+            {"role": "user", "content": said},
+            {"role": "assistant", "content": [{"type": "text", "text": "Doing great."}]},
+        ],
+    )
+    rendered = assistant.rehydrate_messages(sid) or []
+    assert [(m["role"], m["text"]) for m in rendered] == [
+        ("user", "how are you doing"),
+        ("assistant", "Doing great."),
+    ]
+
+
+def test_a_line_after_a_tool_answer_is_its_own_bubble(monkeypatch, db_isolated):
+    """Owner, 2026-11-03: a later voice call's greeting (an assistant line with nothing of the
+    owner's before it) showed INSIDE the earlier answer that had used tools — the tool round's
+    "same turn" flag never switched off."""
+    sid = "test-after-tool-answer"
+    assistant._store().upsert_meta(sid, {"id": sid})
+    monkeypatch.setattr(assistant, "_rehydrated_turn_usage", lambda *a, **k: {})
+    monkeypatch.setattr(
+        assistant,
+        "_load_session",
+        lambda _s: [
+            {"role": "user", "content": "anything urgent?"},
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "t1", "name": "get_alerts", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "[]"}],
+            },
+            {"role": "assistant", "content": [{"type": "text", "text": "Nothing urgent."}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "Hello, it's Lucius."}]},
+        ],
+    )
+    rendered = assistant.rehydrate_messages(sid) or []
+    assert [(m["role"], m["text"]) for m in rendered] == [
+        ("user", "anything urgent?"),
+        ("assistant", "Nothing urgent."),
+        ("assistant", "Hello, it's Lucius."),
+    ]
+
+
 # ── the live path ─────────────────────────────────────────────────────────────
 
 
@@ -104,10 +161,6 @@ async def test_a_live_nudge_never_reaches_the_client_as_an_event(monkeypatch, db
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
     monkeypatch.setattr(profile_service, "read_profile", lambda: {})
 
-    async def _noop(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop, raising=False)
     live_sessions._reset_for_tests()
     pending_injection._reset_for_tests()
     turns.set_inline_for_tests(False)

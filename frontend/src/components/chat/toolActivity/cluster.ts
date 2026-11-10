@@ -15,7 +15,7 @@
 // the client knows what is adjacent on screen and what is still streaming, and only the
 // server knows what a tool is called.
 
-import type { ToolDisplay, ToolStatus } from '../../../types/chat'
+import type { AutoApproval, ToolDisplay, ToolStatus } from '../../../types/chat'
 import { stripExternalMcpFence } from '../../../utils/untrusted'
 import { pluralize } from '../../../utils/pluralize'
 
@@ -29,6 +29,7 @@ export interface ToolItem {
   result?: string
   resultElided?: number
   inputElided?: number
+  autoApproval?: AutoApproval
 }
 
 export interface FetchItem {
@@ -119,7 +120,10 @@ export function displayOf(item: ToolItem): ToolDisplay {
  * "account not found" one click down, under a row that otherwise looks like every successful
  * one, is how a failed turn reads as a successful one.
  */
-export function failureOf(item: ToolItem): { failed: boolean; message: string } {
+export function failureOf(
+  item: ToolItem,
+  declinedIsNotFailure = false,
+): { failed: boolean; message: string } {
   if (item.status !== 'done' || item.result === undefined) return { failed: false, message: '' }
   // The fence is display-only noise here; what the model received is untouched.
   const raw = stripExternalMcpFence(item.result).trim()
@@ -133,6 +137,10 @@ export function failureOf(item: ToolItem): { failed: boolean; message: string } 
   }
   if (!parsed || typeof parsed !== 'object') return plainTextFailure(raw)
   const obj = parsed as Record<string, unknown>
+  // permissions_v2 only (`declinedIsNotFailure`): the owner pressed Deny. The call did not run,
+  // but nothing FAILED — the card already says "Denied", and a "1 failed" beside it would say the
+  // opposite of what happened. With the flag off the result is read exactly as before.
+  if (declinedIsNotFailure && obj.declined_by === 'user') return { failed: false, message: '' }
   const err = obj.error
   if (typeof err === 'string' && err.trim()) return { failed: true, message: err.trim() }
   if (err !== undefined && err !== null) return { failed: true, message: 'The call failed.' }
@@ -208,10 +216,10 @@ function plural(noun: string): string {
  *
  * A long run of identical calls gets long; folding the bar is what that is for.
  */
-export function clusterItems(items: ToolItem[]): Cluster[] {
+export function clusterItems(items: ToolItem[], declinedIsNotFailure = false): Cluster[] {
   return items.map((item, i) => {
     const d = displayOf(item)
-    const { failed, message } = failureOf(item)
+    const { failed, message } = failureOf(item, declinedIsNotFailure)
     return {
       key: item.id || `${d.owner_id}|${d.verb}|${d.noun}-${i}`,
       items: [item],

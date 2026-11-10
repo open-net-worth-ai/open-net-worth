@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChartEvent } from 'chart.js'
+import { useAmountsHidden, useMaskText } from '../../../utils/amountMask'
 import { fBase, fBaseCompact, fPct } from '../../../utils/format'
 import { OvChart, amountsHidden, kTick, resolveColor } from './charts'
 
@@ -45,7 +46,7 @@ function tooltipLine(
   if (!row) return ''
   const pct = shareOf(row, total)
   const formattedVal = amountsHidden() ? '***' : fBaseCompact(row.value)
-  return `${row.label ?? ''}: ${formattedVal} (${fPct(pct)})`
+  return `${row.label ?? ''}: ${formattedVal} (${amountsHidden() ? '***' : fPct(pct)})`
 }
 
 /** What a caller can make a row do — a tap/click on a bar, a pie slice or a legend row. */
@@ -68,6 +69,7 @@ function BreakdownLegend({
   hiddenCount?: number
   select?: RowSelect
 }) {
+  const maskText = useMaskText()
   return (
     <div className="ov-breakdown-list">
       {rows.map((r) => {
@@ -81,7 +83,7 @@ function BreakdownLegend({
               <span className="ov-breakdown-value-full">{fBase(r.value)}</span>
               <span className="ov-breakdown-value-compact">{fBaseCompact(r.value)}</span>
             </span>
-            <span className="ov-breakdown-pct">{fPct(shareOf(r, total))}</span>
+            <span className="ov-breakdown-pct money">{fPct(shareOf(r, total))}</span>
           </>
         )
         return select && (select.canSelect?.(r) ?? true) ? (
@@ -91,7 +93,7 @@ function BreakdownLegend({
             className="ov-breakdown-row ov-breakdown-row--go"
             title={r.tip}
             onClick={() => select.onSelect(r)}
-            aria-label={`${r.label}, ${fBase(r.value)}${select.label ? ` — ${select.label}` : ''}`}
+            aria-label={`${r.label}, ${maskText(fBase(r.value))}${select.label ? ` — ${select.label}` : ''}`}
           >
             {body}
           </button>
@@ -134,6 +136,7 @@ function pickHandlers(pick: (index: number) => void) {
  * rows — prototype's `Stacked`. Each segment's `title` doubles as its tooltip
  * since this is plain HTML, not a chart. */
 function BreakdownBar({ rows, total }: { rows: BreakdownRow[]; total: number }) {
+  useAmountsHidden() // its tooltips read the flag at render
   return (
     <div className="ov-breakdown-bar" aria-hidden="true">
       {rows.map((r) => {
@@ -143,7 +146,7 @@ function BreakdownBar({ rows, total }: { rows: BreakdownRow[]; total: number }) 
           <i
             key={r.key}
             style={{ width: `${Math.max(0, pct)}%`, background: r.color }}
-            title={`${r.label}\n${valStr} • ${fPct(pct)}`}
+            title={`${r.label}\n${valStr} • ${amountsHidden() ? '***' : fPct(pct)}`}
           />
         )
       })}

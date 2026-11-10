@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from '../../../ui/icons'
+import { X, MoreHorizontal } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { useSheetDragToDismiss } from '../../../hooks/useSheetDragToDismiss'
 
@@ -142,7 +142,7 @@ export function KebabMenu({
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
-          {icon ?? '⋯'}
+          {icon ?? <MoreHorizontal size={16} aria-hidden="true" />}
         </button>
         {open &&
           createPortal(
@@ -234,7 +234,7 @@ export function KebabMenu({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {icon ?? '⋯'}
+        {icon ?? <MoreHorizontal size={16} aria-hidden="true" />}
       </button>
       {portal ? menu && createPortal(menu, document.body) : menu}
     </div>

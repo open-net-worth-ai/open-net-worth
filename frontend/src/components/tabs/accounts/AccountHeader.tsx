@@ -7,17 +7,22 @@
  * app.jsx ReconcilePopover.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRouter } from '@tanstack/react-router'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { StatementViewer, StatementsModal } from './StatementsSection'
-import { Button, FormField, InfoPopover, TextField } from '../../ui'
+import { Button, FormField, TextField } from '../../ui'
+import { BalanceTermsInfo } from './BalanceTermsInfo'
 import { Spark } from '../../../lucius/identity'
 import {
   Archive,
   ChevronRight,
+  CircleCheck,
+  ClockAlert,
   Download,
   FileText,
-  ListChecks,
+  Landmark,
+  Link2,
   MoreHorizontal,
   Pencil,
   Tags,
@@ -25,17 +30,18 @@ import {
   Upload,
   User,
 } from '../../../ui/icons'
-import type { Account } from './types'
+import type { Account, LinkStatus } from './types'
 import { fCur } from './data'
-import { ReviewStrip } from './ReviewStrip'
+import { ReviewStrip, TxnCount } from './ReviewStrip'
 import { typeLabel } from './categories'
 import { fDate } from '../../../utils/format'
+import { daysSinceReconcile, isReconcileOverdue } from './reconcileCadence'
 
 type MenuIconName =
   | 'payees'
   | 'categories'
+  | 'institutions'
   | 'import'
-  | 'reconcile'
   | 'edit'
   | 'statements'
   | 'export'
@@ -49,10 +55,10 @@ function MenuIcon({ name }: { name: MenuIconName }) {
       return <User {...common} />
     case 'categories':
       return <Tags {...common} />
+    case 'institutions':
+      return <Landmark {...common} />
     case 'import':
       return <Upload {...common} />
-    case 'reconcile':
-      return <ListChecks {...common} />
     case 'edit':
       return <Pencil {...common} />
     case 'statements':
@@ -156,10 +162,11 @@ export interface AccountStats {
 interface ReconcilePopoverProps {
   account: Account
   onReconcile: (account: Account, realBalance: number) => void
-  menuTrigger?: boolean
 }
 
-function ReconcilePopover({ account, onReconcile, menuTrigger = false }: ReconcilePopoverProps) {
+/** Lives on the "Reconciled …" line under the balance — the action beside the status it
+ *  changes, at every width (owner, 2026-10-26), instead of a header button + ⋯ menu entry. */
+function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'ask' | 'input'>('ask')
   const [val, setVal] = useState('')
@@ -194,25 +201,15 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
   const diff = has ? Math.round((real - account.clearedBalance) * 100) / 100 : 0
 
   return (
-    <div className={`acct-pop-wrap${menuTrigger ? ' acct-pop-wrap--menu' : ''}`} ref={ref}>
-      {menuTrigger ? (
-        <AccountMenuItem
-          icon="reconcile"
-          className="acct-menu-collapsible"
-          onClick={() => (open ? close() : setOpen(true))}
-        >
-          Reconcile
-        </AccountMenuItem>
-      ) : (
-        <Button
-          className="acct-head-reconcile"
-          size="sm"
-          variant="secondary"
-          onClick={() => (open ? close() : setOpen(true))}
-        >
-          Reconcile
-        </Button>
-      )}
+    <div className="acct-pop-wrap acct-pop-wrap--line" ref={ref}>
+      <button
+        type="button"
+        className="acct-recon-action as-btn"
+        aria-expanded={open}
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        Reconcile
+      </button>
 
       {open && (
         <div className="acct-pop" role="dialog">
@@ -220,7 +217,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
             <>
               <div className="acct-pop-q">
                 Is the real balance{' '}
-                <b className={account.clearedBalance < 0 ? 'neg' : ''}>
+                <b className={'mask l' + (account.clearedBalance < 0 ? ' neg' : '')}>
                   {fCur(account.clearedBalance, account.currency, { cents: true })}{' '}
                   {account.currency}
                 </b>
@@ -232,6 +229,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   onClick={() => {
                     onReconcile(account, account.clearedBalance)
                     close()
@@ -254,7 +252,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
               {has && (
                 <div className="acct-pop-diff">
                   <span>Adjustment</span>
-                  <b className={diff < 0 ? 'neg' : diff > 0 ? 'pos' : ''}>
+                  <b className={diff < 0 ? 'neg mask' : diff > 0 ? 'pos mask' : ''}>
                     {diff === 0
                       ? 'In sync'
                       : (diff > 0 ? '+' : '') + fCur(diff, account.currency, { cents: true })}
@@ -267,6 +265,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   disabled={!has}
                   onClick={() => {
                     onReconcile(account, real)
@@ -289,26 +288,28 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
 export interface AccountHeaderProps {
   account: Account
   dueInfo: DueInfo | null
-  /** Still fetching this card's statement summary — hold the banner's space so its arrival
-   *  doesn't shove the page down. */
-  dueLoading?: boolean
   stats: AccountStats | null
   menuOpen: boolean
   setMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void
   collapsed: boolean
   onReopen: () => void
+  /** Hover on the reopen button floats the accounts rail (AccountsTab's peek). */
+  onReopenHover?: () => void
+  onReopenLeave?: () => void
   onAddTxn: () => void
   onEdit: () => void
   onArchive: () => void
   onDelete: () => void
   onManagePayees: () => void
   onManageCategories: () => void
+  /** Rename or remove a shared institution (the left rail's bank groups). */
+  onManageInstitutions?: () => void
   onImport: () => void
   /** Hands a message to Lucius in a fresh conversation; absent in a context with no chat. */
   onAskLucius?: (text: string) => void
   /** "Review →" on a ready-but-uncommitted statement (B20 async) — opens the import modal
    *  straight at the review step, no re-upload. */
-  onReviewStatement?: (statementId: string, filename?: string) => void
+  onReviewStatement?: (statementId: string, filename?: string, uploadedAt?: string) => void
   onExport: () => void
   /** Called with (account, realBalance) — orchestrator wires to hook's reconcile */
   onReconcile: (account: Account, realBalance: number) => void
@@ -318,20 +319,29 @@ export interface AccountHeaderProps {
 
 // ── AccountHeader ─────────────────────────────────────────────────────────────
 
+const LINK_TITLE: Record<LinkStatus, (label: string) => string> = {
+  connected: (label) => `Linked to ${label} — open its connector`,
+  paused: (label) => `${label} is paused — nothing syncs into this account until you resume it`,
+  disconnected: (label) =>
+    `${label} was removed — nothing syncs into this account. Tap to set it up again.`,
+}
+
 export function AccountHeader({
   account,
   dueInfo,
-  dueLoading,
   stats,
   menuOpen,
   setMenuOpen,
   collapsed,
   onReopen,
+  onReopenHover,
+  onReopenLeave,
   onEdit,
   onArchive,
   onDelete,
   onManagePayees,
   onManageCategories,
+  onManageInstitutions,
   onImport,
   onAskLucius,
   onReviewStatement,
@@ -341,6 +351,16 @@ export function AccountHeader({
   onStartReview,
 }: AccountHeaderProps) {
   const chatComposer = useChatComposerOptional()
+  // The connectors this account is linked to (server-derived label + state), one per connector.
+  const linkedProviders = [
+    ...new Map((account.externalIds ?? []).map((e) => [e.source, e])).values(),
+  ].map((e) => ({ source: e.source, label: e.providerLabel, status: e.status }))
+  // Optional: the header also renders outside the router (tests).
+  const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
+  const openConnector = (source: string) => {
+    if (router) void router.navigate({ to: '/connectors', search: { connector: source } as never })
+    else window.location.assign(`/connectors?connector=${encodeURIComponent(source)}`)
+  }
   const [viewStatement, setViewStatement] = useState(false)
   const [showStatements, setShowStatements] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -352,8 +372,15 @@ export function AccountHeader({
         setMenuOpen(false)
       }
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
     document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', h)
+      document.removeEventListener('keydown', onKey)
+    }
   })
 
   const pending = account.balance - account.clearedBalance
@@ -364,7 +391,13 @@ export function AccountHeader({
       <div className="acct-head">
         <div className="acct-head-l">
           {collapsed && (
-            <button className="acct-reopen" onClick={onReopen} title="Show accounts">
+            <button
+              className="acct-reopen"
+              onClick={onReopen}
+              onMouseEnter={onReopenHover}
+              onMouseLeave={onReopenLeave}
+              title="Show accounts"
+            >
               <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}
@@ -388,6 +421,25 @@ export function AccountHeader({
                   <span>•••{account.lastFour}</span>
                 </>
               )}
+              {linkedProviders.map(({ source, label, status }) => (
+                <Fragment key={source}>
+                  <span className="sep">•</span>
+                  <button
+                    type="button"
+                    className={
+                      status === 'connected'
+                        ? 'acct-head-linked'
+                        : 'acct-head-linked acct-head-linked--off'
+                    }
+                    title={LINK_TITLE[status](label)}
+                    onClick={() => openConnector(source)}
+                  >
+                    <Link2 size={12} aria-hidden="true" />
+                    {label}
+                    {status !== 'connected' && ` · ${status}`}
+                  </button>
+                </Fragment>
+              ))}
             </div>
           </div>
         </div>
@@ -412,7 +464,6 @@ export function AccountHeader({
           <Button className="acct-head-collapsible" size="sm" variant="ghost" onClick={onImport}>
             Import
           </Button>
-          <ReconcilePopover account={account} onReconcile={onReconcile} />
           <div className="acct-menu-wrap" ref={menuRef}>
             <button
               className="btn-ghost-icon"
@@ -454,11 +505,14 @@ export function AccountHeader({
                 >
                   Import
                 </AccountMenuItem>
-                <ReconcilePopover account={account} onReconcile={onReconcile} menuTrigger />
-                <div className="acct-menu-collapsible sep" />
-                <AccountMenuItem icon="edit" onClick={onEdit}>
-                  Edit account
-                </AccountMenuItem>
+                {/* App-wide admin, like the two above — always in the menu, split from this
+                    account's own actions below. */}
+                {onManageInstitutions && (
+                  <AccountMenuItem icon="institutions" onClick={onManageInstitutions}>
+                    Manage institutions
+                  </AccountMenuItem>
+                )}
+                <div className={onManageInstitutions ? 'sep' : 'acct-menu-collapsible sep'} />
                 <AccountMenuItem
                   icon="statements"
                   onClick={() => {
@@ -470,6 +524,9 @@ export function AccountHeader({
                 </AccountMenuItem>
                 <AccountMenuItem icon="export" onClick={onExport}>
                   Export transactions
+                </AccountMenuItem>
+                <AccountMenuItem icon="edit" onClick={onEdit}>
+                  Edit account
                 </AccountMenuItem>
                 <div className="sep" />
                 <AccountMenuItem icon="archive" danger onClick={onArchive}>
@@ -488,7 +545,6 @@ export function AccountHeader({
       {/* Honesty tiers: fully PAID congratulates; an ESTIMATE says so (~ + tag) with an
           Import-statement action; statement-backed shows remaining / paid-so-far / minimum.
           Actions (Import statement · Remind me) sit together on the right. */}
-      {!dueInfo && dueLoading && <div className="acct-alert placeholder" aria-hidden="true" />}
       {dueInfo && dueInfo.settled && (
         <div className="acct-alert paid">
           <span className="mark">✓</span>
@@ -496,7 +552,13 @@ export function AccountHeader({
             {dueInfo.source === 'statement' ? (
               <>
                 Congrats — this statement is <b>paid in full</b>
-                {dueInfo.totalDue != null && <> ({fCur(dueInfo.totalDue, dueInfo.currency)})</>}.
+                {dueInfo.totalDue != null && (
+                  <>
+                    {' '}
+                    (<span className="mask l">{fCur(dueInfo.totalDue, dueInfo.currency)}</span>)
+                  </>
+                )}
+                .
                 {dueInfo.statementId && (
                   <button
                     type="button"
@@ -515,9 +577,16 @@ export function AccountHeader({
               // total is only what it covers — never claim an estimated figure was "paid
               // in full" (the actual payment usually differs).
               <>
-                Congrats — <b>{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b> paid this cycle,
-                covering your estimated balance
-                {dueInfo.totalDue != null && <> of ~{fCur(dueInfo.totalDue, dueInfo.currency)}</>}.
+                Congrats —{' '}
+                <b className="mask l">{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b> paid
+                this cycle, covering your estimated balance
+                {dueInfo.totalDue != null && (
+                  <>
+                    {' '}
+                    of <span className="mask l">~{fCur(dueInfo.totalDue, dueInfo.currency)}</span>
+                  </>
+                )}
+                .
               </>
             )}
           </span>
@@ -556,17 +625,22 @@ export function AccountHeader({
                 {dueInfo.partial ? (
                   <>
                     {' '}
-                    Paid <b>{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b>
+                    Paid <b className="mask l">{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b>
                     {dueInfo.totalDue != null && (
-                      <> of {fCur(dueInfo.totalDue, dueInfo.currency)}</>
+                      <>
+                        {' '}
+                        of{' '}
+                        <span className="mask l">{fCur(dueInfo.totalDue, dueInfo.currency)}</span>
+                      </>
                     )}{' '}
-                    — <b>{fCur(dueInfo.amountDue, dueInfo.currency)}</b> still{' '}
+                    — <b className="mask l">{fCur(dueInfo.amountDue, dueInfo.currency)}</b>{' '}
+                    still{' '}
                   </>
                 ) : (
                   <>
                     {' '}
                     Payment of{' '}
-                    <b>
+                    <b className="mask l">
                       {dueInfo.source !== 'statement' ? '~' : ''}
                       {fCur(dueInfo.amountDue, dueInfo.currency)}
                     </b>{' '}
@@ -595,7 +669,8 @@ export function AccountHeader({
                   ((dueInfo.paidAmount ?? 0) < dueInfo.minPayment ? (
                     <>
                       {' '}
-                      • minimum <b>{fCur(dueInfo.minPayment, dueInfo.currency)}</b>
+                      • minimum{' '}
+                      <b className="mask l">{fCur(dueInfo.minPayment, dueInfo.currency)}</b>
                       {(dueInfo.paidAmount ?? 0) > 0 && ' not yet met'}
                     </>
                   ) : (
@@ -697,9 +772,9 @@ export function AccountHeader({
           }
           onReviewStatement={
             onReviewStatement &&
-            ((statementId, filename) => {
+            ((statementId, filename, uploadedAt) => {
               setShowStatements(false)
-              onReviewStatement(statementId, filename)
+              onReviewStatement(statementId, filename, uploadedAt)
             })
           }
         />
@@ -710,15 +785,14 @@ export function AccountHeader({
         <div className="acct-bal-card">
           <div className="acct-bal-k">
             {account.kind === 'liability' ? 'Balance owed' : 'Balance'}
+            <BalanceTermsInfo total="Working balance" meaning="the two together." />
           </div>
           <div className="acct-bal-breakdown">
             <div className="acct-bal-part">
               <div className={'acct-bal-fig mask' + (account.clearedBalance > 0 ? ' pos' : '')}>
                 {fCur(account.clearedBalance, account.currency, { cents: true })}
               </div>
-              <div className="acct-bal-lbl">
-                Cleared <InfoPopover text="Posted — finalized; the amount won't change." />
-              </div>
+              <div className="acct-bal-lbl">Cleared</div>
             </div>
             <div className="acct-bal-grp">
               <span className="acct-bal-op">+</span>
@@ -726,10 +800,7 @@ export function AccountHeader({
                 <div className={'acct-bal-fig mask' + (pending > 0 ? ' pos' : '')}>
                   {fCur(pending, account.currency, { cents: true })}
                 </div>
-                <div className="acct-bal-lbl">
-                  Uncleared{' '}
-                  <InfoPopover text="Pending — a temporary hold; the amount can still change." />
-                </div>
+                <div className="acct-bal-lbl">Uncleared</div>
               </div>
             </div>
             <div className="acct-bal-grp">
@@ -738,37 +809,52 @@ export function AccountHeader({
                 <div className={'acct-bal-fig work mask' + (account.balance > 0 ? ' pos' : '')}>
                   {fCur(account.balance, account.currency, { cents: true })}
                 </div>
-                <div className="acct-bal-lbl">
-                  Working balance <InfoPopover text="Cleared + uncleared, for this account." />
-                </div>
+                <div className="acct-bal-lbl">Working balance</div>
               </div>
             </div>
           </div>
 
           {/* reconcile line + stats */}
           <div className="acct-recon-line">
-            <span className="acct-recon-stat">
-              {account.lastReconciled ? (
-                <>
-                  <span className="ok">✓</span> Reconciled{' '}
-                  {fDate(account.lastReconciled, 'numeric')}
-                </>
-              ) : (
-                <>
-                  <span className="warn">○</span> Never reconciled
-                </>
-              )}
+            <span className="acct-recon-group">
+              <span className="acct-recon-stat">
+                {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
+                  <span
+                    className="acct-recon-stat"
+                    title="Reconcile at least once a month, so a gap is still easy to trace."
+                  >
+                    <ClockAlert size={14} className="warn" aria-hidden="true" />
+                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}{' '}
+                    <span className="warn">
+                      ({daysSinceReconcile(account.lastReconciled)} days ago)
+                    </span>
+                  </span>
+                ) : account.lastReconciled ? (
+                  <>
+                    <CircleCheck size={14} className="ok" aria-hidden="true" />
+                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}
+                  </>
+                ) : (
+                  <>
+                    <ClockAlert size={14} className="warn" aria-hidden="true" />
+                    Never reconciled
+                  </>
+                )}
+              </span>
+              <ReconcilePopover account={account} onReconcile={onReconcile} />
             </span>
             {/* Gated on `stats` existing, never on count, so the line doesn't disappear at 0 txns. */}
             {stats && (
               <>
-                <ReviewStrip
-                  count={stats.review}
-                  onReview={onReview}
-                  onStartReview={onStartReview}
-                />
                 <span className="acct-recon-grow" />
-                <span className="acct-recon-stat muted">{stats.count} txns</span>
+                <span className="acct-recon-group acct-recon-group--review">
+                  <ReviewStrip
+                    count={stats.review}
+                    onReview={onReview}
+                    onStartReview={onStartReview}
+                  />
+                  <TxnCount count={stats.count} />
+                </span>
               </>
             )}
           </div>

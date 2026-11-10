@@ -242,7 +242,7 @@ export function AssetCard({ a, cats, onOpen }: AssetCardProps) {
       <div className="as-card-row">
         <span className="as-card-val money">{fmtOrDash(a.value)}</span>
         <span className="as-card-side">
-          <span className={'as-delta ' + (gp == null ? 'flat' : gp >= 0 ? 'pos' : 'neg')}>
+          <span className={'as-delta money ' + (gp == null ? 'flat' : gp >= 0 ? 'pos' : 'neg')}>
             {gp == null ? '' : pct(gp)}
           </span>
         </span>
@@ -291,7 +291,7 @@ export function ClassCard({ c, onNav }: ClassCardProps) {
         <span className={'as-card-val money' + (c.value < 0 ? ' neg' : '')}>{fmt(c.value)}</span>
         <span
           className={
-            'as-delta ' + (headlinePct == null ? 'flat' : headlinePct >= 0 ? 'pos' : 'neg')
+            'as-delta money ' + (headlinePct == null ? 'flat' : headlinePct >= 0 ? 'pos' : 'neg')
           }
         >
           {headlinePct == null ? c.yield : pct(headlinePct)}
@@ -346,7 +346,7 @@ export function Rail({ cats, classes, summary }: RailProps) {
                 <i style={{ width: r.pct + '%', background: r.color }} />
               </span>
               {/* A sliver still owned reads "<1%", never a misleading "0%". */}
-              <span className="as-comp-pc">{r.pct > 0 ? `${r.pct}%` : '<1%'}</span>
+              <span className="as-comp-pc money">{r.pct > 0 ? `${r.pct}%` : '<1%'}</span>
             </div>
           ))}
         </div>
@@ -371,7 +371,9 @@ export function Rail({ cats, classes, summary }: RailProps) {
                     }}
                   />
                 </span>
-                <span className="as-comp-pc">{Math.round((r.value / summary.owe) * 100)}%</span>
+                <span className="as-comp-pc money">
+                  {Math.round((r.value / summary.owe) * 100)}%
+                </span>
               </div>
             ))}
           </div>

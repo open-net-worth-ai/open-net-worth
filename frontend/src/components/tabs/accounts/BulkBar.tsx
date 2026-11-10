@@ -12,6 +12,21 @@ import type { SelectionTotal } from './data'
 import { fBase, fCur } from './format'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { BottomSheet } from '../../ui/BottomSheet'
+import {
+  Tags,
+  ChevronRight,
+  Check,
+  Circle,
+  Copy,
+  Pencil,
+  ArrowLeftRight,
+  Download,
+  Trash2,
+  ChevronLeft,
+  MoreHorizontal,
+  Eye,
+  EyeOff,
+} from '../../../ui/icons'
 
 // Hoisted out of BulkBar — a component declared during render is re-created (and its state
 // reset) on every render (react-hooks/static-components).
@@ -35,11 +50,13 @@ export interface BulkBarProps {
   onMarkCleared: () => void
   onMarkUncleared: () => void
   onMarkReviewed: () => void
+  onHide: () => void
+  onUnhide: () => void
   /** How many of the selected rows each action would ACTUALLY change. An action that would
    *  change nothing is DISABLED rather than hidden — hiding it makes the menu change height
    *  between selections, and a greyed row with a reason explains itself where a missing one
    *  just looks broken. Omit to leave every action enabled. */
-  actionable?: { review: number; clear: number; unclear: number }
+  actionable?: { review: number; clear: number; unclear: number; hide: number; unhide: number }
   onDuplicate: () => void
   onMemo: (text: string) => void
   onMove: (accountId: string) => void
@@ -60,6 +77,8 @@ export function BulkBar({
   onMarkCleared,
   onMarkUncleared,
   onMarkReviewed,
+  onHide,
+  onUnhide,
   actionable,
   onDuplicate,
   onMemo,
@@ -79,6 +98,8 @@ export function BulkBar({
   const nReview = actionable?.review
   const nCleared = actionable?.clear
   const nUncleared = actionable?.unclear
+  const nHide = actionable?.hide
+  const nUnhide = actionable?.unhide
   const close = () => {
     setMenu(null)
     setMoveOpen(false)
@@ -138,8 +159,9 @@ export function BulkBar({
       {isMobile && (
         <>
           <button className="acct-bm-item" onClick={() => setCatOpen(true)}>
-            <span className="acct-bm-ic">▦</span>Categorize
-            <span className="acct-bm-caret">›</span>
+            <Tags className="acct-bm-ic" size={14} aria-hidden="true" />
+            Categorize
+            <ChevronRight className="acct-bm-caret" size={14} aria-hidden="true" />
           </button>
           <div className="acct-bm-div" />
         </>
@@ -150,7 +172,8 @@ export function BulkBar({
         disabled={nCleared === 0}
         title={whyDisabled(nCleared, 'Every selected transaction is already cleared')}
       >
-        <span className="acct-bm-ic">✓</span>Mark as Cleared
+        <Check className="acct-bm-ic" size={14} aria-hidden="true" />
+        Mark as Cleared
         {!isMobile && <Shortcut k="C" />}
       </button>
       <button
@@ -159,7 +182,8 @@ export function BulkBar({
         disabled={nUncleared === 0}
         title={whyDisabled(nUncleared, 'No selected transaction is cleared')}
       >
-        <span className="acct-bm-ic dim">○</span>Mark as Uncleared
+        <Circle className="acct-bm-ic dim" size={14} aria-hidden="true" />
+        Mark as Uncleared
         {!isMobile && <Shortcut k="C" />}
       </button>
       <button
@@ -168,27 +192,51 @@ export function BulkBar({
         disabled={nReview === 0}
         title={whyDisabled(nReview, 'Every selected transaction is already reviewed')}
       >
-        <span className="acct-bm-ic">✓</span>Mark as Reviewed
+        <Check className="acct-bm-ic" size={14} aria-hidden="true" />
+        Mark as Reviewed
+      </button>
+      <div className="acct-bm-div" />
+      <button
+        className="acct-bm-item"
+        onClick={() => act(onHide)}
+        disabled={nHide === 0}
+        title={whyDisabled(nHide, 'Every selected transaction is already hidden')}
+      >
+        <EyeOff className="acct-bm-ic" size={14} aria-hidden="true" />
+        Hide from Register
+      </button>
+      <button
+        className="acct-bm-item"
+        onClick={() => act(onUnhide)}
+        disabled={nUnhide === 0}
+        title={whyDisabled(nUnhide, 'No selected transaction is hidden')}
+      >
+        <Eye className="acct-bm-ic" size={14} aria-hidden="true" />
+        Unhide
       </button>
       <div className="acct-bm-div" />
       <button className="acct-bm-item" onClick={() => act(onDuplicate)}>
-        <span className="acct-bm-ic">⧉</span>Duplicate
+        <Copy className="acct-bm-ic" size={14} aria-hidden="true" />
+        Duplicate
         {!isMobile && <Shortcut k="⇧D" />}
       </button>
       <button className="acct-bm-item" onClick={() => setMemoMode(true)}>
-        <span className="acct-bm-ic">✎</span>Description…
+        <Pencil className="acct-bm-ic" size={14} aria-hidden="true" />
+        Description…
       </button>
       <button className="acct-bm-item" onClick={() => setMoveOpen(true)}>
-        <span className="acct-bm-ic">⇥</span>Move to Account
-        <span className="acct-bm-caret">›</span>
+        <ArrowLeftRight className="acct-bm-ic" size={14} aria-hidden="true" />
+        Move to Account
+        <ChevronRight className="acct-bm-caret" size={14} aria-hidden="true" />
       </button>
       <button className="acct-bm-item" onClick={() => act(onExport)}>
-        <span className="acct-bm-ic">⭳</span>Export {count}{' '}
-        {count === 1 ? 'Transaction' : 'Transactions'}
+        <Download className="acct-bm-ic" size={14} aria-hidden="true" />
+        Export {count} {count === 1 ? 'Transaction' : 'Transactions'}
       </button>
       <div className="acct-bm-div" />
       <button className="acct-bm-item danger" onClick={() => act(onDelete)}>
-        <span className="acct-bm-ic">🗑</span>Delete
+        <Trash2 className="acct-bm-ic" size={14} aria-hidden="true" />
+        Delete
         {!isMobile && <Shortcut k="⌫" />}
       </button>
     </>
@@ -196,7 +244,8 @@ export function BulkBar({
   const catItems = (
     <>
       <button className="acct-bm-item" onClick={() => setCatOpen(false)}>
-        <span className="acct-bm-ic">‹</span>Back
+        <ChevronLeft className="acct-bm-ic" size={14} aria-hidden="true" />
+        Back
       </button>
       <div className="acct-bm-div" />
       {spend.map((c) => (
@@ -212,7 +261,8 @@ export function BulkBar({
       {isMobile && (
         <>
           <button className="acct-bm-item" onClick={() => setMoveOpen(false)}>
-            <span className="acct-bm-ic">‹</span>Back
+            <ChevronLeft className="acct-bm-ic" size={14} aria-hidden="true" />
+            Back
           </button>
           <div className="acct-bm-div" />
         </>
@@ -302,7 +352,8 @@ export function BulkBar({
                 className={'acct-bulk-btn' + (menu === 'cat' ? ' on' : '')}
                 onClick={() => setMenu((m) => (m === 'cat' ? null : 'cat'))}
               >
-                <span className="acct-bm-ic">▦</span>Categorize
+                <Tags className="acct-bm-ic" size={14} aria-hidden="true" />
+                Categorize
               </button>
               {menu === 'cat' && (
                 <div className="acct-bm-menu cats">
@@ -329,7 +380,7 @@ export function BulkBar({
             onClick={() => setMenu((m) => (m === 'more' ? null : 'more'))}
             aria-label={isMobile ? 'More' : undefined}
           >
-            <span className="acct-bm-ic">⋯</span>
+            <MoreHorizontal className="acct-bm-ic" size={14} aria-hidden="true" />
             {!isMobile && 'More'}
           </button>
           {menu === 'more' && !isMobile && !memoMode && !moveOpen && (
@@ -338,7 +389,8 @@ export function BulkBar({
           {menu === 'more' && !isMobile && moveOpen && !memoMode && (
             <div className="acct-bm-menu wide">
               <button className="acct-bm-item" onClick={() => setMoveOpen(false)}>
-                <span className="acct-bm-ic">‹</span>Move to Account
+                <ChevronLeft className="acct-bm-ic" size={14} aria-hidden="true" />
+                Move to Account
               </button>
               <div className="acct-bm-div" />
               {moveItems}

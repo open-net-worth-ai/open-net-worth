@@ -9,6 +9,7 @@ import { PMSelect } from './ds'
 import { fDate } from '../../../utils/format'
 import { AddCategoryField } from './pickers'
 import { usePayeeUsage } from './usePayeeUsage'
+import { Plus, ChevronRight, ChevronLeft, X } from '../../../ui/icons'
 
 // Format ISO date for display; returns '' for null/undefined.
 function fmtDate(s: string | null | undefined): string {
@@ -94,7 +95,8 @@ export function PayeesModal({
   onApplyPayeeRules,
   onRemoveAlias,
 }: PayeesModalProps) {
-  const payees = usePayeeUsage(listedPayees)
+  const { payees, status: usageStatus } = usePayeeUsage(listedPayees)
+  const usageKnown = usageStatus === 'ready'
   const isMobile = useIsMobile()
   const [q, setQ] = useState('')
   const [selId, setSelId] = useState<string | null>(payees[0]?.id ?? null)
@@ -211,10 +213,11 @@ export function PayeesModal({
   // The current per-kind map.
   const perKindMap = (p: Payee): Record<string, string> => ({ ...(p.defaultCategories || {}) })
   const setPerKind = (p: Payee, kind: string, catId: string) => {
-    const m = perKindMap(p)
-    if (catId) m[kind] = catId
-    else delete m[kind]
-    onChange(p.id, { defaultCategories: m })
+    // An explicit null tells the server "Uncategorized on purpose", so it stops learning that
+    // kind's default from new transactions; the server stores the map without it.
+    const m: Record<string, string | null> = perKindMap(p)
+    m[kind] = catId || null
+    onChange(p.id, { defaultCategories: m as Payee['defaultCategories'] })
   }
   const aliasesFor = (p: Payee) => (p.aliases.length > 0 ? p.aliases : [p.name.toLowerCase()])
   const rules = sel ? rulesById[sel.id] || [] : []
@@ -341,7 +344,7 @@ export function PayeesModal({
                 setNewName('')
               }}
             >
-              + New
+              <Plus size={13} aria-hidden="true" /> New
             </Button>
           </div>
           {creating && (
@@ -456,10 +459,10 @@ export function PayeesModal({
                     {p.hidden ? ' • hidden' : ''}
                   </span>
                 </span>
-                <span className="pm-item-ct">{p.txnCount}</span>
+                <span className="pm-item-ct">{usageKnown ? p.txnCount : '–'}</span>
                 {isMobile && (
                   <span className="pm-item-chev" aria-hidden="true">
-                    ›
+                    <ChevronRight size={16} />
                   </span>
                 )}
               </EntityRow>
@@ -511,7 +514,7 @@ export function PayeesModal({
                 onClick={() => setMobileView('list')}
                 aria-label="Back to payees"
               >
-                <span aria-hidden="true">‹</span> Payees
+                <ChevronLeft size={14} aria-hidden="true" /> Payees
               </Button>
             </div>
           )}
@@ -545,7 +548,7 @@ export function PayeesModal({
                     setNewName('')
                   }}
                 >
-                  + New payee
+                  <Plus size={14} aria-hidden="true" /> New payee
                 </Button>
               </div>
             ) : (
@@ -557,10 +560,16 @@ export function PayeesModal({
                 <div className="pm-ed-headtext">
                   <h3 className="pm-ed-title">{sel.name}</h3>
                   <div className="pm-ed-sub">
-                    {fmtDate(sel.lastUsed) ? `Last used ${fmtDate(sel.lastUsed)}` : 'Never used'}
+                    {!usageKnown
+                      ? usageStatus === 'error'
+                        ? 'Usage unavailable'
+                        : 'Counting transactions…'
+                      : fmtDate(sel.lastUsed)
+                        ? `Last used ${fmtDate(sel.lastUsed)}`
+                        : 'Never used'}
                   </div>
                 </div>
-                {sel.txnCount > 0 ? (
+                {!usageKnown ? null : sel.txnCount > 0 ? (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -666,7 +675,7 @@ export function PayeesModal({
                           aria-label={`Remove auto-match ${a}`}
                           onClick={() => removeAlias(a)}
                         >
-                          ×
+                          <X size={11} aria-hidden="true" />
                         </button>
                       )}
                     </span>
@@ -694,7 +703,7 @@ export function PayeesModal({
                           aria-label="Remove rule"
                           onClick={() => removeRule(i)}
                         >
-                          ×
+                          <X size={11} aria-hidden="true" />
                         </button>
                       </span>
                     ))
@@ -805,11 +814,21 @@ export function PayeesModal({
                   <div>
                     <div className="pm-danger-lbl">Delete payee</div>
                     <p className="pm-sec-hint" style={{ margin: 0 }}>
-                      {sel.txnCount > 0
-                        ? `Has ${sel.txnCount} transaction${sel.txnCount !== 1 ? 's' : ''} — pick a payee to reassign them to, then delete.`
-                        : 'No transactions; this payee will be permanently removed.'}
+                      {!usageKnown
+                        ? usageStatus === 'error'
+                          ? "Couldn't count this payee's transactions — close and reopen to try again."
+                          : 'Counting transactions…'
+                        : sel.txnCount > 0
+                          ? `Has ${sel.txnCount} transaction${sel.txnCount !== 1 ? 's' : ''} — pick a payee to reassign them to, then delete.`
+                          : 'No transactions; this payee will be permanently removed.'}
                     </p>
-                    {sel.txnCount > 0 ? (
+                    {!usageKnown ? (
+                      <div className="pm-danger-row">
+                        <Button size="sm" variant="danger" disabled>
+                          Delete payee
+                        </Button>
+                      </div>
+                    ) : sel.txnCount > 0 ? (
                       <div className="pm-danger-row">
                         <PMSelect
                           searchable

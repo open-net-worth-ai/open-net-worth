@@ -28,6 +28,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+from backend.scripts.demo import asset_collections
 from backend.scripts.demo._timeline import Timeline, add_months
 
 # Real photos, so the register and each asset page look like a real book — credits and
@@ -130,24 +131,26 @@ def _attach_doc(asset_id: str, *, name: str, filename: str, text: str) -> None:
     apply_owned_asset_change({"op": "add_doc", "id": asset_id, "ref_id": ref_id, "name": name})
 
 
-def _attach_photo(asset_id: str, filename: str) -> None:
+def _attach_photo(asset_id: str, filename: str, content: bytes | None = None) -> None:
+    """A file from photos/, or ``content`` already in hand (a fetched card scan)."""
     from backend.services.attachments import create_attachment
     from backend.services.owned_assets import apply_owned_asset_change
 
+    fmt = "png" if filename.endswith(".png") else "jpeg"
     ref_id = create_attachment(
-        {"kind": "image", "summary": "Asset photo", "format": "jpeg"},
-        content=(_PHOTOS / filename).read_bytes(),
+        {"kind": "image", "summary": "Asset photo", "format": fmt},
+        content=content if content is not None else (_PHOTOS / filename).read_bytes(),
         filename=filename,
-        media_type="image/jpeg",
+        media_type=f"image/{fmt}",
         source_channel="assets:photo",
     )
     apply_owned_asset_change({"op": "set_photo", "id": asset_id, "ref": ref_id})
 
 
-def seed(tl: Timeline, A: dict) -> list[dict]:
-    """Every owned asset the book carries — property, a vehicle, a watch, and one disposed
-    item — spanning four of the seven builtin categories and exercising a doc, a photo on
-    each, insurance, storage details, and a disposal."""
+def seed(tl: Timeline, A: dict, *, offline: bool = False) -> list[dict]:
+    """Every owned asset the book carries — property, a vehicle, a watch, one disposed item,
+    and the collections (asset_collections.py) — spanning four builtin categories and a custom
+    one, and exercising a doc, a photo on each, insurance, storage details, and a disposal."""
     from backend.services.owned_assets import apply_owned_asset_change
 
     assets: list[dict] = []
@@ -239,4 +242,5 @@ def seed(tl: Timeline, A: dict) -> list[dict]:
     )
     assets.append(disposed)
 
+    assets += asset_collections.seed(tl, _attach_photo, offline=offline)
     return assets

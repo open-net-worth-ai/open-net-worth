@@ -96,14 +96,9 @@ def gated_env(tmp_path, monkeypatch, db_isolated):
 
     monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
-    monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)
     provider = _CreatePayeeProvider()
     monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: provider)
     return provider
-
-
-async def _noop():
-    return None
 
 
 async def test_a_gated_write_still_stages_a_card_through_the_detached_path(gated_env):

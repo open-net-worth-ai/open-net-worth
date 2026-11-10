@@ -71,8 +71,8 @@
 }
 .bo-fit button.on {
   color: var(--ink);
-  border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  border-color: var(--ink);
+  background: var(--hover-surface);
 }
 .bo-cards {
   display: grid;
@@ -109,10 +109,10 @@
   border-color: var(--line-strong);
 }
 .bo-card.on {
-  border-color: var(--primary);
+  border-color: var(--ink);
   box-shadow:
-    0 0 0 1px var(--primary),
-    0 12px 30px -18px rgba(59, 134, 221, 0.55);
+    0 0 0 1px var(--ink),
+    0 12px 30px -18px rgba(0, 0, 0, 0.35);
 }
 .bo-card.static {
   cursor: default;
@@ -158,14 +158,14 @@
   flex: none;
 }
 .bo-card.on .bo-radio {
-  border-color: var(--primary);
+  border-color: var(--ink);
 }
 .bo-card.on .bo-radio::after {
   content: '';
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: var(--primary);
+  background: var(--ink);
 }
 .bo-card-hook {
   font-size: 13px;

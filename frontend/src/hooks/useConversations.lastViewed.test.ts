@@ -18,9 +18,14 @@ vi.mock('../utils/chatStore', () => ({
   deleteMessages: vi.fn(),
 }))
 
+vi.mock('./useAutomationActivity', () => ({
+  refreshAutomationActivity: vi.fn(),
+}))
+
 import { mergeServerRows, useConversations } from './useConversations'
 import type { ConversationMeta } from './useConversations'
 import { authFetch } from '../api/client'
+import { refreshAutomationActivity } from './useAutomationActivity'
 
 const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
 const LAST_VIEWED_KEY = 'lucius_conversation_last_viewed'
@@ -176,6 +181,45 @@ describe('useConversations: server-side read state', () => {
     expect(readPosts()).toEqual([{ ids: ['b'] }])
     expect(JSON.parse(localStorage.getItem(LAST_VIEWED_KEY) || '{}').b).toBe(SERVER_STAMP)
     expect(result.current.conversations.find((c) => c.id === 'b')?.lastReadAt).toBe(SERVER_STAMP)
+  })
+
+  it('re-reads Needs attention only once the server has the stamp', async () => {
+    let answer: (response: Response) => void = () => {}
+    mockAuthFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/sessions') return jsonOk([serverRow('a'), serverRow('b')])
+      if (url === '/api/sessions/read') {
+        return new Promise<Response>((resolve) => {
+          answer = resolve
+        })
+      }
+      return jsonOk({ ok: true })
+    })
+    const { result } = renderHook(() => useConversations())
+    await waitFor(() => expect(result.current.conversations).toHaveLength(2))
+
+    act(() => result.current.switchConversation('b'))
+    expect(refreshAutomationActivity).not.toHaveBeenCalled()
+
+    answer(jsonOk({ last_read_at: { b: '2026-11-06T10:00:00+00:00' } }))
+    await waitFor(() => expect(refreshAutomationActivity).toHaveBeenCalledTimes(1))
+  })
+
+  it('leaves Needs attention alone when the stamp did not land', async () => {
+    mockAuthFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/sessions') return jsonOk([serverRow('a'), serverRow('b')])
+      if (url === '/api/sessions/read') throw new Error('offline')
+      return jsonOk({ ok: true })
+    })
+    const { result } = renderHook(() => useConversations())
+    await waitFor(() => expect(result.current.conversations).toHaveLength(2))
+
+    act(() => result.current.switchConversation('b'))
+    await waitFor(() => expect(result.current.lastViewed.b).toBeDefined())
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(refreshAutomationActivity).not.toHaveBeenCalled()
   })
 
   it('keeps the optimistic local stamp when the server cannot be reached', async () => {

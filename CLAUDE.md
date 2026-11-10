@@ -22,7 +22,7 @@ capture a bug with `make bug MSG="…"`.
 Fresh clone: `make setup start` (venv, deps, DB migration, frontend build, editable install of
 the `onw` CLI, then run). No `.env` needed — data defaults to `~/.open-net-worth/`, outside the
 checkout. `AUTH_PASSWORD=… docker compose up` on Windows (the password is REQUIRED under Docker).
-`onw autostart install` / `make autostart` installs a boot service (launchd/systemd).
+`onw autostart on` / `make autostart` installs a boot service (launchd/systemd).
 
 Users don't clone: they `uv tool install open-net-worth` (wheel built by `make wheel`) or pull
 `ghcr.io/open-net-worth-ai/open-net-worth`. A release is a manual, gated, signed act —
@@ -31,7 +31,11 @@ Users don't clone: they `uv tool install open-net-worth` (wheel built by `make w
 The wheel carries `frontend/dist`, `docs-site/dist-embed` and `docs/product` under
 `backend/_bundled/`; `core/shipped_assets.py` resolves them — REPO copy wins when present,
 bundled only inside an installed wheel. `backend/cli/` is the top layer (`cli → api → …`). ADR
-`2026-09-19-distribute-as-uv-tool-and-published-image`.
+`2026-09-19-distribute-as-uv-tool-and-published-image`. `onw upgrade` and `onw start --auto-upgrade`
+install the signed release's wheel, never `uv tool upgrade` (ADR
+`2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel`). With a server
+running, `onw upgrade` asks it to do this itself once idle (ADR
+`2026-11-07-onw-upgrade-asks-a-running-server-to-upgrade-itself`).
 
 ```bash
 uvicorn backend.main:app --reload --port 8080
@@ -69,6 +73,8 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
+| Intel delivery (now / later / skip, flag `intel_delivery_decider`) | `news_delivery.apply_delivery_change` |
+| Memory | `memory_write.apply_memory_change` |
 
 - `ledger.resolve_transaction_row(...)` is the resolution half, NO store write — previews render
   exactly what a write would store.
@@ -145,6 +151,10 @@ One line each — full reasoning and the scar behind each is in
   A diversified equity/bond fund is not a "name" for single-name concentration (ADR
   `2026-10-14-today-is-the-regular-session-on-every-surface`, whose "today" decision the owner
   reverted: the price shown follows the pre/post print, ADR `2026-09-01-extended-price-consistency`).
+- Advice about a ticker with an investment thesis is judged against it by ONE authority
+  (`services/thesis_judgment`: stance, citation, `THESIS_RULE`) — the model is told; its words
+  are never rewritten afterwards, and the citation beside them is computed from the price; no
+  thesis ⇒ unchanged (ADR `2026-10-31-advice-on-a-ticker-is-judged-against-its-thesis` + amendment).
 
 **Cross-screen facts**
 - Overdue and due-in-30-days are ONE function (`commitments.due_summary`), the runway is ONE
@@ -199,12 +209,16 @@ One line each — full reasoning and the scar behind each is in
   Ready to Assign, dollar for dollar up to the hole's size — the genuine YNAB mechanic, opposite
   of what shipped for one day. `RTA ≤ cash − baseline` is RETIRED; the identity instead closes
   exactly (`RTA + Σ available(signed) + held_outside_envelopes + card_spend_not_covered +
-  baseline == cash_as_of`).
+  baseline == cash_as_of + card_credit`).
   `cover_overspending` never proposes a card's payment envelope (coverage funds that row; an
   assignment double-funds it) and `_auto_cover_overspending` is capped at displayed RTA.
   `_op_auto_assign` re-derives each step from the live book for the COUPLED modes only
   (`_COUPLED_AUTO_ASSIGN_MODES` — a read/write-set proof about `month`, not a guess), so
   preview == end state.
+- A card IN CREDIT is budget money: `card_credit` (Σ cards' balance above zero) sits beside cash,
+  never in "cash on hand"; spend on it uses the credit first and a refund drains the payment
+  envelope only by the debt it shrinks, so coverage walks each card in date order (ADR
+  `2026-11-02-a-card-in-credit-is-budget-money`; rules in `docs/INVARIANTS.md`).
 - Deleting a category with `reassign=True` and an envelope-backed `reassign_to` CARRIES its
   assigned money there (`categories._carry_assigned_to_target` → `planning.add_to_assigned`,
   the `assign` choke): THIS month's figure lands on the target's envelope instead of releasing
@@ -256,6 +270,7 @@ One line each — full reasoning and the scar behind each is in
 
 **AI harness**
 - Tool results are bounded AT THE TOOL — filter before you cap.
+- Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤500 chars (prompts aim for 280; an over-long extracted fact is shortened once, not dropped); memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change`; a background pass never deletes a fact (it retires), and a user's forget leaves only a hash in `memory_forgotten` that refuses an implicit re-add (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, amendments 7 and 12).
 - Codex gets our tools as real (dynamic) tool calls that the HOST captures and runs — Codex never
   executes one; text `<tool_call>` is the fallback (ADR `2026-10-03-codex-tools-are-native-calls-the-host-runs`).
   The Codex turn stays OPEN across tool rounds — the call parks and the next round answers it
@@ -265,9 +280,13 @@ One line each — full reasoning and the scar behind each is in
   `run_sql_query` is the one deliberately-scoped exception.
 - First run configures the machine; Lucius onboards the book (two separate predicates).
 - Lucius reads the DB directly, read-only, via `run_sql_query` — the boundary is the connection
-  (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {sessions}`.
+  (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {connectors}`;
+  the operator's own conversations (`sessions`, `session_messages`) are readable — only a demo denies them.
+  On Postgres the boundary is a separate login the APP creates and re-syncs at boot
+  (`db/sql_console_role.py`) — never an operator GRANT step, never `SET ROLE` on the app's connection.
 - One confirm mechanism for every tool: a gated tool stages its OWN call arguments under the
   `tool_use_id`; approval resolves server-side and re-runs the same handler.
+- `permissions_v2` (default OFF, `core/feature_flags.py`) holds the whole permissions overhaul: one value per tool, the Auto per-call judge, Automation Always allowed / Blocked lists, three-answer cards. `ai.permissions.engine()` is its ONE backend switch point (old gate `ai/tools/_confirm_gate.py` untouched, new `_confirm_gate_v2.py`), `permission_api()` the REST one; `dispatch` reads the flag ONCE and pins the gate for the whole call (an unreadable flag refuses the call — the one off-path difference); no migration, seeds are read-time, YOLO / `code_execution_auto_run` stay stored and read as Always allow for a tool with no row. Page: `docs/product/lucius/permissions-v2.md`; run its tests with `--flag permissions_v2=on`.
 - Every turn goes through `ai/turns.py`, never a bare `asyncio.create_task` (confirm gate fails
   open without it) — server-owned, not request-owned; a second call mid-turn enqueues.
 - A transcript is a table of messages (`session_messages`), not a JSON column. NEVER
@@ -295,6 +314,20 @@ One line each — full reasoning and the scar behind each is in
   `services/connector_catalog.py`; never add a connector list anywhere else. Data access is
   `db/connector_store.ConnectorStore`. Connectors read no environment variables.
   ADR `2026-10-10-connectors-live-in-a-connectors-table-and-secrets-in-connector-secrets`.
+- Lucius discovers connectors with `search_connector_directory`, reading `services/connector_directory.json` —
+  a DERIVED snapshot of the frontend `catalog.ts` (`npm run sync:connector-directory`; a vitest fails on drift).
+  Setup is the human-only screen command `connectors.open_setup`: it opens a form, never writes config or
+  touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
+- The YNAB two-way sync (`services/ynab_sync/`) writes only through the chokes above, always under
+  the audit surface `ynab_sync` (that is how its own writes are skipped on the next scan); its YNAB
+  traffic is `aggregation.ynab._safe_send` and nothing else. A YNAB category pairs with one of OUR
+  CATEGORIES by id (`services/ynab_pairs`, never by name once imported); its Assigned syncs only
+  with an envelope holding just that category. ADR
+  `2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines`.
+- Actual Budget is the second app behind that one engine: everything app-specific is the `BudgetApp`
+  in `services/budget_app.py` + `services/actual_sync/app.py`; only `actual_sync/client.py` imports
+  `actual`; `make actual-smoke` is the opt-in live regression. ADR
+  `2026-11-05-actual-budget-is-a-second-app-behind-the-ynab-engine`.
 
 ## AI tools
 
@@ -313,6 +346,8 @@ Functions ≤ ~60 lines, files ≤ ~400 lines. Typed exceptions from `core/error
 Screen data: read through `useQueryCache` — it revalidates on every tool write, from any surface
 (`dispatch` → `GET /api/events`, ADR `2026-09-29-every-write-refreshes-every-open-screen`); a
 screen holding fetched data in local state must add `useDataVersion('*')` to its fetch deps.
+
+**Feature flags:** declared ONLY in `core/feature_flags.py`, read via `services.feature_flags.enabled(name)` at ONE seam; off = the old code untouched, data additive-only, both paths tested, CI fails past `remove_by` — [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md).
 
 **Clock:** "today" and time of day for the user come from `core.user_time` (`user_today()` / `user_now()`, the profile's IANA `timezone`) — never `date.today()` / `datetime.now()`: a hosted container runs UTC. Market sessions use their exchange zone; stored timestamps stay UTC/server clock.
 
@@ -355,6 +390,9 @@ owner's private denylist (kept outside the repo: `~/.config/open-net-worth/priva
 locally, the `PRIVACY_DENYLIST` secret in CI). It runs in the pre-commit hook, as a Claude Code
 hook on every agent `git commit` / `git push` / `gh pr create` (`.claude/settings.json`), and as
 the CI `privacy` job on every PR and push — with `pii_lint` (ID/phone/account shapes) and gitleaks.
+Commit MESSAGES are public too: the commit-msg hook `backend/scripts/commit_msg_guard.py` refuses
+one that names a ticker the owner holds (read live from their own DB), one of their instrument
+ids, or a denylist entry — write examples with ACME and made-up numbers, never the real book.
 Never bypass it (`--no-verify`, editing the allowlists to get green) and never "fix" a finding by
 renaming the value: replace real data with synthetic data. QA evidence (screenshots, statements,
 recordings) goes in gitignored scratch folders, never the tree.
@@ -371,6 +409,7 @@ recordings) goes in gitignored scratch folders, never the tree.
 | Backend layers | [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) |
 | Decisions | [`docs/adr/`](docs/adr/) |
 | Windows | [`docs/WINDOWS.md`](docs/WINDOWS.md) |
+| Feature flags | [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md) |
 
 ## Project structure
 
@@ -411,8 +450,17 @@ frontend/src/
   the raw field; every server-chosen string is sanitized.
 - The operator may read a connector secret back; the model never may
   (`services/connector_secrets.py`, not imported under `ai/`/`mcp/`).
+- Voice calls: a spoken answer can resolve ANY approval card, by the owner's knowing choice, through
+  the tap's own path (`desk.answer_card`). A yes counts only for a card read out verbatim to the end,
+  in words that began after the voice stopped, and only if it's a plain yes (`voice/cards.py`): never on
+  how a model read it. A new message cancels an open card, so a request waits, and nothing is appended
+  after one. ADR `2026-11-07-a-spoken-answer-can-resolve-any-approval-card`.
 - Chat channels: HMAC/Ed25519 first, `operator_trust` default false, IDOR guard on confirm, 10
-  turns/60s rate limit per sender.
+  turns/60s rate limit per sender. A channel turn gets a card for every Ask tool unless the adapter's
+  `is_owner_chat` says otherwise (Telegram: the private chat of a bot with one approved person,
+  `permissions_v2` on); only
+  then does it follow the conversation's approval mode (ADR
+  `2026-11-05-a-telegram-owner-sets-and-gets-the-approval-mode`).
 - Sandbox: 3 kill switches, off by default — NOT a filesystem jail (no chroot/seccomp/uid-drop).
   Auth: PBKDF2 + HMAC, 5 failures/15min → 429.
 - Gateway mode (`ONW_GATEWAY_TOKEN`, `api/gateway.py`): an outermost ASGI middleware 403s every request

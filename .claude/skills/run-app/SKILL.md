@@ -30,7 +30,7 @@ make check      # lint -> type -> test -> build
 | `make lint` | `ruff check .` + `ruff format --check .` + `lint-imports` (the dependency rule) |
 | `make imports` | `lint-imports` only (the api/ai -> services -> db -> core contracts) |
 | `make type` | `mypy backend` (blocking) + frontend `tsc` (non-blocking for now) |
-| `make test` | `pytest -q -m "not integration"` (fast gate) |
+| `make test` | `pytest -q -m "not integration" -n auto` (fast gate, one worker per core) |
 | `make build` | `vite build` (production build; exits) |
 | `make format` | auto-fix: `ruff format` + `ruff --fix` + frontend prettier |
 

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Button, Panel, Stack, Text } from '../ui'
-import { ArrowRight } from '../../ui/icons'
+import { ArrowRight, Plus } from '../../ui/icons'
 import { fPrice } from '../../utils/format'
 import { PriceAlertsModal } from './PriceAlertsModal'
 import type { PriceAlertCondition } from '../../types/assetDetail'
+import { BuildWithLucius, alertsBuildPrompt } from './BuildWithLucius'
 
 const OP_SYM: Record<string, string> = { '>=': '≥', '<=': '≤', '>': '>', '<': '<' }
 
@@ -27,6 +28,8 @@ interface EditTarget {
 interface Props {
   ticker: string
   assetName: string
+  /** The ticker as the page shows it (a coin's symbol, not its price-feed id) — for copy. */
+  displaySymbol?: string
   assetClass: string
   /** The asset's instrument id — the modal's 52-week track reads the quote stats by it. */
   instrumentId?: string
@@ -54,6 +57,7 @@ interface Props {
 export function AssetAlertsCard({
   ticker,
   assetName,
+  displaySymbol,
   assetClass,
   instrumentId,
   itemId,
@@ -112,16 +116,24 @@ export function AssetAlertsCard({
         ) : (
           <>
             <Text size="sm" tone="faint">
-              Get notified when {assetName} crosses a price you set.
+              Get notified when {displaySymbol || ticker} crosses a price you set.
             </Text>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => void openEditor()}
-              className="asd-alerts-btn"
-            >
-              + Add price alert
-            </Button>
+            <div className="asd-alerts-start">
+              <BuildWithLucius
+                sym={displaySymbol || ticker}
+                instrumentId={instrumentId}
+                prompt={alertsBuildPrompt(displaySymbol || ticker)}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<Plus size={14} aria-hidden="true" />}
+                onClick={() => void openEditor()}
+                className="asd-alerts-btn"
+              >
+                Add price alert
+              </Button>
+            </div>
           </>
         )}
 

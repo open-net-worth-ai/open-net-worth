@@ -310,15 +310,26 @@ class TransactionStore:
     # ── Query API (lock-free, mirrors JsonStore's read methods) ─────────────────
 
     def all(self, *, conn: Connection | None = None) -> list[dict]:
+        # Payload column only: the other columns are index copies of what the payload holds,
+        # and decoding them for every row is ~30% of the read.
+        stmt = select(transactions.c.payload).order_by(transactions.c.seq)
         if conn is not None:
-            return [
-                r.payload for r in conn.execute(select(transactions).order_by(transactions.c.seq))
-            ]
+            return [r.payload for r in conn.execute(stmt)]
         with self._eng().connect() as read_conn:
-            return [
-                r.payload
-                for r in read_conn.execute(select(transactions).order_by(transactions.c.seq))
-            ]
+            return [r.payload for r in read_conn.execute(stmt)]
+
+    def transfer_routes(self) -> frozenset:
+        """``frozenset({from, to})`` for every live, unmerged transfer — read from the indexed
+        columns, never the JSON payload (decoding every row made each bulk import O(ledger))."""
+        t = transactions.c
+        stmt = (
+            select(t.from_account_id, t.to_account_id)
+            .where(t.kind == "transfer", t.deleted == 0, t.merged_into.is_(None))
+            .where(t.from_account_id.is_not(None), t.to_account_id.is_not(None))
+            .distinct()
+        )
+        with self._eng().connect() as read_conn:
+            return frozenset(frozenset(r) for r in read_conn.execute(stmt))
 
     def find_by_id(self, id_val: str, *, conn: Connection | None = None) -> dict | None:
         """``conn`` reads THROUGH the caller's open transaction (same contract as
@@ -361,11 +372,27 @@ class TransactionStore:
         with self._eng().connect() as conn:
             return {pid: (int(n), last or "") for pid, n, last in conn.execute(stmt)}
 
+    def earliest_date(self) -> str | None:
+        """The earliest non-deleted transaction day (``YYYY-MM-DD``), or None when there is none
+        — what ``min(date[:10])`` over ``all()`` gives, from the ``date`` column alone."""
+        day = func.substr(transactions.c.date, 1, 10)
+        stmt = select(func.min(day)).where(transactions.c.deleted == 0, transactions.c.date != "")
+        with self._eng().connect() as conn:
+            return conn.execute(stmt).scalar()
+
     # ── Domain queries ────────────────────────────────────────────────────────
 
     def query_by_batch(self, batch_id: str, include_deleted: bool = True) -> list[dict]:
-        items = self.all()
-        items = [t for t in items if t.get("batch_id") == batch_id]
+        # Filters on the promoted column, so only the batch's own rows are decoded — the
+        # Statements list calls this once per import, and decoding the whole ledger each time
+        # was most of its cost (2026-10-26).
+        query = (
+            select(transactions.c.payload)
+            .where(transactions.c.batch_id == batch_id)
+            .order_by(transactions.c.seq)
+        )
+        with self._eng().connect() as read_conn:
+            items = [r.payload for r in read_conn.execute(query)]
         if not include_deleted:
             items = [t for t in items if not t.get("deleted")]
         return items
@@ -383,6 +410,7 @@ class TransactionStore:
         cleared: bool | None = None,
         needs_review: bool | None = None,
         uncategorized: bool | None = None,
+        hidden: bool | None = None,
         include_deleted: bool = False,
     ) -> list[ColumnElement]:
         """SQL WHERE predicates for every SQL-pushable `query_txns`/`query_txns_page` filter
@@ -438,6 +466,11 @@ class TransactionStore:
                 or_(transactions.c.category.is_(None), transactions.c.category == ""),
             )
             clauses.append(is_unsorted if uncategorized else ~is_unsorted)
+        if hidden is not None:
+            # Payload-only flag (no promoted column): a row written before it existed has no
+            # key at all, which reads as not hidden.
+            flag = transactions.c.payload["hidden"].as_boolean()
+            clauses.append(flag.is_(True) if hidden else or_(flag.is_(None), flag.is_(False)))
         return clauses
 
     def query_txns(
@@ -524,6 +557,7 @@ class TransactionStore:
         needs_review: bool | None = None,
         automation_only: bool = False,
         exclude_ids: frozenset[str] = frozenset(),
+        account_id: str | None = None,
     ) -> tuple[list[dict], int]:
         """One insertion-ordered page plus the matching total.
 
@@ -531,7 +565,7 @@ class TransactionStore:
         older pending rows out of the queue. `exclude_ids` is applied the same way, so skipping
         rows (the accounts' opening balances) never shortens the page.
         """
-        clauses = self._txn_where(needs_review=needs_review)
+        clauses = self._txn_where(needs_review=needs_review, account_id=account_id)
         if exclude_ids:
             clauses.append(transactions.c.id.not_in(list(exclude_ids)))
         if automation_only:
@@ -578,6 +612,7 @@ class TransactionStore:
         cleared: bool | None = None,
         needs_review: bool | None = None,
         uncategorized: bool | None = None,
+        hidden: bool | None = None,
         include_deleted: bool = False,
         limit: int,
         offset: int = 0,
@@ -607,6 +642,7 @@ class TransactionStore:
             cleared=cleared,
             needs_review=needs_review,
             uncategorized=uncategorized,
+            hidden=hidden,
             include_deleted=include_deleted,
         )
         where = and_(*clauses) if clauses else literal(True)
@@ -874,6 +910,12 @@ class TransactionStore:
     ) -> dict | None:
         """Set the reconciliation cleared flag on one transaction (cleared/reconcile MVP)."""
         return self.update_by_id(txn_id, {"cleared": bool(cleared)}, conn=conn)
+
+    def set_hidden(
+        self, txn_id: str, hidden: bool, *, conn: Connection | None = None
+    ) -> dict | None:
+        """Set the register-declutter flag on one transaction (display-only)."""
+        return self.update_by_id(txn_id, {"hidden": bool(hidden)}, conn=conn)
 
     def mark_cleared_reconciled(
         self, account_id: str, on_date: str, *, conn: Connection | None = None
@@ -1236,6 +1278,8 @@ def make_transaction(data: dict) -> dict:
         # Review queue (Accounts redesign): import/AI creates land True (the service decides at
         # the choke point); approve clears it, reject soft-deletes. Default False.
         "needs_review": bool(data.get("needs_review", False)),
+        # Register declutter only — no money fold reads it. Carried through the edit rebuild.
+        "hidden": bool(data.get("hidden", False)),
         "source": data.get("source", "manual"),
         # Provenance/dedup {source, ref} pairs — ONE ordered list, [0] = origin (ADR 2026-07-21).
         "external_refs": _norm_ext_refs(data.get("external_refs")),

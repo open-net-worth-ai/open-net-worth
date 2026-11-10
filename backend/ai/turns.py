@@ -69,7 +69,7 @@ from backend.core.conversation_approval import (
 from backend.core.cost_context import clear_cost_surface, set_cost_surface
 from backend.core.turn_cancel import record_cancel_reason
 from backend.db import app_config_store
-from backend.services import conversation_approval
+from backend.services import auto_approvals, conversation_approval
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,13 @@ def _turn_id() -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _with_auto_approval(event: dict) -> dict:
+    """A ``tool_done`` for a call the Auto judge decided carries the judge's reason, so the row
+    shows its "i" while the turn is still live (``services.auto_approvals``)."""
+    approval = auto_approvals.take_live(str(event.get("id") or ""))
+    return {**event, "autoApproval": approval} if approval else event
 
 
 def _open(session_id: str, kind: str) -> TurnHandle:
@@ -262,6 +269,11 @@ def executing_turn_id(session_id: str) -> Optional[str]:
     return ids[0] if ids else None
 
 
+def any_running() -> bool:
+    """True while any turn is registered, chats and Automation runs alike (both register here)."""
+    return bool(_turns)
+
+
 def _unregister(handle: TurnHandle) -> None:
     _turns.pop(handle.turn_id, None)
     ids = _by_session.get(handle.session_id)
@@ -368,6 +380,8 @@ async def _drive(
                     if event.get("type") == "error":
                         saw_error_event = True
                         error_message = str(event.get("message") or "") or error_message
+                    elif event.get("type") == "tool_done":
+                        event = _with_auto_approval(event)
                     live_sessions.publish(handle.session_id, event)
             finally:
                 aclose = getattr(events, "aclose", None)
@@ -543,7 +557,11 @@ def recover_interrupted_turns() -> dict:
     for row in assistant.list_sessions():
         if row.get("last_turn_status") != "running":
             continue
-        assistant.upsert_session_meta(row["id"], last_turn_status="interrupted")
+        assistant.upsert_session_meta(
+            row["id"],
+            last_turn_status="interrupted",
+            last_turn_error=stopped_summary_note("crash", subject="turn"),
+        )
         recovered += 1
     if recovered:
         logger.info("turn_recovered_at_boot count=%d", recovered)

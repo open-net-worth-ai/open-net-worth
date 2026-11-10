@@ -156,6 +156,26 @@ def _usage_event(
     }
 
 
+# The Auto-approval judge (``ai/auto_judge.py``, ``permissions_v2``) reads untrusted arguments and
+# must run with NO tools. This CLI is started with ``--dangerously-skip-permissions`` and offers no
+# switch that turns its own tools off, so a judge here could be steered into running one. It is
+# therefore unavailable on this transport: the judge treats any error as "ask", and the call
+# becomes an ordinary confirm card.
+_JUDGE_SOURCES = frozenset({"auto_approval"})
+_NO_JUDGE = (
+    "The Auto-approval judge cannot run on the Antigravity CLI: it cannot be limited to no tools. "
+    "Pick another model for the judge in Settings -> AI; until then a call that needs a decision asks you."
+)
+
+
+# The same reason refuses a turn whose tool list must be a real ceiling (an unattended turn reading
+# untrusted text): the tool loop never sees what this CLI runs itself.
+_NO_ENFORCED_OFFER = (
+    "This turn's tools must be enforced, and the Antigravity CLI cannot be limited to them. "
+    "Pick another model for it in Settings -> AI."
+)
+
+
 class AntigravityCliProvider(AIProvider):
     """AIProvider implementation backed by the local `agy` CLI binary."""
 
@@ -250,6 +270,8 @@ class AntigravityCliProvider(AIProvider):
         response_format: dict | None = None,  # noqa: ARG002
         effort: str = "",
     ) -> str:
+        if source in _JUDGE_SOURCES:
+            raise ConfigurationError(_NO_JUDGE)
         if not model:
             from backend.db.model_config_store import ModelConfigStore
 
@@ -279,6 +301,10 @@ class AntigravityCliProvider(AIProvider):
         source: str = "complete",
         effort: str = "",
     ) -> AsyncGenerator[dict, None]:
+        from backend.ai.tools._skill_scope import offer_is_enforced
+
+        if offer_is_enforced():
+            raise ConfigurationError(_NO_ENFORCED_OFFER)
         if not model:
             from backend.db.model_config_store import ModelConfigStore
 

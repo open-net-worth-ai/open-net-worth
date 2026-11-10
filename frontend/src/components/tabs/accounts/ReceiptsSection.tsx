@@ -1,12 +1,13 @@
 // ReceiptsSection — the transaction detail drawer's Receipts block (attach/view/unlink).
 // Self-fetching (like StatementViewer), NOT prop-threaded from AccountsTab — see the
-// receipts-in-drawer UI spec. Renders inside TxnDetail.tsx's ViewBody, between the split
-// block and Provenance.
+// receipts-in-drawer UI spec. Renders inside TxnDetail.tsx's ViewBody, between the detail
+// rows and Provenance.
 import { Fragment, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { fmtDay } from './TxnDetail'
 import { ReceiptViewer } from './ReceiptViewer'
 import { useTransactionReceipts, type ReceiptEntry } from '../../../hooks/useTransactionReceipts'
+import { Plus } from '../../../ui/icons'
 
 function ReceiptThumb({ receipt, onClick }: { receipt: ReceiptEntry; onClick: () => void }) {
   const [broken, setBroken] = useState(false)
@@ -95,7 +96,13 @@ export function ReceiptsSection({ txnId }: { txnId: string }) {
       disabled={attaching}
       onClick={() => fileInputRef.current?.click()}
     >
-      {attaching ? 'Attaching…' : '+ Attach receipt'}
+      {attaching ? (
+        'Attaching…'
+      ) : (
+        <>
+          <Plus size={13} aria-hidden="true" /> Attach receipt
+        </>
+      )}
     </button>
   )
 

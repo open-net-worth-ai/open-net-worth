@@ -49,10 +49,6 @@ def _isolate(tmp_path, monkeypatch):
     # tests/test_concurrent_turn_ownership.py's _isolate).
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
 
-    async def _noop_memory(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
     live_sessions._reset_for_tests()
     turns.set_inline_for_tests(False)
     yield

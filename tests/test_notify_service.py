@@ -142,8 +142,8 @@ def test_a_channel_with_a_title_slot_gets_the_title_separately(clean_registry):
     assert seen["call"] == ("Overdue vest: ONWAI", "45.8 units")
 
 
-def test_a_plain_text_channel_gets_the_title_as_the_first_line(clean_registry):
-    """It has nowhere else to put it, and that is where a reader expects to see it."""
+def test_a_plain_text_channel_gets_the_message_alone(clean_registry):
+    """The title pasted above the message read as a stray heading line on Telegram."""
     seen = []
 
     async def plain(message: str):
@@ -151,9 +151,22 @@ def test_a_plain_text_channel_gets_the_title_as_the_first_line(clean_registry):
         return {"sent": 1}
 
     channels.register_channel("plain", plain)
-    asyncio.run(notify("45.8 units", channels=["plain"], title="Overdue vest: ONWAI"))
+    asyncio.run(notify("Booked: GRAB, 181,400 VND", channels=["plain"], title="Capture"))
 
-    assert seen == ["Overdue vest: ONWAI\n\n45.8 units"]
+    assert seen == ["Booked: GRAB, 181,400 VND"]
+
+
+def test_an_empty_message_falls_back_to_the_title(clean_registry):
+    seen = []
+
+    async def plain(message: str):
+        seen.append(message)
+        return {"sent": 1}
+
+    channels.register_channel("plain", plain)
+    asyncio.run(notify("  ", channels=["plain"], title="Overdue vest: ONWAI"))
+
+    assert seen == ["Overdue vest: ONWAI"]
 
 
 def test_no_title_leaves_the_message_verbatim(clean_registry):
@@ -227,6 +240,34 @@ async def test_telegram_send_message_targets_only_telegram(clean_registry):
 
     assert json.loads(raw)["ok"] is True
     assert calls == {"telegram": 1, "webhook": 0}
+
+
+@pytest.mark.parametrize(
+    "channel_result",
+    [{"sent": 0}, {"error": "webhook channel not configured"}],
+)
+async def test_a_send_that_reached_nobody_is_not_ok(clean_registry, channel_result):
+    # A Telegram timeout came back as sent: 0 under ok: true, so a lost message read as a success.
+    async def telegram_chan(msg):
+        return channel_result
+
+    channels.register_channel("telegram", telegram_chan)
+
+    from backend.ai.tools import execute_tool
+
+    raw, _ = await execute_tool("telegram_send_message", {"message": "hi"})
+
+    assert json.loads(raw) == {"ok": False, "delivered": {"telegram": channel_result}}
+
+
+async def test_a_channel_that_is_not_set_up_is_not_ok(clean_registry):
+    from backend.ai.tools import execute_tool
+
+    raw, _ = await execute_tool("telegram_send_message", {"message": "hi"})
+
+    result = json.loads(raw)
+    assert result["ok"] is False
+    assert result["delivered"]["telegram"] == {"skipped": "unknown_channel"}
 
 
 async def test_webhook_send_message_targets_only_webhook(clean_registry):

@@ -26,7 +26,7 @@ export interface OAuthOutcome {
   ok: boolean
   /** `begin()`'s reason code, when the failure came from `begin()` itself — drives the extra
    *  affordances (`no_registration`'s Client ID field, `dcr_rejected`'s redirect-URI list).
-   *  `null` for a poll-time failure or a client-side-only reason (`popup_blocked`/`popup_closed`). */
+   *  `null` for a poll-time failure or a client-side-only reason (`popup_closed`). */
   reason: string | null
   /** Always present on failure — see `mcpApi.ts::OAuthBeginResult`'s doc comment for why this
    *  is rendered verbatim rather than re-mapped from `reason`. */
@@ -48,6 +48,15 @@ function openBlankPopup(): Window | null {
   }
 }
 
+/** Open the sign-in window NOW, on the user's click, for a sign-in that starts a moment later on
+ *  another screen (Lucius's setup card: "Connect" → Connectors → the add flow). The flow's own
+ *  `window.open` then reuses this window by its name instead of opening a new one — which the
+ *  popup blocker would refuse, being no longer a direct response to the click. The desktop app
+ *  signs in through the system browser, so it opens nothing here. */
+export function preopenSignInWindow(): void {
+  if (!desktopBridge()) openBlankPopup()
+}
+
 export interface OAuthSignInHandle {
   /** Stop polling and close the popup. Sends no request — the staged flow is simply left to
    *  expire on its own 10-minute TTL (`oauth_pending.TTL_SECONDS`); there is no backend
@@ -59,12 +68,15 @@ export interface OAuthSignInHandle {
 /**
  * Start a sign-in: open the popup, call `begin()`, then race a poll against a `postMessage`
  * until the flow resolves. `onOutcome` fires exactly once — on success, on any `begin()`
- * failure, on a poll `status: 'error'`, on the popup being blocked, or on the popup being
- * closed before the flow finished. Never fires after `cancel()`.
+ * failure, on a poll `status: 'error'` (an expired flow included), or on a popup we hold a
+ * handle to being closed before the flow finished. Never fires after `cancel()`.
+ * `onAuthorizeUrl` fires once `begin()` answers (browser only), with whether we hold a handle
+ * to the window — the caller's fallback link for a window it can't see.
  */
 export function startOAuthSignIn(
   body: OAuthBeginBody,
   onOutcome: (outcome: OAuthOutcome) => void,
+  onAuthorizeUrl?: (url: string, windowOpened: boolean) => void,
 ): OAuthSignInHandle {
   const desktop = desktopBridge()
   let popup = desktop ? null : openBlankPopup()
@@ -140,13 +152,12 @@ export function startOAuthSignIn(
       }
     } else if (popup) popup.location.href = authorizeUrl
     else popup = window.open(authorizeUrl, POPUP_NAME, POPUP_FEATURES)
-    if (!desktop && !popup) {
-      fail(
-        'popup_blocked',
-        'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.',
-      )
-      return
-    }
+    // A `null` handle is NOT proof the window was blocked: Arc/Dia open the popup in their own
+    // mini-window and still return `null`. Failing here abandoned a sign-in the user went on to
+    // finish (the callback persisted the server; nothing was listening). So keep polling — the
+    // poll is the authoritative signal and ends on its own when the staged flow expires — and
+    // hand the URL to the caller so it can offer it as a link.
+    if (!desktop) onAuthorizeUrl?.(authorizeUrl, !!popup)
 
     messageListener = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return

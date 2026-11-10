@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_TEMPLATES, RECOMMENDED_TEMPLATES, TEMPLATE_ICONS } from './automationTemplates'
+import {
+  ALL_TEMPLATES,
+  AUTOMATION_TEMPLATES,
+  RECOMMENDED_TEMPLATES,
+  TEMPLATE_ICONS,
+  templateKeyForConnector,
+} from './automationTemplates'
+import { automationCustomRule, automationTriggerLabel } from './AutomationTriggerSummary'
+import type { AutomationTrigger } from '../../../api/automations'
 
-const mail = RECOMMENDED_TEMPLATES.find((t) => t.key === 'mail_ledger')!
 const byKey = (key: string) => ALL_TEMPLATES.find((t) => t.key === key)!
+const mail = byKey('mail_ledger')
+const digest = byKey('mail_digest')
 
 describe('automation templates', () => {
-  it('recommends email logging, then the three reports', () => {
+  it('recommends the email digest, then the three reports', () => {
     expect(RECOMMENDED_TEMPLATES.map((t) => t.key)).toEqual([
-      'mail_ledger',
+      'mail_digest',
       'daily-briefing',
       'weekly-report',
       'monthly-report',
@@ -58,7 +67,61 @@ describe('automation templates', () => {
   })
 })
 
+describe('the email digest template', () => {
+  it('runs at midnight and noon through the Email finance digest skill', () => {
+    expect(digest.name).toBe('Email finance digest')
+    expect(digest.trigger).toEqual({
+      kind: 'schedule',
+      type: 'rrule',
+      rrule: 'FREQ=DAILY;BYHOUR=0,12;BYMINUTE=0',
+    })
+    expect(automationTriggerLabel(digest.trigger)).toBe('Every day at 12:00 AM and 12:00 PM')
+    expect(digest.execution).toEqual({ kind: 'lucius' })
+    expect(digest.permission_mode).toBe('auto')
+    expect(digest.instructions).toContain('using the Email finance digest skill')
+    expect(digest.instructions).toContain('Log my bank, card and trade confirmations')
+    expect(digest.instructions).not.toMatch(/message_id|idempot/i)
+  })
+
+  // How a run behaves is the automation's to say. The skill also runs in a chat, with none of it.
+  it('says how far back to read and what not to repeat', () => {
+    expect(digest.instructions).toContain('since the run before last')
+    expect(digest.instructions).toContain('Leave out what the last run already told me')
+    expect(digest.instructions).toContain("tell me again anything that didn't reach me")
+  })
+
+  it('is what the Email connector automates', () => {
+    expect(templateKeyForConnector('email')).toBe('mail_digest')
+  })
+})
+
+describe('the schedule label for a custom cadence', () => {
+  const trigger = (rrule: string): AutomationTrigger => ({ kind: 'schedule', type: 'rrule', rrule })
+
+  it('reads a rule it understands, and keeps the rule apart from the words', () => {
+    const readable = trigger('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=5')
+    expect(automationTriggerLabel(readable)).toBe('Every 2 months on the 5th')
+    expect(automationCustomRule(readable)).toBe('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=5')
+  })
+
+  it('shows a rule it cannot read once, as written', () => {
+    const raw = trigger('FREQ=DAILY;COUNT=3')
+    expect(automationTriggerLabel(raw)).toBe('Custom cadence • FREQ=DAILY;COUNT=3')
+    expect(automationCustomRule(raw)).toBeNull()
+  })
+
+  it('adds nothing to a schedule that is not custom', () => {
+    const daily: AutomationTrigger = { kind: 'schedule', type: 'daily', time: '09:00' }
+    expect(automationCustomRule(daily)).toBeNull()
+  })
+})
+
 describe('the email-logging template', () => {
+  it('stays on offer for logging alone', () => {
+    expect(AUTOMATION_TEMPLATES.map((t) => t.key)).toContain('mail_ledger')
+    expect(RECOMMENDED_TEMPLATES.map((t) => t.key)).not.toContain('mail_ledger')
+  })
+
   it('runs every 12 hours through the Log transactions from email skill', () => {
     expect(mail.name).toBe('Auto-log transactions from email')
     expect(mail.trigger).toEqual({ kind: 'schedule', type: 'interval', seconds: 43200 })

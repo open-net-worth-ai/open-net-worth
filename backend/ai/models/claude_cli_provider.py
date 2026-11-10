@@ -45,14 +45,16 @@ import os
 import shutil
 import tempfile
 import time
+from itertools import chain
 from typing import AsyncGenerator, List, Optional
 
 from backend.ai.image_payloads import decode_image_payloads
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError, ProviderTimeoutError
 
-from . import claude_live_session
-from .base import AIProvider
+from . import claude_live_session, cli_sign_in
+from .base import AIProvider, log_text_cap
+from .cli_call_grace import PostCallWatch, grace_seconds
 from .cli_tool_protocol import (
     ToolCallScanner,
     flatten_messages_with_images,
@@ -261,6 +263,18 @@ def _result_error(event: dict) -> str:
         "Claude Code CLI reported an error: "
         + (detail or "The CLI returned an error without details.")[:500]
     )
+
+
+# The CLI's words for having no usable login: "Not logged in · Please run /login", and for an
+# expired one, "…run /login". `/login` means nothing to someone reading it in our chat.
+_NOT_SIGNED_IN_MARKERS = ("not logged in", "run /login")
+
+
+def _cli_failure(message: str) -> ExternalServiceError:
+    """The exception for an ``is_error`` result, carrying ``_result_error``'s text."""
+    if any(marker in message.lower() for marker in _NOT_SIGNED_IN_MARKERS):
+        return cli_sign_in.not_signed_in_error("Claude Code")
+    return ExternalServiceError(message)
 
 
 class ClaudeCliProvider(AIProvider):
@@ -527,6 +541,7 @@ class ClaudeCliProvider(AIProvider):
                 t0 = time.monotonic()
                 ttft_ms = None
                 usage_event = None
+                peak_prompt_tokens: Optional[int] = None
                 stop_reason = "end_turn"
                 emitted_any_delta = False
                 emitted_anything = False
@@ -545,6 +560,7 @@ class ClaudeCliProvider(AIProvider):
                 # this is recoverable — see the poisoned-session branch after the loop.
                 cli_error: Optional[str] = None
                 reused = False
+                watch = PostCallWatch(grace_seconds())
 
                 session = None
                 if use_sessions:
@@ -593,7 +609,7 @@ class ClaudeCliProvider(AIProvider):
                     )
 
                 try:
-                    async for ev in source:
+                    async for ev in _until_call_grace(source, scanner, watch):
                         etype = ev.get("type")
                         if etype == "system" and ev.get("subtype") == "init":
                             api_key_source = ev.get("apiKeySource") or ""
@@ -609,38 +625,51 @@ class ClaudeCliProvider(AIProvider):
                                     if ttft_ms is None:
                                         ttft_ms = (time.monotonic() - t0) * 1000.0
                                     emitted_any_delta = True
-                                    for visible in scanner.feed(delta["text"]):
+                                    # A call goes out before the text the scanner yields after
+                                    # it: one delta can close a call and start the next line,
+                                    # and the chat flushes its held line at each call — text
+                                    # after the call released there sat ABOVE the row, cut off
+                                    # its line (a lone "W", live 2026-10-31).
+                                    for visible in chain(scanner.feed(delta["text"]), ("",)):
+                                        while emitted_call_count < len(scanner.calls):
+                                            call = scanner.calls[emitted_call_count]
+                                            call_id = f"cli_{int(t0 * 1000)}_{emitted_call_count}"
+                                            emitted_anything = True
+                                            yield {
+                                                "type": "tool_use_start",
+                                                "id": call_id,
+                                                "name": call["name"],
+                                            }
+                                            yield {
+                                                "type": "tool_use",
+                                                "id": call_id,
+                                                "name": call["name"],
+                                                "input": call["input"],
+                                            }
+                                            emitted_call_count += 1
+                                            watch.call_parsed()
                                         if visible:
                                             emitted_anything = True
                                             yield {"type": "text_delta", "text": visible}
-                                    while emitted_call_count < len(scanner.calls):
-                                        call = scanner.calls[emitted_call_count]
-                                        call_id = f"cli_{int(t0 * 1000)}_{emitted_call_count}"
-                                        emitted_anything = True
-                                        yield {
-                                            "type": "tool_use_start",
-                                            "id": call_id,
-                                            "name": call["name"],
-                                        }
-                                        yield {
-                                            "type": "tool_use",
-                                            "id": call_id,
-                                            "name": call["name"],
-                                            "input": call["input"],
-                                        }
-                                        emitted_call_count += 1
                             elif inner.get("type") == "message_delta":
                                 stop_reason = (inner.get("delta") or {}).get(
                                     "stop_reason"
                                 ) or stop_reason
+                            elif inner.get("type") == "message_start":
+                                peak_prompt_tokens = _max_prompt(
+                                    peak_prompt_tokens, _message_start_prompt(inner)
+                                )
                         elif etype == "result":
                             fallback_text = ev.get("result") or ""
                             if ev.get("is_error"):
                                 cli_error = _result_error(ev)
                                 break
-                            usage_event = _usage_event(ev, model, ttft_ms, t0, api_key_source)
+                            usage_event = _usage_event(
+                                ev, model, ttft_ms, t0, api_key_source, peak_prompt_tokens
+                            )
 
                 except ProviderTimeoutError as exc:
+                    log.warning("claude_cli: %s — %s", exc, watch.summary())
                     # Nothing reached the user, so a fresh process is invisible to them. Once
                     # something was shown, retrying would duplicate it.
                     if not exc.stalled or emitted_anything or stall_retries_left <= 0:
@@ -656,6 +685,19 @@ class ClaudeCliProvider(AIProvider):
                         await claude_live_session.release(
                             key_argv, session, turn_messages, ok=usage_event is not None
                         )
+
+                if watch.cut:
+                    # No result event will come, so this round's usage is unknown; the CLI
+                    # session was retired above (mid-reply, it cannot take the next send).
+                    log.warning(
+                        "claude_cli: round wrote its tool call(s) but no result event "
+                        "followed within %.0fs — running them (%s)",
+                        watch.grace,
+                        watch.summary(),
+                    )
+                    usage_event = _usage_event(
+                        {}, model, ttft_ms, t0, api_key_source, peak_prompt_tokens
+                    )
 
                 if cli_error is not None:
                     # A REUSED session can be poisoned by the model's OWN reply. The CLI holds
@@ -682,7 +724,7 @@ class ClaudeCliProvider(AIProvider):
                             attempts,
                         )
                         continue
-                    raise ExternalServiceError(cli_error)
+                    raise _cli_failure(cli_error)
 
                 if usage_event is not None:
                     break
@@ -863,7 +905,7 @@ class ClaudeCliProvider(AIProvider):
                             # response to it.
                             retryable_error = ev.get("subtype") or ""
                             break
-                        raise ExternalServiceError(_result_error(ev))
+                        raise _cli_failure(_result_error(ev))
                     log.info(
                         "claude_cli OK num_turns=%s output_tokens=%s duration_ms=%s",
                         ev.get("num_turns"),
@@ -941,7 +983,7 @@ class ClaudeCliProvider(AIProvider):
         # a call that ran unusually long but still succeeded had nothing to show what it
         # actually produced. Bounded, logged only — see openai_provider.complete's matching
         # comment for why this isn't in cost_log.
-        _LOG_TEXT_CAP = 8000
+        _LOG_TEXT_CAP = log_text_cap(source)
         log.info(
             "complete_done  source=%s  transport=claude_cli  model=%s  basis=%s  input=%d  "
             "cache_write=%d  cache_read=%d  output=%d  cost_usd=%.5f  content_chars=%d\n"
@@ -1018,7 +1060,7 @@ class ClaudeCliProvider(AIProvider):
                 if ev.get("type") != "result":
                     continue
                 if ev.get("is_error"):
-                    raise ExternalServiceError(_result_error(ev))
+                    raise _cli_failure(_result_error(ev))
                 saw_result = True
                 text = ev.get("result") or ""
                 usage = ev.get("usage") or {}
@@ -1247,17 +1289,95 @@ def cost_basis_for(api_key_source: str) -> str:
     return "plan_included" if (api_key_source or "").lower() in ("none", "") else "estimate"
 
 
+async def _until_call_grace(
+    source: AsyncGenerator[dict, None], scanner: ToolCallScanner, watch: PostCallWatch
+) -> AsyncGenerator[dict, None]:
+    """``source``'s events, ending early (``watch.cut``) once the round's newest parsed tool
+    call is older than the grace — see ``cli_call_grace``."""
+    try:
+        while True:
+            wait = watch.remaining(scanner.mid_block)
+            if wait is not None and wait <= 0:
+                watch.cut = True
+                return
+            pending = source.__anext__()
+            try:
+                ev = await (pending if wait is None else asyncio.wait_for(pending, wait))
+            except StopAsyncIteration:
+                return
+            except asyncio.TimeoutError:
+                watch.cut = True
+                return
+            watch.saw(ev)
+            yield ev
+    finally:
+        await source.aclose()
+
+
+def _message_start_prompt(inner: dict) -> Optional[int]:
+    """Prompt size of ONE API request, from its ``message_start`` stream event."""
+    usage = (inner.get("message") or {}).get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return (
+        (usage.get("input_tokens") or 0)
+        + (usage.get("cache_creation_input_tokens") or 0)
+        + (usage.get("cache_read_input_tokens") or 0)
+    )
+
+
+def _max_prompt(a: Optional[int], b: Optional[int]) -> Optional[int]:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return max(a, b)
+
+
+def _reported_context_window(result: dict) -> Optional[int]:
+    """The context window the CLI says served this round (``modelUsage[*].contextWindow``).
+
+    A bare alias like ``sonnet`` is in no price table, so a table lookup falls back to
+    200K while the CLI really runs a 1M-window model. With more than one model in the
+    envelope (the CLI may call a small helper model), the one that read the most input
+    is the conversation's model.
+    """
+    best: Optional[tuple[int, int]] = None
+    for entry in (result.get("modelUsage") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        window = entry.get("contextWindow")
+        if not isinstance(window, int) or isinstance(window, bool) or window <= 0:
+            continue
+        read = (
+            (entry.get("inputTokens") or 0)
+            + (entry.get("cacheReadInputTokens") or 0)
+            + (entry.get("cacheCreationInputTokens") or 0)
+        )
+        if best is None or read > best[0]:
+            best = (read, window)
+    return best[1] if best else None
+
+
 def _usage_event(
     result: dict,
     model: str,
     ttft_ms: Optional[float],
     t0: float,
     api_key_source: str = "",
+    peak_prompt_tokens: Optional[int] = None,
 ) -> dict:
-    """Build the normalised ``usage`` event from the CLI's final ``result`` envelope."""
+    """Build the normalised ``usage`` event from the CLI's final ``result`` envelope.
+
+    ``result.usage`` sums every API request the CLI made this round; ``prompt_tokens`` is
+    the largest SINGLE request's prompt (from ``message_start``), which is what context
+    pressure means.
+    """
     usage = result.get("usage") or {}
     cache_creation = usage.get("cache_creation") or {}
     return {
+        "prompt_tokens": peak_prompt_tokens,
+        "context_window": _reported_context_window(result),
         "cost_basis": cost_basis_for(api_key_source),
         "type": "usage",
         "input_tokens": usage.get("input_tokens", 0) or 0,
@@ -1302,4 +1422,6 @@ def _merge_narration_retry_usage(first: dict, second: dict) -> dict:
         first.get("ttft_ms") if first.get("ttft_ms") is not None else second.get("ttft_ms")
     )
     merged["cost_reported"] = bool(first.get("cost_reported") and second.get("cost_reported"))
+    merged["prompt_tokens"] = _max_prompt(first.get("prompt_tokens"), second.get("prompt_tokens"))
+    merged["context_window"] = second.get("context_window") or first.get("context_window")
     return merged

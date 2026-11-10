@@ -7,12 +7,20 @@ import {
   Fragment,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MutableRefObject,
   type ReactElement,
 } from 'react'
-import { useNavigate, useLocation, useRouteContext, useRouterState } from '@tanstack/react-router'
+import {
+  useNavigate,
+  useLocation,
+  useRouteContext,
+  useRouter,
+  useRouterState,
+} from '@tanstack/react-router'
+import { HistoryStepContext } from './hooks/useHistoryStep'
 import {
   LayoutGrid,
   Box,
@@ -52,6 +60,7 @@ import { getTickerEnabled, subscribeTicker } from './tickerPref'
 import { Overview } from './components/tabs/overview/Overview'
 import { LuciusHome } from './components/tabs/lucius/LuciusHome'
 import { LuciusMobile } from './components/tabs/lucius/LuciusMobile'
+import { VoiceCallFab } from './components/chat/lucius/VoiceCallFab'
 import { Inbox } from './components/tabs/Inbox'
 import { Investments } from './components/tabs/Investments'
 import AccountsTab from './components/tabs/accounts/AccountsTab'
@@ -73,6 +82,8 @@ import { openReportProblem } from './state/reportProblem'
 import { ScreenSnapshotProvider } from './state/screenSnapshot'
 import { AssetNavProvider } from './state/assetNav'
 import { LuciusChatProvider, useLuciusChat } from './state/luciusChat'
+import { ChatHistorySync } from './components/chat/ChatHistorySync'
+import { startFreshConversation } from './utils/freshConversation'
 import { useDataVersion } from './hooks/useDataVersion'
 import { connectDataEvents } from './lucius/dataEventsStream'
 import {
@@ -82,7 +93,12 @@ import {
   useProfile,
   useSetupStatus,
 } from './hooks/serverState'
+import {
+  useConnectorAttentionCount,
+  useConnectorAttentionIsSignInOnly,
+} from './components/tabs/connectors/useConnectors'
 import { VisibleIdsProvider } from './lucius/visibleIds'
+import { ScreenReadResponder } from './components/chat/lucius/ScreenReadResponder'
 import { LuciusDock } from './components/chat/lucius/LuciusDock'
 import { ArtifactPanelProvider } from './state/artifactPanel'
 import { DockArtifactPanel } from './components/tabs/lucius/DockArtifactPanel'
@@ -96,7 +112,8 @@ import { useIsMobile } from './hooks/useIsMobile'
 import { useTimezoneCapture } from './hooks/useTimezoneCapture'
 import { useVisualViewportVars } from './hooks/useVisualViewportVars'
 import { NewVersionBanner } from './NewVersionBanner'
-import { isLuciusDockVisible, useLuciusTab } from './hooks/useLuciusTab'
+import { DesktopUpdateNotices } from './DesktopUpdateNotices'
+import { isLuciusDockVisible, routeNewConversation, useLuciusTab } from './hooks/useLuciusTab'
 // Static, not a lazy chunk (2026-09-05): a first open used to wait on a ~17 KB (gzipped)
 // download with a `null` fallback — a blank beat after the tap, and one more chunk that can
 // 404 in a tab that predates a rebuild. Served from the owner's own machine, that split saved
@@ -119,6 +136,7 @@ import {
   CONFIG_TABS,
   TAB_LABELS,
   TAB_DISPLAY_NAMES,
+  NARROW_TABS,
   SELF_HEADER_TABS,
   TAB_SUBTITLES,
 } from './tabs'
@@ -206,16 +224,19 @@ const TAB_SKELETON_VARIANTS: Record<TabId, TabSkeletonVariant> = {
 function PaletteBridge({
   requestOpenRef,
   switchConversationRef,
+  startFreshRef,
 }: {
   requestOpenRef: MutableRefObject<((fresh?: boolean) => void) | null>
   switchConversationRef: MutableRefObject<
     ((sessionId: string, selection?: { model: string; effort: string }) => void) | null
   >
+  startFreshRef: MutableRefObject<(() => void) | null>
 }) {
   const { requestOpen } = useChatComposer()
-  const { switchConversation } = useLuciusChat()
+  const chat = useLuciusChat()
   requestOpenRef.current = requestOpen
-  switchConversationRef.current = switchConversation
+  switchConversationRef.current = chat.switchConversation
+  startFreshRef.current = () => startFreshConversation(chat)
   return null
 }
 
@@ -294,10 +315,13 @@ function SurfaceCommands({
 }
 
 export function RouterShell() {
+  const { history } = useRouter()
   return (
-    <PortfolioProvider>
-      <RouterShellInner />
-    </PortfolioProvider>
+    <HistoryStepContext.Provider value={history}>
+      <PortfolioProvider>
+        <RouterShellInner />
+      </PortfolioProvider>
+    </HistoryStepContext.Provider>
   )
 }
 
@@ -658,6 +682,8 @@ function RouterShellInner() {
   // route. In particular, `/lucius` renders the in-flow main tab and must never reserve the
   // hidden dock's width during the first frame of a restored session.
   const luciusDockVisible = isLuciusDockVisible(chatOpen, isMobile, tabToRender)
+  const luciusDockVisibleRef = useRef(luciusDockVisible)
+  luciusDockVisibleRef.current = luciusDockVisible
   // The docked chat's OWN artifact side panel (owner, 2026-08-13: "when user use lucius side
   // panel! the artifact must open as the modal on the side, not fullscreen") — mirrors
   // LuciusHome's ArtifactPanelProvider, scoped to this one docked instance. Closes whenever
@@ -743,6 +769,7 @@ function RouterShellInner() {
   const chatSwitchConversationRef = useRef<
     ((sessionId: string, selection?: { model: string; effort: string }) => void) | null
   >(null)
+  const chatStartFreshRef = useRef<(() => void) | null>(null)
   // Tracks the previous "room for the expanded nav" state so the auto-collapse
   // is edge-triggered (fires once when the content area gets too narrow).
   const prevRoomRef = useRef(true)
@@ -944,7 +971,8 @@ function RouterShellInner() {
     })
   }
 
-  useEffect(() => {
+  // Before the first paint, or a reload shows the figures for a frame.
+  useLayoutEffect(() => {
     document.body.classList.toggle('hide-amounts', hidden)
   }, [hidden])
 
@@ -954,7 +982,7 @@ function RouterShellInner() {
   useEffect(() => {
     if (!isMobile) return
     const onDockOpen = () => {
-      void navigate({ to: '/lucius' })
+      void navigate({ to: '/lucius', search: { conversation: undefined } })
     }
     window.addEventListener('lx-dock-open', onDockOpen)
     return () => window.removeEventListener('lx-dock-open', onDockOpen)
@@ -982,6 +1010,9 @@ function RouterShellInner() {
     if (!matchReviews.data) return
     setDedupCount(matchReviews.data.count ?? 0)
   }, [matchReviews.data])
+
+  const connectorsAttention = useConnectorAttentionCount()
+  const connectorsSignInOnly = useConnectorAttentionIsSignInOnly()
 
   const now = fDateTime(new Date(), 'long', 'always')
   // Clock-only form for the ticker head — see TickerStripProps.asOf for why.
@@ -1065,7 +1096,14 @@ function RouterShellInner() {
           search: { account: undefined, txn: undefined, review: undefined },
         })
       } else if (command.type === 'open-lucius') {
-        void navigate({ to: '/lucius' })
+        void navigate({ to: '/lucius', search: { conversation: undefined } })
+      } else if (command.type === 'new-conversation') {
+        routeNewConversation(luciusDockVisibleRef.current, {
+          startFresh: () => chatStartFreshRef.current?.(),
+          focusPanel: () => chatRequestOpenRef.current?.(),
+          openLuciusTab: () =>
+            void navigate({ to: '/lucius', search: { conversation: undefined } }),
+        })
       } else if (command.type === 'resume') {
         invalidateQueryCache(() => true)
       } else if (command.type === 'go') {
@@ -1172,6 +1210,17 @@ function RouterShellInner() {
           <span className="sidebar-intel-badge">
             {inboxUnread + dedupCount > 9 ? '9+' : inboxUnread + dedupCount}
           </span>
+        )}
+        {t === 'connectors' && connectorsAttention > 0 && (
+          <span
+            className={
+              connectorsSignInOnly
+                ? 'sidebar-attention-dot sidebar-attention-dot-warn'
+                : 'sidebar-attention-dot'
+            }
+            role="img"
+            aria-label="A connector needs attention"
+          />
         )}
       </span>
       <span className="sidebar-label">{TAB_LABELS[t]}</span>
@@ -1280,10 +1329,12 @@ function RouterShellInner() {
               aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
             >
               <span className="sidebar-icon">
+                {/* The icon is the current STATE (the collapsed rail has no label to say
+                    which action it is) — the label and tooltip carry the action. */}
                 {hidden ? (
-                  <Eye size={16} strokeWidth={1.6} aria-hidden="true" />
-                ) : (
                   <EyeOff size={16} strokeWidth={1.6} aria-hidden="true" />
+                ) : (
+                  <Eye size={16} strokeWidth={1.6} aria-hidden="true" />
                 )}
               </span>
               <span className="sidebar-label">{hidden ? 'Show amounts' : 'Hide amounts'}</span>
@@ -1349,10 +1400,13 @@ function RouterShellInner() {
               }
             />
             <VisibleIdsProvider>
+              <ScreenReadResponder />
               <PaletteBridge
                 requestOpenRef={chatRequestOpenRef}
                 switchConversationRef={chatSwitchConversationRef}
+                startFreshRef={chatStartFreshRef}
               />
+              <ChatHistorySync />
               <div
                 className={`app-shell${luciusDockVisible ? ' chat-open' : ''}${drawerOpen ? ' drawer-open' : ''}${isMobile ? ' mb-shell' : ''}`}
               >
@@ -1365,6 +1419,15 @@ function RouterShellInner() {
                 {/* Inside the shell for its tab-bar clearance contract (--mobile-tabbar-clearance). */}
                 <div {...behindFirstRunWrap}>
                   <NewVersionBanner />
+                  <DesktopUpdateNotices />
+                  {isMobile && !onboarding && (
+                    <VoiceCallFab
+                      onLuciusTab={tabToRender === 'lucius'}
+                      onOpenChat={() =>
+                        void navigate({ to: '/lucius', search: { conversation: undefined } })
+                      }
+                    />
+                  )}
                 </div>
                 <nav
                   className={`sidebar${sidebarExpanded ? ' expanded' : ''}${drawerOpen ? ' drawer-open' : ''}`}
@@ -1450,7 +1513,7 @@ function RouterShellInner() {
                       tabToRender === 'investments' || tabToRender === 'plan'
                         ? ' app-layout--wide'
                         : ''
-                    }${phoneLucius ? ' app-layout--lucius' : ''}`}
+                    }${NARROW_TABS.has(tabToRender) ? ' app-layout--narrow' : ''}${phoneLucius ? ' app-layout--lucius' : ''}`}
                   >
                     {!SELF_HEADER_TABS.has(tabToRender) && !isSingleAssetRoute && !phoneLucius && (
                       <div className="tab-header">
@@ -1804,7 +1867,7 @@ function RouterShellInner() {
                       // Lucius is the main tab, not a floating dock over Dashboard — the
                       // conversation that just onboarded the book should BE the screen you land
                       // on, not a panel over an empty net-worth chart with nothing in it yet.
-                      navigate({ to: '/lucius' })
+                      navigate({ to: '/lucius', search: { conversation: undefined } })
                       setChatOpen(true)
                       setProfileVersion((v) => v + 1)
                       checkFreshSetup()
@@ -1883,6 +1946,7 @@ function RouterShellInner() {
                       badges={{
                         inbox: inboxUnread + dedupCount,
                         intel: intelUnread,
+                        connectors: connectorsAttention,
                       }}
                       moreOpen={mobileMoreOpen}
                       onMoreOpenChange={setMobileMoreOpen}

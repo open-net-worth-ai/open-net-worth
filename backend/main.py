@@ -22,6 +22,7 @@ import logging
 import logging.config
 import math
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -90,6 +91,7 @@ from backend.api._deps import require_auth
 from backend.api.account_linking_api import router as account_linking_router
 from backend.api.actions_api import router as actions_router
 from backend.api.activity import router as activity_router
+from backend.api.actual_budget_api import router as actual_budget_router
 from backend.api.alerts import router as alerts_router
 from backend.api.alpaca_api import router as alpaca_router
 from backend.api.artifacts import router as artifacts_router
@@ -125,11 +127,14 @@ from backend.api.entity_types import router as entity_types_router
 from backend.api.equity import router as equity_router
 from backend.api.extensions import router as extensions_router
 from backend.api.favicon import router as favicon_router
+from backend.api.feature_flags import router as feature_flags_router
 from backend.api.fire import router as fire_router
 from backend.api.fixed_income import router as fixed_income_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
+from backend.api.gocardless_api import router as gocardless_router
 from backend.api.ibkr_api import router as ibkr_router
 from backend.api.import_api import router as import_router
+from backend.api.import_runs_api import router as import_runs_router
 from backend.api.inbox import router as inbox_router
 from backend.api.income import router as income_router
 from backend.api.instruments import router as instruments_router
@@ -139,6 +144,7 @@ from backend.api.intel_digest import router as intel_digest_router
 from backend.api.intel_latency import router as intel_latency_router
 from backend.api.intel_signals import router as intel_signals_router
 from backend.api.intel_watch import router as intel_watch_router
+from backend.api.investment_theses import router as investment_theses_router
 from backend.api.investments import router as investments_router
 from backend.api.investments_xray import router as investments_xray_router
 from backend.api.ledger import router as ledger_router
@@ -183,6 +189,7 @@ from backend.api.receipts import router as receipts_router
 from backend.api.recurring import router as recurring_router
 from backend.api.reports import router as reports_router
 from backend.api.returns import router as returns_router
+from backend.api.screen_read_api import router as screen_read_router
 from backend.api.search_config_api import router as search_config_router
 from backend.api.setup import router as setup_router
 from backend.api.shortcuts import router as shortcuts_router
@@ -194,6 +201,7 @@ from backend.api.terminal import router as terminal_router
 from backend.api.tool_permissions import router as tool_permissions_router
 from backend.api.upload import router as upload_router
 from backend.api.vault import router as vault_router
+from backend.api.voice import router as voice_router
 from backend.api.watchlist import router as watchlist_router
 from backend.api.ynab_api import router as ynab_router
 from backend.api.yodlee_api import router as yodlee_router
@@ -222,7 +230,13 @@ async def _start_connector(name: str, start) -> None:
 
 
 async def _headless_turn_runner(
-    prompt: str, *, allowed_tools=None, model=None, lean_prompt=False
+    prompt: str,
+    *,
+    allowed_tools=None,
+    model=None,
+    lean_prompt=False,
+    enforce_offer=False,
+    effort="medium",
 ) -> str:
     """The headless-turn runner registered on the ``core.headless_turn`` seam (below, in
     ``lifespan``) so a service can run one Lucius turn WITHOUT ``services`` importing ``ai``
@@ -253,6 +267,9 @@ async def _headless_turn_runner(
 
     lean_prompt = use the short system prompt instead of the full conversational one — right
     for a zero-tool completion that only has to return text.
+
+    enforce_offer = make ``allowed_tools`` a real ceiling for this turn. Without it an offer is
+    advisory: a call outside it still dispatches, and nobody is here to tap a card.
     """
     import uuid
 
@@ -274,6 +291,8 @@ async def _headless_turn_runner(
     _snap = _skill_scope.snapshot_scope()
     if allowed_tools is not None:
         _skill_scope.set_offer_scope(allowed_tools)
+    if enforce_offer:
+        _skill_scope.enforce_offer()
     run_model = model or ModelConfigStore().resolved()["model"]
     short_id = str(uuid.uuid4())[:8]
     session_id = f"headless-{short_id}"
@@ -291,6 +310,7 @@ async def _headless_turn_runner(
                 else build_system_prompt()
             ),
             model=run_model,
+            effort=effort,
         ):
             if event.get("type") == "text_delta":
                 parts.append(event.get("text", ""))
@@ -357,6 +377,20 @@ async def lifespan(app: FastAPI):
 
     ensure_migrated(allow_live_instance=True)
 
+    # ── Postgres: create / re-sync Lucius's SQL login against THIS schema, right after the
+    # migration that may have added tables, so an upgrade never leaves a table unreadable or a
+    # credential table readable. Off the event loop (a remote server can be slow) and
+    # non-fatal: an unavailable login only switches SQL access off, with the reason in Settings.
+    from backend.db import sql_console
+
+    def _prepare_sql_console() -> None:
+        try:
+            sql_console.console_status()
+        except Exception:
+            _log.exception("SQL console login preparation failed (non-fatal)")
+
+    threading.Thread(target=_prepare_sql_console, name="sql-console-login", daemon=True).start()
+
     # ── A shell in the browser runs as this user: make this process unreadable to it, and drop
     # the secrets Settings has already absorbed from the live environment. AFTER Settings is
     # built (they are read once, at construction) and BEFORE the app serves a request, so before
@@ -380,6 +414,13 @@ async def lifespan(app: FastAPI):
     from backend.services.portability import sweep_stale_exports
 
     sweep_stale_exports()
+
+    try:
+        from backend.services.actual_sync import sweep_leftovers
+
+        sweep_leftovers()
+    except Exception:
+        _log.exception("Actual Budget leftover sweep failed (non-fatal)")
 
     # Boot sweep (B20): the parse-progress registry is in-process and ephemeral — a restart
     # (crash, `kill -9`, redeploy) mid-parse leaves no live entry to ask, so any statement
@@ -641,6 +682,11 @@ async def lifespan(app: FastAPI):
 
     recover_interrupted_turns()
 
+    # An import run still "running" belonged to the process that just died.
+    from backend.services import import_runs
+
+    import_runs.recover_interrupted()
+
     # Register the significance-screen consumer on the core.news_arrivals seam (INT5,
     # news-ingestion-latency.md §4) — monitoring.collect.gather_rss/gather_matched emit newly-
     # inserted evidence rows here on every RSS/hot-tier fetch; this is the volume-independent
@@ -670,6 +716,17 @@ async def lifespan(app: FastAPI):
         lock_exclusive(_SCHEDULER_LOCK_HANDLE)
         start()
         _log.info("scheduler: started (this worker owns the scheduler lock)")
+        # Memory is written when a conversation goes idle and tidied once a day. Like the
+        # scheduler this must run in ONE worker, or every worker would extract the same chat.
+        # Skipped under ONW_QA_MODE — an isolated QA run must not spend model calls.
+        from backend.core.config import get_settings as _memory_settings
+
+        if not _memory_settings().onw_qa_mode:
+            from backend.ai.memory_idle import memory_sweep_loop
+
+            app.state.memory_sweep_task = asyncio.create_task(
+                memory_sweep_loop(), name="memory-sweep"
+            )
     except (OSError, BlockingIOError):
         if _SCHEDULER_LOCK_HANDLE is not None:
             _SCHEDULER_LOCK_HANDLE.close()
@@ -680,6 +737,9 @@ async def lifespan(app: FastAPI):
     # appear after the first notify() call, so /api/notify-channels (the "Send to" picker)
     # would miss it on a fresh boot.
     import backend.services.notify  # noqa: F401 — registers the "in_app" channel
+    from backend.services import keep_awake as _keep_awake
+
+    _keep_awake.apply_saved()
 
     # Loop-lag watchdog. Runs in every worker; see core.loop_watch for why measuring beat
     # reading code here. Held on the app so shutdown can cancel it.
@@ -769,6 +829,9 @@ async def lifespan(app: FastAPI):
         _log.exception("benchmark instrument seeding failed (non-fatal)")
 
     await _start_connector("telegram", telegram_bot.start)
+    from backend.connectors.voice import service as voice_service
+
+    await _start_connector("voice", voice_service.start)
     # Register the Telegram notification channel on the core.channels seam (only when
     # the connector boots) so the Notifier can fan out to Telegram (P2-SK2 §B.5). The
     # channel's notify() no-ops until the bot is actually connected, so it is safe to
@@ -835,8 +898,23 @@ async def lifespan(app: FastAPI):
     from backend.ai.turns import shutdown as shutdown_turns
 
     await shutdown_turns()
+    memory_sweep_task = getattr(app.state, "memory_sweep_task", None)
+    if memory_sweep_task is not None:
+        memory_sweep_task.cancel()
+        await asyncio.gather(memory_sweep_task, return_exceptions=True)
+    from backend.ai.memory_idle import cancel_background as cancel_memory_extractions
+
+    await cancel_memory_extractions()
     unregister_automation_adapters()
+    # Before the channels stop: a price alert's background run still owes its push.
+    from backend.monitoring import price_alert_run
+
+    await price_alert_run.drain()
     await telegram_bot.stop()
+    from backend.connectors.voice import service as voice_service
+
+    await voice_service.stop()
+    _keep_awake.release()
     # Release the working-folder claim last, so the folder stays owned for the whole of a
     # graceful shutdown rather than freeing up while turns are still being journalled.
     from backend.core.instance_lock import release as _release_instance
@@ -960,6 +1038,19 @@ async def log_validation_error(request: Request, exc: RequestValidationError):
 from backend.core.config import get_settings
 from backend.core.shipped_assets import DOCS_SITE_DIST_DIR, FRONTEND_DIST_DIR
 from backend.core.spa_csp import spa_csp
+
+
+def _voice_csp_url() -> str | None:
+    """The LiveKit server for the page's ``connect-src``, while the voice calls flag is on
+    (``core.spa_csp``). Never fails the page: unreadable means no extra source."""
+    try:
+        from backend.connectors.voice import service as voice_service
+
+        return voice_service.voice_server_url()
+    except Exception:  # noqa: BLE001
+        return None
+
+
 from backend.core.version import AGENT_CONTRACTS, APP_VERSION
 from backend.services.mentions.entity_types import entity_types
 
@@ -1063,6 +1154,7 @@ app.include_router(budgets_router)
 app.include_router(fire_router)
 app.include_router(chat_router)
 app.include_router(data_events_router)
+app.include_router(screen_read_router)
 app.include_router(desktop_router)
 app.include_router(chat_suggestions_router)
 app.include_router(capture_router)
@@ -1082,6 +1174,7 @@ app.include_router(fixed_income_router)
 app.include_router(options_router)
 app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
+app.include_router(investment_theses_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)
@@ -1097,6 +1190,7 @@ app.include_router(simplefin_router)
 app.include_router(plaid_router)
 app.include_router(lunch_flow_router)
 app.include_router(enable_banking_router)
+app.include_router(gocardless_router)
 app.include_router(alpaca_router)
 app.include_router(artifacts_router)
 app.include_router(vault_router)
@@ -1106,8 +1200,11 @@ app.include_router(ibkr_router)
 app.include_router(yodlee_router)
 app.include_router(lunch_money_router)
 app.include_router(ynab_router)
+app.include_router(actual_budget_router)
+app.include_router(import_runs_router)
 app.include_router(account_linking_router)
 app.include_router(integrations_router)
+app.include_router(voice_router)
 app.include_router(setup_router)
 app.include_router(networth_history_router)
 app.include_router(daily_total_value_router)
@@ -1145,6 +1242,7 @@ app.include_router(mcp_router)
 app.include_router(mcp_client_router)
 app.include_router(mcp_oauth_router)
 app.include_router(config_router)
+app.include_router(feature_flags_router)
 app.include_router(sql_query_router)
 app.include_router(extensions_router)
 app.include_router(mentionables_router)
@@ -1277,7 +1375,7 @@ class _SPAStaticFiles(StaticFiles):
         if response.headers.get("content-type", "").startswith("text/html"):
             _purge_stale_cache_once(response, scope)
             portal = (scope.get("state") or {}).get("gateway_portal_url")
-            response.headers["Content-Security-Policy"] = spa_csp(portal)
+            response.headers["Content-Security-Policy"] = spa_csp(portal, _voice_csp_url())
         return response
 
 
@@ -1354,6 +1452,12 @@ def _with_cache_policy(response, path: str):
         response.headers["Cache-Control"] = "no-store"
     elif "_astro/" in path or "/assets/" in path or path.startswith("assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("connector-logos/"):
+        # Brand marks keep their names when replaced, so not immutable — but left with no
+        # header the browser guessed a few hours from their recent mtime and re-asked for
+        # every tile each time Browse & add opened, so logos arrived late, worst over a
+        # slow link (owner, 2026-10-31). A day fresh, then shown at once while re-checked.
+        response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
     return response
 
 

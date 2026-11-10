@@ -8,10 +8,53 @@
 // replacing it, so the header, sidebar and scroll position survive.
 import Default from '@astrojs/starlight/components/Head.astro';
 import { ClientRouter } from 'astro:transitions';
+
+// The in-app copy (served at /docs/ by the app, publicly on the demo host) would otherwise
+// declare `site` + its own path as canonical — <site>/docs/…, a URL that 404s.
+// Point it at the public page instead, and drop the sitemap link: the embed's sitemap lists
+// those same dead /docs/ URLs.
+if (import.meta.env.ONW_DOCS_EMBED && Astro.site) {
+  const route = Astro.locals.starlightRoute;
+  const publicPath = Astro.url.pathname.replace(new RegExp(`^${import.meta.env.BASE_URL.replace(/\/$/, '')}`), '') || '/';
+  const publicHref = new URL(publicPath, Astro.site).href;
+  route.head = route.head
+    .filter((e) => !(e.tag === 'link' && e.attrs?.rel === 'sitemap'))
+    .map((e) =>
+      e.tag === 'link' && e.attrs?.rel === 'canonical'
+        ? { ...e, attrs: { ...e.attrs, href: publicHref } }
+        : e.tag === 'meta' && e.attrs?.property === 'og:url'
+          ? { ...e, attrs: { ...e.attrs, content: publicHref } }
+          : e,
+    );
+}
+const gaId = import.meta.env.ONW_GA_ID;
 ---
 
 <Default><slot /></Default>
 <ClientRouter />
+
+{gaId && (
+  <>
+    <script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}></script>
+    {/* ClientRouter swaps pages without a load, so page_view is sent per swap, not per load.
+        The tab title is pinned to one string (below), so the page's own h1 names the view. */}
+    <script is:inline define:vars={{ gaId }}>
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+      if (!window.__onwGa) {
+        window.__onwGa = true;
+        window.gtag('js', new Date());
+        window.gtag('config', gaId, { send_page_view: false });
+        const view = () => window.gtag('event', 'page_view', {
+          page_location: location.href,
+          page_title: document.querySelector('h1')?.textContent?.trim() || document.title,
+        });
+        view();
+        document.addEventListener('astro:after-swap', view);
+      }
+    </script>
+  </>
+)}
 
 {/*
   One constant tab title (owner, 2026-08-23). Starlight emits "<page> - <site>"

@@ -172,6 +172,11 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new SimpleFIN transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "simplefin_list_accounts",
+            "List the SimpleFIN accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
     ],
     "plaid": [
         _t("plaid_get_status", "Read the Plaid connector status and sync stats."),
@@ -180,12 +185,26 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new Plaid transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "plaid_list_accounts",
+            "List the Plaid accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
+        _t(
+            "plaid_reconnect_bank",
+            "Send you a sign-in link to reconnect a bank whose login expired; you sign in.",
+        ),
     ],
     "lunch_money": [
         _t("lunch_money_get_status", "Read the Lunch Money connector status and sync stats."),
         _t(
             "lunch_money_fetch_transactions",
             "Fetch new Lunch Money transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "lunch_money_list_accounts",
+            "List the Lunch Money accounts and which of yours each is linked to; no transactions.",
             read_only=True,
         ),
     ],
@@ -196,12 +215,28 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new Lunch Flow transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "lunch_flow_list_accounts",
+            "List the Lunch Flow accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
     ],
     "ynab": [
         _t("ynab_get_status", "Read the YNAB connector status and sync stats."),
         _t(
             "ynab_fetch_transactions",
             "Fetch new YNAB transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "ynab_list_accounts",
+            "List the YNAB accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
+        _t("ynab_list_plans", "List the YNAB plans the token can see.", read_only=True),
+        _t(
+            "ynab_get_plan",
+            "Read a YNAB plan's accounts and one month's budget.",
             read_only=True,
         ),
     ],
@@ -215,12 +250,38 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new Enable Banking transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "enable_banking_list_accounts",
+            "List the Enable Banking accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
+    ],
+    "gocardless": [
+        _t(
+            "gocardless_get_status",
+            "Read the GoCardless connector status and sync stats.",
+        ),
+        _t(
+            "gocardless_fetch_transactions",
+            "Fetch new GoCardless transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "gocardless_list_accounts",
+            "List the GoCardless accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
     ],
     "yodlee": [
         _t("yodlee_get_status", "Read the Yodlee connector status and sync stats."),
         _t(
             "yodlee_fetch_transactions",
             "Fetch new Yodlee transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "yodlee_list_accounts",
+            "List the Yodlee accounts and which of yours each is linked to; no transactions.",
             read_only=True,
         ),
     ],
@@ -310,16 +371,19 @@ SHORT: dict[str, str] = {
     "web_search:google_pse": "Google Custom Search",
     "web_search:firecrawl": "Search + full-page scraping, JS-rendered pages included",
     "telegram": "Chat with Lucius and get alerts on Telegram.",
+    "voice": "Talk to Lucius out loud from the chat.",
     "webhook": "Send notifications to any URL.",
     "simplefin": "Bank and card accounts from the US and Canada, via a setup token.",
     "plaid": "Bank and card accounts from the US and Canada.",
     "lunch_money": "Transactions already aggregated in your Lunch Money account.",
     "lunch_flow": "Bank and investment accounts across 30+ countries, via OAuth.",
     "ynab": "Transactions already tracked in your YNAB budget.",
+    "actual_budget": "Import a budget from your Actual server and keep it in step.",
     "enable_banking": "Bank accounts from the EU and UK, under PSD2.",
+    "gocardless": "EU and UK bank accounts, for an existing GoCardless Bank Account Data login.",
     "yodlee": "Bank and card accounts, worldwide.",
-    "alpaca": "Holdings from an Alpaca brokerage account.",
-    "ibkr": "Positions, trades and cash activity from Interactive Brokers.",
+    "alpaca": "Read-only: imports your Alpaca positions and cash",
+    "ibkr": "Read-only: daily import of IBKR positions, trades, cash",
     "yahoo_finance": "Prices for stocks, ETFs and supported major crypto — no key needed.",
     "coingecko": "Crypto prices, search and facts — the fallback behind Yahoo Finance.",
     "mcp": "A third-party tool server you connected.",
@@ -368,6 +432,12 @@ LONG: dict[str, str] = {
         "Search plus full page scraping, including JS-rendered pages a plain fetch can't read "
         "— the provider to pick if page reads are coming back thin or blocked."
     ),
+    "voice": (
+        "Press Call in Lucius's chat and talk instead of typing. A fast voice keeps the "
+        "conversation going while Lucius does the real work with the same tools, permissions "
+        "and approval cards as the chat; his answers are read out word for word. Runs on your "
+        "LiveKit project."
+    ),
     "telegram": (
         "Message your own bot to ask questions, send photos, and approve changes, with the same "
         "abilities Lucius has in the app. Price and news alerts arrive the same way. Only the "
@@ -403,14 +473,28 @@ LONG: dict[str, str] = {
     ),
     "ynab": (
         "If you already track spending in YNAB, paste a personal access token from its "
-        "Account Settings → Developer Settings page and its transactions flow into your "
-        "ledger from here on. A token that can see more than one budget asks you to pick "
-        "one in this connector's settings; when it can see only one, that one is picked "
-        "automatically. Categories are left for you or an Automation to set."
+        "Account Settings → Developer Settings page, and Lucius can read your plans and book "
+        "their transactions here. Nothing else is set on this page: if the token sees several "
+        "plans, Lucius asks which one you mean, and the first time it books a YNAB account it "
+        "asks which of your accounts that is. Categories are left for you or an Automation to "
+        "set."
+    ),
+    "actual_budget": (
+        "Sign in to your own Actual server and import a whole budget, then keep it and this book "
+        "in step on a schedule. You need the server's address and its password, or a token if it "
+        "doesn't take one; a budget that is end-to-end encrypted also needs its encryption "
+        "password. Not available on a hosted instance, and sign-in through OpenID may not work."
     ),
     "enable_banking": (
         "Pick your bank, authorise access at the bank's own site, and balances and transactions "
         "flow into your ledger. Anything already imported is skipped."
+    ),
+    "gocardless": (
+        "For people who already have a GoCardless Bank Account Data account — GoCardless stopped "
+        "taking new signups in 2025. Paste a secret ID and key from its User secrets page, link "
+        "each of your banks and authorise access at the bank's own site. Banks allow only a few "
+        "reads a day per account, so fetch a few times a day, not every hour. Each bank's access "
+        "lasts as long as that bank allows (often 90 days); link it again when it runs out."
     ),
     "yodlee": (
         "Yodlee covers banks and cards in the US, Canada and many international markets. You "
@@ -441,14 +525,7 @@ LONG: dict[str, str] = {
         "(from CoinGecko's own site) for a higher one — Pro plans set their own limits with "
         "CoinGecko directly."
     ),
-    # This is the FALLBACK only — ``connectors._decorate`` swaps it for the server's own ``instructions``
-    # (captured at handshake time, ``mcp.client.parse_server_info``) when one was reported, so
-    # a self-describing server never shows this generic line at all.
-    #
-    # Deliberately says nothing about the permission ladder (moved here from an earlier
-    # version that did): the ladder control right below this text already explains its own
-    # semantics per tool (ConnectorDetail.tsx), so repeating it here was redundant, and it
-    # made this the one description in the whole file that read as a warning label instead of
-    # a description.
-    "mcp": "A third-party server you connected. Lucius can call whatever tools it offers.",
+    # No "mcp" entry: a custom server's page has no paragraph. Its subtitle is the one line
+    # about it, and the publisher panel and Tool permissions below already say it is a
+    # third-party server and what Lucius may call.
 }

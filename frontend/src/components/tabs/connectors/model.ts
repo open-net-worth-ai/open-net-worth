@@ -131,6 +131,10 @@ export const CONNECTOR_CATEGORIES = [
   'Accounting',
   'Banking',
   'Brokerage',
+  // Reads or renders web pages (a browser, a scraper). Not "Web": that is a FAMILY, and a
+  // category that repeats the lane says nothing (every search provider read "Search · Web").
+  'Browsing',
+  'Crypto',
   'Economic data',
   'Email',
   'Expenses',
@@ -139,17 +143,39 @@ export const CONNECTOR_CATEGORIES = [
   'Messaging',
   'Payments',
   'Research',
-  'Search',
   'Tax',
-  'Web',
+  'Voice',
+  'Web search',
 ] as const
 
 export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number]
 
+/** One hue per category, from the theme's own tokens so every chip follows light/dark mode —
+ *  distinct enough that a list of servers reads as what each is FOR at a glance. */
+export const CATEGORY_HUE: Record<ConnectorCategory, string> = {
+  Accounting: 'var(--bond)',
+  Banking: 'var(--liquid)',
+  Brokerage: 'var(--ibkr)',
+  Browsing: 'var(--bad-light)',
+  Crypto: 'var(--crypto)',
+  'Economic data': 'var(--cat-retirement)',
+  Email: 'var(--overfunded)',
+  Expenses: 'var(--apt)',
+  Filings: 'var(--locked)',
+  'Market data': 'var(--act-teal)',
+  Messaging: 'var(--crypto)',
+  Payments: 'var(--recv)',
+  Research: 'var(--violet)',
+  Tax: 'var(--tax)',
+  Voice: 'var(--accent)',
+  'Web search': 'var(--contingent)',
+}
+
 // ── status ──────────────────────────────────────────────────────────────────
 
 /** Row/badge tone. `''` is the neutral badge (a deliberately disconnected connector). */
-export type StatusTone = 'good' | 'bad' | ''
+/** `warn` is a sign-in the user has to renew; `bad` is something actually failing. */
+export type StatusTone = 'good' | 'warn' | 'bad' | ''
 
 export type StatusFilter = 'all' | 'connected' | 'attention'
 
@@ -240,6 +266,10 @@ export interface ConnectorEntry {
    *  Absent for everything else, which renders the tinted glyph instead. */
   logo?: string
   families: ConnectorFamily[]
+  /** What the connector is FOR (`Brokerage`, `Search`…) — the catalog entry's topics, matched
+   *  by id for a native connector and by endpoint for an MCP server. Empty for a server we have
+   *  no catalog entry for: a user's own endpoint gets no invented topic. */
+  categories?: ConnectorCategory[]
   /** Optional inline tag beside the name, e.g. DuckDuckGo's `Default`. */
   tag?: string
   /** One vocabulary: `Connected` for every healthy connector (spec §2). */
@@ -247,6 +277,10 @@ export interface ConnectorEntry {
   tone: StatusTone
   /** True only for an ACTUAL error — never "configured but switched off" (spec §1). */
   attention: boolean
+  /** What the fix button says: Authenticate when it has never signed in, else Reconnect. */
+  fixLabel: 'Authenticate' | 'Reconnect'
+  /** Why it needs attention, in the words the failure recorded — the status's hover text. */
+  lastError?: string
   /** Drives the detail page's primary action: Disconnect ⇄ Connect (spec §3). */
   enabled: boolean
   /** The connector's own sub-line — bot handle, mailbox, query name, provider. Shown on
@@ -361,6 +395,9 @@ export interface ConnectorDetailEntry extends ConnectorEntry {
    *  Connect opens its configuration form instead of PATCHing `enabled` (spec §3). */
   configured: boolean
   desc: string
+  /** The outside service a native connector runs on (catalog `service`): its name in `desc`
+   *  is linked. */
+  service?: { name: string; url: string }
   /** Publisher line. Absent for a custom MCP server, which claims no author (spec §5). */
   developer?: string
   /** Where the publisher lives — same field as `DirectoryRow.homepageUrl`, threaded through
@@ -369,6 +406,10 @@ export interface ConnectorDetailEntry extends ConnectorEntry {
    *  2026-08-21: the installed page previously never linked ANY native publisher, even
    *  though the browse-time preview always did). */
   developerUrl?: string
+  /** The version an MCP server reported in its last handshake. */
+  version?: string
+  /** An MCP server's handshake `instructions` — guidance it gives an AI, shown folded. */
+  instructions?: string
   /** True for an external MCP server — gates the vendor-trust panel (spec §5). */
   mcp: boolean
   verification: VerificationState

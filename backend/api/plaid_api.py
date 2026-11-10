@@ -7,6 +7,10 @@ Thin router over ``db.PlaidConfigStore`` + ``services.aggregation.plaid``:
     secret leaves the saved one unchanged (write-only-secret discipline).
   * ``POST /api/plaid/link``      — start the consent flow → returns the Plaid Hosted Link
     ``link`` the user opens (no frontend Link-SDK needed).
+  * ``POST /api/plaid/link/complete`` — after the user finishes Hosted Link, read the session's
+    public_token back from Plaid and exchange it (``pending`` until they have finished).
+  * ``POST /api/plaid/banks/{key}/remove`` — unlink ONE linked bank (by the public ``key`` the
+    status lists); the others are untouched.
   * ``POST /api/plaid/exchange``  — exchange the public_token (delivered after Hosted Link)
     for an access token + item_id (persisted write-only).
 
@@ -44,6 +48,11 @@ class PlaidLinkRequest(BaseModel):
     # The URL Plaid redirects back to after Hosted Link consent (defaults applied
     # service-side; optional for the sandbox flow).
     redirect: Optional[str] = None
+    # Plaid UPDATE MODE for an already-linked bank (its public ``key`` from the status):
+    # renew its sign-in, or with ``add_accounts`` re-open its account picker. Omit to link a
+    # new bank.
+    bank: Optional[str] = None
+    add_accounts: bool = False
 
 
 class PlaidExchangeRequest(BaseModel):
@@ -81,10 +90,50 @@ async def plaid_link(body: PlaidLinkRequest):
     authenticate at their bank (no frontend Link-SDK). Requires credentials. Bad config /
     auth → 422. Blocking httpx off the loop."""
     try:
-        result = await asyncio.to_thread(plaid_service.create_link_token, body.redirect or "")
+        result = await asyncio.to_thread(
+            plaid_service.create_link_token,
+            body.redirect or "",
+            bank=body.bank or "",
+            add_accounts=bool(body.add_accounts),
+        )
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     return result
+
+
+@router.post("/api/plaid/link/complete")
+async def plaid_link_complete():
+    """Finish the Hosted Link session ``/api/plaid/link`` started → ``{status: "pending"}``
+    until the user is done at their bank, then ``{status: "linked", item_id, ...}``. No link
+    in flight / Plaid refusal → 422. Blocking httpx off the loop."""
+    try:
+        return await asyncio.to_thread(plaid_service.complete_hosted_link)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
+class PlaidBankRename(BaseModel):
+    # Blank → back to Plaid's own name for the bank.
+    name: str = ""
+
+
+@router.post("/api/plaid/banks/{key}/rename")
+async def plaid_rename_bank(key: str, body: PlaidBankRename):
+    """Give one linked bank your own name. Unknown key / too long → 422."""
+    try:
+        return await asyncio.to_thread(plaid_service.rename_bank, key, body.name)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
+@router.post("/api/plaid/banks/{key}/remove")
+async def plaid_remove_bank(key: str):
+    """Unlink one bank: Plaid is told to drop it (best effort) and it leaves the list. Unknown
+    key → 422. Blocking httpx off the loop."""
+    try:
+        return await asyncio.to_thread(plaid_service.remove_bank, key)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
 @router.post("/api/plaid/exchange")

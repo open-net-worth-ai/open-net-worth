@@ -210,6 +210,58 @@ async def test_an_unknown_token_refuses_rather_than_executing_the_raw_args(armed
     assert json.loads(text)["ok"] is False
 
 
+# ── A call the handler would refuse never stages ──────────────────────────────
+
+_NO_TYPE_TRIGGER = {
+    "name": "Friday spending check",
+    "instructions": "Check whether spending is on track for the month and send a short note.",
+    "trigger": {"kind": "schedule", "time": "18:00", "day": "fri"},
+}
+
+
+@pytest.mark.asyncio
+async def test_an_invalid_automation_trigger_is_refused_before_any_card(armed):
+    """Demo incident 2026-10-26: a schedule trigger with no 'type' was STAGED, the user tapped
+    Allow once, and only then did the handler refuse it — an approval that could only ever run
+    the refusal. The error must reach the model at once, with no pending record to approve."""
+    from backend.db.automation_store import AutomationStore
+    from backend.db.pending_plan_store import PendingPlanStore
+
+    text, proposed = await _dispatch(
+        "create_automation", _NO_TYPE_TRIGGER, tool_use_id="toolu_bad_trigger"
+    )
+
+    # A real result, not the (None, change) pause the turn loop logs as tool_awaiting_approval.
+    assert proposed is None
+    assert text is not None
+    assert PendingPlanStore().get_pending("toolu_bad_trigger") is None
+    body = json.loads(text)
+    assert body["ok"] is False
+    assert "a schedule trigger needs a 'type' key" in body["error"]
+    assert AutomationStore().all() == []
+
+
+@pytest.mark.asyncio
+async def test_a_precheck_that_crashes_refuses_rather_than_running_ungated(armed, monkeypatch):
+    """`_permission_gate` fails OPEN on an exception, so one escaping the precheck would run
+    the write with no card at all. The precheck's failure must stay a refusal."""
+    from backend.db.automation_store import AutomationStore
+
+    def boom(_args):
+        raise RuntimeError("precheck exploded")
+
+    monkeypatch.setattr(registry, "tool_precheck", lambda _name: boom)
+    text, proposed = await _dispatch(
+        "create_automation",
+        {**_NO_TYPE_TRIGGER, "trigger": {"kind": "manual"}},
+        tool_use_id="toolu_precheck_crash",
+    )
+
+    assert proposed is None
+    assert json.loads(text) == {"ok": False, "error": "precheck exploded"}
+    assert AutomationStore().all() == []
+
+
 # ── Structural coverage: the point of moving the gate to dispatch ─────────────
 
 

@@ -59,7 +59,7 @@ describe('transaction conditions', () => {
   it('starts empty, with only an Add condition link', () => {
     const onChange = renderList({})
     expect(el('automation-condition-0-field')).toBeNull()
-    fireEvent.click(screen.getByText('+ Add condition'))
+    fireEvent.click(screen.getByText('Add condition'))
     expect(onChange).toHaveBeenLastCalledWith(
       { ...CLEARED, conditions: [{ field: 'payee', op: 'is', value: '' }] },
       'trigger.when.conditions',

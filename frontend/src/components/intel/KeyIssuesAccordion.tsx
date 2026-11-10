@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { safeHref } from '../../utils/format'
-import { TrendingUp, TrendingDown } from '../../ui/icons'
+import { TrendingUp, TrendingDown, ChevronDown, ChevronRight } from '../../ui/icons'
 import type { Citation, KeyIssue } from '../../types/assetDetail'
 
 function SourcesList({ sources, tone }: { sources: Citation[]; tone: 'bull' | 'bear' }) {
@@ -49,7 +49,7 @@ function IssueItem({ issue, defaultOpen }: { issue: KeyIssue; defaultOpen: boole
         aria-expanded={open}
       >
         <span className="asd-ki-chevron" aria-hidden="true">
-          {open ? '▾' : '▸'}
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
         <span className="asd-ki-question">{issue.question}</span>
       </button>

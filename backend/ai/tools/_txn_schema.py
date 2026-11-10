@@ -141,15 +141,16 @@ _FIELDS: dict[str, dict[str, Any]] = {
         "description": (
             "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name "
             "plus any reference/trace code the bank itself stamped on it. Read by dedup, "
-            "rules and payee matching. Personal detail belongs in memo."
+            "rules and payee matching."
         ),
     },
     "memo": {
         "type": "string",
         "description": (
-            "Personal note, e.g. 'dinner with Sam'. Display-only — never read by dedup, rules "
-            "or payees. Omit when there is no personal detail; never put a bank reference "
-            "code here."
+            "Your own note — what you'd jot down yourself: what was bought, who it was with, "
+            "what it was for. Not a copy of the alert: no alert text, times, card or account "
+            "numbers, or anything another field already shows. Leave it empty when there's "
+            "nothing worth noting."
         ),
     },
     "amount": {"type": "number", "description": "Always a positive number (absolute value)."},
@@ -205,6 +206,14 @@ _FIELDS: dict[str, dict[str, Any]] = {
             "OPTIONAL: unset records the row as 'Uncategorized'. 'income'/'transfer'/'investment' "
             "are transaction KINDS, not categories — use direction='credit' for income and "
             "the leg account ids for a transfer."
+        ),
+    },
+    "override_payee_default": {
+        "type": "boolean",
+        "description": (
+            "A payee's pinned default category replaces your `category` unless this is true. "
+            "Set it ONLY when a standing user instruction decides the category; never for a "
+            "guess."
         ),
     },
     "account_id": {
@@ -364,6 +373,7 @@ def create_item_properties() -> dict[str, dict[str, Any]]:
         "original_amount",
         "original_currency",
         "category",
+        "override_payee_default",
         "account_id",
         "to_account_id",
         "from_account_id",

@@ -22,13 +22,16 @@ import { Text } from '../../ui'
 import { EmailUnifiedSection } from './EmailUnifiedSection'
 import { WebhookSection } from './ChannelSection'
 import { TelegramSection } from './TelegramSection'
+import { VoiceSection } from './VoiceSection'
 import { SimpleFinSection } from './SimpleFinSection'
 import { PlaidSection } from './PlaidSection'
 import { LunchMoneySection } from './LunchMoneySection'
 import { LunchFlowSection } from './LunchFlowSection'
+import { ActualSection } from './ActualSection'
 import { YnabSection } from './YnabSection'
 import { WebSearchSection } from './WebSearchSection'
 import { EnableBankingSection } from './EnableBankingSection'
+import { GoCardlessSection } from './GoCardlessSection'
 import { YodleeSection } from './YodleeSection'
 import { AlpacaSection } from './AlpacaSection'
 import { IbkrSection } from './IbkrSection'
@@ -45,13 +48,16 @@ const CONFIGURABLE_KINDS = new Set([
   'email',
   'webhook',
   'telegram',
+  'voice',
   'simplefin',
   'plaid',
   'lunch_money',
   'lunch_flow',
   'ynab',
+  'actual_budget',
   'web_search',
   'enable_banking',
+  'gocardless',
   'yodlee',
   'alpaca',
   'ibkr',
@@ -92,6 +98,8 @@ function configForm(connector: Connector, initialCountry?: string): JSX.Element 
       return <WebhookSection />
     case 'telegram':
       return <TelegramSection />
+    case 'voice':
+      return <VoiceSection />
     case 'simplefin':
       return <SimpleFinSection />
     case 'plaid':
@@ -102,10 +110,14 @@ function configForm(connector: Connector, initialCountry?: string): JSX.Element 
       return <LunchFlowSection />
     case 'ynab':
       return <YnabSection />
+    case 'actual_budget':
+      return <ActualSection />
     case 'web_search':
       return <WebSearchSection providerId={connector.id.replace(WEB_SEARCH_PREFIX, '')} />
     case 'enable_banking':
       return <EnableBankingSection initialCountry={initialCountry} />
+    case 'gocardless':
+      return <GoCardlessSection initialCountry={initialCountry} />
     case 'yodlee':
       return <YodleeSection />
     case 'alpaca':

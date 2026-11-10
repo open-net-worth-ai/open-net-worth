@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import './activity.css'
 import { fCurrency } from '../../../utils/format'
 import { SummaryBar, Stack, ErrorState, TabSkeleton, Button } from '../../ui'
-import { ChevronDown } from '../../../ui/icons'
+import { ChevronDown, Check } from '../../../ui/icons'
 import { Spark } from '../../../lucius/identity'
 import type { StatCard } from '../../ui'
 import { useIsMobile } from '../../../hooks/useIsMobile'
@@ -196,7 +196,7 @@ function RangeDropdown({
                 }}
               >
                 {rg.label}
-                {range === rg.k && <span className="ck">✓</span>}
+                {range === rg.k && <Check className="ck" size={14} aria-hidden="true" />}
               </button>
             ))}
           </div>

@@ -44,6 +44,8 @@ def record(
     turn_index: int | None = None,
     cost_basis: str | None = None,
     provider: str | None = None,
+    peak_prompt_tokens: int | None = None,
+    context_window: int | None = None,
 ) -> float:
     """Write a cost record to the DB. Returns cost_usd. Best-effort — never raises.
 
@@ -135,6 +137,14 @@ def record(
             rec["cost_basis"] = cost_basis
         if provider:
             rec["provider"] = provider
+        # Context-pressure inputs for the chat compaction check (ai/assistant.py
+        # _token_pressure_over_fraction): the token buckets above SUM a turn's requests,
+        # so the largest single request's prompt is stored on its own, beside the window
+        # the provider reported serving it.
+        if peak_prompt_tokens:
+            rec["peak_prompt_tokens"] = peak_prompt_tokens
+        if context_window:
+            rec["context_window"] = context_window
 
         with _record_lock:
             store = CostLogStore()

@@ -103,6 +103,17 @@ class _TxnStore:
         self._rows[row["id"]] = row
         return row
 
+    def transfer_routes(self):
+        return frozenset(
+            frozenset((t["from_account_id"], t["to_account_id"]))
+            for t in self.all()
+            if t.get("kind") == "transfer"
+            and not t.get("deleted")
+            and not t.get("merged_into")
+            and t.get("from_account_id")
+            and t.get("to_account_id")
+        )
+
     def all(self):
         return list(self._rows.values())
 
@@ -592,7 +603,7 @@ def test_bulk_add_refused_rows_are_folded_into_skipped_details(bulk_client):
     created=0/skipped=0/skipped_details=[], so the attach-refs hint on `_duplicate_reason`
     never reached a REST caller. A hand-typed row plus a colliding bulk row (same account/
     amount/description) carrying a connector ref must be reported, naming both the existing
-    row and add_transaction_refs; `force=true` then books it."""
+    row and add_transaction_refs; `allow_duplicate=true` then books it."""
     hand_typed = bulk_client.post(
         "/api/transactions",
         json={
@@ -630,7 +641,7 @@ def test_bulk_add_refused_rows_are_folded_into_skipped_details(bulk_client):
     assert detail.get("duplicate_of") == hand_typed["id"]
     assert detail["external_refs"] == [{"source": "plaid", "ref": "t1"}]
 
-    forced_payload = {**colliding_payload, "force": True}
+    forced_payload = {**colliding_payload, "allow_duplicate": True}
     r2 = bulk_client.post("/api/transactions/bulk", json=forced_payload)
     assert r2.status_code == 200, r2.text
     body2 = r2.json()

@@ -6234,7 +6234,7 @@ def test_write_asset_brief_synthesis_stamps_clock_even_when_key_issues_empty(db_
     import backend.monitoring.analyst as analyst_mod
 
     now = _iso_now()
-    analyst_mod._write_asset_brief_synthesis("inst-btc", {"key_issues": []}, [], now)
+    analyst_mod._write_asset_brief_synthesis("inst-btc", {"key_issues": []}, [], now, held=True)
 
     brief = abs_mod.AssetBriefStore().get("inst-btc")
     assert brief is not None
@@ -6254,7 +6254,7 @@ def test_write_asset_brief_synthesis_still_writes_key_issues_when_present(db_iso
         "key_issues": [{"question": "Q?", "bullish": "b", "bearish": "r"}],
         "portfolio_narrative": "Matters because X.",
     }
-    analyst_mod._write_asset_brief_synthesis("inst-aapl", parsed, [], now)
+    analyst_mod._write_asset_brief_synthesis("inst-aapl", parsed, [], now, held=True)
 
     brief = abs_mod.AssetBriefStore().get("inst-aapl")
     assert brief["key_issues"][0]["question"] == "Q?"
@@ -6694,6 +6694,42 @@ def test_run_stale_facts_peers_precompute_refreshes_a_never_synthesized_held_ins
     assert calls == [("inst-h1", False)]
 
 
+def test_run_stale_facts_peers_precompute_reads_off_the_event_loop(monkeypatch, db_isolated):
+    """Hydrating every position and the per-instrument staleness read are synchronous DB/price
+    work; this coroutine runs on the SHARED loop, so doing them inline stalled every request
+    and stream each ~60s tick (loop_watch, 2026-10-26)."""
+    import threading
+
+    import backend.monitoring.analyst as analyst_mod
+    import backend.monitoring.asset_brief as asset_brief_mod
+    import backend.services.positions as positions_mod
+
+    threads: dict[str, str] = {}
+
+    def _hydrated():
+        threads["hydrated"] = threading.current_thread().name
+        return [{"instrument_id": "inst-h1", "ticker": "H1", "quantity": 5.0}]
+
+    def _stale(_iid):
+        threads["stale"] = threading.current_thread().name
+        return True
+
+    monkeypatch.setattr(positions_mod, "hydrated", _hydrated)
+    monkeypatch.setattr(asset_brief_mod, "facts_peers_stale", _stale)
+    monkeypatch.setattr(analyst_mod, "read_watchlist", lambda: {"items": []})
+    calls = _spy_refresh_asset_brief(monkeypatch)
+
+    async def _run():
+        threads["loop"] = threading.current_thread().name
+        await analyst_mod._run_stale_facts_peers_precompute()
+
+    asyncio.run(_run())
+
+    assert calls == [("inst-h1", False)]
+    assert threads["hydrated"] != threads["loop"]
+    assert threads["stale"] != threads["loop"]
+
+
 def test_run_stale_facts_peers_precompute_skips_a_fresh_held_instrument(monkeypatch, db_isolated):
     import backend.db.asset_brief_store as abs_mod
     import backend.monitoring.analyst as analyst_mod
@@ -7094,6 +7130,77 @@ def test_trigger_on_demand_brief_refresh_skips_fresh_instrument(monkeypatch, db_
 
     assert fired is False
     assert pas_mod.PendingAnalysisStore().query(subject="asset:inst-od2") == []
+
+
+def test_refresh_rewrites_a_fresh_take_once_however_many_times_it_is_clicked(
+    tmp_path, monkeypatch, db_isolated
+):
+    """The page's Refresh passes ``force``: a take written an hour ago is rewritten now (no 12h
+    cooldown), and two overlapping clicks still make exactly one model call."""
+    import backend.db.asset_brief_store as abs_mod
+    import backend.monitoring.analyst as analyst_mod
+
+    _seed_on_demand_instrument(db_isolated, iid="inst-od-force")
+    abs_mod.AssetBriefStore().upsert_brief(
+        {
+            "instrument_id": "inst-od-force",
+            "portfolio_narrative": "Matters because X.",
+            "key_issues_synthesized_at": (
+                datetime.now(timezone.utc) - timedelta(hours=1)
+            ).isoformat(),
+        }
+    )
+    complete_calls, _ = _stub_analyst(monkeypatch, tmp_path, db_isolated)
+    monkeypatch.setattr(analyst_mod, "_is_held_instrument", lambda iid: True)
+    monkeypatch.setattr(analyst_mod, "_is_watched_instrument", lambda iid: False)
+    monkeypatch.setattr(analyst_mod, "_fetch_analyst_consensus_block", _async_return(""))
+
+    assert asyncio.run(analyst_mod.trigger_on_demand_brief_refresh("inst-od-force")) is False
+
+    async def _click_twice():
+        return await asyncio.gather(
+            analyst_mod.trigger_on_demand_brief_refresh("inst-od-force", force=True),
+            analyst_mod.trigger_on_demand_brief_refresh("inst-od-force", force=True),
+        )
+
+    assert sorted(asyncio.run(_click_twice())) == [False, True]
+    assert len(complete_calls) == 1
+
+
+def test_refresh_returns_with_the_take_rewrite_already_marked_in_flight(monkeypatch, db_isolated):
+    """The Refresh route saves the news first, then starts the take rewrite — so the page's
+    refetch on the response sees "analysing" (the badge stays up until the new take lands),
+    and the news save can no longer overwrite that stamp from a stale copy."""
+    import backend.db.asset_brief_store as abs_mod
+    import backend.monitoring.analyst as analyst_mod
+    import backend.monitoring.asset_brief as asset_brief_mod
+    from backend.api.intel_assets import refresh_asset
+
+    _seed_on_demand_instrument(db_isolated, iid="inst-od-route")
+    abs_mod.AssetBriefStore().upsert_brief(
+        {
+            "instrument_id": "inst-od-route",
+            "key_issues_synthesized_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    async def _news(iid, force=False):
+        return {"refreshed": True}
+
+    async def _slow_take(row, store):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(asset_brief_mod, "refresh_asset_brief", _news)
+    monkeypatch.setattr(analyst_mod, "_process_row", _slow_take)
+
+    async def _click():
+        result = await refresh_asset("inst-od-route", force=True)
+        stage = abs_mod.AssetBriefStore().get("inst-od-route").get("key_issues_refresh_stage")
+        return result, stage
+
+    result, stage = asyncio.run(_click())
+    assert result == {"refreshed": True, "take_refreshing": True}
+    assert stage == "analysing"
 
 
 def test_trigger_on_demand_brief_refresh_skips_unknown_instrument(monkeypatch, db_isolated):

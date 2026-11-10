@@ -1,0 +1,149 @@
+"""VoiceConfigStore — the Voice calls connector's settings, a thin facade over its ``connectors``
+row (id ``voice``; ADR ``2026-11-03-voice-calls-are-a-fast-front-voice-over-lucius``).
+
+Where each field lives: ``enabled`` is the row's own flag; the LiveKit project's ``api_key`` and
+``api_secret`` are secrets (``connector_secrets``); everything else — the LiveKit URL and which
+models and voice to use — is plain ``config`` and carries no credential.
+
+Secret discipline matches Telegram's: ``public()`` exposes only ``has_api_key`` /
+``has_api_secret``, a blank secret on update leaves the saved one unchanged, and only the
+operator's reveal route (``services.connector_secrets``) ever returns a value.
+
+Data-only repository; the worker that uses these lives in ``connectors/voice``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
+
+CONNECTOR_ID = "voice"
+_NAME = "Voice calls"
+SECRET_KEYS = ("api_key", "api_secret")
+
+# Defaults that work on LiveKit Cloud with nothing else to set up (its built-in inference).
+# The front voice must answer in about a second, so its default is a fast model. Lucius on a call
+# uses the conversation's own model: there is no second setting for it.
+CONFIG_DEFAULTS: dict = {
+    "livekit_url": "",
+    "front_model": "google/gemma-4-31b-it",
+    "stt_model": "assemblyai/universal-streaming",
+    # The cheapest voice that speaks every language in ``LANGUAGES``; a saved voice stays as it is.
+    "tts_model": "inworld/inworld-tts-2-flash",
+    "tts_voice": "",
+    "language": "en",
+    "noise_filter": "standard",
+}
+
+# Which Krisp filter cleans the caller's audio (``connectors/voice/noise.py``): none, background
+# noise only, or other people's voices too.
+NOISE_FILTERS = frozenset({"off", "standard", "isolation"})
+
+# LiveKit retired these on 2026-10-20 and names Gemma as their replacement. A setting saved before
+# then reads as the default, so it is a model LiveKit still lists and a choice the screen can show.
+RETIRED_FRONT_MODELS = frozenset({"google/gemini-2.5-flash-lite", "google/gemini-2.5-flash"})
+
+# The languages a call can be held in: speech-to-text listens for it, the voice speaks it, the
+# front voice words its own lines in it. Codes are what LiveKit Inference takes.
+LANGUAGES: dict[str, str] = {
+    "en": "English",
+    "vi": "Vietnamese",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "hi": "Hindi",
+    "id": "Indonesian",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "pt": "Portuguese",
+}
+# Speech-to-text models that hear only some of ``LANGUAGES`` (LiveKit's model table, 2026-11-06).
+STT_HEARS_ONLY: dict[str, frozenset[str]] = {
+    "assemblyai/universal-streaming": frozenset({"en"}),
+    "assemblyai/universal-streaming-multilingual": frozenset({"en", "es", "fr", "de", "pt"}),
+}
+
+
+def _merged(row: dict | None, secrets: dict) -> dict:
+    config = {**CONFIG_DEFAULTS, **(row["config"] if row else {})}
+    if config["front_model"] in RETIRED_FRONT_MODELS:
+        config["front_model"] = CONFIG_DEFAULTS["front_model"]
+    return {
+        **config,
+        "enabled": bool(row and row["enabled"]),
+        "api_key": secrets.get("api_key") or "",
+        "api_secret": secrets.get("api_secret") or "",
+    }
+
+
+def public(config: dict) -> dict:
+    """The client-safe view: every setting, and only WHETHER each secret is set."""
+    view = {k: v for k, v in config.items() if k not in SECRET_KEYS}
+    for key in SECRET_KEYS:
+        view[f"has_{key}"] = bool(config.get(key))
+    return view
+
+
+class VoiceConfigStore:
+    def __init__(self) -> None:
+        self._store = ConnectorStore()
+
+    def isolation_refusal(self) -> dict:
+        """LiveKit's latest refusal of voice isolation (``connectors/voice/isolation.py``)."""
+        row = self._store.get(CONNECTOR_ID)
+        return dict((row["state"] if row else {}).get(_ISOLATION_REFUSAL) or {})
+
+    def update_isolation_refusal(self, change: Callable[[dict | None], dict | None]) -> None:
+        def apply(state: dict) -> dict:
+            refusal = change(state.get(_ISOLATION_REFUSAL))
+            rest = {k: v for k, v in state.items() if k != _ISOLATION_REFUSAL}
+            return {**rest, _ISOLATION_REFUSAL: refusal} if refusal else rest
+
+        with serialized_unit_of_work() as conn:
+            self._store.ensure(CONNECTOR_ID, CONNECTOR_ID, _NAME, conn=conn)
+            self._store.update_state(CONNECTOR_ID, apply, conn=conn)
+
+    def get(self) -> dict:
+        """Full config (secrets included — db/connectors callers only)."""
+        return _merged(self._store.get(CONNECTOR_ID), self._store.secrets(CONNECTOR_ID))
+
+    def update(self, changes: dict) -> dict:
+        """Patch the config. A blank secret leaves the saved one unchanged; ``None`` values and
+        unknown keys are dropped. Returns the merged config (secrets included)."""
+        clean = {
+            k: v
+            for k, v in changes.items()
+            if v is not None and (k in CONFIG_DEFAULTS or k in SECRET_KEYS or k == "enabled")
+        }
+        secrets = {k: str(clean.pop(k)).strip() for k in SECRET_KEYS if k in clean}
+        enabled = clean.pop("enabled", None)
+        settings = {k: str(v).strip() for k, v in clean.items()}
+        with serialized_unit_of_work() as conn:
+            self._store.ensure(CONNECTOR_ID, CONNECTOR_ID, _NAME, conn=conn)
+            if enabled is not None:
+                self._store.set_enabled(CONNECTOR_ID, bool(enabled), conn=conn)
+            if settings:
+                self._store.patch_config(CONNECTOR_ID, settings, conn=conn)
+            if any(secrets.values()):
+                self._store.set_secrets(
+                    CONNECTOR_ID, {k: v for k, v in secrets.items() if v}, conn=conn
+                )
+            return _merged(
+                self._store.get(CONNECTOR_ID, conn=conn),
+                self._store.secrets(CONNECTOR_ID, conn=conn),
+            )
+
+
+_ISOLATION_REFUSAL = "isolation_refusal"
+
+
+def is_ready(config: dict) -> bool:
+    """Enabled, with a LiveKit URL and both credentials — enough to start a call."""
+    return bool(
+        config.get("enabled")
+        and config.get("livekit_url")
+        and config.get("api_key")
+        and config.get("api_secret")
+    )

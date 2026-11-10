@@ -186,12 +186,8 @@ def test_concurrent_same_session_turns_are_serialized_not_corrupted(monkeypatch)
     assistant.SESSIONS.pop(sid, None)
     assistant._SESSION_LOCKS.pop(sid, None)
 
-    async def _noop_memory(*args, **kwargs):
-        return None
-
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
     monkeypatch.setattr(assistant, "_save_session", lambda *a, **k: None)
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
 
     async def _consume(gen):
         async for _ in gen:
@@ -344,12 +340,8 @@ def test_abandoned_generator_close_clears_scope_and_finalizes_checkpoint_no_cras
     monkeypatch.setattr(ckpt_mod, "begin_turn", fake_begin_turn)
     monkeypatch.setattr(ckpt_mod, "end_turn", fake_end_turn)
 
-    async def _noop_memory(*args, **kwargs):
-        return None
-
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
     monkeypatch.setattr(assistant, "_save_session", lambda *a, **k: None)
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
 
     class _ParkingProvider:
         """Yields exactly one event, then hangs — so the turn is genuinely mid-flight

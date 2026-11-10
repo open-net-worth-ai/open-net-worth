@@ -38,7 +38,7 @@ from backend.core.user_time import user_today
 from backend.core.write_receipt import record_write
 from backend.db.engine import locked_unit_of_work
 from backend.db.instrument_store import InstrumentStore
-from backend.db.lot_store import LotStore
+from backend.db.lot_store import LotStore, _fifo_sorted
 from backend.db.position_store import PositionStore
 from backend.db.realized_event_store import RealizedEventStore
 from backend.db.tables import lots as lots_tbl
@@ -752,30 +752,19 @@ def _ensure_acquire_position(change: dict) -> dict | None:
     if not inst:
         return None
     from backend.db.account_store import AccountStore
-    from backend.db.grant_store import GrantStore
     from backend.services import positions as positions_service
-    from backend.services.positions import vesting_state_of
 
     if not AccountStore().find_by_id(acct_id):
         return None
-    active = positions_service.find_active_liquid_position(inst_id, acct_id)
-    if active:
-        return active
-    grant_owned: set[str] = set()
-    for grant in GrantStore().all():
-        for key in ("locked_position_id", "pending_position_id"):
-            if grant.get(key):
-                grant_owned.add(grant[key])
-    for pos in PositionStore().query_positions(instrument_id=inst_id, account_id=acct_id):
-        if pos["id"] in grant_owned:
-            continue
-        if vesting_state_of(pos) == "vested":
-            return pos
+    existing = positions_service.find_active_liquid_position(
+        inst_id, acct_id
+    ) or positions_service.find_sold_out_liquid_position(inst_id, acct_id)
+    if existing:
+        return existing
     return positions_service.add_position(
         instrument_id=inst_id,
         account_id=acct_id,
         cost_currency=change.get("cost_currency") or inst.get("quote_currency"),
-        note=change.get("note", ""),
     )
 
 
@@ -811,7 +800,9 @@ def _book_funding_debit(
             fees=change.get("fees"),
         )
     )
-    txn = ledger_service.create_transaction(txn_data, conn=conn)
+    txn = ledger_service.create_transaction(
+        txn_data, allow_duplicate=bool(change.get("allow_duplicate")), conn=conn
+    )
     return txn.get("id")
 
 
@@ -1216,7 +1207,9 @@ def _book_deposit_proceeds(
         )
     )
 
-    txn = ledger_service.create_transaction(txn_data, conn=conn)
+    txn = ledger_service.create_transaction(
+        txn_data, allow_duplicate=bool(change.get("allow_duplicate")), conn=conn
+    )
     return txn.get("id")
 
 
@@ -1557,16 +1550,24 @@ def _apply_dispose_amend(change: dict) -> dict:
 
 
 def lots_for_position(
-    position_id: str, threshold_days: int = DEFAULT_TERM_THRESHOLD_DAYS
+    position_id: str,
+    threshold_days: int = DEFAULT_TERM_THRESHOLD_DAYS,
+    with_predecessors: bool = False,
 ) -> list[dict]:
     """Open + closed lots for a position, FIFO-ordered, each annotated with its
     effective unit cost, remaining basis, and term-to-date (long/short as of today).
+    `with_predecessors` adds the sold-out positions' lots, as `realized_pnl` adds their sales.
 
     Pure read. Every holding has its lot from the moment it is added (ADR
     2026-10-07-a-position-quantity-is-derived-from-its-records), so nothing is seeded here."""
+    from backend.services.position_lineage import history_position_ids
+
     today = user_today().isoformat()
+    ids = history_position_ids(position_id) if with_predecessors else [position_id]
+    store = LotStore()
+    rows = [lot for pid in ids for lot in store.lots_for_position(pid, include_closed=True)]
     out: list[dict] = []
-    for lot in LotStore().lots_for_position(position_id, include_closed=True):
+    for lot in _fifo_sorted(rows):
         eff = effective_unit_cost(lot)
         rq = float(lot.get("remaining_qty") or 0)
         out.append(
@@ -1599,6 +1600,7 @@ def realized_pnl(
     account_id: str | None = None,
     position_id: str | None = None,
     base: str | None = None,
+    with_predecessors: bool = False,
 ) -> dict:
     """Realized gains over a date range / instrument / account / position. Walks the
     realized-event ledger. Each event's base figure follows the historical-rate lock
@@ -1612,17 +1614,25 @@ def realized_pnl(
     fully-sold holding — which has left the live portfolio — still labels by name, not its
     raw UUID).
 
+    `with_predecessors` widens a `position_id` read to the holding's sold-out predecessors
+    (`position_lineage.history_position_ids`) — a sell-out then rebuy keeps its sale.
+
     AC-14: an empty ledger returns [] + realized_total_base 0.0 (no crash / div-by-zero).
     """
+    from backend.services.position_lineage import history_position_ids
+
     base = (base or base_currency()).upper()
     rates = _load_rates()
+    lineage = history_position_ids(position_id) if with_predecessors and position_id else None
     events = RealizedEventStore().query_events(
         date_from=date_from,
         date_to=date_to,
         instrument_id=instrument_id,
         account_id=account_id,
-        position_id=position_id,
+        position_id=None if lineage else position_id,
     )
+    if lineage:
+        events = [ev for ev in events if ev.get("position_id") in lineage]
 
     # Hydrate instrument name/symbol HERE so the read is self-sufficient: a fully-sold
     # holding (qty→0) drops out of the live portfolio, so the UI can no longer resolve its

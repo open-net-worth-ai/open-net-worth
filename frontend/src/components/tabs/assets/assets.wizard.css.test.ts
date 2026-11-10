@@ -29,7 +29,8 @@ describe('the Add asset dialog frame', () => {
     expect(segment).toMatch(/border-radius:\s*var\(--radius-pill\);/)
     // --line-strong: plain --line all but vanished on a dark surface.
     expect(segment).toMatch(/background:\s*var\(--line-strong\);/)
-    expect(rule('.as-wizard-progress > span.on')).toMatch(/background:\s*var\(--accent\);/)
+    // A done step is a selection state, so it reads in ink, not the blue accent.
+    expect(rule('.as-wizard-progress > span.on')).toMatch(/background:\s*var\(--ink\);/)
     expect(rule('.as-wizard-progress')).toMatch(/gap:\s*var\(--space-2\);/)
   })
 })

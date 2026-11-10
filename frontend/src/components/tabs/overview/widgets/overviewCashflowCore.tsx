@@ -14,7 +14,7 @@
 import { useState } from 'react'
 import type { ComponentType, ReactElement } from 'react'
 import { fBase, fDate, fMonth } from '../../../../utils/format'
-import { Button, Money, Skeleton, Text, TextArea } from '../../../ui'
+import { Button, MaskedText, Money, Skeleton, Text, TextArea } from '../../../ui'
 import { WealthBriefing } from '../../../shared/WealthBriefing'
 import { Spark } from '../../../../lucius/identity'
 import { TopDailyMovers } from '../../../shared/TopDailyMovers'
@@ -152,12 +152,16 @@ const Attention: ComponentType<WidgetContentProps> = ({
                       className="ov-risk-title-link"
                       onClick={() => onNavigate(r.nav!.tab)}
                     >
-                      {r.title}.
+                      <MaskedText>{r.title}</MaskedText>.
                     </button>
                   ) : (
-                    <b>{r.title}.</b>
+                    <b>
+                      <MaskedText>{r.title}</MaskedText>.
+                    </b>
                   )}{' '}
-                  <span>{r.desc}</span>
+                  <span>
+                    <MaskedText>{r.desc}</MaskedText>
+                  </span>
                 </div>
                 <div className="ov-risk-actions">
                   {onAskLucius && (

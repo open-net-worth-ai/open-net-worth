@@ -484,6 +484,29 @@ statement_parse_progress = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+# The FINISHED decision preview of a statement (2026-10-25, ADR
+# `2026-10-25-ready-means-the-review-is-persisted`): what the review screen renders, persisted by
+# `decision_preview` BEFORE the record can read `ready`, so "Ready to review" opens the screen
+# instantly and survives a restart. One row per statement, overwritten in place; ON DELETE
+# CASCADE drops it with its statement. `fmt`/`instr_hash`/`account_arg` are the request shape it
+# answers (a different account, new instructions or a re-read recomputes instead of serving it);
+# `resolved_account_id` is the anchor the preview resolved to. Checkpoint-EXCLUDED
+# (`ai.checkpoint._EXCLUDED_TABLES`) and absent from `db.portable_bridge.BRIDGED` — a derived
+# per-statement cache with no rewind/export role, same precedent as `statement_parse_progress`.
+statement_previews = Table(
+    "statement_previews",
+    metadata,
+    Column(
+        "statement_id", Text, ForeignKey("statements_meta.id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column("fmt", Text, nullable=False),
+    Column("instr_hash", Text, nullable=True),
+    Column("account_arg", Text, nullable=True),
+    Column("resolved_account_id", Text, nullable=True),
+    Column("preview", JSON, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
 # Tier-2-plus, same pattern. `id_field` is `absorbed_id` (db/merge_journal_store.py's own
 # JsonStore id_field, not "id"). The store today has NO query/filter methods beyond
 # find-by-absorbed-id (`pop`) and upsert (`record`) — `canonical_id` is promoted anyway as the
@@ -632,12 +655,32 @@ categories = book_payload_table("categories")
 commitments = book_payload_table("commitments")
 envelopes = book_payload_table("envelopes")
 income_events = book_payload_table("income_events")
+# Why you own / would buy an instrument (services.investment_theses) — one row per instrument.
+investment_theses = book_payload_table("investment_theses")
 recurring_streams = book_payload_table("recurring_streams")
 targets = book_payload_table("targets")
 corrections = book_payload_table("corrections")
 match_decisions = book_payload_table("match_decisions")
 match_reviews = book_payload_table("match_reviews")
 rejected_identities = book_payload_table("rejected_identities")
+
+# YNAB two-way sync (ADR 2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines):
+# book-scoped bookkeeping, no credentials. `ynab_sync_state` holds two documents (`state` — plan,
+# schedule, cursors, last run — and `meta` — YNAB's accounts/categories/payees as last seen);
+# `ynab_sync_mirror` is YNAB's transactions as last synced (id = YNAB transaction id);
+# `ynab_sync_baselines` the last-agreed state per ledger transaction (`t:<id>`) and per month +
+# category Assigned (`a:<month>:<category>`); `ynab_sync_conflicts` the review list.
+ynab_sync_state = book_payload_table("ynab_sync_state")
+ynab_sync_mirror = book_payload_table("ynab_sync_mirror")
+ynab_sync_baselines = book_payload_table("ynab_sync_baselines")
+ynab_sync_conflicts = book_payload_table("ynab_sync_conflicts")
+
+# The Actual sync's own: the twins of the four above, one set per app so nothing of one reaches
+# the other. No credentials.
+actual_sync_state = book_payload_table("actual_sync_state")
+actual_sync_mirror = book_payload_table("actual_sync_mirror")
+actual_sync_baselines = book_payload_table("actual_sync_baselines")
+actual_sync_conflicts = book_payload_table("actual_sync_conflicts")
 
 # owned_assets / owned_asset_categories: the Assets tab domain (ADR 2026-09-06-assets-tab-
 # faithful-port) — things you own that are valued by a dated manual mark, not a ledger balance
@@ -820,6 +863,34 @@ dashboard_layouts = Table(
 # ledger fact.
 memory = payload_table("memory")
 
+# What the user told Lucius to forget, as a SHA-256 of the fact's normalised text — the hash
+# only, never the text (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home` amendment 7).
+# The memory write choke refuses an implicit write that matches one; an explicit save of the
+# same text clears it. Checkpoint-INCLUDED like `memory` (a rewound forget brings the fact AND
+# drops its fingerprint), wiped with `memory` by `/api/reset` and a whole-book import, not
+# portable on its own.
+memory_forgotten = Table(
+    "memory_forgotten",
+    metadata,
+    Column("hash", Text, primary_key=True),
+    Column("forgotten_at", Text, nullable=False),
+)
+
+# One generated Summary line per memory topic, for the topic page (ADR
+# `2026-10-25-memory-keeps-only-what-has-no-other-home` amendment 8). Display-only, never in a
+# model prompt. `facts_digest` (sha256 over the topic's live fact ids + text) tells the idle sweep
+# which topics changed. Derived and regenerated, so checkpoint-EXCLUDED; wiped with `memory`.
+memory_topic_summaries = Table(
+    "memory_topic_summaries",
+    metadata,
+    Column("section", Text, primary_key=True),
+    Column("topic_key", Text, primary_key=True),
+    Column("topic", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("facts_digest", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
 # ── Tier-3 config stores (plan 4d, task 1) — plain flat-list shape, NO book_id:
 # installation-wide config/reference rows, not book-scoped user data.
 news_sources = payload_table("news_sources")
@@ -827,6 +898,32 @@ statement_formats = payload_table("statement_formats")
 notification_log = payload_table("notification_log")  # runtime cache — checkpoint-EXCLUDED
 desktop_access_grants = payload_table("desktop_access_grants")
 desktop_ingest_jobs = payload_table("desktop_ingest_jobs")
+# One row per Import / Verify / Preview run of a provider's importer (services/import_runs.py):
+# the stored report the Imports & sync screen reads. The columns are what the history list and the
+# polls look up; `detail` holds the heavy parts (log, counts, problems, preview, verification) that
+# only a run opened as a report reads. No credential in it. Checkpoint-EXCLUDED, non-restorable,
+# wiped by Reset.
+import_runs = Table(
+    "import_runs",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("provider", Text, nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("trigger", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("started_at", Text, nullable=False),
+    Column("finished_at", Text, nullable=True),
+    Column("plan_id", Text, nullable=False),
+    Column("plan_name", Text, nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("archived_at", Text, nullable=True),
+    Column("phase", Text, nullable=False),
+    Column("progress", JSON, nullable=False),
+    Column("error", Text, nullable=True),
+    Column("detail", JSON, nullable=False),
+    Index("ix_import_runs_provider_started", "provider", "started_at"),
+    Index("ix_import_runs_status", "status"),
+)
 # ── intel_stories / signal_timeline_entries / daily_digests (RFC intel-signals-data-model)
 # Split of the old multi-writer `intel_signals` (stories + digests): three shapes shared one
 # table with a name collision (`summary` meant two different things) and an unbounded JSON
@@ -1440,4 +1537,44 @@ claims = Table(
     CheckConstraint("decision_relevant IN (0,1)", name=conv("ck_claims_decision_relevant_bool")),
     Index("ix_claims_seq", "seq", unique=True),
     Index("ix_claims_group_key", "group_key"),
+)
+
+# ── `news_deliveries` — the Intel delivery decider's record (flag `intel_delivery_decider`, ADR
+# 2026-11-02-intel-decides-news-delivery-code-keeps-safety-rails). One row per candidate
+# notification the three Intel senders (analysis, price alert / crash-watch, watch alert) would
+# have pushed: `pending` until Lucius decides, then `waiting` (a roundup will carry it), `told`,
+# `skipped` (stays in the Intel tab), `superseded` (a newer candidate for the same story
+# replaced it) or `expired` (waited past 7 days). Promoted columns carry the status machine and
+# the reads (`status`, `story_id`); `payload` is the verbatim row. Runtime scheduler state, like
+# `pending_pushes`: checkpoint-EXCLUDED (a /rewind must never turn a told item back into an
+# unsent one), no FK to `intel_stories` (`story_id` is an opaque id, as in `claims`), and
+# additive — with the flag off nothing reads or writes it.
+news_deliveries = Table(
+    "news_deliveries",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("seq", Integer, nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'pending'")),
+    Column("decision", Text, nullable=True),
+    Column("source", Text, nullable=False),
+    Column("story_id", Text, nullable=False, server_default=text("''")),
+    Column("subject", Text, nullable=False, server_default=text("''")),
+    Column("user_set", Integer, nullable=False, server_default=text("0")),
+    Column("created_at", Text, nullable=False),
+    Column("decided_at", Text, nullable=True),
+    Column("told_at", Text, nullable=True),
+    Column("expires_at", Text, nullable=False),
+    Column("payload", JSON, nullable=False),  # verbatim row (round-trip source of truth)
+    CheckConstraint(
+        "status IN ('pending','waiting','told','skipped','superseded','expired')",
+        name=conv("ck_news_deliveries_status"),
+    ),
+    CheckConstraint(
+        "decision IS NULL OR decision IN ('now','later','skip')",
+        name=conv("ck_news_deliveries_decision"),
+    ),
+    CheckConstraint("user_set IN (0,1)", name=conv("ck_news_deliveries_user_set_bool")),
+    Index("ix_news_deliveries_seq", "seq", unique=True),
+    Index("ix_news_deliveries_status", "status"),
+    Index("ix_news_deliveries_story_id", "story_id"),
 )

@@ -169,3 +169,24 @@ describe('WatchlistsSection — watchlist_ids membership filtering', () => {
     expect(getByText(MANUAL_LIST.name, { selector: '.intel-wlc-head-title' })).toBeTruthy()
   })
 })
+
+describe('WatchlistsSection — price precision', () => {
+  // The digits come from the ITEM's asset class: the price feed (tickerMeta) never carries one,
+  // so reading it there showed every equity at crypto precision.
+  it('shows an equity at two decimals and a crypto at its own precision', () => {
+    const items = [
+      makeItem({ id: 'eq', value: 'AAPL', asset_class: 'equity' }),
+      makeItem({ id: 'cx', value: 'SOL-USD', label: 'Solana', asset_class: 'crypto' }),
+    ]
+    const tickerMeta = { AAPL: { price: 187.4567 }, 'SOL-USD': { price: 142.1234 } }
+    const { container } = render(
+      <WatchlistsSection {...baseProps(items)} tickerMeta={tickerMeta} />,
+      { wrapper: Wrapper },
+    )
+    const prices = [...container.querySelectorAll('.intel-wlc-row-price')].map(
+      (el) => el.textContent,
+    )
+    expect(prices.some((t) => t?.includes('187.46') && !t.includes('187.4567'))).toBe(true)
+    expect(prices.some((t) => t?.includes('142.1234'))).toBe(true)
+  })
+})

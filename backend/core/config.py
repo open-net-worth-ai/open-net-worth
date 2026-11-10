@@ -429,6 +429,21 @@ class Settings:
     demo_tokens_total_daily: int = field(
         default_factory=lambda: _env_int("DEMO_TOKENS_TOTAL_DAILY", 30_000_000)
     )
+    # Voice-call caps, enforced only while `demo_mode` is on (`services/demo_calls`). A call
+    # spends the demo's LiveKit inference by the MINUTE whether or not Lucius is asked anything
+    # (one person's testing used ~100 minutes of a project's credit), so calls are metered in
+    # minutes, per visitor and instance-wide, beside the token budgets above.
+    demo_call_max_s: int = field(default_factory=lambda: _env_int("DEMO_CALL_MAX_S", 600))
+    demo_calls_per_visitor_daily: int = field(
+        default_factory=lambda: _env_int("DEMO_CALLS_PER_VISITOR_DAILY", 3)
+    )
+    demo_call_minutes_per_visitor_daily: int = field(
+        default_factory=lambda: _env_int("DEMO_CALL_MINUTES_PER_VISITOR_DAILY", 15)
+    )
+    demo_call_minutes_total_daily: int = field(
+        default_factory=lambda: _env_int("DEMO_CALL_MINUTES_TOTAL_DAILY", 120)
+    )
+    demo_calls_concurrent: int = field(default_factory=lambda: _env_int("DEMO_CALLS_CONCURRENT", 2))
     # How many reverse proxies sit in front of a demo and APPEND the address they saw to
     # `X-Forwarded-For`. The visitor key is the Nth entry from the RIGHT: everything left of it
     # is whatever the client chose to send. 0 (the default) ignores the header and keys on the

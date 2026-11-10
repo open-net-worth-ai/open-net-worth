@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { X } from '../../ui/icons'
-import type { ModelOption } from '../../api/models'
+import { useSheetDragToDismiss } from '../../hooks/useSheetDragToDismiss'
+import { X, ChevronLeft, ChevronRight, ChevronDown, Check } from '../../ui/icons'
+import { providerLabelFor, type ModelOption } from '../../api/models'
 
 // The ONE model chooser. Every surface that lets a human pick a model uses it: the chat
 // side panel, the Lucius dock, Settings → Task models (×13), Settings → Preferred models,
@@ -67,7 +68,7 @@ export function resolveModelSelection(ref: string, models: ModelOption[]): Model
     providerKey: match?.provider_key ?? providerKey,
     // Fall back to the catalogue KEY when no entry matched: naming `openrouter` still beats
     // showing nothing for a model whose provider was since disabled or removed.
-    providerLabel: match?.provider_label ?? providerKey,
+    providerLabel: match?.provider_label ?? providerLabelFor(providerKey) ?? providerKey,
     model: match,
     isDefault: clean === '',
   }
@@ -99,6 +100,9 @@ export function groupModels(models: ModelOption[]): ModelGroup[] {
 }
 
 interface BaseProps {
+  /** Don't focus the search on opening: on a phone that raises the keyboard and shoves the
+   *  screen behind the sheet up, which the full call screen can't afford. */
+  noSearchFocus?: boolean
   models: ModelOption[]
   /** aria-label for the trigger AND the sheet title. */
   label: string
@@ -106,7 +110,8 @@ interface BaseProps {
   annotate?: (m: ModelOption) => string | undefined
   /** Rows this site cannot honour (e.g. a disabled provider). Never selectable. */
   isUnavailable?: (m: ModelOption) => boolean
-  size?: 'sm' | 'md'
+  /** `field`: a form field the size of a `Select` beside it (connector settings). */
+  size?: 'sm' | 'md' | 'field'
   /** Native tooltip on the trigger — the chat surfaces explain what the turn will run on. */
   title?: string
   className?: string
@@ -136,7 +141,7 @@ function PaneHead({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="mp-pane-head">
       <button type="button" className="mp-pane-back" aria-label="Back" onClick={onBack}>
-        ‹
+        <ChevronLeft size={16} aria-hidden="true" />
       </button>
       <span className="mp-pane-title">{title}</span>
     </div>
@@ -209,6 +214,11 @@ export function ModelPicker(props: ModelPickerProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
+  const dragHandlers = useSheetDragToDismiss({
+    sheetRef: panelRef,
+    onDismiss: () => close(true),
+    enabled: open && isMobile,
+  })
 
   const multiple = props.multiple === true
   const defaultLabel = multiple ? undefined : (props as SingleProps).defaultLabel
@@ -328,7 +338,7 @@ export function ModelPicker(props: ModelPickerProps) {
   // Focus the search when the MODEL list is what's on screen — with panes the panel opens on the
   // root menu, where there is no search field to focus (and re-runs on entering the list).
   useEffect(() => {
-    if (open && pane === 'models') searchRef.current?.focus()
+    if (open && pane === 'models' && !props.noSearchFocus) searchRef.current?.focus()
   }, [open, pane])
 
   // Deliberately NOT keyed on selectableIdx: that array is rebuilt each render, so
@@ -479,7 +489,7 @@ export function ModelPicker(props: ModelPickerProps) {
                 <em className="mp-opt-note">{annotate(row.model)}</em>
               )}
               <span className="mp-opt-tick" aria-hidden="true">
-                ✓
+                <Check size={14} />
               </span>
             </button>
           ),
@@ -500,7 +510,7 @@ export function ModelPicker(props: ModelPickerProps) {
         <span className="mp-menu-row-l">Model</span>
         <span className="mp-menu-row-v">{triggerParts.text}</span>
         <span className="mp-menu-row-chev" aria-hidden="true">
-          ›
+          <ChevronRight size={14} />
         </span>
       </button>
       {panes?.map((p) => (
@@ -514,7 +524,7 @@ export function ModelPicker(props: ModelPickerProps) {
           <span className="mp-menu-row-l">{p.label}</span>
           <span className="mp-menu-row-v">{p.value}</span>
           <span className="mp-menu-row-chev" aria-hidden="true">
-            ›
+            <ChevronRight size={14} />
           </span>
         </button>
       ))}
@@ -546,7 +556,13 @@ export function ModelPicker(props: ModelPickerProps) {
   const panel =
     open &&
     (isMobile ? (
-      <div className="mp-sheet" data-portal-layer ref={panelRef} onKeyDown={onKeyDown}>
+      <div
+        className="mp-sheet"
+        data-portal-layer
+        ref={panelRef}
+        onKeyDown={onKeyDown}
+        {...dragHandlers}
+      >
         <div className="mp-sheet-handle-wrap">
           <span className="mp-sheet-handle" />
         </div>
@@ -558,7 +574,7 @@ export function ModelPicker(props: ModelPickerProps) {
               aria-label="Back"
               onClick={() => setPane(null)}
             >
-              ‹
+              <ChevronLeft size={16} aria-hidden="true" />
             </button>
           )}
           <span className="mp-sheet-title">{paneTitle}</span>
@@ -593,7 +609,11 @@ export function ModelPicker(props: ModelPickerProps) {
     ))
 
   return (
-    <span className={'mp-wrap' + (className ? ` ${className}` : '')}>
+    <span
+      className={
+        'mp-wrap' + (size === 'field' ? ' mp-wrap--field' : '') + (className ? ` ${className}` : '')
+      }
+    >
       {multiple && (
         <span className="mp-chips">
           {(props.value as string[]).length === 0 && (props as MultiProps).emptyHint}
@@ -610,7 +630,7 @@ export function ModelPicker(props: ModelPickerProps) {
                   )
                 }
               >
-                ×
+                <X size={12} aria-hidden="true" />
               </button>
             </span>
           ))}
@@ -620,7 +640,10 @@ export function ModelPicker(props: ModelPickerProps) {
         ref={triggerRef}
         id={id}
         type="button"
-        className={'mp-trigger' + (size === 'sm' ? ' mp-trigger--sm' : '')}
+        className={
+          'mp-trigger' +
+          (size === 'sm' ? ' mp-trigger--sm' : size === 'field' ? ' mp-trigger--field' : '')
+        }
         aria-label={label}
         title={title}
         aria-haspopup="listbox"
@@ -632,7 +655,7 @@ export function ModelPicker(props: ModelPickerProps) {
         {triggerParts.provider && <span className="mp-trigger-prov">{triggerParts.provider}</span>}
         {trailing && <span className="mp-trigger-trail">{trailing}</span>}
         <span className="mp-trigger-chev" aria-hidden="true">
-          ▾
+          <ChevronDown size={14} />
         </span>
       </button>
       {panel ? createPortal(panel, document.body) : null}

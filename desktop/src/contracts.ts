@@ -1,6 +1,12 @@
 export interface NativeFile { name: string; type: string; bytes: Uint8Array }
 export interface DesktopConnection { mode: 'local' | 'server'; serverUrl: string | null; bookFolder: string | null }
 export interface HistoryState { canGoBack: boolean; canGoForward: boolean }
+// `ready`: an update has downloaded and installs on restart or the next quit. `available`: a newer
+// version exists but has not downloaded (this install cannot update itself, a download failed, or
+// the person chose Later); `offerUpdate` opens the same choice as the menu's Update Available….
+export interface DesktopUpdateState { ready: boolean; version: string | null; available?: boolean }
+// Shown once, inside the app, on the first launch after an update installed.
+export interface DesktopWhatsNew { version: string; highlights: string[]; releaseUrl: string }
 export interface DesktopClientBridge {
   version: 1;
   getConnection(): Promise<DesktopConnection>;
@@ -11,6 +17,17 @@ export interface DesktopClientBridge {
   openActivitySettings?(): Promise<void>;
   reportProblem?(error?: string): Promise<void>;
   reportHistory?(state: HistoryState): void;
+  getUpdateState?(): Promise<DesktopUpdateState>;
+  onUpdateState?(listener: (state: DesktopUpdateState) => void): () => void;
+  restartToUpdate?(): Promise<void>;
+  offerUpdate?(): Promise<void>;
+  takeWhatsNew?(): Promise<DesktopWhatsNew | null>;
+  // macOS only: start the system's own dictation in the focused field (Edit → Start Dictation…).
+  startDictation?(): Promise<void>;
+  // …and end it (Start Dictation… again does not: owner, 2026-11-03).
+  stopDictation?(): Promise<void>;
+  // macOS only: open System Settings at Privacy & Security → Microphone, where a refusal is undone.
+  openMicrophoneSettings?(): Promise<void>;
   onCommand(listener: (command: DesktopCommand) => void): () => void;
 }
 export interface ImportSelection { cancelled: boolean; files: NativeFile[] }
@@ -30,7 +47,7 @@ export type GoTab = (typeof GO_TABS)[number];
 export type DesktopCommand =
   | { type: 'import-files'; files: NativeFile[] }
   | { type: 'go'; tab: GoTab }
-  | { type: 'open-inbox' | 'open-activity' | 'open-intel' | 'new-transaction' | 'search' | 'open-lucius' | 'open-settings' | 'resume' | 'history-back' | 'history-forward' | 'toggle-sidebar' | 'open-help' | 'show-shortcuts' };
+  | { type: 'open-inbox' | 'open-activity' | 'open-intel' | 'new-transaction' | 'new-conversation' | 'search' | 'open-lucius' | 'open-settings' | 'resume' | 'history-back' | 'history-forward' | 'toggle-sidebar' | 'open-help' | 'show-shortcuts' };
 export interface DesktopBridge {
   version: 1;
   chooseImportFiles(): Promise<ImportSelection>;

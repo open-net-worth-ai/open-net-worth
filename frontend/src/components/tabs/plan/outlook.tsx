@@ -21,9 +21,10 @@ import type { ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as PD from './planData'
 import { fBaseCompact, getCurrencySymbol } from '../../../utils/format'
-import { fBaseWhole, fSigned } from './planData'
+import { fBaseWhole, fCoarse, fSigned } from './planData'
 import { authFetch } from '../../../api/client'
 import { FanChart, RbdChart } from './charts'
+import { fireSeedKey, stableJson, useFireReseed } from './fireReseed'
 import { X, Plus, Info, Chevron } from './icons'
 import { Spark } from '../../../lucius/identity'
 import { useOutlookFire } from './useOutlookFire'
@@ -46,7 +47,7 @@ import { useDataVersion } from '../../../hooks/useDataVersion'
 import { buildWhatifState } from './stageWhatif'
 import { useScenarioOdds } from './scenarioOdds'
 import { Button, MoneyField, NumberField } from '../../ui'
-import { SquarePen } from '../../../ui/icons'
+import { SquarePen, ChevronsLeft, RotateCcw } from '../../../ui/icons'
 import { PlanningModal } from './PlanningModal'
 import { OutlookWhatIfAsk } from './OutlookWhatIfAsk'
 
@@ -127,15 +128,18 @@ function mapScorecard(d: ForecastScorecard | null): ScoreView | null {
 export interface OutlookTabProps {
   onAskLucius: (text: string) => void
   toast: (msg: string) => void
-  onOpenSettings: () => void
   /** Real net worth (GET /api/net-worth, the authoritative computation) — seeds FIRE.netWorth. */
   total: number
   /** True while /api/net-worth's FIRST fetch is still in flight — `total` is a 0 placeholder
    *  until then, never a confirmed value. Keeps useOutlookFire from seeding (and simulating)
    *  off that placeholder, which otherwise flashes a real-looking but wrong odds % on open. */
   totalLoading?: boolean
-  /** Bumped by the shell's FIRE Settings modal on save → re-fetch /api/fire. */
+  /** Bumped by the shell's FIRE Settings modal on save AND by any 'profile' data change (which
+   *  includes every app-wide '*' write) → re-fetch /api/fire. */
   fireVersion: number
+  /** The FIRE Settings save counter alone (no data-change noise): an advance is an explicit
+   *  save, which re-seeds the levers even when the saved values equal the previous ones. */
+  fireSaveVersion: number
   /** False while this sub-tab is mounted-but-hidden — gates the sim so it doesn't compute
    *  until the user actually views Outlook. */
   active?: boolean
@@ -261,7 +265,7 @@ function Section({
       <div className="pl-sec-head">
         <button className="pl-sec-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <span className="pl-sec-caret" aria-hidden="true">
-            ›
+            <Chevron dir="right" size={13} />
           </span>
           {mark && (
             <span className="pl-sec-mark" aria-hidden="true">
@@ -288,15 +292,6 @@ function accTone(v: number, kind: 'cf' | 'nw') {
   const a = Math.abs(v),
     b = ACC_BANDS[kind] ?? ACC_BANDS.cf
   return a <= b[0]! ? 'good' : a <= b[1]! ? 'warn' : 'bad'
-}
-// coarse money for guidance figures — no false precision (S$307,800 → "S$310k")
-function fCoarse(n: number) {
-  const a = Math.abs(n),
-    s = n < 0 ? '−' : ''
-  const sym = getCurrencySymbol()
-  if (a >= 1e6) return s + sym + (a / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'
-  if (a >= 1e3) return s + sym + Math.round(a / 1e4) * 10 + 'k'
-  return s + sym + Math.round(a)
 }
 
 // ── Click-to-type lever (slider + editable value) — ported from the old Projections tab ──
@@ -428,7 +423,7 @@ export function MonthlySavingLever({
         onValueChange={onChange}
       />
       <div className="pl-lever-sub">
-        until you retire • plan: <b>{fBaseWhole(baselineSaving)}/month</b>
+        until you retire • plan: <b className="mask">{fBaseWhole(baselineSaving)}/month</b>
       </div>
     </div>
   )
@@ -459,7 +454,7 @@ export function RetirementSpendingLever({
         onValueChange={onChange}
       />
       <div className="pl-lever-sub">
-        {fBaseWhole(annualSpending)}/year • FIRE number{' '}
+        <span className="mask">{fBaseWhole(annualSpending)}/year</span> • FIRE number{' '}
         <b className="mask">{fCoarse(fireNumber)}</b>
       </div>
     </div>
@@ -470,7 +465,7 @@ const INIT_STREAMS: IncomeStream[] = []
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function OutlookTab(props: OutlookTabProps) {
-  const { onAskLucius: onAsk, toast, onOpenSettings } = props
+  const { onAskLucius: onAsk, toast } = props
   // "What if?" is a full sidebar on desktop but too tall/cramped to scroll to on a phone —
   // it opens as a bottom sheet there instead (same PlanningModal primitive as every other
   // mobile sheet in this tab), never inline in the page flow.
@@ -482,6 +477,13 @@ export function OutlookTab(props: OutlookTabProps) {
     retry: retryFire,
     configVersion: fireConfigVersion,
   } = useOutlookFire(props.total, props.fireVersion, props.totalLoading ?? false)
+  // A write anywhere in the app refetches the settings, so a failed REFRESH keeps the last good
+  // ones on screen and says so; only a first load with nothing to show takes the full-screen
+  // error (one dropped request used to blank the whole Outlook).
+  const fireBlocked = fireError && fireConfigVersion === -1
+  useEffect(() => {
+    if (fireError && fireConfigVersion !== -1) toast("Couldn't refresh your plan settings")
+  }, [fireError]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scenarios + FIRE baseline persisted on the server via /api/plan/*.
   const {
@@ -493,8 +495,17 @@ export function OutlookTab(props: OutlookTabProps) {
     addScenario: addScenarioApi,
     updateScenario: updateScenarioApi,
     deleteScenario: deleteScenarioApi,
-    saveBaseline,
+    saveBaseline: saveBaselineApi,
   } = usePlanState()
+  // The baseline the levers were last seeded from (or that this screen last saved). Our own
+  // save is recorded here so the refetch its data_changed('*') triggers is not mistaken for a
+  // chat edit — which re-seeded the levers, dropped the active scenario and toasted "Plan
+  // updated from chat" after every FIRE settings save.
+  const seededBaselineJson = useRef<string | null>(null)
+  const saveBaseline = (obj: BaseOverride | null) => {
+    seededBaselineJson.current = stableJson(obj ?? null)
+    return saveBaselineApi(obj)
+  }
 
   // Deferred render: the Monte-Carlo sim runs inside useMemo and blocks paint. We gate all
   // heavy useMemos on simEnabled (false on first render) then flip it inside a startTransition
@@ -521,13 +532,12 @@ export function OutlookTab(props: OutlookTabProps) {
   // re-seeding on those was clobbering a just-tapped scenario and wiping its highlight
   // ("tap does nothing" repro). version 0 = the initial load (silent).
   const seededPlanVersion = useRef(-1)
-  const seededBaselineJson = useRef<string | null>(null)
   useEffect(() => {
     if (planStateLoading || seededPlanVersion.current === planStateVersion) return
     const isRefetch = seededPlanVersion.current >= 0
     seededPlanVersion.current = planStateVersion
     const b = baseOverride
-    const bJson = JSON.stringify(b ?? null)
+    const bJson = stableJson(b ?? null)
     const baselineChanged = bJson !== seededBaselineJson.current
     seededBaselineJson.current = bJson
     if (!b || (isRefetch && !baselineChanged)) return
@@ -580,36 +590,42 @@ export function OutlookTab(props: OutlookTabProps) {
   // in useOutlookFire that commits one render before its fetch actually resolves, so an effect
   // here keyed on it could mark props.fireVersion "handled" using a still-stale `f` — permanently
   // skipping the real re-seed once the fresh config lands a moment later.
-  const seededVer = useRef(-1)
-  useEffect(() => {
-    if (fireConfigVersion !== props.fireVersion || seededVer.current === props.fireVersion) return
-    const firstSeed = seededVer.current === -1
-    seededVer.current = props.fireVersion
-    if (firstSeed && baseOverride) return
-    setSaving(f.monthlySaving)
-    setRet(f.expectedReturn)
-    setVol(f.volatility)
-    setMonthlyRetirementSpending(f.monthlyRetirementSpend)
-    setSwr(f.withdrawalRate)
-    setLifeExp(f.lifeExpectancy)
-    setRetireAge(f.targetAge)
-    // A later explicit settings save (Settings modal, or a Lucius profile edit) is the new
-    // source of truth for the saved plan too — sync the Outlook baseline to match instead of
-    // letting it keep silently shadowing the fresh values in BASE.* (the "plan: X" captions).
-    if (!firstSeed) {
-      void saveBaseline({
-        saving: f.monthlySaving,
-        ret: f.expectedReturn,
-        vol: f.volatility,
-        monthlyRetirementSpending: f.monthlyRetirementSpend,
-        swr: f.withdrawalRate,
-        lifeExp: f.lifeExpectancy,
-        retireAge: f.targetAge,
-        streams,
-        events,
-      })
-    }
-  }, [fireConfigVersion, props.fireVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  //
+  // A fireVersion advance is not always a settings save: see fireReseed.ts. Re-seed only on an
+  // explicit save (fireSaveVersion advanced) or when the seeding values changed.
+  const { markOwnSave } = useFireReseed({
+    config: f,
+    configVersion: fireConfigVersion,
+    fireVersion: props.fireVersion,
+    fireSaveVersion: props.fireSaveVersion,
+    hasSavedBaseline: !!baseOverride,
+    apply: (c, save) => {
+      setSaving(c.monthlySaving)
+      setRet(c.expectedReturn)
+      setVol(c.volatility)
+      setMonthlyRetirementSpending(c.monthlyRetirementSpend)
+      setSwr(c.withdrawalRate)
+      setLifeExp(c.lifeExpectancy)
+      setRetireAge(c.targetAge)
+      if (!save) return
+      // A later explicit settings save (Settings modal, or a Lucius profile edit) is the new
+      // source of truth for the saved plan's levers too — sync the Outlook baseline to match
+      // instead of letting it keep silently shadowing the fresh values in BASE.* (the "plan: X"
+      // captions). Only the levers: the SAVED streams and events stay, so an unsaved what-if
+      // event on screen is never written into the plan by someone else's settings save.
+      saveBaseline({
+        saving: c.monthlySaving,
+        ret: c.expectedReturn,
+        vol: c.volatility,
+        monthlyRetirementSpending: c.monthlyRetirementSpend,
+        swr: c.withdrawalRate,
+        lifeExp: c.lifeExpectancy,
+        retireAge: c.targetAge,
+        streams: BASE_STREAMS,
+        events: BASE_EVENTS,
+      }).catch(() => toast("Couldn't update your saved plan"))
+    },
+  })
 
   // Clear the drag flag on any mouseup so the indicator re-appears on the next slider change.
   useEffect(() => {
@@ -851,7 +867,11 @@ export function OutlookTab(props: OutlookTabProps) {
     settleTick,
     nwBucket,
   ].join('|')
-  const planKey = JSON.stringify([baseOverride, fireConfigVersion, nwBucket])
+  // What the saved plan's numbers depend on, by VALUE: the profile's FIRE settings and age, not
+  // the config's fetch counter — that advances on every write anywhere in the app ('*'), which
+  // re-ran the plan sim and every saved scenario's odds for an unrelated category rename.
+  const fireInputsKey = fireSeedKey(f) + '|' + f.currentAge
+  const planKey = JSON.stringify([baseOverride, fireInputsKey, nwBucket])
   const {
     bundle,
     planResult,
@@ -914,11 +934,7 @@ export function OutlookTab(props: OutlookTabProps) {
   // LIVE shelf odds — a stored odds/successPct is a save-time snapshot (it bakes in that
   // day's net worth + age and silently goes stale), so the shelf re-reads every row from
   // the SAME server engine whenever the inputs move; stored values are only the bootstrap.
-  const liveOdds = useScenarioOdds(
-    scenarios,
-    JSON.stringify([baseOverride, fireConfigVersion, nwBucket]),
-    simEnabled && !fireLoading,
-  )
+  const liveOdds = useScenarioOdds(scenarios, planKey, simEnabled && !fireLoading)
 
   // Refresh a recalled scenario's PERSISTED odds (what headless/AI readers see) — but
   // ONLY from a sim result that provably corresponds to the recalled levers:
@@ -1046,6 +1062,7 @@ export function OutlookTab(props: OutlookTabProps) {
       }),
     })
     if (!response.ok) throw new Error(`PUT /api/profile → HTTP ${response.status}`)
+    markOwnSave()
     props.onFireSettingsSaved?.()
   }
   // Write the current levers, events & income back onto the baseline "My FIRE plan" (persisted),
@@ -1600,14 +1617,14 @@ export function OutlookTab(props: OutlookTabProps) {
 
   return (
     <div className={'pl-sub pl-outlook' + (railCollapsed ? ' rail-collapsed' : '')}>
-      {fireError || (simError && simLoading) ? (
+      {fireBlocked || (simError && simLoading) ? (
         <div className="pl-main">
           <div
             style={{ padding: '32px 0', textAlign: 'center', color: 'var(--bad)', fontSize: 13 }}
           >
-            {fireError ? "Couldn't load your plan settings" : "Couldn't run your outlook"}
+            {fireBlocked ? "Couldn't load your plan settings" : "Couldn't run your outlook"}
             {' • '}
-            <button className="pl-link" onClick={fireError ? retryFire : retrySim}>
+            <button className="pl-link" onClick={fireBlocked ? retryFire : retrySim}>
               Retry
             </button>
           </div>
@@ -1667,7 +1684,7 @@ export function OutlookTab(props: OutlookTabProps) {
                       className={'pl-sum-hero ' + (simLoading ? 'warn' : tone)}
                       style={{ fontSize: 34 }}
                     >
-                      {simLoading ? '—' : `${successPct}%`}
+                      <span className="mask">{simLoading ? '—' : `${successPct}%`}</span>
                     </div>
                     {diverged && (
                       <button
@@ -1676,7 +1693,7 @@ export function OutlookTab(props: OutlookTabProps) {
                         onClick={resetToBaseline}
                         title={'Reset to ' + baselineLabel}
                       >
-                        ↺ Reset
+                        <RotateCcw size={11} aria-hidden="true" /> Reset
                       </button>
                     )}
                   </div>
@@ -1750,7 +1767,9 @@ export function OutlookTab(props: OutlookTabProps) {
                       />
                     </span>
                     <span className="v mask">{fCoarse(fireNumber)}</span>
-                    <span className="s">{fundedPct}% funded today</span>
+                    <span className="s">
+                      <span className="mask">{fundedPct}%</span> funded today
+                    </span>
                   </div>
                   {yearsToRet > 0 ? (
                     <div className="pl-sum-stat">
@@ -1764,8 +1783,10 @@ export function OutlookTab(props: OutlookTabProps) {
                           ''
                         ) : (
                           <>
-                            range {fCoarse(result!.nestEggBand.p10)}–
-                            {fCoarse(result!.nestEggBand.p90)}
+                            range{' '}
+                            <span className="mask">
+                              {fCoarse(result!.nestEggBand.p10)}–{fCoarse(result!.nestEggBand.p90)}
+                            </span>
                           </>
                         )}
                       </span>
@@ -1789,7 +1810,8 @@ export function OutlookTab(props: OutlookTabProps) {
                     <>Running the simulation…</>
                   ) : success >= 0.85 ? (
                     <>
-                      You're in good shape — money lasts in <b>{successPct}%</b> of futures
+                      You're in good shape — money lasts in <b className="mask">{successPct}%</b> of
+                      futures
                       {earliestAge != null && stopVsTarget != null && stopVsTarget > 0 ? (
                         <>
                           , and you could stop as early as <b>~{earliestAge}</b>.
@@ -2341,8 +2363,8 @@ export function OutlookTab(props: OutlookTabProps) {
               >
                 <line x1="4" y1="9" x2="20" y2="9" />
                 <line x1="4" y1="15" x2="20" y2="15" />
-                <circle cx="10" cy="9" r="2.5" fill="var(--primary)" />
-                <circle cx="15" cy="15" r="2.5" fill="var(--primary)" />
+                <circle cx="10" cy="9" r="2.5" fill="var(--cta)" />
+                <circle cx="15" cy="15" r="2.5" fill="var(--cta)" />
               </svg>
               <span className="pl-rail-fab-label">What if?</span>
             </button>
@@ -2357,7 +2379,7 @@ export function OutlookTab(props: OutlookTabProps) {
                     title="Collapse the levers"
                     aria-label="Collapse"
                   >
-                    «
+                    <ChevronsLeft size={16} aria-hidden="true" />
                   </button>
                   <span className="pl-panel-title">
                     What if? <Info text="Drag any lever — the chart and odds update live." />
@@ -2370,7 +2392,7 @@ export function OutlookTab(props: OutlookTabProps) {
                         onClick={resetToBaseline}
                         title={'Reset to ' + baselineLabel}
                       >
-                        ↺ Reset
+                        <RotateCcw size={11} aria-hidden="true" /> Reset
                       </button>
                     )}
                     <button
@@ -2467,7 +2489,7 @@ export function OutlookTab(props: OutlookTabProps) {
                             ) : !loadedFrom && !isBase ? (
                               <span className="pl-scenrow-tag edited">unsaved</span>
                             ) : (
-                              <span className="pl-scenrow-odds">
+                              <span className="pl-scenrow-odds mask">
                                 {planResult != null ? `${planPct}%` : '—'}
                               </span>
                             )}
@@ -2514,9 +2536,11 @@ export function OutlookTab(props: OutlookTabProps) {
                                         : `Chance your money lasts with this scenario's settings${s.atNumber ? '' : `, retiring at ${s.retireAge}`}`
                                     }
                                   >
-                                    {(liveOdds[s.id] ?? s.odds) != null
-                                      ? `${liveOdds[s.id] ?? s.odds}%`
-                                      : '—'}
+                                    <span className="mask">
+                                      {(liveOdds[s.id] ?? s.odds) != null
+                                        ? `${liveOdds[s.id] ?? s.odds}%`
+                                        : '—'}
+                                    </span>
                                     {!s.atNumber && s.retireAge !== BASE.retireAge && (
                                       <span className="pl-scenrow-age"> at {s.retireAge}</span>
                                     )}
@@ -2783,7 +2807,7 @@ export function OutlookTab(props: OutlookTabProps) {
                                     <span className="pl-event-row-lbl">{ev.label}</span>
                                     <span
                                       className={
-                                        'pl-event-row-amt' + (ev.amount > 0 ? ' windfall' : '')
+                                        'pl-event-row-amt mask' + (ev.amount > 0 ? ' windfall' : '')
                                       }
                                     >
                                       {ev.amount < 0 ? '−' : '+'}
@@ -2892,7 +2916,7 @@ export function OutlookTab(props: OutlookTabProps) {
                                   </div>
                                   <div
                                     className={
-                                      'pl-compare-pct ' + (successPct >= 80 ? 'pos' : 'neg')
+                                      'pl-compare-pct mask ' + (successPct >= 80 ? 'pos' : 'neg')
                                     }
                                   >
                                     {successPct}%
@@ -2915,7 +2939,11 @@ export function OutlookTab(props: OutlookTabProps) {
                                       • {planB.name}
                                     </span>
                                   </div>
-                                  <div className={'pl-compare-pct ' + (bPct >= 80 ? 'pos' : 'neg')}>
+                                  <div
+                                    className={
+                                      'pl-compare-pct mask ' + (bPct >= 80 ? 'pos' : 'neg')
+                                    }
+                                  >
                                     {bPct}%
                                   </div>
                                   <div
@@ -2997,7 +3025,12 @@ export function OutlookTab(props: OutlookTabProps) {
                     . The net-worth line swings with markets, so treat it as a guide, not a promise.
                   </span>
                   <button className="pl-trust-toggle" onClick={() => setShowTrack((s) => !s)}>
-                    {showTrack ? 'Hide track record ▾' : 'See track record ▸'}
+                    {showTrack ? 'Hide track record' : 'See track record'}{' '}
+                    {showTrack ? (
+                      <Chevron dir="down" size={12} />
+                    ) : (
+                      <Chevron dir="right" size={12} />
+                    )}
                   </button>
                 </>
               )}
@@ -3107,7 +3140,12 @@ export function OutlookTab(props: OutlookTabProps) {
                     </span>
                   </div>
                   <button className="pl-tech-toggle" onClick={() => setShowTech((s) => !s)}>
-                    {showTech ? 'Hide the technical numbers ▾' : 'Show the technical numbers ▸'}
+                    {showTech ? 'Hide the technical numbers' : 'Show the technical numbers'}{' '}
+                    {showTech ? (
+                      <Chevron dir="down" size={12} />
+                    ) : (
+                      <Chevron dir="right" size={12} />
+                    )}
                   </button>
                   {showTech && (
                     <div className="pl-tiles pl-tiles--tech" style={{ marginTop: 14 }}>
@@ -3523,7 +3561,7 @@ export function OutlookTab(props: OutlookTabProps) {
                             : 'var(--bad)',
                     }}
                   >
-                    {successPct}% odds
+                    <span className="mask">{successPct}%</span> odds
                   </b>
                 </div>
               </div>

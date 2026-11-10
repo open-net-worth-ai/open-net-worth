@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Sparkles, X } from '../../ui/icons'
+import { Sparkles, X, RefreshCw, ArrowRight } from '../../ui/icons'
 import { Button } from '../ui'
 import { Spark } from '../../lucius/identity'
 import { getCurrencySymbol } from '../../utils/format'
@@ -136,8 +136,14 @@ export function LuciusAlertSuggest({
               Add all
             </button>
           )}
-          <button type="button" className="intel-lx-regen" title="Regenerate" onClick={generate}>
-            ↻
+          <button
+            type="button"
+            className="intel-lx-regen"
+            title="Regenerate"
+            aria-label="Regenerate"
+            onClick={generate}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -145,7 +151,7 @@ export function LuciusAlertSuggest({
         <div className="intel-lx-empty">
           Added what you need.{' '}
           <button type="button" className="intel-lx-more" onClick={generate}>
-            Suggest more →
+            Suggest more <ArrowRight size={13} aria-hidden="true" />
           </button>
         </div>
       ) : (

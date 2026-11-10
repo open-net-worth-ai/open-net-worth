@@ -109,7 +109,7 @@ class GetLotsInput(ToolInput):
     position_id: Optional[str] = Field(
         default=None,
         description=(
-            "position_id from get_portfolio. Required unless `position_ids` (the batch form) is used instead."
+            "position_id from get_portfolio. Required unless `position_ids` or `ticker` is used."
         ),
     )
     position_ids: Optional[List[str]] = Field(
@@ -117,6 +117,10 @@ class GetLotsInput(ToolInput):
         description=(
             "Batch form: lots for SEVERAL positions in one call — e.g. every AAPL position held across custodians. `limit`/`offset`/`open_only` apply to EACH position individually (not across the combined set); each position gets its OWN `totals` block — a cost basis is never meaningfully summed across different instruments/currencies, so there is no combined grand total. Omit the single `position_id` field when using this."
         ),
+    )
+    ticker: Optional[str] = Field(
+        default=None,
+        description="Every position holding this ticker, at every custodian.",
     )
     open_only: Optional[bool] = Field(
         default=None,
@@ -151,12 +155,25 @@ class GetLotsInput(ToolInput):
 @tool(
     "get_lots",
     description=(
-        "List the tax lots (acquisition tranches) for a position — each with acquired_at, remaining quantity, effective unit cost, remaining cost basis, and term-to-date (long/short as of today). Call get_portfolio first to get the position_id. Use this BEFORE proposing a specific-lot sale so you can name the right lot ids.\n\nLots come back FIFO-ordered (oldest first — the order a sale consumes them), capped at 50 rows. The `totals` block is computed over ALL lots, not just the returned page, so quantity and cost-basis questions stay correct even when the list is truncated — never sum the rows yourself to answer one.\n\nThe SAME instrument held at several custodians is several positions (the custodian model) — pass `position_ids` (a list) to read lots for all of them in one call instead of one call per account.\n\nWINDOW MODE — `date_from` + `date_to` with no position: every lot acquired in the window across all holdings, oldest first, each with instrument, account and `kind`. A `buy`/`drp` carries `paid` and `paid_base` (base currency at the trade-date rate; fees included); a `transfer_in` (shares moved between brokers) or `grant` (a vest) carries `cost_basis`/`cost_basis_base` instead — it is not money invested. Sales are `get_realized_pnl` over the same dates."
+        "List the tax lots (acquisition tranches) for a position — each with acquired_at, remaining quantity, effective unit cost, remaining cost basis, and term-to-date (long/short as of today). Call get_portfolio first to get the position_id, or pass `ticker`. Use this BEFORE proposing a specific-lot sale so you can name the right lot ids.\n\nLots come back FIFO-ordered (oldest first — the order a sale consumes them), capped at 50 rows. The `totals` block is computed over ALL lots, not just the returned page, so quantity and cost-basis questions stay correct even when the list is truncated — never sum the rows yourself to answer one.\n\nThe SAME instrument held at several custodians is several positions (the custodian model) — pass `position_ids` (a list) to read lots for all of them in one call instead of one call per account.\n\nWINDOW MODE — `date_from` + `date_to` with no position: every lot acquired in the window across all holdings, oldest first, each with instrument, account and `kind`. A `buy`/`drp` carries `paid` and `paid_base` (base currency at the trade-date rate; fees included); a `transfer_in` (shares moved between brokers) or `grant` (a vest) carries `cost_basis`/`cost_basis_base` instead — it is not money invested. Sales are `get_realized_pnl` over the same dates."
     ),
     input_schema=schema_of(GetLotsInput, tool_name="get_lots"),
 )
 async def get_lots(input_data: dict):
     raw_position_ids = input_data.get("position_ids")
+    ticker = input_data.get("ticker")
+    if ticker and not raw_position_ids and not input_data.get("position_id"):
+        from backend.services import positions as _ps
+
+        raw_position_ids = _ps.position_ids_for_ticker(ticker)
+        if not raw_position_ids:
+            return json.dumps(
+                {"error": f"no position holds ticker {ticker!r} — get_portfolio lists what is held"}
+            ), None
+        if len(raw_position_ids) == 1:
+            maps = labels.label_maps(instruments=True, accounts=True)
+            payload = _get_lots_one(raw_position_ids[0], input_data, maps)
+            return json.dumps(payload, ensure_ascii=False), None
     if raw_position_ids:
         if len(raw_position_ids) > _MAX_LOTS_POSITION_BATCH:
             return json.dumps(
@@ -179,14 +196,22 @@ async def get_lots(input_data: dict):
     if not position_id and (input_data.get("date_from") or input_data.get("date_to")):
         return await _lots_in_window(input_data), None
     if not position_id:
-        return json.dumps(
-            {
-                "error": "position_id is required (or position_ids for a batch, or "
-                "date_from + date_to for every lot acquired in a window)"
-            }
-        ), None
+        return json.dumps({"error": _missing_position_error(input_data)}), None
     maps = labels.label_maps(instruments=True, accounts=True)
     return json.dumps(_get_lots_one(position_id, input_data, maps), ensure_ascii=False), None
+
+
+def _missing_position_error(input_data: dict) -> str:
+    # Dispatch validates types only, so an argument the schema doesn't have reaches the handler
+    # silently; naming it is what lets the model fix the call instead of abandoning it.
+    message = (
+        "position_id is required (or position_ids for a batch, ticker for every position "
+        "holding it, or date_from + date_to for every lot acquired in a window)"
+    )
+    unknown = sorted(set(input_data) - set(GetLotsInput.model_fields))
+    if unknown:
+        message += f"; not a get_lots argument: {', '.join(unknown)}"
+    return message
 
 
 async def _lots_in_window(input_data: dict) -> str:

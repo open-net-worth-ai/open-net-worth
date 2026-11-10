@@ -12,7 +12,7 @@
 // Type + Account, ActivityTab with a single Type group.
 
 import { useEffect, useRef, useState } from 'react'
-import { X } from '../../../ui/icons'
+import { X, Check } from '../../../ui/icons'
 import { BottomSheet } from '../../ui/BottomSheet'
 
 export interface FilterOption {
@@ -70,7 +70,7 @@ export function FilterGroupList({
               {o.count != null && <span className="mk-filter-item-count">{o.count}</span>}
               {g.value === o.id && (
                 <span className="mk-filter-item-tick" aria-hidden>
-                  ✓
+                  <Check size={14} />
                 </span>
               )}
             </button>

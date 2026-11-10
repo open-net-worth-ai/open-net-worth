@@ -90,11 +90,6 @@ def tg(db_isolated, monkeypatch):
     monkeypatch.setattr(handlers, "_policy_allows_turn", lambda cid: True)
     monkeypatch.setattr(assistant, "get_provider", lambda **_k: _ToolProvider())
 
-    async def _noop(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop, raising=False)
-
     async def _fake_execute(name, inp, *a, **k):
         return '{"ok": true}', None
 

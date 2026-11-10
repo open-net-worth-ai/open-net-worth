@@ -104,6 +104,8 @@ class Profile(ONBaseModel):
     # above the call it followed. Purely presentational — the transcript records the rounds
     # separately either way, so this only chooses how they are drawn.
     chat_thinking_grouped: bool = False
+    # Whether a device with no choice of its own sends the screen with each message. Default ON.
+    screen_awareness_default: bool = True
     # Feature intros already shown (UI state, never model-facing).
     seen_intros: List[str] = []
 
@@ -147,6 +149,7 @@ class ProfileUpdate(ONBaseModel):
     chat_cost_visible: Optional[bool] = None
     chat_multi_turn_enabled: Optional[bool] = None
     chat_thinking_grouped: Optional[bool] = None
+    screen_awareness_default: Optional[bool] = None
     seen_intros: Optional[List[str]] = None
 
     @field_validator(

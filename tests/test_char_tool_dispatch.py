@@ -139,7 +139,9 @@ def test_import_transactions_in_registered_set():
 # The fourteen per-provider names are now REAL, offered tools — not aliases (the alias-era
 # behavior these promoted from is pinned historically by
 # tests/test_tools_aggregation.py's "the promoted per-provider tools" section, not here).
-# A provider removed OUTRIGHT (GoCardless/Pluggy) has no successor at all. SimpleFIN was
+# A provider removed OUTRIGHT (Pluggy) has no successor at all; GoCardless was rebuilt on
+# 2026-11-02 with promoted tools from the start (ADR
+# 2026-11-02-restore-gocardless-for-existing-accounts). SimpleFIN was
 # removed in the same pass and later restored (ADR
 # 2026-08-14-restore-simplefin-connector) — it is a first-class promoted pair again, not
 # an alias. Lunch Money is a new, seventh provider (2026-08-16).
@@ -643,7 +645,6 @@ def test_propose_position_update_returns_change(monkeypatch):
         "quantity": 10,
         "cost_basis": 100.0,
         "vesting_state": "vested",
-        "note": "",
         "symbol": "AAPL",
         "label": "Apple",
         "category": "Vantage Brokerage",
@@ -652,15 +653,16 @@ def test_propose_position_update_returns_change(monkeypatch):
     monkeypatch.setattr(ps, "hydrated_one", lambda pid: dict(row) if pid == "p1" else None)
     monkeypatch.setattr(registry, "should_preview_write", lambda: True)
     monkeypatch.setattr(ps, "validate_position_update", lambda pid, changes: None)
+    monkeypatch.setattr(ps, "find_account", lambda **_: None)
     res, change = call(
-        "update_positions", position_id="p1", changes={"note": "core"}, reason="rebalance"
+        "update_positions", position_id="p1", changes={"account_name": "Saxo"}, reason="rebalance"
     )
     assert res is None, "a staged card pauses the tool_use — no result yet"
     assert change["tool_use_id"] and change["grant_tool"]
     assert change["type"] == "update"
     assert change["position_id"] == "p1"
-    assert change["display"]["before"]["note"] == ""
-    assert change["display"]["after"]["note"] == "core"
+    assert change["display"]["account_to"] == "Saxo"
+    assert change["display"]["account_to_is_new"] is True
     assert change["display"]["after"]["quantity"] == 10  # unchanged field carried over
 
 

@@ -85,7 +85,8 @@ export function TerminalView({ onEnded }: { onEnded: (reason: EndReason) => void
 
   return (
     <div className="rd-term">
-      <div className="rd-term-screen" ref={host} />
+      {/* A shell's output can be anything, secrets included: never into the screen snapshot. */}
+      <div className="rd-term-screen" ref={host} data-ctx-secret="" />
       {note && (
         <div className="rd-term-note" role="status">
           <span className="rd-help">{note}</span>

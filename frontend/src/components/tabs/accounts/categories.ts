@@ -99,7 +99,14 @@ export function isRefundTxn(
   categoryId: string | null | undefined,
   catMap: Record<string, { kind?: string }>,
 ): boolean {
-  return kind === 'income' && !!categoryId && catMap[categoryId]?.kind === 'expense'
+  // The `split` sentinel is stored as an expense-kind row, but a split inflow lands on its
+  // lines' envelopes, never on a "Split" one (it once read "Returned to Split envelope").
+  return (
+    kind === 'income' &&
+    !!categoryId &&
+    categoryId !== 'split' &&
+    catMap[categoryId]?.kind === 'expense'
+  )
 }
 
 // ── Account types ─────────────────────────────────────────────────────────
@@ -148,6 +155,17 @@ export const TYPE_COLOR: Record<AccountType, string> = {
   receivable: '#d4537e',
   credit: '#e0a032',
   loan: '#e2554f',
+}
+
+/** The `AccIcon` glyph for each type — the add-account picker and the connector account list. */
+export const TYPE_ICON: Record<AccountType, string> = {
+  cash: 'banknote',
+  fixed_deposit: 'coins',
+  investment: 'trending',
+  retirement: 'umbrella',
+  receivable: 'incoming',
+  credit: 'card',
+  loan: 'home',
 }
 
 export const LIABILITY_TYPES: ReadonlySet<AccountType> = new Set(['credit', 'loan'])
@@ -258,5 +276,6 @@ export const ACTION_VERB: Record<string, string> = {
   rejected: 'Rejected',
   split: 'Split',
   merged: 'Merged',
+  reverted: 'Reverted',
   deleted: 'Deleted',
 }

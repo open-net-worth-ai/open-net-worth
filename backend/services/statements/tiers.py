@@ -547,6 +547,16 @@ def parse_grid(text: str) -> list[list[str]]:
     return [row for row in csv.reader(io.StringIO(cleaned))]
 
 
+def _first_sheet_rows(text: str) -> int | None:
+    """How many grid rows belong to the workbook's FIRST sheet, or None for a single-table
+    file. Sheets are concatenated into one grid, so only the first sheet's grid indexes are its
+    own row numbers — a later sheet's rows get no ``source_row`` rather than a wrong one."""
+    markers = list(re.finditer(r"^\[Sheet:[^\]]*\]\n?", text, flags=re.MULTILINE))
+    if len(markers) < 2:
+        return None
+    return len(parse_grid(text[: markers[1].start()].rstrip("\n")))
+
+
 def looks_tabular(text: str) -> bool:
     """CSV-shaped? Majority of the first non-blank lines share a delimiter count > 0."""
     lines = [ln for ln in text.splitlines() if ln.strip()][:40]
@@ -711,7 +721,7 @@ def apply_schema(grid: list[list[str]], schema: dict, meta: StatementMeta) -> li
     success_vals = {str(v).strip() for v in (schema.get("success_values") or [])}
     rows: list[CanonicalRow] = []
     saw_date = False
-    for raw in data:
+    for offset, raw in enumerate(data):
         date_raw = _cell(raw, schema.get("date_col"))
         if not date_raw:
             continue
@@ -739,6 +749,7 @@ def apply_schema(grid: list[list[str]], schema: dict, meta: StatementMeta) -> li
             # resolved against the live category store at draft time.
             category_ref=_cell(raw, schema.get("category_col")) or None,
             raw=_raw_row(grid[header], raw),
+            source_row=header + 2 + offset,
         )
         if status is not None and success_vals and status not in success_vals:
             rows.append(
@@ -801,6 +812,11 @@ async def tier1_tabular(text: str, schema: dict | None = None) -> ParseResult:
     )
     meta.extra["parse_complete"] = True  # deterministic parse of every grid row — never partial
     rows = apply_schema(grid, schema, meta)
+    first_sheet = _first_sheet_rows(text)
+    if first_sheet is not None:
+        for row in rows:
+            if row.source_row is not None and row.source_row > first_sheet:
+                row.source_row = None
     # Printed account digits live in the preamble the schema deliberately skips — harvest
     # them deterministically (set-union keeps anything another source already contributed).
     for last4 in harvest_preamble_last4s(grid, schema.get("header_row", 0)):

@@ -8,8 +8,9 @@ import { useRegisterHandles, useRegisterScreenPrompts } from '../../lucius/useSc
 import type { ScreenHandle } from '../../state/screenSnapshot'
 import { fetchPositionIncome } from '../../api/portfolio'
 import type { IncomeSummary } from '../../types/portfolio'
+import { keyIssuesPassActive } from '../../types/assetDetail'
 import { Button, EmptyState, ErrorState, Panel, Text } from '../ui'
-import { Sunrise, Sunset, RotateCcw, TrendingUp, TrendingDown } from '../../ui/icons'
+import { Info, Sunrise, Sunset, RotateCcw, TrendingUp, TrendingDown } from '../../ui/icons'
 // The underline tab bar already used on the Connectors page (`.rd-tabs`/`.rd-tab`) — reused
 // here rather than SegmentedControl's pill style. See the `.asd-subtabs` CSS below for why the
 // styling is duplicated (scoped to `.asd-subtabs`) instead of importing connectors.css.
@@ -39,6 +40,9 @@ import { PriceMovementTimeline } from './PriceMovementTimeline'
 import { KeyIssuesAccordion } from './KeyIssuesAccordion'
 import { YourPositionCard } from './YourPositionCard'
 import { PositionSubtab } from './PositionSubtab'
+import { YourThesisCard } from './YourThesisCard'
+import { PositionVerdictLine } from './PositionVerdictLine'
+
 import { ClosedPositionHistory } from './ClosedPositionHistory'
 import { AssetWatchlistMenu } from './AssetWatchlistMenu'
 import { AssetAlertsCard } from './AssetAlertsCard'
@@ -47,6 +51,11 @@ import { PeersCard } from './PeersCard'
 import { FundamentalsSnapshot } from './FundamentalsSnapshot'
 import { TechnicalsWidget } from './TechnicalsWidget'
 import { AcquireLotForm } from '../shared/AcquireLotForm'
+import { useRailResize } from './useRailResize'
+
+/** Under every take: Lucius's view is an opinion, never licensed advice. */
+const TAKE_NOT_ADVICE =
+  'Lucius isn’t a licensed financial adviser. Treat its suggestions as information, not advice.'
 
 type DetailTab = 'overview' | 'analysis' | 'position'
 const DETAIL_TAB_VALUES: DetailTab[] = ['overview', 'analysis', 'position']
@@ -107,6 +116,13 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
   // Prefetched at the top level (not gated on the Analysis tab) + session-cached,
   // so the Analysis tab is ready before it's ever opened and never re-fetches.
   const analyst = useAnalystConsensus(instrumentId)
+  const {
+    bodyRef: railBodyRef,
+    railRef,
+    style: railStyle,
+    snapped: railSnapped,
+    handleProps: railHandleProps,
+  } = useRailResize()
   const [activeTab, setActiveTab] = useState<DetailTab>(() => loadDetailTab(search.sub))
   // One effect covers three cases: (1) mirror a manual tab click into the URL, (2) deep-link /
   // back-forward (?sub=analysis) for the SAME instrument, and (3) the Intel tab reusing one
@@ -395,8 +411,14 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
   // the STOCK, generated for held/watched/ad-hoc alike, so this has no such gate. `refreshing`
   // covers a truly cold ad-hoc open (the news/facts/peers POST and the on-demand key_issues pass
   // both fire from the same page load); `backgroundRefreshing` covers a held/watched reopen
-  // (key_issues top-up only, no POST at all).
-  const keyIssuesGenerating = !hasIssues && (refreshing || backgroundRefreshing) && data.has_ticker
+  // (key_issues top-up only, no POST at all). `keyIssuesPassActive` is the backend's own stamp
+  // for that pass: both client flags can lapse while it still runs (a Refresh POST returns
+  // before the separate key_issues LLM call finishes), which dropped the Analysis tab to the
+  // "No key issues yet" empty state with the bull/bear seconds away.
+  const keyIssuesGenerating =
+    !hasIssues &&
+    (refreshing || backgroundRefreshing || keyIssuesPassActive(data)) &&
+    data.has_ticker
   // Drives the "Generating" state on KeyFactsCard/PeersCard (owner-reproduced live bug,
   // 2026-08-31, KODK/HPE/XOM: neither card had ANY loading state — Key Facts silently showed
   // only Symbol/Exchange with no indication more was coming, Peers rendered nothing at all).
@@ -494,10 +516,24 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
       )
     )
 
+  const thesisBlock = (
+    <YourThesisCard
+      instrumentId={instrumentId}
+      ticker={asset.ticker ?? asset.symbol}
+      thesis={data.thesis ?? null}
+      held={!!position?.held}
+      price={effPrice ?? null}
+      priceMaxFrac={priceMaxFrac}
+      currency={price.currency}
+      onSaved={refetch}
+    />
+  )
+
   const priceAlertsBlock = data.has_ticker && asset.ticker && (
     <AssetAlertsCard
       ticker={asset.ticker}
       assetName={asset.name}
+      displaySymbol={displayTicker(asset)}
       assetClass={asset.asset_class}
       instrumentId={data.instrument_id}
       itemId={watchlist.item_id ?? null}
@@ -587,6 +623,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
           {refreshNotice ? (
             <span className="asd-updated-at" role="status">
               {refreshNotice}
+            </span>
+          ) : refreshing || keyIssuesPassActive(data) ? (
+            <span className="asd-updated-at" role="status">
+              Updating analysis…
             </span>
           ) : (
             data.last_refreshed_at && (
@@ -712,6 +752,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                       })}
                     </span>
                   </>
+                ) : /^\d{4}-\d{2}-\d{2}$/.test(effAsOf!) ? (
+                  // A recorded close from local history is a calendar day with no time; read
+                  // as a UTC instant it showed "Oct 26, 8:00 PM EDT" for Oct 27's close.
+                  fDate(effAsOf!)
                 ) : (
                   // The year is noise almost always — only worth showing once the price is
                   // stale enough to be from a DIFFERENT calendar year (owner ask 2026-09-01).
@@ -871,7 +915,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
       )}
 
       {/* Body */}
-      <div className="asd-body">
+      <div className="asd-body" ref={railBodyRef} style={railStyle}>
         <div className="asd-main">
           {/* Chart */}
           {activeTab === 'overview' && (
@@ -973,7 +1017,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                         {/* Card-scoped counterpart to the page-level RefreshingBanner (owner
                             clarification, ADR addendum "an on-demand top-up"): the banner alone
                             doesn't make clear THIS card is what's being refreshed. */}
-                        {(backgroundRefreshing || generating) && (
+                        {(backgroundRefreshing || generating || keyIssuesPassActive(data)) && (
                           <span
                             className="asd-pi-updating"
                             role="status"
@@ -995,7 +1039,22 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                           <Skeleton height={13} width="52%" />
                         </div>
                       ) : (
-                        <p className="asd-pi-body">{portfolio_impact}</p>
+                        <>
+                          <p className="asd-pi-body">{portfolio_impact}</p>
+                          {data.position_verdict && (
+                            <PositionVerdictLine
+                              verdict={data.position_verdict}
+                              priceMaxFrac={priceMaxFrac}
+                              instrumentId={instrumentId}
+                              name={asset.name}
+                              ticker={asset.ticker}
+                            />
+                          )}
+                          <p className="asd-pi-disclaimer">
+                            <Info size={12} aria-hidden="true" />
+                            <span>{TAKE_NOT_ADVICE}</span>
+                          </p>
+                        </>
                       )}
                     </div>
                   )
@@ -1012,6 +1071,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
               />
 
               <div className="asd-mobile-only">{yourPositionBlock}</div>
+              <div className="asd-mobile-only">{thesisBlock}</div>
               <div className="asd-mobile-only">{priceAlertsBlock}</div>
               <div className="asd-mobile-only">{analystConsensusBlock}</div>
 
@@ -1071,23 +1131,27 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                 </Panel>
               )}
 
-              {!hasNews && !hasIssues && !refreshing && !backgroundRefreshing && (
-                <EmptyState
-                  title="No news or analysis yet"
-                  body={
-                    data.has_ticker
-                      ? 'Click Refresh to fetch the latest news and key issues for this asset.'
-                      : 'This asset has no ticker symbol, so automated news fetching is unavailable.'
-                  }
-                  action={
-                    data.has_ticker ? (
-                      <Button variant="primary" onClick={refresh} disabled={refreshing}>
-                        {refreshing ? 'Refreshing…' : 'Refresh now'}
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              )}
+              {!hasNews &&
+                !hasIssues &&
+                !keyIssuesGenerating &&
+                !refreshing &&
+                !backgroundRefreshing && (
+                  <EmptyState
+                    title="No news or analysis yet"
+                    body={
+                      data.has_ticker
+                        ? 'Click Refresh to fetch the latest news and key issues for this asset.'
+                        : 'This asset has no ticker symbol, so automated news fetching is unavailable.'
+                    }
+                    action={
+                      data.has_ticker ? (
+                        <Button variant="primary" size="sm" onClick={refresh} disabled={refreshing}>
+                          {refreshing ? 'Refreshing…' : 'Refresh now'}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                )}
             </>
           )}
 
@@ -1123,10 +1187,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
               ) : (
                 <EmptyState
                   title="No key issues yet"
-                  body="Bull and bear key issues will appear after a refresh."
+                  body="Lucius hasn't written the bull and bear case for this asset yet. Refresh to try again."
                   action={
                     data.has_ticker ? (
-                      <Button variant="primary" onClick={refresh} disabled={refreshing}>
+                      <Button variant="primary" size="sm" onClick={refresh} disabled={refreshing}>
                         {refreshing ? 'Refreshing…' : 'Refresh now'}
                       </Button>
                     ) : undefined
@@ -1180,7 +1244,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                 title="No position in this asset"
                 body={`You don't currently hold ${asset.ticker ?? asset.name}. Record your first acquisition to start tracking it here.`}
                 action={
-                  <Button variant="primary" onClick={() => setAddLotOpen(true)}>
+                  <Button variant="primary" size="sm" onClick={() => setAddLotOpen(true)}>
                     Add lot
                   </Button>
                 }
@@ -1203,7 +1267,8 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
               (there's already content on screen whenever this fires), only this non-blocking
               indicator. */}
           {((refreshing && data?.refresh_stage !== 'ready') ||
-            (backgroundRefreshing && data?.key_issues_refresh_stage !== 'ready')) &&
+            (backgroundRefreshing && data?.key_issues_refresh_stage !== 'ready') ||
+            keyIssuesPassActive(data)) &&
             (hasNews || hasIssues) &&
             !generatingLuciusTake && (
               <div className="asd-ask-bar mb-anchored">
@@ -1222,8 +1287,17 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
             reflows to a single column at, see index.css) — the narrow layout instead
             places Your Position inline in Overview and Facts/Peers inline in Analysis
             (below), each next to the content it's actually about. */}
-        <div className="asd-rail asd-desktop-only">
+        <div className="asd-rail asd-desktop-only" ref={railRef}>
+          <div
+            className={`asd-rail-handle${railSnapped ? ' asd-rail-handle--snapped' : ''}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize side panel"
+            title="Drag to resize · drag back or double-click for the default width"
+            {...railHandleProps}
+          />
           {yourPositionBlock}
+          {thesisBlock}
           {priceAlertsBlock}
           {/* Hidden only on Analysis, which already has the full Estimates/Ratings
               breakdown — shown on every other tab (Overview, Position). */}

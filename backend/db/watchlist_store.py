@@ -133,6 +133,7 @@ _DEFAULT_CONFIG = {
     "ai_opinion_level": "information",  # information | lean | suggest
     "holdings_brief_verbosity": 3,  # 1 headline … 4 detailed, 5 written by Lucius
     "watchlist_brief_verbosity": 3,
+    "delivery_instructions": "",  # the user's words on what Intel should tell them (delivery decider)
     "last_scan_at": None,
     "last_price_check_at": None,
 }

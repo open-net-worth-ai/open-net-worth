@@ -2,7 +2,7 @@
 // design_handoffs/settings_handoff/prototype/redesign/settings-model.jsx.
 //
 // Provider credentials and model routing. Usage telemetry lives in Settings → AI usage;
-// chat and memory preferences live in Settings → Chat & Memory.
+// chat preferences live in Settings → Chat, memory in Settings → Memory.
 //
 // The one deliberate departure from the prototype source: vision capability. The handoff's
 // `TEXT_ONLY` array is explicitly a stand-in ("capability must come from the provider; an
@@ -17,15 +17,27 @@ import {
   modelRejectsImages,
   useModels,
 } from '../../../../hooks/useModels'
+import { useFlag } from '../../../../hooks/useFlag'
 import { getCachedQueryData, useCachedFetchState } from '../../../../state/queryCache'
 import { openReportProblem } from '../../../../state/reportProblem'
 import { useCliDetectionPoll } from '../../../../hooks/useCliDetectionPoll'
 import { CliSubscriptionHelp } from '../../../shared/CliSubscriptionHelp'
-import type { CliHostPlatform } from '../../../shared/CliSubscriptionHelp'
+import type { CliHostPlatform, CliSignInState } from '../../../shared/CliSubscriptionHelp'
 import { NO_LOCAL_MODELS_NOTE, isLocalOnlyProvider } from '../../../shared/privateCloudCopy'
 import { ModelPicker } from '../../../ui'
-import { ChevronRight, Eye, EyeOff, TriangleAlert } from '../../../../ui/icons'
-import { Badge, Btn, Empty, Field, Modal, Panel, Select, Toggle, useSectionBusy } from '../ds'
+import { ChevronRight, Eye, EyeOff, TriangleAlert, Plus } from '../../../../ui/icons'
+import {
+  Badge,
+  Btn,
+  Empty,
+  Field,
+  Modal,
+  Panel,
+  Select,
+  Toggle,
+  useSaving,
+  useSectionBusy,
+} from '../ds'
 import type { SectionProps } from '../ds'
 import { TurnTimeLimitPanel } from './TurnTimeLimitPanel'
 
@@ -53,6 +65,18 @@ interface ConfiguredProvider {
   label?: string
 }
 
+// "Custom" is one catalog row, but the owner may keep several OpenAI-compatible endpoints:
+// each further one is stored as `custom_<id>` and shown as a copy of that row.
+const isCustomKey = (key: string) => /^custom(_[a-z0-9]{1,24})?$/.test(key)
+
+function newCustomKey(taken: string[]): string {
+  if (!taken.includes('custom')) return 'custom'
+  let key: string
+  do key = `custom_${Math.random().toString(36).slice(2, 10)}`
+  while (taken.includes(key))
+  return key
+}
+
 // A local CLI enrols by DETECTION, not by stored credentials — it has no api_key or base_url
 // to save, so `configured_providers` has no row for it. The Settings list still shows it (it is
 // a usable provider, and may be the instance default), which means the row renderer must be
@@ -72,6 +96,9 @@ interface ProvidersResponse {
   /** What each CLI runs when told nothing — read from the CLI's own config. */
   cli_default_models?: Record<string, string>
   cli_host_platform?: CliHostPlatform
+  /** Whether each detected CLI can spend a login. Installed does not say so. */
+  cli_sign_in?: Record<string, CliSignInState>
+  cli_in_container?: boolean
 }
 
 const CLI_DEFAULT_NOTE: Record<string, string> = {
@@ -110,7 +137,7 @@ const TASK_GROUPS: [string, [string, string, string, boolean?][]][] = [
   [
     'Assistant',
     [
-      ['memory', 'Memory', 'Extracts and consolidates facts after chat turns'],
+      ['memory', 'Memory', 'Writes memory when a conversation goes quiet, and tidies it daily'],
       ['suggestions', 'Chat suggestions', 'Generates follow-up suggestions in the chat panel'],
       [
         'title',
@@ -170,6 +197,24 @@ const TASK_GROUPS: [string, [string, string, string, boolean?][]][] = [
 const TASK_ROWS = TASK_GROUPS.flatMap(([, rows]) => rows)
 const VISION_TASKS = TASK_ROWS.filter((r) => r[3])
 
+// permissions_v2 only: the Auto judge's own row, the last of the Assistant group.
+const TASK_GROUPS_V2: typeof TASK_GROUPS = TASK_GROUPS.map(([group, rows]) =>
+  group === 'Assistant'
+    ? [
+        group,
+        [
+          ...rows,
+          [
+            'approval',
+            'Auto-approval judge',
+            'Decides whether Auto mode must ask before a call. Unset uses the model your conversation is running on — pin a fast, non-reasoning model for snappier Auto. The pending call and your last few messages are sent to it.',
+          ],
+        ],
+      ]
+    : [group, rows],
+)
+const TASK_ROWS_V2 = TASK_GROUPS_V2.flatMap(([, rows]) => rows)
+
 // Two states, plainly named: GREEN = you can use it, RED = you cannot. "Unreachable" was
 // amber, which read as a caution when it is just as broken as a rejected key — neither one
 // can answer a turn. Wording avoids our internal vocabulary ("valid", "detected", "configured"
@@ -196,6 +241,7 @@ function ProviderRow({
   isDefault,
   detected,
   detectedPath,
+  signIn,
   onEdit,
   onToggle,
   toast,
@@ -206,11 +252,13 @@ function ProviderRow({
   isDefault: boolean
   detected: boolean
   detectedPath: string
+  signIn?: CliSignInState
   onEdit: (k: string) => void
   onToggle: (k: string, v: boolean) => void
   toast: SectionProps['toast']
   subscription?: {
     platform?: CliHostPlatform
+    inContainer?: boolean
     onCheck: () => Promise<unknown>
     terminal?: { onOpen: () => void }
   }
@@ -229,11 +277,13 @@ function ProviderRow({
     // whether its binary was even installed. The Default model row below names its provider,
     // so the chip was saying it twice and costing the useful fact.
     if (!enabled) return null
-    // Binary presence does not prove the CLI's saved login can answer a turn.
-    if (isCli)
-      return (
-        <Badge tone={detected ? 'good' : 'bad'}>{detected ? 'Installed' : 'Not installed'}</Badge>
-      )
+    // Binary presence does not prove the CLI's saved login can answer a turn, so the CLI's own
+    // answer wins. "Installed" is left for a CLI we couldn't ask.
+    if (isCli) {
+      if (!detected) return <Badge tone="bad">Not installed</Badge>
+      if (signIn === 'not_signed_in') return <Badge tone="bad">Not signed in</Badge>
+      return <Badge tone="good">{signIn === 'signed_in' ? 'Signed in' : 'Installed'}</Badge>
+    }
     const [txt, tone] = STATUS_BADGE[cfg.key_status || 'unchecked'] || STATUS_BADGE.unchecked!
     return <Badge tone={tone}>{txt}</Badge>
   }
@@ -297,6 +347,8 @@ function ProviderRow({
           provider={entry.key}
           platform={subscription.platform}
           detected={detected}
+          signIn={signIn}
+          inContainer={subscription.inContainer}
           onCheck={subscription.onCheck}
           terminal={subscription.terminal}
         />
@@ -314,6 +366,8 @@ function ProviderModal({
   models,
   cliPlatform,
   detectedClis,
+  cliSignIn,
+  cliInContainer,
   onCheckCli,
   terminal,
   taken,
@@ -331,6 +385,8 @@ function ProviderModal({
   models: ModelOption[]
   cliPlatform?: CliHostPlatform
   detectedClis: Record<string, boolean>
+  cliSignIn?: Record<string, CliSignInState>
+  cliInContainer?: boolean
   onCheckCli: () => Promise<unknown>
   terminal?: { onOpen: () => void }
   taken: string[]
@@ -343,7 +399,9 @@ function ProviderModal({
   onRemove: (key: string) => void
   toast: SectionProps['toast']
 }) {
-  const available = catalog.filter((e) => e.key === 'custom' || !taken.includes(e.key))
+  const available = catalog.filter((e) =>
+    e.key === 'custom' ? true : !isCustomKey(e.key) && !taken.includes(e.key),
+  )
   const [sel, setSel] = useState(
     mode === 'edit' ? editKey || 'custom' : available[0]?.key || 'custom',
   )
@@ -422,11 +480,14 @@ function ProviderModal({
       })
       const body = (await r.json().catch(() => null)) as {
         key_status?: string
+        sign_in?: CliSignInState
         error?: string
         detail?: string
       } | null
       const ms = Math.round(performance.now() - started)
-      if (body?.key_status === 'valid') toast(`Tested ok — ${ms}ms`)
+      // Signed out is a step to take, not a failure to report; the sign-in steps are right here.
+      if (body?.sign_in === 'not_signed_in') toast(body.error || 'Not signed in.')
+      else if (body?.key_status === 'valid') toast(`Tested ok — ${ms}ms`)
       // `detail` is what a 4xx carries (e.g. the provider is switched off). Without it this
       // asserted "unreachable" for ANY failure — including our own server erroring — and so
       // blamed the network for problems that had nothing to do with it.
@@ -486,7 +547,7 @@ function ProviderModal({
             label="Provider"
             span="full"
             help={
-              entry.key === 'custom'
+              isCustomKey(entry.key)
                 ? 'Any endpoint that speaks the OpenAI API — a self-hosted gateway, a proxy, anything'
                 : undefined
             }
@@ -500,7 +561,7 @@ function ProviderModal({
             </Select>
           </Field>
         )}
-        {entry.key === 'custom' && (
+        {isCustomKey(entry.key) && (
           <Field label="Display name" span="full">
             <input
               className="rd-input"
@@ -619,6 +680,8 @@ function ProviderModal({
               provider={entry.key}
               platform={cliPlatform}
               detected={Boolean(detectedClis[entry.key])}
+              signIn={cliSignIn?.[entry.key]}
+              inContainer={cliInContainer}
               onCheck={onCheckCli}
               terminal={terminal}
             />
@@ -656,8 +719,15 @@ function TaskModels({
   onSave: (next: Record<string, string | null>) => void
 }) {
   const over = taskModels
-  const keys = Object.keys(over).filter((k) => over[k])
-  const label = (k: string) => (TASK_ROWS.find(([kk]) => kk === k) || [, k])[1] as string
+  // The ONE switch point for permissions_v2 here: the judge picker exists only while it is on
+  // (and not before the flag list has loaded).
+  const judgePicker = useFlag('permissions_v2') === true
+  const taskGroups = judgePicker ? TASK_GROUPS_V2 : TASK_GROUPS
+  const taskRows = judgePicker ? TASK_ROWS_V2 : TASK_ROWS
+  // A judge model pinned while the flag was on is kept, but it is not a task of this screen while
+  // the flag is off: it neither counts nor shows.
+  const keys = Object.keys(over).filter((k) => over[k] && (judgePicker || k !== 'approval'))
+  const label = (k: string) => (taskRows.find(([kk]) => kk === k) || [, k])[1] as string
   const resolved = (k: string) => over[k] || defaultModel
   // Only a positively-declared text-only model warns. An unknown model id is UNKNOWN, not
   // incapable — the model field takes free text, so warning on anything unrecognised would
@@ -700,13 +770,13 @@ function TaskModels({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, fontWeight: 600 }}>
             {keys.length
-              ? keys.length + ' of ' + TASK_ROWS.length + ' tasks overridden'
+              ? keys.length + ' of ' + taskRows.length + ' tasks overridden'
               : 'All tasks use your default model'}
           </div>
           <div className="rd-help" style={{ marginTop: 3, display: 'block', lineHeight: 1.5 }}>
             {keys.length
               ? keys.map(label).join(' • ')
-              : TASK_ROWS.length + ' routable tasks — override only the ones you care about.'}
+              : taskRows.length + ' routable tasks — override only the ones you care about.'}
           </div>
         </div>
         {keys.length ? (
@@ -722,7 +792,7 @@ function TaskModels({
           </Btn>
         ) : null}
       </div>
-      {TASK_GROUPS.map(([group, rows]) => (
+      {taskGroups.map(([group, rows]) => (
         // A keyed Fragment, NOT a display:contents div. Both keep the wrapper out of the
         // layout, but a real element still sits in the DOM tree — so the panel's
         // `.rd-panel-body > .rd-subhead` rule (its padding and background band) stopped
@@ -740,12 +810,16 @@ function TaskModels({
                     models={models}
                     value={over[k] || ''}
                     defaultLabel={
-                      'Default' +
-                      (vision && modelRejectsImages(defaultModel, models, defaultModel)
-                        ? ' (no vision)'
-                        : '')
+                      k === 'approval'
+                        ? 'Same as chat model'
+                        : 'Default' +
+                          (vision && modelRejectsImages(defaultModel, models, defaultModel)
+                            ? ' (no vision)'
+                            : '')
                     }
-                    defaultModelId={defaultModel}
+                    // The judge, unset, follows the CONVERSATION's model, not the instance
+                    // default — naming the default here would be wrong whenever they differ.
+                    defaultModelId={k === 'approval' ? undefined : defaultModel}
                     annotate={
                       vision ? (m) => (m.vision === false ? '— no vision' : undefined) : undefined
                     }
@@ -828,6 +902,8 @@ export function PreferredModels({
 
 // ── the section ──────────────────────────────────────────────────────────────
 export function ModelSection({ toast, gatewayMode = false, openSection }: SectionProps) {
+  const judgePicker = useFlag('permissions_v2') === true
+  const track = useSaving()
   const [subscriptionKeys, setSubscriptionKeys] = useState<string[]>([])
   const providers = useCachedFetchState<ProvidersResponse>(
     '/api/model-config/providers',
@@ -871,12 +947,22 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
 
   const terminal =
     gatewayMode && openSection ? { onOpen: () => openSection('terminal') } : undefined
-  const catalog = (providers.data?.catalog ?? []).filter(
+  const baseCatalog = (providers.data?.catalog ?? []).filter(
     (entry) => !gatewayMode || !isLocalOnlyProvider(entry),
   )
   const configured = providers.data?.configured_providers ?? {}
+  const customRow = baseCatalog.find((entry) => entry.key === 'custom')
+  const catalog = customRow
+    ? [
+        ...baseCatalog,
+        ...Object.keys(configured)
+          .filter((key) => key !== 'custom' && isCustomKey(key))
+          .map((key) => ({ ...customRow, key })),
+      ]
+    : baseCatalog
   const detected = providers.data?.detected_clis ?? {}
   const detectedPaths = providers.data?.detected_cli_paths ?? {}
+  const cliSignIn = providers.data?.cli_sign_in ?? {}
   const refreshProviders = providers.refresh
   const refreshCliDetection = useCallback(async () => {
     const previous = getCachedQueryData<ProvidersResponse>('/api/model-config/providers')
@@ -944,7 +1030,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     window.dispatchEvent(new Event(MODEL_CONFIG_CHANGED_EVENT))
   }
 
-  async function putProvider(key: string, body: Record<string, unknown>, message: string) {
+  async function putProviderNow(key: string, body: Record<string, unknown>, message: string) {
     try {
       const r = await authFetch(`/api/model-config/providers/${encodeURIComponent(key)}`, {
         method: 'PUT',
@@ -967,7 +1053,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
   // DELETE /providers/{key}, not the sibling /providers/{key}/key — that one drops only the
   // API key and keeps `enabled: false`, so the provider never left the list however many
   // times you pressed Remove. (Removing only the key is `/key`, which nothing here calls.)
-  async function removeProvider(key: string) {
+  async function removeProviderNow(key: string) {
     try {
       const r = await authFetch(`/api/model-config/providers/${encodeURIComponent(key)}`, {
         method: 'DELETE',
@@ -985,7 +1071,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putDefaultModel(ref: string) {
+  async function putDefaultModelNow(ref: string) {
     try {
       const r = await authFetch('/api/model-config', {
         method: 'PUT',
@@ -1005,7 +1091,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putPreferred(models: string[], message: string) {
+  async function putPreferredNow(models: string[], message: string) {
     try {
       const r = await authFetch('/api/preferred-models', {
         method: 'PUT',
@@ -1028,10 +1114,13 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
-  async function putTaskModels(next: Record<string, string | null>) {
+  async function putTaskModelsNow(next: Record<string, string | null>) {
     // The endpoint takes the WHOLE map; an omitted task would silently keep its old pin.
+    // The judge's row exists only with permissions_v2; leaving it out while the flag is off keeps
+    // a pin made earlier. Sending TASK_ROWS alone dropped every judge pick, answered 200, and the
+    // picker snapped back to "Same as chat model" on the refresh.
     const full: Record<string, string | null> = {}
-    for (const [k] of TASK_ROWS) full[k] = next[k] || null
+    for (const [k] of judgePicker ? TASK_ROWS_V2 : TASK_ROWS) full[k] = next[k] || null
     try {
       const r = await authFetch('/api/model-config/task-models', {
         method: 'PUT',
@@ -1050,6 +1139,17 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
     }
   }
 
+  // Every write below shows the shell's "Saving…" pill while it is in flight.
+  const saving =
+    <A extends unknown[]>(write: (...args: A) => Promise<void>) =>
+    (...args: A) =>
+      track(() => write(...args))
+  const putProvider = saving(putProviderNow)
+  const removeProvider = saving(removeProviderNow)
+  const putDefaultModel = saving(putDefaultModelNow)
+  const putPreferred = saving(putPreferredNow)
+  const putTaskModels = saving(putTaskModelsNow)
+
   return (
     <>
       <Panel
@@ -1057,7 +1157,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
         sub="Credentials and endpoints, and the model Lucius runs by default"
         actions={
           <Btn size="xs" onClick={() => setEditor({ mode: 'add' })}>
-            ＋ Add provider
+            <Plus size={12} aria-hidden="true" /> Add provider
           </Btn>
         }
       >
@@ -1072,10 +1172,21 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   isDefault={defaultKey === entry.key}
                   detected={Boolean(detected[entry.key])}
                   detectedPath={detectedPaths[entry.key] || ''}
+                  signIn={cliSignIn[entry.key]}
                   toast={toast}
                   onEdit={(k) => setEditor({ mode: 'edit', key: k })}
                   onToggle={(k, v) =>
                     void putProvider(k, { enabled: v }, v ? 'Enabled' : 'Disabled')
+                  }
+                  subscription={
+                    cliSignIn[entry.key] === 'not_signed_in'
+                      ? {
+                          platform: providers.data?.cli_host_platform,
+                          inContainer: providers.data?.cli_in_container,
+                          onCheck: checkCliInstallations,
+                          terminal,
+                        }
+                      : undefined
                   }
                 />
               )
@@ -1134,6 +1245,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   isDefault={defaultKey === entry.key}
                   detected={Boolean(detected[entry.key])}
                   detectedPath={detectedPaths[entry.key] || ''}
+                  signIn={cliSignIn[entry.key]}
                   toast={toast}
                   onEdit={(key) => setEditor({ mode: 'edit', key })}
                   onToggle={(key, enabled) =>
@@ -1141,6 +1253,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   }
                   subscription={{
                     platform: providers.data?.cli_host_platform,
+                    inContainer: providers.data?.cli_in_container,
                     onCheck: checkCliInstallations,
                     terminal,
                   }}
@@ -1203,6 +1316,8 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
           models={models}
           cliPlatform={providers.data?.cli_host_platform}
           detectedClis={detected}
+          cliSignIn={cliSignIn}
+          cliInContainer={providers.data?.cli_in_container}
           onCheckCli={checkCliInstallations}
           terminal={terminal}
           taken={takenKeys}
@@ -1210,8 +1325,11 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
           toast={toast}
           onClose={() => setEditor(null)}
           onSave={(key, patch) => {
-            const entry = catalog.find((e) => e.key === key)
+            // Adding "Custom" when one exists must not overwrite it: it gets its own key.
+            if (editor.mode === 'add' && key === 'custom') key = newCustomKey(takenKeys)
+            const entry = catalog.find((e) => e.key === key) ?? customRow
             const body: Record<string, unknown> = { enabled: true }
+            if (isCustomKey(key)) body.label = patch.label
             if (entry?.cli_binary) body.base_url = patch.bin
             else body.base_url = patch.url
             if (patch.model) body.model = patch.model

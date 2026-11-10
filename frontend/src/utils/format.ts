@@ -4,7 +4,7 @@
  * .money` rule in index.css — no per-selector allowlist. Use this helper to add
  * the class to an element that already has its own classes (a `<td>`, a flex
  * cell); for a plain wrapper prefer the <Money> ui primitive. Only the AMOUNT
- * should carry it — keep labels/dates/percentages off the masked element.
+ * or percentage should carry it — keep labels and dates off the masked element.
  */
 export const MONEY_CLASS = 'money'
 export const moneyClass = (...extra: (string | false | null | undefined)[]): string =>
@@ -262,25 +262,52 @@ export const fBaseWhole = (n: number): string =>
  *  (e.g. VND projections in the cash-flow grid). 2,008,437,944 → ₫2.01B, 50,400 → S$50.4K.
  *  Small values (<1000) render in full. Pair with a `title` carrying the exact fBase value. */
 export function fBaseCompact(n: number): string {
-  const code = _baseCurrency
+  return fCompactAmount(n, _baseCurrency, 2)
+}
+
+const COMPACT_UNITS: ReadonlyArray<readonly [number, string]> = [
+  [1e12, 'T'],
+  [1e9, 'B'],
+  [1e6, 'M'],
+  [1e3, 'K'],
+]
+
+/** Scale to K/M/B/T. The suffix is fixed (never the locale's "Mio."/"Mrd."/"Tr"), so a
+ *  figure reads the same in every Number format; only separators and symbol placement follow it. */
+function scaleCompact(v: number, maxFrac: number): { scaled: number; suffix: string } {
+  const a = Math.abs(v)
+  const i = COMPACT_UNITS.findIndex(([u]) => a >= u)
+  const unit = COMPACT_UNITS[i]
+  if (!unit) return { scaled: v, suffix: '' }
+  const f = 10 ** maxFrac
+  const rounded = Math.round((a / unit[0]) * f) / f
+  const [divisor, suffix] = (rounded >= 1000 && COMPACT_UNITS[i - 1]) || unit
+  return { scaled: v / divisor, suffix }
+}
+
+/** Compact currency amount WITH symbol and a fixed K/M/B/T suffix — ₫2.01B, S$50.4K. */
+export function fCompactAmount(n: number, currency: string, maxFrac = 2): string {
+  const code = (currency || _baseCurrency).toUpperCase()
   const value = n === 0 ? 0 : n
   try {
-    const fmt = new Intl.NumberFormat(_numberLocale, {
+    const { scaled, suffix } = scaleCompact(value, maxFrac)
+    const parts = new Intl.NumberFormat(_numberLocale, {
       style: 'currency',
       currency: code,
       currencyDisplay: 'narrowSymbol',
-      notation: 'compact',
-      maximumFractionDigits: 2,
-    })
-    if (UNAMBIGUOUS[code]) {
-      return fmt
-        .formatToParts(value)
-        .map((p) => (p.type === 'currency' ? UNAMBIGUOUS[code] : p.value))
-        .join('')
-    }
-    return fmt.format(value)
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxFrac,
+    }).formatToParts(scaled)
+    const last = parts.map((p) => p.type).lastIndexOf('fraction')
+    const at = last >= 0 ? last : parts.map((p) => p.type).lastIndexOf('integer')
+    return parts
+      .map((p, k) => {
+        const v = p.type === 'currency' && UNAMBIGUOUS[code] ? UNAMBIGUOUS[code] : p.value
+        return k === at ? v + suffix : v
+      })
+      .join('')
   } catch {
-    return fBase(n)
+    return fCurrency(n, code)
   }
 }
 
@@ -337,10 +364,11 @@ export const fNum = (n: number): string => Math.round(n).toLocaleString(_numberL
  *  120234567 → "120.23M". Used for crypto market cap / token supply. */
 export function fCompact(n: number, maxFrac = 2): string {
   try {
-    return new Intl.NumberFormat(_numberLocale, {
-      notation: 'compact',
-      maximumFractionDigits: maxFrac,
-    }).format(n)
+    const { scaled, suffix } = scaleCompact(n, maxFrac)
+    return (
+      new Intl.NumberFormat(_numberLocale, { maximumFractionDigits: maxFrac }).format(scaled) +
+      suffix
+    )
   } catch {
     return fNum(n)
   }
@@ -388,6 +416,13 @@ export function fAmountNative(n: number, currency?: string): string {
   } catch {
     return n.toFixed(2)
   }
+}
+
+/** A per-unit cost with no symbol: the currency's own decimals, except a sub-unit cost that
+ *  those decimals would round to zero (SHIB at 0.0000241 → "0.00", as if it were free), which
+ *  keeps fPrice's magnitude-adaptive precision. A genuine zero stays "0.00". */
+export function fUnitCostNative(n: number, currency?: string): string {
+  return n > 0 && n < 1 ? fPrice(n) : fAmountNative(n, currency)
 }
 
 /**
@@ -441,8 +476,15 @@ export function fPrice(p: number | null | undefined, maxFractionDigits?: number)
       minimumFractionDigits: 2,
       maximumFractionDigits: maxFractionDigits,
     })
-  if (p >= 0.001) return p.toFixed(4)
-  if (p >= 0.000001) return p.toFixed(8)
+  // The same fixed precision as before, written with the user's decimal mark ("0,00001234" under
+  // the dot format) — toFixed only ever writes a point.
+  const fixed = (digits: number) =>
+    p.toLocaleString(_numberLocale, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    })
+  if (p >= 0.001) return fixed(4)
+  if (p >= 0.000001) return fixed(8)
   return p.toExponential(2)
 }
 
@@ -515,28 +557,19 @@ export function txnMentionSublabel({
   return parts.join(' • ')
 }
 
-/** Short, year-less date for a compact chip: "2026-06-02" → "Jun 2". Pure string parse
- *  (no Date/timezone). Falls back to the input when it isn't an ISO yyyy-mm-dd. */
+/** Compact month + day for a dense cell ("02/06", "06/02" or "06-02" by the Date-format
+ *  preference); the year is left out. Empty for a missing or unreadable value. */
+export function fMonthDay(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = parseDate(iso)
+  return d ? fDate(d, 'numeric', 'never') : ''
+}
+
+/** Short, year-less date for a compact chip: "2026-06-02" → "2 Jun" / "Jun 2" by the
+ *  Date-format preference. Falls back to the input when it isn't an ISO yyyy-mm-dd. */
 export function fShortDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
-  if (!m) return iso
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ]
-  const month = months[parseInt(m[2]!, 10) - 1]
-  if (!month) return iso
-  return `${month} ${parseInt(m[3]!, 10)}`
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  return fDate(iso, 'short', 'never')
 }
 
 export const fVND = (m: number): string =>
@@ -604,6 +637,9 @@ export function timeAgo(iso: string): string {
     const d = new Date(iso)
     if (isNaN(d.getTime())) return ''
     const s = Math.floor((Date.now() - d.getTime()) / 1000)
+    // Clock skew, or a zoneless timestamp read as this browser's local time, can land in the
+    // future — never print a negative age.
+    if (s < 0) return 'just now'
     if (s < 60) return `${s}s ago`
     const m = Math.floor(s / 60)
     if (m < 60) return `${m}m ago`

@@ -80,7 +80,7 @@ def inception_date(
     that pass it; it no longer contributes a candidate.
     """
     if txns is None:
-        txns = [t for t in TransactionStore().all() if not t.get("deleted")]
+        return TransactionStore().earliest_date()
 
     candidates = [d for t in txns if (d := (t.get("date") or "")[:10])]
     return min(candidates) if candidates else None

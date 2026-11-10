@@ -5,13 +5,15 @@
 // (New/Collapse buttons don't belong in a transient hover peek).
 
 import { useState } from 'react'
-import { ChevronRight, ListChecks, MessageSquare } from '../../../ui/icons'
+import { ChevronRight, ListChecks, MessageSquare, Zap } from '../../../ui/icons'
 import {
   ConversationRow,
   ConversationIcon,
   groupByAge,
+  RECENT_CAPTURES,
   selectVisibleRows,
   sortWithinSection,
+  type ConversationKind,
 } from '../../chat/ConversationMenu'
 import type { ConversationMeta } from '../../../hooks/useConversations'
 import type { ConvRowStatus } from '../../../types/chat'
@@ -30,14 +32,14 @@ export function LuciusHistoryHoverList({
   onViewAll,
   onMenuOpenChange,
 }: {
-  groups: { key: 'chat' | 'automation'; items: ConversationMeta[]; total: number }[]
+  groups: { key: ConversationKind; items: ConversationMeta[]; total: number }[]
   activeId: string
   statusFor: (id: string) => ConvRowStatus
   onSelect: (id: string) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
   onStop: (id: string) => void
-  onViewAll: (kind: 'chat' | 'automation') => void
+  onViewAll: (kind: ConversationKind) => void
   /** Forwarded to every row's kebab menu — LuciusHome.tsx uses it to keep this hover flyout
    *  open while a row's Rename/Delete menu is open. The menu portals to `document.body`
    *  (ActionMenu.tsx), outside this flyout's own DOM subtree, so moving the cursor into it
@@ -49,8 +51,10 @@ export function LuciusHistoryHoverList({
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const runs = groups.find((g) => g.key === 'automation')?.items ?? []
+  const captures = groups.find((g) => g.key === 'capture')?.items ?? []
   const chats = groups.find((g) => g.key === 'chat')?.items ?? []
   const visibleRuns = sortWithinSection(selectVisibleRows(runs, statusFor, RECENT_RUNS), statusFor)
+  const visibleCaptures = selectVisibleRows(captures, statusFor, RECENT_CAPTURES)
   const visibleChats = selectVisibleRows(chats, statusFor, RECENT_CHATS)
 
   const row = (conv: ConversationMeta) => (
@@ -93,6 +97,24 @@ export function LuciusHistoryHoverList({
             </button>
           </div>
           {visibleRuns.map(row)}
+        </div>
+      )}
+      {captures.length > 0 && (
+        <div className="conv-menu-sec">
+          <div className="conv-menu-sec-h">
+            <Zap size={14} />
+            <span>Captures</span>
+            <button
+              type="button"
+              className="conv-menu-viewall"
+              onClick={() => onViewAll('capture')}
+              aria-label="View all captures"
+              title="View all captures"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          {visibleCaptures.map(row)}
         </div>
       )}
       <div className="conv-menu-sec conv-menu-sec--fill">

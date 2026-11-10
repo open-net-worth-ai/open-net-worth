@@ -173,7 +173,6 @@ def add_position(
     account_id: str,
     cost_currency: str | None = None,
     vesting_state: str = "vested",
-    note: str = "",
     acquired_at: str | None = None,
 ) -> dict:
     """Create an EMPTY position shell. Its quantity and cost basis come from the records the
@@ -188,13 +187,12 @@ def add_position(
             if cost_currency is not None
             else None,
             "vesting_state": vesting_state or "vested",
-            "note": note or "",
             "acquired_at": acquired_at or None,
         }
     )
 
 
-_UPDATABLE_FIELDS = {"vesting_state", "note", "account_id"}
+_UPDATABLE_FIELDS = {"vesting_state", "account_id"}
 
 _FIGURES_ARE_DERIVED = (
     "a position's quantity and cost basis are derived from its records, so they can't be "
@@ -404,12 +402,26 @@ def find_active_liquid_position(instrument_id: str, account_id: str) -> dict | N
     (a grant legitimately holds its own unvested and pending-release rows, and since the
     ownership/liquidity split the pending one is `vested` too — so entitlement alone no
     longer excludes it and we must exclude it by identity). Closed (qty <= 0) records never
-    match either: re-opening a sold-out holding is a real add."""
+    match either: re-opening a sold-out holding goes to `find_sold_out_liquid_position`."""
     grant_owned = _grant_managed_position_ids()
     for pos in PositionStore().query_positions(instrument_id=instrument_id, account_id=account_id):
         if pos["id"] in grant_owned:
             continue
         if vesting_state_of(pos) == "vested" and float(pos.get("quantity") or 0) > 0:
+            return pos
+    return None
+
+
+def find_sold_out_liquid_position(instrument_id: str, account_id: str) -> dict | None:
+    """The position a buy of a sold-out holding REOPENS: a qty<=0 liquid row for the same
+    instrument × account, never a grant's own. One rule for every acquire path — the Add-lot
+    form (`lots._ensure_acquire_position`) and add_positions — so a sell-out then rebuy keeps
+    its sales and dividends on one position instead of minting a sibling."""
+    grant_owned = _grant_managed_position_ids()
+    for pos in PositionStore().query_positions(instrument_id=instrument_id, account_id=account_id):
+        if pos["id"] in grant_owned or vesting_state_of(pos) != "vested":
+            continue
+        if float(pos.get("quantity") or 0) <= 0:
             return pos
     return None
 
@@ -556,22 +568,27 @@ def _apply_add(change: dict) -> dict:
         account_type=change.get("account_type"),
         currency=inst.get("quote_currency"),
     )
+    reopened = None
     if vesting == "vested" and not grant_managed:
-        held = _duplicate_holding(inst, account["id"], quantity)
+        held = _duplicate_holding(inst, account["id"])
         if held:
             return held
-    pos = add_position(
+        reopened = find_sold_out_liquid_position(inst["id"], account["id"])
+    pos = reopened or add_position(
         instrument_id=inst["id"],
         account_id=account["id"],
         cost_currency=cost_currency,
         vesting_state=vesting,
-        note=change.get("note", ""),
         acquired_at=change.get("acquired_at"),
     )
     result = {"ok": True, "position_id": pos["id"], "instrument": inst.get("symbol")}
+    if reopened:
+        result["reopened"] = True
     if quantity > 0:
         acquired_at = change.get("acquired_at") or user_today().isoformat()
-        result.update(_book_add_lot_or_undo(pos, change, quantity, acquired_at, cost_currency))
+        # A reopened row carries the holding's sales and dividends — a failed lot leaves it.
+        book = _book_add_lot if reopened else _book_add_lot_or_undo
+        result.update(book(pos, change, quantity, acquired_at, cost_currency))
         if result.get("error"):
             return {"error": result["error"]}
     _after_add(inst)
@@ -615,11 +632,10 @@ def _existing_record_for_add(change: dict, quantity: float) -> dict | None:
     }
 
 
-def _duplicate_holding(inst: dict, account_id: str, quantity: float) -> dict | None:
+def _duplicate_holding(inst: dict, account_id: str) -> dict | None:
     """Refuse a second liquid position for the same instrument × account — a buy of an
     existing holding is a lot acquisition, not a new position (the duplicate-position /
-    double-quantity incident). An EMPTY add (quantity 0) reuses an empty shell already there
-    instead of minting another."""
+    double-quantity incident). A buy of a SOLD-OUT holding is the caller's to reopen."""
     existing = find_active_liquid_position(inst["id"], account_id)
     if existing:
         return {
@@ -632,12 +648,6 @@ def _duplicate_holding(inst: dict, account_id: str, quantity: float) -> dict | N
             ),
             "position_id": existing["id"],
         }
-    if quantity > 0:
-        return None
-    grant_owned = _grant_managed_position_ids()
-    for pos in PositionStore().query_positions(instrument_id=inst["id"], account_id=account_id):
-        if pos["id"] not in grant_owned and vesting_state_of(pos) == "vested":
-            return {"ok": True, "position_id": pos["id"], "instrument": inst.get("symbol")}
     return None
 
 
@@ -766,6 +776,20 @@ def resolve_account(
 
 def get_position(position_id: str) -> dict | None:
     return PositionStore().find_by_id(position_id)
+
+
+def position_ids_for_ticker(ticker: str) -> list[str]:
+    """Every position (one per custodian, sold-out included — their lots are history) whose
+    instrument's display ticker or symbol is ``ticker``, case-insensitively."""
+    wanted = str(ticker or "").strip().upper()
+    if not wanted:
+        return []
+    matching = {
+        i["id"]
+        for i in InstrumentStore().all()
+        if wanted in {_row_ticker(i).upper(), str(i.get("symbol") or "").upper()}
+    }
+    return [p["id"] for p in PositionStore().all() if p.get("instrument_id") in matching]
 
 
 def hydrated_one(position_id: str) -> dict | None:
@@ -999,7 +1023,6 @@ def hydrated(
                 "ticker": _row_ticker(inst),
                 "unit": inst.get("unit", ""),
                 "quote_per_unit": qpu,
-                "note": pos.get("note", ""),
                 # ── day-P&L (Pillar 1): quote currency; None = no prior day yet ──
                 "prev_price": prev,
                 "day_change": day_change,

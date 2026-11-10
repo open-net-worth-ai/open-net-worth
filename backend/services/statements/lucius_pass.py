@@ -648,13 +648,34 @@ def _run_batch(
 
 def active_ops(record: dict) -> list[dict]:
     """The ops the LAST preview applied — what ``decision_commit`` re-applies so the booked
-    outcome is exactly the reviewed one. Retired the moment the record's parse guidance no
-    longer matches the guidance the pass processed (instructions edited away → a fresh
-    preview re-decides; cleared → nothing applies)."""
+    outcome is exactly the reviewed one. Lucius's are retired the moment the record's parse
+    guidance no longer matches the guidance the pass processed (instructions edited away → a
+    fresh preview re-decides; cleared → nothing applies); the owner's own row types stay."""
     ops = record.get("lucius_ops") or []
-    if not ops or record.get("lucius_pass_hash") != record.get("parse_instructions_hash"):
-        return []
-    return list(ops)
+    if ops and record.get("lucius_pass_hash") != record.get("parse_instructions_hash"):
+        ops = []
+    return merge_user_routes(record, list(ops))
+
+
+def merge_user_routes(record: dict, ops: list[dict]) -> list[dict]:
+    """The owner's own Type choice per row (the review's Edit window), over Lucius's ops. A
+    chosen account routes the row as a transfer through the same guarded reshape — first, so
+    it wins over a Lucius route; ``""`` means "not a transfer" and drops Lucius's route."""
+    chosen: dict[int, str] = {}
+    for key, account_id in (record.get("user_routes") or {}).items():
+        try:
+            chosen[int(key)] = str(account_id or "")
+        except (TypeError, ValueError):
+            continue
+    if not chosen:
+        return ops
+    user_ops = [
+        {"row": row, "op": "route_transfer", "account_id": account_id, "source": "user"}
+        for row, account_id in sorted(chosen.items())
+        if account_id
+    ]
+    kept = [o for o in ops if not (o.get("op") == "route_transfer" and o.get("row") in chosen)]
+    return user_ops + kept
 
 
 # ── Prompt ────────────────────────────────────────────────────────────────────────────

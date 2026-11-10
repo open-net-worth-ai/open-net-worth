@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, X } from '../../ui/icons'
 import { ConversationRenameInput, ConversationRowMenu } from './ConversationRowActions'
-import { BackgroundConversationsToggle, ConversationIcon } from './ConversationMenu'
-import { useShowBackgroundConversations } from '../../hooks/useShowBackgroundConversations'
+import { ConversationIcon, type ConversationKind } from './ConversationMenu'
 import { ConversationStatusBadge, conversationStatusLabel } from './ConversationStatusBadge'
 import { isBackgroundConversation, type ConversationMeta } from '../../hooks/useConversations'
 import type { ConvRowStatus } from '../../types/chat'
@@ -41,7 +40,7 @@ export function ConversationBrowser({
   onStop: (id: string) => void
   formatWhen: (conv: ConversationMeta) => string
   /** Which filter it opens on — "View all runs" should land on runs, not ask again. */
-  initialKind?: 'all' | 'chat' | 'automation'
+  initialKind?: 'all' | ConversationKind
 }) {
   // Esc goes back to the conversation — same as the sidebar it opened from.
   useEffect(() => {
@@ -53,52 +52,50 @@ export function ConversationBrowser({
   }, [onClose])
 
   const [query, setQuery] = useState('')
-  const [kind, setKind] = useState<'all' | 'chat' | 'automation'>(initialKind)
+  const [kind, setKind] = useState<'all' | ConversationKind>(initialKind)
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  const [showBackground] = useShowBackgroundConversations()
   const rows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase()
     return conversations.filter((conv) => {
       const isRun = conv.source === 'automation'
-      if (!showBackground && isBackgroundConversation(conv)) return false
+      const isInApp = !conv.source && !conv.channel
       // Same rule as `conversationGroups`: "chat" means IN-APP — neither runner-owned
-      // (`source`) nor arriving over a transport (`channel`).
-      if (kind === 'chat' && (conv.source || conv.channel)) return false
+      // (`source`) nor arriving over a transport (`channel`) — and typed into, not a capture.
+      if (kind === 'chat' && !(isInApp && !isBackgroundConversation(conv))) return false
       if (kind === 'automation' && !isRun) return false
+      if (kind === 'capture' && !(isInApp && isBackgroundConversation(conv))) return false
       return !needle || conv.title.toLocaleLowerCase().includes(needle)
     })
-  }, [conversations, query, kind, showBackground])
+  }, [conversations, query, kind])
 
   return (
     <div className="conv-browser" role="dialog" aria-label="All conversations">
       <div className="conv-browser-head">
-        <span className="conv-browser-t">Chats and runs</span>
+        <span className="conv-browser-t">All conversations</span>
         <button type="button" className="conv-browser-x" onClick={onClose} aria-label="Close">
           <X size={18} strokeWidth={1.6} />
         </button>
       </div>
 
       <div className="conv-browser-tools">
-        <div className="conv-browser-searchrow">
-          <label className="conv-browser-search">
-            <Search size={13} aria-hidden="true" />
-            <span className="ui-visually-hidden">Search conversations</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search…"
-              autoFocus
-            />
-          </label>
-          <BackgroundConversationsToggle />
-        </div>
+        <label className="conv-browser-search">
+          <Search size={13} aria-hidden="true" />
+          <span className="ui-visually-hidden">Search conversations</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search…"
+            autoFocus
+          />
+        </label>
         <div className="conv-seg conv-seg--browser" role="tablist" aria-label="Filter">
           {(
             [
               ['all', 'All'],
               ['chat', 'Chats'],
               ['automation', 'Runs'],
+              ['capture', 'Captures'],
             ] as const
           ).map(([value, label]) => (
             <button

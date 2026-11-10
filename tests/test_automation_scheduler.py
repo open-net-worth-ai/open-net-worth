@@ -236,7 +236,7 @@ async def test_a_pending_approval_does_not_block_the_next_scheduled_run(
             },
         }
     )
-    AutomationStore().update_by_id(automation["id"], {"next_run_at": "2025-05-04T09:00:00+00:00"})
+    AutomationStore().update_by_id(automation["id"], {"next_run_at": "2025-05-05T09:00:00+00:00"})
     parked = AutomationRunStore().start(
         {
             "automation_id": automation["id"],
@@ -321,3 +321,193 @@ async def test_a_run_that_is_actually_executing_still_blocks_a_second_one(
 
     assert result["ran"] == 0 and result["waiting"] == 1
     assert AutomationRunStore().find_by_id(running["id"])["status"] == "running"
+
+
+SLOT = "2026-08-04T09:00:00+00:00"
+DAILY = {"kind": "schedule", "type": "daily", "time": "09:00", "tzid": "UTC"}
+
+
+def _at(day: int, hour: int = 9, minute: int = 0) -> datetime:
+    return datetime(2026, 8, day, hour, minute, tzinfo=timezone.utc)
+
+
+def _automation_that_parks(monkeypatch, trigger: dict, *, while_running=None) -> tuple[dict, list]:
+    """An Automation due at SLOT whose every run stops on an approval card."""
+    from backend.core.automation_runner import (
+        AutomationRunnerResult,
+        register_automation_session_materializer,
+    )
+
+    monkeypatch.setattr("backend.services.automations.service.now_utc", lambda: _at(4, 7))
+    automation = apply_automation_change(
+        {
+            "op": "create",
+            "automation": {
+                "name": "Digest",
+                "instructions": "Read my email.",
+                "trigger": trigger,
+                "execution": {"kind": "lucius"},
+            },
+        }
+    )
+    AutomationStore().update_by_id(automation["id"], {"next_run_at": SLOT})
+    monkeypatch.setattr("backend.services.automations.service.now_utc", lambda: _at(4, 9, 1))
+    register_automation_session_materializer(
+        lambda run, a: str(run.get("session_id") or f"automation-run-{run['id']}")
+    )
+    started: list[str] = []
+
+    async def parking_runner(request, event_sink=None):
+        started.append(request.run_id)
+        if while_running is not None:
+            while_running(automation["id"])
+        return AutomationRunnerResult(
+            status="waiting",
+            session_id=request.session_id,
+            summary="Needs you",
+            model="test",
+            input_tokens=1,
+            output_tokens=1,
+            cost_usd=0.0,
+        )
+
+    monkeypatch.setattr(runs_mod, "run_with_automation_runner", parking_runner)
+    return automation, started
+
+
+async def _settle_background_runs() -> None:
+    while runs_mod._tasks:
+        await asyncio.gather(*list(runs_mod._tasks))
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_parks_uses_up_its_slot_and_the_next_one_still_runs(
+    isolated_automation_paths, monkeypatch
+):
+    """Repro: a digest stopped on an approval card at 00:02 and the 00:03 tick started a second
+    run for the same midnight slot. Letting go of the claim was right (a parked run must not
+    freeze the schedule), but the slot stayed due because only a FINISHED run moved it on."""
+    automation, started = _automation_that_parks(monkeypatch, DAILY)
+
+    first = await run_due_automations(_at(4, 9, 1))
+    await _settle_background_runs()
+    again = await run_due_automations(_at(4, 9, 3))
+
+    assert first["ran"] == 1
+    assert again["ran"] == 0, "the same slot must not start a second run"
+    assert len(started) == 1
+    parked = AutomationRunStore().find_by_id(started[0])
+    assert parked["status"] == "waiting"
+    assert AutomationStore().find_by_id(automation["id"])["next_run_at"] == (
+        "2026-08-05T09:00:00+00:00"
+    )
+
+    # The fix from the five-day freeze still holds: tomorrow's slot runs with the card untapped.
+    monkeypatch.setattr("backend.services.automations.service.now_utc", lambda: _at(5, 9, 1))
+    tomorrow = await run_due_automations(_at(5, 9, 1))
+    await _settle_background_runs()
+
+    assert tomorrow["ran"] == 1
+    assert len(started) == 2
+    assert AutomationRunStore().find_by_id(started[0])["status"] == "waiting"
+
+
+@pytest.mark.asyncio
+async def test_a_one_off_run_that_parks_runs_once_and_finishes_when_answered(
+    isolated_automation_paths, monkeypatch
+):
+    from backend.core.automation_runner import AutomationRunnerResult
+    from backend.services.automations.runs import (
+        begin_automation_continuation,
+        reconcile_automation_continuation,
+    )
+
+    automation, started = _automation_that_parks(
+        monkeypatch, {"kind": "schedule", "type": "once", "at": SLOT}
+    )
+
+    await run_due_automations(_at(4, 9, 1))
+    await _settle_background_runs()
+    again = await run_due_automations(_at(4, 9, 3))
+
+    assert again["ran"] == 0
+    parked_automation = AutomationStore().find_by_id(automation["id"])
+    assert parked_automation["next_run_at"] is None
+    assert parked_automation["status"] == "active", "it isn't finished until the run is"
+
+    session_id = AutomationRunStore().find_by_id(started[0])["session_id"]
+    latest, baseline = begin_automation_continuation(session_id)
+    reconcile_automation_continuation(
+        latest,
+        baseline,
+        AutomationRunnerResult(status="completed", session_id=session_id, summary="done"),
+    )
+
+    assert AutomationStore().find_by_id(automation["id"])["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_a_parked_run_counts_towards_max_runs(isolated_automation_paths, monkeypatch):
+    automation, started = _automation_that_parks(monkeypatch, DAILY)
+    AutomationStore().update_by_id(automation["id"], {"max_runs": 1})
+
+    await run_due_automations(_at(4, 9, 1))
+    await _settle_background_runs()
+    tomorrow = await run_due_automations(_at(5, 9, 1))
+
+    assert tomorrow["ran"] == 0
+    assert len(started) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_manual_run_that_parks_leaves_the_schedule_alone(
+    isolated_automation_paths, monkeypatch
+):
+    automation, started = _automation_that_parks(monkeypatch, DAILY)
+
+    await runs_mod.run_automation(automation["id"], trigger={"kind": "manual"})
+    await _settle_background_runs()
+
+    assert len(started) == 1
+    assert AutomationStore().find_by_id(automation["id"])["next_run_at"] == SLOT
+
+
+@pytest.mark.asyncio
+async def test_a_schedule_edited_during_the_run_is_not_overwritten_when_it_parks(
+    isolated_automation_paths, monkeypatch
+):
+    edited = "2026-08-10T09:00:00+00:00"
+
+    def edit_schedule(automation_id: str) -> None:
+        AutomationStore().update_by_id(automation_id, {"next_run_at": edited})
+
+    automation, _ = _automation_that_parks(monkeypatch, DAILY, while_running=edit_schedule)
+
+    await run_due_automations(_at(4, 9, 1))
+    await _settle_background_runs()
+
+    assert AutomationStore().find_by_id(automation["id"])["next_run_at"] == edited
+
+
+def test_boot_moves_on_a_slot_whose_parked_run_never_got_to(isolated_automation_paths, monkeypatch):
+    """A crash between parking and moving on would otherwise hand the slot back at boot."""
+    from backend.services.automations.runs import recover_automation_runs
+
+    automation, _ = _automation_that_parks(monkeypatch, DAILY)
+    parked = AutomationRunStore().start(
+        {
+            "automation_id": automation["id"],
+            "session_id": "automation-run-parked",
+            "trigger": {"kind": "schedule", "scheduled_for": SLOT},
+        }
+    )
+    AutomationRunStore().transition(parked["id"], {"running"}, "waiting", {})
+
+    recover_automation_runs(
+        materialize_session=lambda row, a: row["session_id"],
+        pending_for_session=lambda session_id: ["tool-1"],
+    )
+
+    assert AutomationStore().find_by_id(automation["id"])["next_run_at"] == (
+        "2026-08-05T09:00:00+00:00"
+    )

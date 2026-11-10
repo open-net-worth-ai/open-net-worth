@@ -169,7 +169,7 @@ def test_dashboard_attention_marks_debt_covered_only_when_every_dollar_is(monkey
     monkeypatch.setattr(
         planning,
         "card_payment_coverage",
-        lambda month: [{"owed": 392.0, "held": 392.0, "underfunded": 0.0}],
+        lambda month, **_: [{"owed": 392.0, "held": 392.0, "underfunded": 0.0}],
     )
     att = analytics._attention(rows)
     assert att["debt_covered"] is True and att["debt_covered_total"] == 392.0
@@ -177,7 +177,7 @@ def test_dashboard_attention_marks_debt_covered_only_when_every_dollar_is(monkey
     monkeypatch.setattr(
         planning,
         "card_payment_coverage",
-        lambda month: [{"owed": 392.0, "held": 100.0, "underfunded": 292.0}],
+        lambda month, **_: [{"owed": 392.0, "held": 100.0, "underfunded": 292.0}],
     )
     att = analytics._attention(rows)
     assert att["debt_covered"] is False and att["debt_covered_total"] == 100.0

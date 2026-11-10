@@ -15,6 +15,7 @@ import {
   invalidateQueryCache,
 } from '../../../state/queryCache'
 import { getBaseCurrency } from '../../../utils/format'
+import { emitDataChanged } from '../../../lucius/bus'
 import { PORTFOLIO_KEY as SHARED_PORTFOLIO_KEY, useNetWorth } from '../../../hooks/serverState'
 import { accountClearedValue, accountValue, fromApiAccount, fromApiTxn } from './data'
 import { retiredEnvelopeNotice } from './retiredPaymentEnvelope'
@@ -81,6 +82,8 @@ const DEFAULT_FILTERS: TxnFilters = {
   amounts: [],
   uncategorized: false,
   batchId: null,
+  showHidden: false,
+  hiddenOnly: false,
 }
 
 // Holdings by account_id (market value in base currency)
@@ -180,6 +183,10 @@ export interface AccountsLedgerState {
   // loading states
   loading: boolean
   loadingTxns: boolean
+  /** The in-flight fetch will visibly REPLACE the rows on screen: a filter change, or a reload
+   *  because the data changed (Lucius, another surface, a write here). Never the silent
+   *  revalidation a remount does, nor a load-more append. */
+  reloadingRows: boolean
   /** A further page of transactions is being appended to the register. */
   isLoadingMore: boolean
   error: string | null
@@ -287,6 +294,8 @@ export function buildTxnQueryString(filters: TxnFilters, offset: number): string
   if (filters.needsReview) p.set('needs_review', 'true')
   if (filters.uncategorized) p.set('uncategorized', 'true')
   if (filters.batchId) p.set('batch_id', filters.batchId)
+  if (filters.hiddenOnly) p.set('hidden', 'true')
+  else if (!filters.showHidden) p.set('hidden', 'false')
   appendEach(p, 'tag', filters.tags)
   appendEach(p, 'payee_id', filters.payeeIds)
   appendEach(p, 'source', filters.source)
@@ -399,6 +408,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     () => getCachedQueryData<ApiAccount[]>(ACCOUNTS_KEY) === undefined,
   )
   const [loadingTxns, setLoadingTxns] = useState(false)
+  const [reloadingRows, setReloadingRows] = useState(false)
   // Distinct from `loadingTxns` (which also covers the initial/filtered load, where rows are
   // absent and a full-list spinner is correct): this is ONLY true for an in-flight `loadMore`
   // append, so the list can show a small trailing "loading more" row instead of nothing.
@@ -435,6 +445,13 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
   // (e.g. the initial unfiltered mount fetch) resolving AFTER a newer one (e.g. a just-applied
   // date filter) would silently clobber the correct state with stale data.
   const loadTxnsAbortRef = useRef<AbortController | null>(null)
+  // Which query the rows on screen answer. A remount paints the cached default rows and
+  // revalidates that same query — no visible "reloading" for it (owner report 2026-10-27:
+  // every return to the tab from Lucius flashed the refetch bar). A reload because the data
+  // CHANGED (`refresh`/`refreshTxns`) does show it.
+  const shownQueryRef = useRef<string | null>(
+    initialTxnData ? buildTxnQueryString(DEFAULT_FILTERS, 0) : null,
+  )
 
   // ── Core data fetch (accounts, categories, payees, FX) ─────────────────
 
@@ -490,7 +507,13 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
   // ── Transactions fetch (filters + pagination) ────────────────────────────
 
   const loadTxns = useCallback(
-    async (currentFilters: TxnFilters, currentOffset: number, append = false, force = false) => {
+    async (
+      currentFilters: TxnFilters,
+      currentOffset: number,
+      append = false,
+      force = false,
+      dataChanged = false,
+    ) => {
       // Supersede any in-flight request — only the LAST loadTxns call's response may ever land in
       // state, regardless of which one resolves first (REG2: an out-of-order response otherwise
       // silently overwrites a correctly-filtered result with a stale one).
@@ -498,6 +521,8 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       const ac = new AbortController()
       loadTxnsAbortRef.current = ac
       setLoadingTxns(true)
+      const queryKey = buildTxnQueryString(currentFilters, 0)
+      if (!append) setReloadingRows(dataChanged || queryKey !== shownQueryRef.current)
       try {
         const qs = buildTxnQueryString(currentFilters, currentOffset)
         const url = `/api/transactions?${qs}`
@@ -531,6 +556,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         const items: ApiTxn[] = Array.isArray(data) ? data : (data.items ?? data.transactions ?? [])
         const mapped = items.map(fromApiTxn)
         setTransactions((prev) => (append ? [...prev, ...mapped] : mapped))
+        if (!append) shownQueryRef.current = queryKey
         setHasMore(
           !Array.isArray(data) && typeof data.has_more === 'boolean'
             ? data.has_more
@@ -547,7 +573,10 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         if (ac.signal.aborted) return
         setError(e instanceof Error ? e.message : 'Failed to load transactions')
       } finally {
-        if (!ac.signal.aborted) setLoadingTxns(false)
+        if (!ac.signal.aborted) {
+          setLoadingTxns(false)
+          setReloadingRows(false)
+        }
       }
     },
     [],
@@ -842,6 +871,15 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       // paint has to come back off even though the request itself succeeded.
       const refused = new Set([...result.not_found, ...result.skipped.map((s) => s.id)])
       if (refused.size) restore(refused)
+      // A review flip changes WHICH rows a "Needs review" register holds and the "N to review"
+      // count — the optimistic paint alone left 69 reviewed rows sitting in that view with the
+      // count unchanged (owner, 2026-10-26). Refetch the list (a reviewed row must leave the
+      // view, so page 0 is right) and tell every screen, the count included.
+      if ('needs_review' in data) {
+        await loadTxns(filters, 0, false, true)
+        setOffset(0)
+        emitDataChanged(['ledger'])
+      }
       void refreshAccounts()
       fireMutate()
       return result
@@ -999,7 +1037,18 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         method: 'POST',
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const text = await res.text()
+        // A 409 means the shown balance was stale — re-read it so a retry asks the right figure.
+        if (res.status === 409) await refreshAccount(id)
+        let detail: unknown
+        try {
+          detail = JSON.parse(text)?.detail
+        } catch {
+          detail = undefined
+        }
+        throw new Error(typeof detail === 'string' && detail ? detail : text)
+      }
       const result: ReconcileResult = await res.json()
       await refreshAccount(id)
       // The reconcile may create an adjustment txn — reload txns
@@ -1014,7 +1063,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
   const refresh = useCallback(async () => {
     invalidateQueryCache((key) => key.startsWith('/api/transactions?'))
     setOffset(0)
-    await Promise.all([loadCore(true), loadTxns(filters, 0, false)])
+    await Promise.all([loadCore(true), loadTxns(filters, 0, false, false, true)])
   }, [loadCore, filters, loadTxns])
 
   // force=true is REQUIRED, not defensive: every caller is a POST-WRITE reload (import commit,
@@ -1024,7 +1073,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
   // while the ledger on disk already had deleted=true on all six. ``refresh`` above dodged this
   // only because it invalidates the cache by key first; this path had neither guard.
   const refreshTxns = useCallback(() => {
-    loadTxns(filters, 0, false, true)
+    loadTxns(filters, 0, false, true, true)
     setOffset(0)
   }, [filters, loadTxns])
 
@@ -1039,6 +1088,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     baseCurrency: getBaseCurrency(),
     loading,
     loadingTxns,
+    reloadingRows,
     isLoadingMore,
     error,
     hasLoaded,

@@ -2,10 +2,13 @@
 # Host a public Open Net Worth demo on one AWS Lightsail VM, reached through a Cloudflare tunnel.
 #
 #   demo-aws.sh provision          create the VM (Ubuntu 24.04, 2 GB, Docker, only SSH open)
-#   demo-aws.sh ship [--worktree]  build the image for linux/amd64 and load it on the VM
+#   demo-aws.sh ship [--worktree | --ref REF]  build the image for linux/amd64 and load it on the VM
 #   demo-aws.sh book --seed        generate a fresh fabricated demo book on the VM
+#   demo-aws.sh book --reset       replace the live book with a fresh one, keeping Lucius's AI settings
 #   demo-aws.sh book [DIR]         or copy an existing hosted demo book (default ~/.open-net-worth-demo)
+#   demo-aws.sh backup             save the live book to this machine (~/.open-net-worth-demo-backups)
 #   demo-aws.sh lucius             point Lucius at OpenRouter (key read silently, never echoed)
+#   demo-aws.sh voice              turn on voice calls with the demo's own LiveKit project (hidden prompts)
 #   demo-aws.sh verify             open the VM's demo at http://127.0.0.1:15175 over SSH
 #   demo-aws.sh tunnel             start the connector for a tunnel DEDICATED to the demo
 #   demo-aws.sh ssh | logs | status
@@ -22,16 +25,32 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${HERE}/../.." && pwd)"
 STACK=/srv/onw-demo-stack
 BOOK=/srv/onw-demo
+BACKUP_DIR="${ONW_DEMO_BACKUP_DIR:-${HOME}/.open-net-worth-demo-backups}"
+BACKUP_KEEP="${ONW_DEMO_BACKUP_KEEP:-14}"
+
+# Read / write Lucius's AI settings inside the app container (they live in the book).
+AI_READ_PY='import json; from backend.db.model_config_store import ModelConfigStore as S; print(json.dumps(S().get() or {}))'
+AI_WRITE_PY='import json, sys; from backend.db.model_config_store import ModelConfigStore as S; raw = json.loads(sys.stdin.read()); raw and S().save(raw)'
+# The same for voice calls' LiveKit project (`demo-aws.sh voice`), also in the book. Written back
+# only when it holds a key, so a book that never had voice gets no connector row.
+VOICE_READ_PY='import json; from backend.db.voice_config_store import VoiceConfigStore as S; print(json.dumps(S().get()))'
+VOICE_WRITE_PY='import json, sys; from backend.db.voice_config_store import VoiceConfigStore as S; raw = json.loads(sys.stdin.read() or "{}"); raw.get("api_key") and S().update(raw)'
 
 ls_() { aws lightsail --region "${REGION}" "$@"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 confirm() { read -r -p "$1 [y/N] " a; [[ "${a}" == "y" || "${a}" == "Y" ]]; }
 
 IP=""
+# ONW_DEMO_HOST skips the AWS lookup: the VM sits on a static IP, and an unattended job should
+# not depend on an AWS sign-in session that expires.
 need_vm() {
-  IP="$(ls_ get-instance --instance-name "${NAME}" --query 'instance.publicIpAddress' --output text 2>/dev/null)" \
-    && [[ -n "${IP}" && "${IP}" != "None" ]] \
-    || die "no running Lightsail instance '${NAME}' in ${REGION} — run provision first"
+  [[ -n "${ONW_DEMO_HOST:-}" ]] && { IP="${ONW_DEMO_HOST}"; return 0; }
+  # The static IP outlives the instance: an upgrade starts a bigger instance from a snapshot
+  # under a new name and moves this IP to it (onw-demo → onw-demo-xl, 2026-11-01).
+  IP="$(ls_ get-static-ip --static-ip-name "${NAME}-ip" --query 'staticIp.ipAddress' --output text 2>/dev/null)" \
+    || IP="$(ls_ get-instance --instance-name "${NAME}" --query 'instance.publicIpAddress' --output text 2>/dev/null)"
+  [[ -n "${IP}" && "${IP}" != "None" ]] \
+    || die "no static IP '${NAME}-ip' or instance '${NAME}' in ${REGION} — run provision first"
 }
 SSH_OPTS=(-i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
 remote() { ssh "${SSH_OPTS[@]}" "ubuntu@${IP}" "$@"; }
@@ -100,29 +119,35 @@ CLOUDINIT
 }
 
 cmd_ship() {
-  local sha src
+  local sha src ref=HEAD
   BUILD_TMP=""
+  [[ "${1:-}" == "--ref" ]] && ref="${2:?--ref needs a git ref, e.g. origin/main}"
   if [[ "${1:-}" == "--worktree" ]]; then
     src="${REPO_ROOT}"
     sha="$(git -C "${REPO_ROOT}" rev-parse --short HEAD)-dirty-$(date +%Y%m%d%H%M)"
     echo "==> building from the WORKING TREE (uncommitted changes included)"
   else
-    sha="$(git -C "${REPO_ROOT}" rev-parse --short HEAD)"
+    sha="$(git -C "${REPO_ROOT}" rev-parse --short=9 "${ref}")"
     BUILD_TMP="$(mktemp -d "${TMPDIR:-/tmp}/onw-demo-build.XXXXXX")"
-    git -C "${REPO_ROOT}" worktree add --detach "${BUILD_TMP}" HEAD >/dev/null
+    git -C "${REPO_ROOT}" worktree add --detach "${BUILD_TMP}" "${ref}" >/dev/null
     trap 'git -C "${REPO_ROOT}" worktree remove --force "${BUILD_TMP}" >/dev/null 2>&1 || true' EXIT
     src="${BUILD_TMP}"
-    echo "==> building committed HEAD ${sha} (pass --worktree to include uncommitted work)"
+    echo "==> building committed ${ref} ${sha} (pass --worktree to include uncommitted work)"
   fi
+  # Every image carries the voice-call libraries; calls stay off until `voice` sets the flag.
   docker buildx build --platform linux/amd64 -t "onw-demo:${sha}" --load "${src}"
   echo "==> uploading the image (a few minutes)..."
   docker save "onw-demo:${sha}" | gzip -1 | remote 'gunzip | docker load'
-  scp "${SSH_OPTS[@]}" -q "${HERE}/compose.yml" "ubuntu@${IP}:${STACK}/compose.yml"
+  # The compose file ships with the code it was written for, not with this checkout's copy.
+  scp "${SSH_OPTS[@]}" -q "${src}/deploy/aws-demo/compose.yml" "ubuntu@${IP}:${STACK}/compose.yml"
   ensure_unpublished_password
   printf '%s' "${sha}" | remote_env_set ONW_DEMO_TAG
   if remote "test -s ${BOOK}/data/onw.db"; then
     compose up -d app
-    remote "docker image prune -af --filter 'until=168h' >/dev/null" || true
+    # Keep the running image and the newest other one (the rollback target). Each is ~4 GB and
+    # the daily job ships most days, so a 7-day window filled the disk to 74% (2026-11-01).
+    remote "docker images onw-demo --format '{{.Tag}}' | grep -vx '${sha}' | tail -n +2 \
+      | xargs -r -I{} docker rmi -f onw-demo:{} >/dev/null; docker image prune -f >/dev/null" || true
     echo "==> running onw-demo:${sha}"
   else
     echo "==> image loaded; no book yet — next: $0 book --seed"
@@ -147,6 +172,37 @@ ensure_unpublished_password() {
     || remote "head -c 48 /dev/urandom | base64 | tr -d '\n/+='" | remote_env_set DEMO_UNPUBLISHED_PASSWORD
 }
 
+# The live book, saved to THIS machine before anything replaces it. `book --reset` deletes the
+# VM's own nightly backups (they hold visitors' conversations) and there are no Lightsail
+# snapshots, so without this a book replaced by mistake is gone (2026-10-26). The archive holds
+# data/ exactly as `book DIR` expects: extract it and run `demo-aws.sh book <that dir>`.
+# It contains the AI key and the auth hash, so the folder is owner-only.
+cmd_backup() {
+  remote "test -s ${BOOK}/data/onw.db" || { echo "==> no book on the VM yet; nothing to back up"; return 0; }
+  local out
+  ( umask 077; mkdir -p "${BACKUP_DIR}" )
+  out="${BACKUP_DIR}/onw-demo-$(date +%Y%m%d-%H%M%S).tar.gz"
+  echo "==> saving the live book to ${out}..."
+  # SQLite's online backup is consistent while the app keeps writing; copying onw.db + -wal is not.
+  remote "BOOK=${BOOK} bash -s" > "${out}.part" <<'SH'
+set -euo pipefail
+s="$(mktemp -d)"; trap 'rm -rf "$s"' EXIT
+python3 -c 'import sqlite3, sys
+src, dst = sys.argv[1:]
+d = sqlite3.connect(dst)
+sqlite3.connect(src).backup(d)
+assert d.execute("pragma integrity_check").fetchone()[0] == "ok", "snapshot failed integrity_check"
+d.close()' "${BOOK}/data/onw.db" "$s/onw.db" </dev/null
+tar czf - --exclude='data/onw.db' --exclude='data/onw.db-wal' --exclude='data/onw.db-shm' \
+  --exclude='*.lock' -C "${BOOK}" data -C "$s" --transform 's,^onw\.db$,data/onw.db,' onw.db </dev/null
+SH
+  tar tzf "${out}.part" data/onw.db >/dev/null 2>&1 || { rm -f "${out}.part"; die "backup is incomplete — nothing was replaced"; }
+  chmod 600 "${out}.part" && mv "${out}.part" "${out}"
+  # Oldest first out; ls -t sorts newest first.
+  ls -1t "${BACKUP_DIR}"/onw-demo-*.tar.gz 2>/dev/null | tail -n +"$((BACKUP_KEEP + 1))" | while read -r old; do rm -f "${old}"; done
+  echo "==> saved ($(du -h "${out}" | cut -f1)); the newest ${BACKUP_KEEP} are kept in ${BACKUP_DIR}"
+}
+
 cmd_book_seed() {
   remote_env_has ONW_DEMO_TAG || die "no image on the VM yet — run ship first"
   remote "test -s ${BOOK}/data/onw.db" && die "the VM already has a book — remove ${BOOK}/data/onw.db first to reseed"
@@ -156,6 +212,38 @@ cmd_book_seed() {
   compose run --rm --no-deps app python3 -m backend.scripts.seed_demo --commit --quiet
   compose up -d app
   echo "==> demo is starting — next: $0 lucius, then $0 verify"
+}
+
+# Visitors edit the one shared book (a base-currency switch reaches everyone), so the daily job
+# starts each day from a fresh one. The OpenRouter key lives IN the book, so its config is read
+# out of the running container and written into the new book; it never leaves the VM.
+cmd_book_reset() {
+  remote_env_has ONW_DEMO_TAG || die "no image on the VM yet — run ship first"
+  cmd_backup
+  echo "==> replacing the book with a fresh one dated to today (AI and voice settings kept)..."
+  remote "STACK=${STACK} BOOK=${BOOK} bash -s" <<'SH'
+set -euo pipefail
+cd "${STACK}"
+read_py='import json; from backend.db.model_config_store import ModelConfigStore as S; print(json.dumps(S().get() or {}))'
+write_py='import json, sys; from backend.db.model_config_store import ModelConfigStore as S; raw = json.loads(sys.stdin.read()); raw and S().save(raw)'
+voice_read_py='import json; from backend.db.voice_config_store import VoiceConfigStore as S; print(json.dumps(S().get()))'
+voice_write_py='import json, sys; from backend.db.voice_config_store import VoiceConfigStore as S; raw = json.loads(sys.stdin.read() or "{}"); raw.get("api_key") and S().update(raw)'
+# This script arrives on bash's stdin, so every command that could read stdin gets /dev/null.
+ai="$(docker exec -e DEMO_MODE=0 onw-demo python3 -c "${read_py}" </dev/null)"
+[[ "${ai}" == "{}" ]] && echo "    (no AI settings in the old book — run: demo-aws.sh lucius)"
+# Voice calls' LiveKit project lives in the book too (demo-aws.sh voice); an image older than
+# voice calls has no store to read, which is no voice to carry.
+voice="$(docker exec -e DEMO_MODE=0 onw-demo python3 -c "${voice_read_py}" </dev/null 2>/dev/null || echo '{}')"
+docker compose stop app </dev/null
+# The app's nightly backups are copies of the old book, conversations included.
+rm -rf "${BOOK}/data" "${BOOK}/backups"
+mkdir -m 755 "${BOOK}/data" "${BOOK}/backups"
+docker compose run --rm --no-deps -T app python3 -m backend.scripts.seed_demo --commit --quiet </dev/null
+printf '%s' "${ai}" | docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c "${write_py}"
+printf '%s' "${voice}" | docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c "${voice_write_py}"
+docker compose up -d app </dev/null
+SH
+  echo "==> fresh book is starting"
 }
 
 cmd_book_copy() {
@@ -170,6 +258,13 @@ cmd_book_copy() {
   sqlite3 "${root}/data/onw.db" ".backup '${stage}/onw.db'"
   [[ "$(sqlite3 "${stage}/onw.db" 'PRAGMA integrity_check;')" == "ok" ]] || die "snapshot failed integrity_check"
 
+  cmd_backup
+  # Lucius's AI settings live IN the book, so copying another book over it would drop the key
+  # (2026-10-26). Read them out of the running app first; they stay on the VM, owner-only.
+  remote "umask 077; docker exec -e DEMO_MODE=0 onw-demo python3 -c '${AI_READ_PY}' > ${STACK}/.ai-carry.json 2>/dev/null \
+    || echo '{}' > ${STACK}/.ai-carry.json"
+  remote "umask 077; docker exec -e DEMO_MODE=0 onw-demo python3 -c '${VOICE_READ_PY}' > ${STACK}/.voice-carry.json 2>/dev/null \
+    || echo '{}' > ${STACK}/.voice-carry.json"
   compose stop app 2>/dev/null || true
   local excl=(--exclude 'onw.db' --exclude 'onw.db-wal' --exclude 'onw.db-shm' --exclude '*.lock'
               --exclude 'backups/')
@@ -183,10 +278,19 @@ cmd_book_copy() {
   ensure_session_key "${root}.session-key"
 
   if remote_env_has ONW_DEMO_TAG; then
+    if remote "grep -q '[^{} ]' ${STACK}/.ai-carry.json"; then
+      remote "cd ${STACK} && docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c '${AI_WRITE_PY}' < .ai-carry.json"
+      echo "==> Lucius's AI settings carried over"
+    fi
+    remote "cd ${STACK} && docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c '${VOICE_WRITE_PY}' < .voice-carry.json" \
+      || echo "    (voice-call settings were not carried over — run: $0 voice)"
+    remote "rm -f ${STACK}/.ai-carry.json ${STACK}/.voice-carry.json"
     compose up -d app
-    echo "==> book in place and the demo is starting — next: $0 lucius, then $0 verify"
+    echo "==> book in place and the demo is starting — next: $0 verify"
   else
-    echo "==> book in place — next: $0 ship"
+    # No image to write them with: the carried settings (keys included) must not stay behind.
+    remote "rm -f ${STACK}/.ai-carry.json ${STACK}/.voice-carry.json"
+    echo "==> book in place — next: $0 ship, then $0 lucius / $0 voice"
   fi
 }
 
@@ -234,6 +338,52 @@ PY
   echo "    set a credit limit on the key itself at https://openrouter.ai/settings/keys as the hard stop."
 }
 
+# Voice calls on the demo, with a LiveKit project of its OWN (never the owner's personal one):
+# its inference is billed by the call-minute, which DEMO_CALL_* in compose.yml caps. Each value
+# is read hidden and travels on stdin only; the keys are checked against LiveKit from the VM
+# (where the worker will connect from) before anything is stored.
+cmd_voice() {
+  local url key secret payload code
+  url="$(read_secret "The demo's LiveKit project URL, wss://… (input hidden): " | tr -d '[:space:]')"
+  key="$(read_secret "Its API key (input hidden): " | tr -d '[:space:]')"
+  secret="$(read_secret "Its API secret (input hidden): " | tr -d '[:space:]')"
+  [[ -n "${url}" && -n "${key}" && -n "${secret}" ]] || die "the URL, key and secret are all needed"
+  [[ "${url}" == wss://* ]] || die "the LiveKit URL starts with wss:// (${#url} characters given)"
+  payload="$(URL="${url}" KEY="${key}" SECRET="${secret}" python3 -c 'import json,os; print(json.dumps({"livekit_url": os.environ["URL"], "api_key": os.environ["KEY"], "api_secret": os.environ["SECRET"]}))')"
+  # DEMO_MODE=0 for this one process: the running demo refuses voice-settings writes from
+  # visitors (backend/api/demo_lockdown.py); the host's shell is the operator.
+  code="$(base64 <<'PY' | tr -d '\n'
+import json, subprocess, sys, urllib.error
+from backend.connectors.voice import rooms, service
+from backend.db.voice_config_store import VoiceConfigStore
+cfg = json.loads(sys.stdin.readline())
+if not service.libraries_installed():
+    sys.exit("This image has no voice libraries (it predates them): run `demo-aws.sh ship` again first.")
+# Import them for real, in a child: a native library this CPU cannot run dies with SIGILL
+# (seen under amd64 emulation), which would otherwise surface only as a worker that never starts.
+probe = [sys.executable, "-c", "import livekit.agents, livekit.plugins.silero"]
+if subprocess.run(probe, capture_output=True, timeout=180).returncode != 0:
+    sys.exit("The voice libraries fail to load on this VM: import livekit.agents in the container to see why.")
+try:
+    rooms.list_rooms(cfg)
+except urllib.error.HTTPError as e:
+    sys.exit(f"LiveKit rejected those keys (HTTP {e.code}) — check the key and secret belong to the project at that URL.")
+except Exception as e:
+    sys.exit(f"LiveKit is unreachable from the VM ({type(e).__name__}) — check the URL.")
+VoiceConfigStore().update({**cfg, "enabled": True})
+print("==> LiveKit accepted the keys; voice calls are set up")
+PY
+)"
+  printf '%s\n' "${payload}" | remote "docker exec -i -e DEMO_MODE=0 onw-demo python3 -c \"import base64; exec(base64.b64decode('${code}'))\"" \
+    || die "nothing was stored"
+  printf '1' | remote_env_set ONW_FLAG_VOICE_CALLS
+  compose up -d app  # an environment change needs the container recreated, not restarted
+  echo "    Calls are capped by DEMO_CALL_* in ${STACK}/.env (defaults: 10 min a call, 3 calls and"
+  echo "    15 min per visitor a day, 120 min a day in all, 2 at once). Also set a spending limit"
+  echo "    on the LiveKit project itself, as the hard stop. Turn calls off: set"
+  echo "    ONW_FLAG_VOICE_CALLS=0 in ${STACK}/.env and run docker compose up -d app there."
+}
+
 cmd_verify() {
   remote "curl -fsS http://127.0.0.1:5175/api/health" && echo
   echo "==> forwarding http://127.0.0.1:15175 → the VM's demo (no login). Ctrl-C to stop."
@@ -262,17 +412,24 @@ cmd_status() {
 }
 
 case "${1:-}" in
-  ship|book|lucius|verify|tunnel|status|logs|ssh) need_vm ;;
+  ship|book|backup|lucius|voice|verify|tunnel|status|logs|ssh) need_vm ;;
 esac
 case "${1:-}" in
   provision) cmd_provision ;;
   ship)      shift; cmd_ship "$@" ;;
-  book)      shift; if [[ "${1:-}" == "--seed" ]]; then cmd_book_seed; else cmd_book_copy "${1:-}"; fi ;;
+  book)      shift
+             case "${1:-}" in
+               --seed)  cmd_book_seed ;;
+               --reset) cmd_book_reset ;;
+               *)       cmd_book_copy "${1:-}" ;;
+             esac ;;
+  backup)    cmd_backup ;;
   lucius)    cmd_lucius ;;
+  voice)     cmd_voice ;;
   verify)    cmd_verify ;;
   tunnel)    cmd_tunnel ;;
   status)    cmd_status ;;
   logs)      remote "docker logs --tail 200 -f onw-demo" ;;
   ssh)       shift; remote "$@" ;;
-  *) sed -n '2,15p' "$0"; exit 2 ;;
+  *) sed -n '2,17p' "$0"; exit 2 ;;
 esac

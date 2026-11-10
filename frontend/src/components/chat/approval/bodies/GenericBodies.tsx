@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactElement } from 'react'
-import { diffLines } from 'diff'
+import { diffLines, diffWords } from 'diff'
 import type {
   AutomationFieldChange,
   AutomationUpdateDisplay,
@@ -12,6 +12,7 @@ import {
   ApprovalDetails,
   ApprovalDiff,
   ApprovalDiffLine,
+  ApprovalDiffWord,
   ApprovalFact,
   ApprovalFacts,
   ApprovalMeta,
@@ -193,15 +194,61 @@ export function GenericChangePreview({ change }: { change: ProposedChange }) {
   return <ArgumentRows entries={entries} />
 }
 
-type DiffRow = { kind: DiffKind; text: string }
+type WordPart = { text: string; op: 'context' | 'added' | 'removed' }
+type DiffRow = { kind: DiffKind; text: string; parts?: WordPart[] }
 type DiffItem = { type: 'line'; row: DiffRow } | { type: 'collapsed'; rows: DiffRow[] }
 
+// Below this share of unchanged characters a line was rewritten, not edited — one line
+// interleaving two different sentences is unreadable, so the pair stays two lines.
+const MIN_SHARED = 0.4
+
+function splitLines(value: string): string[] {
+  const lines = value.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop()
+  return lines
+}
+
+// A one-line instruction edited by a phrase is one removed and one added line; show it once,
+// colouring only the words that changed, so the edit is visible without comparing two
+// paragraphs by eye. Null when the line was rewritten or differs only in whitespace.
+function mergedRow(removed: string, added: string): DiffRow | null {
+  const parts = diffWords(removed, added).map(
+    (c): WordPart => ({ text: c.value, op: c.added ? 'added' : c.removed ? 'removed' : 'context' }),
+  )
+  const shared = parts.filter((p) => p.op === 'context').reduce((n, p) => n + p.text.length, 0)
+  if (shared < MIN_SHARED * Math.max(removed.length, added.length)) return null
+  if (parts.every((p) => p.op === 'context')) return null
+  return { kind: 'edited', text: added, parts }
+}
+
+function pairedRows(removed: string[], added: string[]): DiffRow[] {
+  const asBlocks = () => [
+    ...removed.map((text): DiffRow => ({ kind: 'removed', text })),
+    ...added.map((text): DiffRow => ({ kind: 'added', text })),
+  ]
+  if (removed.length !== added.length) return asBlocks()
+  const merged = removed.map((text, j) => mergedRow(text, added[j]!))
+  if (merged.every((row) => row === null)) return asBlocks()
+  return merged.flatMap((row, j): DiffRow[] =>
+    row
+      ? [row]
+      : [
+          { kind: 'removed', text: removed[j]! },
+          { kind: 'added', text: added[j]! },
+        ],
+  )
+}
+
 function diffRows(before: string, after: string): DiffRow[] {
-  return diffLines(before, after).flatMap((hunk) => {
-    const lines = hunk.value.split('\n')
-    if (lines[lines.length - 1] === '') lines.pop()
+  const hunks = diffLines(before, after)
+  return hunks.flatMap((hunk, i) => {
+    const next = hunks[i + 1]
+    if (hunk.added && hunks[i - 1]?.removed) return []
+    if (hunk.removed && next?.added) {
+      return pairedRows(splitLines(hunk.value), splitLines(next.value))
+    }
     const kind: DiffKind = hunk.added ? 'added' : hunk.removed ? 'removed' : 'context'
-    return lines.map((text) => ({ kind, text }))
+    return splitLines(hunk.value).map((text): DiffRow => ({ kind, text }))
   })
 }
 
@@ -228,7 +275,17 @@ function TextDiff({ before, after }: { before: string; after: string }) {
         if (item.type === 'line') {
           return (
             <ApprovalDiffLine key={i} kind={item.row.kind}>
-              {item.row.text}
+              {item.row.parts
+                ? item.row.parts.map((part, j) =>
+                    part.op === 'context' ? (
+                      part.text
+                    ) : (
+                      <ApprovalDiffWord key={j} op={part.op}>
+                        {part.text}
+                      </ApprovalDiffWord>
+                    ),
+                  )
+                : item.row.text}
             </ApprovalDiffLine>
           )
         }

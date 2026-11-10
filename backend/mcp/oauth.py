@@ -46,6 +46,7 @@ from backend.core.pinned_http import (
 )
 from backend.core.redact_error import redact_error
 from backend.core.untrusted import sanitize_untrusted
+from backend.mcp.sse import USER_AGENT
 from backend.models.mcp_client import redact_endpoint
 
 # Kept independent of backend.mcp.client's constants on purpose (see the module docstring on
@@ -112,6 +113,12 @@ class TokenExchangeError(OAuthDiscoveryError):
     def __init__(self, message: str, *, detail: str = "", code: str = ""):
         super().__init__(message, detail=detail)
         self.code = code
+
+
+class OAuthUnreachableError(OAuthDiscoveryError):
+    """The sign-in service could not be reached, or answered with its own outage (no DNS, a
+    dropped connection, a 5xx, a 429). Nothing was learned about the sign-in itself, so a
+    refresh that ends here must not call it dead."""
 
 
 class OAuthSecurityError(OAuthDiscoveryError):
@@ -190,6 +197,10 @@ def _mcp_server_is_public(mcp_url: str) -> bool:
     try:
         net_guard.assert_public_url(mcp_url)
         return True
+    except net_guard.UnresolvableHostError as exc:
+        # Not evidence of a private server: reading it as one sends a public server's sign-in
+        # down the same-origin path, and a DNS blip then looks like a security refusal.
+        raise OAuthUnreachableError("the server could not be reached") from exc
     except net_guard.UnsafeUrlError:
         return False
 
@@ -255,7 +266,10 @@ def _unguarded_urlopen(
     if scheme not in ("http", "https"):
         raise OAuthSecurityError(f"unsupported scheme: {scheme or 'none'}")
     request = urllib.request.Request(
-        url, data=data, headers=headers or {}, method=method or ("POST" if data else "GET")
+        url,
+        data=data,
+        headers={"User-Agent": USER_AGENT, **(headers or {})},
+        method=method or ("POST" if data else "GET"),
     )
     return _no_redirect_opener().open(request, timeout=_TIMEOUT_SECONDS)  # noqa: S310 — see docstring
 
@@ -345,8 +359,14 @@ def _fetch(
     if _mcp_server_is_public(mcp_url):
         try:
             return pinned_urlopen(
-                url, data=data, headers=headers or {}, method=method, timeout=_TIMEOUT_SECONDS
+                url,
+                data=data,
+                headers={"User-Agent": USER_AGENT, **(headers or {})},
+                method=method,
+                timeout=_TIMEOUT_SECONDS,
             )
+        except net_guard.UnresolvableHostError as exc:
+            raise OAuthUnreachableError("the sign-in service could not be reached") from exc
         except net_guard.UnsafeUrlError as exc:
             raise OAuthSecurityError("a sign-in URL pointed somewhere we won't follow") from exc
     return _fetch_private(url, mcp_url, data=data, headers=headers, method=method)
@@ -901,18 +921,16 @@ def refresh_token(
     _apply_client_auth(client.token_endpoint_auth_method, client, body, headers)
     try:
         doc = _post_form(as_meta.token_endpoint, mcp_url, body, headers)
-    except OAuthSecurityError:
+    except (OAuthSecurityError, OAuthUnreachableError):
         raise
     except urllib.error.HTTPError as exc:
         detail, code = _safe_error(exc)
+        if exc.code >= 500 or exc.code == 429:
+            raise OAuthUnreachableError("refresh failed", detail=detail) from exc
         raise TokenExchangeError("refresh failed", detail=detail, code=code) from exc
-    except (
-        urllib.error.URLError,
-        OSError,
-        TimeoutError,
-        OAuthDiscoveryError,
-        PinnedFetchError,
-    ) as exc:
+    except (urllib.error.URLError, OSError, TimeoutError, PinnedFetchError) as exc:
+        raise OAuthUnreachableError("refresh failed", detail=str(exc)) from exc
+    except OAuthDiscoveryError as exc:
         raise TokenExchangeError("refresh failed", detail=str(exc)) from exc
     return _parse_token_response(doc)
 

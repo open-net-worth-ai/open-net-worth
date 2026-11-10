@@ -19,7 +19,7 @@
 // rule.
 import { describe, it, expect } from 'vitest'
 import { createElement } from 'react'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { afterEach } from 'vitest'
 import { ChangePreview } from './ChangePreview'
 import type { ProposedChange } from '../../types/chat'
@@ -119,6 +119,34 @@ describe('ChangePreview — a refused approval is terminal, not re-armed', () =>
     mount(permissionCard)
     expect(screen.getByRole('button', { name: 'Allow once' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Deny' })).toBeTruthy()
+    expect(screen.queryByText(REFUSED_TEXT)).toBeNull()
+  })
+})
+
+// A decision that never REACHED the server (network drop, server restarting, non-2xx) is the
+// opposite case: the staged call is still pending server-side, so the card must re-arm
+// (2026-10-29: a tap during a restart left only "Not run — can't be reused." under "Try again").
+describe('ChangePreview — an undelivered decision re-arms the card', () => {
+  it('clears the optimistic tick and shows the buttons again', () => {
+    const { rerender } = mount(permissionCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    expect(screen.queryByRole('button', { name: 'Deny' })).toBeNull()
+
+    rerender(
+      createElement(ChangePreview, {
+        change: { ...permissionCard, status: undefined, undelivered: true },
+        onRespond: noop,
+        onResolvePendingToolUse: noop,
+      }),
+    )
+    expect(screen.getByRole('button', { name: 'Allow once' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Deny' })).toBeTruthy()
+    expect(screen.queryByText(REFUSED_TEXT)).toBeNull()
+  })
+
+  it('code_run card: the three-way row comes back', () => {
+    mount({ ...codeRunCard, undelivered: true })
+    expect(screen.getByRole('button', { name: 'Allow once' })).toBeTruthy()
     expect(screen.queryByText(REFUSED_TEXT)).toBeNull()
   })
 })

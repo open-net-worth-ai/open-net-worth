@@ -1135,14 +1135,14 @@ describe('ImportModal — the verdict line click-through + the transient pill', 
     expect(screen.queryByText('LAZADA')).toBeNull()
     const pill = pillEl()!
     expect(pill.getAttribute('aria-pressed')).toBe('true')
-    expect(pill.textContent).toContain('✕')
+    expect(pill.querySelector('.x svg')).not.toBeNull()
   })
 
   it('the pill toggles the filter; its ✕ click and the All chip both clear back to everything', async () => {
     await openDriftBook()
     await screen.findByText('LAZADA')
     const nav = screen.getByRole('navigation', { name: 'Filter statement rows' })
-    expect(pillEl()!.textContent).not.toContain('✕') // inactive: present (drift exists), no ✕
+    expect(pillEl()!.querySelector('.x svg')).toBeNull() // inactive: present (drift exists), no ✕
     fireEvent.click(pillEl()!)
     expect(domDraftOrder()).toEqual(['0', '1'])
     fireEvent.click(pillEl()!) // the active pill (its ✕) clears

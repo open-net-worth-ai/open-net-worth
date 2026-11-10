@@ -33,6 +33,12 @@ describe('ShortcutsDialog', () => {
     expect(screen.getByText('Desktop app')).toBeTruthy()
     const back = screen.getByText('Back').closest('li')!
     expect(Array.from(back.querySelectorAll('kbd')).map((k) => k.textContent)).toEqual(['Alt', '←'])
+    const keys = (label: string) =>
+      Array.from(screen.getByText(label).closest('li')!.querySelectorAll('kbd')).map(
+        (k) => k.textContent,
+      )
+    expect(keys('New Lucius conversation')).toEqual(['Ctrl', 'N'])
+    expect(keys('New transaction')).toEqual(['Ctrl', 'Shift', 'N'])
   })
 
   it('closes on Escape', () => {

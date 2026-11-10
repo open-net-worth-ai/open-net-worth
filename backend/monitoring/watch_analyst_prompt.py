@@ -78,6 +78,7 @@ def build_facts(
     fit: dict | None,
     analyst: dict | None,
     findings: list[dict],
+    thesis_read: dict | None = None,
 ) -> dict:
     """Every figure the write-up may use, already rounded the way it should be written."""
     facts: dict = {
@@ -105,6 +106,14 @@ def build_facts(
             facts["vs_your_fair_value_pct"] = _r((snap["price"] / intent["fair_value"] - 1) * 100)
     if thesis:
         facts["your_thesis"] = thesis
+    if thesis_read:
+        # The whole thesis read at this price (services.thesis_judgment): role, what would break
+        # it, and where the price sits against the buy zone and fair value — entry is judged here.
+        facts["your_thesis_read"] = {
+            k: thesis_read[k]
+            for k in ("role", "breaks_if", "stance", "position", "read")
+            if thesis_read.get(k)
+        }
     if fit:
         facts["your_sector_share_pct"] = _r(fit.get("held_pct"))
         facts["sector"] = fit.get("sector")

@@ -443,7 +443,7 @@ def test_permission_gate_still_runs_independently_per_call_on_a_shared_connectio
         set_tool_use_id("tu_gate_1")
         text1, proposed1, _images = await mgr.call_external_tool(name, {})
         assert proposed1 is not None  # parked — NOTHING ran yet
-        assert "Awaiting your confirmation" in text1
+        assert text1 is None  # paused: no result until the card is answered
         applied1, after1, _images = await _redeem_and_apply(mgr, "tu_gate_1", name)
         assert after1 is None
 

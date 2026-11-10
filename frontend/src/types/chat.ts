@@ -211,6 +211,12 @@ export interface ProposedChange {
   // disabled ✓/✗ state instead of the Confirm/Dismiss buttons, so a re-render
   // from storage (reload / conversation switch / panel reopen) can't re-fire it.
   status?: 'confirmed' | 'dismissed'
+  // permissions_v2 only: WHICH of the three answers the owner gave, stored with the card so a
+  // reload (or a conversation switch) still reads "Approved", "Always allowed" or "Denied" —
+  // `status` alone cannot tell an approval from an Always allow. Approved runs this call once;
+  // Always allowed runs it AND stores the permission (chat: global; Automation run: that
+  // Automation's list); Denied refuses this call only and stores nothing.
+  resolution?: 'approved' | 'always_allowed' | 'denied'
   // The server REFUSED to redeem this approval (already answered elsewhere, or superseded by a
   // later message) — nothing ran. Set alongside clearing `status`, so a card the user tapped
   // stops claiming "✓ Approved" above the red error (ADR `2026-07-30-approvals-never-expire`).
@@ -218,6 +224,10 @@ export interface ProposedChange {
   // has to be cleared too, and only an explicitly-changing prop survives React's batching of
   // the tap's own updates. Cleared again on the next tap.
   refused?: boolean
+  // The decision never REACHED the server (network drop, server restarting, non-2xx), so the
+  // staged call is still pending there and the card must offer its buttons again — the
+  // opposite of `refused`. A flag of its own for the same batching reason. Cleared on the next tap.
+  undelivered?: boolean
   position_id?: string // update / remove target
   instrument_id?: string // add
   account_id?: string
@@ -300,6 +310,13 @@ export interface ProposedChange {
   // silently keying off an external server's tool would be exactly the kind of collision
   // this codebase has been burned by.
   grant_tool?: string
+  // permissions_v2 only: why the Auto judge stopped to ask about this call (model-written, so
+  // shown as plain text only). Absent when Auto didn't judge it.
+  judge_reason?: string
+  // permissions_v2 only: present when the call belongs to an Automation run — the Automation's
+  // id. It is what makes the card's Always allow write to THIS Automation's own list (routed
+  // server-side from `session_id`), never to the global table.
+  automation_id?: string
 }
 
 // Ledger write-confirm cards (txn_create / txn_update / txn_bulk; mirrors backend
@@ -349,7 +366,7 @@ export interface TxnSplitLine {
   category_id: string | null
   category_label: string
   amount: number
-  note?: string | null
+  memo?: string | null
 }
 
 // One row of a txn_update's resolved before/after diff (already human-labeled by the
@@ -397,6 +414,15 @@ export interface SearchCall {
 }
 
 export type ToolStatus = 'streaming' | 'executing' | 'done'
+
+/** The Auto judge's verdict on a call it decided (`services/auto_approvals.py`). No `verdict`
+ *  means it let the call through. The reason is model-written from the call's arguments: plain
+ *  text only, never markup. */
+export interface AutoApproval {
+  reason: string
+  model?: string
+  verdict?: 'ask'
+}
 
 /**
  * What a tool call SAYS, resolved by the server (`backend/ai/tools/display.py`).
@@ -547,6 +573,8 @@ export type MessageBlock =
        *  result that never existed (a pending approval). */
       resultElided?: number
       inputElided?: number
+      /** permissions_v2: the Auto judge let this call run without a card. */
+      autoApproval?: AutoApproval
     }
   | { type: 'search'; query: string; results: SearchResult[]; loading: boolean }
   | { type: 'fetch'; url: string }
@@ -643,6 +671,8 @@ export interface Message {
   // A restore of an EARLIER message rewound past this turn: no Restore while that restore
   // stands; undoing it clears the flag (the checkpoint is kept for exactly that).
   checkpointSuperseded?: boolean
+  // An answer written for a voice call that was never read out: the owner spoke first and moved on.
+  unheard?: boolean
   // Set the instant sendMessage() queues this (user) message into an already-busy
   // conversation, instead of opening a fresh turn (RFC mid-turn injection, acceptance C1/
   // C2). 'queued' is the only value today — there is no error variant (C3: a turn that

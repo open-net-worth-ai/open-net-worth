@@ -233,6 +233,12 @@ make check          # lint → type → test → build → docs-lint
 CI (`.github/workflows/ci.yml`) runs the same lint → type → test → build → docs-lint jobs on
 every PR plus an opt-in integration job. A PR must be green on `make check` locally and in CI.
 
+**Memory changes** (a memory prompt, the routing guide, the write choke, or the model a memory
+pass runs on) additionally run the opt-in live benchmark, `make memory-eval REPEATS=3`, which exits
+non-zero on any safety miss or a quality score under the bar — see
+[`docs/ai/MEMORY_EVAL.md`](docs/ai/MEMORY_EVAL.md). It spends the chosen model's quota, so it is never
+part of `make check`; `make memory-eval-mock` is the zero-cost proof of the harness itself.
+
 **UI changes** additionally clear the UI Quality Gate — see
 [`docs/UI_QUALITY_GATE.md`](docs/UI_QUALITY_GATE.md): a design-first spec, an acceptance file
 under `docs/qa/acceptance/`, `make qa-e2e` green for the touched criteria, `make ui-gate` clean,

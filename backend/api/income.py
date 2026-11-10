@@ -69,9 +69,12 @@ def get_income_calendar(days: int = 90):
 
 
 @router.get("/api/positions/{position_id}/income")
-def get_position_income(position_id: str):
-    """Income summary scoped to one position (received income + yield-on-cost)."""
-    return income_service.income_summary(position_id=position_id, include_event_labels=True)
+def get_position_income(position_id: str, with_predecessors: bool = False):
+    """Income summary scoped to one position (received income + yield-on-cost);
+    with_predecessors adds a sold-out-then-rebought holding's earlier position."""
+    return income_service.income_summary(
+        position_id=position_id, include_event_labels=True, with_predecessors=with_predecessors
+    )
 
 
 @router.post("/api/income")

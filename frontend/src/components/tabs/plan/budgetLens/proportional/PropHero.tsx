@@ -75,8 +75,12 @@ function savingsBasisTitle(m: PropMonth): string {
 /** Savings against the goal, in money: "You saved S$5,363 (31%) — S$730 short of your 35% goal";
  *  a running month says where its pace is heading. */
 function SavingsLine({ t, m }: { t: Extract<Insight, { kind: 'save' }>; m: PropMonth }) {
-  const lead =
-    t.amount < 0
+  const month = new Date(m.month + '-01T00:00:00').toLocaleDateString('en', { month: 'long' })
+  const lead = t.early
+    ? t.amount < 0
+      ? `If ${month} goes like recent months, you'd spend ${fmt(-t.amount)} more than you earn`
+      : `If ${month} goes like recent months, you'd save ${fmt(t.amount)}`
+    : t.amount < 0
       ? `${t.running ? 'On pace to spend' : 'You spent'} ${fmt(-t.amount)} more than you ${t.running ? 'earn' : 'earned'}`
       : `${t.running ? 'On pace to save' : 'You saved'} ${fmt(t.amount)}`
   const goal =

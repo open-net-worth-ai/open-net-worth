@@ -19,6 +19,7 @@ import { useElementSize } from '../../../hooks/useElementWidth'
 import { useSheetDragToDismiss } from '../../../hooks/useSheetDragToDismiss'
 import type { SheetDragHandlers } from '../../../hooks/useSheetDragToDismiss'
 import { X } from './icons'
+import { Check } from '../../../ui/icons'
 
 type PointerHandler = (event: ReactPointerEvent) => void
 
@@ -184,7 +185,7 @@ export function CategoryKindFilter({
       {/* Always present, just before the count: a fixed-width slot keeps the counts flush right
           in one column whether or not the row is the selected one. */}
       <span className="pl-catfilter-item-tick" aria-hidden="true">
-        {value === o.id ? '✓' : ''}
+        {value === o.id ? <Check size={12} aria-hidden="true" /> : null}
       </span>
       <span className="pl-catfilter-item-count">{o.count}</span>
     </button>

@@ -2,16 +2,20 @@
 // a shared read: it's per-provider, one caller) and reads the app's own account list through
 // the shared `useAccounts` hook (RFC frontend-server-state-consolidation — the accounts
 // collection endpoint is a SHARED read; a bare direct fetch of it here would re-fork the 19th
-// caller the consolidation removed, which `sharedReadsInventory.test.ts` catches). Each row
-// links a provider account to an existing app account (or opens AccountModal to create one) or,
-// once linked, offers Unlink. Region 1.D of .claude/rfcs/connectors-as-data-sources-ui-spec.md.
-import { useCallback, useEffect, useState } from 'react'
+// caller the consolidation removed, which `sharedReadsInventory.test.ts` catches). Rows group by
+// suggested type (ConnectorAccountRow): Add opens AccountModal prefilled, the row menu links an
+// existing account, a linked row offers Unlink; once anything is linked, ConnectorNextStep says
+// how transactions come in. Region 1.D of .claude/rfcs/connectors-as-data-sources-ui-spec.md.
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { Stack, Cluster, Text, Button, Select, EmptyState, ErrorState, Loading } from '../../ui'
+import { Stack, Text, EmptyState, ErrorState, Loading } from '../../ui'
 import { useAccounts, type AccountLike } from '../../../hooks/serverState'
-import { fCur } from '../accounts/format'
 import { fromApiAccount } from '../accounts/data'
 import AccountModal from '../accounts/AccountModal'
+import { ConnectorAccountRow } from './ConnectorAccountRow'
+import { ConnectorNextStep } from './ConnectorNextStep'
+import { FileUnderBankFix } from './FileUnderBankFix'
+import { bankInstitution, groupRows, prefillFor, type ProviderAccountRow } from './accountRows'
 import type {
   Account,
   ApiAccount,
@@ -31,15 +35,6 @@ interface AppAccountRow extends AccountLike {
   external_ids?: ApiExternalId[]
 }
 
-interface ProviderAccountRow {
-  provider_account_id: string
-  name: string
-  mask: string
-  currency: string
-  balance: number | null
-  linked_account_id: string | null
-}
-
 interface ConnectorAccountsResponse {
   // Untyped beyond string — an unmapped value (a provider status this component doesn't yet
   // know) falls through to the generic error copy below, never a raw status string on screen.
@@ -53,18 +48,27 @@ const KNOWN_NON_ERROR_STATUSES = new Set([
   'not_configured',
   'disabled',
   'auth_error',
+  'reconnect_needed',
   'rate_limited',
   'connect_error',
 ])
 
-const CREATE_OPTION = { value: '__create__', label: '+ Create account…' }
-
 export function ConnectorAccountsList({
   provider,
   providerLabel,
+  embedded = false,
+  notConfiguredText,
+  onCounts,
 }: {
   provider: string
   providerLabel: string
+  /** Inside a setup step whose own title names the list — drop the "Accounts" heading, and
+   *  leave "bring in transactions" to the parent's own step (it gets the counts via onCounts). */
+  embedded?: boolean
+  /** How many accounts are linked, of how many, and whether the provider answered. */
+  onCounts?: (counts: { linked: number; total: number; live: boolean }) => void
+  /** What to say while the provider isn't set up (default: add your credentials above). */
+  notConfiguredText?: { title: string; body: string }
 }) {
   const [data, setData] = useState<ConnectorAccountsResponse | null>(null)
   const [loadErr, setLoadErr] = useState(false)
@@ -89,7 +93,15 @@ export function ConnectorAccountsList({
 
   async function putExternalIds(
     accountId: string,
-    externalIds: Array<{ source: string; ref: string; name: string; mask: string }>,
+    // `institution` is read once, server-side, to fill an EMPTY account institution at link
+    // time (services.accounts._link_fill) — never stored on the link, never overwriting.
+    externalIds: Array<{
+      source: string
+      ref: string
+      name: string
+      mask: string
+      institution?: string
+    }>,
   ) {
     const res = await authFetch(`/api/accounts/${accountId}`, {
       method: 'PUT',
@@ -99,6 +111,29 @@ export function ConnectorAccountsList({
     if (!res.ok) throw new Error()
   }
 
+  // Names of accounts created here, until the shared account list refreshes with them.
+  const [newNames, setNewNames] = useState<Record<string, string>>({})
+
+  /** Show a link change the moment the write succeeds. The re-fetch behind it asks the provider
+   *  for live balances, which can take a couple of seconds; the row must not wait on that. */
+  function showLinked(providerAccountId: string, accountId: string | null) {
+    setData(
+      (d) =>
+        d && {
+          ...d,
+          accounts: d.accounts.map((a) =>
+            a.provider_account_id === providerAccountId
+              ? { ...a, linked_account_id: accountId }
+              : a,
+          ),
+        },
+    )
+  }
+
+  // The institution a new or newly linked account at this row's bank should go under.
+  const institutionFor = (row: ProviderAccountRow) =>
+    bankInstitution(row, data?.accounts ?? [], appAccounts, providerLabel) || row.institution || ''
+
   async function link(row: ProviderAccountRow, accountId: string) {
     const acct = appAccounts.find((a) => a.id === accountId)
     if (!acct) return
@@ -107,8 +142,15 @@ export function ConnectorAccountsList({
     try {
       await putExternalIds(accountId, [
         ...(acct.external_ids ?? []),
-        { source: provider, ref: row.provider_account_id, name: row.name, mask: row.mask },
+        {
+          source: provider,
+          ref: row.provider_account_id,
+          name: row.name,
+          mask: row.mask,
+          ...(institutionFor(row) ? { institution: institutionFor(row) } : {}),
+        },
       ])
+      showLinked(row.provider_account_id, accountId)
       load()
       void refreshAppAccounts()
     } catch {
@@ -136,6 +178,7 @@ export function ConnectorAccountsList({
           (e) => !(e.source === provider && e.ref === row.provider_account_id),
         ),
       )
+      showLinked(row.provider_account_id, null)
       load()
       void refreshAppAccounts()
     } catch {
@@ -167,6 +210,8 @@ export function ConnectorAccountsList({
             mask: creatingFor.mask,
           },
         ])
+        setNewNames((n) => ({ ...n, [acct.id]: acct.name }))
+        showLinked(creatingFor.provider_account_id, acct.id)
       } catch {
         setActionErr('Account created, but linking it failed — link it manually below.')
       }
@@ -179,19 +224,47 @@ export function ConnectorAccountsList({
 
   function linkedName(accountId: string | null): string {
     if (!accountId) return ''
-    return appAccounts.find((a) => a.id === accountId)?.name ?? 'that account'
+    return (
+      appAccounts.find((a) => a.id === accountId)?.name ?? newNames[accountId] ?? 'that account'
+    )
   }
 
-  const accountOptions = appAccounts.map((a) => ({
-    value: a.id,
-    label: `${a.name} (${a.institution || 'No institution'})`,
-  }))
+  const linkedCount = data?.accounts.filter((a) => a.linked_account_id).length ?? 0
+  // The provider answered: its accounts are live. Anything else (removed, paused, failing) means
+  // the rows below are only the links left on your accounts — nothing syncs through them.
+  const live = data?.status === 'ok'
+  const total = data?.accounts.length ?? 0
+  // Report only when the counts CHANGE — the callback itself may be a fresh closure each
+  // render, and depending on it would re-fire (and re-render the parent) forever.
+  const onCountsRef = useRef(onCounts)
+  useEffect(() => {
+    onCountsRef.current = onCounts
+  })
+  useEffect(() => {
+    onCountsRef.current?.({ linked: linkedCount, total, live })
+  }, [linkedCount, total, live])
+  const pickAccounts = appAccounts.map((a) => fromApiAccount(a as unknown as ApiAccount))
 
   return (
     <Stack gap="--space-3">
-      <Text size="sm" tone="ink">
-        Accounts
-      </Text>
+      <div className="conn-acct-head">
+        {!embedded && (
+          <Text size="sm" tone="ink" weight={600}>
+            Accounts
+          </Text>
+        )}
+        {live && data.accounts.length > 0 && (
+          <Text size="xs" tone="faint">
+            {linkedCount} of {data.accounts.length} added
+          </Text>
+        )}
+      </div>
+      {live && data.accounts.length > 0 && linkedCount < data.accounts.length && (
+        <Text size="xs" tone="muted">
+          Add each account you want to track, or link it to one you already have. Nothing is
+          imported until Lucius fetches transactions.
+        </Text>
+      )}
       {!data && !loadErr && <Loading label="Loading accounts…" />}
       {loadErr && (
         <ErrorState message="Couldn't load accounts for this connector." onRetry={load} />
@@ -204,14 +277,23 @@ export function ConnectorAccountsList({
       )}
       {data && data.status === 'not_configured' && (
         <EmptyState
-          title="Not set up yet"
-          body={`Add your ${providerLabel} credentials above to see its accounts here.`}
+          title={notConfiguredText?.title ?? 'Not set up yet'}
+          body={
+            notConfiguredText?.body ??
+            `Add your ${providerLabel} credentials above to see its accounts here.`
+          }
         />
       )}
       {data && data.status === 'disabled' && (
         <EmptyState
           title="Paused"
           body={`${providerLabel} is paused. Resume it above to see its accounts.`}
+        />
+      )}
+      {data && data.status === 'reconnect_needed' && (
+        <ErrorState
+          message={`Your bank wants you to sign in again — use Reconnect above. Nothing syncs from it until then.`}
+          onRetry={load}
         />
       )}
       {data && data.status === 'auth_error' && (
@@ -238,53 +320,58 @@ export function ConnectorAccountsList({
           from the picker just because the live call couldn't run"). The status banners above
           explain why live options/balances may be missing; they must not also hide a link a
           user already made. */}
+      {data && data.status === 'not_configured' && linkedCount > 0 && (
+        <Text size="xs" tone="muted">
+          Left over from before: {providerLabel} isn&apos;t connected, so nothing syncs into{' '}
+          {linkedCount === 1 ? 'this account' : 'these accounts'}. Unlink{' '}
+          {linkedCount === 1 ? 'it' : 'them'}, or link a bank above to use{' '}
+          {linkedCount === 1 ? 'it' : 'them'} again.
+        </Text>
+      )}
       {data && data.accounts.length > 0 && (
-        <Stack gap="--space-2">
-          {data.accounts.map((row) => (
-            <Cluster
-              key={row.provider_account_id}
-              gap="--space-3"
-              align="center"
-              wrap
-              justify="between"
+        <div className="conn-acct-list">
+          {groupRows(data.accounts).map((group) => (
+            <section
+              key={group.key}
+              className="conn-acct-group"
+              aria-label={group.label || undefined}
             >
-              <Text size="xs" tone="faint">
-                {row.name} •{row.mask} · {row.currency}
-                {row.balance != null
-                  ? ` · ${fCur(row.balance, row.currency, { cents: true })}`
-                  : ''}
-              </Text>
-              {row.linked_account_id ? (
-                <Cluster gap="--space-2" align="center">
-                  <Text size="xs" tone="ink">
-                    Linked to "{linkedName(row.linked_account_id)}"
-                  </Text>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    loading={busyId === row.provider_account_id}
-                    onClick={() => void unlink(row)}
-                  >
-                    Unlink
-                  </Button>
-                </Cluster>
-              ) : (
-                <Select
-                  aria-label={`Link ${row.name} to an account`}
-                  placeholder="Link to an account…"
-                  value=""
-                  disabled={busyId === row.provider_account_id}
-                  options={[...accountOptions, CREATE_OPTION]}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    if (value === CREATE_OPTION.value) setCreatingFor(row)
-                    else if (value) void link(row, value)
-                  }}
+              {group.label && <h4 className="conn-acct-group-label">{group.label}</h4>}
+              {group.rows.map((row) => (
+                <ConnectorAccountRow
+                  key={row.provider_account_id}
+                  row={row}
+                  linkedName={linkedName(row.linked_account_id)}
+                  accounts={pickAccounts}
+                  live={live}
+                  busy={busyId === row.provider_account_id}
+                  onAdd={() => setCreatingFor(row)}
+                  onLink={(accountId) => void link(row, accountId)}
+                  onUnlink={() => void unlink(row)}
                 />
-              )}
-            </Cluster>
+              ))}
+            </section>
           ))}
-        </Stack>
+        </div>
+      )}
+      {live && data && (
+        <FileUnderBankFix
+          rows={data.accounts}
+          accounts={appAccounts}
+          providerLabel={providerLabel}
+          onFixed={() => {
+            load()
+            void refreshAppAccounts()
+          }}
+        />
+      )}
+      {live && !embedded && (
+        <ConnectorNextStep
+          provider={provider}
+          providerLabel={providerLabel}
+          linkedCount={linkedCount}
+          unlinkedCount={data.accounts.length - linkedCount}
+        />
       )}
       {actionErr && (
         <Text size="xs" tone="bad">
@@ -297,16 +384,7 @@ export function ConnectorAccountsList({
         institutions={
           [...new Set(appAccounts.map((a) => a.institution).filter(Boolean))].sort() as string[]
         }
-        prefill={
-          creatingFor
-            ? {
-                name: creatingFor.name,
-                currency: creatingFor.currency,
-                lastFour: creatingFor.mask,
-                institution: providerLabel,
-              }
-            : undefined
-        }
+        prefill={creatingFor ? prefillFor(creatingFor, institutionFor(creatingFor)) : undefined}
         onClose={() => setCreatingFor(null)}
         onSave={createAndLink}
       />

@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import type { Commitment, FundingSource, FundingType } from '../../../types/commitments'
 import { fBase, getCurrencySymbol, toBase } from '../../../utils/format'
+import { MaskedText } from '../../ui/MaskedText'
 import {
   FUNDING_LABELS,
   fmtDate,
@@ -23,6 +24,7 @@ import type { DetailMutations } from './detailTypes'
 import type { PositionMeta } from './fundingValue'
 import type { EnvelopeAccrualState } from './fundingValue'
 import { useNarrow } from './useNarrow'
+import { ArrowRight } from '../../../ui/icons'
 
 const TYPE_ORDER = ['income', 'cash', 'loan', 'asset_sale', 'windfall']
 
@@ -99,7 +101,7 @@ function TargetLink({ t, onOpen }: { t: EnvelopeAccrualState; onOpen: () => void
           far
         </span>
         <button className="c2-link" onClick={onOpen}>
-          Manage in Budget →
+          Manage in Budget <ArrowRight size={13} aria-hidden="true" />
         </button>
       </div>
       {t.target_this_month > 0 && (
@@ -226,7 +228,9 @@ function FundRow({ c, f, pos, m }: FundRowProps) {
             >
               {isEnvelopeSource(f) ? 'Budget target' : FUNDING_LABELS[f.type] || f.type}
             </span>
-            <span className="c2-fund-when c2-fund-when-inline">{fundingWhen(f, pos)}</span>
+            <span className="c2-fund-when c2-fund-when-inline">
+              <MaskedText>{fundingWhen(f, pos)}</MaskedText>
+            </span>
           </div>
           {(f.note ||
             f.disabled ||
@@ -249,7 +253,7 @@ function FundRow({ c, f, pos, m }: FundRowProps) {
                     ticker={pos.symbol}
                     className="c2-link"
                   >
-                    {pos.symbol || 'position'} →
+                    {pos.symbol || 'position'} <ArrowRight size={13} aria-hidden="true" />
                   </AssetLink>
                 </>
               )}
@@ -265,7 +269,7 @@ function FundRow({ c, f, pos, m }: FundRowProps) {
                       )
                     }
                   >
-                    set up repayment plan →
+                    set up repayment plan <ArrowRight size={13} aria-hidden="true" />
                   </button>
                 </>
               )}
@@ -277,7 +281,7 @@ function FundRow({ c, f, pos, m }: FundRowProps) {
                     className="c2-link"
                     onClick={() => m.onOpenCommitment(f.repayment_commitment_id as string)}
                   >
-                    repayment plan →
+                    repayment plan <ArrowRight size={13} aria-hidden="true" />
                   </button>
                 </>
               )}
@@ -285,7 +289,9 @@ function FundRow({ c, f, pos, m }: FundRowProps) {
           )}
         </div>
       </div>
-      <span className="c2-fund-when c2-fund-when-standalone">{fundingWhen(f, pos)}</span>
+      <span className="c2-fund-when c2-fund-when-standalone">
+        <MaskedText>{fundingWhen(f, pos)}</MaskedText>
+      </span>
       <span className={'c2-fund-amt money' + (f.disabled ? ' c3-fund-lost-amt' : '')}>
         {/* Was `f.type === 'income'`, which is TRUE for both the one live-synced envelope
             (isEnvelopeSource — genuinely no fixed number; it accrues dynamically in Planning,
@@ -364,7 +370,7 @@ export function Funding({ commitment: c, fx, envelope, positions, m }: FundingPr
                 m.onAskLucius(`Help me add a funding source to my "${c.name}" commitment's plan.`)
               }
             >
-              Manage with Lucius →
+              Manage with Lucius <ArrowRight size={13} aria-hidden="true" />
             </button>
           </span>
         )}
@@ -399,7 +405,7 @@ export function Funding({ commitment: c, fx, envelope, positions, m }: FundingPr
                   className="c2-link"
                   onClick={() => void navigate({ to: '/plan', search: { sub: 'budget' } } as never)}
                 >
-                  Manage in Budget →
+                  Manage in Budget <ArrowRight size={13} aria-hidden="true" />
                 </button>
               </div>
             </div>

@@ -3,10 +3,11 @@
 // see the render-gate note in RouterShell.tsx (mobileNav === 'lucius' still owns the phone's
 // full-screen chat, unchanged).
 
-import { useEffect, useRef, useState } from 'react'
+import { useMemoryWindow } from '../../../hooks/useMemoryWindow'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
-import { useShowBackgroundConversations } from '../../../hooks/useShowBackgroundConversations'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
+import type { ConversationKind } from '../../chat/ConversationMenu'
 import { LuciusHistorySidebar } from './LuciusHistorySidebar'
 import { LuciusHistoryHoverList } from './LuciusHistoryHoverList'
 import { ArtifactSidePanel } from './ArtifactSidePanel'
@@ -14,11 +15,17 @@ import { ArtifactFullscreen } from './ArtifactFullscreen'
 import { ArtifactPanelProvider } from '../../../state/artifactPanel'
 import { VaultPanel } from '../../vault/VaultPanel'
 import { useLuciusChat } from '../../../state/luciusChat'
-import { ChevronRight, FolderLock, SquarePen } from '../../../ui/icons'
+import { startFreshConversation } from '../../../utils/freshConversation'
+import { Brain, ChevronRight, FolderLock, SquarePen } from '../../../ui/icons'
 import { usePointerResize } from '../../../hooks/usePointerResize'
 import { useSessionState } from '../../../hooks/useSessionState'
 import type { ArtifactRef } from '../../../types/chat'
+import { lazyChunk } from '../../../lazyChunk'
 import './lucius-home.css'
+
+const MemorySheet = lazyChunk(() =>
+  import('../../chat/MemorySheet').then((m) => ({ default: m.MemorySheet })),
+)
 
 const COLLAPSE_KEY = 'luciusSideCollapsed'
 const SIDEBAR_DEFAULT_W = 280
@@ -258,6 +265,7 @@ export function LuciusHome({
   // artifact it is not tied to a conversation, so switching chats leaves it open.
   // Remembered for the browser session, so a refresh brings it back (owner report).
   const [documentsFlag, setDocumentsFlag] = useSessionState(DOCUMENTS_OPEN_KEY)
+  const memory = useMemoryWindow('home')
   const vaultOpen = documentsFlag === '1'
   const setVaultOpen = (open: boolean) => setDocumentsFlag(open ? '1' : null)
   const toggleVault = () => {
@@ -299,22 +307,13 @@ export function LuciusHome({
     },
   })
 
-  const [browsingConvs, setBrowsingConvs] = useState<'chat' | 'automation' | null>(null)
-  const [showBackground] = useShowBackgroundConversations()
-  const groups = conversationGroups(conversations, showBackground)
+  const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
+  const groups = conversationGroups(conversations)
 
-  // A `persist: false` conversation is never added to `conversations` (that's the whole
-  // point — it stays out of the sidebar/server until it has real content), so "the active
-  // id isn't in the list" IS "already sitting on an empty/unpersisted conversation." Reusing
-  // that instead of minting another one satisfies two owner reports at once: "New shouldn't
-  // trigger when I'm already on a new conversation tab", and it's also what makes a
-  // not-yet-typed-into conversation never hit the server/sidebar at all (ensurePersisted in
+  // Owner: "New shouldn't trigger when I'm already on a new conversation tab" — and a
+  // not-yet-typed-into conversation never hits the server/sidebar at all (ensurePersisted in
   // luciusChat.tsx promotes it the moment a real message is actually sent).
-  const startFresh = () => {
-    const alreadyOnAnEmptyOne = !conversations.some((c) => c.id === activeId)
-    if (alreadyOnAnEmptyOne) return
-    createConversation()
-  }
+  const startFresh = () => startFreshConversation({ conversations, activeId, createConversation })
 
   // Ref guard against React StrictMode's dev double-invoke (would otherwise start two
   // fresh conversations on first mount) — not a dependency-array concern, this must run
@@ -325,7 +324,10 @@ export function LuciusHome({
     freshSessionCheckedRef.current = true
     if (!sessionStorage.getItem(FRESH_SESSION_KEY)) {
       sessionStorage.setItem(FRESH_SESSION_KEY, '1')
-      startFresh()
+      startFreshConversation(
+        { conversations, activeId, createConversation },
+        { replaceHistory: true },
+      )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -468,17 +470,33 @@ export function LuciusHome({
             </button>
           </div>
         )}
-        <button
-          type="button"
-          className={`lucius-home-vault-btn${vaultOpen && !openArtifact ? ' is-on' : ''}`}
-          onClick={toggleVault}
-          aria-pressed={vaultOpen && !openArtifact}
-          title="Your documents, statements, receipts and saved artifacts"
-          data-tour="lucius-documents"
-        >
-          <FolderLock size={15} strokeWidth={1.6} />
-          Documents
-        </button>
+        <div className="lucius-home-top-actions">
+          <button
+            type="button"
+            className="lucius-home-vault-btn"
+            onClick={memory.show}
+            title="What Lucius remembers about you"
+          >
+            <Brain size={15} strokeWidth={1.6} />
+            Memory
+          </button>
+          <button
+            type="button"
+            className={`lucius-home-vault-btn${vaultOpen && !openArtifact ? ' is-on' : ''}`}
+            onClick={toggleVault}
+            aria-pressed={vaultOpen && !openArtifact}
+            title="Your documents, statements, receipts and saved artifacts"
+            data-tour="lucius-documents"
+          >
+            <FolderLock size={15} strokeWidth={1.6} />
+            Documents
+          </button>
+        </div>
+        {memory.open && (
+          <Suspense fallback={null}>
+            <MemorySheet onClose={memory.close} />
+          </Suspense>
+        )}
         <ArtifactPanelProvider onOpen={setOpenArtifact}>
           <ChatPanel
             open

@@ -15,7 +15,7 @@ import path from "node:path";
 const sourceExecutable = process.argv[2];
 assert.ok(
   sourceExecutable,
-  "Usage: node qa/packaged-smoke.mjs /absolute/App.app/Contents/MacOS/open-net-worth (macOS) or C:\\path\\open-net-worth.exe (Windows)",
+  "Usage: node qa/packaged-smoke.mjs '/absolute/App.app/Contents/MacOS/Open Net Worth' (macOS) or C:\\path\\open-net-worth.exe (Windows)",
 );
 const windows = process.platform === "win32";
 const profile = await mkdtemp(path.join(tmpdir(), "onw-packaged-profile-"));

@@ -105,7 +105,7 @@ function OptionsSection({
                     {p.strike.toLocaleString()}
                   </span>
                 </td>
-                <td>
+                <td className="not-money">
                   <span className="opt-contract">{fDate(p.expiry, 'short', 'always')}</span>
                   <span className={'opt-dte' + (p.dte <= 14 ? ' soon' : '')}>{p.dte}d</span>
                 </td>
@@ -113,10 +113,10 @@ function OptionsSection({
                   {fSigned(p.premium, baseCurrency)}
                 </td>
                 <td className={`num money ${plClass(p.mark)}`}>{fSigned(p.mark, baseCurrency)}</td>
-                <td>
+                <td className="not-money">
                   <Badge tone={p.status === 'ITM' ? 'warn' : 'muted'}>{p.status}</Badge>
                 </td>
-                <td className="opt-row-actions">
+                <td className="opt-row-actions not-money">
                   <Button variant="ghost" size="dense" onClick={() => onCloseRow(p)}>
                     Close
                   </Button>

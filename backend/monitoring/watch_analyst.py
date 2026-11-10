@@ -20,6 +20,7 @@ skipped silently. Only an explained, sourced alert is PUSHED (ADR
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import uuid
 from datetime import datetime
@@ -124,6 +125,21 @@ def _facts(item: dict, snap: dict, findings: list[dict], ctx: dict, analyst: dic
         ),
         analyst=analyst,
         findings=findings,
+        thesis_read=_thesis_read(item, snap, key),
+    )
+
+
+def _thesis_read(item: dict, snap: dict, key: str) -> dict | None:
+    from backend.services import investment_theses, thesis_judgment
+
+    try:
+        iid = item.get("instrument_id") or investment_theses.thesis_instrument_for_item(item)
+    except Exception:
+        return None
+    return thesis_judgment.compact(
+        thesis_judgment.for_instrument(
+            iid, snap.get("price"), ticker=key, currency=snap.get("currency") or "", held=False
+        )
     )
 
 
@@ -217,6 +233,21 @@ async def _push(ticker: str, explained: dict) -> None:
         logger.warning("watch_analyst: push failed for %s", ticker, exc_info=True)
 
 
+async def _deliver(ticker: str, story: dict) -> None:
+    """The call site for an explained alert's external push: ``delivery.route`` runs ``_push``
+    unchanged with the ``intel_delivery_decider`` flag off, and hands Lucius the candidate with
+    it on."""
+    from backend.monitoring import delivery
+
+    explained = story["explained"]
+    await delivery.route(
+        lambda: delivery.watch_candidate(
+            ticker, story, explained, legacy_message=push_message(ticker, explained)
+        ),
+        functools.partial(_push, ticker, explained),
+    )
+
+
 def _candidates(ctx: dict, store) -> list[dict]:
     """Sync (run in a worker thread): every ticker with a material trigger whose story is live
     and hasn't been explained for this trigger + session yet — each with its first trigger."""
@@ -286,7 +317,7 @@ async def explain_material(ctx: dict, *, store=None) -> int:
             _persist, c["story"], c["trigger"], c["trigger_key"], result, why, now_iso, level
         )
         written += 1
-        await _push(c["key"], updated["explained"])
+        await _deliver(c["key"], updated)
     if written:
         logger.info("watch_analyst: %d explained alert(s)", written)
     return written

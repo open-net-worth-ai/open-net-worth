@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, fireEvent } from '@testing-library/react'
+import { render, cleanup, fireEvent, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { StoryArc } from '../intel/storyMeta'
 
@@ -313,6 +313,19 @@ describe('Intel tabs', () => {
     await findByTestId('holdings-brief')
     fireEvent.click(getByRole('button', { name: /New list/ }))
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/intel/monitors' })
+  })
+
+  it('closing the workspace navigates to /intel instead of going back in history', async () => {
+    // Regression: Settings' close pushes /intel/monitors, so the entry behind it is /settings —
+    // history.back() reopened Settings, and the two dialogs looped.
+    const back = vi.spyOn(window.history, 'back')
+    const { findByRole } = mount({ showMonitorsRoute: true })
+    const dialog = await findByRole('dialog', { name: /Watchlists & monitors/ })
+    mockNavigate.mockClear()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(back).not.toHaveBeenCalled()
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/intel', search: { sub: 'holdings' } })
+    back.mockRestore()
   })
 
   it('jumps to a tab that has the story when focused from elsewhere, and unfolds it', async () => {

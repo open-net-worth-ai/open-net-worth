@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.core.timestamps import sort_key
+from backend.core.timestamps import sort_key, to_utc_iso
 
 # fixed_local_tz (a fixed, DST-free +12h UTC offset) is a shared fixture in
 # tests/conftest.py — large enough that the classic "14:00 naive-local vs 10:00
@@ -67,3 +67,19 @@ def test_sort_key_blank_sentinel_is_stable_and_aware():
     b = sort_key("")
     assert a == b
     assert a.tzinfo is not None  # always comparable against a parsed aware datetime
+
+
+def test_to_utc_iso_reads_a_naive_value_as_server_local(fixed_local_tz):
+    """Same rule as `sort_key`: at local = UTC+12, naive 14:00 is 02:00 UTC — serialised
+    with its offset so a browser in any zone reads the same instant."""
+    assert to_utc_iso("2026-07-07T14:00:00") == "2026-07-07T02:00:00+00:00"
+
+
+def test_to_utc_iso_converts_an_aware_value_to_utc():
+    assert to_utc_iso("2026-07-07T14:00:00+08:00") == "2026-07-07T06:00:00+00:00"
+    assert to_utc_iso("2026-07-07T06:00:00Z") == "2026-07-07T06:00:00+00:00"
+
+
+@pytest.mark.parametrize("blank", [None, "", "not-a-timestamp"])
+def test_to_utc_iso_leaves_a_missing_or_unparseable_value_alone(blank):
+    assert to_utc_iso(blank) == blank

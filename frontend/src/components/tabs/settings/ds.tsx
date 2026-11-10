@@ -8,9 +8,9 @@
 // break every row.
 //
 // Not ported (the prototype's standalone-shell scaffolding): AppNav, Shell, Kebab, Tabs, Dot.
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode, SelectHTMLAttributes } from 'react'
-import { ChevronDown, X } from '../../../ui/icons'
+import { Check, ChevronDown, X } from '../../../ui/icons'
 
 // ── primitives ───────────────────────────────────────────────────────────────
 export type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid'
@@ -211,12 +211,15 @@ export function Modal({
   footer,
   children,
   size,
+  className,
 }: {
   title: ReactNode
   onClose: () => void
   footer?: ReactNode
   children: ReactNode
   size?: 'lg'
+  /** A dialog-specific hook on `.rd-modal` (e.g. a fixed height). */
+  className?: string
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -238,7 +241,7 @@ export function Modal({
       }}
     >
       <div
-        className={'rd-modal' + (size === 'lg' ? ' lg' : '')}
+        className={'rd-modal' + (size === 'lg' ? ' lg' : '') + (className ? ' ' + className : '')}
         role="dialog"
         aria-label={typeof title === 'string' ? title : undefined}
       >
@@ -319,21 +322,135 @@ export interface SectionProps {
 //
 // A counter, not a boolean: several hooks in one section load concurrently, and the skeleton
 // must persist until the last one lands, not clear when the first does.
-const SectionBusyContext = createContext<((delta: number) => void) | null>(null)
+type Bump = (delta: number, failed?: boolean) => void
+type CounterContext = React.Context<Bump | null>
 
-export function SectionBusyProvider({
+function CounterProvider({
+  context: Context,
   onChange,
   children,
 }: {
-  onChange: (delta: number) => void
+  context: CounterContext
+  onChange: Bump
   children: ReactNode
 }) {
   const ref = useRef(onChange)
   ref.current = onChange
   // Stable identity: a fresh callback each render would retrigger every consumer's effect,
   // decrementing and re-incrementing the counter and flickering the skeleton.
-  const bump = useRef((delta: number) => ref.current(delta)).current
-  return <SectionBusyContext.Provider value={bump}>{children}</SectionBusyContext.Provider>
+  const bump = useRef<Bump>((delta, failed) => ref.current(delta, failed)).current
+  return <Context.Provider value={bump}>{children}</Context.Provider>
+}
+
+const SectionBusyContext: CounterContext = createContext<Bump | null>(null)
+
+export function SectionBusyProvider(props: {
+  onChange: (delta: number) => void
+  children: ReactNode
+}) {
+  return <CounterProvider context={SectionBusyContext} {...props} />
+}
+
+// ── a write in flight, declared by whoever makes it ────────────────────────────
+// The same counter idea as the first-load skeleton, for the other half of a settings screen's
+// life: the owner changed something and the server has not answered yet. A section wraps its
+// write in `useSaving()`'s `track` and the SHELL shows one "Saving…" pill for every section —
+// a new settings screen gets the indicator by wrapping its save, with no UI of its own.
+const SectionSavingContext: CounterContext = createContext<Bump | null>(null)
+
+export function SectionSavingProvider(props: { onChange: Bump; children: ReactNode }) {
+  return <CounterProvider context={SectionSavingContext} {...props} />
+}
+
+/**
+ * `const track = useSaving()`, then `await track(() => authFetch(...))`: the shell shows
+ * "Saving…" while the promise is pending and "Saved ✓" when it ends. Returns the work's
+ * result, rethrows its error (no "Saved" for a write that threw), and is a plain pass-through
+ * outside the Settings shell.
+ */
+export function useSaving(): <T>(work: () => Promise<T>) => Promise<T> {
+  const bump = useContext(SectionSavingContext)
+  return useCallback(
+    async <T,>(work: () => Promise<T>): Promise<T> => {
+      bump?.(1)
+      try {
+        const result = await work()
+        bump?.(-1)
+        return result
+      } catch (error) {
+        bump?.(-1, true)
+        throw error
+      }
+    },
+    [bump],
+  )
+}
+
+// "Saved ✓" confirms a write that changed the screen without a message of its own. It stays
+// out of the way of the section's own result toast (the same spot) and of an error toast: if a
+// toast is up when the write ends there is nothing to add, so it never shows.
+function SavedPill({ quiet }: { quiet: boolean }) {
+  const [on, setOn] = useState(!quiet)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setOn(false), 1400)
+    return () => window.clearTimeout(timer)
+  }, [])
+  if (!on) return null
+  return (
+    <div className="rd-saving rd-saving--done" role="status" aria-live="polite">
+      <Check size={13} strokeWidth={2.2} aria-hidden="true" />
+      Saved
+    </div>
+  )
+}
+
+/**
+ * The shell's write feedback. "Saving…" appears only if the write is still pending after
+ * `delayMs`, so a save that answers at once never flashes a spinner. `savedCount` counts writes
+ * that finished without throwing; each one shows "Saved ✓" for a moment, unless `quiet` (a toast
+ * is already speaking) or another write is still in flight.
+ */
+export function SavingIndicator({
+  active,
+  savedCount = 0,
+  quiet = false,
+  delayMs = 200,
+}: {
+  active: boolean
+  savedCount?: number
+  quiet?: boolean
+  delayMs?: number
+}) {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    if (!active) return
+    const timer = window.setTimeout(() => setShown(true), delayMs)
+    return () => {
+      window.clearTimeout(timer)
+      setShown(false)
+    }
+  }, [active, delayMs])
+  if (active) {
+    if (!shown) return null
+    return (
+      <div className="rd-saving" role="status" aria-live="polite">
+        <span className="rd-saving__spin" aria-hidden="true" />
+        Saving…
+      </div>
+    )
+  }
+  return savedCount > 0 ? <SavedPill key={savedCount} quiet={quiet} /> : null
+}
+
+// A section with a page of its own (a memory topic) hands the shell a way back, and the shell draws
+// it: "‹ Memory" in place of the title on a computer, the sheet's own back arrow on a phone — so
+// the name is never shown twice. Null outside Settings, where the section draws its own link.
+export type SectionBack = { label: string; onBack: () => void }
+const SectionBackContext = createContext<((back: SectionBack | null) => void) | null>(null)
+export const SectionBackProvider = SectionBackContext.Provider
+
+export function useSectionBack(): ((back: SectionBack | null) => void) | null {
+  return useContext(SectionBackContext)
 }
 
 /** Declare that this component is doing a FIRST load — pass `initialLoading && !data`. */

@@ -388,6 +388,65 @@ def test_rest_roundtrip_preview_commit_and_records(monkeypatch):
     assert not (ev.get("note") or "").startswith("batch:")
 
 
+def test_statements_list_says_what_each_statement_holds_and_did(monkeypatch):
+    """Owner, 2026-10-25: rows waiting for review showed no size and booked rows no import
+    date. Every row reports how many rows the file holds; a booked one also says when, and how
+    many transactions it added that are still in the ledger."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.import_api import router
+
+    _stub_text_tier(monkeypatch, _ROWS, _META)
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    hdrs = {"X-Requested-With": "XMLHttpRequest"}
+    sid = client.post(
+        "/api/statements/preview",
+        files={"file": ("june.pdf", _FAKE_PDF, "application/pdf")},
+        data={"account_id": "acc", "format": "pdf"},
+        headers=hdrs,
+    ).json()["statement_id"]
+    svc.claim_for_account(sid, "acc")
+
+    waiting = client.get("/api/accounts/acc/statements").json()["statements"][0]
+    assert waiting["rows_read"] == len(_ROWS)
+    assert waiting["imported_at"] is None and waiting["added"] is None
+
+    client.post(
+        "/api/statements/commit",
+        json={"statement_id": sid, "account_id": "acc", "decisions": []},
+        headers=hdrs,
+    )
+    booked = client.get("/api/accounts/acc/statements").json()["statements"][0]
+    assert booked["rows_read"] == len(_ROWS)
+    assert booked["imported_at"]
+    assert booked["added"] == 1 and booked["linked"] == 0  # the clean row; needs-eyes skipped
+
+
+def test_statements_list_finds_bookings_the_record_itself_forgot(monkeypatch):
+    """Owner's real book, 2026-10-25: older statements keep their batch ids only in the
+    promoted column, so the record read back as never booked — no date, no counts. The batch's
+    own `statement_ref_id` still names the statement; a rolled-back batch counts for nothing."""
+    from backend.db.statement_store import StatementStore
+    from backend.services.statements.statement_list import batches_by_statement, import_facts
+
+    _stub_text_tier(monkeypatch, _ROWS, _META)
+    sid = _preview(monkeypatch)["statement_id"]
+    svc.decision_commit(sid, "acc", [])
+    batch_id = StatementStore().find_by_id(sid)["batch_ids"][0]
+    StatementStore().update_by_id(sid, {"batch_ids": []})  # the payload that forgot
+
+    record = StatementStore().find_by_id(sid)
+    facts = import_facts(record, batches_by_statement())
+    assert facts["imported_at"] and facts["added"] == 1
+
+    ledger_service.import_batches.set_status(batch_id, "rolled_back")
+    facts = import_facts(StatementStore().find_by_id(sid), batches_by_statement())
+    assert facts["imported_at"] is None and facts["added"] is None
+
+
 def test_non_statement_bulk_batch_never_reads_as_statement_import():
     """bulk_create stamps batch_id on ANY batch (AI fixes, legacy CSV) — only a
     statement-BACKED batch may relabel the drawer 'via Statement import'."""

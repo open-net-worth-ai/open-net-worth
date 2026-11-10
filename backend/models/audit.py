@@ -22,7 +22,17 @@ from .base import ONBaseModel
 
 # Closed sets — kept here as the single source of truth for the store + service.
 AUDIT_OPS = frozenset(
-    {"create", "update", "delete", "restore", "merge", "unmerge", "attach_refs", "detach_ref"}
+    {
+        "create",
+        "update",
+        "delete",
+        "restore",
+        "revert",  # a chat checkpoint restore put the row back to an earlier image
+        "merge",
+        "unmerge",
+        "attach_refs",
+        "detach_ref",
+    }
 )
 AUDIT_ACTORS = frozenset({"user", "ai", "agent", "system"})
 

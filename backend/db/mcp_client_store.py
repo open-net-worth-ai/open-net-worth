@@ -41,6 +41,7 @@ transport, no offer/dispatch logic (that lives in ``mcp/client_manager``).
 
 from __future__ import annotations
 
+import base64
 from contextlib import contextmanager
 from typing import Any, Iterator, List, Optional
 
@@ -78,6 +79,8 @@ _PUBLIC_FIELDS = (
     "tool_allowlist",
     "server_info_name",
     "server_info_version",
+    "server_info_title",
+    "server_info_description",
     "server_info_instructions",
     "publisher",
     "homepage_url",
@@ -85,6 +88,9 @@ _PUBLIC_FIELDS = (
     "verification",
     "last_status",
     "last_error",
+    "refresh_failures",
+    "site_name",
+    "site_source",
 )
 
 # Where each McpServerConfig field lives.
@@ -94,9 +100,16 @@ _STATE_FIELDS = (
     "discovered_tools",
     "server_info_name",
     "server_info_version",
+    "server_info_title",
+    "server_info_description",
     "server_info_instructions",
     "last_status",
     "last_error",
+    "refresh_failures",
+    "site_name",
+    "site_source",
+    "site_icon_type",
+    "site_checked_at",
 )
 _SECRET_FIELDS = ("url", "command", "args", "env", "auth_header", "token")
 # McpOAuth's secrets ride as ``oauth_<field>``; the rest of the block is state.
@@ -294,10 +307,9 @@ class McpClientStore:
         """Cache the result of a connect/``tools/list`` (the /test path).
 
         ``server_info`` is the provenance the ``initialize`` handshake reported (name,
-        version, publisher, links, instructions). Written on EVERY call including a failure (where the
-        caller passes ``None``), for the same reason ``discovered_tools`` is cleared on a
-        failure: the cache describes the LAST connect, and a stale publisher from a connect
-        that no longer succeeds would be a claim about a server we can no longer reach.
+        version, publisher, links, instructions). A failed read does not come here — it goes to
+        ``record_read_failure``, which keeps all of this. An empty list here means the server
+        answered with none, or the endpoint changed and the old answer no longer applies.
 
         ``verification`` is deliberately NOT touched here — a server must not be able to
         upgrade its own trust badge by what it answers in a handshake. Only the curated
@@ -316,7 +328,10 @@ class McpClientStore:
                     "last_error": error,
                     "server_info_name": info.name,
                     "server_info_version": info.version,
+                    "server_info_title": info.title,
+                    "server_info_description": info.description,
                     "server_info_instructions": info.instructions,
+                    **({"refresh_failures": None} if status == "ok" else {}),
                 },
                 conn=conn,
             )
@@ -330,6 +345,99 @@ class McpClientStore:
                 conn=conn,
             )
             return self._read(server_id, conn)
+
+    def record_read_failure(self, server_id: str, status: str, error: str) -> None:
+        """A read failed: say so, and keep the tool list and the server's identity.
+
+        Failing to reach a server says nothing about what it offers. Erasing the list took the
+        permission table off the detail page, and Lucius is kept away from a failed server's
+        tools by its status (``McpClientManager``), not by an empty list."""
+        cid = mcp_connector_id(server_id)
+        with _unit(None) as conn:
+            if self._store.get(cid, conn=conn) is not None:
+                self._store.merge_state(
+                    cid, {"last_status": status, "last_error": error}, conn=conn
+                )
+
+    def record_refresh_failure(self, server_id: str) -> int:
+        """Count one more failed UNATTENDED re-read in a row and return the run's length.
+
+        The cached tools and status are left alone; ``record_discovery`` with ``ok`` ends the run."""
+        cid = mcp_connector_id(server_id)
+        with _unit(None) as conn:
+            row = self._store.get(cid, conn=conn)
+            if row is None:
+                return 0
+            count = int(row["state"].get("refresh_failures") or 0) + 1
+            self._store.merge_state(cid, {"refresh_failures": count}, conn=conn)
+            return count
+
+    def record_site_identity(
+        self,
+        server_id: str,
+        *,
+        name: Optional[str],
+        source: Optional[str],
+        icon: Optional[bytes],
+        icon_type: Optional[str],
+        checked_at: float,
+        rename_from: Optional[str] = None,
+        reserved_names: frozenset[str] = frozenset(),
+    ) -> Optional[McpServerConfig]:
+        """Cache what ``mcp.site_identity.lookup`` found — like ``record_discovery``, not in
+        ``update()``'s patchable set, so no request body can choose a server's icon. A lookup
+        that found nothing keeps the previous answer (a site briefly down must not blank a
+        working icon) but still stamps ``site_checked_at``.
+
+        ``rename_from`` renames the row to ``name`` only while it still carries that exact
+        auto-derived default (its URL host) — a name the user chose is never overwritten."""
+        cid = mcp_connector_id(server_id)
+        with _unit(None) as conn:
+            row = self._store.get(cid, conn=conn)
+            if row is None:
+                return None
+            patch: dict[str, Any] = {"site_checked_at": checked_at}
+            if name:
+                patch.update(site_name=name, site_source=source)
+            if icon and icon_type:
+                patch.update(
+                    site_icon=base64.b64encode(icon).decode("ascii"),
+                    site_icon_type=icon_type,
+                    site_source=source,
+                )
+            self._store.merge_state(cid, patch, conn=conn)
+            if name and rename_from and row["name"] == rename_from:
+                self._store.set_name(
+                    cid, self._free_name(cid, name, reserved_names, conn), conn=conn
+                )
+            return self._read(server_id, conn)
+
+    def _free_name(self, cid: str, name: str, reserved: frozenset[str], conn: Connection) -> str:
+        """``name``, unless another connector already shows it — then ``"<name> (MCP)"``. The
+        built-in connectors hold names a vendor's site may also claim, so a site-derived rename
+        must not hand Lucius's @-mention list two rows with the same name. ``reserved`` carries
+        the built-ins that exist without a row (the caller reads them; ``db`` can't)."""
+        taken = {n.strip().lower() for n in reserved} | {
+            str(r["name"]).strip().lower() for r in self._store.list(conn=conn) if r["id"] != cid
+        }
+        if name.strip().lower() not in taken:
+            return name
+        suffixed = f"{name} (MCP)"
+        return suffixed if suffixed.strip().lower() not in taken else name
+
+    def site_icon(self, server_id: str) -> Optional[tuple[bytes, str]]:
+        """The cached icon as ``(bytes, mime)`` — its type is the one ``site_identity``
+        sniffed from magic bytes, never a header the site sent."""
+        with get_engine().connect() as conn:
+            row = self._store.get(mcp_connector_id(server_id), conn=conn)
+        state = (row or {}).get("state") or {}
+        blob, kind = state.get("site_icon"), state.get("site_icon_type")
+        if not isinstance(blob, str) or not isinstance(kind, str):
+            return None
+        try:
+            return base64.b64decode(blob), kind
+        except ValueError:
+            return None
 
     def set_oauth(
         self, server_id: str, oauth: McpOAuth, *, conn: Optional[Connection] = None
@@ -439,6 +547,8 @@ class McpClientStore:
         # each caller re-deriving it and the two families disagreeing.
         out["endpoint"] = endpoint_of(config)
         out["oauth"] = McpClientStore._oauth_summary(config)
+        # A version, not a flag: it busts the browser's cache of the icon route on a refetch.
+        out["icon_version"] = int(config.site_checked_at or 0) if config.site_icon_type else None
         return out
 
     def public_one(self, server_id: str) -> Optional[dict]:

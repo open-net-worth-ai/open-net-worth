@@ -1,21 +1,25 @@
-import { app, autoUpdater, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, powerMonitor, protocol, safeStorage, shell, Tray } from 'electron';
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, powerMonitor, protocol, safeStorage, shell, systemPreferences, Tray } from 'electron';
 import { existsSync } from 'node:fs';
 import { release } from 'node:os';
-import { mkdir, realpath } from 'node:fs/promises';
+import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { DesktopCommand, DesktopConnection, DesktopSettings } from '../contracts';
+import type { DesktopCommand, DesktopConnection, DesktopSettings, DesktopUpdateState, DesktopWhatsNew } from '../contracts';
 import { BackendSupervisor } from './backend';
+import { startDictation, stopDictation } from './dictation';
+import { MicrophoneReopen } from './microphone-reopen';
+import { microphoneSettingsUrl } from './microphone-settings';
 import { chooseImportFiles, saveExport } from './dialogs';
 import { readSelectedFiles, supportedFile } from './files';
 import { FolderWatcher } from './folders';
 import { NativeNotifications } from './notifications';
 import { Preferences, settingsPatch, type SettingsPatch } from './preferences';
 import { setKeepAwake } from './keep-awake';
-import { showUpdateProgress } from './update-progress';
+import { handOverToInstaller, showUpdateProgress } from './update-progress';
+import { UPDATE_HANDOFF_FLAG, installNotice, macBundlePath, notificationsOn, pendingMacInstall, reopenAfterInstall } from './update-handoff';
 import { bundledRuntime, type RuntimeConfig } from './runtime';
 import { externalUrl } from './security';
 import { DesktopWindow } from './window';
-import { goMenu, helpMenu, privateCloudItems, viewMenu, windowMenu } from './app-menu';
+import { goMenu, helpMenu, newItems, privateCloudItems, viewMenu, windowMenu } from './app-menu';
 import { qaInactiveMode } from './window-chrome';
 import { desktopEvent } from './desktop-events';
 import { initialBookRoot, inspectBookFolder, verifyConfirmedBookRoot, verifyRememberedBookRoot, type BookFolder } from './book-folder';
@@ -23,7 +27,6 @@ import { chooseBookFolder } from './book-picker';
 import { BookSwitcher, type BookEntry } from './book-switch';
 import { InitialBookChoice } from './initial-book-choice';
 import { bookFolderMissing } from './startup-decision';
-import { openLocalConnection } from './local-connection-action';
 import { ConnectionSwitcher, savedServerOrigin } from './connections';
 import { ConnectionDialog } from './connection-dialog';
 import { ServerSubmission } from './server-submission';
@@ -43,8 +46,8 @@ import { hostedStatePage } from './hosted-state-page';
 import { MoveActions } from './move-actions';
 import { LocalEndpoint, type MoveEndpoint } from './move-endpoint';
 import { PRIVATE_CLOUD_ENABLED, assertPrivateCloudEnabled, displayVersion } from './feature-flags';
-import { RELEASES_PAGE, UpdateController, updateFeedUrl, updatesSupported } from './updates';
-import { LATEST_RELEASE_API, LinuxUpdater, fetchLatestVersion, linuxUpdatesSupported, relaunchAppImage } from './linux-updates';
+import { RELEASES_PAGE, UpdateController, releaseHighlights, releasePage, updateFeedUrl, updatesSupported } from './updates';
+import { LATEST_RELEASE_API, LinuxUpdater, fetchLatestVersion, fetchReleaseNotes, linuxUpdatesSupported, relaunchAppImage } from './linux-updates';
 import { LinuxAutostart, autostartPath } from './linux-autostart';
 import { loginItemOptions, squirrelUpdateExe } from './login-item';
 import squirrelStartup from 'electron-squirrel-startup';
@@ -60,6 +63,7 @@ if (qaInactiveMode(app.isPackaged, process.env) && process.platform === 'darwin'
 if (qaMode && process.env.ONW_DESKTOP_ROOT) app.setPath('userData', resolve(process.env.ONW_DESKTOP_ROOT, 'desktop'));
 else if (PROFILE.settingsFolder) app.setPath('userData', join(app.getPath('appData'), PROFILE.settingsFolder));
 const QUIT_DEADLINE_MS = 40_000;
+const microphoneReopen = new MicrophoneReopen(() => systemPreferences.getMediaAccessStatus('microphone'));
 // At login a server on this machine starts alongside the app; keep the opening splash up this long for it.
 const SERVER_STARTUP_PATIENCE_MS = 60_000;
 const pendingFiles: string[] = [];
@@ -93,6 +97,10 @@ let earlyLink: string | null = deepLinkArgument(process.argv);
 let loginLaunch = false;
 let updates: UpdateController | null = null;
 let installingUpdate = false;
+// Handed to the page once, on the first launch after an update installed.
+let whatsNew: Promise<DesktopWhatsNew> | null = null;
+const PAGE_UPDATE_DIALOG_COOLDOWN_MS = 30_000;
+let pageUpdateDialogAfter = 0;
 let replacingWindow = false;
 class PresentedError extends Error {}
 
@@ -124,11 +132,18 @@ if (squirrelStartup || !app.requestSingleInstanceLock()) {
     // Squirrel.Mac installs a downloaded update as the app quits, so the quit says so instead of vanishing.
     if (process.platform === 'darwin' && updates?.phase === 'ready') showUpdateProgress(updates.readyVersion, false);
     // Every wait inside shutdown() is bounded, but quitting must not depend on that staying true.
-    void Promise.race([shutdown(), new Promise<void>(done => setTimeout(done, QUIT_DEADLINE_MS).unref())]).finally(() => app.exit(0));
+    const installing = process.platform === 'darwin' && updates?.phase === 'ready' ? updates.readyVersion : undefined;
+    const reopen = process.platform === 'darwin' && installing === undefined && microphoneReopen.shouldReopen(BrowserWindow.getFocusedWindow() !== null);
+    void Promise.race([shutdown(), new Promise<void>(done => setTimeout(done, QUIT_DEADLINE_MS).unref())])
+      .then(() => installing !== undefined && preferences?.current.notifications ? announceInstall(installing, true) : undefined)
+      .finally(() => {
+        if (reopen) app.relaunch();
+        app.exit(0);
+      });
   });
   process.on('SIGTERM', () => app.quit());
   process.on('SIGINT', () => app.quit());
-  void app.whenReady().then(boot).catch((error: unknown) => {
+  void app.whenReady().then(async () => { if (!await handOffToUpdateInstall()) await boot(); }).catch((error: unknown) => {
     desktopEvent({ event: 'desktop.startup_failed', error: error instanceof Error ? error.name : 'Error', message: error instanceof Error ? error.message : 'Startup failed' });
     // showErrorBox blocks the main process until dismissed, which would also hold off SIGTERM and every quit.
     void dialog.showMessageBox({ type: 'error', title: 'Open Net Worth could not open', message: 'Open Net Worth could not open', detail: 'Your book has been kept. Verify the app installation and open it again.' }).finally(() => app.quit());
@@ -150,16 +165,42 @@ function shutdown(): Promise<void> {
   });
 }
 
+// Reopened while ShipIt is still installing the update the last quit handed it: staying open would
+// cancel that install, so this launch says what is happening, leaves, and comes back once it is done.
+// A notification, not a window: any window keeps this process running, which is what cancels it.
+async function handOffToUpdateInstall(): Promise<boolean> {
+  if (process.platform !== 'darwin' || process.argv.includes(UPDATE_HANDOFF_FLAG) || !updatesSupported(app.isPackaged, process.platform, qaMode, process.env)) return false;
+  const bundle = macBundlePath(process.execPath);
+  const pending = await pendingMacInstall(bundle, app.getPath('home'));
+  if (!pending) return false;
+  desktopEvent({ event: 'desktop.update_install_handoff', version: pending.version });
+  reopenAfterInstall(pending.pid, bundle);
+  const settings = await readFile(join(app.getPath('userData'), 'desktop-settings.json'), 'utf8').catch(() => '');
+  if (notificationsOn(settings)) await announceInstall(pending.version, false);
+  app.exit(0);
+  return true;
+}
+
+// ShipIt keeps working after this process is gone, on a busy machine for minutes, with no window of
+// ours left to say so. Resolves once the system has the notification (bounded), so exiting right
+// after cannot drop it. The caller decides whether notifications are wanted.
+async function announceInstall(version: string | null, closed: boolean): Promise<void> {
+  if (!Notification.isSupported() || qaInactiveMode(app.isPackaged, process.env)) return;
+  const notification = new Notification(installNotice(version, closed));
+  await new Promise<void>(done => { notification.once('show', () => done()); setTimeout(done, 1_000).unref(); notification.show(); });
+}
+
 // The window's close handler hides rather than closes, so Squirrel's own window teardown would
 // stall: the book is shut down first, then the installer terminates and relaunches the app.
 function installUpdate(): void {
   if (quitting) return;
   installingUpdate = true;
-  showUpdateProgress(updates?.readyVersion ?? null, true);
-  void shutdown().finally(() => {
+  const progress = showUpdateProgress(updates?.readyVersion ?? null, true);
+  const version = updates?.readyVersion ?? null;
+  void shutdown().then(() => process.platform === 'darwin' && preferences?.current.notifications ? announceInstall(version, true) : undefined).finally(() => {
     autoUpdater.once('error', () => app.exit(0));
     setTimeout(() => app.exit(0), 30_000).unref();
-    try { autoUpdater.quitAndInstall(); } catch { app.exit(0); }
+    try { handOverToInstaller(progress, () => autoUpdater.quitAndInstall()); } catch { app.exit(0); }
   });
 }
 
@@ -174,6 +215,19 @@ function installLinuxUpdate(): void {
   });
 }
 
+function updateState(): DesktopUpdateState {
+  if (updates?.phase === 'ready') return { ready: true, version: updates.readyVersion, available: false };
+  if (updates?.phase === 'available') return { ready: false, version: updates.availableVersion, available: true };
+  return { ready: false, version: null, available: false };
+}
+
+// Notes that cannot be fetched still leave the note, with only the link to the release.
+async function loadWhatsNew(version: string): Promise<DesktopWhatsNew> {
+  let highlights: string[] = [];
+  try { highlights = releaseHighlights(await fetchReleaseNotes(fetch, version)); } catch { /* Offline or not published yet. */ }
+  return { version, highlights, releaseUrl: releasePage(version) };
+}
+
 function startUpdates(): void {
   const linux = linuxUpdatesSupported(app.isPackaged, process.platform, process.arch, qaMode, process.env);
   const supported = linux || updatesSupported(app.isPackaged, process.platform, qaMode, process.env, existsSync(squirrelUpdateExe(process.execPath)));
@@ -185,7 +239,7 @@ function startUpdates(): void {
       notification.on('click', onClick);
       notification.show();
     },
-    changed: () => { if (!quitting) { installMenu(); installTray(); } },
+    changed: () => { if (!quitting) { installMenu(); installTray(); main?.sendUpdateState(updateState()); } },
     install: process.platform === 'linux' ? installLinuxUpdate : installUpdate,
     openReleases: () => { void shell.openExternal(RELEASES_PAGE); },
     newerVersion: () => fetchLatestVersion(fetch, app.getVersion()),
@@ -194,7 +248,7 @@ function startUpdates(): void {
   }, app.getVersion());
   if (supported) updates.start(linux ? LATEST_RELEASE_API : updateFeedUrl(process.platform, process.arch, app.getVersion()));
   if (app.isPackaged && !qaMode && preferences && preferences.current.lastRunVersion !== app.getVersion()) {
-    updates.announceUpdate(preferences.current.lastRunVersion, earlierInstall);
+    if (updates.announceUpdate(preferences.current.lastRunVersion, earlierInstall)) whatsNew = loadWhatsNew(app.getVersion());
     void preferences.save({ lastRunVersion: app.getVersion() });
   }
 }
@@ -207,6 +261,7 @@ async function runtime(): Promise<RuntimeConfig> {
 }
 
 async function boot(): Promise<void> {
+  if (process.platform === 'darwin') microphoneReopen.watch();
   await mkdir(app.getPath('userData'), { recursive: true, mode: 0o700 });
   const profile = await realpath(app.getPath('userData'));
   const fallback = join(app.getPath('home'), PROFILE.bookFolder);
@@ -344,16 +399,6 @@ async function enterMissingBook(): Promise<void> {
   if (connections) connections.current = { mode: 'local', serverUrl: null, bookFolder: missingBookRoot, welcome: true };
   starting = false;
   await main!.showWelcome(suggestedRoot, 'missing', missingBookRoot);
-}
-
-async function useLocalBook(): Promise<void> {
-  await openLocalConnection({
-    select: alternate => connectionLoader!.selectLocal(alternate),
-    showFailure: async (message, offerAlternate) => {
-      const choice = await dialog.showMessageBox(main!.window, { type: 'error', title: 'Local book could not open', message, detail: 'Your server connection has been kept. Choose another local folder to use a different book.', buttons: offerAlternate ? ['Choose another local folder…', 'Keep current connection'] : ['Keep current connection'], defaultId: offerAlternate ? 1 : 0, cancelId: offerAlternate ? 1 : 0 });
-      return offerAlternate && choice.response === 0;
-    },
-  });
 }
 
 async function drainWorkers(): Promise<void> {
@@ -532,8 +577,26 @@ function registerIpc(): void {
     if (!main!.hosted || starting || quitting) throw new Error('Wait for the current operation to finish.');
     return hosted!.signInFresh(safeReturnPath(returnPath));
   });
+  // The page's mic: the system's own dictation, typing into the focused field — the Edit menu's
+  // Start Dictation…, so it can do nothing a person could not by menu (owner, 2026-11-03).
+  ipcMain.handle('desktop-client:start-dictation', event => {
+    main!.authorizeClient(event);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || process.platform !== 'darwin') throw new Error('Dictation is a macOS feature.');
+    startDictation(win);
+  });
+  ipcMain.handle('desktop-client:stop-dictation', async event => {
+    main!.authorizeClient(event);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && process.platform === 'darwin') await stopDictation(win);
+  });
+  // macOS asks for the microphone once and remembers a refusal; this page is the only way back.
+  ipcMain.handle('desktop-client:microphone-settings', event => {
+    main!.authorizeClient(event);
+    if (process.platform !== 'darwin') throw new Error('This is a macOS setting.');
+    return shell.openExternal(microphoneSettingsUrl(release()));
+  });
   ipcMain.handle('desktop-client:open-browser', event => { main!.authorizeClient(event); return books!.exclusive(async () => { main!.authorizeClient(event); await openBrowser(); }); });
-  ipcMain.handle('desktop-connection:use-local', event => { main!.authorizeServerRetry(event); return useLocalBook(); });
   ipcMain.handle('desktop-connection:retry', event => { main!.authorizeServerRetry(event); return books!.exclusive(async () => { main!.authorizeServerRetry(event); await connectionLoader!.retry(); }); });
   ipcMain.handle('desktop-hosted:sign-in', event => {
     assertPrivateCloudEnabled();
@@ -561,6 +624,23 @@ function registerIpc(): void {
     const { canGoBack, canGoForward } = (state ?? {}) as Record<string, unknown>;
     if (typeof canGoBack !== 'boolean' || typeof canGoForward !== 'boolean') return;
     try { main?.authorizeClient(event); main?.setHistory({ canGoBack, canGoForward }); } catch { /* Untrusted frames cannot drive the menu. */ }
+  });
+  ipcMain.handle('desktop-client:update-state', event => { main!.authorizeClient(event); return updateState(); });
+  // The page only ever OPENS the native choice; installing needs the person's answer in that
+  // dialog, never a page call alone. After a dialog it opened closes, the page waits before
+  // opening another, so a hostile page cannot reopen it the moment it is dismissed.
+  const pageUpdateDialog = async (event: Electron.IpcMainInvokeEvent, phase: 'ready' | 'available', open: () => Promise<void>) => {
+    main!.authorizeClient(event);
+    if (updates?.phase !== phase || starting || quitting || Date.now() < pageUpdateDialogAfter) return;
+    try { await open(); } finally { pageUpdateDialogAfter = Date.now() + PAGE_UPDATE_DIALOG_COOLDOWN_MS; }
+  };
+  ipcMain.handle('desktop-client:restart-to-update', event => pageUpdateDialog(event, 'ready', () => updates!.offerRestart()));
+  ipcMain.handle('desktop-client:offer-update', event => pageUpdateDialog(event, 'available', () => updates!.offerUpdate()));
+  ipcMain.handle('desktop-client:whats-new', event => {
+    main!.authorizeClient(event);
+    const pending = whatsNew;
+    whatsNew = null;
+    return pending;
   });
   ipcMain.on('desktop-client:commands-ready', event => { try { main?.authorizeClient(event); main?.ready(); } catch { /* Untrusted frames receive no commands. */ } });
   ipcMain.handle('desktop:book-choice', (event) => {
@@ -701,7 +781,7 @@ function installMenu(): void {
     { label: 'Open in browser', click: () => nativeAction(() => books!.exclusive(openBrowser)) },
     { label: 'Import statement or receipt…', enabled: !main?.serverOrigin, accelerator: 'CmdOrCtrl+O', click: importAction },
     { label: 'Export book…', enabled: !main?.serverOrigin, accelerator: 'CmdOrCtrl+Shift+E', click: () => { if (main && !main.serverOrigin && backend?.origin && !starting) nativeAction(() => books!.exclusive(() => saveExport(main!.window, backend!))); } },
-    { type: 'separator' }, { label: 'New transaction', accelerator: 'CmdOrCtrl+N', click: () => command({ type: 'new-transaction' }) },
+    { type: 'separator' }, ...newItems(command),
     // Closing hides the window exactly like the red button; on Windows and Linux that would quit, which Quit already offers.
     ...(mac ? [{ type: 'separator' as const }, { role: 'close' as const }] : [{ type: 'separator' as const }, { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings }, { label: 'Background and startup…', click: showBackground }, { type: 'separator' as const }, { role: 'quit' as const }]),
   ] };

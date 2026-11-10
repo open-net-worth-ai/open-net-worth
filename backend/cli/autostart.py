@@ -6,7 +6,7 @@ runs THIS interpreter (`<python> -m backend.cli start`), so it is identical for 
 install and for a checkout's .venv, and it carries this shell's PATH — launchd/systemd hand a
 fresh process a minimal one, and the claude/codex CLI providers would not resolve otherwise.
 
-`stop` deletes the unit file, not just unloads it: a LaunchAgent that is merely booted out is
+`off` deletes the unit file, not just unloads it: a LaunchAgent that is merely booted out is
 loaded again at the next login, which is not "stopped".
 
 Windows: a per-user Task Scheduler task with restart-on-failure (``autostart_windows``).
@@ -29,8 +29,23 @@ from backend.cli import autostart_windows
 LABEL = "ai.opennetworth.app"
 UNIT_NAME = "open-net-worth.service"
 # Carried into the service verbatim when set in the installing shell — PATH for the CLI
-# providers, the rest so `PORT=9000 onw autostart install` sticks across reboots.
-PASSTHROUGH_ENV = ("PATH", "HOST", "PORT", "ONW_ROOT", "DATA_DIR", "CACHE_DIR", "LOGS_DIR")
+# providers, the rest so `PORT=9000 onw autostart on` sticks across reboots. The last ones
+# decide where uv keeps this install: without them the service looks elsewhere and can't upgrade.
+PASSTHROUGH_ENV = (
+    "PATH",
+    "HOST",
+    "PORT",
+    "ONW_ROOT",
+    "DATA_DIR",
+    "CACHE_DIR",
+    "LOGS_DIR",
+    "UV_TOOL_DIR",
+    "UV_TOOL_BIN_DIR",
+    "UV_CACHE_DIR",
+    "UV_PYTHON_INSTALL_DIR",
+    "XDG_DATA_HOME",
+)
+AUTO_UPGRADE_FLAG = "--auto-upgrade"
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
@@ -44,11 +59,15 @@ class ServiceSpec:
 
 
 def service_spec(
-    home: Path, environ: Mapping[str, str] = os.environ, python: str = sys.executable
+    home: Path,
+    environ: Mapping[str, str] = os.environ,
+    python: str = sys.executable,
+    auto_upgrade: bool = False,
 ) -> ServiceSpec:
     root = home / ".open-net-worth"
+    start_args = (AUTO_UPGRADE_FLAG, "--service") if auto_upgrade else ()
     return ServiceSpec(
-        command=(python, "-m", "backend.cli", "start"),
+        command=(python, "-m", "backend.cli", "start", *start_args),
         working_dir=root,
         log_dir=root / "logs",
         env={key: environ[key] for key in PASSTHROUGH_ENV if environ.get(key)},
@@ -133,8 +152,8 @@ def _unsupported(system: str) -> int:
     return 1
 
 
-def install(system: str, home: Path, runner: Runner) -> int:
-    spec = service_spec(home)
+def install(system: str, home: Path, runner: Runner, auto_upgrade: bool = False) -> int:
+    spec = service_spec(home, auto_upgrade=auto_upgrade)
     spec.log_dir.mkdir(parents=True, exist_ok=True)
     if system == "Darwin":
         return _install_launchd(spec, home, runner)
@@ -155,7 +174,7 @@ def _install_launchd(spec: ServiceSpec, home: Path, runner: Runner) -> int:
     if result.returncode != 0:
         print(f"launchctl bootstrap failed: {result.stderr.strip()}", file=sys.stderr)
         return result.returncode
-    print("==> Installed and started. It will also start at login.")
+    print("==> Autostart is on. It's running now, and starts by itself at every login.")
     print(f"    Logs: {spec.log_dir}/app.log")
     return 0
 
@@ -169,7 +188,7 @@ def _install_systemd(spec: ServiceSpec, home: Path, runner: Runner) -> int:
     if result.returncode != 0:
         print(f"systemctl enable failed: {result.stderr.strip()}", file=sys.stderr)
         return result.returncode
-    print("==> Installed and started.")
+    print("==> Autostart is on. It's running now, and starts by itself after every restart.")
     linger = runner(["loginctl", "enable-linger", getpass.getuser()])
     if linger.returncode == 0:
         print("==> Linger enabled — it also starts on boot with nobody logged in.")
@@ -192,8 +211,24 @@ def stop(system: str, home: Path, runner: Runner) -> int:
         return autostart_windows.stop(home / ".open-net-worth", runner)
     else:
         return _unsupported(system)
-    print("==> Stopped and removed. It will no longer start at login/boot.")
+    print("==> Autostart is off. It's stopped, and won't start by itself again.")
     return 0
+
+
+def _saved_service(system: str, home: Path) -> Path | None:
+    paths = {
+        "Darwin": plist_path(home),
+        "Linux": unit_path(home),
+        "Windows": autostart_windows.config_path(home / ".open-net-worth"),
+    }
+    return paths.get(system)
+
+
+def _print_auto_upgrade(system: str, home: Path) -> None:
+    saved = _saved_service(system, home)
+    if saved is not None and saved.is_file():
+        enabled = AUTO_UPGRADE_FLAG in saved.read_text(encoding="utf-8")
+        print(f"auto-upgrade {'on' if enabled else 'off'}")
 
 
 def status(system: str, home: Path, runner: Runner) -> int:
@@ -204,14 +239,17 @@ def status(system: str, home: Path, runner: Runner) -> int:
         installed = unit_path(home).exists()
         probe = ["systemctl", "--user", "is-active", UNIT_NAME]
     elif system == "Windows":
-        return autostart_windows.status(runner)
+        code = autostart_windows.status(runner)
+        _print_auto_upgrade(system, home)
+        return code
     else:
         return _unsupported(system)
     if not installed:
-        print("not installed")
+        print("off")
         return 1
     running = runner(probe).returncode == 0
-    print("installed and running" if running else "installed but not running")
+    print("on and running" if running else "on, but not running")
+    _print_auto_upgrade(system, home)
     return 0 if running else 1
 
 
@@ -222,6 +260,19 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(cmd, 127, "", str(exc))
 
 
+def install_service(auto_upgrade: bool = False) -> int:
+    """`onw start --autostart`: the service then matches the flags last typed."""
+    return install(platform.system(), Path.home(), _run, auto_upgrade=auto_upgrade)
+
+
 def run_autostart(action: str) -> int:
-    handlers = {"install": install, "stop": stop, "status": status}
+    # `install`, `uninstall` and `stop` are the older names: scripts and older docs still use them.
+    handlers = {
+        "on": install,
+        "off": stop,
+        "status": status,
+        "install": install,
+        "uninstall": stop,
+        "stop": stop,
+    }
     return handlers[action](platform.system(), Path.home(), _run)

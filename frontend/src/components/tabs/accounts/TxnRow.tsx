@@ -12,7 +12,7 @@ import type { Txn, Account, Category, FxRates } from './types'
 import { fCur, fBase } from './format'
 import { fDate } from '../../../utils/format'
 import { catOptionsFor } from './categories'
-import { buildTxnView } from './txnView'
+import { buildTxnView, type TransferLeg } from './txnView'
 import {
   InlineField,
   InlinePayee,
@@ -22,6 +22,8 @@ import {
   type PayeeOption,
 } from './pickers'
 import { SourceIcon, IconCheck } from './pickers'
+import { SplitChip } from './SplitView'
+import { Check, Circle } from '../../../ui/icons'
 
 export interface RowPatch {
   date?: string
@@ -50,6 +52,30 @@ export function categoryPill(
   return (
     <span className="acct-pill" style={{ background: color + '26', color }}>
       {c?.label || 'Uncategorized'}
+    </span>
+  )
+}
+
+/** A transfer's payee cell leads with the word: a long account name clips the arrow, which left
+ *  a row reading like a spend at that account. A leg the screen already names (the viewed account,
+ *  or the Account column) is dropped, so the other account is what survives the clip. */
+export function transferLabel(
+  from: string | null,
+  to: string | null,
+  namedLeg: TransferLeg | null,
+): React.ReactNode {
+  if (namedLeg === 'destination')
+    return (
+      <span>
+        Transfer<span className="arrow">←</span>
+        {from || '—'}
+      </span>
+    )
+  return (
+    <span>
+      {namedLeg === 'source' ? 'Transfer' : `Transfer: ${from || '—'}`}
+      <span className="arrow">→</span>
+      {to || '—'}
     </span>
   )
 }
@@ -173,6 +199,7 @@ export function TxnRow({
     amount,
     ccy,
     pos,
+    amtTone,
     baseVal,
     amtTitle,
     nativeMain,
@@ -185,6 +212,7 @@ export function TxnRow({
     payeeText,
     payeeFromName,
     payeeToName,
+    transferViewedLeg,
     mentionSub,
   } = v
   // The bank/matching description, shown as-is — no payee de-dup (predictable; matches the drawer).
@@ -200,19 +228,17 @@ export function TxnRow({
   const spendCats = catOptionsFor(catPickKind, categories, t.category)
 
   const payeeTransfer = isTransfer
-  const payeeMain: React.ReactNode = isTransfer ? (
-    t.kind === 'adjustment' ? (
-      'Balance adjustment'
-    ) : (
-      <span>
-        {payeeFromName || '—'}
-        <span className="arrow">→</span>
-        {payeeToName || '—'}
-      </span>
-    )
-  ) : (
-    payeeText
-  )
+  const payeeMain: React.ReactNode = isTransfer
+    ? t.kind === 'adjustment'
+      ? 'Balance adjustment'
+      : transferLabel(
+          payeeFromName,
+          payeeToName,
+          transferViewedLeg ?? (has('account') ? 'source' : null),
+        )
+    : payeeText
+  const payeeTitle =
+    t.kind === 'transfer' ? `${payeeFromName || '—'} → ${payeeToName || '—'}` : undefined
 
   // ── Lucius mention wiring ─────────────────────────────────────────────────
   // Make every register row @-mentionable, draggable into the dock, and
@@ -270,7 +296,11 @@ export function TxnRow({
             onUpdate(t.id, { cleared: !t.cleared })
           }}
         >
-          {t.cleared ? <span className="c">✓</span> : <span className="o">○</span>}
+          {t.cleared ? (
+            <Check className="c" size={12} aria-hidden="true" />
+          ) : (
+            <Circle className="o" size={12} aria-hidden="true" />
+          )}
         </span>
         {has('account') && (
           <span className="acct-td-acct" data-edit="" onDoubleClick={editCell('account')}>
@@ -324,7 +354,10 @@ export function TxnRow({
                 />
               </InlineField>
             ) : (
-              <div className={'acct-payee-nm' + (payeeTransfer ? ' transfer' : '')}>
+              <div
+                className={'acct-payee-nm' + (payeeTransfer ? ' transfer' : '')}
+                title={payeeTitle}
+              >
                 {payeeMain}
               </div>
             )}
@@ -352,15 +385,12 @@ export function TxnRow({
                 />
               </InlineField>
             ) : isSplit ? (
-              <button
-                className="acct-split-chip"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSplit(t.id)
-                }}
-              >
-                Split • {t.splits.length} {splitOpen ? '▴' : '▾'}
-              </button>
+              <SplitChip
+                splits={t.splits}
+                catMap={catMap}
+                open={splitOpen}
+                onToggle={() => onSplit(t.id)}
+              />
             ) : t.category && t.kind !== 'adjustment' ? (
               categoryPill(t.category, catMap)
             ) : !isTransfer && (t.kind === 'expense' || t.kind === 'income') ? (
@@ -516,11 +546,7 @@ export function TxnRow({
           </span>
         ) : (
           <span
-            className={
-              'acct-td-amt mask ' +
-              (pos ? 'pos' : 'neg') +
-              (t.kind === 'investment' ? ' invest' : '')
-            }
+            className={'acct-td-amt mask ' + amtTone + (t.kind === 'investment' ? ' invest' : '')}
             data-edit={isTransfer ? undefined : ''}
             onDoubleClick={isTransfer ? undefined : editCell('amount')}
             title={amtTitle}
@@ -551,8 +577,9 @@ export function TxnRow({
                   {s.note}
                 </span>
               )}
-              <span className="acct-split-amt" style={{ gridColumn: gcol('amount') }}>
-                {fCur(s.amount, t.fromCurrency ?? ccy, { cents: true })}
+              <span className="acct-split-amt mask" style={{ gridColumn: gcol('amount') }}>
+                {pos ? '+' : '−'}
+                {fCur(s.amount, t.fromCurrency ?? ccy, { cents: true }).replace('-', '')}
               </span>
             </div>
           ))}

@@ -66,6 +66,11 @@ _SERVER_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789-"
 # user set would simply never be found, and every tool would read as the default.
 MCP_CONNECTOR_PREFIX = "mcp:"
 
+# A server in one of these keeps its tool list for the permission table, but Lucius is offered
+# neither its tools nor its instructions: each turn tells him the server failed, and the offer
+# must agree with that.
+FAILED_STATUSES = frozenset({"connect_error", "error", "auth_error"})
+
 
 def mcp_connector_id(server_id: str) -> str:
     """An MCP server's id as the connector namespace spells it (``mcp:<server_id>``)."""
@@ -115,6 +120,12 @@ class ServerInfo:
 
     name: Optional[str] = None
     version: Optional[str] = None
+    # MCP 2025-06-18's human display name and 2025-11-25's ``icons`` (https/data URIs only —
+    # fetched and sniffed later by ``mcp.site_identity``, never rendered from here).
+    title: Optional[str] = None
+    # 2025-11-25's one-line ``description`` — what the card's subtitle shows.
+    description: Optional[str] = None
+    icons: tuple[str, ...] = ()
     publisher: Optional[str] = None
     homepage_url: Optional[str] = None
     repo_url: Optional[str] = None
@@ -267,6 +278,10 @@ class McpServerConfig(ONBaseModel):
     # reporting nothing, a blank, or a non-string lands ``None``.
     server_info_name: Optional[str] = None
     server_info_version: Optional[str] = None
+    # The handshake's display ``title`` and one-line ``description`` — the card's name (while
+    # the row still carries the server's own ``name``) and subtitle.
+    server_info_title: Optional[str] = None
+    server_info_description: Optional[str] = None
     # The server's own ``instructions`` string from the ``initialize`` handshake — used as
     # this server's detail-page/directory description when present (``services.connectors``
     # falls back to the generic ``mcp`` copy when it is ``None``).
@@ -285,6 +300,17 @@ class McpServerConfig(ONBaseModel):
     verification: Literal["verified", "unverified", "unknown"] = "unknown"
     last_status: Optional[str] = None  # ok | connect_error | auth_error | error | never
     last_error: Optional[str] = None
+    # Unattended re-reads that failed in a row while the last good tool list was kept
+    # (``McpClientManager.refresh_tools``); a successful read resets it.
+    refresh_failures: int = 0
+    # The display name + icon the handshake or the endpoint's website gave
+    # (``mcp.site_identity``) — a CLAIM, never a verification; ``site_source`` is the host it
+    # came from (``None`` = the server itself). The icon BYTES live in state only
+    # (``McpClientStore.site_icon``), never on this object.
+    site_name: Optional[str] = None
+    site_source: Optional[str] = None
+    site_icon_type: Optional[str] = None
+    site_checked_at: Optional[float] = None
 
     @field_validator("id")
     @classmethod

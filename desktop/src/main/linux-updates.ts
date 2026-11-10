@@ -91,6 +91,13 @@ export async function fetchLatestVersion(fetcher: Fetch, current: string, feed =
   return isNewer(release.version, current) ? release.version : null;
 }
 
+// The Markdown notes of one published release, for the What's new note shown after it installs.
+export async function fetchReleaseNotes(fetcher: Fetch, version: string): Promise<string> {
+  if (!parseVersion(version)) throw new Error('Not a release version.');
+  const release = JSON.parse(await readText(fetcher, `https://api.github.com/repos/${UPDATE_REPO}/releases/tags/v${version}`, { Accept: 'application/vnd.github+json' })) as { body?: unknown } | null;
+  return typeof release?.body === 'string' ? release.body : '';
+}
+
 // Adapts the GitHub release feed to the controller's Updater contract. An AppImage in a writable
 // place is replaced after its SHA-256 is verified against the release's SHA256SUMS, and that file
 // against its minisign signature with the key built into this app (a checksum published beside the

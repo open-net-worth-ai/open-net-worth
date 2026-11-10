@@ -188,11 +188,15 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 tmp_path_retention_count = 2
 tmp_path_retention_policy = "failed"
+# A hang fails its own test with a traceback instead of stalling the whole job (pytest-timeout).
+timeout = 300
 markers = [
     "integration: requires ANTHROPIC_API_KEY and makes LLM calls",
     "network: requires live network access (Yahoo/CoinGecko); skipped in default suite",
     "real_price_backfill: opts OUT of conftest's no-op patch of positions._trigger_backfill_async",
+    "real_site_identity: opts OUT of conftest's no-op patch of mcp.site_identity.lookup",
     "real_session_title: opts OUT of conftest's no-op patch of session_titles.schedule_title",
+    "allow_stray_threads: the test deliberately leaves a thread running past its teardown",
 ]
 
 # --- coverage: measure shippable code, not one-off scripts ---

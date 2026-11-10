@@ -9,12 +9,13 @@
 import { useState, type ReactNode } from 'react'
 import { useCaretAtEnd } from '../../../hooks/useCaretAtEnd'
 import type { AssetCategory, AssetLoan, OwnedAsset } from '../../../types/assets'
-import { Cluster, Modal, Stack, TextArea } from '../../ui'
+import { Cluster, MaskedText, Modal, Stack, TextArea } from '../../ui'
 import * as api from './api'
 import { canHaveLoan, purchaseCopy, showsInsured } from './assetCategoryRules'
 import { catOf, equityOf, fmt, loanOf, monthYear, shareOf } from './assetsData'
 import { labelList, splitFacts, type Fact } from './detailsFacts'
 import { EditorFooter, SaveError, useEditorSave } from './editorKit'
+import { Icons } from './icons'
 
 export type Section = 'ownership' | 'purchase' | 'details' | 'notes'
 /** What an Edit or a "+" chip opens: a group's editor, or Details with a new row of your own. */
@@ -99,7 +100,9 @@ function LoanSplit({ a, loan, cats, loans, onNav }: LoanSplitProps) {
             </>
           }
         >
-          {fmt(eq)} · {Math.round(ofValue(eq))}%
+          <span className="money">
+            {fmt(eq)} · {Math.round(ofValue(eq))}%
+          </span>
         </Row>
         <Row
           label={
@@ -109,10 +112,16 @@ function LoanSplit({ a, loan, cats, loans, onNav }: LoanSplitProps) {
             </>
           }
         >
-          {fmt(loan.balance)} · {Math.round(ofValue(loan.balance))}%
+          <span className="money">
+            {fmt(loan.balance)} · {Math.round(ofValue(loan.balance))}%
+          </span>
         </Row>
       </dl>
-      {terms && <p className="as-rec-caption">{terms}</p>}
+      {terms && (
+        <p className="as-rec-caption">
+          <MaskedText>{terms}</MaskedText>
+        </p>
+      )}
       {alsoSecures && <p className="as-rec-caption">This loan also secures {alsoSecures}.</p>}
       <button type="button" className="as-rec-link" onClick={() => onNav('accounts')}>
         See this loan in Accounts
@@ -126,7 +135,9 @@ function Ownership({ a, cats, loans, onNav, onEdit }: AssetSectionsProps) {
   return (
     <Group title="Ownership" onEdit={() => onEdit('ownership')}>
       <dl className="as-rec-list">
-        <Row label="Your share">{shareOf(a)}</Row>
+        <Row label="Your share">
+          <MaskedText>{shareOf(a)}</MaskedText>
+        </Row>
         {loan && <Row label="Secured by">{loan.name}</Row>}
       </dl>
       {loan && <LoanSplit a={a} loan={loan} cats={cats} loans={loans} onNav={onNav} />}
@@ -139,7 +150,11 @@ function Purchase({ a, onEdit }: { a: OwnedAsset; onEdit(): void }) {
   return (
     <Group title={copy.cardTitle} onEdit={onEdit}>
       <dl className="as-rec-list">
-        {a.cost != null && <Row label={copy.costLabel}>{fmt(a.cost)}</Row>}
+        {a.cost != null && (
+          <Row label={copy.costLabel}>
+            <span className="money">{fmt(a.cost)}</span>
+          </Row>
+        )}
         {a.cost_date && <Row label={copy.dateLabel}>{monthYear(a.cost_date)}</Row>}
       </dl>
     </Group>
@@ -222,7 +237,7 @@ export function AssetSections(props: AssetSectionsProps) {
             aria-label={m.aria}
             onClick={() => onEdit(m.opens)}
           >
-            <span aria-hidden="true">+</span>
+            <span aria-hidden="true">{Icons.plus!({ width: 12, height: 12 })}</span>
             {m.label}
           </button>
         ))}

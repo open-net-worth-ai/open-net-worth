@@ -1,11 +1,10 @@
 """The duplicate refusal the model reads names the tool's own escape hatch.
 
-ADR 2026-09-02 follow-up. ``core.errors.duplicate_hint`` ends "retry with force=true" —
-``force`` is the service kwarg and the REST body flag, but the ``add_transactions`` parameter
-is ``allow_duplicate``. A model that takes the hint literally sends ``force: true``, which the
-tool does not read, and is refused again with the same advice: a loop, or a give-up on a charge
-the user just confirmed was genuinely separate. The bulk path's own ``refused_note`` carried the
-same wrong name. Both surfaces must name ``allow_duplicate=true`` and never ``force=true``.
+ADR 2026-09-02 follow-up. The refusal used to say "retry with force=true" — ``force`` was the
+service kwarg and the REST body flag, while every tool takes ``allow_duplicate``. A model that
+took the hint literally sent ``force: true``, which no tool reads, and was refused again with
+the same advice: a loop, or a give-up on a charge the user just confirmed was genuinely
+separate. The flag is now ``allow_duplicate`` at every layer, so there is one name to say.
 """
 
 from __future__ import annotations

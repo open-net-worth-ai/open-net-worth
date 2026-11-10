@@ -13,8 +13,8 @@ import { SCREEN_INTROS } from '../../intro/screenIntros'
 import { reportScreenFill } from '../../intro/screenState'
 import { FlowIcon, X } from './icons'
 import { ChartArea } from '../../../ui/icons'
-import { fBase } from './planData'
-import { fMonth, getCurrencySymbol } from '../../../utils/format'
+import { fBase, fCF } from './planData'
+import { getCurrencySymbol } from '../../../utils/format'
 import { useCashflowData } from './useCashflowData'
 import type { MappedRow } from './useCashflowData'
 import { useRegisterScreenFacts, useRegisterScreenPrompts } from '../../../lucius/useScreenContract'
@@ -27,15 +27,6 @@ import { cardCaveat } from '../../../utils/cardCaveat'
 import type { RegisterFilter } from './budget'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function fCF(n: number): string {
-  const a = Math.abs(n),
-    s = n < 0 ? '−' : ''
-  const sym = getCurrencySymbol()
-  if (a >= 1e6) return s + sym + (a / 1e6).toFixed(2) + 'M'
-  if (a >= 1e3) return s + sym + (a / 1e3).toFixed(2) + 'K'
-  return s + sym + a.toFixed(0)
-}
 
 const CAT_COLOR: Record<string, string> = {
   Commitment: 'var(--bad)',
@@ -303,7 +294,9 @@ function BalanceChart({
       </div>
       <div className="cfx-chart-axis">
         <span>{months[0]!.label}</span>
-        <span className="cfx-thr-key">Safety floor {fCF(LOW_T)}</span>
+        <span className="cfx-thr-key">
+          Safety floor <span className="mask">{fCF(LOW_T)}</span>
+        </span>
         <span>{months[n - 1]!.label}</span>
       </div>
     </div>
@@ -1062,7 +1055,7 @@ export function CashFlowTab(props: CashFlowTabProps) {
             >
               Savings rate
             </span>
-            <span className={'v ' + (savingPct >= 0 ? 'pos' : 'neg')}>
+            <span className={'v mask ' + (savingPct >= 0 ? 'pos' : 'neg')}>
               {savingPct > 0 ? '+' : ''}
               {savingPct}%
             </span>
@@ -1250,12 +1243,16 @@ export function CashFlowTab(props: CashFlowTabProps) {
                       className={'cfx-year-net ' + ((yearNet[g.year] ?? 0) >= 0 ? 'pos' : 'neg')}
                     >
                       <span className="cfx-year-figlbl">Net</span>
-                      {(yearNet[g.year] ?? 0) >= 0 ? '+' : '−'}
-                      {fCF(Math.abs(yearNet[g.year] ?? 0))}
+                      <span className="mask">
+                        {(yearNet[g.year] ?? 0) >= 0 ? '+' : '−'}
+                        {fCF(Math.abs(yearNet[g.year] ?? 0))}
+                      </span>
                     </span>
-                    <span className="cfx-year-bal mask">
+                    <span className="cfx-year-bal">
                       <span className="cfx-year-figlbl">Balance</span>
-                      <RowBalance row={g.rows[g.rows.length - 1]!} />
+                      <span className="mask">
+                        <RowBalance row={g.rows[g.rows.length - 1]!} />
+                      </span>
                     </span>
                   </span>
                 </div>
@@ -1359,7 +1356,9 @@ export function CashFlowTab(props: CashFlowTabProps) {
                       <span></span>
                       <span></span>
                       <span
-                        className={'cfx-year-net ' + ((yearNet[g.year] ?? 0) >= 0 ? 'pos' : 'neg')}
+                        className={
+                          'cfx-year-net mask ' + ((yearNet[g.year] ?? 0) >= 0 ? 'pos' : 'neg')
+                        }
                       >
                         {(yearNet[g.year] ?? 0) >= 0 ? '+' : '−'}
                         {fCF(Math.abs(yearNet[g.year] ?? 0))}

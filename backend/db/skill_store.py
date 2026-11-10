@@ -1182,6 +1182,12 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             # 2026-10-11 (a607394d3): a fixed 1-day fetch window, sized for a 12-hour
             # schedule — a weekly one missed six days of mail. Now since the last completed run.
             "2fc64121dc4aa07ceb1b347830e04c0184116e90f88bc9b3c5e311b7f5479b53",
+            # 2026-10-25: memo invited "anything worth seeing", so runs retold each email
+            # (alert name, time, card, payee, fare) in memo. Now empty unless it adds something.
+            "c5646e9cf177bf8db1c26e09c6e8ea185d31b5f1c9bf62e7363175c4ded8ee43",
+            # 2026-10-27: memo banned the amount and fare breakdown, so a receipt's breakdown
+            # never reached memo even when the user asked for it. Now the model decides.
+            "d877696c3bac8ae098ca3f70043b79046ed02f766cd8168b9c240159b7494a35",
         }
     ),
     # 2026-10-11 (e98c3e2a5): the load step spelled as a find_tools(names=[...]) call.
@@ -1227,6 +1233,30 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "3f3def0712e78b029e6c7b81cbecb2ff76bb366f2cca010fd3fb40e88cd84518",
             # 2026-10-11: before the Gotchas section led the body.
             "528520ce70242fc9b4a5bc5fac3c52869c468a187652911f14981052aad8f372",
+            # 2026-11-02: before the "on what you watch" paragraph (get_untold_news).
+            "a3ea85de528f72da449398bf5648c12683cc2dff4dafa55078c949c2c21d66cf",
+            # 2026-11-06: before "Needs a look" checked each item against memory.
+            "e285d7433a577013205dc4cc0964d13e2a7af525088de990b6d67a50c6c64bc5",
+            # 2026-11-06: before what's still open got its own line and a reminder to recheck.
+            "853ae7eae7692d36d5bb4ffd635a1b9670d7dd21edef1b453adea5e593b559c0",
+        }
+    ),
+    # 2026-11-05: before one money test for every email, and connecting each item to the books.
+    "email-finance-digest": frozenset(
+        {
+            "39aa239fc5d8f0dd57029bb9d26ae0fca06af1cf1134d11327906bdf43a92194",
+            # 2026-11-05: before the ranked order, the greeting and logging second.
+            "1a1c78a12a7b1113d15502ec44b4a16e48592c9c0e08aae23f3af63256f888bc",
+            # 2026-11-05: before dropping the warning about links from the message.
+            "5eac0567dc62c2f8a83f9c761fdfba7b9c156365a7e8064290d2cc4d408e39e5",
+            # 2026-11-05: before the message said what period it went through.
+            "795001fc51a930e11c7027e7408765a68e51aebf95891ff75e6c2fd1fa486b2f",
+            # 2026-11-05: before an example named one provider instead of "the broker".
+            "33f8841bed9c1b5bbdfc98881645fdcf24551340e81b3df5a46ca06d979e48de",
+            # 2026-11-05: before dropping the scripted "skip this if it was you" line.
+            "8c1ebb1af245d07ad6697f02135aead68ab65d749300f222a8cc351ddf9d245c",
+            # 2026-11-06: before security notes were limited to finance apps.
+            "d7c70868131e008f640a1fa61bb7370a15259954218acc1610d83390ffeb48fa",
         }
     ),
 }
@@ -1300,6 +1330,8 @@ _ADDED_STARTERS: tuple[str, ...] = (
     "log-transactions-from-email",
     # 2026-10-15: why an account's balance differs from the bank's, traced row by row.
     "balance-mismatch-tracer",
+    # 2026-11-05: the Email finance digest template runs it — logging plus what else needs them.
+    "email-finance-digest",
 )
 
 # ── Built-in starter skills ────────────────────────────────────────────────────

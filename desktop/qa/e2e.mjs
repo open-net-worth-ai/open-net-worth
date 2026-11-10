@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { _electron as electron } from "playwright";
+import { SEEN_GUIDES } from "./guides.mjs";
 
 const repo = path.resolve("..");
 const root = await mkdtemp(path.join(tmpdir(), "onw-desktop-e2e-"));
@@ -151,7 +152,7 @@ async function commitImport(filename, shot) {
     .waitFor({ timeout: 45000 });
   if (shot) await page.screenshot({ path: `qa/artifacts/${shot}.png` });
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
-  await page.getByText("Booked.", { exact: true }).waitFor();
+  await page.getByText(`Imported ${filename}`, { exact: true }).waitFor();
   await page.getByRole("button", { name: "Done", exact: true }).click();
 }
 async function stop() {
@@ -196,6 +197,8 @@ try {
     },
     "PUT",
   );
+  // Before the reload below, so the app loads a profile that already has them.
+  await api("/api/profile", { seen_intros: SEEN_GUIDES }, "PUT");
   await page.goto(`${firstOrigin}/setup/password`);
   await page.getByRole("button", { name: "Skip", exact: true }).click();
   await page.waitForURL(/\/lucius/);
@@ -229,6 +232,31 @@ try {
   });
   assert.equal((await readFile(saved)).subarray(0, 2).toString(), "PK");
   check("native export writes portable ZIP outside the book");
+  assert.deepEqual(
+    await page.evaluate(() => window.onwDesktopClient.getUpdateState()),
+    { ready: false, version: null, available: false },
+  );
+  assert.equal(await page.evaluate(() => window.onwDesktopClient.takeWhatsNew()), null);
+  await app.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send("desktop-client:update-state", { ready: false, version: "9.9.9", available: true });
+  });
+  const availableBar = page.getByRole("status").filter({ hasText: "Open Net Worth 9.9.9 is available" });
+  await availableBar.waitFor();
+  await page.screenshot({ path: "qa/artifacts/update-available-bar.png" });
+  // No update is really pending here, so the main process answers and opens nothing.
+  await availableBar.getByRole("button", { name: "Update", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.onwDesktopClient.offerUpdate()), undefined);
+  await app.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send("desktop-client:update-state", { ready: true, version: "9.9.9" });
+  });
+  const updateBar = page.getByRole("status").filter({ hasText: "Open Net Worth 9.9.9 is ready" });
+  await updateBar.waitFor();
+  await page.screenshot({ path: "qa/artifacts/update-ready-bar.png" });
+  await updateBar.getByRole("button", { name: "Later", exact: true }).click();
+  await updateBar.waitFor({ state: "detached" });
+  check("update state and What's new reach the page; an available and a ready update each show their bar");
   await menu("Settings…");
   await page.getByRole("button", { name: "Desktop", exact: true }).click();
   await page

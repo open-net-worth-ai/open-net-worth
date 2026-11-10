@@ -6,6 +6,8 @@ Jobs:
   - intel_scan       : every N hours (from watchlist config)
   - watchlist_sync   : daily + shortly after boot — reconciles the auto-managed
                        "My holdings" watchlist against owned positions
+  - mcp_tools_refresh: daily — re-reads each external MCP server's tool list;
+                       mcp_tools_retry re-reads hourly the ones whose last read failed
 
 Call reschedule(config) to update intervals at runtime (e.g. when Lucius changes config).
 """
@@ -494,6 +496,23 @@ def _schedule_rss_hot_job(config: dict) -> None:
     logger.info("scheduler: rss_poll_hot scheduled — every %ds", _HOT_INTERVAL_SECONDS)
 
 
+async def _run_mcp_tools_refresh(only_unhealthy: bool = False) -> None:
+    """Re-read external MCP servers' tool lists — every enabled one daily, and hourly only
+    those whose last read failed, so a blip heals within the hour.
+
+    Boot and the human Test button were the only re-reads, so a remote server that gained a
+    tool stayed invisible to Lucius until a restart. A stdio server re-lists on its pooled
+    child (no respawn); an HTTP one gets a fresh handshake. Never raises."""
+    logger.info("scheduler: mcp_tools_refresh starting (only_unhealthy=%s)", only_unhealthy)
+    try:
+        from backend.mcp.client_manager import get_manager
+
+        manager = get_manager()
+        await asyncio.to_thread(lambda: manager.refresh_tools(only_unhealthy=only_unhealthy))
+    except Exception:
+        logger.exception("scheduler: mcp_tools_refresh failed")
+
+
 async def _run_watchlist_sync() -> None:
     """Reconcile the auto-managed "My holdings" watchlist against owned positions.
 
@@ -523,6 +542,18 @@ async def _run_watchlist_sync() -> None:
         logger.info("scheduler: watchlist_sync done — %d ticker(s) added", len(added or []))
     except Exception as exc:
         logger.exception("scheduler: watchlist_sync error: %s", exc)
+
+
+async def _run_ynab_sync() -> None:
+    """Tick of the two-way YNAB sync: runs it when its schedule says it is due (and none is
+    running). Cheap when it is not — one small state read."""
+    try:
+        from backend.services import ynab_sync
+
+        if await asyncio.to_thread(ynab_sync.run_if_due):
+            logger.info("scheduler: ynab_sync ran")
+    except Exception as exc:
+        logger.exception("scheduler: ynab_sync error: %s", exc)
 
 
 def _outward_jobs_allowed() -> bool:
@@ -597,6 +628,19 @@ def start() -> None:
     if outward:
         _schedule_automations_job()
 
+    # Two-way YNAB sync — one tick a minute; the schedule itself (15 min … daily, or manual
+    # only) lives in the sync's state, so changing it needs no re-registration here.
+    if outward:
+        _scheduler.add_job(
+            _run_ynab_sync,
+            trigger=IntervalTrigger(seconds=60),
+            id="two_way_budget_sync",  # not a provider ingest poll (see test_scheduler_no_ingest_job)
+            replace_existing=True,
+            misfire_grace_time=120,
+            max_instances=1,
+        )
+        logger.info("scheduler: ynab_sync scheduled — checked every 60s")
+
     # Batch reap sweep — polls pending batch ledger rows and applies results.
     # Runs every 5 minutes; no-op when the ledger is empty.
     _scheduler.add_job(
@@ -639,6 +683,24 @@ def start() -> None:
         misfire_grace_time=3600,
     )
     logger.info("scheduler: daily_backup scheduled — daily at 03:30 local")
+
+    # Boot already listed every server's tools, so the first re-read is a day out.
+    _scheduler.add_job(
+        _run_mcp_tools_refresh,
+        trigger=IntervalTrigger(hours=24),
+        id="mcp_tools_refresh",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_mcp_tools_refresh,
+        trigger=IntervalTrigger(hours=1),
+        kwargs={"only_unhealthy": True},
+        id="mcp_tools_retry",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("scheduler: mcp_tools_refresh scheduled — every 24h, failed ones hourly")
 
     # Auto-managed "My holdings" watchlist reconciliation (see _run_watchlist_sync). Daily,
     # plus a kick-start a few seconds after boot: holdings can change while the server is

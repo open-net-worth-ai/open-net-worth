@@ -38,6 +38,18 @@ def _ui_task_keys() -> set[str]:
     return set(re.findall(r"\[\s*'(\w+)',\s*'", groups))
 
 
+# A task that is routable and storable always, but whose Settings row exists only while its flag is
+# on (the Auto-approval judge: nothing reads the pin with ``permissions_v2`` off). The store and
+# the API accept it either way - the pin is additive data - so the flag-off panel is main's panel.
+_FLAG_GATED_TASKS = {"approval": "permissions_v2"}
+
+
+def _ui_flag_gated_task_keys() -> set[str]:
+    source = _PANEL.read_text(encoding="utf-8")
+    block = source[source.index("const TASK_GROUPS_V2") : source.index("const TASK_ROWS_V2")]
+    return set(re.findall(r"\[\s*'(\w+)',\s*'", block))
+
+
 def test_every_routable_task_is_settable_via_the_api():
     """A task the store can route but the request body cannot name is silently undroppable
     into the config — it can only ever run on the instance default."""
@@ -57,11 +69,19 @@ def test_the_api_invents_no_task_the_store_cannot_route():
 def test_every_routable_task_has_a_row_in_the_settings_panel():
     """An API-settable task with no UI control is unreachable for anyone not writing curl —
     which is how news_screen kept running on the old provider."""
-    missing = VALID_TASKS - _ui_task_keys()
+    missing = VALID_TASKS - _ui_task_keys() - set(_FLAG_GATED_TASKS)
     assert not missing, (
         f"tasks with no row in Settings → Task models (sections/ModelSection.tsx): {sorted(missing)}. "
         "They fall back to the instance default with nothing in the UI to say so."
     )
+
+
+def test_a_flag_gated_task_has_its_row_only_behind_its_flag():
+    """With the flag off the panel is exactly main's (no row for the task); with it on the row is
+    there. The task itself stays routable either way."""
+    assert set(_FLAG_GATED_TASKS) <= VALID_TASKS
+    assert not set(_FLAG_GATED_TASKS) & _ui_task_keys()
+    assert set(_FLAG_GATED_TASKS) <= _ui_flag_gated_task_keys()
 
 
 def test_news_screen_specifically_is_pinnable():

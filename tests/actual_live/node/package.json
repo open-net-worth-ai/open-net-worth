@@ -1,0 +1,9 @@
+{
+  "name": "onw-actual-live",
+  "private": true,
+  "description": "Pinned Actual server and official client for make actual-smoke. Made-up data only.",
+  "dependencies": {
+    "@actual-app/api": "26.11.0",
+    "@actual-app/sync-server": "26.11.0"
+  }
+}

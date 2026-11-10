@@ -5,7 +5,7 @@
 // entry), and create-account-then-link.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
@@ -26,7 +26,7 @@ const appAccounts = [
     id: 'acc_1',
     name: 'Existing Checking',
     kind: 'asset',
-    type: 'checking',
+    type: 'cash',
     institution: 'Chase',
     currency: 'USD',
     balance: 0,
@@ -101,8 +101,11 @@ describe('ConnectorAccountsList — status branches (CDS-UI-8)', () => {
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
 
-    expect(await screen.findByLabelText('Link Checking to an account')).toBeTruthy()
-    expect(screen.getByText('Linked to "Existing Checking"')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Add' })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Link Checking to an existing account' }),
+    ).toBeTruthy()
+    expect(screen.getByText('Linked to “Existing Checking”')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Unlink' })).toBeTruthy()
   })
 
@@ -167,7 +170,7 @@ describe('ConnectorAccountsList — status branches (CDS-UI-8)', () => {
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
     expect(await screen.findByText("Couldn't reach Plaid.")).toBeTruthy()
-    expect(screen.getByText('Linked to "Existing Checking"')).toBeTruthy()
+    expect(screen.getByText('Linked to “Existing Checking”')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Unlink' })).toBeTruthy()
   })
 
@@ -189,7 +192,7 @@ describe('ConnectorAccountsList — status branches (CDS-UI-8)', () => {
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
     expect(await screen.findByText('Not set up yet')).toBeTruthy()
-    expect(screen.getByText('Linked to "Existing Checking"')).toBeTruthy()
+    expect(screen.getByText('Linked to “Existing Checking”')).toBeTruthy()
   })
 
   it('error (or unmapped): error copy + Retry, not a raw status string', async () => {
@@ -240,8 +243,13 @@ describe('ConnectorAccountsList — link (CDS-UI-5)', () => {
       },
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
-    const select = await screen.findByLabelText('Link Checking to an account')
-    fireEvent.change(select, { target: { value: 'acc_1' } })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Link Checking to an existing account' }),
+    )
+    // The ledger's own searchable account picker opens straight away.
+    const picker = await screen.findByRole('group', { name: 'Link Checking to an account' })
+    expect(within(picker).getByPlaceholderText('Search accounts…')).toBeTruthy()
+    fireEvent.mouseDown(within(picker).getByRole('button', { name: 'Existing Checking' }))
 
     await waitFor(() => expect(putUrl).toBe('/api/accounts/acc_1'))
     expect(putBody).toEqual({
@@ -298,7 +306,7 @@ describe('ConnectorAccountsList — unlink (CDS-UI-7)', () => {
 })
 
 describe('ConnectorAccountsList — create account (CDS-UI-6)', () => {
-  it('"+ Create account…" opens AccountModal prefilled, then POSTs and links', async () => {
+  it('"Add" opens AccountModal prefilled, then POSTs and links', async () => {
     let postBody: unknown,
       putUrl = '',
       putBody: unknown
@@ -325,8 +333,7 @@ describe('ConnectorAccountsList — create account (CDS-UI-6)', () => {
       },
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
-    const select = await screen.findByLabelText('Link New Savings to an account')
-    fireEvent.change(select, { target: { value: '__create__' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
 
     expect(await screen.findByRole('dialog')).toBeTruthy()
     expect(screen.getByDisplayValue('New Savings')).toBeTruthy()
@@ -336,9 +343,10 @@ describe('ConnectorAccountsList — create account (CDS-UI-6)', () => {
     expect(postBody).toMatchObject({
       name: 'New Savings',
       currency: 'USD',
-      institution: 'Plaid',
       last_four: '4242',
     })
+    // No bank known for this row: the institution is left blank — never the connector "Plaid".
+    expect((postBody as { institution?: string }).institution ?? '').toBe('')
     expect(putBody).toEqual({
       external_ids: [{ source: 'plaid', ref: 'p1', name: 'New Savings', mask: '4242' }],
     })

@@ -7,7 +7,8 @@
  * full TxnDetail drawer, which already edits every field), no column picker/resize —
  * just the read layout, ranked by what a user scans a transaction list for:
  *   1. Payee/description + amount (the "who / how much") — the title row.
- *   2. Date + category (or the Split chip) — the "when / what for" meta row.
+ *   2. Date + category (or the Split chip, which expands the lines in place) — the "when /
+ *      what for" meta row.
  *   3. Account (only in the all-accounts view) and a needs-review flag, same row.
  *   4. Memo — personal annotation, shown only when present.
  * Selection (checkbox) and the cleared toggle stay one-tap actions, same as the
@@ -17,11 +18,13 @@
 
 import { EntityRow } from '../../../lucius/EntityRow'
 import type { Txn, Account, Category, FxRates } from './types'
-import { fCur, fBase } from './format'
+import { fBase } from './format'
 import { fDate } from '../../../utils/format'
 import { buildTxnView } from './txnView'
-import { categoryPill } from './TxnRow'
+import { categoryPill, transferLabel } from './TxnRow'
 import { SourceIcon, IconCheck } from './pickers'
+import { Check, Circle } from '../../../ui/icons'
+import { SplitChip, SplitLines } from './SplitView'
 
 export interface TxnCardProps {
   t: Txn
@@ -61,6 +64,7 @@ export function TxnCard({
   const {
     ccy,
     pos,
+    amtTone,
     baseVal,
     amtTitle,
     nativeMain,
@@ -73,22 +77,15 @@ export function TxnCard({
     payeeText,
     payeeFromName,
     payeeToName,
+    transferViewedLeg,
     mentionSub,
   } = buildTxnView(t, accounts, selectedId, payeeName, rates, showAccount)
 
-  const payeeMain: React.ReactNode = isTransfer ? (
-    isAdjustment ? (
-      'Balance adjustment'
-    ) : (
-      <span>
-        {payeeFromName || '—'}
-        <span className="arrow">→</span>
-        {payeeToName || '—'}
-      </span>
-    )
-  ) : (
-    payeeText
-  )
+  const payeeMain: React.ReactNode = isTransfer
+    ? isAdjustment
+      ? 'Balance adjustment'
+      : transferLabel(payeeFromName, payeeToName, transferViewedLeg)
+    : payeeText
   const askLabel = payeeName || t.description || '(no description)'
   const askSearch = [t.description, t.memo, payeeName, primaryAcct?.name, t.category]
     .filter(Boolean)
@@ -134,9 +131,7 @@ export function TxnCard({
             <span className={'acct-payee-nm' + (isTransfer ? ' transfer' : '')}>{payeeMain}</span>
             <span
               className={
-                'acct-card-amt ' +
-                (pos ? 'pos' : 'neg') +
-                (t.kind === 'investment' ? ' invest' : '')
+                'acct-card-amt mask ' + amtTone + (t.kind === 'investment' ? ' invest' : '')
               }
               title={amtTitle}
             >
@@ -147,15 +142,12 @@ export function TxnCard({
           <span className="acct-card-meta">
             {showDate && <span className="acct-card-date">{fDate(t.date, 'numeric')}</span>}
             {isSplit ? (
-              <button
-                className="acct-split-chip"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSplit(t.id)
-                }}
-              >
-                Split • {t.splits.length} {splitOpen ? '▴' : '▾'}
-              </button>
+              <SplitChip
+                splits={t.splits}
+                catMap={catMap}
+                open={splitOpen}
+                onToggle={() => onSplit(t.id)}
+              />
             ) : t.category && !isAdjustment ? (
               categoryPill(t.category, catMap)
             ) : !isTransfer && (t.kind === 'expense' || t.kind === 'income') ? (
@@ -178,10 +170,23 @@ export function TxnCard({
                 onUpdate(t.id, { cleared: !t.cleared })
               }}
             >
-              {t.cleared ? <span className="c">✓</span> : <span className="o">○</span>}
+              {t.cleared ? (
+                <Check className="c" size={12} aria-hidden="true" />
+              ) : (
+                <Circle className="o" size={12} aria-hidden="true" />
+              )}
             </span>
             {!t.needsReview && <SourceIcon source={t.source} />}
           </span>
+          {isSplit && splitOpen && (
+            <SplitLines
+              splits={t.splits}
+              catMap={catMap}
+              currency={t.fromCurrency ?? ccy}
+              sign={pos ? '+' : '−'}
+              className="acct-card-splits"
+            />
+          )}
           {t.memo && (
             <span
               className="acct-card-memo"
@@ -197,19 +202,6 @@ export function TxnCard({
           )}
         </span>
       </EntityRow>
-      {isSplit && splitOpen && (
-        <div className="acct-card-split-detail">
-          {t.splits.map((s, i) => (
-            <div className="acct-card-split-line" key={i}>
-              {categoryPill(s.category, catMap)}
-              {s.note && <span className="acct-split-note">{s.note}</span>}
-              <span className="acct-split-amt">
-                {fCur(s.amount, t.fromCurrency ?? ccy, { cents: true })}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </>
   )
 }

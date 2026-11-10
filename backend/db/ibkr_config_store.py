@@ -47,7 +47,7 @@ DEFAULTS: dict = {
 
 class IbkrConfigStore(AggregatorConfigStore):
     KIND = "ibkr"
-    LABEL = "Interactive Brokers"
+    LABEL = "IBKR Flex"
     DEFAULTS = DEFAULTS
     CONFIG_KEYS = ("flex_query_id", "base_url")
     SECRET_KEYS = ("flex_token",)

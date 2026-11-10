@@ -64,7 +64,9 @@ def client(tmp_path, monkeypatch):
     return TestClient(app), acct
 
 
-def _wait_for(fn, timeout=5.0):
+# A generous ceiling: polling returns the moment the job is done, and a real parse on a busy
+# CI runner (or beside a parallel suite) can take longer than a few seconds.
+def _wait_for(fn, timeout=30.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         val = fn()
@@ -74,7 +76,7 @@ def _wait_for(fn, timeout=5.0):
     raise AssertionError("timed out waiting for condition")
 
 
-def _wait_for_settled(web, sid, timeout=5.0):
+def _wait_for_settled(web, sid, timeout=30.0):
     def _check():
         body = web.get(f"/api/statements/{sid}/parse-status").json()
         return body if body.get("parse_status") in ("ready", "failed") else None
@@ -217,6 +219,9 @@ def test_forced_rerun_of_an_already_ready_statement_is_not_fooled_by_a_stale_run
     )
     assert resp2.status_code == 202
     assert resp2.json()["attached"] is False, "must not attach to a job that already finished"
+    # The re-parse runs on the pool; `is_running` is patched, so read the real set to know it
+    # has finished before judging what it ran.
+    _wait_for(lambda: sid not in parse_jobs._running)
     assert calls == [1], "a fresh parse must actually run, not zero model calls"
 
 

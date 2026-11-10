@@ -15,7 +15,15 @@ import json
 import logging
 from typing import Any, AsyncGenerator, AsyncIterable, Callable, Optional, Sequence
 
-from backend.ai import assistant, pending_injection, run_context, run_plan, skill_runtime, turns
+from backend.ai import (
+    assistant,
+    memory_idle,
+    pending_injection,
+    run_context,
+    run_plan,
+    skill_runtime,
+    turns,
+)
 from backend.ai.prompts import build_system_prompt
 from backend.ai.tool_text import RoundText
 from backend.ai.tools import _skill_scope
@@ -128,7 +136,7 @@ async def automation_runner(
             run_id=request.run_id,
             session_id=request.session_id,
             mode=request.permission_mode,
-            always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+            **_approval_tool_lists(request),
         )
     )
     skill_scope_snapshot = _skill_scope.snapshot_scope()
@@ -293,6 +301,7 @@ async def automation_runner(
     # NOT a tool ceiling. The predecessor flag was both, and as a ceiling it refused every
     # tool on every run; see core.unattended.
     _unattended_token = set_unattended(True)
+    transcript_saved = False
     try:
         turn_status = await turns.run_inline(
             request.session_id,
@@ -306,6 +315,7 @@ async def automation_runner(
                 "This run exceeded the turn time limit and was stopped before it finished."
             )
         _persist_automation_history(request.session_id)
+        transcript_saved = True
     except asyncio.CancelledError:
         # The run row is settled by `runs._task_done` — the only place that can also release
         # the runtime claim — so this just releases the email stage and lets the
@@ -330,6 +340,9 @@ async def automation_runner(
         _skill_scope.restore_scope(skill_scope_snapshot)
         set_email_consumer(prior_email_consumer)
         clear_audit_scope(audit_token)
+
+    if transcript_saved:
+        memory_idle.schedule_extraction(request.session_id)
 
     files = _artifact_filenames(request.session_id)
     context = {
@@ -560,20 +573,11 @@ def materialize_automation_session(run: dict, automation: Optional[dict] = None)
     created_transcript = existing is None
     if not isinstance(existing, list) or not existing:
         if "started_at" not in run and automation is not None:
-            request = AutomationRunnerRequest(
-                automation_id=str(run.get("automation_id") or automation.get("id") or ""),
-                run_id=run_id,
-                session_id=session_id,
-                title=str(automation.get("name") or run_id),
-                instructions=str(automation.get("instructions") or ""),
-                trigger=dict(run.get("trigger") or {}),
-                execution=dict(automation.get("execution") or {"kind": "lucius"}),
-                model=str(automation.get("model") or ""),
-                effort=str(automation.get("effort") or "medium"),
-                payload=dict(run.get("context") or {}),
-                permission_mode=str(automation.get("permission_mode") or "manual"),
-                always_allowed=list(automation.get("always_allowed") or []),
-            )
+            # The ONE request a run gets. This message is the only opening it ever sees, so a
+            # request built by hand here told every run it had no last run and no rule.
+            from backend.services.automations.runs import request_for_run
+
+            request = request_for_run(automation, {**run, "session_id": session_id})
             history = [_automation_message(request)]
         else:
             facts = {
@@ -708,9 +712,10 @@ async def _stream_continuation(
     prior_email_consumer: str | None = None
     failure: str | None = None
     stream = None
+    transcript_saved = False
     try:
-        persisted = assistant.load_session_durable(session_id)
-        if not persisted:
+        transcript = assistant.load_session_durable(session_id)
+        if not transcript:
             raise RuntimeError("Automation conversation transcript is missing or empty")
         request = request_for_run(automation, baseline)
         projection = _EventProjection(request)
@@ -720,7 +725,7 @@ async def _stream_continuation(
                 run_id=request.run_id,
                 session_id=request.session_id,
                 mode=request.permission_mode,
-                always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+                **_approval_tool_lists(request),
             )
         )
         audit_token = set_audit_scope(
@@ -747,6 +752,7 @@ async def _stream_continuation(
                     )
                 yield event
             _persist_automation_history(session_id)
+            transcript_saved = True
         finally:
             close = getattr(stream, "aclose", None)
             if close is not None:
@@ -786,6 +792,8 @@ async def _stream_continuation(
                 set_email_consumer(prior_email_consumer)
             if audit_token is not None:
                 clear_audit_scope(audit_token)
+            if transcript_saved:
+                memory_idle.schedule_extraction(session_id)
 
 
 def _persist_automation_history(session_id: str) -> None:
@@ -987,7 +995,60 @@ class _EventProjection:
         )
 
 
+def _approval_tool_lists(request: AutomationRunnerRequest) -> dict[str, frozenset[str]]:
+    """The Automation's tool lists for its approval context. Under ``permissions_v2`` the
+    Always allowed list may also name external MCP tools and the Automation has a Blocked list;
+    otherwise only the registry's tools in Always allowed count."""
+    from backend.ai.permissions import engine
+
+    if not engine().automation_blocked_lists:
+        return {"always_allowed_tools": _canonical_always_allowed_tools(request.always_allowed)}
+    names: list = []
+    for descriptor in request.always_allowed or []:
+        if not isinstance(descriptor, dict):
+            continue
+        candidates = descriptor.get("tools")
+        names.extend(candidates if isinstance(candidates, list) else [])
+        capability = descriptor.get("capability")
+        if isinstance(capability, str):
+            names.append(capability)
+    return {
+        "always_allowed_tools": _canonical_tool_names(names),
+        "blocked_tools": _canonical_tool_names(request.blocked, keep_external=True),
+    }
+
+
+def _canonical_tool_names(names: list[str], *, keep_external: bool = False) -> frozenset[str]:
+    """The live tool names among ``names`` — a registry tool, or an external MCP tool
+    (``mcp__<server>__<tool>``) its enabled server currently advertises. An entry that names no
+    live tool grants and blocks nothing.
+
+    ``keep_external`` is for the BLOCKED list: a Block must outlive a server that is disabled or
+    has not advertised the tool at the moment the run starts, so every well-formed external name
+    is kept (an unknown one matches nothing). Dropping it would let a re-enabled server's tool
+    run past the Automation's own Block."""
+    from backend.ai.tools.registry import registered_tool_names
+    from backend.core import mcp_external
+
+    live = set(registered_tool_names())
+    dispatcher = mcp_external.get_external_dispatcher()
+
+    def is_live(name: str) -> bool:
+        if name in live:
+            return True
+        if not mcp_external.is_external(name):
+            return False
+        if keep_external and mcp_external.split_external(name) is not None:
+            return True
+        return dispatcher is not None and dispatcher.discovered_tool(name) is not None
+
+    return frozenset(
+        name.strip() for name in names or [] if isinstance(name, str) and is_live(name.strip())
+    )
+
+
 def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str]:
+    from backend.ai.search.switch import with_stand_ins
     from backend.ai.tools.registry import registered_tool_names
 
     live = set(registered_tool_names())
@@ -1006,7 +1067,7 @@ def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str
             canonical = name.strip()
             if canonical in live:
                 result.add(canonical)
-    return frozenset(result)
+    return frozenset(with_stand_ins(result))
 
 
 def _progress_patch(
@@ -1121,6 +1182,8 @@ def _automation_message(request: AutomationRunnerRequest) -> dict:
             # Why it ran and since when: the instructions say what to do, never when.
             "configured_trigger": request.configured_trigger,
             "last_completed_run": request.last_completed_run,
+            "run_before_last": request.run_before_last,
+            "last_run_record": request.last_run_record,
         },
         sort_keys=True,
         default=str,

@@ -170,3 +170,10 @@ public HTTPS address (see step 1 above).
 - [Permissions](../lucius/permissions.md) — blocking tools you don't want changed
 - [External MCP servers](../connectors/external-mcp.md) — the other direction
 - [Security and privacy](security-and-privacy.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Personal Finance MCP Server: Use Your Ledger from Claude](https://opennetworth.ai/blog/personal-finance-mcp-server/): a walkthrough of the MCP server with Claude
+- [An Open-Source Claude Personal Finance Alternative](https://opennetworth.ai/blog/claude-personal-finance-alternative/): Claude's own personal finance features next to a self-hosted ledger

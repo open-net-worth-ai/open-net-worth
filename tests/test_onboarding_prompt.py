@@ -129,12 +129,12 @@ def test_first_greeting_is_concise_before_asking_for_a_name(db_isolated):
     assert "Do not list capabilities" in body
 
 
-def test_the_skill_is_honest_about_migration_not_existing(db_isolated):
-    """YNAB/Actual budget migration is unbuilt. Lucius must not imply it works — the connector
-    syncs transactions only."""
+def test_the_skill_says_where_a_budget_app_import_is(db_isolated):
+    """YNAB and Actual budgets import from Data sync, and the person runs it from that screen."""
     body = _onboarding_skill_body()
-    assert "YNAB" in body
-    assert "not built yet" in body
+    assert "YNAB" in body and "Actual Budget" in body
+    assert "Automations > Data sync" in body
+    assert "not built yet" not in body
 
 
 def test_the_skill_is_both_host_and_model_invocable(db_isolated):
@@ -150,12 +150,11 @@ def test_the_skill_is_both_host_and_model_invocable(db_isolated):
     assert allows_model_invocation(skill.get("claude")) is True
 
 
-def test_the_skill_mentions_ibkr_xml_format(db_isolated):
-    """If the user sets up Interactive Brokers via Connectors, the onboarding skill instructs
-    reminding them to set the Flex Query format to XML."""
+def test_the_skill_no_longer_coaches_the_retired_ibkr_flex_setup(db_isolated):
+    """IBKR Flex is retired (ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server): Lucius
+    must not walk a new user through a Flex Query it can no longer use."""
     body = _onboarding_skill_body()
-    assert "Interactive Brokers" in body
-    assert "XML" in body
+    assert "Flex" not in body
 
 
 def _onboarding_reference(name: str) -> str:
@@ -221,7 +220,7 @@ def test_the_prompt_asks_for_a_profile_field_only_when_an_answer_needs_it(db_iso
     """PROFILE ON DEMAND (main prompt, every conversation): ask one missing field with its
     reason when an answer depends on it; never chase a skipped one; a bare age is NEVER
     turned into an invented birth date (persona QA 2026-10-14: "I'm 44" was stored as
-    1 January 1982); free-form context goes to `notes`."""
+    1 January 1982); free-form context is memory, not the profile."""
     prompt = build_system_prompt()
     assert "PROFILE ON DEMAND" in prompt
     assert "Never ask for a field the question at hand does not need" in prompt
@@ -229,7 +228,8 @@ def test_the_prompt_asks_for_a_profile_field_only_when_an_answer_needs_it(db_iso
     assert "NEVER invent a value to store" in prompt
     assert "a bare age" in prompt and "is not a birth date" in prompt
     assert "January 1 of that birth year" not in prompt
-    assert "profile's `notes` field" in prompt
+    assert "is memory — see MEMORY below" in prompt
+    assert "profile's `notes` field" not in prompt
     assert "Settings > Profile" in prompt
 
 

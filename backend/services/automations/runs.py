@@ -24,10 +24,15 @@ from backend.db.automation_runtime_store import AutomationRuntimeStore
 from backend.db.automation_store import DELETING_STATUS, AutomationStore
 from backend.db.session_store import SessionStore
 
-from .run_context import configured_trigger, last_completed_run
+from .run_context import configured_trigger, last_completed_run, last_run_record, run_before_last
 from .schedules import compute_next_run, ran_slot_floor
 
 logger = logging.getLogger(__name__)
+
+# An Automation run's conversation id is always minted as ``automation-run-{run_id}``, so a
+# session id with this prefix names an Automation run even after the run or its Automation is gone.
+AUTOMATION_SESSION_PREFIX = "automation-run-"
+
 _tasks: set[asyncio.Task] = set()
 _tasks_by_run: dict[str, asyncio.Task] = {}
 _ALL_STATUSES = frozenset({"running", "waiting", "completed", "failed", "cancelled"})
@@ -105,7 +110,7 @@ async def run_automation(
     draft = {
         "id": run_id,
         "automation_id": automation_id,
-        "session_id": f"automation-run-{run_id}",
+        "session_id": f"{AUTOMATION_SESSION_PREFIX}{run_id}",
         "status": "running",
         "trigger": trigger_data,
         "execution": automation.get("execution") or {},
@@ -230,7 +235,9 @@ async def _execute_run(automation: dict, run: dict, payload: dict) -> None:
         )
     except TransitionConflict:
         return
-    if result.status != "waiting":
+    if result.status == "waiting":
+        _move_past_parked_slot(automation["id"], updated)
+    else:
         _finish_automation_once(automation, updated, result.status, payload)
     # Released on EVERY outcome, ``waiting`` included. The runtime claim means "a run of this
     # Automation is EXECUTING", not "a run of it exists": a waiting run is parked on an
@@ -265,9 +272,18 @@ def request_for_run(
         payload=dict(payload if payload is not None else run.get("context") or {}),
         permission_mode=automation.get("permission_mode") or "manual",
         always_allowed=always_allowed,
+        blocked=[str(tool) for tool in automation.get("blocked") or []],
         configured_trigger=configured_trigger(automation),
         last_completed_run=last_completed_run(automation["id"], run),
+        run_before_last=run_before_last(automation["id"], run),
+        last_run_record=last_run_record(automation["id"], run),
     )
+
+
+def is_automation_session(session_id: Optional[str]) -> bool:
+    """Whether ``session_id`` is an Automation run's conversation id, whether or not the run row
+    (or the Automation behind it) still exists."""
+    return bool(session_id) and str(session_id).startswith(AUTOMATION_SESSION_PREFIX)
 
 
 def automation_run_for_session(session_id: str) -> tuple[dict, dict] | None:
@@ -422,13 +438,19 @@ def _merge_steps(existing: list[dict], current: list[dict]) -> list[dict]:
     return result
 
 
-def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
+def grant_automation_tool(
+    session_id: str, tool: str, scope: str, *, clear_blocked: bool = False
+) -> bool:
     """Persist a grant locally when ``session_id`` belongs to an Automation run.
 
     Two scopes (2026-08-02): ``once`` stores nothing — approving the card IS the grant — and
     ``always`` appends to this Automation's standing ``always_allowed`` list, so the tool stops
     raising a card for it. Keeping the grant on the Automation rather than in the global
-    table is what stops an Automation inheriting a permission granted in an unrelated chat.
+    table is what stops one card tap changing a tool for every other caller.
+
+    ``clear_blocked`` (``permissions_v2``): a tool is never on both lists, so allowing it here takes
+    it off this Automation's Blocked list. With the flag off the Blocked list is not this path's to
+    touch.
     """
     owned = automation_run_for_session(session_id)
     if owned is None:
@@ -438,6 +460,9 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
         always_allowed = [
             dict(item) for item in automation.get("always_allowed") or [] if isinstance(item, dict)
         ]
+        current = automation.get("blocked") or []
+        blocked = [name for name in current if name != tool] if clear_blocked else current
+        changes: dict = {}
         if not any(tool in (item.get("tools") or []) for item in always_allowed):
             always_allowed.append(
                 {
@@ -446,15 +471,13 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
                     "tools": [tool],
                 }
             )
+            changes["always_allowed"] = always_allowed
+        if len(blocked) != len(current):
+            changes["blocked"] = blocked
+        if changes:
             from .service import apply_automation_change
 
-            apply_automation_change(
-                {
-                    "op": "update",
-                    "id": automation["id"],
-                    "changes": {"always_allowed": always_allowed},
-                }
-            )
+            apply_automation_change({"op": "update", "id": automation["id"], "changes": changes})
         return True
     return scope == "once"
 
@@ -629,6 +652,7 @@ def recover_automation_runs(
     for run in waiting_runs:
         latest = store.find_by_id(run["id"])
         if latest is not None and latest.get("status") == "waiting":
+            _move_past_parked_slot(run.get("automation_id") or "", latest)
             _release_runtime(run.get("automation_id") or "", run["id"])
     _sweep_orphan_runtime_owners(store)
     return {"backfilled": backfilled, "recovered": recovered}
@@ -682,34 +706,7 @@ def _finish_automation_once(
     }
     trigger = current.get("trigger") or {}
     if trigger.get("kind") == "schedule":
-        scheduled_for = payload.get("scheduled_for")
-        after = datetime.fromisoformat(scheduled_for) if scheduled_for else finished
-        # ``after`` anchors the cadence grid (so a daily 09:00 job does not drift later by
-        # each run's duration); ``not_before`` skips slots that are already gone. Without
-        # the floor, a run that finishes days after it was scheduled advances by ONE
-        # occurrence into a still-past next_run_at, and the scheduler replays the backlog
-        # one paid, notifying run per missed day. See compute_next_run's docstring.
-        #
-        # The floor is the CLOCK SEAM, not the run's finished_at: a store-stamped timestamp
-        # is real wall-clock even when the caller is driving a simulated now, which would
-        # make the reschedule untestable and, on the recovery path, floor against when the
-        # crashed run happened to stop rather than when we are actually rescheduling.
-        # Imported locally because service imports runs lazily in the other direction.
-        #
-        # The slot that just ran is a floor too, placed on the CURRENT clock: a tz-less
-        # trigger whose machine moved west would otherwise get the same slot back an hour
-        # later and run it twice (see ran_slot_floor).
-        from .service import now_utc
-
-        not_before = now_utc()
-        if scheduled_for:
-            not_before = max(not_before, ran_slot_floor(trigger, after))
-        next_run = compute_next_run(
-            trigger,
-            after,
-            created_at=current.get("created_at"),
-            not_before=not_before,
-        )
+        next_run = _next_run_after(current, payload.get("scheduled_for"), finished)
         reached_cap = current.get("max_runs") is not None and run_count >= int(current["max_runs"])
         if next_run is None or reached_cap:
             # The schedule ran out — ``completed``, never ``paused`` (the user's own choice).
@@ -729,6 +726,64 @@ def _finish_automation_once(
         pass
 
 
+def _next_run_after(current: dict, scheduled_for: str | None, fallback: datetime) -> str | None:
+    trigger = current.get("trigger") or {}
+    after = datetime.fromisoformat(scheduled_for) if scheduled_for else fallback
+    # ``after`` anchors the cadence grid (so a daily 09:00 job does not drift later by
+    # each run's duration); ``not_before`` skips slots that are already gone. Without
+    # the floor, a run that finishes days after it was scheduled advances by ONE
+    # occurrence into a still-past next_run_at, and the scheduler replays the backlog
+    # one paid, notifying run per missed day. See compute_next_run's docstring.
+    #
+    # The floor is the CLOCK SEAM, not the run's finished_at: a store-stamped timestamp
+    # is real wall-clock even when the caller is driving a simulated now, which would
+    # make the reschedule untestable and, on the recovery path, floor against when the
+    # crashed run happened to stop rather than when we are actually rescheduling.
+    # Imported locally because service imports runs lazily in the other direction.
+    #
+    # The slot that just ran is a floor too, placed on the CURRENT clock: a tz-less
+    # trigger whose machine moved west would otherwise get the same slot back an hour
+    # later and run it twice (see ran_slot_floor).
+    from .service import now_utc
+
+    not_before = now_utc()
+    if scheduled_for:
+        not_before = max(not_before, ran_slot_floor(trigger, after))
+    return compute_next_run(
+        trigger,
+        after,
+        created_at=current.get("created_at"),
+        not_before=not_before,
+    )
+
+
+def _move_past_parked_slot(automation_id: str, run: dict) -> None:
+    """A parked run has used its slot, so the slot stops being due now, not when it's answered.
+
+    A parked run lets go of the runtime claim (see _execute_run) and only a FINISHED run
+    reschedules, so the slot still read as due and unclaimed: the next tick started a second
+    run for it. Live 2026-11-03 and 2026-11-06, two minutes after each first run. Finishing
+    still reschedules and counts the run. Only a slot still at the head of the schedule moves,
+    so an edit made during the run stands. It may not raise: the caller has a claim to release.
+    """
+    try:
+        scheduled_for = _lifecycle_payload(run).get("scheduled_for")
+        if not scheduled_for:
+            return
+        store = AutomationStore()
+        current = store.find_by_id(automation_id)
+        if current is None or current.get("next_run_at") != scheduled_for:
+            return
+        cap = current.get("max_runs")
+        used_up = cap is not None and int(current.get("run_count") or 0) + 1 >= int(cap)
+        next_run = (
+            None if used_up else _next_run_after(current, scheduled_for, _run_finished_at(run))
+        )
+        store.update_by_id(current["id"], {"next_run_at": next_run})
+    except Exception:
+        logger.exception("could not move automation %s past its parked slot", automation_id)
+
+
 def _run_finished_at(run: dict) -> datetime:
     raw = run.get("finished_at")
     if isinstance(raw, str) and raw:
@@ -746,13 +801,11 @@ async def run_due_automations(now: datetime | None = None) -> dict:
     """Fire every Automation whose ``next_run_at`` has passed.
 
     An Automation already holding its runtime claim is skipped rather than attempted: its
-    current run is either genuinely still executing, or PARKED waiting on the owner's
-    approval — either way `run_automation` is guaranteed to raise "already running", and
-    `next_run_at` cannot advance until that run settles (`_finish_automation_once` is the
-    only thing that recomputes it), so a stale-in-the-past `next_run_at` makes the
-    Automation "due" on literally every tick forever. Attempting it anyway turned a normal,
-    already-visible state (the run row reads `waiting`, "Needs you" in the Automations tab)
-    into a manufactured tick failure, logged as a scheduler error every 60 seconds — live
+    current run is still executing, so `run_automation` is guaranteed to raise "already
+    running", and `next_run_at` cannot advance until that run parks or settles, so a
+    stale-in-the-past `next_run_at` makes the Automation "due" on every tick until then.
+    Attempting it anyway turned a normal, already-visible state into a manufactured tick
+    failure, logged as a scheduler error every 60 seconds — live
     incident: `task-cbcf7a0c` ("Daily Trades Summary") sat on a `notify` approval card for 5
     days, spamming a failed retry every minute the whole time. Skipped automations are
     reported separately from `errors` so a parked approval never reads as one.

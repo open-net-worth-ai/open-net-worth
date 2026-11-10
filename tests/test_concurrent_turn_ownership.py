@@ -44,11 +44,6 @@ def _isolate(monkeypatch):
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
 
-    async def _noop_memory(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
-
 
 def _cleanup(sid: str) -> None:
     assistant.SESSIONS.pop(sid, None)

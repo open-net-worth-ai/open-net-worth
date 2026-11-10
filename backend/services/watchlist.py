@@ -9,6 +9,7 @@ from __future__ import annotations
 from backend.core.errors import ValidationError
 from backend.core.holdings_change import register_holdings_changed_hook
 from backend.core.ids import new_id
+from backend.core.untrusted import sanitize_untrusted
 from backend.db.engine import _lock_for_table
 
 # PLAN 4B TASK 3: re-seated off the raw watchlist.json file onto WatchlistStore's DB row.
@@ -52,6 +53,9 @@ _DEFAULT_CONFIG = {
     "ai_opinion_level": "information",  # information | lean | suggest
     "holdings_brief_verbosity": 3,  # 1 headline … 4 detailed, 5 written by Lucius
     "watchlist_brief_verbosity": 3,
+    # The user's own words on what Intel should tell them (the delivery decider's standing
+    # instructions, flag intel_delivery_decider). Sanitized and capped by validate_ai_settings.
+    "delivery_instructions": "",
     "last_scan_at": None,
     "last_price_check_at": None,
 }
@@ -72,6 +76,7 @@ CRASH_MOVE_PCT = {
 
 AI_OPINION_LEVELS = ("information", "lean", "suggest")
 WATCH_READS_MAX_PER_DAY = 50
+DELIVERY_INSTRUCTIONS_MAX_CHARS = 1000
 BRIEF_VERBOSITY_LEVELS = (1, 2, 3, 4, 5)
 
 
@@ -91,6 +96,10 @@ def validate_ai_settings(changes: dict) -> dict:
     for key in ("explained_alerts_enabled", "watch_reads_enabled"):
         if key in out:
             out[key] = bool(out[key])
+    if "delivery_instructions" in out:
+        out["delivery_instructions"] = sanitize_untrusted(
+            str(out["delivery_instructions"] or "").strip(), DELIVERY_INSTRUCTIONS_MAX_CHARS
+        )
     return out
 
 
@@ -240,6 +249,55 @@ def update_watchlist(watchlist_id: str, changes: dict) -> dict:
 
 def delete_watchlist(watchlist_id: str) -> dict:
     return watchlist_store().delete_watchlist(watchlist_id)
+
+
+def with_thesis_intents(wl: dict) -> dict:
+    """A watchlist read as every caller expects it: each ticker item's ``intent`` is its
+    instrument's investment thesis (``investment_theses.intent_for_item``), never the raw stored key."""
+    from backend.services import investment_theses
+
+    theses = investment_theses.theses_by_instrument()
+    items = [
+        i if is_topic(i) else investment_theses.with_intent(i, theses)
+        for i in wl.get("items") or []
+    ]
+    return {**wl, "items": items}
+
+
+def project_item(item: dict | None) -> dict | None:
+    """One watch item with its thesis-backed ``intent`` (see ``with_thesis_intents``)."""
+    if item is None or is_topic(item):
+        return item
+    from backend.services import investment_theses
+
+    return investment_theses.with_intent(item)
+
+
+def update_item(item_id: str, changes: dict) -> dict | None:
+    """Patch one watch item. Its ``intent`` belongs to the instrument's investment thesis, so an
+    ``intent`` change is written there whenever the ticker has an instrument and dropped from the
+    item; only a ticker with no instrument yet keeps it on the item. Returns the item with
+    ``intent`` projected from the thesis, or None when the id is unknown."""
+    from backend.services import investment_theses
+
+    store = watchlist_store()
+    iid = None
+    intent = None
+    if "intent" in changes:
+        item = store.find_by_id(item_id)
+        if item is None:
+            return None
+        iid = investment_theses.thesis_instrument_for_item(item)
+        if iid:
+            # Check the intent first, then write the item (its own validators run there), then
+            # the thesis — so a refusal on either side leaves both untouched.
+            intent = changes.get("intent")
+            investment_theses.check_watch_intent(iid, intent)
+            changes = {**changes, "intent": None}
+    updated = store.update_by_id(item_id, changes)
+    if updated and iid:
+        investment_theses.set_from_watch_intent(iid, intent)
+    return investment_theses.with_intent(updated) if updated else None
 
 
 def resolve_watchlist_id(watchlist_name: str | None) -> str:

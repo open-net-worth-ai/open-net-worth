@@ -26,6 +26,9 @@ class AutomationApprovalContext:
     # approval list as an offer and you widen what is reachable; read an offer as an
     # approval list and you silently approve everything the playbook can touch.
     always_allowed_tools: frozenset[str] = frozenset()
+    # Tools this Automation's owner BLOCKED for it — refused at dispatch whatever the tool's
+    # global value, checked before ``always_allowed_tools``.
+    blocked_tools: frozenset[str] = frozenset()
 
 
 _approval_context: ContextVar[AutomationApprovalContext | None] = ContextVar(
@@ -59,10 +62,15 @@ class AutomationRunnerRequest:
     payload: dict = field(default_factory=dict)
     permission_mode: str = "manual"
     always_allowed: list[dict] = field(default_factory=list)
+    blocked: list[str] = field(default_factory=list)
     # The rule that woke the run (stored trigger + names of what it points at) and the last
     # run that completed — the instructions carry no timing, so the run learns both here.
     configured_trigger: dict = field(default_factory=dict)
     last_completed_run: Optional[dict] = None
+    # The completed run before that one, and what the last one said and sent, so a run can overlap
+    # its predecessor and still know what the user has already been told.
+    run_before_last: Optional[dict] = None
+    last_run_record: Optional[dict] = None
 
 
 # Appended to the summary of a run that was cancelled. A tool call already in flight can
@@ -96,6 +104,11 @@ _CANCEL_NOTES = {
         "Did not finish — the server restarted while this {subject} was working, which "
         "cancels whatever was in flight. Nobody stopped it. A tool call already in flight "
         "may have completed, so anything it touched needs checking before you rely on it."
+    ),
+    "crash": (
+        "Did not finish — the server stopped unexpectedly while this {subject} was working. "
+        "Nobody stopped it. A tool call already in flight may have completed, so anything it "
+        "touched needs checking before you rely on it."
     ),
     "conversation_deleted": (
         "Did not finish — the conversation this {subject} was working in was deleted, which "

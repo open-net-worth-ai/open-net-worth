@@ -39,6 +39,23 @@ describe('buildRtaLines — the identity, one line per term', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
+  it('adds credit on your cards after cash when a card is in credit, still summing exactly', () => {
+    // ADR 2026-11-02: an overpaid or refunded card holds your own money — budget money beside
+    // cash, never subtracted. Absent (most books) it never renders.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const lines = buildRtaLines({ ...BOOK, cardCredit: 1375, rta: BOOK.rta + 1375 })
+    expect(lines.map((l) => l.label)).toEqual([
+      'Cash on hand',
+      'Credit on your cards',
+      'Held in envelopes',
+      'Card spending not covered this month',
+    ])
+    expect(lines[1]).toMatchObject({ key: 'cardcredit', value: 1375, op: '+' })
+    expect(lines.reduce((s, l) => s + l.value, 0)).toBeCloseTo(BOOK.rta + 1375, 2)
+    expect(lines.some((l) => l.key === 'other')).toBe(false)
+    expect(warn).not.toHaveBeenCalled()
+  })
+
   it('always shows Held in envelopes; hides card spend, Baseline and future at zero', () => {
     // What the envelopes hold is the rule's other half and reads as "nothing is spoken for" at
     // $0. The other three are terms most books never have — zero rows would only add noise.

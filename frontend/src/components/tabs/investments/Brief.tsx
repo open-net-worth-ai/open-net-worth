@@ -13,11 +13,12 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import type { InvestmentSignal } from '../../../types/investmentSignals'
 import type { DerivedBook } from './useInvestmentsBook'
-import { Sparkles } from '../../../ui/icons'
+import { Sparkles, ArrowRight, ChevronRight } from '../../../ui/icons'
 import { Skeleton } from '../../ui/Skeleton'
 import { usePortfolioDrivers } from '../../../hooks/usePortfolioDrivers'
 import { DriverChips } from '../../shared/DriverChips'
 import { INTEL_SUBTAB_KEY } from '../../../hooks/useIntelStoryIndex'
+import { MaskedText } from '../../ui/MaskedText'
 
 interface Props {
   d: DerivedBook
@@ -176,7 +177,10 @@ export function Brief({
               onNavigate('intel')
             }}
           >
-            Intel <span className="intel-brief-ask-spark">→</span>
+            Intel{' '}
+            <span className="intel-brief-ask-spark">
+              <ArrowRight size={12} aria-hidden="true" />
+            </span>
           </a>
         )}
         <span className="intel-brief-updated">{formatTime(mountedAt.current)}</span>
@@ -193,7 +197,9 @@ export function Brief({
           >
             {leadSig.tag}
           </span>
-          <p className="intel-brief-narrative">{leadSig.narrative}</p>
+          <p className="intel-brief-narrative">
+            <MaskedText>{leadSig.narrative}</MaskedText>
+          </p>
           {shownMore.length > 0 && compact && (
             <button
               type="button"
@@ -202,7 +208,7 @@ export function Brief({
               onClick={() => setMoreOpen((o) => !o)}
             >
               <span className={`brief-more-caret${moreOpen ? ' is-open' : ''}`} aria-hidden>
-                ▸
+                <ChevronRight size={12} />
               </span>
               {moreOpen ? 'Show less' : `${shownMore.length} more`}
             </button>
@@ -212,7 +218,9 @@ export function Brief({
               {shownMore.map((s) => (
                 <li key={s.id}>
                   <span className="brief-dot" style={{ background: toneVar(s.tone) }} />
-                  <span>{s.narrative}</span>
+                  <span>
+                    <MaskedText>{s.narrative}</MaskedText>
+                  </span>
                 </li>
               ))}
             </ul>

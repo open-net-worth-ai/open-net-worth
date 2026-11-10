@@ -116,8 +116,12 @@ def _brief_context(instrument_id: str | None) -> dict:
         issues.append(seg)
     if issues:
         out["key_issues"] = " || ".join(issues)
-    if brief.get("portfolio_impact"):
-        out["lucius_take"] = brief["portfolio_impact"]
+    take = brief.get("portfolio_narrative") or brief.get("portfolio_impact")
+    if take:
+        out["lucius_take"] = take
+    call = _lucius_call(instrument_id, brief)
+    if call:
+        out["lucius_call"] = call
     if brief.get("synthesized_at"):
         out["brief_as_of"] = brief["synthesized_at"]
     return out
@@ -165,6 +169,22 @@ def _analyst_context(instrument_id: str | None) -> dict:
         if segs:
             out["analyst_ratings_recent"] = "; ".join(segs)
     return out
+
+
+def _lucius_call(instrument_id: str, brief: dict) -> str:
+    """The take's call (``services.position_verdict``) as one line, or "" — never raises."""
+    try:
+        from backend.db.instrument_store import InstrumentStore
+        from backend.services import investment_theses, position_verdict
+
+        inst = InstrumentStore().find_by_id(instrument_id) or {}
+        return position_verdict.call_text(
+            brief.get("position_verdict"),
+            investment_theses.thesis_for(instrument_id),
+            currency=inst.get("quote_currency") or "",
+        )
+    except Exception:
+        return ""
 
 
 # Mention types that carry a per-asset news brief (instrument-backed). Used to bind a
@@ -222,6 +242,8 @@ def session_brief_block(instrument_id: str, label: str = "") -> str:
         lines.append(f"key_issues: {ctx['key_issues']}")
     if ctx.get("lucius_take"):
         lines.append(f"lucius_take: {ctx['lucius_take']}")
+    if ctx.get("lucius_call"):
+        lines.append(f"lucius_call: {ctx['lucius_call']}")
     for k in ("analyst_rating", "analyst_targets", "analyst_ratings_recent"):
         if analyst.get(k):
             lines.append(f"{k}: {analyst[k]}")
@@ -516,10 +538,11 @@ def _resolve_budget_month(ref: str) -> dict:
         "month": table.get("month"),
         "ready_to_assign": table.get("ready_to_assign"),
         "on_budget_cash": table.get("on_budget_cash"),
-        # EVERY term Ready to Assign is MADE of (ADR 2026-09-09 + 2026-09-10) — cash − baseline
-        # − held in envelopes − held outside envelopes − uncovered card spend − the
-        # future-assigned clamp — so a reader of this projection can close the identity without
-        # a second fetch. The baseline and the clamp were missing from the first cut, which left
+        "card_credit": table.get("card_credit"),
+        # EVERY term Ready to Assign is MADE of (ADR 2026-09-09 + 2026-09-10 + 2026-11-02) — cash
+        # + card credit − baseline − held in envelopes − held outside envelopes − uncovered card
+        # spend − the future-assigned clamp — so a reader of this projection can close the
+        # identity without a second fetch. The baseline and the clamp were missing from the first cut, which left
         # the arithmetic short on any book carrying either.
         "pre_budget_baseline": table.get("pre_budget_baseline"),
         "held_in_envelopes": table.get("held_in_envelopes"),

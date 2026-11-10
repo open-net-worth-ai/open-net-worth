@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 //
 // CDS-UI-1/2 (docs/qa/acceptance/connectors-data-sources.md): a cross-cutting regression guard
-// over all 8 provider config sections — none of them may render "Sync now" or fire a request
+// over all 9 provider config sections — none of them may render "Sync now" or fire a request
 // to a `*/sync` URL. Sync now the mechanism is gone; fetching is a Lucius turn now.
+//
+// The one deliberate exception (owner decision, 2026-10-20) lives on the Imports & sync page, not
+// on a connector card: YNAB's scheduled two-way sync has its own "Sync now" under
+// /api/ynab/sync (automations/builtin/YnabSyncDetail.test.tsx). The YNAB card only READS that status for its
+// one-line summary, so for YNAB exactly that one GET is allowed, and no button.
 
 import type { JSX } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { PlaidSection } from './PlaidSection'
 import { SimpleFinSection } from './SimpleFinSection'
@@ -13,14 +18,24 @@ import { LunchMoneySection } from './LunchMoneySection'
 import { LunchFlowSection } from './LunchFlowSection'
 import { YnabSection } from './YnabSection'
 import { EnableBankingSection } from './EnableBankingSection'
+import { GoCardlessSection } from './GoCardlessSection'
 import { AlpacaSection } from './AlpacaSection'
 import { IbkrSection } from './IbkrSection'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 import { authFetch } from '../../../api/client'
+import { overrideFlagsForTests } from '../../../hooks/useFlag'
 const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
 
-afterEach(cleanup)
+// On: the YNAB card then reads the sync's status, the one `/sync` GET this guard allows.
+let restoreFlags: () => void = () => {}
+beforeEach(() => {
+  restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: true })
+})
+afterEach(() => {
+  restoreFlags()
+  cleanup()
+})
 
 function okJson(body: unknown): Response {
   return { ok: true, json: async () => body } as Response
@@ -81,6 +96,18 @@ const STATUS_BY_PATH: Record<string, unknown> = {
     last_status: 'ok',
     last_error: null,
   },
+  '/api/ynab/sync': {
+    token_saved: true,
+    enabled: false,
+    interval: '1h',
+    intervals: ['15m', '30m', '1h', '6h', 'daily', 'manual'],
+    plan_id: null,
+    plan_name: null,
+    running: false,
+    last_run: null,
+    next_run_at: null,
+    conflicts: [],
+  },
   '/api/enable-banking/status': {
     configured: true,
     enabled: true,
@@ -104,6 +131,30 @@ const STATUS_BY_PATH: Record<string, unknown> = {
     cash: null,
     buying_power: null,
   },
+  '/api/gocardless/status': {
+    configured: true,
+    enabled: true,
+    has_credentials: true,
+    secret_id: 'x',
+    has_link: true,
+    banks: [
+      {
+        key: 'k1',
+        institution_id: 'ACME_BANK_GB',
+        institution_name: 'ACME Bank',
+        country: 'GB',
+        status: 'LN',
+        consent_expires_at: null,
+        linked_at: null,
+        accounts: 1,
+        renewing: false,
+      },
+    ],
+    last_synced_at: null,
+    last_status: 'ok',
+    last_error: null,
+    last_caution: null,
+  },
   '/api/ibkr/status': {
     configured: true,
     has_token: true,
@@ -115,20 +166,36 @@ const STATUS_BY_PATH: Record<string, unknown> = {
   },
 }
 
-const SECTIONS: Array<{ name: string; provider: string; Component: () => JSX.Element }> = [
+// What shows once a section has loaded: the accounts list's heading — "Accounts", or the setup
+// step that holds it ("Choose and link accounts"). YNAB's form is the token alone (Lucius names
+// a plan per call), so its intro is the marker.
+const ACCOUNTS_HEADING = /^(Choose and link accounts|Accounts)$/
+
+const SECTIONS: Array<{
+  name: string
+  provider: string
+  Component: () => JSX.Element
+  loaded?: RegExp
+}> = [
   { name: 'Plaid', provider: 'plaid', Component: PlaidSection },
   { name: 'SimpleFIN', provider: 'simplefin', Component: SimpleFinSection },
   { name: 'Lunch Money', provider: 'lunch_money', Component: LunchMoneySection },
   { name: 'Lunch Flow', provider: 'lunch_flow', Component: LunchFlowSection },
-  { name: 'YNAB', provider: 'ynab', Component: YnabSection },
+  {
+    name: 'YNAB',
+    provider: 'ynab',
+    Component: YnabSection,
+    loaded: /paste a personal access token/,
+  },
   { name: 'Enable Banking', provider: 'enable_banking', Component: () => <EnableBankingSection /> },
+  { name: 'GoCardless', provider: 'gocardless', Component: () => <GoCardlessSection /> },
   { name: 'Alpaca', provider: 'alpaca', Component: AlpacaSection },
   { name: 'Interactive Brokers', provider: 'ibkr', Component: IbkrSection },
 ]
 
 describe.each(SECTIONS)(
   '$name — no Sync now, no */sync request (CDS-UI-1/2)',
-  ({ provider, Component }) => {
+  ({ provider, Component, loaded = ACCOUNTS_HEADING }) => {
     it('renders with no "Sync now" text and issues no /sync request', async () => {
       mockAuthFetch.mockReset()
       mockAuthFetch.mockImplementation((url: string) => {
@@ -142,11 +209,13 @@ describe.each(SECTIONS)(
 
       render(<Component />)
 
-      await waitFor(() => expect(screen.getByText('Accounts')).toBeTruthy())
+      await waitFor(() => expect(screen.getByText(loaded)).toBeTruthy())
       expect(screen.queryByRole('button', { name: /sync now/i })).toBeNull()
       expect(screen.queryByText(/sync now/i)).toBeNull()
       expect(screen.queryByText(/poll interval/i)).toBeNull()
-      const syncCalls = mockAuthFetch.mock.calls.filter((c) => String(c[0]).includes('/sync'))
+      const syncCalls = mockAuthFetch.mock.calls.filter(
+        (c) => String(c[0]).includes('/sync') && String(c[0]) !== '/api/ynab/sync',
+      )
       expect(syncCalls).toEqual([])
       // Sanity: the status endpoint for THIS provider was actually hit (proves the mock wired
       // through and the assertion above isn't vacuously true from an early error state).

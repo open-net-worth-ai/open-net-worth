@@ -13,6 +13,7 @@ import { monthLabel } from '../../../hooks/useBudget'
 import type { BudgetMonth } from '../../../hooks/useBudget'
 import { useCommitments } from '../../../hooks/useCommitments'
 import { authFetch } from '../../../api/client'
+import { useMaskText } from '../../../utils/amountMask'
 import { getCurrencySymbol } from '../../../utils/format'
 import { entityRefProps } from '../../../utils/mentionable'
 import { useRegisterScreenFacts, useRegisterScreenPrompts } from '../../../lucius/useScreenContract'
@@ -22,7 +23,7 @@ import { RtaFloat } from './budgetRtaFloat'
 import { CardPaymentPanel } from './budgetCardPayment'
 import { useBreakpoint } from '../../../hooks/useBreakpoint'
 import { usePointerResize } from '../../../hooks/usePointerResize'
-import { Chevron, Arrow, Grip, Plus } from './icons'
+import { Chevron, Arrow, Grip, Plus, X } from './icons'
 import { Spark } from '../../../lucius/identity'
 import {
   ColorDot,
@@ -97,6 +98,8 @@ export interface SummaryBudget {
   ageOfMoney: number | null
   ageForecastable: boolean
   onBudgetCash: number | null
+  /** Every card's balance above zero — budget money beside cash (ADR 2026-11-02). */
+  cardCredit?: number
   /** SIGNED Σ of every envelope's Available — negative when envelopes are net overspent and
    *  holding those holes until the roll (ADR 2026-09-09). */
   heldInEnvelopes: number
@@ -241,6 +244,7 @@ function Summary({
             rta={rta}
             monthLabel={month}
             onBudgetCash={b.onBudgetCash}
+            cardCredit={b.cardCredit}
             heldInEnvelopes={b.heldInEnvelopes}
             heldOutsideEnvelopes={b.heldOutsideEnvelopes}
             cardSpendNotCovered={b.cardSpendNotCovered}
@@ -922,7 +926,7 @@ export function EnvCatsBadge({
                     onRemove(n.key, n.label)
                   }}
                 >
-                  ✕
+                  <X size={11} />
                 </button>
               </div>
             ))}
@@ -1002,6 +1006,7 @@ export function CategoryRow({
   onOpenTxn,
   onOpenRegister,
 }: RowHandlers & { c: LocalCat; gid: string; otherGroups: LocalGroup[]; locked: boolean }) {
+  const maskText = useMaskText()
   const [renaming, setRenaming] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [assignDraft, setAssignDraft] = useState('')
@@ -1256,7 +1261,10 @@ export function CategoryRow({
     ) : null)
   const targetBarNode =
     !renaming && !c.isPaymentEnvelope && (c.target || isOver || fullySpent) ? (
-      <span className={'pl-tbar-wrap' + (c.target && !locked ? ' is-target' : '')} title={barTitle}>
+      <span
+        className={'pl-tbar-wrap' + (c.target && !locked ? ' is-target' : '')}
+        title={barTitle && maskText(barTitle)}
+      >
         <span className="pl-tbar">
           {isOver ? (
             <>
@@ -1485,9 +1493,13 @@ export function CategoryRow({
             className="pl-paycell"
             title={
               paymentOverpaid
-                ? `You sent ${fSmart(-payAvail)} more to ${c.label} than you had set aside.`
+                ? maskText(
+                    `You sent ${fSmart(-payAvail)} more to ${c.label} than you had set aside.`,
+                  )
                 : paymentUnderfundedNow
-                  ? `You have a ${fSmart(paymentOwed)} bill but only ${fSmart(payAvail)} set aside for ${c.label}.`
+                  ? maskText(
+                      `You have a ${fSmart(paymentOwed)} bill but only ${fSmart(payAvail)} set aside for ${c.label}.`,
+                    )
                   : undefined
             }
           >
@@ -2169,6 +2181,7 @@ export function BudgetTab({
   const liveB: SummaryBudget = {
     readyToAssign: m.rta,
     onBudgetCash: m.data?.on_budget_cash ?? null,
+    cardCredit: m.data?.card_credit ?? 0,
     heldInEnvelopes,
     heldOutsideEnvelopes,
     cardSpendNotCovered,

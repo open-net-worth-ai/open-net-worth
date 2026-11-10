@@ -152,7 +152,7 @@ register(
     )
 )
 
-# ── transaction (order=4) ─────────────────────────────────────────────────────
+# ── transaction (order=5) ─────────────────────────────────────────────────────
 # TransactionStore.query_txns(q=...) — query-aware rows for server-side pushdown.
 # _resolve_transaction does txn_base_amount recompute + FK→name resolution
 # (payee_id/account_id → names).
@@ -183,7 +183,7 @@ register(
         type="transaction",
         label="Transaction",
         icon="↕",
-        order=4,
+        order=5,
         tone="neutral",
         surfaces=frozenset({"entity"}),
         rows=_transaction_rows,

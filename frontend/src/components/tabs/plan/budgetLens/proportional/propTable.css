@@ -16,7 +16,7 @@
   padding: 0 11px;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
 }
 .pt-inc:focus-within {
   border-color: var(--accent);
@@ -78,7 +78,7 @@
   background: var(--line-strong);
 }
 .pt-ob-dots i.on {
-  background: var(--accent);
+  background: var(--ink);
 }
 .pt-ob-sub {
   margin: 0;
@@ -191,7 +191,7 @@
   text-transform: none;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .bo-linkbtn:hover {
   color: var(--ink);
@@ -208,11 +208,11 @@
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  color: #fff;
+  color: var(--bg);
 }
 .bo-check.on {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 /* ── Hero ───────────────────────────────────────────────────────────────────────────────── */
@@ -584,7 +584,7 @@
   font-weight: 500;
 }
 .pt-group.over {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
   background: var(--hover);
 }
 /* Zero-Based groups carry no colour of their own; the dot is the group's colour in the hero. */
@@ -600,7 +600,7 @@
   color: var(--ink);
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 3px 8px;
   min-width: 0;
   width: 180px;
@@ -730,7 +730,7 @@
   padding: 0 10px;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font: inherit;
   font-size: var(--text-base);
   color: var(--ink);
@@ -932,7 +932,7 @@
   padding: 0 10px;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   font: inherit;
   font-size: var(--text-base);
   color: var(--ink);

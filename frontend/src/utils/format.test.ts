@@ -16,6 +16,7 @@ import {
   txnMentionSublabel,
   localIso,
   newsTime,
+  timeAgo,
   fDate,
   fMonth,
   fDateTime,
@@ -30,6 +31,21 @@ describe('fBaseCompact — canonical compact base-currency formatter', () => {
     setDisplayFormats({ number_format: 'comma' })
 
     expect(fBaseCompact(2_008_437_944)).toBe('₫2.01B')
+  })
+  it('keeps K/M/B suffixes in a German-style format (never Mio./Mrd.)', () => {
+    setBaseCurrency('VND')
+    setDisplayFormats({ number_format: 'dot' })
+
+    const out = fBaseCompact(2_802_502_000)
+    expect(out).toContain('2,8')
+    expect(out).toContain('B')
+    expect(out).not.toMatch(/Mio|Mrd/)
+    expect(fCompact(1_500_000)).not.toMatch(/Mio/)
+  })
+  it('rolls 999,999 up to 1M, not 1000K', () => {
+    setBaseCurrency('VND')
+    setDisplayFormats({ number_format: 'comma' })
+    expect(fBaseCompact(999_999)).toBe('₫1M')
   })
 })
 
@@ -64,6 +80,15 @@ describe('fPrice — always ≥2 decimals for normal prices, more for sub-dollar
   })
   it('sub-dollar / crypto values keep their finer precision', () => {
     expect(fPrice(0.5)).toBe('0.5000')
+    expect(fPrice(0.00001234)).toBe('0.00001234')
+  })
+  it('sub-dollar prices use the user’s decimal mark, not always a point', () => {
+    setDisplayFormats({ number_format: 'dot' })
+    expect(fPrice(0.5)).toBe('0,5000')
+    expect(fPrice(0.00001234)).toBe('0,00001234')
+    setDisplayFormats({ number_format: 'space' })
+    expect(fPrice(0.00001234)).toBe('0,00001234')
+    setDisplayFormats({ number_format: 'comma' })
     expect(fPrice(0.00001234)).toBe('0.00001234')
   })
   it('null / zero render as an em dash', () => {
@@ -360,6 +385,27 @@ describe('newsTime — relative under 24h, absolute date beyond that', () => {
   it('returns empty string for an empty or unparseable date', () => {
     expect(newsTime('')).toBe('')
     expect(newsTime('not a date')).toBe('')
+  })
+})
+
+describe('timeAgo — past-relative age, never negative', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reads a future timestamp as "just now", not a negative age', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-01T12:00:00.000Z'))
+    // ~13h ahead: a zoneless server stamp read in a browser west of the server.
+    expect(timeAgo('2026-11-02T00:59:15.000Z')).toBe('just now')
+    expect(timeAgo('2026-11-01T12:00:01.000Z')).toBe('just now')
+  })
+
+  it('still counts a past timestamp up from seconds', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-01T12:00:00.000Z'))
+    expect(timeAgo('2026-11-01T11:59:30.000Z')).toBe('30s ago')
+    expect(timeAgo('2026-11-01T07:00:00.000Z')).toBe('5h ago')
   })
 })
 

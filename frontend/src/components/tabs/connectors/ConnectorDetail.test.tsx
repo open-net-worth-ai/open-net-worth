@@ -4,7 +4,7 @@
 // here is the one the previous design got wrong: a server we did not publish must claim
 // NO author — never "Developed by Open Net Worth" over unaudited third-party code.
 
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
 import { ConnectorDetail } from './ConnectorDetail'
 import { buildToolGroups, type ConnectorDetailEntry } from './model'
@@ -32,6 +32,7 @@ function entry(overrides: Partial<ConnectorDetailEntry> = {}): ConnectorDetailEn
     statusText: 'Connected',
     tone: 'good',
     attention: false,
+    fixLabel: 'Reconnect',
     enabled: true,
     configured: true,
     sub: 'Flex query • nightly import',
@@ -67,6 +68,49 @@ function renderDetail(
   const { container } = render(<ConnectorDetail entry={e} {...handlers} {...extra} />)
   return { container, ...handlers }
 }
+
+describe('a failing connector', () => {
+  const failing = {
+    mcp: true,
+    tone: 'bad',
+    attention: true,
+    statusText: 'Error',
+    lastError: 'Can’t reach this server.',
+  } as const
+
+  it('states the reason on the page without a hover', () => {
+    const { container } = renderDetail(entry(failing))
+    expect(container.querySelector('.cn-errorbox-text')?.textContent).toBe(failing.lastError)
+    expect(container.querySelector('.cn-errorbox')?.hasAttribute('data-ctx-ignore')).toBe(true)
+  })
+
+  it('keeps its tool permission table', () => {
+    renderDetail(entry(failing))
+    expect(screen.queryByText(/gives Lucius no tools yet/)).toBeNull()
+    expect(screen.getByText('Choose when Lucius is allowed to use these tools.')).toBeTruthy()
+  })
+
+  it('says an expired connection will not fix itself, in amber', () => {
+    const { container } = renderDetail(
+      entry({ ...failing, tone: 'warn', statusText: 'Authentication issue' }),
+    )
+    const note = container.querySelector('.cn-errorbox-note')?.textContent
+    expect(note).toContain('until you reconnect')
+    expect(note).not.toContain('every hour')
+    expect(container.querySelector('.cn-errorbox-warn')).toBeTruthy()
+  })
+
+  it('keeps the red box and the hourly retry note for a connection failure', () => {
+    const { container } = renderDetail(entry(failing))
+    expect(container.querySelector('.cn-errorbox-note')?.textContent).toContain('every hour')
+    expect(container.querySelector('.cn-errorbox-warn')).toBeNull()
+  })
+
+  it('shows no box while healthy', () => {
+    const { container } = renderDetail(entry())
+    expect(container.querySelector('.cn-errorbox')).toBeNull()
+  })
+})
 
 /** Stands in for a real provider form — this page only hosts one, it never builds one. */
 const FORM = <label htmlFor="fake-key">Client ID</label>
@@ -180,14 +224,27 @@ describe('the primary action — the only place a connector can be disabled', ()
   // An OAuth reconnect is a popup + poll, not an instant call (RFC `2026-08-14-mcp-oauth`
   // §4.7's "Recovery is one button") — the page has to say so while it waits, rather than
   // sitting there looking clickable with nothing happening.
-  it('says Reconnecting… and disables the button while an OAuth sign-in is in flight', () => {
-    renderDetail(entry({ tone: 'bad', statusText: 'Auth error', attention: true, mcp: true }), {
+  it('says Authenticating… and disables the button while an OAuth sign-in is in flight', () => {
+    renderDetail(
+      entry({
+        tone: 'warn',
+        statusText: 'Auth error',
+        attention: true,
+        mcp: true,
+        fixLabel: 'Authenticate',
+      }),
+      { reconnecting: true },
+    )
+    const button = screen.getByRole('button', { name: 'Authenticating…' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Authenticate' })).toBeNull()
+  })
+
+  it('says Reconnecting… while a connection retry is in flight', () => {
+    renderDetail(entry({ tone: 'bad', statusText: 'Error', attention: true, mcp: true }), {
       reconnecting: true,
     })
-    const button = screen.getByRole('button', { name: 'Reconnecting…' })
-    expect(button).toBeTruthy()
-    expect((button as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reconnecting…' })).toBeTruthy()
   })
 })
 
@@ -345,6 +402,21 @@ describe('the publisher panel is MCP-only (spec §5)', () => {
     expect(container.textContent).not.toContain('Only connectors you add are reachable')
   })
 
+  it("links the outside service's name in the description, and nothing when there is none", () => {
+    renderDetail(
+      entry({
+        desc: 'Press Call and talk. Runs on your LiveKit project.',
+        service: { name: 'LiveKit', url: 'https://cloud.livekit.io' },
+      }),
+    )
+    const link = screen.getByRole('link', { name: /LiveKit/ })
+    expect(link.getAttribute('href')).toBe('https://cloud.livekit.io')
+    expect(link.closest('p')?.textContent).toMatch(/Runs on your LiveKit.? project\./)
+    cleanup()
+    renderDetail(entry({ desc: 'Press Call and talk. Runs on your LiveKit project.' }))
+    expect(screen.queryByRole('link', { name: /LiveKit/ })).toBeNull()
+  })
+
   it('says the same for a connector WE publish — the name, and nothing more', () => {
     const { container } = renderDetail(entry({ id: 'telegram', developer: 'Open Net Worth' }))
     expect(container.textContent).toContain('Developed by Open Net Worth')
@@ -382,7 +454,7 @@ describe('the publisher panel is MCP-only (spec §5)', () => {
     )
     // the defect: a generic server reading "Developed by Open Net Worth"
     expect(screen.queryByText(/^Developed by/)).toBeNull()
-    expect(screen.getByText('Unknown publisher')).toBeTruthy()
+    expect(screen.getByText('Unverified publisher')).toBeTruthy()
     expect(screen.getByText(/can’t vouch for its code/)).toBeTruthy()
   })
 
@@ -448,14 +520,22 @@ describe('the Automate action', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Automate' }))
     expect(navigate).toHaveBeenCalledWith({
       to: '/automations',
-      search: { template: 'mail_ledger' },
+      search: { template: 'mail_digest' },
     })
   })
 
   it('maps a bank or broker to its sync template', () => {
-    renderDetail(entry())
+    renderDetail(entry({ id: 'plaid', name: 'Plaid', kind: 'plaid' }))
     fireEvent.click(screen.getByRole('button', { name: 'Automate' }))
-    expect(navigate).toHaveBeenCalledWith({ to: '/automations', search: { template: 'sync_ibkr' } })
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/automations',
+      search: { template: 'sync_plaid' },
+    })
+  })
+
+  it('offers no Automate for retired IBKR Flex — its sync template is not offered', () => {
+    renderDetail(entry())
+    expect(screen.queryByRole('button', { name: 'Automate' })).toBeNull()
   })
 
   it('is not offered for a connector with nothing to automate, or one that is paused', () => {
@@ -464,5 +544,46 @@ describe('the Automate action', () => {
     cleanup()
     renderDetail(entry({ enabled: false }))
     expect(screen.queryByRole('button', { name: 'Automate' })).toBeNull()
+  })
+})
+
+describe('on a phone a running connector keeps Pause in the ⋮; only a fix reaches the footer', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows Done alone in the footer and Pause in the ⋮, in a compact header', () => {
+    const { container, onSetEnabled } = renderDetail(entry({ enabled: true }))
+    const head = container.querySelector('.cn-idhead') as HTMLElement
+    expect(head.className).toContain('cn-idhead-compact')
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    expect(within(foot).getAllByRole('button')).toHaveLength(1)
+    expect(within(foot).getByRole('button', { name: 'Done' }).className).toContain('primary')
+
+    openKebab(container)
+    fireEvent.click(screen.getByText('Pause connector'))
+    const confirmDialog = container.querySelectorAll<HTMLElement>('.rd-modal')[1]!
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Pause' }))
+    expect(onSetEnabled).toHaveBeenCalledWith(false)
+  })
+
+  it('promotes Resume to the footer, primary and last, beside a secondary Done', () => {
+    const { container, onSetEnabled } = renderDetail(entry({ enabled: false }))
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    const buttons = within(foot).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent)).toEqual(['Done', 'Resume'])
+    expect(buttons[0]!.className).toContain('secondary')
+    fireEvent.click(buttons[1]!)
+    expect(onSetEnabled).toHaveBeenCalledWith(true)
   })
 })

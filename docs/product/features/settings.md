@@ -33,7 +33,8 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
    and the default date on new entries. The browser's zone is detected the first time; a zone
    you pick yourself is never overwritten.
 3. Under **Number & date format**, choose a **Date format** (31/12/2026, 12/31/2026 or
-   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser.
+   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser. Large figures in tight spaces are
+   shortened with K, M, B or T (₫2.01B) in every number format; only the separators change.
 
 **Switch to dark mode**
 1. Open **Settings → Appearance**.
@@ -55,9 +56,10 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
 
 | Section | What it is for |
 |---|---|
-| **Profile** | **About you** (name, what Lucius should call you, date of birth, marital status, risk tolerance, nationalities, countries of residence, tax residencies, employment), **Income & expenses**, **FIRE settings** (retirement spending, withdrawal rate, expected return, volatility, target retirement age, life expectancy, monthly saving — these drive [Retirement and FIRE outlook](retirement-planning.md)), and **Notes for Lucius**. Everything here is context Lucius reads; an empty field is just a gap in what he knows. |
+| **Profile** | **About you** (name, what Lucius should call you, date of birth, marital status, risk tolerance, nationalities, countries of residence, tax residencies, employment), **Income & expenses**, **FIRE settings** (retirement spending, withdrawal rate, expected return, volatility, target retirement age, life expectancy, monthly saving — these drive [Retirement and FIRE outlook](retirement-planning.md)), and **Instructions for Lucius** (standing rules for how he works with you; he can add to them too, and you see each change before it's saved). Everything here is context Lucius reads; an empty field is just a gap in what he knows. |
 | **AI** | Which AI provider and model run Lucius: **AI providers** (add an API key or connect a Claude/ChatGPT subscription), **Preferred models**, **Task models**, and **Stop a turn after** (how long one reply or Automation run may take). See [Connecting an AI provider](../getting-started/connecting-an-ai-provider.md) and [Models & cost](../lucius/models-and-cost.md). |
-| **Chat & Memory** | How the chat behaves (follow-up suggestions, cost per turn, multi-turn chat, grouping reasoning into one block) and Lucius's **Memory** — turn it on or off, search what he remembers, and forget a fact. See [Memory](../lucius/memory.md). |
+| **Chat** | How the chat behaves: follow-up suggestions, cost per turn, multi-turn chat, grouping reasoning into one block. |
+| **Memory** | What Lucius remembers about you: switches for **Search and reference chats**, **Generate memory from chats** and **Include sensitive topics in memory**, **Import memory from other AI providers** and **Export memory**, and below them everything he remembers, by section and topic, each with a one-line summary — open a topic to edit or forget what's in it. **Older memories** saved before sections existed are listed at the bottom while Lucius files them. See [Memory](../lucius/memory.md). |
 | **Permissions** | Which tools Lucius (and Automations) may use without asking first. See [Permissions](../lucius/permissions.md). |
 | **Duplicate Detection** | How imported transactions are matched against what is already in your ledger: **Auto-merge policy**, the **AI judge** and its **Judgment model**, **Max AI checks per run**, and **Remembered decisions** — pairs you already ruled on, which are never re-flagged unless you forget the decision. |
 | **Intelligence** | Every Intel setting: monitoring cadence, where each kind of alert is sent, Lucius's explained alerts and reads, how much the briefs say, and crash thresholds. See [Intel settings](intel.md#settings). |
@@ -70,8 +72,25 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
 | **Data** | **Backup & restore** (export a full .zip), **Automatic backups** (daily, and how many days to keep), **Restore from a backup**, **Uploaded files** from chat, and resetting the instance. See [Backup & restore](../operations/backup-and-restore.md). |
 | **Terminal** | A shell on the machine the app runs on. Shown only where it is allowed; off by default when you host the app yourself. See [Terminal](../operations/terminal.md). |
 | **Help** | The **Help center** (these pages, available offline), **Ask Lucius**, and **Send feedback**. |
-| **Developer** | **Application logs**, **Code execution** (let Lucius run short Python on this server), **Extensions**, **Bundled script skills**, and **SQL access** (Lucius's read-only queries and their log). See [Logs](../operations/logs.md). |
+| **Developer** | **Experimental** first (see below), then **Application logs**, **Code execution** (let Lucius run short Python on this server), **SQL access** (Lucius's read-only queries and their log), **Extensions** and **Bundled script skills**. See [Logs](../operations/logs.md). |
 | **Cost & Performance** | **AI spend** over a period you choose, search and page-fetch costs, and model speed and reliability. |
+
+## Experimental features
+
+Settings → Developer → **Experimental**, at the top of Developer, lists features that are still being tried out. Each has
+a switch, a short description, and whether it is at its **default** or **changed** by you; **Reset**
+puts a changed one back to its default. Turning a feature off always brings back exactly how the
+app worked before. Each one is temporary: once it is finished it becomes part of the app (or is
+removed) and disappears from this list. When the list is empty there is nothing to try right now.
+
+Right now the list holds **Permissions v2**, a new way of deciding when Lucius asks you before
+using a tool; see [Permissions v2](../lucius/permissions-v2.md). It also holds **Voice calls**: talk to Lucius out loud
+from the chat; see [Voice calls](../connectors/voice-calls.md). **Actual Budget** is here too, off
+by default: see [Import from Actual Budget](actual-budget-import.md).
+
+A switch is read-only when the server sets it from its environment (the row names the variable),
+and on the public demo, which runs the defaults unless its server was started with one switched on
+or off. Lucius cannot change these switches.
 
 ## Things to know
 
@@ -83,6 +102,9 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
   Anything you'd rather he not know, leave blank.
 - **Some sections only appear where they apply** — Desktop in the desktop app, Terminal where it
   is enabled.
+- **The version is at the bottom of Settings** — at the foot of the side rail, or of the menu on a
+  phone. It's the version of the server you're connected to, so it changes only after that server
+  restarts on a new release.
 
 ## Related pages
 

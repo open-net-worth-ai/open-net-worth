@@ -28,6 +28,16 @@ test('waiting for a server that is still starting retries with backoff until it 
   assert.deepEqual(delays, [1000, 2000, 4000]);
 });
 
+test('each pause is announced before it starts, so a countdown can show it', async () => {
+  const { server, fetcher } = fakeServer();
+  const announced: number[] = [];
+  await waitForServer(ORIGIN, new AbortController().signal, {
+    patienceMs: Infinity, fetcher, maxDelayMs: 3000, onPause: ms => { announced.push(ms); },
+    sleep: async () => { if (announced.length === 4) server.up = true; },
+  });
+  assert.deepEqual(announced, [1000, 2000, 3000, 3000]);
+});
+
 test('waiting gives up with the unreachable message once its patience runs out, and stops on abort', async () => {
   const { server, fetcher } = fakeServer();
   let clock = 0;
@@ -42,9 +52,11 @@ test('waiting gives up with the unreachable message once its patience runs out, 
 
 class FakeMain {
   readonly pages: string[] = [];
+  readonly countdown: number[] = [];
   constructor(readonly serverOrigin: string | null = ORIGIN, readonly hosted = null) {}
   async showServerRecovery(loading = false): Promise<void> { this.pages.push(loading ? 'opening' : 'unreachable'); }
   async loadServer(): Promise<void> { this.pages.push('server'); }
+  showReconnectIn(ms: number): void { this.countdown.push(ms); }
 }
 
 function loaderFor(main: { current: FakeMain }, fetcher: typeof fetch) {
@@ -92,6 +104,7 @@ test('left on "can’t reach your server", the window reconnects by itself once 
     server.up = true;
     await settle();
     assert.deepEqual(main.current.pages, ['opening', 'unreachable', 'opening', 'server']);
+    assert.deepEqual(main.current.countdown.slice(0, 5), [2000, 2000, 4000, 8000, 15000], 'the page is told each wait, capped at 15s');
   } finally { restore(); }
 });
 
@@ -107,5 +120,6 @@ test('a reconnect in waiting never reloads a window the user has since replaced'
     await settle();
     assert.deepEqual(stranded.pages, ['opening', 'unreachable']);
     assert.deepEqual(main.current.pages, []);
+    assert.deepEqual(main.current.countdown, [], 'nor counts down on it');
   } finally { restore(); }
 });

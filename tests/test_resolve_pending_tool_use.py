@@ -92,13 +92,8 @@ def env(tmp_path, monkeypatch, db_isolated):
     monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     # Never let a real memory/fold background task survive past the test.
-    monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)
     yield tmp_path
     set_tool_use_id(None)
-
-
-async def _noop():
-    return None
 
 
 def _install(monkeypatch, provider) -> None:

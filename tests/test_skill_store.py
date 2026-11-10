@@ -1105,6 +1105,7 @@ _HOUSE_STANDARD = [
     "can-i-afford-it",
     "catch-up",
     "daily-briefing",
+    "email-finance-digest",
     "investment-checkup",
     "log-transactions-from-email",
     "monthly-report",

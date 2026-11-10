@@ -88,7 +88,6 @@ class PositionCreate(BaseModel):
     cost_basis: Optional[float] = None
     cost_currency: Optional[str] = None
     vesting_state: str = "vested"
-    note: str = ""
     acquired_at: Optional[str] = None
     fees: float = 0
     idempotency_key: Optional[str] = None

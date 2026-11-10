@@ -26,7 +26,9 @@ fabricated book; nothing that reaches past it. Two rules, both inert unless ``se
      replaces or carries off the one book every visitor shares;
    - automations (create, edit, run: they spend tokens unattended and can send data out),
      skills, memory, notification channels, the monitoring schedule (``/api/watchlist/config``), the match judge's model and cap
-     and every provider/connector/integration config;
+     and every provider/connector/integration config — voice calls' included (a visitor may only
+     START a call, ``POST /api/voice/call``, metered by ``services.demo_calls``);
+   - feature flags (``/api/feature-flags``): the demo always runs the declared defaults;
    - the host's logs and filesystem probes, turn checkpoints (they carry other visitors'
      conversations and restore the shared book), and the QA routes.
 
@@ -66,14 +68,17 @@ _LOCKED: tuple[_Rule, ...] = (
     ),
     *_rules(
         _WRITE,
+        r"^/api/screen-reads/[^/]+$",
         r"^/api/model-config(/.*)?$",
         r"^/api/preferred-models$",
         r"^/api/auth/(change|remove)-password$",
         r"^/api/auth/settings$",
         r"^/api/shortcuts/prepare$",
         r"^/api/(connectors|tool-permissions)(/.*)?$",
+        r"^/api/imports(/.*)?$",
         r"^/api/search/config(/.*)?$",
         r"^/api/config(/.*)?$",
+        r"^/api/feature-flags(/.*)?$",
     ),
     # code and processes on the host
     *_rules(
@@ -105,13 +110,19 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/chat-pairing(/.*)?$",
         r"^/api/cost/(budget|log)$",
         r"^/api/intel/(scan|sources)(/.*)?$",
-        r"^/api/(alpaca|ibkr|plaid|enable-banking|lunch-flow|lunch-money|simplefin|yodlee|ynab"
+        r"^/api/(alpaca|ibkr|plaid|enable-banking|gocardless|lunch-flow|lunch-money|simplefin|yodlee|ynab"
         r"|telegram|email|market-data|integrations|account-linking)(/.*)?$",
+        # Voice calls: a visitor may START one (``_WRITABLE``), capped by ``services.demo_calls``;
+        # the LiveKit project, its keys and the call settings stay the operator's.
+        r"^/api/voice(?!/call$)(/.*)?$",
         r"^/api/setup-status/complete$",
         r"^/api/watchlist/config$",
         r"^/api/matches/config$",
     ),
+    *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
+    # Actual reads a saved server on a GET too: a budget list signs in and answers with names.
+    *_rules(_ANY, r"^/api/actual-budget(/.*)?$"),
     # the host and other visitors
     *_rules(
         _ANY,
@@ -137,6 +148,7 @@ _WRITABLE: tuple[re.Pattern[str], ...] = tuple(
         r"^/api/commitments(/.*)?$",
         r"^/api/dashboard/layout$",
         r"^/api/equity(/.*)?$",
+        r"^/api/investment-theses(/[^/]+)?$",
         r"^/api/(income|options|lots|positions|disposals|instruments|rebalance|recurring)(/.*)?$",
         r"^/api/intel/(assets|signals)(/.*)?$",
         r"^/api/(accounts|categories|institutions|transactions|payees|matches)(/.*)?$",
@@ -148,6 +160,7 @@ _WRITABLE: tuple[re.Pattern[str], ...] = tuple(
         # import, receipts and Documents working, and every visitor knows the book is public.
         # Size limits are the app's own; parsing spends the visitor's and the instance's budget.
         r"^/api/uploads?(/.*)?$",
+        r"^/api/voice/call$",
         r"^/api/statements(/.*)?$",
         r"^/api/vault(/.*)?$",
         r"^/api/watchlists?(/.*)?$",

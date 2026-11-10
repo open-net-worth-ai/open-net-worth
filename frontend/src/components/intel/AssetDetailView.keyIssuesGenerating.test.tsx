@@ -136,7 +136,7 @@ describe('AssetDetailView — Key Issues generating placeholder (Overview tab)',
 
     const badge = screen.getByRole('status', { name: 'Key issues are generating' })
     expect(badge.textContent).toContain('Generating')
-    expect(screen.queryByText('Bull and bear key issues will appear after a refresh.')).toBeNull()
+    expect(screen.queryByText('No key issues yet')).toBeNull()
   })
 
   it('renders the generating skeleton while the explicit POST refresh is in flight too', () => {
@@ -236,7 +236,68 @@ describe('AssetDetailView — Key Issues generating placeholder (Analysis tab)',
     })
 
     expect(screen.getByText('No key issues yet')).toBeTruthy()
+    expect(
+      screen.getByText(
+        "Lucius hasn't written the bull and bear case for this asset yet. Refresh to try again.",
+      ),
+    ).toBeTruthy()
     expect(screen.queryByRole('status', { name: 'Key issues are generating' })).toBeNull()
+  })
+
+  // Both client flags lapse while the backend's key_issues pass still runs (a Refresh POST
+  // returns before that separate LLM call finishes) — its own stamp keeps Generating up.
+  it.each(['analysing', 'retrying'] as const)(
+    'shows Generating while key_issues_refresh_stage is %s, with both client flags off',
+    (stage) => {
+      mockHook({
+        data: assetDetail({ news: [{ headline: 'n' }], key_issues_refresh_stage: stage } as never),
+      })
+
+      render(<AssetDetailView instrumentId="ko" />)
+      act(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Analysis' }))
+      })
+
+      expect(screen.getByRole('status', { name: 'Key issues are generating' })).toBeTruthy()
+      expect(screen.queryByText('No key issues yet')).toBeNull()
+    },
+  )
+
+  it('falls back to the empty state once the stage reads ready', () => {
+    mockHook({
+      data: assetDetail({ news: [{ headline: 'n' }], key_issues_refresh_stage: 'ready' } as never),
+    })
+
+    render(<AssetDetailView instrumentId="ko" />)
+    act(() => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Analysis' }))
+    })
+
+    expect(screen.getByText('No key issues yet')).toBeTruthy()
+  })
+
+  it('never shows Generating from the stage for a no-ticker instrument', () => {
+    mockHook({
+      data: assetDetail({ has_ticker: false, key_issues_refresh_stage: 'analysing' } as never),
+    })
+
+    render(<AssetDetailView instrumentId="ko" />)
+    act(() => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Analysis' }))
+    })
+
+    expect(screen.queryByRole('status', { name: 'Key issues are generating' })).toBeNull()
+  })
+})
+
+describe('AssetDetailView — Overview empty state defers to a running key_issues pass', () => {
+  it('hides "No news or analysis yet" while key_issues_refresh_stage is analysing', () => {
+    mockHook({ data: assetDetail({ key_issues_refresh_stage: 'analysing' } as never) })
+
+    render(<AssetDetailView instrumentId="ko" />)
+
+    expect(screen.queryByText('No news or analysis yet')).toBeNull()
+    expect(screen.getByRole('status', { name: 'Key issues are generating' })).toBeTruthy()
   })
 })
 

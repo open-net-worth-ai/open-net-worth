@@ -89,6 +89,10 @@ export const tokenGroups = [
       ['lucius', '#7C6CF5'],
       ['act-teal', '#22b8cf', '#0d7f92'],
       ['accent', 'var(--primary)'],
+      // The main call to action is INK, not blue: near-black on a light page, near-white on
+      // dark. Blue (--primary/--accent) stays for links, focus and info; CTA ≠ selection ≠ link.
+      ['cta', 'var(--ink)'],
+      ['cta-hover', 'color-mix(in srgb, var(--ink) 86%, var(--bg))'],
       ['text', 'var(--ink)'],
       ['card', 'var(--surface2)'],
       ['border', 'var(--line)'],
@@ -132,6 +136,18 @@ export const tokenGroups = [
       // LIGHTER than the page is what separates it, so the same move there would flatten it.
       ['modal-bg', '#0e1014', '#f8f6f0', '#ffffff'],
       ['modal-border', '#1f242d', '#d5cfc1', '#dcdcdc'],
+    ],
+  },
+  {
+    // A toast is the theme INVERTED — light on dark, dark on light. On the page's own
+    // surface it disappeared into the register rows behind it (owner, 2026-10-25).
+    label: 'Toast surfaces',
+    category: 'color',
+    tokens: [
+      ['toast-bg', '#f3f5f9', '#2d2a24', '#202124'],
+      ['toast-ink', '#0e1014', '#f8f6f0', '#ffffff'],
+      ['toast-muted', '#5c6370', '#b3ac9f', '#a9adb5'],
+      ['toast-accent', '#2666b8', '#8ab8f0', '#8ab8f0'],
     ],
   },
   {
@@ -262,6 +278,14 @@ export const tokenGroups = [
         '0 8px 24px rgba(48, 42, 30, 0.16)',
         '0 8px 24px rgba(17, 24, 39, 0.1)',
       ],
+      // Every floating toast / nudge pill. Already lifted by its inverted fill, so this only
+      // seats it: a hairline contact shadow plus a short, soft falloff — never a halo.
+      [
+        'shadow-toast',
+        '0 1px 2px rgba(0, 0, 0, 0.24), 0 6px 18px -6px rgba(0, 0, 0, 0.45)',
+        '0 1px 2px rgba(48, 42, 30, 0.08), 0 6px 18px -6px rgba(48, 42, 30, 0.24)',
+        '0 1px 2px rgba(17, 24, 39, 0.06), 0 6px 18px -6px rgba(17, 24, 39, 0.2)',
+      ],
       // The quietest lift there is: a hint of depth UNDER a surface that carries its own soft
       // outline (the chat input block). It must not read as a shadow in its own right — the
       // border draws the edge, this only stops the block sitting flat on the page.
@@ -276,7 +300,10 @@ export const tokenGroups = [
   {
     label: 'Ink on accent fill',
     category: 'color',
-    tokens: [['ink-on-accent', '#fff']],
+    tokens: [
+      ['ink-on-accent', '#fff'],
+      ['ink-on-cta', 'var(--bg)'],
+    ],
   },
   {
     label: 'Z-index scale',

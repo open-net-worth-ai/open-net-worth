@@ -4,7 +4,7 @@ PositionStore — holdings (the "how much, at what cost").
 Each position links one instrument to one account with a quantity and cost basis.
 The same instrument held in three exchanges is one instrument + three positions. Two
 grants of the same stock in one account with different cost bases are two positions,
-distinguished by `vesting_state`/`note`. The lots layer links back via
+distinguished by `vesting_state`. The lots layer links back via
 `lot.position_id` — the reverse FK; positions carry no lot key.
 
 Identity is the UUID `id` — nothing keys on (label, category) anymore.
@@ -22,7 +22,6 @@ Position schema:
     cost_currency : str       usually == instrument.quote_currency, not always
     vesting_state : "vested" | "unvested"   — entitlement, NOT liquidity (see below)
     acquired_at   : str|None  optional; enables holding-period later
-    note          : str
     created_at    : ISO
     updated_at    : ISO
 
@@ -200,7 +199,6 @@ def _make_position(data: dict) -> dict:
         "cost_currency": (data.get("cost_currency") or "").upper() or None,
         "vesting_state": vesting,
         "acquired_at": data.get("acquired_at"),
-        "note": data.get("note", ""),
         "created_at": data.get("created_at") or now,
         "updated_at": data.get("updated_at") or now,
     }

@@ -1,5 +1,57 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import * as PD from './planData'
+import { fBaseCompact, setBaseCurrency, setDisplayFormats } from '../../../utils/format'
+
+// Outlook tiles (fCoarse) and Cash Flow figures (fCF) once stopped at M, so a VND plan read
+// "₫24946.08M" beside a chart axis saying "₫47.09B". From a million up they are the axis's own
+// formatter, in every number format, so the two can never disagree again.
+describe('fCoarse / fCF — big amounts read exactly like the chart axis', () => {
+  afterEach(() => {
+    setBaseCurrency('SGD')
+    setDisplayFormats({})
+  })
+
+  it('reads billions as B, never thousands of millions', () => {
+    setBaseCurrency('VND')
+    setDisplayFormats({ number_format: 'comma' })
+
+    expect(PD.fCoarse(24_946_080_000)).toBe('₫24.95B')
+    expect(PD.fCF(7_500_000_000)).toBe('₫7.5B')
+    expect(PD.fCoarse(1_436_033_610_000)).toBe('₫1.44T')
+  })
+
+  it.each(['comma', 'dot', 'space'] as const)(
+    'matches fBaseCompact in the %s number format, sign included',
+    (number_format) => {
+      setBaseCurrency('VND')
+      setDisplayFormats({ number_format })
+      for (const v of [1_000_000, 24_946_080_000, 7_500_000_000, 999_995_000]) {
+        expect(PD.fCoarse(v)).toBe(fBaseCompact(v))
+        expect(PD.fCF(v)).toBe(fBaseCompact(v))
+        expect(PD.fCoarse(-v)).toBe('−' + fBaseCompact(v))
+      }
+    },
+  )
+
+  it('a figure that rounds up to a million reads as that million, not 1000k / 1000.00K', () => {
+    setDisplayFormats({ number_format: 'comma' })
+    const million = fBaseCompact(1_000_000)
+
+    expect(PD.fCoarse(996_400)).toBe(million)
+    expect(PD.fCoarse(994_000)).toBe(PD.fCoarse(990_000))
+    expect(PD.fCoarse(994_000)).toMatch(/990k$/)
+    expect(PD.fCF(999_996)).toBe(million)
+    expect(PD.fCF(999_994)).toMatch(/999\.99K$/)
+  })
+
+  it('keeps the small-amount rules', () => {
+    setDisplayFormats({ number_format: 'comma' })
+
+    expect(PD.fCoarse(307_800)).toMatch(/310k$/)
+    expect(PD.fCF(12_345)).toMatch(/12\.35K$/)
+    expect(PD.fCF(-450)).toMatch(/^−.*450$/)
+  })
+})
 
 // Every Plan money input parses through this. 50/30/20's cap cell once stripped the decimal
 // point, so clicking into an S$83.33 cap and away saved S$8,333 (audit, 2026-09-25).

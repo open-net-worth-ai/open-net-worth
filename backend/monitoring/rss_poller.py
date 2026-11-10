@@ -179,7 +179,7 @@ async def _process_holding_fast(
     if fetched_urls is not None:
         fetched_urls.update(f["url"] for f in feeds if f.get("url"))
     if feeds:
-        await gather_rss(feeds, max_age=_FAST_CACHE_TTL)
+        await gather_rss(feeds, max_age=_FAST_CACHE_TTL, read_back=False)
 
     if not iid:
         return
@@ -212,7 +212,7 @@ async def _process_holding_slow(row: dict, topics: list[dict] | None = None) -> 
         feeds, row.get("price_source_id") or row.get("ticker") or "", topics or []
     )
     if feeds:
-        await gather_rss(feeds, max_age=_SLOW_CACHE_TTL)
+        await gather_rss(feeds, max_age=_SLOW_CACHE_TTL, read_back=False)
 
 
 async def run_rss_poll(tier: str) -> int:
@@ -320,7 +320,7 @@ async def run_rss_poll(tier: str) -> int:
                     feeds = resolve_holding_feeds(item)
                     _augment_with_linked_topics(feeds, item.get("value") or "", topics)
                     if feeds:
-                        await gather_rss(feeds, max_age=_SLOW_CACHE_TTL)
+                        await gather_rss(feeds, max_age=_SLOW_CACHE_TTL, read_back=False)
                     count += 1
             except Exception as exc:
                 logger.warning(

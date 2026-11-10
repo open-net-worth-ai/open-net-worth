@@ -19,7 +19,11 @@ import { AutomationCostPanel } from './AutomationCostPanel'
 import { AutomationHistory } from './AutomationHistory'
 import { AutomationMenu } from './AutomationMenu'
 import { AutomationRunCard } from './AutomationRunCard'
-import { automationTriggerLabel, type AutomationOptions } from './AutomationTriggerSummary'
+import {
+  AutomationTriggerText,
+  automationTriggerLabel,
+  type AutomationOptions,
+} from './AutomationTriggerSummary'
 
 export function AutomationDetail({
   automation,
@@ -207,9 +211,11 @@ export function AutomationDetail({
             )}
           </DetailSection>
           <DetailSection title="Trigger" odId="trigger">
-            <div className="a3-trigger-detail">
+            <div className="a3-trigger-detail a3-trigger-line">
               <TriggerIcon size={14} aria-hidden="true" />
-              {automationTriggerLabel(automation.trigger, options)}
+              <span className="grow">
+                <AutomationTriggerText trigger={automation.trigger} options={options} />
+              </span>
             </div>
             <div className="a3-block-note">
               {finished

@@ -8,13 +8,23 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.ai import checkpoint as ckpt
+from backend.core import audit_context
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+
+
+async def _ui_audit_scope() -> None:
+    """A Restore clicked in the chat is the user acting through the UI — the "revert" rows
+    it writes to each transaction's Activity are theirs. ``async`` for the same reason as
+    ``api.ledger._ui_audit_scope``: a sync dependency's ContextVar never reaches the endpoint."""
+    audit_context.set_audit_scope("user", "ui")
+
+
+router = APIRouter(dependencies=[Depends(_ui_audit_scope)])
 
 
 @router.get("/api/checkpoints")

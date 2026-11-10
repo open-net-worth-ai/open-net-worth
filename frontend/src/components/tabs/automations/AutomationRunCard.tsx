@@ -1,4 +1,8 @@
 import { Check, ChevronRight, FileText, Folder, Sparkles, X } from 'lucide-react'
+import { useToolOwnerLogos } from '../../chat/toolActivity/useToolOwnerLogos'
+import { useAccounts } from '../../../hooks/serverState/useAccounts'
+import { AccIcon } from '../accounts/ds'
+import { TYPE_COLOR, TYPE_ICON, type AccountType } from '../accounts/categories'
 import type { AutomationRun } from '../../../api/automations'
 import { money, tokenCount } from './AutomationCostPanel'
 import { fDateTime } from '../../../utils/format'
@@ -136,10 +140,10 @@ export function AutomationRunCard({ run, onClose }: { run: AutomationRun; onClos
           {context.hasAny ? (
             <>
               {context.connectors.length > 0 && (
-                <ContextPills label="Connectors" values={context.connectors} />
+                <ContextPills label="Connectors" values={context.connectors} brand />
               )}
               {context.accounts.length > 0 && (
-                <ContextPills label="Accounts it read" values={context.accounts} />
+                <ContextPills label="Accounts it read" values={context.accounts} accounts />
               )}
               {context.skills.length > 0 && <ContextFiles label="Skills" values={context.skills} />}
               {context.remembered.length > 0 && (
@@ -213,14 +217,58 @@ function durationLabel(start: string, finish: string | null) {
   return `${Math.floor(duration / 60_000)}m ${Math.round((duration % 60_000) / 1000)}s`
 }
 
-function ContextPills({ label, values }: { label: string; values: string[] }) {
+function ContextPills({
+  label,
+  values,
+  brand = false,
+  accounts = false,
+}: {
+  label: string
+  values: string[]
+  brand?: boolean
+  accounts?: boolean
+}) {
+  const lookup = useToolOwnerLogos(brand ? values : [])
+  const { data: book } = useAccounts()
+  const typeByName = new Map(
+    (accounts ? (book ?? []) : []).map((a) => [String(a.name ?? '').toLowerCase(), String(a.type)]),
+  )
   return (
     <div className="ctxg">
       <span className="ctxk">{label}</span>
       <div className="a3-conn">
-        {values.map((item) => (
-          <span key={item}>{item}</span>
-        ))}
+        {values.map((item) => {
+          if (accounts) {
+            const type = typeByName.get(item.toLowerCase()) as AccountType | undefined
+            return (
+              <span key={item} className="a3-conn-brand">
+                {type && TYPE_ICON[type] && (
+                  <span className="a3-conn-type" style={{ color: TYPE_COLOR[type] }}>
+                    <AccIcon name={TYPE_ICON[type]} size={13} />
+                  </span>
+                )}
+                {item}
+              </span>
+            )
+          }
+          if (!brand) return <span key={item}>{item}</span>
+          const look = lookup(item.toLowerCase().replace(/\s+/g, '_'))
+          const logo = look.logo
+          const shown =
+            look.name ?? item.replace(/_/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase())
+          return (
+            <span key={item} className="a3-conn-brand">
+              {logo ? (
+                <img src={logo} alt="" className="a3-conn-logo" />
+              ) : (
+                <i className="a3-conn-logo a3-conn-initial" aria-hidden="true">
+                  {item.charAt(0).toUpperCase()}
+                </i>
+              )}
+              {shown}
+            </span>
+          )
+        })}
       </div>
     </div>
   )

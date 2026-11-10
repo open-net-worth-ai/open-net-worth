@@ -150,7 +150,7 @@ async def test_the_lone_row_path_reports_it_too():
 def test_the_service_choke_raises_even_under_force():
     _book_then_delete()
     with pytest.raises(PreviouslyDeletedError) as exc:
-        L.create_transaction(_svc_row(), force=True)
+        L.create_transaction(_svc_row(), allow_duplicate=True)
     assert exc.value.code == "previously_deleted"
     assert "already deleted" in exc.value.message
     assert exc.value.context["deleted_txn_id"]
@@ -158,7 +158,7 @@ def test_the_service_choke_raises_even_under_force():
 
 def test_bulk_create_skips_it_under_force_and_names_it():
     deleted_id = _book_then_delete()
-    created, skipped = L.bulk_create_transactions([_svc_row()], force=True)
+    created, skipped = L.bulk_create_transactions([_svc_row()], allow_duplicate=True)
     assert created == []
     assert skipped[0]["_previously_deleted"] is True
     assert skipped[0]["_duplicate_of"] == deleted_id
@@ -274,7 +274,7 @@ def test_rest_create_refuses_with_a_typed_409_and_names_the_way_back():
         "external_refs": [{"source": "email", "ref": REF}],
     }
 
-    refused = client.post("/api/transactions", json={**body, "force": True})
+    refused = client.post("/api/transactions", json={**body, "allow_duplicate": True})
     assert refused.status_code == 409, refused.text
     detail = refused.json()["detail"]
     assert detail["error"] == "previously_deleted"
@@ -297,7 +297,7 @@ def test_the_other_leg_of_a_deleted_wise_chain_still_books():
     other_leg = L.create_transaction(_svc_row(frm="acc_wallet", to="acc_cash", kind="transfer"))
     assert other_leg["id"]
     _, skipped = L.bulk_create_transactions(
-        [_svc_row(frm="acc_card", to="acc_wallet", kind="transfer")], force=True
+        [_svc_row(frm="acc_card", to="acc_wallet", kind="transfer")], allow_duplicate=True
     )
     assert skipped and skipped[0]["_previously_deleted"] is True
 
@@ -346,7 +346,7 @@ def test_every_trade_undo_opts_out():
 
 def test_a_merge_tombstone_writes_nothing():
     keep = L.create_transaction(_svc_row(ref="keep0000ref0"))
-    lose = L.create_transaction(_svc_row(ref="lose0000ref0"), force=True)
+    lose = L.create_transaction(_svc_row(ref="lose0000ref0"), allow_duplicate=True)
     L.merge_transactions(keep["id"], lose["id"], override=True)
     tomb = L.transactions.find_by_id(lose["id"])
     assert tomb["merged_into"] == keep["id"]

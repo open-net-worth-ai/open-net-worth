@@ -32,18 +32,20 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { Btn } from './primitives'
 import { Icons } from './icons'
-import { PermissionLadder } from './PermissionLadder'
+import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { VendorTrust } from './VendorTrust'
 import { McpConnectionFields } from './McpConnectionFields'
 import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
 import { MCP_INSTALL_PRESETS, type DirectoryRow } from './catalog'
 import {
   EMPTY_MCP_FORM,
+  displayName,
   formFromEditTarget,
   guessServerName,
   isValidMcpUrl,
   slugify,
   uniqueServerId,
+  type McpAuth,
   type McpConnectionForm,
   type McpEditTarget,
 } from './mcpConfig'
@@ -133,6 +135,9 @@ export interface McpOAuthState {
   /** The connected-account summary — seeded from a saved server on an edit, refreshed by every
    *  successful Test connect. `null` before any server has ever signed in. */
   summary: OAuthSummary | null
+  /** The vendor's authorize URL while `pending` (browser only) — the fallback link for a
+   *  sign-in window the browser opened without handing us a handle to it (Arc, Dia). */
+  authorizeUrl: string | null
   signIn: () => void
   /** Stops polling, closes the popup, and drops the staged flow client-side — the state itself
    *  is simply left to expire on its own TTL (RFC §4.3; see `oauthSignIn.ts`'s doc comment on
@@ -153,6 +158,11 @@ export interface McpAddFlow {
   toolGroups: ToolGroup[]
   meta: VendorMeta
   error: string
+  /** What the failed probe's 401 asked for, when it disagrees with the chosen Authentication —
+   *  the error step offers a one-click switch. */
+  needsAuth: McpAuth | null
+  /** Switch Authentication to what the server asked for and go back to the form. */
+  switchAuth: (auth: McpAuth) => void
   pasteOpen: boolean
   setPasteOpen: (open: boolean) => void
   perms: PermissionMap
@@ -175,6 +185,10 @@ export interface McpAddFlow {
   runConnect: () => void
   back: () => void
   finish: () => void
+  /** Save without connecting: the server is stored switched off and untested, to be tested
+   *  later from its settings. Add only; `canSave` says whether the form holds enough. */
+  saveDormant: () => void
+  canSave: boolean
   /** Deletes the dormant, live-credentialed OAuth server row THIS session's sign-in minted, if
    *  the flow is being left without it ever having been claimed by a successful `finish()`. A
    *  no-op on an edit (`editing`'s row predates this session and must survive every dismiss path
@@ -196,7 +210,8 @@ export function useMcpAddFlow({
   /** A saved server to reopen the flow ON. Read once, at mount — the host renders this hook's
    *  modal only while it is open, so there is no stale-target effect to keep in sync. */
   editing?: McpEditTarget | null
-  onSaved: (name: string, toolCount: number) => void
+  /** `dormant`: saved switched off without a connection test (the form's Save). */
+  onSaved: (name: string, toolCount: number, opts?: { dormant?: boolean }) => void
 }): McpAddFlow {
   const [step, setStep] = useState<McpStep>('form')
   const [form, setFormState] = useState<McpConnectionForm>(() =>
@@ -215,6 +230,7 @@ export function useMcpAddFlow({
       : UNKNOWN_VENDOR,
   )
   const [error, setError] = useState('')
+  const [needsAuth, setNeedsAuth] = useState<McpAuth | null>(null)
   const [pasteOpen, setPasteOpen] = useState(false)
   // The saved levels, so an edit shows what the server actually has (spec §3) and writes back
   // only what the user changed.
@@ -230,6 +246,9 @@ export function useMcpAddFlow({
   // `.then()` tell "am I still the one the user is looking at" and no-op if not, rather than
   // clobbering whatever the user did in the meantime (a fresh probe, or the form again).
   const activeTokenRef = useRef<string | null>(null)
+  // The directory card's name, when the flow began from one. A server's self-reported name is
+  // often a package slug (Coinbase's CLI says `coinbase`), so the card we list it under wins.
+  const catalogNameRef = useRef<string | null>(null)
 
   // ── OAuth sign-in (RFC `2026-08-14-mcp-oauth` §4.2/§4.3) ──────────────────────
   // `connected` alone is not enough to seed `signed_in`: a refresh can fail and mark
@@ -245,6 +264,7 @@ export function useMcpAddFlow({
   const [oauthNeedsClientId, setOauthNeedsClientId] = useState(false)
   const [oauthClientId, setOauthClientId] = useState('')
   const [oauthSummary, setOauthSummary] = useState<OAuthSummary | null>(editing?.oauth ?? null)
+  const [oauthAuthorizeUrl, setOauthAuthorizeUrl] = useState<string | null>(null)
   // The server id a completed sign-in is bound to, for the brand-new ADD case only — an EDIT
   // always targets `editing.serverId` directly. Set once the callback's dormant row is found
   // (see `resolveNewOAuthServerId`); a ref because it drives `runConnect`/`finish` without
@@ -277,6 +297,7 @@ export function useMcpAddFlow({
     setOauthRedirectUris([])
     setOauthNeedsClientId(false)
     setOauthSummary(null)
+    setOauthAuthorizeUrl(null)
   }
 
   /**
@@ -309,49 +330,55 @@ export function useMcpAddFlow({
     setOauthReason(null)
     setOauthRedirectUris([])
     setOauthNeedsClientId(false)
+    setOauthAuthorizeUrl(null)
     oauthHandleRef.current?.cancel()
     const clientId = oauthClientId.trim() || undefined
     const body: OAuthBeginBody = editing
       ? { server_id: editing.serverId, client_id: clientId }
       : { url: form.url.trim(), client_id: clientId }
-    oauthHandleRef.current = startOAuthSignIn(body, (outcome) => {
-      oauthHandleRef.current = null
-      if (!outcome.ok) {
-        setOauthStatus('error')
-        setOauthReason(outcome.reason)
-        setOauthError(outcome.error)
-        setOauthNeedsClientId(outcome.needsClientId)
-        setOauthRedirectUris(outcome.redirectUris)
-        return
-      }
-      if (editing) {
-        oauthServerIdRef.current = editing.serverId
-        setOauthStatus('signed_in')
-        runOAuthTestConnect(editing.serverId)
-        return
-      }
-      // A brand-new add: the callback already persisted a dormant server for this url the
-      // instant it completed (`oauth_flow.complete`) — but it never learns that id any other
-      // way, so the one read left is finding it in the live list.
-      const urlAtSignIn = form.url
-      void (async () => {
-        const servers = await listMcpServers()
-        const known = new Set(takenIds)
-        const candidates = servers.filter(
-          (s) => s.auth_type === 'oauth' && s.url === urlAtSignIn.trim(),
-        )
-        const found = candidates.find((s) => !known.has(s.id)) ?? candidates[0]
-        if (!found) {
+    oauthHandleRef.current = startOAuthSignIn(
+      body,
+      (outcome) => {
+        oauthHandleRef.current = null
+        setOauthAuthorizeUrl(null)
+        if (!outcome.ok) {
           setOauthStatus('error')
-          setOauthError("Signed in, but couldn't find the new server — try again.")
+          setOauthReason(outcome.reason)
+          setOauthError(outcome.error)
+          setOauthNeedsClientId(outcome.needsClientId)
+          setOauthRedirectUris(outcome.redirectUris)
           return
         }
-        oauthServerIdRef.current = found.id
-        setOauthSummary(found.oauth)
-        setOauthStatus('signed_in')
-        runOAuthTestConnect(found.id)
-      })()
-    })
+        if (editing) {
+          oauthServerIdRef.current = editing.serverId
+          setOauthStatus('signed_in')
+          runOAuthTestConnect(editing.serverId)
+          return
+        }
+        // A brand-new add: the callback already persisted a dormant server for this url the
+        // instant it completed (`oauth_flow.complete`) — but it never learns that id any other
+        // way, so the one read left is finding it in the live list.
+        const urlAtSignIn = form.url
+        void (async () => {
+          const servers = await listMcpServers()
+          const known = new Set(takenIds)
+          const candidates = servers.filter(
+            (s) => s.auth_type === 'oauth' && s.url === urlAtSignIn.trim(),
+          )
+          const found = candidates.find((s) => !known.has(s.id)) ?? candidates[0]
+          if (!found) {
+            setOauthStatus('error')
+            setOauthError("Signed in, but couldn't find the new server — try again.")
+            return
+          }
+          oauthServerIdRef.current = found.id
+          setOauthSummary(found.oauth)
+          setOauthStatus('signed_in')
+          runOAuthTestConnect(found.id)
+        })()
+      },
+      (url) => setOauthAuthorizeUrl(url),
+    )
   }
 
   const cancelSignIn = () => {
@@ -360,6 +387,7 @@ export function useMcpAddFlow({
     setOauthStatus('idle')
     setOauthError(null)
     setOauthReason(null)
+    setOauthAuthorizeUrl(null)
   }
 
   const stopPolling = () => {
@@ -400,6 +428,8 @@ export function useMcpAddFlow({
     resetOAuthState()
     setOauthClientId('')
     const preset = entry ? MCP_INSTALL_PRESETS[entry.id] : undefined
+    // The generic slot names no server — the server's own report has to do there.
+    catalogNameRef.current = entry && entry.id !== 'mcp-custom' ? entry.name : null
     setFormState({
       ...EMPTY_MCP_FORM,
       transport: preset?.transport ?? 'remote',
@@ -487,7 +517,7 @@ export function useMcpAddFlow({
       setFormState((f) =>
         editing
           ? { ...f, name: f.name.trim() || result.name }
-          : { ...f, name: result.name, serverId: result.id },
+          : { ...f, name: catalogNameRef.current ?? displayName(result.name), serverId: result.id },
       )
       setMeta((m) =>
         mergeTrust(m, {
@@ -504,6 +534,7 @@ export function useMcpAddFlow({
 
   const runConnect = () => {
     setError('')
+    setNeedsAuth(null)
     if (form.auth === 'oauth') {
       if (oauthStatus !== 'signed_in') {
         signIn()
@@ -560,13 +591,16 @@ export function useMcpAddFlow({
       stopPolling()
       if (!result.ok) {
         setError(result.error || 'Could not reach the server.')
+        const asked = result.needs_auth ?? null
+        setNeedsAuth(asked && asked !== form.auth ? asked : null)
         setStep('error')
         return
       }
       const discovered = result.tools.map((t) => t.name)
       // `suggested_name` is already `serverInfo.name` with the backend's own endpoint-derived
       // fallback; `guessServerName` only covers a server that reported nothing at all.
-      const name = result.suggested_name.trim() || guessServerName(form)
+      const name =
+        catalogNameRef.current ?? displayName(result.suggested_name.trim() || guessServerName(form))
       setDiscoveredTools(result.tools)
       // Every NEWLY discovered tool starts at Needs approval — no tiering, no exceptions
       // (spec §4). On an edit the tools already permissioned keep the level they have: a
@@ -634,6 +668,49 @@ export function useMcpAddFlow({
     })()
   }
 
+  // Save without connecting (owner, 2026-10-31): a server whose test can't pass yet — real keys
+  // still to come, a build still to finish — no longer has to be retyped later. Stored switched
+  // off, so nothing is spawned or reached; enabling it from its settings runs the test then.
+  const canSave =
+    !editing && (form.transport === 'remote' ? isValidMcpUrl(form.url) : !!form.command.trim())
+  const saveDormant = () => {
+    if (!canSave || saving) return
+    setSaving(true)
+    void (async () => {
+      const name =
+        form.name.trim() ||
+        catalogNameRef.current ||
+        displayName(guessServerName(form)) ||
+        'MCP server'
+      // An OAuth sign-in already minted the row, dormant; saving names it rather than adding a
+      // second one under a new id.
+      const oauthCreatedId = form.auth === 'oauth' ? oauthServerIdRef.current : null
+      const res = oauthCreatedId
+        ? await updateMcpServer({
+            id: oauthCreatedId,
+            name,
+            config: toWireConfig(form, savedAuth),
+            replaceEnv: false,
+            tool_permissions: {},
+          })
+        : await createMcpServer({
+            id: uniqueServerId(name, takenIds),
+            name,
+            config: toWireConfig(form, savedAuth),
+            tool_permissions: {},
+            enabled: false,
+          })
+      setSaving(false)
+      if (!res.ok) {
+        setError(res.error)
+        setStep('error')
+        return
+      }
+      if (oauthCreatedId) oauthServerIdRef.current = null
+      onSaved(name, 0, { dormant: true })
+    })()
+  }
+
   return {
     step,
     mode: editing ? 'edit' : 'add',
@@ -644,6 +721,13 @@ export function useMcpAddFlow({
     toolGroups: buildToolGroups(discoveredTools),
     meta,
     error,
+    needsAuth,
+    switchAuth: (auth) => {
+      setFormState((f) => ({ ...f, auth }))
+      setNeedsAuth(null)
+      setError('')
+      setStep('form')
+    },
     pasteOpen,
     setPasteOpen,
     perms,
@@ -663,6 +747,7 @@ export function useMcpAddFlow({
       clientId: oauthClientId,
       setClientId: setOauthClientId,
       summary: oauthSummary,
+      authorizeUrl: oauthAuthorizeUrl,
       signIn,
       cancel: cancelSignIn,
     },
@@ -677,6 +762,8 @@ export function useMcpAddFlow({
       setStep('form')
     },
     finish,
+    saveDormant,
+    canSave,
     discardAbandonedOAuthServer,
   }
 }
@@ -843,9 +930,22 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
           >
             <Icons.warn /> {flow.error || 'Could not reach the server.'}
           </div>
+          {flow.needsAuth ? (
+            <div className="cn-authhint" role="status">
+              <span>
+                {flow.needsAuth === 'oauth'
+                  ? 'This server needs you to sign in. Switch Authentication to OAuth, then connect again.'
+                  : 'This server needs a key. Switch Authentication to API key and paste it.'}
+              </span>
+              <Btn size="xs" variant="primary" onClick={() => flow.switchAuth(flow.needsAuth!)}>
+                {flow.needsAuth === 'oauth' ? 'Switch to OAuth' : 'Use an API key'}
+              </Btn>
+            </div>
+          ) : null}
           <span className="rd-help">
-            Fix the URL, command, or credentials above and test again. Nothing is saved until the
-            server is actually reached.
+            {flow.canSave
+              ? 'Fix the URL, command, or credentials and test again — or Save to keep it, switched off, and test it later from its settings.'
+              : 'Fix the URL, command, or credentials above and test again.'}
           </span>
         </div>
       )}
@@ -951,7 +1051,7 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
             <div className="rd-help" style={{ marginBottom: 8, fontSize: 12.5 }}>
               Choose when Lucius is allowed to use these tools.
             </div>
-            <PermissionLadder
+            <PermissionLadderSwitch
               groups={flow.toolGroups}
               perms={flow.perms}
               onSetTool={flow.setTool}
@@ -979,10 +1079,18 @@ export function McpAddFlowFooter({
   onCancel: () => void
 }): JSX.Element {
   if (flow.step === 'connecting') return <Btn disabled>Testing…</Btn>
+  // Save keeps what was typed without a passing test (stored switched off) — on the form, and on
+  // the failed test too, where real keys still to come is the usual reason it failed.
+  const save = flow.canSave ? (
+    <Btn disabled={flow.saving} onClick={flow.saveDormant}>
+      {flow.saving ? 'Saving…' : 'Save'}
+    </Btn>
+  ) : null
   if (flow.step === 'error') {
     return (
       <>
         <Btn onClick={flow.back}>Back</Btn>
+        {save}
         <Btn variant="primary" onClick={flow.runConnect}>
           Retry
         </Btn>
@@ -1013,6 +1121,7 @@ export function McpAddFlowFooter({
   return (
     <>
       <Btn onClick={onCancel}>Cancel</Btn>
+      {save}
       <Btn variant="primary" disabled={!flow.canConnect} onClick={flow.runConnect}>
         {flow.form.auth === 'oauth' && flow.oauth.status === 'pending' ? 'Signing in…' : 'Connect'}
       </Btn>

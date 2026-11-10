@@ -161,10 +161,12 @@ async def test_a_level_on_one_provider_does_not_reach_its_sibling(armed):
     what this test needs to demonstrate a leak would look like."""
     perms.set_tool_permission("plaid", "plaid_get_status", "always_allow")
 
-    assert perms.stored_tool_level("ibkr", "ibkr_get_status") is None
-    text, proposed = await _dispatch("ibkr_get_status", tool_use_id="toolu_sibling")
-    assert text is None and proposed["grant_tool"] == "ibkr_get_status", (
-        "IBKR's status inherited Plaid's permission"
+    # SimpleFIN, not IBKR/Alpaca: both are retired (DISABLED_CONNECTORS), so their tools are
+    # refused before the permission gate is ever consulted — the leak this pins could not show.
+    assert perms.stored_tool_level("simplefin", "simplefin_get_status") is None
+    text, proposed = await _dispatch("simplefin_get_status", tool_use_id="toolu_sibling")
+    assert text is None and proposed["grant_tool"] == "simplefin_get_status", (
+        "SimpleFIN's status inherited Plaid's permission"
     )
 
 
@@ -277,7 +279,8 @@ def test_every_dispatch_site_consults_the_permission_store():
     gap is now closed, and what has to be pinned instead is the closure: this app has
     exactly TWO dispatch paths, and BOTH read the permission store.
 
-      * internal tools -> ``ai/tools/registry.dispatch`` -> ``_confirm_gate.effective_level``
+      * internal tools -> ``ai/tools/registry.dispatch`` -> ``ai.permissions.engine()`` ->
+        ``_confirm_gate.effective_level`` (``_confirm_gate_v2`` when ``permissions_v2`` is on)
       * external MCP   -> ``mcp/client_manager``
 
     A THIRD reader appearing is not automatically wrong — but it is a new place a permission
@@ -299,8 +302,13 @@ def test_every_dispatch_site_consults_the_permission_store():
     # accident would blind this test to the layer most likely to grow a second answer.
     not_a_dispatch_site = {
         "services/tool_permissions.py",  # DEFINES these reads
+        "services/tool_permissions_v2.py",  # the permissions_v2 twin: re-exports and extends them
         "db/tool_permission_store.py",  # the storage underneath them
         "api/tool_permissions.py",  # REST: reads to DISPLAY and to write, never to decide
+        # The REST behaviour the router calls (ai.permissions.permission_api picks one by the
+        # permissions_v2 flag): the router's former inline code, same reads, same purpose.
+        "ai/permission_api.py",
+        "ai/permission_api_v2.py",
         # `_decorate`'s `_level` helper: the Connectors permission LADDER's displayed
         # default for an undecided tool (security review finding #4 / ADR
         # `2026-08-17-connector-ladder-shows-the-real-effective-default`) — reads
@@ -309,6 +317,11 @@ def test_every_dispatch_site_consults_the_permission_store():
         # effective_level` itself (the dependency rule). Reads to DISPLAY, same shape as
         # `api/tool_permissions.py` above, never to decide whether a call fires.
         "services/connectors.py",
+        # `with_stand_ins`: while `search_reads_results` is on, an Automation's `x_search` entry
+        # counts as one for `web_search` unless the owner stored Ask/Block on `web_search`. It
+        # reads that level to REFUSE an inherited grant over a restriction; the call itself is
+        # still decided by `_confirm_gate.effective_level` at dispatch.
+        "ai/search/switch.py",
     }
     callers: dict[str, set[str]] = {}
     for path in backend.rglob("*.py"):
@@ -330,6 +343,7 @@ def test_every_dispatch_site_consults_the_permission_store():
 
     assert set(callers) == {
         "ai/tools/_confirm_gate.py",
+        "ai/tools/_confirm_gate_v2.py",
         "mcp/client_manager.py",
     }, (
         "the permission store is read somewhere new. Every dispatch site MUST consult it, "
@@ -351,7 +365,7 @@ def test_the_reserved_core_bucket_can_never_collide_with_a_real_connector(db_iso
 
 
 @pytest.mark.asyncio
-async def test_a_level_set_through_the_connector_route_gates_a_native_tool(armed):
+async def test_a_level_set_through_the_connector_route_gates_a_native_tool(armed, quiet_app_boot):
     """The whole claim, driven through the surface a user actually touches.
 
     ``PUT /api/connectors/{id}/permissions/{tool}`` is what the Connectors tab's ladder
@@ -390,7 +404,7 @@ async def test_a_level_set_through_the_connector_route_gates_a_native_tool(armed
 
 
 @pytest.mark.asyncio
-async def test_a_level_set_through_the_app_wide_route_gates_an_untagged_tool(armed):
+async def test_a_level_set_through_the_app_wide_route_gates_an_untagged_tool(armed, quiet_app_boot):
     """The other surface — Settings › Permissions — writing the SAME store. The owner is
     resolved server-side, so a client that knows only the tool name still lands the row
     where the gate will look for it."""
@@ -498,7 +512,9 @@ async def test_an_auto_automation_passes_a_connector_read_as_it_does_a_connector
 
 
 @pytest.mark.asyncio
-async def test_the_yolo_row_is_settable_and_revocable_through_the_ordinary_route(armed):
+async def test_the_yolo_row_is_settable_and_revocable_through_the_ordinary_route(
+    armed, quiet_app_boot
+):
     """The blanket permission must be reachable by the SAME surface as every other one —
     that is what makes "one revoke surface" true rather than aspirational, and turning yolo
     off is the single most important revoke here.

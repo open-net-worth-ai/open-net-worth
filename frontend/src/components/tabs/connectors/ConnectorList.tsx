@@ -10,7 +10,7 @@ import type { JSX } from 'react'
 import { Badge, Btn, Empty } from './primitives'
 import { Icons } from './icons'
 import { ConnectorRow } from './ConnectorRow'
-import { emptyStateFor } from './emptyState'
+import { emptyStateFor, FAMILY_BLURB } from './emptyState'
 import { DirectoryCard } from './DirectoryCard'
 import { matchesSearch, type DirectoryRow } from './catalog'
 import {
@@ -44,7 +44,7 @@ function passesStatus(entry: ConnectorEntry, statusFilter: StatusFilter): boolea
 function passesQuery(entry: ConnectorEntry, query: string): boolean {
   const q = query.trim()
   if (!q) return true
-  return matchesSearch(`${entry.name} ${entry.sub}`, q)
+  return matchesSearch(`${entry.name} ${entry.sub} ${(entry.categories ?? []).join(' ')}`, q)
 }
 
 /**
@@ -60,6 +60,17 @@ export function visibleSections(
   return FAMILY_SECTIONS.filter((s) => tab === 'all' || s.key === tab)
     .map((section) => ({ section, entries: matched.filter((e) => inFamily(e, section.key)) }))
     .filter((s) => s.entries.length > 0)
+}
+
+/** What each status filter would list on this tab and search, so a count always matches the
+ *  rows its button shows. A connector in several families still counts once. */
+export function statusCounts(
+  entries: ConnectorEntry[],
+  { query, tab }: Pick<ListFilters, 'query' | 'tab'>,
+): Record<StatusFilter, number> {
+  const rows = entries.filter((e) => inFamily(e, tab) && passesQuery(e, query))
+  const count = (filter: StatusFilter) => rows.filter((e) => passesStatus(e, filter)).length
+  return { all: count('all'), connected: count('connected'), attention: count('attention') }
 }
 
 export interface ConnectorListProps {
@@ -82,6 +93,10 @@ export interface ConnectorListProps {
   suggestions?: DirectoryRow[]
   /** Open a suggestion's own page in Browse & add, where it is added. */
   onSuggest?: (row: DirectoryRow) => void
+  /** Up to three not-yet-added entries per section, like the Assets screen's "Add more":
+   *  on a family tab under that section's rows, on All as ONE block (`all`) after every
+   *  section — never a block per section there. Absent while searching or filtering. */
+  sectionSuggestions?: Partial<Record<FamilyTab, DirectoryRow[]>>
 }
 
 export function ConnectorList({
@@ -93,6 +108,7 @@ export function ConnectorList({
   onAddBank,
   suggestions = [],
   onSuggest,
+  sectionSuggestions,
 }: ConnectorListProps): JSX.Element {
   const sections = visibleSections(entries, filters)
   const notAdded =
@@ -126,6 +142,32 @@ export function ConnectorList({
   if (sections.length === 0 && notAdded) return notAdded
   if (sections.length === 0) {
     const copy = emptyStateFor(filters)
+    const section = FAMILY_SECTIONS.find((s) => s.key === filters.tab)
+    const picks = sectionSuggestions?.[filters.tab]
+    // An empty family tab shows a few connectors to start with INSIDE its empty view, under its
+    // Browse & add (primary — it is the tab's one real action) — a separate "Suggested" row under
+    // "Nothing here yet" read as two contradicting messages, and as if those few were all there is.
+    if (section && onSuggest && picks?.length) {
+      return (
+        <Empty title={copy.title} body={FAMILY_BLURB[section.key]}>
+          <Btn variant="primary" onClick={() => onBrowse(section.key)}>
+            {copy.actionLabel}
+          </Btn>
+          <div className="cn-emptypicks" aria-label={`Start with ${section.title}`}>
+            {picks.map((d) => (
+              <DirectoryCard
+                key={d.id}
+                d={d}
+                suggested
+                onAdd={onSuggest}
+                onPreview={onSuggest}
+                onConfigure={onSuggest}
+              />
+            ))}
+          </div>
+        </Empty>
+      )
+    }
     return (
       <Empty
         title={copy.title}
@@ -155,6 +197,13 @@ export function ConnectorList({
               />
             ))}
           </div>
+          {filters.tab !== 'all' ? (
+            <SuggestedBlock
+              rows={sectionSuggestions?.[section.key]}
+              onSuggest={onSuggest}
+              label={`Suggested ${section.title.toLowerCase()}`}
+            />
+          ) : null}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <button className="cn-addlink" onClick={() => onBrowse(section.key)}>
               <Icons.plus /> {section.add}
@@ -173,7 +222,45 @@ export function ConnectorList({
           </div>
         </div>
       ))}
+      {filters.tab === 'all' ? (
+        <SuggestedBlock
+          rows={sectionSuggestions?.all}
+          onSuggest={onSuggest}
+          label="Suggested connectors"
+        />
+      ) : null}
       {notAdded}
     </>
+  )
+}
+
+/** The Suggested heading + dashed cards — ONE rendering for a section, the All tab and an
+ *  empty tab, so the three can't drift. Renders nothing when there is nothing to suggest. */
+function SuggestedBlock({
+  rows,
+  onSuggest,
+  label,
+}: {
+  rows?: DirectoryRow[]
+  onSuggest?: (row: DirectoryRow) => void
+  label: string
+}): JSX.Element | null {
+  if (!onSuggest || !rows?.length) return null
+  return (
+    <div className="cn-suggest" aria-label={label}>
+      <div className="cn-suggest-h">Suggested</div>
+      <div className="cn-suggestgrid">
+        {rows.map((d) => (
+          <DirectoryCard
+            key={d.id}
+            d={d}
+            suggested
+            onAdd={onSuggest}
+            onPreview={onSuggest}
+            onConfigure={onSuggest}
+          />
+        ))}
+      </div>
+    </div>
   )
 }

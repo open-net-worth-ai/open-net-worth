@@ -5,6 +5,7 @@ import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
 import { TagInput } from '../ui/TagInput'
 import { tagCounts } from './vaultFormat'
+import { Plus } from '../../ui/icons'
 
 const MAX_TAGS = 10 // services/vault.py MAX_TAGS
 
@@ -66,7 +67,7 @@ export function TagsDialog({ item, onClose }: { item: VaultItem; onClose: () => 
                 aria-label={`Add tag ${t}`}
                 onClick={() => setTags([...tags, t])}
               >
-                <span aria-hidden="true">+</span>
+                <Plus size={12} aria-hidden="true" />
                 {t}
               </button>
             ))}

@@ -1,5 +1,5 @@
 import type { ProposedChange } from '../../../types/chat'
-import { ApprovalLead, ApprovalNote } from './ApprovalCard'
+import { ApprovalNote } from './ApprovalCard'
 import { BudgetChangePreview, BudgetOperationChangePreview } from './bodies/BudgetBodies'
 import { CodeRunPreview, CodeSkillPreview, ExternalMcpCallPreview } from './bodies/CodeBodies'
 import { DisposalPreview } from './bodies/DisposalPreview'
@@ -40,13 +40,6 @@ export function CardBody({ change }: { change: ProposedChange }) {
   const isBatch = change.type.endsWith('_batch') && Array.isArray(d.rows)
   return (
     <>
-      {isExternalMcp && (
-        <ApprovalLead>
-          Lucius wants to use <b>{String(d.name || change.tool || 'this tool')}</b> from{' '}
-          <b>{String(d.server || change.server_id || 'this server')}</b>
-        </ApprovalLead>
-      )}
-
       {change.type === 'update' && <PositionUpdateBody change={change} />}
       {change.type === 'add' && <PositionAddBody change={change} />}
       {change.type === 'remove' && <PositionRemoveBody change={change} />}

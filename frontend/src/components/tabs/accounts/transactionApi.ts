@@ -82,6 +82,18 @@ export async function setTransactionCleared(id: string, cleared: boolean): Promi
   return txn
 }
 
+// Register declutter — display-only, so no balance moves; the register refetches on the bus.
+export async function setTransactionHidden(id: string, hidden: boolean): Promise<Txn> {
+  const res = await authFetch(`/api/transactions/${id}/hidden`, {
+    method: 'PATCH',
+    body: JSON.stringify({ hidden }),
+  })
+  if (!res.ok) throw await failed(res, 'Update failed')
+  const txn = fromApiTxn((await res.json()) as ApiTxn)
+  announceLedgerWrite()
+  return txn
+}
+
 export async function deleteTransaction(id: string): Promise<void> {
   const res = await authFetch(`/api/transactions/${id}`, { method: 'DELETE' })
   if (!res.ok) throw await failed(res, 'Delete failed')

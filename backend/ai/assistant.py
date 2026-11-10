@@ -18,7 +18,10 @@ from backend.core.run_steps import append_run_step as _append_step
 logger = logging.getLogger(__name__)
 
 from backend.ai import pending_injection, run_plan, skill_runtime
+from backend.ai.memory_citations import CitationStripper, note_cited_facts, split_citations
 from backend.ai.models.base import AIProvider
+from backend.ai.permissions import engine as _permission_engine
+from backend.ai.spoken_lines import UNHEARD_KEY, lines_around
 from backend.ai.tool_text import (
     UNPARSED_CALL_NOTICE,
     LiveLineFilter,
@@ -32,12 +35,14 @@ from backend.ai.tools.display import describe_tool_call
 from backend.ai.tools.registry import external_args_error, mutated_domains, validation_error
 from backend.ai.turn_completion import MAX_COMPLETION_NUDGES, completion_nudge
 from backend.core import mcp_external
+from backend.core.chat_context_markers import is_model_context_block
+from backend.core.chat_session import INTERNAL_SESSION_IDS as _INTERNAL_SESSION_IDS  # noqa: F401
+from backend.core.chat_session import is_internal_session as _is_internal_session
 from backend.core.errors import DataIntegrityError
 from backend.core.redact import redact_secrets, redact_summary
 from backend.core.tool_use_context import set_tool_use_id
 from backend.core.untrusted import (
     fence_untrusted_block,
-    is_screen_context_block,
     make_fence_nonce,
     sanitize_untrusted,
 )
@@ -69,7 +74,7 @@ def _external_tool_schemas() -> list[dict]:
     if dispatcher is None:
         return []
     try:
-        schemas = list(dispatcher.schemas())
+        schemas = _permission_engine().external_schemas(dispatcher)
         return sorted(schemas, key=lambda s: s.get("name", ""))
     except Exception:  # noqa: BLE001 — a broken external manager must never break the offer
         logger.exception("external mcp schema fetch failed (non-fatal)")
@@ -159,8 +164,10 @@ def _build_core_offer() -> list[dict]:
     """
     from backend.ai.tools._extra_groups_scope import get_extra_names
     from backend.ai.tools._groups import CORE_TOOL_NAMES
+    from backend.ai.tools.catalog import hidden_tools
 
-    loaded: set[str] = set(get_extra_names())
+    # A name a session loaded earlier stays in its persisted set, so the hide is applied here too.
+    loaded: set[str] = set(get_extra_names()) - hidden_tools()
     core = [t for t in TOOL_SCHEMAS if t["name"] in CORE_TOOL_NAMES]
     extra = [t for t in TOOL_SCHEMAS if t["name"] in loaded and t["name"] not in CORE_TOOL_NAMES]
     ext_mcp = [s for s in _external_tool_schemas() if s.get("name") in loaded]
@@ -555,14 +562,6 @@ def _proposed_change_signature(change: dict) -> tuple:
         ).hexdigest()
     return (ctype, identity)
 
-
-# Session IDs (or prefixes) used by background/headless paths that must never
-# appear in the user-facing conversation list.  The on-disk files are kept
-# intact (the agents still read/write them); only the LISTING is filtered.
-# Exact IDs: "scheduled" (legacy; may still exist on disk from old instances).
-# Prefix: "scheduled-" (per-run sessions from the prompt_lucius runner).
-_INTERNAL_SESSION_IDS: frozenset[str] = frozenset({"scheduled"})
-_INTERNAL_SESSION_PREFIXES: tuple[str, ...] = ("scheduled-",)
 
 # In-memory sessions: {session_id: [messages]}
 SESSIONS: Dict[str, List[dict]] = {}
@@ -1058,7 +1057,11 @@ def load_screen_tools(session_id: str, screen_title: Optional[str]) -> frozenset
     newly loaded (empty when the screen has none or they are already loaded)."""
     from backend.ai.tools._screen_tools import tools_for_screen
 
-    wanted = tools_for_screen(screen_title)
+    return load_session_tools(session_id, tools_for_screen(screen_title))
+
+
+def load_session_tools(session_id: str, wanted: frozenset[str]) -> frozenset[str]:
+    """Add ``wanted`` to this session's sticky offer; returns the names newly loaded."""
     if not wanted:
         return frozenset()
     entry = _session_meta_entry(session_id) or {}
@@ -1081,6 +1084,12 @@ def session_brief(session_id: str) -> Tuple[Optional[str], str]:
     return (iid or None, entry.get("brief_label") or "")
 
 
+def session_channel(session_id: str) -> str:
+    """The chat channel (Telegram, ...) that owns this conversation; '' for the app's own."""
+    entry = _session_meta_entry(session_id)
+    return (entry.get("channel") or "") if entry is not None else ""
+
+
 def session_screen_handles(session_id: str) -> list:
     """The handle manifest from the most recent screen snapshot this conversation sent, or ``[]``.
 
@@ -1097,13 +1106,6 @@ def session_screen_commands(session_id: str) -> list:
     ``run_screen_command`` can only ever invoke what THIS turn's screen advertised."""
     entry = _session_meta_entry(session_id)
     return (entry.get("screen_commands") or []) if entry is not None else []
-
-
-def _is_internal_session(sid: str) -> bool:
-    """True when ``sid`` identifies a background/headless session (never shown to the user)."""
-    if sid in _INTERNAL_SESSION_IDS:
-        return True
-    return any(sid.startswith(p) for p in _INTERNAL_SESSION_PREFIXES)
 
 
 def list_sessions(*, with_run_status: bool = False) -> list[dict]:
@@ -1413,11 +1415,10 @@ def clear_session(session_id: str) -> None:
 
 
 def release_session(session_id: str) -> None:
-    """Drop a session's in-process state (cached history, extract debounce, idle turn lock)
+    """Drop a session's in-process state (cached history, idle turn lock)
     and KEEP its stored row — for a one-shot turn whose conversation stays readable, like a
     capture. ``clear_session`` is this plus cancelling its turns and deleting the row."""
     SESSIONS.pop(session_id, None)
-    _last_memory_extract_len.pop(session_id, None)
     # Drop this session's turn lock too (finding 3) — a scheduled/dispatched run mints a
     # fresh ``scheduled-<uuid>`` session id per invocation and always calls clear_session()
     # AFTER its own run() generator is fully exhausted, so popping there is always safe.
@@ -1629,21 +1630,24 @@ def _post_execute_events(
 def _maybe_append_screen_command_block(owner_blocks: Optional[list], result_text: str) -> None:
     """Re-derive the parked screen-command chip from a persisted run_screen_command
     tool pair (reload / cross-device). Dispatched (live) commands were ephemeral UI
-    state — they leave no block."""
+    state — they leave no block, EXCEPT a connector setup: its card names the connector
+    and carries Connect, so it shows whether or not Connectors was already open."""
     if owner_blocks is None:
         return
     try:
         parsed = json.loads(result_text or "")
     except Exception:
         return
-    if not isinstance(parsed, dict) or parsed.get("status") != "parked":
+    if not isinstance(parsed, dict):
         return
     cmd = parsed.get("command")
     if not isinstance(cmd, dict) or not cmd.get("name"):
         return
-    owner_blocks.append(
-        {"type": "screen_command", "command": cmd, "open": parsed.get("open") or {}}
-    )
+    setup = cmd.get("name") == "connectors.open_setup"
+    if parsed.get("status") != "parked" and not setup:
+        return
+    open_ = parsed.get("open") or ({"route": "connectors"} if setup else {})
+    owner_blocks.append({"type": "screen_command", "command": cmd, "open": open_})
 
 
 def _maybe_append_mcp_image_attachments(
@@ -1921,14 +1925,25 @@ def _rebuilt_card(session_id: str, block: dict) -> dict:
     staged = _staged_card(block["id"])
     if staged is not None:
         return {**staged, "tool_use_id": block["id"], "id": block["id"]}
+    return _card_from_call(
+        session_id, block, f"{block.get('name')} needs your approval before it runs."
+    )
+
+
+def _card_from_call(session_id: str, block: dict, reason: str) -> dict:
+    """A generic permission card rebuilt from the tool call alone — for a call with no staged
+    card: an Automation park (its ids never reach the pending store) or, under
+    ``permissions_v2``, an answered call."""
     return {
         "type": "tool_permission",
         "grant_tool": block.get("name"),
         "display": {"tool": block.get("name"), "arguments": block.get("input") or {}},
-        "reason": f"{block.get('name')} needs your approval before it runs.",
+        "reason": reason,
         "tool_use_id": block["id"],
         "session_id": session_id,
         "id": block["id"],
+        **_permission_engine().automation_ref(session_id),
+        **_permission_engine().recorded_judge_note(session_id, block["id"]),
     }
 
 
@@ -2184,7 +2199,11 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
             )
         pending_receipt = None
 
+    lines_after: list[dict] = []  # what a voice call said after the entry before this one
     for i, entry in enumerate(history):
+        messages.extend(lines_after)
+        lines_before, lines_after = lines_around(session_id, i, entry)
+        messages.extend(lines_before)
         if isinstance(entry.get(skill_runtime.DEACTIVATION_MARKER), dict):
             continue
         if entry.get("_onw_skill"):
@@ -2270,28 +2289,27 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                                 )
                 elif btype == "text":
                     t = b.get("text", "")
-                    if t.startswith("<turn_context>"):
-                        continue  # persisted snapshot — never render in chat UI
-                    if t.lstrip().startswith("«mention:"):
-                        # The resolved-mention block (services/mentions/dispatch —
-                        # "[Referenced items the user is asking about … UNTRUSTED]" inside a
-                        # nonce fence). api/chat._merge_mention_context appends it as its own
-                        # text part on the user turn so the model can see the current data
-                        # behind an @-chip. It is MODEL context, not something the reader
-                        # typed — and because these parts are ""-joined below, leaving it in
-                        # rendered as "change the payee name to sally«mention:97beb…»" followed
-                        # by the whole untrusted-data dump, in the reader's own message bubble.
-                        # Skipped for DISPLAY only; the transcript keeps the block.
+                    if is_harness_note(t) and any(
+                        isinstance(o, dict)
+                        and o.get("type") == "text"
+                        and o is not b
+                        and o.get("text")
+                        and not is_harness_note(o.get("text", ""))
+                        for o in content
+                    ):
+                        # A harness note BESIDE the owner's own words (a voice call's
+                        # message: what they said + the note telling Lucius it came by
+                        # voice). The note is for the model; their words are their bubble.
+                        # A message that is ONLY a note stays hidden by the check below.
                         continue
-                    if is_screen_context_block(t):
-                        # Same reason as turn_context: api/chat._merge_mention_context appends
-                        # the screen snapshot as its own content part on the user turn so the
-                        # model can see what's on screen. It is MODEL context, not something
-                        # the user typed — and because these parts are ""-joined below, leaving
-                        # it in rendered the owner's one-line message as
-                        # "Yes, add the car alongside the home[Currently on screen — Plan …]"
-                        # followed by every row on the screen. Skipped for DISPLAY only; the
-                        # transcript keeps the block, so the model still sees it.
+                    if is_model_context_block(t):
+                        # A persisted <turn_context> snapshot, the resolved-mention block and
+                        # the screen snapshot are appended onto the user turn by
+                        # api/chat._merge_mention_context so the MODEL can see them; they are
+                        # not something the reader typed, and because these parts are
+                        # ""-joined below, leaving one in rendered it inside the reader's own
+                        # bubble (owner: "…alongside the home[Currently on screen — Plan …]").
+                        # Skipped for DISPLAY only; the transcript keeps the block.
                         continue
                     _injected_body = _strip_user_msg_fence(t)
                     if _injected_body is not None:
@@ -2343,8 +2361,14 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                 continues_turn = False
             else:
                 # Pure tool_results — the same tool loop continues, so the assistant
-                # entry that follows belongs on THIS turn's bubble, not a new one.
-                continues_turn = True
+                # entry that follows belongs on THIS turn's bubble, not a new one. A turn opening
+                # with nothing to draw isn't that: a voice call's request re-sent with more words
+                # keeps them on its first message, and taking it for tool results pulled the answer
+                # up into the PREVIOUS answer's bubble, above its own question (owner, 2026-11-08).
+                continues_turn = any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in (content if isinstance(content, list) else [])
+                )
 
         elif role == "assistant":
             # Live, one turn can drive many tool_use rounds, but they all land on the
@@ -2478,7 +2502,15 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                     msg["usage"] = usage_by_idx[i]
                 messages.append(msg)
                 last_assistant = msg
+            if entry.get(UNHEARD_KEY):
+                last_assistant["unheard"] = True
+            # Only the tool_results entry right before carries a turn on: a SECOND assistant
+            # entry in a row is a new line (a voice call's greeting or check-in after an
+            # answer). Left set, every one after a tool round piled into that round's bubble
+            # — a later call's greeting showed inside an earlier answer (owner, 2026-11-03).
+            continues_turn = False
 
+    messages.extend(lines_after)
     _land_pending_skills()
     _land_receipt()
 
@@ -2512,8 +2544,66 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
         if pending:
             last_assistant["awaitingApproval"] = True
 
+    if _permission_engine().labels_answered_cards:
+        _rebuild_answered_cards(session_id, messages)
+        _attach_auto_approvals(session_id, messages)
     _append_last_turn_error(session_id, messages)
     return messages
+
+
+def _rebuild_answered_cards(session_id: str, messages: list[dict]) -> None:
+    """Put back the confirm cards the owner already ANSWERED, labelled with the answer they gave
+    (``permissions_v2``).
+
+    The transcript keeps what a call returned, which cannot say whether the owner approved it
+    once or chose Always allow; ``services.tool_resolutions`` stores that, keyed by the card's
+    ``tool_use_id``. A tool block that has a result AND a stored answer gets its card back right
+    after it, resolved (``status`` + ``resolution``), so the label survives a reload and shows
+    when an Automation run's conversation is opened later. A call with no stored answer (every
+    ordinary tool call, and anything answered before the answer was stored) gets no card.
+    """
+    from backend.services import tool_resolutions
+
+    answers = tool_resolutions.for_session(session_id)
+    if not answers:
+        return
+    for message in messages:
+        blocks = message.get("blocks")
+        if message.get("role") != "assistant" or not blocks:
+            continue
+        rebuilt: list[dict] = []
+        for block in blocks:
+            rebuilt.append(block)
+            answer = answers.get(block.get("id") or "")
+            if block.get("type") != "tool" or "result" not in block or answer is None:
+                continue
+            change = {
+                **_card_from_call(
+                    session_id, block, f"{block.get('name')} needed your approval before it ran."
+                ),
+                "status": "dismissed" if answer == tool_resolutions.DENIED else "confirmed",
+                "resolution": answer,
+            }
+            message.setdefault("proposedChanges", []).append(change)
+            rebuilt.append({"type": "change", "change": change})
+        message["blocks"] = rebuilt
+
+
+def _attach_auto_approvals(session_id: str, messages: list[dict]) -> None:
+    """Give each call the Auto judge decided its stored verdict (``autoApproval``), so the row
+    keeps its "i" after a reload (``permissions_v2``, ``services.auto_approvals``)."""
+    from backend.services import auto_approvals
+
+    approvals = auto_approvals.for_session(session_id)
+    if not approvals:
+        return
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        for block in message.get("blocks") or []:
+            approval = approvals.get(block.get("id") or "")
+            if block.get("type") == "tool" and approval is not None:
+                block["autoApproval"] = approval
 
 
 # Statuses whose stored message is worth showing. "awaiting_approval"/"ok"/"running" are
@@ -2637,6 +2727,10 @@ FOLD_TRIGGER_FRACTION = 0.55  # of the model's real context window — confirmed
 # a named constant (not an inline literal) so a reader recognises it as the same text
 # on both the write side (below) and any future read side, not a copy that can drift.
 FOLD_SUMMARY_MARKER = "[CONVERSATION SUMMARY SO FAR]"
+# A provider needs a user message first, and a thread can open on Lucius's own words: an alert
+# or a briefing is an ordinary assistant message, and a quiet person's window may hold nothing
+# else before their reply. Those messages stay; this is what stands in front of them.
+WINDOW_OPENS_ON_LUCIUS_MARKER = "[THE VISIBLE PART OF THIS THREAD STARTS HERE]"
 
 _FOLD_SUMMARIZE_SYSTEM = (
     "You compress the older portion of a financial-advisory conversation into a faithful "
@@ -2705,6 +2799,9 @@ def _prepare_messages(
        window_start is computed ONCE per turn and passed in so it stays pinned across all
        loop iterations of the same turn (prevents a mid-turn chunk-boundary shift from
        rewriting the prefix every round-trip).
+       The window is the thread as it stands: alerts and briefings count and stay, however
+       long ago the person last wrote. It used to be cut to its first user message, which
+       sent a reply to an alert with no alert in front of it (live, 2026-11-05).
     2. Orphan tool_result blocks (whose tool_use was evicted from the window) are dropped
        per-iteration — orphan-drop is a correctness invariant so it stays live.
     3. Context fold (RFC D): when fold_summary is provided, a synthetic user text block
@@ -2737,24 +2834,9 @@ def _prepare_messages(
             window_start = 0
     windowed = history[window_start:]
 
-    # Find the first message that is a clean conversation start:
-    # a user text message (not a tool_result-only message).
-    start = 0
-    for i, msg in enumerate(windowed):
-        if msg.get("role") != "user":
-            continue
-        content = msg.get("content")
-        if isinstance(content, str):
-            start = i
-            break
-        if isinstance(content, list) and content and content[0].get("type") != "tool_result":
-            start = i
-            break
-    windowed = windowed[start:]
-
     # Drop any tool_result blocks whose tool_use_id isn't present in this window
     known_ids = _collect_tool_use_ids(windowed)
-    abs_offset = window_start + start  # windowed[i] is history[abs_offset + i]
+    abs_offset = window_start  # windowed[i] is history[abs_offset + i]
     result = []
     active_skills_injected = False
     for i, msg in enumerate(windowed):
@@ -2804,6 +2886,8 @@ def _prepare_messages(
             lines = "\n".join(f'{i}. "{m["text"]}"' for i, m in enumerate(fold_verbatim, start=1))
             block_text += f"\n\n[USER'S OWN WORDS, VERBATIM, IN ORDER]\n{lines}"
         result = [{"role": "user", "content": block_text}] + result
+    elif result and result[0].get("role") != "user":
+        result = [{"role": "user", "content": WINDOW_OPENS_ON_LUCIUS_MARKER}] + result
 
     # A resume can have no fresh user entry. Its original logical-turn skill body is still
     # retained by turn_start, so active entries are intentionally not appended a second time.
@@ -3183,19 +3267,6 @@ def _drain_injected_messages(
         raise
 
 
-# Skip memory extraction for trivial exchanges (need at least ~2 turns of substance).
-MIN_HISTORY_FOR_MEMORY = 4
-
-# Debounce extraction: it re-reads the whole conversation each time, so firing it on
-# every turn re-processes already-distilled history. Only fire once the transcript has
-# grown by this many messages (~3 turns) since the last extraction.
-MEMORY_EXTRACT_EVERY = 8
-
-# session_id -> history length at last memory extraction (in-memory; resets on restart,
-# which at worst triggers one extra extraction — harmless).
-_last_memory_extract_len: Dict[str, int] = {}
-
-
 def _record_cost(
     session_id: str,
     model: str,
@@ -3207,6 +3278,8 @@ def _record_cost(
     turn_index: int | None = None,
     cost_basis: str | None = None,
     provider: str | None = None,
+    peak_prompt_tokens: int | None = None,
+    context_window: int | None = None,
 ) -> None:
     from backend.ai.cost_tracker import record
     from backend.core.cost_context import get_cost_surface
@@ -3227,22 +3300,26 @@ def _record_cost(
         turn_index=turn_index,
         cost_basis=cost_basis,
         provider=provider,
+        peak_prompt_tokens=peak_prompt_tokens,
+        context_window=context_window,
     )
 
 
-async def _run_memory_extraction(history: list[dict], session_id: str = "") -> None:
-    """
-    Fire-and-forget: distil the finished conversation into long-term memory.
-    Best-effort — any failure is logged and swallowed so chat is never affected.
-    session_id activates the per-conversation extraction cursor (only turns added
-    since the last run are sent to the LLM).
-    """
-    try:
-        from backend.ai.memory import extract_and_merge
+def _round_prompt_tokens(event: dict) -> int:
+    """Largest single-request prompt in one usage round.
 
-        await extract_and_merge(history, session_id=session_id or None)
-    except Exception:
-        logger.exception("memory extraction failed (non-fatal)")
+    A provider that makes several requests per round reports ``prompt_tokens`` itself
+    (the CLI); otherwise one round is one request and its three input buckets ARE that
+    request's prompt.
+    """
+    reported = event.get("prompt_tokens")
+    if isinstance(reported, int) and not isinstance(reported, bool) and reported > 0:
+        return reported
+    return (
+        (event.get("input_tokens") or 0)
+        + (event.get("cache_creation_tokens") or 0)
+        + (event.get("cache_read_tokens") or 0)
+    )
 
 
 # Cheap, local, no-API-call token estimate — same technique as Codex's own
@@ -3277,16 +3354,26 @@ def _token_pressure_over_fraction(
     from backend.services.cost import session_chat_records
 
     rows = session_chat_records(session_id)
-    if rows:
-        last = rows[-1]
-        current_tokens = (
-            (last.get("input_tokens") or 0)
-            + (last.get("cache_creation_tokens") or 0)
-            + (last.get("cache_read_tokens") or 0)
-        )
-    else:
+    last = rows[-1] if rows else {}
+    # A row's input buckets SUM every request of its turn — a three-round turn read as
+    # one 3x-sized prompt, so every turn looked over the line (live, 2026-10-22). Only
+    # the turn's largest single request is a prompt size; a row from before that was
+    # recorded falls back to the local estimate.
+    current_tokens = _positive_int(last.get("peak_prompt_tokens"))
+    if current_tokens is None:
         current_tokens = _approx_token_count(json.dumps(history, ensure_ascii=False, default=str))
-    return current_tokens > fraction * max_input_tokens(model, base_url)
+    # The window the provider itself reported wins over the table: the CLI's bare
+    # ``sonnet`` alias is in no table (→ 200K fallback) yet runs a 1M-window model.
+    window = _positive_int(last.get("context_window")) if last.get("model") == model else None
+    if window is None:
+        window = max_input_tokens(model, base_url)
+    return current_tokens > fraction * window
+
+
+def _positive_int(value: object) -> Optional[int]:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return None
 
 
 def _should_refold(
@@ -3332,11 +3419,7 @@ def _extract_user_text(content: object) -> str:
         if not isinstance(b, dict) or b.get("type") != "text":
             continue
         t = b.get("text", "")
-        if t.startswith("<turn_context>"):
-            continue
-        if t.lstrip().startswith("«mention:"):
-            continue
-        if is_screen_context_block(t):
+        if is_model_context_block(t):
             continue
         injected = _strip_user_msg_fence(t)
         text_parts.append(injected if injected is not None else t)
@@ -3797,8 +3880,10 @@ async def _run_turn(
     # Reset the per-turn screen-handle fetch budget (get_screen_detail is capped per turn so a
     # runaway loop can't hammer the network). Co-located with the session binding — same boundary.
     from backend.services import screen_context as _screen_context
+    from backend.services import screen_read as _screen_read
 
     _screen_context.reset_fetch_budget()
+    _screen_read.reset_read_budget()
     # Open a fresh artifact scope for this turn: stamps create_artifact calls with the
     # owning session and enforces the per-turn artifact cap (services/artifacts.py).
     from backend.services import artifacts as _artifacts_service
@@ -3828,6 +3913,11 @@ async def _run_turn(
     # Snapshot the per-turn scope ContextVars (skill/offer/unattended/bundle/depth)
     # the SAME way, for the SAME reason (CONC-H5) — see ``_skill_scope.snapshot_scope``.
     _scope_snapshot = _skill_scope.snapshot_scope()
+    # The tools a feature flag keeps out of every offer this turn: ONE flag read per turn,
+    # restored with the rest of the scope (``restore_scope(_scope_snapshot)`` below).
+    from backend.ai.search.switch import retired_tools
+
+    _skill_scope.set_turn_retired(retired_tools())
 
     # ── Turn checkpoint scaffolding, declared BEFORE the try (finding 5): the try below now
     # starts immediately after the scope snapshot, so an exception raised anywhere in this
@@ -4204,8 +4294,15 @@ async def _run_turn(
         # ── Turn checkpoint: capture pre-write state of any data file this turn edits, so
         #    the whole turn can be rolled back. anchor = history length before this turn's
         #    messages (conversation rewind truncates back to here).
+        #    A turn resumed after an approval belongs to the message that proposed the card,
+        #    so its checkpoint anchors THERE — the same message its approved write's
+        #    checkpoint sits on (`_run_approved_tool_use`), the one the client puts it on.
         _ckpt_ctx, _ckpt_token = ckpt.begin_turn(
-            session_id, history_snapshot_len, _extract_user_preview(new_messages)
+            session_id,
+            _provider_turn_start,
+            _extract_user_preview(
+                new_messages or history[_provider_turn_start : _provider_turn_start + 1]
+            ),
         )
 
         # Accumulate token usage across all model turns in this conversation turn
@@ -4216,6 +4313,8 @@ async def _run_turn(
         turn_cost_usd = 0.0
         turn_cost_rounds = 0
         turn_cost_reported_rounds = 0
+        turn_peak_prompt_tokens = 0
+        turn_context_window: int | None = None
         # What this turn's dollar figure MEANS. Set only by a provider that knows it is
         # not metered spend (the Claude Code CLI on a Pro/Max login reports a list-price
         # estimate for usage already covered by the plan); absent everywhere else, which
@@ -4246,6 +4345,8 @@ async def _run_turn(
         # ai/turn_completion.py. Per TURN, not per round: a model that keeps writing its
         # calls as prose gets a bounded number of chances across the whole turn.
         _completion_nudges = 0
+        # Whether any round of this turn has shown the reader text yet.
+        _turn_had_text = False
 
         # Cross-channel-attachments RFC section 4 (same-turn first-refusal recovery):
         # bounds the ONE capability-learning retry a turn may spend. Set True the instant
@@ -4384,6 +4485,7 @@ async def _run_turn(
 
             _offered_tools = _active_tools()
             live_text = LiveLineFilter()
+            citations = CitationStripper()
             async for event in _stream_round(_render_turn_messages({}), _offered_tools):
                 if event["type"] == "thinking_delta":
                     assistant_thinking += event["text"]
@@ -4391,12 +4493,12 @@ async def _run_turn(
 
                 elif event["type"] == "text_delta":
                     assistant_text += event["text"]
-                    shown = live_text.feed(event["text"])
+                    shown = live_text.feed(citations.feed(event["text"]))
                     if shown:
                         yield {**event, "text": shown}
 
                 elif event["type"] == "tool_use_start":
-                    held = live_text.flush(has_calls=True)
+                    held = live_text.feed(citations.flush()) + live_text.flush(has_calls=True)
                     if held:
                         yield {"type": "text_delta", "text": held}
                     if str(event.get("name") or "") != "activate_skill":
@@ -4420,6 +4522,12 @@ async def _run_turn(
                     turn_output_tokens += event["output_tokens"]
                     turn_cost_usd += event["cost_usd"]
                     turn_cost_rounds += 1
+                    turn_peak_prompt_tokens = max(
+                        turn_peak_prompt_tokens, _round_prompt_tokens(event)
+                    )
+                    turn_context_window = (
+                        _positive_int(event.get("context_window")) or turn_context_window
+                    )
                     if event.get("cost_reported"):
                         turn_cost_reported_rounds += 1
                     if event.get("cost_basis"):
@@ -4438,10 +4546,21 @@ async def _run_turn(
                     }
 
                 elif event["type"] == "done":
-                    held = live_text.flush(has_calls=bool(pending_tool_uses))
+                    held = live_text.feed(citations.flush()) + live_text.flush(
+                        has_calls=bool(pending_tool_uses)
+                    )
                     if held:
                         yield {"type": "text_delta", "text": held}
                     stop_reason = event.get("stop_reason")
+                    # The citation tag never reaches the transcript, a channel or a run's
+                    # output: every consumer reads this stream or the saved text.
+                    _with_tag = assistant_text
+                    assistant_text, _cited = split_citations(assistant_text)
+                    await note_cited_facts(_cited)
+                    # A round that was only the tag, after an earlier round already answered,
+                    # is a finished turn, not an empty reply.
+                    _tag_only_round = bool(_with_tag.strip()) and not assistant_text.strip()
+                    _answered_earlier = _turn_had_text
 
                     # Append assistant turn to history
                     assistant_content: list[dict] = []
@@ -4464,6 +4583,7 @@ async def _run_turn(
                         )
                     if assistant_text:
                         assistant_content.append({"type": "text", "text": assistant_text})
+                        _turn_had_text = True
                     for tu in pending_tool_uses:
                         assistant_content.append(
                             {
@@ -4515,10 +4635,38 @@ async def _run_turn(
                         # its OWN verdict (validated, then executed or bounced on its own
                         # merits) instead of inheriting the first one's load as permission.
                         _offer_names = {t.get("name") for t in _active_tools()}
+                        # Under ``permissions_v2`` Auto approval judges this step's Ask calls
+                        # TOGETHER, once, before the first is dispatched (``dispatch`` then finds
+                        # each verdict parked). A call outside this round's offer goes through the
+                        # discovery gate below, which bounces every write, so it is left to the
+                        # single-call judge. Every dispatch path — chat, an Automation run or its
+                        # continuation, a Codex native call — reaches this one loop.
+                        await _permission_engine().judge_step(
+                            [
+                                (tu["id"], tu["name"], tu["input"])
+                                for tu in pending_tool_uses
+                                if tu["name"] in _offer_names
+                            ]
+                        )
                         for tu in pending_tool_uses:
                             tool_name = tu["name"]
                             tool_input_summary = redact_summary(tu["input"])
                             logger.info("tool_call  %s  input=%s", tool_name, tool_input_summary)
+                            # Before both dispatch branches: an external MCP tool skips
+                            # registry.dispatch, and it is the one that could place an order.
+                            if _skill_scope.offer_refuses(tool_name):
+                                logger.warning("enforced_offer_refused  tool=%s", tool_name)
+                                _refused_msg = json.dumps(
+                                    {
+                                        "error": (
+                                            f"NOT EXECUTED: '{tool_name}' is not available on "
+                                            "this run. Use only the tools you were given."
+                                        )
+                                    }
+                                )
+                                yield {"type": "tool_done", "id": tu["id"], "result": _refused_msg}
+                                tool_results.append(_tool_result_block(tu["id"], _refused_msg))
+                                continue
                             # Stage 1b — tool-discovery gate (find_tools auto-load). On a normal
                             # interactive turn the offer is CORE ∪ already-loaded tools, while
                             # the FULL toolset lives in the prompt catalog; on a LARGE explicit
@@ -4724,8 +4872,12 @@ async def _run_turn(
                                         # stage keys its PendingPlanStore entry on the SAME id
                                         # this tool_use will be resolved against.
                                         set_tool_use_id(tu["id"])
-                                        text_result, proposed, _mcp_image_ids = await _ext.call(
-                                            tool_name, tu["input"]
+                                        (
+                                            text_result,
+                                            proposed,
+                                            _mcp_image_ids,
+                                        ) = await _permission_engine().dispatch_external(
+                                            _ext, tool_name, tu["input"]
                                         )
                                 else:
                                     text_result, proposed = await execute_tool(
@@ -5035,6 +5187,8 @@ async def _run_turn(
                                 cost_basis=turn_cost_basis,
                                 turn_index=history_snapshot_len,
                                 provider=_turn_provider_label,
+                                peak_prompt_tokens=turn_peak_prompt_tokens or None,
+                                context_window=turn_context_window,
                             )
                             if _mutated_domains:
                                 yield {"type": "data_changed", "domains": sorted(_mutated_domains)}
@@ -5114,6 +5268,7 @@ async def _run_turn(
                             _raw_assistant_text,
                             run_plan.get_tasks(),
                             nudges_used=_completion_nudges,
+                            reply_given=_tag_only_round and _answered_earlier,
                         )
                         if _nudge is not None:
                             _completion_nudges += 1
@@ -5155,13 +5310,6 @@ async def _run_turn(
                                     effort,
                                     len(assistant_text.split()),
                                 )
-                        _last = _last_memory_extract_len.get(session_id, 0)
-                        if (
-                            len(history) >= MIN_HISTORY_FOR_MEMORY
-                            and len(history) - _last >= MEMORY_EXTRACT_EVERY
-                        ):
-                            _last_memory_extract_len[session_id] = len(history)
-                            asyncio.create_task(_run_memory_extraction(list(history), session_id))
                         # Fold update already happened BEFORE this turn rendered (see
                         # _stream_turn_fold_update, 2026-08-27) — no post-turn call left
                         # to make here.
@@ -5183,6 +5331,8 @@ async def _run_turn(
                             cost_basis=turn_cost_basis,
                             turn_index=history_snapshot_len,
                             provider=_turn_provider_label,
+                            peak_prompt_tokens=turn_peak_prompt_tokens or None,
+                            context_window=turn_context_window,
                         )
                         if _mutated_domains:
                             yield {"type": "data_changed", "domains": sorted(_mutated_domains)}
@@ -5292,6 +5442,43 @@ async def _run_turn(
         # Restore (not null) the per-turn write-receipt buffer — same nesting contract as
         # the audit scope above: a nested turn must not drain the outer turn's receipt.
         _wr.close_receipt(_receipt_token)
+
+
+def _begin_approval_checkpoint(session_id: str, history: list[dict], turn_start: int):
+    """Open a checkpoint for an approved card's call, anchored on the message that proposed
+    it. The call runs here, AFTER that turn paused and finalised its own checkpoint and
+    BEFORE the resumed turn opens one — with no checkpoint open, the write was recorded
+    nowhere and "Restore to before this message" left it in place (owner, 2026-11-03)."""
+    from backend.ai import checkpoint as ckpt
+
+    return ckpt.begin_turn(
+        session_id, turn_start, _extract_user_preview(history[turn_start : turn_start + 1])
+    )
+
+
+def _end_approval_checkpoint(ctx, token) -> dict | None:
+    from backend.ai import checkpoint as ckpt
+
+    return ckpt.end_turn(ctx, token)
+
+
+async def _run_approved_tool_use(
+    session_id: str, history: list[dict], turn_start: int, tool_name: str, tool_use_id: str
+) -> tuple[str, dict | None, dict | None]:
+    """Redeem an approved internal tool call inside its own checkpoint. Returns the tool's
+    result, its proposed change, and the checkpoint entry (None when it wrote nothing)."""
+    from backend.ai.tools import execute_tool
+    from backend.ai.tools._confirm_gate import CONFIRM_TOKEN_KEY
+
+    ctx, token = _begin_approval_checkpoint(session_id, history, turn_start)
+    entry: dict | None = None
+    try:
+        text_result, proposed = await execute_tool(
+            tool_name, {CONFIRM_TOKEN_KEY: tool_use_id}, tool_use_id=tool_use_id
+        )
+    finally:
+        entry = _end_approval_checkpoint(ctx, token)
+    return text_result, proposed, entry
 
 
 async def resolve_pending_tool_use(
@@ -5416,6 +5603,7 @@ async def _resolve_pending_tool_use_body(
         tool_name = entry.get("tool") or ""
         resume_turn_start = _semantic_turn_start_for_tool_use(history, tool_use_id)
         _mcp_image_ids: list[str] = []
+        _approved_cp: dict | None = None
         if decision == "approve":
             from backend.ai.tools._confirm_gate import (
                 preview_mismatch_result,
@@ -5455,20 +5643,21 @@ async def _resolve_pending_tool_use_body(
                             None,
                         )
                     else:
-                        text_result, _proposed, _mcp_image_ids = await _ext.apply_confirmed(
-                            tool_name, staged_args(redeemed)
+                        _ctx, _token = _begin_approval_checkpoint(
+                            session_id, history, resume_turn_start
                         )
+                        try:
+                            text_result, _proposed, _mcp_image_ids = await _ext.apply_confirmed(
+                                tool_name, staged_args(redeemed)
+                            )
+                        finally:
+                            _approved_cp = _end_approval_checkpoint(_ctx, _token)
             else:
-                from backend.ai.tools import execute_tool
-                from backend.ai.tools._confirm_gate import CONFIRM_TOKEN_KEY
-
-                text_result, _proposed = await execute_tool(
-                    tool_name, {CONFIRM_TOKEN_KEY: tool_use_id}, tool_use_id=tool_use_id
+                text_result, _proposed, _approved_cp = await _run_approved_tool_use(
+                    session_id, history, resume_turn_start, tool_name, tool_use_id
                 )
         elif decision == "deny":
-            from backend.ai import _confirm_gate as _policy
-
-            text_result, _ = _policy.declined_result(tool_name)
+            text_result, _ = _permission_engine().declined_result(tool_name)
             store.pop_pending(tool_use_id)  # nothing executes — consume it directly
         else:
             yield {"type": "error", "message": f"unknown decision: {decision!r}"}
@@ -5517,6 +5706,8 @@ async def _resolve_pending_tool_use_body(
         )
         _save_session(session_id, history)
         yield {"type": "tool_done", "id": tool_use_id, "result": text_result}
+        if _approved_cp:
+            yield {"type": "checkpoint_created", "checkpoint": _approved_cp}
 
         _mutated: set = set()
         if decision == "approve" and not is_err:

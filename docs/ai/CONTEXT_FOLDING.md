@@ -16,6 +16,12 @@ the code/RFC name for the same mechanism. All backend logic lives in `backend/ai
   in steps of 10, not message-by-message, so an ordinary turn doesn't shift the prefix and bust
   the whole conversation's prompt cache. `_compute_turn_prefix_state`/`_prepare_messages` compute
   `window_start` once per turn and pin it for every round-trip in that turn.
+- **The window is the thread, alerts included.** Alerts and briefings are ordinary assistant
+  messages and count toward the 60, however long ago the person last wrote. The window used to be
+  cut to its first user message, so a reply after a burst of alerts reached the model with nothing
+  in front of it. A provider still needs a user message first: that is the fold summary, or
+  `WINDOW_OPENS_ON_LUCIUS_MARKER` when there is none. A reused CLI session steps over only its own
+  reply (`cli_live_session.pending_turn`), so an alert pushed after that reply reaches it too.
 - **Fold is triggered by real token pressure, not a message count**
   (`_should_refold`/`_token_pressure_over_fraction`): the first fold ever, unconditionally; every
   fold after that only when the session's real usage exceeds `FOLD_TRIGGER_FRACTION = 0.55` of

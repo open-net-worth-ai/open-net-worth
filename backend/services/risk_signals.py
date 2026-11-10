@@ -15,7 +15,7 @@ Dependency rule: imports only services/ db/ core/ — no api, no ai, no monitori
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.services import investments_book
 from backend.services.classification import classify_instrument
@@ -247,7 +247,7 @@ def emit_risk_signals(store=None) -> int:
     profile = read_profile()
     findings = compute_risk(rows=rows, rates=rates, profile=profile)
 
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     base = (profile.get("base_currency") or "SGD").upper()
 
     # Build a set of synthetic keys from the current breach findings.

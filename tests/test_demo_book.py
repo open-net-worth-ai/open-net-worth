@@ -448,8 +448,9 @@ def test_the_assistant_surfaces_are_not_empty(demo_book):
     kinds = {(a.get("trigger") or {}).get("kind") for a in autos}
     assert {"event", "schedule"} <= kinds, "both trigger kinds must be represented"
 
-    statuses = {a.get("status") for a in autos}
-    assert {"active", "paused"} <= statuses, "a board where everything is green shows one state"
+    # A paused one used to be required too; the owner deleted every paused demo automation
+    # (2026-11-01), preferring a tab of routines that actually run.
+    assert any(a.get("status") == "active" for a in autos), "no active automation"
 
     # An ACTIVE scheduled automation must actually be scheduled — a next_run_at of None
     # means it will never fire, which looks identical to "active" on the screen.
@@ -623,6 +624,47 @@ def test_owned_assets_span_multiple_categories(demo_book):
     assert {"property", "vehicle", "watch"} <= categories
 
 
+def test_demo_book_carries_the_watch_and_card_collections(demo_book):
+    """A daily reset rebuilds the hosted demo from this seed, so a collection added by hand to
+    the live book is gone the next morning (2026-10-26). They live in the seed instead."""
+    from backend.db.owned_assets_store import OwnedAssetsStore
+    from backend.services.owned_assets import categories
+
+    assets = OwnedAssetsStore().all()
+    cards = next(c["key"] for c in categories() if c["label"] == "Pokemon Cards")
+    assert sum(a["category"] == "watch" for a in assets) == 11
+    assert sum(a["category"] == cards for a in assets) == 22
+    names = {a["name"] for a in assets}
+    assert {"Landed House, Thao Dien, Ho Chi Minh City", "Residential Land Plot, Da Lat"} <= names
+    assert sum(a["category"] == "art" for a in assets) == 6
+
+
+def test_a_fetched_card_scan_is_that_cards_photo(db_isolated, monkeypatch):
+    """Each card's photo is its own scan; a scan that can't be fetched falls back to the
+    licensed pile photo instead of failing the build."""
+    from backend.db.attachment_store import AttachmentStore
+    from backend.db.owned_assets_store import OwnedAssetsStore
+    from backend.scripts.demo import asset_collections, owned_assets
+    from backend.scripts.demo._timeline import Timeline
+
+    def fake_scan(set_id, number):
+        return None if (set_id, number) == ("basep", "1") else b"\x89PNG fake scan"
+
+    monkeypatch.setattr(asset_collections, "_card_scan", fake_scan)
+    asset_collections.seed(Timeline.anchored_on(ANCHOR), owned_assets._attach_photo)
+
+    photo = {
+        a["name"]: AttachmentStore().find_meta(a["photo_ref"]) for a in OwnedAssetsStore().all()
+    }
+    charizard = photo["Charizard – Base Set (1999, Holo)"]
+    assert (charizard["filename"], charizard["media_type"]) == ("base1-4.png", "image/png")
+    assert (
+        photo["Pikachu – Wizards Black Star Promo #1"]["filename"]
+        == asset_collections.CARD_FALLBACK
+    )
+    assert photo["Rolex Submariner Date"]["filename"] == "rolex-submariner.jpg"
+
+
 def test_owned_assets_exercise_doc_photo_insurance_and_disposal(demo_book):
     """A doc, photo, insured asset, and disposal exercise the richer surfaces."""
     from backend.db.owned_assets_store import OwnedAssetsStore
@@ -677,3 +719,36 @@ def test_owned_assets_store_valuations_and_derive_the_purchase(demo_book):
     assert kinds == {"valuation", "purchase"}
     costed = [a for a in projected if a.get("cost") and a.get("cost_date")]
     assert costed and all(a["marks"][-1]["kind"] == "purchase" for a in costed)
+
+
+def test_demo_automations_run_at_a_sensible_cadence(demo_book):
+    """Every demo run is a Lucius turn charged to the public demo's token ceiling. An hourly
+    watch that reads the last 24 hours re-read the same day 24 times, and the grant's own
+    "Vest calendar reminder" ran beside the seeded "Vest reminder" (2026-10-28)."""
+    from backend.db.automation_store import AutomationStore
+
+    active = [a for a in AutomationStore().all() if a.get("status") == "active"]
+    too_often = [
+        a["name"]
+        for a in active
+        if (a.get("trigger") or {}).get("type") == "interval"
+        and (a["trigger"].get("seconds") or 0) < 86400
+    ]
+    assert not too_often, f"active demo automations running more than daily: {too_often}"
+    vests = [a["name"] for a in active if "vest" in a["name"].lower()]
+    assert len(vests) == 1, f"one active vest automation expected, got {vests}"
+
+
+def test_automations_the_owner_removed_stay_removed(demo_book):
+    """Deleted from the demo by the owner (2026-11-01). The vest one is provisioned by the app
+    itself when the grant is recorded, so the seed deletes it after the fact."""
+    from backend.db.automation_store import AutomationStore
+
+    removed = {
+        "Rideshare & transit → Transport",
+        "Utilities → Home & Utilities",
+        "Uncategorised sweep",
+        "Subscription creep",
+        "Vest calendar reminder",
+    }
+    assert not {a["name"] for a in AutomationStore().all()} & removed

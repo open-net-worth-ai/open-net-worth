@@ -11,6 +11,7 @@ import asyncio
 import logging
 import re
 import time
+import unicodedata
 from typing import TYPE_CHECKING, Callable, Optional
 
 from backend.ai import conversation
@@ -150,6 +151,52 @@ def format_permission_card(change: dict, summary: str) -> str:
         f"revoke in Settings › Permissions."
     )
     return "\n".join(lines)
+
+
+# Draw as blank but are not whitespace to ``str.split``: braille blank and the Hangul fillers.
+_BLANK_FILLERS = "\u2800\u115f\u1160\u3164\uffa0"
+_APPROVAL_NOT_SHOWN = "I couldn't show an approval here. Nothing ran. Open the app to answer it."
+
+
+def _one_visible_line(text: str) -> str:
+    """``text`` as one line that also LOOKS like one: no line breaks, no format characters, and
+    no run of blanks that would wrap the rest onto a row of its own on a phone."""
+    visible = "".join(
+        " " if ch in _BLANK_FILLERS else ch for ch in text if unicodedata.category(ch) != "Cf"
+    )
+    return " ".join(visible.split())
+
+
+def with_judge_reason(summary: str, change: dict) -> str:
+    """``summary`` plus why the Auto judge asked, for the message the owner reads. Same words as
+    the web card.
+
+    Kept out of ``format_change_summary`` because ``chat/confirm`` writes that summary into a
+    session note, and this is untrusted text the model wrote from the call's arguments. A native
+    reply to the card can still quote it into a later turn, sanitized and fenced as data, like the
+    summary's own untrusted names. One visible line so it cannot forge rows of its own on a
+    permission prompt; each adapter's rendering of the summary escapes it
+    (``format_permission_card``)."""
+    reason = _one_visible_line(str(change.get("judge_reason") or ""))
+    return f"{summary}\nAuto asked because: {reason}" if reason else summary
+
+
+async def send_approval(connector, channel_id: str, change: dict, change_id: str) -> None:
+    """Put one approval in front of the owner, whatever it takes to keep it from going quiet.
+
+    A failed send used to leave only a log line: the turn had paused on a card nobody saw. An
+    over-long message is the likely cause, and a reason can be what tips it over, so the card goes
+    again without it, whole or not at all because a cut reason read wrongly (owner, 2026-11-04).
+    Only the exception's type is logged: a reason never reaches the log."""
+    plain = format_change_summary(change)
+    summary = with_judge_reason(plain, change)
+    for text in [summary] if summary == plain else [summary, plain]:
+        try:
+            await connector.send_proposed_change(channel_id, change, change_id, text)
+            return
+        except Exception as exc:  # noqa: BLE001 — the owner must hear about this approval
+            log.warning("[%s] approval not sent: %s", channel_id, type(exc).__name__)
+    await connector.send_text(channel_id, _APPROVAL_NOT_SHOWN)
 
 
 def format_change_summary(change: dict) -> str:
@@ -480,6 +527,37 @@ async def process_message(
     )
 
 
+def _bind_owner_approval_mode(connector, channel_id: str, session_id: str, sender_id):
+    """Bind the conversation's approval mode for an owner's turn, or nothing for anyone else.
+
+    A channel turn does not run through ``turns._drive``, which binds the mode for the web, so
+    this is its twin. Only the owner gets it: an adapter says who that is with
+    ``is_owner_chat``, and one that does not implement it has no owner. Nothing bound means
+    every Ask tool shows a card, which is also where any failure here lands.
+    """
+    is_owner = getattr(connector, "is_owner_chat", None)
+    if is_owner is None or not sender_id:
+        return None
+    try:
+        from backend.ai.permissions import channel_turns_follow_mode
+        from backend.core.conversation_approval import (
+            ConversationApprovalContext,
+            bind_conversation_approval,
+        )
+        from backend.services import conversation_approval
+
+        if not is_owner(channel_id, sender_id) or not channel_turns_follow_mode():
+            return None
+        return bind_conversation_approval(
+            ConversationApprovalContext(
+                session_id=session_id, mode=conversation_approval.get_mode(session_id)
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 — a card is the safe outcome of not knowing
+        log.warning("[%s] approval mode not bound: %s", channel_id, type(exc).__name__)
+        return None
+
+
 async def pump_channel_turn(
     connector,
     channel_id: str,
@@ -488,6 +566,7 @@ async def pump_channel_turn(
     session_id: str,
     sender_id: Optional[str] = None,
     observer: Optional[Callable[[dict], None]] = None,
+    follow_approval_mode: bool = True,
 ) -> None:
     """Render ONE turn's event stream to a chat channel — the shared half of every
     connector turn.
@@ -603,6 +682,11 @@ async def pump_channel_turn(
 
     _cost_surface = f"connector:{_channel}" if _channel else "connector"
     set_cost_surface(_cost_surface)
+    _approval_token = (
+        _bind_owner_approval_mode(connector, channel_id, session_id, sender_id)
+        if follow_approval_mode
+        else None
+    )
 
     # /stop plumbing: register THIS turn's task so a `/stop` on the same channel can cancel it.
     # Cancellation raises CancelledError into assistant.run, whose finally tears down the LLM
@@ -677,14 +761,13 @@ async def pump_channel_turn(
                     channel_id=channel_id,
                     sender_id=sender_id,
                 )
-                summary = format_change_summary(change)
                 log.info(
                     "[%s] proposed_change type=%s label=%s",
                     channel_id,
                     change.get("type"),
                     change.get("label") or change.get("row", {}).get("label"),
                 )
-                await connector.send_proposed_change(channel_id, change, change_id, summary)
+                await send_approval(connector, channel_id, change, change_id)
 
             elif etype == "error":
                 # A turn can FAIL without raising: assistant.run maps a provider/tool
@@ -749,6 +832,10 @@ async def pump_channel_turn(
             turn_registry.clear_active(_channel, channel_id, _turn_task, session_id=session_id)
         _stop_typing()
         clear_cost_surface()
+        if _approval_token is not None:
+            from backend.core.conversation_approval import reset_conversation_approval
+
+            reset_conversation_approval(_approval_token)
 
 
 async def resume_pending_tool_use(
@@ -813,6 +900,9 @@ async def resume_pending_tool_use(
             session_id=session_id,
             sender_id=sender_id,
             observer=_observe,
+            # The owner just said no. The judge cannot see that, so a retry in the rest of this
+            # turn must reach the owner again rather than be judged from their earlier words.
+            follow_approval_mode=decision != "deny",
         )
     except asyncio.CancelledError:
         raise

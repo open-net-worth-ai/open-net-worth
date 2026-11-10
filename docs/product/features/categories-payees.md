@@ -74,6 +74,10 @@ transaction's payee picker. Pick a payee on the left to edit it. Changes save au
 
 New transactions from this payee are categorized from then on.
 
+If you never set a default for a kind, the app picks one up from the first transaction of that
+kind you categorize for this payee. To stop that, set the kind to **Uncategorized**. The app
+leaves it alone until you choose a category for it again.
+
 ### Clean up messy bank descriptions
 
 **Auto-matched descriptions** lists bank text the app has already learned belongs to this payee

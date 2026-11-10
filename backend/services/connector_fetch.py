@@ -29,6 +29,7 @@ from typing import Optional
 from backend.core.errors import ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.core.user_time import user_today
+from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
 from backend.services.aggregation import providers
 from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
@@ -53,8 +54,8 @@ _MAX_FETCH_ROWS = 5000
 # (RFC §A step 4, AC9). Identity fields (external_refs/provider_account_id) are NOT in this
 # list: they are structural keys the ledger dedup floor and the snapshot store key off of,
 # never rendered as prose, and must stay byte-stable across re-fetches of the same row.
-_ROW_TEXT_FIELDS = ("description", "memo", "currency")
-_ACCOUNT_TEXT_FIELDS = ("name", "mask", "currency")
+_ROW_TEXT_FIELDS = ("description", "memo", "currency", "category_hint")
+_ACCOUNT_TEXT_FIELDS = ("name", "mask", "currency", "institution")
 _POSITION_TEXT_FIELDS = ("symbol", "currency")
 # Cap on any single string leaf inside a stashed `raw` payload (S-F3) — generous enough for
 # a real provider field, small enough that a hostile/malformed response can't balloon a
@@ -110,6 +111,11 @@ def _sanitize_row(row: dict) -> dict:
             out[field] = sanitize_untrusted(value)
     _cap_identity_fields(out)
     return out
+
+
+def _known_account_type(value: object) -> str | None:
+    """A provider's suggested app account type, kept only if it is one of the seven."""
+    return value if isinstance(value, str) and value in AccountType.__members__ else None
 
 
 def _sanitize_account(account: dict) -> dict:
@@ -240,7 +246,11 @@ def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
                 "balance": None,
             }
         )
-        | {"linked_account_id": info.get("linked_account_id")}
+        | {
+            "account_type": None,
+            "institution": None,
+            "linked_account_id": info.get("linked_account_id"),
+        }
         for pid, info in linked.items()
     ]
 
@@ -306,8 +316,10 @@ def fetch(
     include_pending: bool = False,
     limit: int = _DEFAULT_LIMIT,
     offset: int = 0,
+    plan_id: Optional[str] = None,
 ) -> dict:
-    """Fetch + normalize + stash + link + filter one provider's window (RFC §A). NEVER
+    """Fetch + normalize + stash + link + filter one provider's window (RFC §A). ``plan_id``
+    is YNAB's only: which plan to read (omitted = the saved or only one). NEVER
     raises for a provider-side failure — a dormant connector, an auth/rate/connect error,
     and a genuine transport exception all come back as ``status`` inside the result, exactly
     like the retired ingestion orchestrator's contract. Raises ``UnknownProvider`` only for a
@@ -334,7 +346,11 @@ def fetch(
     if account:
         try:
             accounts_probe = provider.fetch_window(
-                since=since_resolved, before=before_resolved, account=None, accounts_only=True
+                since=since_resolved,
+                before=before_resolved,
+                account=None,
+                accounts_only=True,
+                plan_id=plan_id,
             )
         except Exception as exc:  # noqa: BLE001 — classified below, never propagated
             status = provider.classify_error(exc)
@@ -355,7 +371,7 @@ def fetch(
     # ── step 2: fetch ────────────────────────────────────────────────────────────────────
     try:
         window: FetchWindow = provider.fetch_window(
-            since=since_resolved, before=before_resolved, account=resolved_account
+            since=since_resolved, before=before_resolved, account=resolved_account, plan_id=plan_id
         )
     except Exception as exc:  # noqa: BLE001 — classified below, never propagated
         status = provider.classify_error(exc)
@@ -465,6 +481,9 @@ def fetch(
         "accounts": accounts,
         "transactions": public_rows,
         "changes": changes,
+        # Part of the provider failed while the rest answered (one of several Plaid banks with
+        # an expired login, say) — say so, so it is never a silent gap.
+        "warnings": [sanitize_untrusted(w, max_len=300) for w in window.warnings],
         "counts": {
             "fetched": fetched_count,
             "already_booked": already_booked,
@@ -483,10 +502,11 @@ def fetch(
     return result
 
 
-def provider_accounts(provider_key: str) -> dict:
+def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     """The account list ONLY, no transaction fetch — ``GET /api/connectors/{id}/accounts``
     (``api/connectors_api.py``, L1) calls this directly. Returns ``{status, provider_label,
-    accounts: [{provider_account_id, name, mask, currency, balance, linked_account_id}]}``.
+    accounts: [{provider_account_id, name, mask, currency, balance, account_type,
+    linked_account_id}]}`` — ``account_type`` is the provider's suggested app type, or None.
 
     A pure READ (C-B2/S-F7): unlike ``fetch()``, this NEVER calls ``store.record_status``
     or publishes a sync event — opening the Connectors tab's link picker must not look like
@@ -526,7 +546,9 @@ def provider_accounts(provider_key: str) -> dict:
 
     today = user_today().isoformat()
     try:
-        window = provider.fetch_window(since=today, before=today, account=None, accounts_only=True)
+        window = provider.fetch_window(
+            since=today, before=today, account=None, accounts_only=True, plan_id=plan_id
+        )
     except Exception as exc:  # noqa: BLE001 — classified, never propagated
         status = provider.classify_error(exc)
         error_text = sanitize_untrusted(str(exc), max_len=300)
@@ -552,6 +574,8 @@ def provider_accounts(provider_key: str) -> dict:
                 "mask": clean.get("mask"),
                 "currency": clean.get("currency"),
                 "balance": clean.get("balance"),
+                "account_type": _known_account_type(clean.get("account_type")),
+                "institution": clean.get("institution"),
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
             }
         )

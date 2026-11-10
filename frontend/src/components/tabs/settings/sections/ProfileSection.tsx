@@ -1,7 +1,7 @@
 // Settings → Profile. Ported from
 // design_handoffs/settings_handoff/prototype/redesign/profile-section.jsx.
 //
-// Four panels: About you · Income & expenses · FIRE settings · Notes for Lucius. Everything
+// Four panels: About you · Income & expenses · FIRE settings · Instructions for Lucius. Everything
 // here is fed to the model, which is why the panel subtitles say so — a user who doesn't know
 // that leaves the fields empty.
 //
@@ -18,6 +18,7 @@ import {
   useCachedFetchState,
 } from '../../../../state/queryCache'
 import { fBase, fBaseCompact, getCurrencySymbol } from '../../../../utils/format'
+import { MaskedText } from '../../../ui/MaskedText'
 import {
   EMPTY_FIRE_DRAFT,
   fireHorizon,
@@ -318,10 +319,11 @@ function FireModal({
         <div className="rd-callout">
           <span className="rd-callout-k">FIRE number</span>
           <span className="rd-callout-calc">
-            {fBase(Number(s.monthlyRetirementSpending))} × 12 ÷ {s.withdrawalRate}%
+            <span className="money">{fBase(Number(s.monthlyRetirementSpending))}</span> × 12 ÷{' '}
+            {s.withdrawalRate}%
           </span>
           <span className="rd-callout-eq">=</span>
-          <b className="rd-callout-v">{fBaseCompact(fireNum)}</b>
+          <b className="rd-callout-v money">{fBaseCompact(fireNum)}</b>
         </div>
       )}
       <div className="rd-formgrid">
@@ -767,7 +769,7 @@ export function ProfileSection({
             <div className="rd-readout-item" key={k}>
               <span className="rd-readout-k">{k}</span>
               <span className="rd-readout-v rd-mono">
-                {v}
+                <MaskedText>{v}</MaskedText>
                 {note ? <em>{note}</em> : null}
               </span>
             </div>
@@ -776,12 +778,13 @@ export function ProfileSection({
       </Panel>
 
       <Panel
-        title="Notes for Lucius"
-        sub="Anything else the AI assistant should know — tax situation, upcoming life events, preferences"
+        title="Instructions for Lucius"
+        sub="Standing rules for how Lucius should work with you. Lucius can add to them too — you’ll see each change before it’s saved."
       >
         <textarea
           className="rd-textarea"
           rows={4}
+          placeholder="e.g. Keep answers short. Always show amounts in SGD."
           value={draft?.notes ?? ''}
           disabled={loading}
           onChange={(e) => set('notes', e.target.value)}

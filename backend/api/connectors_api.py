@@ -37,6 +37,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from starlette.concurrency import run_in_threadpool
 
+from backend.ai.permissions import engine
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.models.connector import ConnectorPatch
 from backend.services import connectors as connectors_service
@@ -44,11 +45,17 @@ from backend.services import connectors as connectors_service
 router = APIRouter()
 
 
-async def _reload_telegram_if_needed(connector_id: str) -> bool:
+async def _reload_live_connector(connector_id: str) -> bool:
     """Best-effort live-bot reload after a write that touched Telegram — enable or disable
     (``PATCH``) land here. Returns whether the reload actually completed; ``True`` (a
     trivial "nothing needed reloading") for every other connector, so a caller can thread
     the result into the response uniformly without a second branch."""
+    if connector_id == "voice":
+        # Voice calls read their settings once, at start: pausing or resuming restarts them.
+        from backend.connectors.voice import service as voice_service
+
+        await voice_service.reload()
+        return True
     if connector_id != connectors_service.TELEGRAM_ID:
         return True
     from backend.connectors.telegram import bot as telegram_bot
@@ -60,7 +67,12 @@ async def _reload_telegram_if_needed(connector_id: str) -> bool:
 def list_connectors():
     """The connector list. An empty table still returns every built-in connector as
     ``not_configured`` — never 500."""
-    return {"connectors": [v.model_dump() for v in connectors_service.list_connectors()]}
+    ladder_v2 = engine().ladder_v2
+    return {
+        "connectors": [
+            v.model_dump() for v in connectors_service.list_connectors(ladder_v2=ladder_v2)
+        ]
+    }
 
 
 @router.get("/api/connectors/{connector_id:path}/accounts")
@@ -94,7 +106,9 @@ def get_connector_accounts(connector_id: str):
 def get_connector(connector_id: str):
     """One connector by id. 404 if unknown. (``:path`` so an ``mcp:<id>`` id round-trips.)"""
     try:
-        return connectors_service.get_connector(connector_id).model_dump()
+        return connectors_service.get_connector(
+            connector_id, ladder_v2=engine().ladder_v2
+        ).model_dump()
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
@@ -116,8 +130,8 @@ async def patch_connector(connector_id: str, body: ConnectorPatch):
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     result = view.model_dump()
-    if connector_id == connectors_service.TELEGRAM_ID:
-        result["reloaded"] = await _reload_telegram_if_needed(connector_id)
+    if connector_id in (connectors_service.TELEGRAM_ID, "voice"):
+        result["reloaded"] = await _reload_live_connector(connector_id)
     return result
 
 
@@ -150,6 +164,11 @@ async def remove_connector(connector_id: str):
                 "allowlist while it keeps running. Try again, or restart the app to force "
                 "a clean stop.",
             )
+    if connector_id == "voice":
+        # Stop the worker before its LiveKit credentials are removed out from under it.
+        from backend.connectors.voice import service as voice_service
+
+        await voice_service.stop()
     try:
         await run_in_threadpool(connectors_service.remove_connector, connector_id)
     except OpenNetWorthError as exc:

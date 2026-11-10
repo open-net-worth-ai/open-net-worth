@@ -25,6 +25,7 @@ imports ``backend.ai`` and would make any other such edge a ``services → ai`` 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Iterator, List
 
 from backend.core.channels import unregister_channel
@@ -34,13 +35,14 @@ from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
 from backend.db.engine import get_engine
 from backend.models.connector import ConnectorTool, ConnectorView
 from backend.models.mcp_client import MCP_CONNECTOR_PREFIX
-from backend.services import tool_permissions
+from backend.services import tool_permissions, tool_permissions_v2
 from backend.services.connector_catalog import (
     CATALOG,
     Builtin,
     ConnectorKind,
     builtins,
     copy_for,
+    discover_mcp_tools_if_unlisted,
     display_name,
     kind_of,
 )
@@ -76,11 +78,27 @@ def _status(enabled: bool, configured: bool, last_error: str | None = None) -> s
 # ── building the list ────────────────────────────────────────────────────────────────────
 
 
+def _voice_calls_on() -> bool:
+    from backend.services.feature_flags import enabled
+
+    return enabled("voice_calls")
+
+
+def _actual_budget_on() -> bool:
+    from backend.services.actual_flag import on
+
+    return on()
+
+
 def _entries(rows: dict[str, Row]) -> Iterator[tuple[ConnectorKind, Row]]:
     """Every connector in display order: the catalog's built-in instances (their row, or the
     defaults when never saved), then the open-ended rows (MCP servers) oldest first."""
     seen: set[str] = set()
     for builtin in builtins():
+        if builtin.id == "voice" and not _voice_calls_on():
+            continue  # behind the `voice_calls` flag: off, the hub is exactly the old one
+        if builtin.id == "actual_budget" and not _actual_budget_on():
+            continue  # behind the `actual_budget_sync` flag
         kind = kind_of(builtin.id)
         row = rows.get(builtin.id) or _default_row(builtin, kind)
         seen.add(builtin.id)
@@ -124,6 +142,52 @@ def _level_of(stored: dict[str, str], yolo: bool):
     return level
 
 
+def _level_of_v2(kind: ConnectorKind, stored: dict[str, str], yolo: bool):
+    """A tool's value under ``permissions_v2`` — what dispatch (``ai.tools._confirm_gate_v2.
+    effective_level``, or ``mcp.client_manager`` for an external MCP tool) will actually do. Its
+    row, and failing that what an unset tool is worth: an external MCP tool asks; a native tool
+    follows what it does — a real change or a send asks, a read runs — unless a stored YOLO
+    switch says to stop asking. Cannot call the gate (it lives in ``ai/``, which ``services`` may
+    not import); ``tool_permissions_v2.unrowed_level`` is the tier-legal route to the same answer,
+    so the page and dispatch cannot disagree (ADR
+    ``2026-08-17-connector-ladder-shows-the-real-effective-default``)."""
+
+    def level(name: str) -> str:
+        explicit = stored.get(name)
+        if explicit:
+            return explicit
+        if kind.kind == "mcp":
+            return tool_permissions_v2.DEFAULT_LEVEL
+        return tool_permissions_v2.unrowed_level(name, yolo=yolo, auto_run=False)
+
+    return level
+
+
+def view_default_levels(view: ConnectorView) -> tuple[str, dict[str, str]]:
+    """``(default_level, {tool: seed})`` for one connector (``permissions_v2``) — the value each
+    tool is seeded with and Reset restores, so a client can show "default" beside a value the
+    owner changed.
+
+    ``default_level`` is what a tool NOT in the map takes: ``needs_approval`` for an external MCP
+    server, ``always_allow`` (a read) for a native connector. The map carries every tool the
+    connector lists, so a native connector's sends read ``needs_approval`` there."""
+    if view.kind == "mcp":
+        return tool_permissions_v2.DEFAULT_LEVEL, {
+            t.name: tool_permissions_v2.DEFAULT_LEVEL for t in view.tools
+        }
+    return "always_allow", {t.name: tool_permissions_v2.seed_level(t.name) for t in view.tools}
+
+
+def default_levels(connector_id: str) -> tuple[str, dict[str, str]]:
+    """``view_default_levels`` by id. Never raises on an unknown id: a connector that does not
+    exist has no tools to list (an ``mcp:`` id still reads the cautious default)."""
+    try:
+        return view_default_levels(get_connector(connector_id, ladder_v2=True))
+    except NotFoundError:
+        mcp = connector_id.startswith(MCP_CONNECTOR_PREFIX)
+        return (tool_permissions_v2.DEFAULT_LEVEL if mcp else "always_allow"), {}
+
+
 def _tools(
     kind: ConnectorKind, row: Row, level, native: list[ConnectorTool]
 ) -> list[ConnectorTool]:
@@ -156,6 +220,19 @@ def _config(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict) -> dict:
     return {k: v for k, v in merged.items() if k not in kind.private_state}
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+_SUBTITLE_CHARS = 160
+
+
+def _first_sentence(text: str | None) -> str | None:
+    if not text:
+        return None
+    sentence = _SENTENCE_END.split(" ".join(text.split()), maxsplit=1)[0]
+    if len(sentence) <= _SUBTITLE_CHARS:
+        return sentence or None
+    return sentence[:_SUBTITLE_CHARS].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
 def _view(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict, level) -> ConnectorView:
     connector_id = row["id"]
     enabled = bool(row["enabled"]) or not kind.pausable
@@ -163,9 +240,16 @@ def _view(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict, level) -> C
     status = _status(enabled, kind.configured(row, have), error or None)
     short, long, native = copy_for(connector_id, kind)
     if kind.kind == "mcp":
-        # The server's OWN self-description (handshake ``instructions``, already sanitized and
-        # capped at capture time) beats the generic fallback every custom server would share.
-        long = row["state"].get("server_info_instructions") or long
+        # The subtitle is the server's OWN one-line description (handshake
+        # ``serverInfo.description``, sanitized at capture), over the generic fallback every
+        # custom server would share; there is no paragraph under it. Its
+        # ``instructions`` are guidance for an AI, not a description — the detail page shows
+        # them on their own, folded (``config.server_info_instructions``) — though with no
+        # description their first sentence is still the best one-line subtitle we have.
+        described = row["state"].get("server_info_description")
+        instructions = row["state"].get("server_info_instructions")
+        short = described or _first_sentence(instructions) or short
+        long = ""
     return ConnectorView(
         id=connector_id,
         kind=kind.kind,
@@ -189,9 +273,14 @@ def _rows_and_secrets() -> tuple[dict[str, Row], dict[str, frozenset]]:
         return rows, store.secret_field_map(conn=conn)
 
 
-def list_connectors() -> List[ConnectorView]:
+def list_connectors(*, ladder_v2: bool = False) -> List[ConnectorView]:
     """Every connector, built-ins first and MCP servers after. Never raises on an empty table:
-    a fresh instance still lists every built-in as ``not_configured``."""
+    a fresh instance still lists every built-in as ``not_configured``.
+
+    ``ladder_v2`` is the caller's choice of how each tool's level is DISPLAYED (``permissions_v2``
+    shows what a tool is worth with no row, main shows the cautious default); a caller that does
+    not show levels leaves it off. The choice is made by the caller (``ai.permissions.engine()``),
+    never here."""
     rows, secrets = _rows_and_secrets()
     # ONE bulk permission read for the whole list — this sits under ``enabled_connector_ids()``'s
     # sibling hot paths, where a per-connector read would be a per-connector table scan.
@@ -205,7 +294,9 @@ def list_connectors() -> List[ConnectorView]:
             row,
             secrets.get(row["id"], none),
             ctx,
-            _level_of(levels.get(row["id"]) or {}, yolo),
+            _level_of_v2(kind, levels.get(row["id"]) or {}, yolo)
+            if ladder_v2
+            else _level_of(levels.get(row["id"]) or {}, yolo),
         )
         for kind, row in _entries(rows)
     ]
@@ -222,9 +313,9 @@ def enabled_connector_ids() -> frozenset[str]:
     )
 
 
-def get_connector(connector_id: str) -> ConnectorView:
+def get_connector(connector_id: str, *, ladder_v2: bool = False) -> ConnectorView:
     """One connector by id. Raises ``NotFoundError`` (→ HTTP 404) if unknown."""
-    for view in list_connectors():
+    for view in list_connectors(ladder_v2=ladder_v2):
         if view.id == connector_id:
             return view
     raise NotFoundError(f"unknown connector: {connector_id}", connector_id=connector_id)
@@ -302,6 +393,8 @@ def set_connector_enabled(connector_id: str, enabled: bool) -> ConnectorView:
             store.ensure(connector_id, kind.kind, builtin.name, config=builtin.config, conn=conn)
         store.set_enabled(connector_id, enabled, conn=conn)
     _reconcile_notify_channel(kind)
+    if enabled and kind.kind == "mcp":
+        discover_mcp_tools_if_unlisted(connector_id[len(MCP_CONNECTOR_PREFIX) :])
     return get_connector(connector_id)
 
 

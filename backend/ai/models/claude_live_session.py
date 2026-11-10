@@ -25,8 +25,8 @@ prefix, no session matches, and the turn starts a fresh process with the full tr
 Drift is therefore structurally impossible rather than merely unlikely: we never *decide* to
 invalidate, the match simply fails. ADR ``2026-08-01-claude-cli-live-sessions``.
 
-Assistant messages are never re-sent. The CLI generated them, so it already holds them; on
-the next turn they appear in our list and the matcher steps over them.
+The CLI's own reply is never re-sent: it already holds it. On the next turn the reply appears
+in our list and the matcher steps over it, but not over an alert pushed after it.
 
 Sessions are UNCAPPED in count (owner's call, 2026-08-01) — a live chat keeps its process.
 They are still reaped when idle, because a process nobody has spoken to in half an hour is

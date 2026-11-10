@@ -102,7 +102,10 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 2px 0 14px;
+  /* No bottom padding: the band (and its blur) ends ON the tabs' baseline, so a scrolled row
+     disappears at the line instead of showing through a frosted strip below it. The breathing
+     room lives in .rd-content's top padding instead. */
+  padding: 2px 0 0;
   position: sticky;
   top: 0;
   background: color-mix(in srgb, var(--bg) 86%, transparent);
@@ -153,10 +156,50 @@
 }
 .cn-page .rd-content {
   width: 100%;
-  padding: 16px 0 80px;
+  padding: 30px 0 80px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+/* Browse & add's scroll shadow (.cn-dirhead::after), on the page's own pinned header. */
+.cn-page .rd-masthead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 24px;
+  background: linear-gradient(to bottom, var(--bg), transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.cn-page .rd-masthead.scrolled::after {
+  opacity: 1;
+}
+/* Detail page: the server's reported version, and its AI instructions folded (ConnectorDetail). */
+.cn-page .cn-version {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cn-page .cn-fold > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  width: fit-content;
+}
+.cn-page .cn-fold > summary:hover {
+  color: var(--ink);
+}
+.cn-page .cn-fold > p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 /* collision neutraliser — tabs/automations.css ships an unlayered, unscoped .rd-masthead of
    its own. Scoping settles the properties both sheets declare; these are the ones only THAT
@@ -169,6 +212,14 @@
      34px single line, which would amputate two of these three rows on a phone
    box-sizing — same value as the app's @layer reset, restated only because an unlayered
      declaration outranks a layered one */
+/* Narrow layouts follow the SPACE a block has, not the window: the Lucius panel makes a wide
+   window's page and Browse & add phone-narrow. The masthead's pinned bar (search, Add, tabs)
+   and Browse & add are both `cn-space`; each rule below reads its nearest one. The pinned bar,
+   not the masthead: on a phone the masthead is `display: contents` and has no width to read. */
+.cn-page .rd-masthead-pinned,
+.cn-page .cn-browser {
+  container: cn-space / inline-size;
+}
 .cn-page .rd-masthead {
   align-items: stretch;
   border-bottom: none;
@@ -194,10 +245,31 @@
 .cn-page .rd-tabs {
   display: flex;
   gap: 2px;
-  border-bottom: 1px solid var(--line);
+  /* The baseline is drawn INSIDE the box (not a border) so the picked tab's bar can sit on it
+     without being clipped by the sideways scroll below. */
+  box-shadow: inset 0 -1px 0 var(--line);
+  /* One line, always: a tab label never wraps ("Data sources" broke in two on a phone) — the
+     row scrolls sideways instead, on every screen that uses it. A scroll box may SHRINK in a
+     column layout (its min-height drops to 0), which squashed the row to half height in the
+     page header — so it never shrinks and never scrolls vertically. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Narrow to fit its parent (that is what makes it scroll), but never get shorter than its
+     content: `flex: none` stopped the squash and also stopped the narrowing, so the row ran
+     past its parent's edge with nothing to scroll (owner, 2026-10-31). */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: max-content;
+  scrollbar-width: none;
+}
+.cn-page .rd-tabs::-webkit-scrollbar {
+  display: none;
 }
 .cn-page .rd-tab {
   appearance: none;
+  flex: none;
+  white-space: nowrap;
   background: none;
   border: none;
   color: var(--muted);
@@ -225,10 +297,10 @@
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   border-radius: 2px 2px 0 0;
-  background: var(--accent);
+  background: var(--ink);
 }
 .cn-page .rd-tab-count {
   font-size: 10.5px;
@@ -250,7 +322,7 @@
   gap: 7px;
   height: 30px;
   box-sizing: border-box;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   font-size: 12.5px;
   font-weight: 600;
   padding: 0 13px;
@@ -264,12 +336,12 @@
     border-color 0.12s ease;
 }
 .cn-page .rd-btn.primary {
-  background: var(--accent);
-  color: var(--ink-on-accent);
+  background: var(--cta);
+  color: var(--ink-on-cta);
 }
 @media (hover: hover) {
-  .cn-page .rd-btn.primary:hover {
-    background: color-mix(in srgb, var(--accent) 88%, #fff);
+  .cn-page .rd-btn.primary:hover:not(:disabled) {
+    background: var(--cta-hover);
   }
 }
 .cn-page .rd-btn.secondary {
@@ -303,11 +375,16 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+.cn-page .rd-btn.primary:disabled {
+  opacity: 1;
+  color: var(--faint);
+  background: var(--bg-2);
+}
 .cn-page .rd-btn.xs {
   height: 24px;
   padding: 0 9px;
   font-size: 11.5px;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
 }
 /* The one action a header exists to drive (landing page's Add, the detail page's
    Connect/Disconnect/Reconnect). A fixed height like every other size — spec §9's "controls
@@ -316,7 +393,7 @@
   height: 38px;
   padding: 0 20px;
   font-size: 13.5px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
 }
 .cn-page .rd-btn.lg svg {
   width: 16px;
@@ -366,7 +443,7 @@
   width: 100%;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -508,9 +585,30 @@
   flex: 0 1 220px;
   min-width: 90px;
 }
+/* A button label with a short twin for a phone: one line, search and button side by side. */
+.cn-page .cn-label-narrow {
+  display: none;
+}
+@container cn-space (max-width: 520px) {
+  .cn-page .rd-masthead-toolbar {
+    flex-wrap: nowrap;
+  }
+  .cn-page .rd-masthead-toolbar > .rd-search {
+    flex: 1 1 auto;
+  }
+  .cn-page .rd-masthead-toolbar > .rd-btn {
+    flex: none;
+  }
+  .cn-page .cn-label-wide {
+    display: none;
+  }
+  .cn-page .cn-label-narrow {
+    display: inline;
+  }
+}
 .cn-page .rd-search input {
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   padding-left: 32px;
   width: 100%;
 }
@@ -551,11 +649,22 @@
 }
 .cn-page .rd-seg-b.on {
   color: var(--ink);
-  background: var(--selected);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.cn-page .cn-seg-count {
+  margin-left: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.cn-page .cn-seg-count.bad {
+  color: var(--bad);
 }
 
 /* ── connector list rows (compact list, replaces card grid) ────────────────── */
 .cn-page .cn-list {
+  container: cn-list / inline-size;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
@@ -640,6 +749,8 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
+  /* Chips that cannot shrink are clipped here, never painted under the status beside them. */
+  overflow: hidden;
 }
 .cn-page .cn-name > b {
   font-weight: 700;
@@ -659,7 +770,40 @@
   width: 14px;
   height: 14px;
 }
-.cn-page .cn-statusbad {
+/* In a narrow list the icon alone says the status, and on a failing row the reason under the name
+   says what is wrong; the word squeezed the name out of the row. Measured on the LIST, not the
+   window — the Lucius panel narrows it on a wide screen too. Kept for screen readers, not removed. */
+@container cn-list (max-width: 520px) {
+  .cn-page .cn-statusgood-label,
+  .cn-page .cn-statusbad-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  /* An installed row needs only its name here: the category chips go (its section already
+     says what it is), and a long name wraps to a second line rather than an ellipsis. */
+  .cn-page .cn-row .cn-cats {
+    display: none;
+  }
+  .cn-page .cn-row .cn-name > b {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+  .cn-page .cn-row .cn-rowerror {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+.cn-page .cn-statusbad,
+.cn-page .cn-statuswarn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -667,7 +811,49 @@
   font-size: 12px;
   font-weight: 600;
 }
-.cn-page .cn-statusbad svg {
+.cn-page .cn-statuswarn {
+  color: var(--warn);
+}
+.cn-page .cn-rowerror {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--bad);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cn-page .cn-errorbox {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--bad) 35%, var(--bg));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bad) 8%, var(--bg));
+}
+.cn-page .cn-errorbox-text {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--bad) 75%, var(--ink));
+  overflow-wrap: anywhere;
+}
+.cn-page .cn-rowerror-warn {
+  color: var(--warn);
+}
+.cn-page .cn-errorbox-warn {
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--bg));
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg));
+}
+.cn-page .cn-errorbox-warn .cn-errorbox-text {
+  color: color-mix(in srgb, var(--warn) 75%, var(--ink));
+}
+.cn-page .cn-errorbox-note {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.cn-page .cn-statusbad svg,
+.cn-page .cn-statuswarn svg {
   width: 13px;
   height: 13px;
 }
@@ -724,39 +910,66 @@
   transform: translateY(-50%);
   color: var(--faint);
 }
-.cn-page .cn-chiprow {
+/* Search, plus (phone only) the Sort icon beside it. */
+.cn-page .cn-dirsearchrow {
   display: flex;
   align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
-.cn-page .cn-chip {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+.cn-page .cn-dirsearchrow > .cn-dirsearch {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cn-page .cn-sorticon {
+  display: none;
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
   color: var(--muted);
   background: var(--surface2);
   border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 6px 13px;
+  border-radius: var(--radius-lg);
+}
+/* A category is active: the icon says so, since the chip row that would show it is hidden. */
+.cn-page .cn-sorticon.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface2));
+}
+.cn-page .cn-sorticon > select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
   cursor: pointer;
 }
-@media (hover: hover) {
-  .cn-page .cn-chip:hover {
-    color: var(--ink);
-    border-color: var(--line-strong);
-  }
+/* The directory's family chips + Sort row. */
+.cn-page .cn-dirfilters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.cn-page .cn-chip.on {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface2));
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+/* How many cards a filter chip holds — quieter than its label, brighter once picked. */
+.cn-page .cn-chipcount {
+  margin-left: 5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint, var(--muted));
+}
+.cn-page .cn-cat.on .cn-chipcount {
+  color: var(--muted);
 }
 .cn-page .rd-select.cn-sortselect {
-  height: 30px;
+  height: auto;
+  align-self: stretch;
+  flex: none;
   padding: 0 28px 0 13px;
   font-size: 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
 }
 .cn-page .cn-sublabel {
   font-size: 10px;
@@ -764,42 +977,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
-}
-.cn-page .cn-poprow {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.cn-page .cn-poptile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--surface2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: var(--ink);
-}
-@media (hover: hover) {
-  .cn-page .cn-poptile:hover {
-    border-color: var(--line-strong);
-  }
-}
-.cn-page .cn-poptile b {
-  flex: 1;
-  font-size: 12.5px;
-  font-weight: 700;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cn-page .cn-poptile svg {
-  flex: none;
-  color: var(--faint);
 }
 .cn-page .cn-dirgrid {
   display: grid;
@@ -818,6 +995,86 @@
 /* The one card with no real product behind it (no logo, no publisher, nothing to preview) —
    dashed border marks it as a build-your-own slot rather than a specific item sitting in the
    grid alongside real, named servers (owner review, 2026-08-19). */
+/* Browse & add's family tabs ARE the Connectors page's tabs — same component, same look, no
+   overrides (owner, 2026-10-31: one design system, not a variant per screen). */
+.cn-page .cn-dirfilters > .rd-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* On a phone a tab row runs past the edge; the fade says there are more this way. */
+@container cn-space (max-width: 520px) {
+  .cn-page .rd-tabs {
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+  /* Room past the last tab as wide as the fade, so scrolled to the end it sits clear of it.
+     A spacer, not padding: Safari drops end padding from a sideways scroll area. */
+  .cn-page .rd-tabs::after {
+    content: '';
+    flex: none;
+    width: 24px;
+  }
+}
+/* Browse & add's sticky header (DirectoryBrowser): once the list scrolls under it, cards fade out
+   beneath the chips instead of being cut at a hard edge — the Documents screen's fade (24px), as
+   a gradient hanging below the header in the sheet's own colour. Never at the top. */
+.cn-page .cn-dirhead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 24px;
+  background: linear-gradient(to bottom, var(--modal-bg), transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.cn-page .cn-dirhead.scrolled::after {
+  opacity: 1;
+}
+/* The custom MCP server, pinned above the directory grid as its own row (DirectoryBrowser). */
+.cn-page .cn-customrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+}
+.cn-page .cn-customrow-ic {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.cn-page .cn-customrow-text {
+  flex: 1;
+  min-width: 0;
+}
+.cn-page .cn-customrow-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cn-page .cn-customrow-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+@container cn-space (max-width: 520px) {
+  .cn-page .cn-customrow {
+    flex-wrap: wrap;
+  }
+  .cn-page .cn-customrow > .rd-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .cn-page .cn-dircard.generic {
   border-style: dashed;
   background: transparent;
@@ -840,14 +1097,24 @@
   color: var(--muted);
   line-height: 1.5;
 }
-.cn-page .cn-tag {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+/* `.cn-tag` (Default) and `.cn-cat` (Brokerage, Search…) sit side by side on a row, so they
+   share ONE pill: same size, weight, height and shape — only the hue says which is which. */
+.cn-page .cn-tag,
+.cn-page .cn-cat {
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 18px;
+  padding: 0 7px;
+  border: 0;
   border-radius: 999px;
-  padding: 2px 7px;
+  white-space: nowrap;
+}
+.cn-page .cn-tag {
+  color: color-mix(in srgb, var(--accent) 78%, var(--muted));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .cn-page .cn-verified-tag {
   font-size: 9.5px;
@@ -884,11 +1151,191 @@
   flex: none;
   align-self: center;
 }
-@media (max-width: 560px) {
-  .cn-page .cn-dirgrid,
-  .cn-page .cn-poprow {
+@container cn-space (max-width: 520px) {
+  .cn-page .cn-dirgrid {
     grid-template-columns: 1fr;
   }
+}
+
+/* The error step's "this server needs you to sign in" fix — the action next to its reason. */
+.cn-page .cn-authhint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--radius-lg);
+  padding: 10px 13px;
+}
+
+/* ── category chips + per-section suggestions ──────────────────────────────── */
+.cn-page .cn-cats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+/* Quiet on purpose (owner, 2026-10-31: "more subtle, more premium"): a softened hue, a faint
+   fill and a hairline outline in that hue, at medium weight — the tag labels the card without
+   competing with its name. The hairline is an inset shadow so it adds no size. */
+.cn-page .cn-cat {
+  color: color-mix(in srgb, var(--cat-hue, var(--muted)) 78%, var(--muted));
+  background: color-mix(in srgb, var(--cat-hue, var(--muted)) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat-hue, var(--muted)) 18%, transparent);
+}
+.cn-page .cn-cat.pick {
+  cursor: pointer;
+}
+/* The directory's category filter: a row of the SAME small pills the cards carry, under the
+   (larger) family chips — picked = solid hue, so the active one reads at a glance. */
+/* On a card the tags sit on its bottom edge, so cards of different description lengths
+   in one grid row line their tags up. */
+.cn-page .cn-dircard > .cn-cats {
+  margin-top: auto;
+}
+/* ONE line that scrolls sideways at every width — fourteen chips wrapped into two (desktop)
+   or four (phone) lines of the sticky header. Bleeds to the header's edges, which fade so a
+   cut-off chip reads as "more this way"; a tapped chip scrolls itself to the centre
+   (`DirectoryBrowser`), revealing its neighbours. */
+.cn-page .cn-catrow {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -20px;
+  padding: 0 20px;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 20px,
+    #000 calc(100% - 20px),
+    transparent
+  );
+}
+.cn-page .cn-catrow::-webkit-scrollbar {
+  display: none;
+}
+.cn-page .cn-catrow > .cn-cat {
+  flex: none;
+}
+/* Phone: Sort and the category filter become icons beside search (`.cn-sorticon`), so the search
+   row stays one line. After the base `.cn-sorticon` rule, so it wins. */
+@container cn-space (max-width: 520px) {
+  .cn-page .cn-dirfilters {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .cn-page .cn-dirsearchrow > .cn-sortselect {
+    display: none;
+  }
+  .cn-page .cn-sorticon {
+    display: inline-flex;
+  }
+  /* The category chips fold into the filter icon above. */
+  .cn-page .cn-catrow {
+    display: none;
+  }
+  /* Search and the Sort icon share one 40px line — a comfortable thumb target, and level. */
+  .cn-page .cn-dirsearchrow .cn-dirsearch input {
+    height: 40px;
+  }
+}
+/* The filter row wears the family chips' neutral look — one hue per category across a whole row
+   read as cheap (owner review, 2026-10-31); the hues stay on the cards' tags. Sized BETWEEN the
+   family chips above (12px, ~30px tall) and the card tags (10.5px, 18px). */
+.cn-page .cn-catrow .cn-cat {
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  font-size: 11.5px;
+  line-height: 22px;
+  padding: 0 10px;
+}
+.cn-page .cn-catrow .cn-cat.pick.on {
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
+}
+.cn-page .cn-cat.pick.on {
+  color: var(--surface);
+  background: var(--cat-hue, var(--ink));
+  border-color: transparent;
+}
+@media (hover: hover) {
+  .cn-page .cn-cat.pick:not(.on):hover {
+    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 14%, transparent);
+  }
+  .cn-page .cn-catrow .cn-cat.pick:not(.on):hover {
+    color: var(--ink);
+    background: var(--surface2);
+    border-color: var(--line-strong);
+  }
+}
+.cn-page .cn-cat.pick:focus-visible {
+  outline: 2px solid var(--cat-hue, var(--accent));
+  outline-offset: 1px;
+}
+.cn-page .cn-suggest {
+  container: cn-suggest / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.cn-page .cn-suggest-h {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+/* `minmax(0, 1fr)`, not `1fr`: a bare 1fr track can't shrink below its card's min-content, so
+   a long name pushed the row wider than the screen and it scrolled sideways. */
+.cn-page .cn-suggestgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+/* Phone: one card per row. AFTER the base rule — in the shared 560px block above it lost the
+   cascade to the three-column rule (same-specificity, later wins). `.swipe` (Browse & add) is
+   instead ONE row that scrolls sideways, snapping card by card, each card ~80% wide so the next
+   one peeks in — the owner's call for the directory, where stacking pushed the list a screen
+   down. It bleeds to the sheet's edges so the peek isn't clipped by the body's padding. */
+@container cn-space (max-width: 520px) {
+  .cn-page .cn-suggestgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cn-page .cn-suggestgrid.swipe {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    margin: 0 -20px;
+    padding: 0 20px 2px;
+    scroll-padding: 0 20px;
+  }
+  .cn-page .cn-suggestgrid.swipe::-webkit-scrollbar {
+    display: none;
+  }
+  .cn-page .cn-suggestgrid.swipe > .cn-dircard {
+    flex: 0 0 80%;
+    scroll-snap-align: start;
+  }
+}
+/* The landing's suggestions stack once THEIR space is narrow — the Lucius panel narrows it on
+   a wide window, where the 560px rule above never fires and three cards crushed to slivers. */
+@container cn-suggest (max-width: 560px) {
+  .cn-page .cn-suggestgrid:not(.swipe) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cn-page .cn-dircard.suggested {
+  border-style: dashed;
+  background: transparent;
 }
 
 /* ── connector header (the landing page's and the detail page's identity block) ──
@@ -941,6 +1388,25 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 4px 11px;
+}
+/* "Show all N" closes a folded tool row: a chip's shape, the accent's colour, so it reads as
+   the row's last item and as something to press. */
+.cn-page .cn-chipmore {
+  cursor: pointer;
+  color: var(--accent);
+  background: transparent;
+  border-style: dashed;
+}
+.cn-page .cn-chipmore:hover {
+  border-style: solid;
+}
+/* Where a tool list came from ("as of v0.0.11"), after the row's count — not shouted. */
+.cn-page .cn-chipnote {
+  margin-left: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--fg-3);
 }
 .cn-page .cn-permlist {
   display: flex;
@@ -1024,7 +1490,7 @@
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   padding: 6px 13px;
   cursor: pointer;
 }
@@ -1252,6 +1718,29 @@
   font-size: 13.5px;
   font-weight: 700;
 }
+/* An empty tab's starting picks: cards centred in the empty view (one or two sit in the
+   middle rather than hugging the left of a three-column grid), their text left-aligned. */
+.cn-page .cn-emptypicks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 10px 0 6px;
+  text-align: left;
+}
+.cn-page .cn-emptypicks > .cn-dircard {
+  flex: 0 1 calc((100% - 20px) / 3);
+  min-width: 0;
+}
+.cn-page .cn-emptypicks {
+  container: cn-picks / inline-size;
+}
+@container cn-picks (max-width: 520px) {
+  .cn-page .cn-emptypicks > .cn-dircard {
+    flex-basis: 100%;
+  }
+}
 .cn-page .rd-empty-body {
   font-size: 12.5px;
   color: var(--faint);
@@ -1359,6 +1848,12 @@
   flex: none;
 }
 
+/* The preview's action, moved into the footer on a phone (DirectoryModal): the sheet's ONE
+   action, so it spans the footer rather than hanging off its right edge. */
+.cn-page .rd-modal-foot .cn-foot-action {
+  flex: 1;
+}
+
 /* ── misc ─────────────────────────────────────────────────────────────────── */
 .cn-page .rd-hr {
   height: 1px;
@@ -1389,19 +1884,19 @@
   left: 50%;
   transform: translateX(calc(-50% - var(--chat-width, 0px) / 2));
   z-index: var(--z-toast);
-  background: var(--modal-bg);
-  border: 1px solid var(--modal-border);
-  color: var(--ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 9px 18px;
-  box-shadow: var(--shadow-lg);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
+  color: var(--toast-ink);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
+  box-shadow: var(--shadow-toast);
   /* Sized to its text, never squeezed: centred with left 50% + translate, a shrink-to-fit box
      only gets half the viewport, so a long message wrapped into a tall pill-shaped oval. */
   width: max-content;
   max-width: min(520px, calc(100vw - 32px));
   text-align: center;
-  border-radius: 14px;
+  border-radius: var(--toast-radius);
 }
 
 /* ── phone ────────────────────────────────────────────────────────────────── */
@@ -1441,6 +1936,13 @@
      inside a still-sticky parent. */
   .cn-page .rd-masthead {
     display: contents;
+  }
+  /* `display: contents` drops the box, not its pseudo-elements: the desktop scroll shadow
+     (`.rd-masthead.scrolled::after`, absolute at top:100%) would still render, anchored to the
+     scroller instead of the header, and wash out whatever line of the page it lands on once the
+     page has scrolled. The pinned bar's own fade below is the phone's shadow. */
+  .cn-page .rd-masthead::after {
+    display: none;
   }
   .cn-page .rd-masthead-sub {
     display: none;
@@ -1484,8 +1986,9 @@
   }
   /* The status filter (All/Connected/Attention) doesn't fit next to the family tabs at
      phone width and wraps to its own row, doubling the pinned bar's height. Dropped rather
-     than collapsed to an icon — each card already shows its own attention state. */
-  .cn-page .rd-seg {
+     than collapsed to an icon — each card already shows its own attention state. ONLY that
+     filter: a bare `.rd-seg` here also hid the add form's Transport and Authentication. */
+  .cn-page .cn-statusseg {
     display: none;
   }
 
@@ -1505,6 +2008,18 @@
     flex: 1 0 100%;
     justify-content: flex-end;
   }
+  /* …except when the only thing left in the header is the ⋮ (ConnectorDetail on a phone, its
+     state action having moved to the footer): that stays inline, top-right beside the name. */
+  .cn-page .cn-idhead-compact {
+    flex-wrap: nowrap;
+  }
+  .cn-page .cn-idhead-compact .cn-idhead-main {
+    flex-basis: auto;
+  }
+  .cn-page .cn-idhead-compact .cn-idhead-actions {
+    flex: none;
+    align-self: flex-start;
+  }
 
   .cn-page .rd-modal-scrim {
     padding: 0;
@@ -1514,6 +2029,12 @@
     width: 100%;
     max-height: 90vh;
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  }
+  /* The big sheets (Browse & add, the MCP add/edit flow) are lists and forms you scroll: on a
+     phone they rise to just under the status bar instead of stopping at 86% of the screen. */
+  .cn-page .rd-modal.xl {
+    height: calc(100dvh - env(safe-area-inset-top) - 8px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 8px);
   }
   /* The shared sheet handle (`.ui-modal-handle`, index.css): drag the sheet down to close it. */
   .cn-page .rd-modal .ui-modal-handle-wrap {
@@ -1529,6 +2050,19 @@
   /* a lone footer button does not stretch full width — only multi-button footers split evenly */
   .cn-page .rd-modal-foot .rd-btn:not(:only-child) {
     flex: 1;
+  }
+  /* Every footer button on a phone is the large, thumb-sized one — the preview's own action
+     already was, so Close / Add custom server / Cancel / Connect sat shorter beside it
+     (owner, 2026-10-31). One size per place, never per button. */
+  .cn-page .rd-modal-foot .rd-btn {
+    height: 38px;
+    padding: 0 20px;
+    font-size: 13.5px;
+    border-radius: var(--radius-lg);
+  }
+  /* A two-line sub in --faint read as a truncated fragment once the header narrowed. */
+  .cn-page .cn-idhead-sub {
+    color: var(--muted);
   }
 }
 

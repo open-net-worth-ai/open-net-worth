@@ -13,11 +13,20 @@ import { ConnectorDetail } from './ConnectorDetail'
 import { ConnectorConfig, hasConfigForm } from './ConnectorConfig'
 import { toEntry } from './adapter'
 import type { Connector } from './types'
+import { overrideFlagsForTests } from '../../../hooks/useFlag'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
 
-afterEach(cleanup)
+// The YNAB card's Two-way sync link is behind this flag; on, so the card is complete.
+let restoreFlags: () => void = () => {}
+beforeEach(() => {
+  restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: true })
+})
+afterEach(() => {
+  restoreFlags()
+  cleanup()
+})
 
 // ── wire fixtures ───────────────────────────────────────────────────────────
 
@@ -78,6 +87,18 @@ const STATUS: Record<string, unknown> = {
   '/api/lunch-money/status': {
     ...SYNC_BASE,
     has_access_token: false,
+  },
+  '/api/ynab/sync': {
+    token_saved: false,
+    enabled: false,
+    interval: '1h',
+    intervals: ['15m', '30m', '1h', '6h', 'daily', 'manual'],
+    plan_id: null,
+    plan_name: null,
+    running: false,
+    last_run: null,
+    next_run_at: null,
+    conflicts: [],
   },
   '/api/ynab/status': {
     ...SYNC_BASE,

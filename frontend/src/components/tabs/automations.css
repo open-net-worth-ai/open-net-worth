@@ -59,7 +59,9 @@
   min-width: 0;
 }
 .a3-awake {
+  container-type: inline-size;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 11px 15px;
@@ -83,11 +85,19 @@
   font-weight: 600;
 }
 .a3-awake-text {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
 }
 .a3-awake-switch {
   flex: none;
+}
+/* Too narrow for one line: the label and switch wrap together under the sentence, starting where
+   its text starts (past the icon + gap), not squeezed beside it as a five-line column (owner,
+   2026-11-09). On one line the text's flex-grow already pushes them to the right. */
+@container (max-width: 440px) {
+  .a3-awake-label {
+    margin-left: 25px;
+  }
 }
 .a3-toolbar > .grow,
 .a3-instr-foot .grow,
@@ -113,7 +123,7 @@
   padding: 0 10px 0 30px;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -203,7 +213,7 @@
   align-items: center;
   gap: 6px;
   padding: 0 11px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
@@ -229,11 +239,11 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 12px;
+  padding: 0 13px;
   border: none;
-  border-radius: var(--radius-md);
-  color: #fff;
-  background: var(--accent);
+  border-radius: var(--radius-lg);
+  color: var(--ink-on-cta);
+  background: var(--cta);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -242,7 +252,7 @@
 }
 @media (hover: hover) {
   .a3-new-button:hover {
-    filter: brightness(1.08);
+    background: var(--cta-hover);
   }
 }
 .a3-new-pop {
@@ -284,9 +294,13 @@
   }
 }
 .a3-menu-check {
-  display: inline-block;
-  width: 10px;
+  width: 14px;
+  height: 14px;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
 }
 .a3-empty {
   padding: 38px 8px;
@@ -538,7 +552,7 @@
 }
 @media (hover: hover) {
   .a3-tpl:hover .a3-tpl-ic {
-    color: var(--accent);
+    color: var(--ink);
     border-color: color-mix(in srgb, var(--hover-line) 45%, var(--line));
   }
 }
@@ -738,8 +752,55 @@
   color: var(--accent);
   flex: none;
 }
+/* The icon stays beside the words, however long they run. */
+.a3-trigger-line {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.a3-trigger-line svg {
+  margin-top: 3px;
+}
+.a3-trigger-line .grow {
+  flex: 1;
+  min-width: 0;
+}
+.a3-trigger-words,
+.a3-trigger-rule {
+  display: block;
+}
+.a3-trigger-rule {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg-3);
+  overflow-wrap: anywhere;
+}
 .a3-model-detail svg {
   color: var(--faint);
+}
+/* A data sync's setting, read like a Trigger and changed by clicking it: the value opens its
+   choices, the current one ticked. */
+.a3-setting .kebab-trigger {
+  margin-left: calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: inherit;
+  color: inherit;
+}
+.a3-setting .kebab-trigger:hover,
+.a3-setting .kebab-trigger[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.a3-setting .a3-trigger-detail {
+  color: var(--ink);
+}
+.a3-setting .a3-trigger-detail .a3-setting-caret {
+  color: var(--faint);
+}
+.a3-setting-blank {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
 }
 .a3-model-detail b {
   color: var(--ink);
@@ -775,6 +836,9 @@
   cursor: pointer;
   padding: 0;
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 @media (hover: hover) {
   .a3-linkbtn:hover {
@@ -814,7 +878,7 @@
   }
 }
 .a3-hist-row.on {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--selected);
 }
 .a3-hist-row .when {
   font-size: 12.5px;
@@ -1170,9 +1234,9 @@
   font-size: 9.5px;
 }
 .a3-step.done .box {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 .a3-step.done .l {
   color: var(--fg-3);
@@ -1256,6 +1320,49 @@
   border-radius: var(--radius-pill);
   padding: 3px 9px;
 }
+.a3-conn .a3-conn-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 5px;
+}
+.a3-conn .a3-conn-type {
+  display: inline-flex;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+}
+.a3-conn-logo {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+.a3-conn-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+/* The Builder's step rail (below) shares this class; in the run card the marker is 16px,
+   so the rail is re-centred on it. */
+.rsec .a3-step {
+  position: relative;
+  padding-bottom: 12px;
+}
+.rsec .a3-step:not(:last-child)::before {
+  left: 7.25px;
+  top: 19px;
+  bottom: 3px;
+}
 .a3-costgrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1309,7 +1416,7 @@
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   padding: 0 10px;
   font: inherit;
@@ -1428,7 +1535,7 @@
   padding: 3px;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
 }
 .a3-seg-btn {
   display: inline-flex;
@@ -1437,7 +1544,7 @@
   height: 27px;
   padding: 0 13px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: none;
   color: var(--muted);
   font: inherit;
@@ -1457,9 +1564,9 @@
   }
 }
 .a3-seg-btn.on {
-  background: var(--selected);
+  background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-sm);
 }
 .a3-trows {
   display: flex;
@@ -1851,7 +1958,7 @@
     padding: 0;
     gap: 0;
     justify-content: center;
-    border-radius: var(--radius-md);
+    border-radius: 50%;
   }
   .a3-toolbar .a3-toolbar-label,
   .a3-toolbar .a3-toolbar-chevron {
@@ -1919,4 +2026,320 @@
 .a3-step-hint {
   font-size: 11.5px;
   color: var(--faint);
+}
+
+/* ── permissions_v2: an Automation's Tool permissions ─────────────────────────────────────
+   This Automation's own Always allow / Block per tool. */
+.a3-perm {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+/* The value column is as wide as the picker's two pills below it, and the rows share its 14px
+   inset, so the table and the picker line up on both edges. */
+.a3-perm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 111px 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.a3-perm-row:last-child {
+  border-bottom: none;
+}
+.a3-perm-row.head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+@media (max-width: 600px) {
+  .a3-perm-row {
+    grid-template-columns: minmax(0, 1fr) 111px 40px;
+  }
+}
+.a3-perm-head-value {
+  grid-column: 2 / -1;
+  white-space: nowrap;
+}
+.a3-perm-select {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.a3-perm-select-chev {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--faint);
+  pointer-events: none;
+}
+.a3-perm-row .ui-select--dense {
+  display: block;
+  width: 100%;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 26px 0 10px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
+}
+.a3-perm-name {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a3-perm-fixed {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.a3-perm-add {
+  margin: 8px 0 6px;
+}
+.a3-perm-add .a3-linkbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.a3-perm-picker {
+  container-type: inline-size;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.a3-perm-picker input {
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.a3-perm-picker input:focus {
+  border-color: var(--accent);
+}
+/* The scrollbar sits in the picker's right inset. Each row takes the picker's width rather than
+   the list's, so a scrollbar of any width never pushes the pills out of line with the table. */
+.a3-perm-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin-right: -14px;
+}
+.a3-perm-cand {
+  box-sizing: border-box;
+  width: 100cqw;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.a3-perm-cand:last-child {
+  border-bottom: none;
+}
+.a3-perm-cand-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.a3-perm-cand-main b {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.a3-perm-cand-sub {
+  font-size: 11px;
+  color: var(--fg-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a3-perm-pick {
+  flex: none;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  cursor: pointer;
+}
+.a3-perm-pick.danger {
+  color: var(--bad);
+}
+@media (hover: hover) {
+  .a3-perm-pick:hover {
+    border-color: var(--accent);
+  }
+  .a3-perm-pick.danger:hover {
+    border-color: var(--bad);
+  }
+}
+
+/* ── Data syncs (fixed rules, no AI model) — today the two-way YNAB sync ── */
+/* The Lucius / Data sync tabs close the masthead, under the title on a row of their own: the
+   page's own panels supply the gap below. */
+.a3-masthead--tabs {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.a3-views {
+  margin-top: var(--space-4);
+  margin-bottom: 0;
+}
+.a3-attention {
+  padding: 14px 15px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--line));
+  background: color-mix(in srgb, var(--warn) 6%, var(--surface));
+}
+.a3-attention .a3-block-h .count {
+  color: var(--warn);
+}
+.a3-schedule-row {
+  max-width: 260px;
+}
+.a3-rules {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-base);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.a3-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 760px;
+}
+.a3-step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 22px;
+}
+/* The rail joining one step's number to the next. */
+.a3-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 30px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--line);
+}
+.a3-step-n {
+  flex: none;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  border: 1px solid var(--line);
+  color: var(--faint);
+  background: var(--surface);
+}
+.a3-step.current .a3-step-n {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.a3-step.done .a3-step-n {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--line));
+  background: color-mix(in srgb, var(--good) 10%, var(--surface));
+}
+.a3-step-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+.a3-step-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+.a3-step.later .a3-step-title {
+  color: var(--faint);
+}
+.a3-step-body p {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.a3-step.current .a3-step-body {
+  padding: 14px 16px;
+  margin-top: -4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.a3-last-sync {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.a3-last-sync.bad {
+  color: var(--bad);
+}
+
+/* ── A data sync's brand mark (YnabMark) — the connector's own logo on a white plate, as the
+   Connectors page shows it: marks keep their colours, so they need the ground they were drawn
+   for in both themes. ── */
+.a3-mark {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: inline-flex;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.a3-mark-logo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  padding: 5px;
+  box-sizing: border-box;
+  object-fit: contain;
 }

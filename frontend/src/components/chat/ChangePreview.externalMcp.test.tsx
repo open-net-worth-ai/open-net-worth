@@ -82,7 +82,6 @@ function permissionCall(): { url: string; body: Record<string, unknown> } | null
 describe('external_mcp_call card — the Tool permission split-button layout', () => {
   it('renders the SAME layout as the native Tool permission card: [Allow once ▾][Deny], never the old bare Confirm/Dismiss', () => {
     mount()
-    expect(screen.getByText('Tool permission')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Allow once' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Standing permission' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Deny' })).toBeTruthy()
@@ -91,10 +90,10 @@ describe('external_mcp_call card — the Tool permission split-button layout', (
     expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
   })
 
-  it('shows the bold tool + server line', () => {
-    mount()
-    expect(screen.getByText('transfer', { selector: 'b' })).toBeTruthy()
-    expect(screen.getByText('Drive', { selector: 'b' })).toBeTruthy()
+  it('is titled by the tool name, with the server beside it', () => {
+    const { container } = mount()
+    expect(container.querySelector('.change-preview-tool')?.textContent).toBe('transfer')
+    expect(container.querySelector('.change-preview-label')?.textContent).toBe('Drive')
   })
 
   it('shows the args as fact rows so the user sees exactly what will run', () => {
@@ -103,15 +102,15 @@ describe('external_mcp_call card — the Tool permission split-button layout', (
     expect(rows).toEqual(['Tosavings', 'Amount100'])
   })
 
-  it('names the tool in the lead, not in a note under the buttons', () => {
+  it('names the tool in the title, not in a note under the buttons', () => {
     // The "Approving runs `x`." note is gone from every card (owner, 2026-08-25) — it
     // restated what the card already showed, and on a native card it printed our own
     // snake_case tool name, the one thing no chat surface is supposed to show. An external
-    // server's tool name is different: it IS the tool's identity, and the bold lead line
-    // above the args is where it belongs (the args rows don't repeat it).
+    // server's tool name is different: it IS the tool's identity, so it is the card's title
+    // (owner, 2026-10-31 — the old "Lucius wants to use … from …" lead was too many words).
     const { container } = mount()
     expect(container.querySelector('.change-grant-note')).toBeNull()
-    expect(container.querySelector('.ac-lead')?.textContent).toContain('transfer')
+    expect(container.querySelector('.change-preview-header')?.textContent).toContain('transfer')
   })
 })
 

@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { resolveDirectory } from './directoryRows'
-import { catalogProvenanceFor, CATALOG, MCP_INSTALL_PRESETS } from './catalog'
+import { catalogProvenanceFor, CATALOG, MCP_INSTALL_PRESETS, endpointKey } from './catalog'
 import { toEntry } from './adapter'
 import type { Connector } from './types'
 
@@ -27,18 +27,31 @@ function mcpConnector(id: string, cfg: Record<string, unknown>): Connector {
   }
 }
 
+// A flagged native entry (Voice calls) is listed only when its live connector exists.
+const UNFLAGGED = CATALOG.filter((e) => !e.flag).length
+
 describe('catalogProvenanceFor — matched by endpoint, never by name', () => {
   it('attributes a server launched with the catalog command', () => {
     const preset = MCP_INSTALL_PRESETS['mcp-playwright']!
     const endpoint = [preset.command, preset.args].filter(Boolean).join(' ')
-    expect(catalogProvenanceFor(endpoint)).toEqual({
+    expect(catalogProvenanceFor(endpoint)).toMatchObject({
       publisher: 'Microsoft',
       verification: 'verified',
       repoUrl: 'https://github.com/microsoft/playwright-mcp',
       homepageUrl: undefined,
       logo: '/connector-logos/playwright.svg',
-      categories: ['Web'],
+      categories: ['Browsing'],
     })
+  })
+
+  it('still knows a server saved without the @latest the catalog now launches', () => {
+    // Coinbase was added as `npx -y @coinbase/coinbase-cli mcp`; the preset gained `@latest`.
+    expect(catalogProvenanceFor('npx -y @coinbase/coinbase-cli mcp')?.logo).toBe(
+      catalogProvenanceFor('npx -y @coinbase/coinbase-cli@latest mcp')?.logo,
+    )
+    expect(catalogProvenanceFor('npx -y @coinbase/coinbase-cli@1.2.0 mcp')).not.toBeNull()
+    expect(endpointKey('npx -y @scope/pkg@latest --demo')).toBe('npx -y @scope/pkg --demo')
+    expect(endpointKey('uvx  pkg@2.0.1')).toBe('uvx pkg')
   })
 
   it('attributes nothing to an unrecognised endpoint', () => {
@@ -70,8 +83,13 @@ describe('the detail page and the directory card agree', () => {
     expect(detail.verification).toBe('verified')
     expect(detail.developer).toBe('Firecrawl')
 
-    // …and the directory row for the very same server says the same thing.
-    const row = resolveDirectory([installed]).find((r) => r.id === 'mcp:firecrawl')!
+    // …and the directory shows the very same server as ONE card — the catalog entry, marked
+    // installed and pointing at the live server — saying the same thing.
+    const rows = resolveDirectory([installed])
+    expect(rows.find((r) => r.id === 'mcp:firecrawl')).toBeUndefined()
+    const row = rows.find((r) => r.id === 'mcp-firecrawl')!
+    expect(row.installed).toBe(true)
+    expect(row.installedId).toBe('mcp:firecrawl')
     expect(row.verification).toBe('verified')
     expect(row.publisher).toBe('Firecrawl')
   })
@@ -101,12 +119,29 @@ describe('resolveDirectory', () => {
     ])
     const telegram = rows.find((r) => r.id === 'telegram')!
     expect(telegram.installed).toBe(true)
-    expect(rows.length).toBe(CATALOG.length)
+    expect(rows.length).toBe(UNFLAGGED)
+  })
+
+  it('lists a flagged native entry only while the backend returns it (its flag is on)', () => {
+    expect(resolveDirectory([]).some((r) => r.id === 'voice')).toBe(false)
+    const rows = resolveDirectory([
+      {
+        id: 'voice',
+        kind: 'voice',
+        name: 'Voice calls',
+        enabled: false,
+        config: {},
+        secrets_public: {},
+        status: 'not_configured',
+        pausable: true,
+      } as Parameters<typeof resolveDirectory>[0][number],
+    ])
+    expect(rows.some((r) => r.id === 'voice')).toBe(true)
   })
 
   it('appends an installed MCP server the catalog has never heard of', () => {
     const rows = resolveDirectory([mcpConnector('mine', { url: 'https://mcp.mine.test' })])
-    expect(rows.length).toBe(CATALOG.length + 1)
+    expect(rows.length).toBe(UNFLAGGED + 1)
     expect(rows.find((r) => r.id === 'mcp:mine')?.installed).toBe(true)
   })
 

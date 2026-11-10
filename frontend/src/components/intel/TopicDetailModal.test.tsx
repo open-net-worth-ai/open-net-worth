@@ -96,9 +96,9 @@ describe('TopicDetailModal — Custom news feeds', () => {
     )
     fireEvent.click(getByText('Advanced: news sources'))
     expect(getByText('No custom feeds yet.')).toBeTruthy()
-    for (let i = 0; i < 5; i++) fireEvent.click(getByText('+ Add feed URL'))
+    for (let i = 0; i < 5; i++) fireEvent.click(getByText('Add feed URL'))
     expect(getAllByPlaceholderText('https://example.com/feed.xml')).toHaveLength(5)
-    expect(queryByText('+ Add feed URL')).toBeFalsy()
+    expect(queryByText('Add feed URL')).toBeFalsy()
     expect(getByText('Maximum 5 feeds.')).toBeTruthy()
   })
 })
@@ -109,7 +109,7 @@ describe('TopicDetailModal — Save', () => {
     const p = props({ linked_tickers: ['AAPL'], custom_feed_urls: ['https://a.com/feed.xml'] })
     const { getByText } = render(<TopicDetailModal {...p} />)
     fireEvent.click(getByText('Advanced: news sources'))
-    fireEvent.click(getByText('+ Add feed URL')) // an extra blank row must be filtered out
+    fireEvent.click(getByText('Add feed URL')) // an extra blank row must be filtered out
     fireEvent.click(getByText('Save'))
     await waitFor(() => expect(mockAuthFetch).toHaveBeenCalledTimes(1))
     const [url, opts] = mockAuthFetch.mock.calls[0]!

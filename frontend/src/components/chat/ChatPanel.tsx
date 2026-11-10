@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useMemoryWindow } from '../../hooks/useMemoryWindow'
 import { useLuciusChat } from '../../state/luciusChat'
 import { useChatSuggestionsEnabled } from '../../hooks/useChatSuggestionsEnabled'
 import { useIsCoarsePointer } from '../../hooks/useIsCoarsePointer'
@@ -22,11 +23,18 @@ import {
 } from '../../hooks/useModels'
 import { useChatComposer } from '../../state/chatComposer'
 import { useReauthDraftSource } from '../../state/useReauthDraftSource'
-import { followsBottom, newScrollIntent, useChatScrollPin } from '../../utils/chatScroll'
+import {
+  followsBottom,
+  newScrollIntent,
+  placeOf,
+  restorePlace,
+  useChatScrollPin,
+  type HeldPlace,
+} from '../../utils/chatScroll'
 import { fUsd, sumSessionCost } from '../../utils/costFormat'
 import { fDateTime } from '../../utils/format'
 import { ConversationBrowser } from './ConversationBrowser'
-import { ConversationMenu, shortWhen } from './ConversationMenu'
+import { ConversationMenu, shortWhen, type ConversationKind } from './ConversationMenu'
 import {
   TRANSCRIPT_WINDOW_INITIAL,
   TRANSCRIPT_WINDOW_STEP,
@@ -39,6 +47,8 @@ import { TurnActivity, turnProgress } from './TurnActivity'
 import { CatchingUp, ChatLoading } from './ChatLoading'
 import { LuciusComposer } from './lucius/Composer'
 import { EffortChoices } from './lucius/ModelEffortRow'
+import { FileDropMask } from './lucius/FileDropMask'
+import { useFileDropZone } from './lucius/useFileDropZone'
 import type { LuciusComposerHandle, ComposerParsed } from './lucius/Composer'
 import { chatSessions } from '../../state/chatSessions'
 import { loadEarlierMessages, restoreSuggestions } from '../../state/chatReducer'
@@ -54,9 +64,17 @@ import { dataChangeTurns } from './dataChangeTurns'
 import { takeSendIntent } from '../../state/luciusSendIntent'
 import { useNavigate } from '@tanstack/react-router'
 import { isBackgroundConversation, type ConversationMeta } from '../../hooks/useConversations'
-import { ChevronRight, Eraser, FolderLock, Menu, SquarePen } from '../../ui/icons'
+import { Brain, ChevronRight, FolderLock, Menu, SquarePen } from '../../ui/icons'
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
+import { useCallInSendSlot, VoiceCallButton } from './lucius/VoiceCallButton'
+import { VoiceCallNotice } from './lucius/VoiceCallNotice'
+import {
+  LastAnswerReveal,
+  VoiceCallHeardMessage,
+  VoiceCallSpokenMessage,
+} from './lucius/VoiceCallLive'
+import { VoiceCallSlot } from './lucius/VoiceCallSlot'
 import { computeHomeEmpty } from './homeEmpty'
 import { useProfile } from '../../hooks/serverState'
 import { ActivityPanel } from '../tabs/lucius/ActivityPanel'
@@ -65,12 +83,16 @@ import { isOnboardingInit, ONBOARDING_INIT_SENTINEL } from '../../utils/onboardi
 import { applyScrollbarGutter } from '../../utils/scrollbarGutter'
 import { composerDensity } from './composerDensity'
 import { usePointerResize } from '../../hooks/usePointerResize'
-import { useShowBackgroundConversations } from '../../hooks/useShowBackgroundConversations'
+import { lazyChunk } from '../../lazyChunk'
 
 // Documents from the side panel on any tab — loaded only when opened, so the chat that every
 // tab carries doesn't carry the document viewer too.
 const DocumentsSheet = lazy(() =>
   import('../vault/DocumentsSheet').then((m) => ({ default: m.DocumentsSheet })),
+)
+// lazyChunk: a window left open across a rebuild reloads once instead of crashing on the click.
+const MemorySheet = lazyChunk(() =>
+  import('./MemorySheet').then((m) => ({ default: m.MemorySheet })),
 )
 
 /** The kickoff message that makes Lucius speak first on a brand-new instance. Harness-authored:
@@ -176,16 +198,18 @@ export function runBrief(
  * chats read as twenty duplicates of the same thread and the list becomes unusable for
  * both. Split, and each side gets a label that says what you are looking at.
  */
-export function conversationGroups(conversations: ConversationMeta[], showBackground = false) {
+export function conversationGroups(conversations: ConversationMeta[]) {
   const runs = conversations.filter((c) => c.source === 'automation')
   // "Chats" means IN-APP conversations. Two different axes decide that, and conflating them
   // is what put the owner's Telegram thread in this sidebar (2026-08-21): `source` is an
   // ownership claim ('automation' — a RUNNER, and a security gate reads it), while `channel`
   // is the TRANSPORT the human is on. In-app is the absence of both — it needs no name of
   // its own, and naming it 'web' would be wrong the moment this runs in the desktop app.
-  const chats = conversations.filter(
-    (c) => !c.source && !c.channel && (showBackground || !isBackgroundConversation(c)),
-  )
+  const inApp = conversations.filter((c) => !c.source && !c.channel)
+  // A capture is in-app too, but nobody typed into it — a dozen a day buried the chats you
+  // actually switch between, so they get a section of their own.
+  const captures = inApp.filter(isBackgroundConversation)
+  const chats = inApp.filter((c) => !isBackgroundConversation(c))
   return [
     {
       key: 'chat' as const,
@@ -198,6 +222,12 @@ export function conversationGroups(conversations: ConversationMeta[], showBackgr
       label: 'Automation runs',
       items: [...runs].sort(byRecency),
       total: runs.length,
+    },
+    {
+      key: 'capture' as const,
+      label: 'Captures',
+      items: [...captures].sort(byRecency),
+      total: captures.length,
     },
   ].filter((group) => group.items.length > 0)
 }
@@ -308,6 +338,8 @@ export function ChatPanel({
 
   const composerRef = useRef<LuciusComposerHandle>(null)
   useReauthDraftSource(composerRef)
+  // The whole panel takes a dropped file, not just the composer at its foot.
+  const fileDrop = useFileDropZone((files) => composerRef.current?.addFiles(files))
   const [widthFrac, setWidthFrac] = useState(savedWidthFrac)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const width = clampWidth(Math.round(widthFrac * viewportWidth))
@@ -434,15 +466,12 @@ export function ChatPanel({
   // with, so "View all runs" lands on runs rather than making you pick again.
   const [menuOpen, setMenuOpen] = useState(false)
   const [documentsOpen, setDocumentsOpen] = useState(false)
-  const [browsingConvs, setBrowsingConvs] = useState<'chat' | 'automation' | null>(null)
+  const memory = useMemoryWindow('panel')
+  const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
   // One ordering for the header, the sidebar and the browser — they disagreed for a build,
   // and a switcher that orders its rows differently from the list behind it is worse than
   // either ordering on its own.
-  const [showBackground] = useShowBackgroundConversations()
-  const convGroups = useMemo(
-    () => conversationGroups(conversations, showBackground),
-    [conversations, showBackground],
-  )
+  const convGroups = useMemo(() => conversationGroups(conversations), [conversations])
 
   // Tapping the run header (inside a message bubble the user is already reading) sends the
   // MAIN content area to that run, leaving the panel on the conversation you are reading —
@@ -480,6 +509,7 @@ export function ChatPanel({
   // In place, over whatever is showing — the cards are hosted at the app level now, not on
   // the Accounts tab, so there is no tab to go to first.
   const { openReview } = useTransactionSurfaces()
+  const callInSendSlot = useCallInSendSlot()
   const openTransactionReview = useCallback(() => openReview('all'), [openReview])
 
   // Master switch (Settings → Appearance → Chat).
@@ -896,40 +926,46 @@ export function ChatPanel({
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
 
-  // Expanding adds content ABOVE the viewport; keep what the eye was on in place.
-  const transcriptAnchorRef = useRef<number | null>(null)
+  // Expanding adds content ABOVE the viewport; keep what the eye was on in place, by the
+  // message itself (`restorePlace`). Held from the moment a load starts, as the reader goes on
+  // scrolling while a page is fetched, and let go after the commit that finishes it.
+  const heldPlaceRef = useRef<HeldPlace | null>(null)
   const showEarlierMessages = () => {
     if (hiddenTranscript > 0) {
-      transcriptAnchorRef.current = messagesAreaRef.current?.scrollHeight ?? null
+      heldPlaceRef.current = placeOf(messagesAreaRef.current)
+      if (heldPlaceRef.current) heldPlaceRef.current.last = true
       setTranscriptWindow((w) => w + TRANSCRIPT_WINDOW_STEP)
       return
     }
-    // Local window exhausted — page the previous slice down from the server. Prepending
-    // alone doesn't move anything (the window shows the LAST N), so the scroll anchor is
-    // captured right before the window widens to reveal what arrived.
+    // Local window exhausted — page the previous slice down from the server.
     if (serverEarlier > 0 && !loadingEarlierRef.current) {
       loadingEarlierRef.current = true
+      heldPlaceRef.current = placeOf(messagesAreaRef.current)
       setLoadingEarlier(true)
       const ownerId = activeId
       void loadEarlierMessages(ownerId).then((added) => {
         loadingEarlierRef.current = false
         setLoadingEarlier(false)
         // The messages landed on ownerId's slice regardless; only the VIEW adjustments
-        // (window widening, scroll anchor) must not leak onto a conversation the user
+        // (window widening, held place) must not leak onto a conversation the user
         // switched to while the fetch was in flight.
         if (added > 0 && activeIdRef.current === ownerId) {
-          transcriptAnchorRef.current = messagesAreaRef.current?.scrollHeight ?? null
+          if (heldPlaceRef.current) heldPlaceRef.current.last = true
           setTranscriptWindow((w) => w + added)
+        } else {
+          heldPlaceRef.current = null
         }
       })
     }
   }
+  // Every commit while a place is held: the fetched page and the wider window are two.
   useLayoutEffect(() => {
     const el = messagesAreaRef.current
-    const prev = transcriptAnchorRef.current
-    transcriptAnchorRef.current = null
-    if (el && prev !== null) el.scrollTop += el.scrollHeight - prev
-  }, [transcriptWindow])
+    const held = heldPlaceRef.current
+    if (!el || !held) return
+    restorePlace(el, held)
+    if (held.last) heldPlaceRef.current = null
+  })
 
   // Scroll to bottom when new messages arrive (if already near bottom). Counts
   // `queuedMessages` too — a message you just sent while busy renders below the
@@ -1011,7 +1047,9 @@ export function ChatPanel({
   // "already sitting on an empty/unpersisted conversation" — reusing that instead of minting
   // another one means clicking New twice in a row doesn't leave an orphaned pending draft.
   function handleNewConversation() {
-    const alreadyOnAnEmptyOne = !conversations.some((c) => c.id === activeId)
+    // Messages on screen mean it isn't empty, listed or not (a call from the fresh screen).
+    const alreadyOnAnEmptyOne =
+      !conversations.some((c) => c.id === activeId) && messages.length === 0
     if (alreadyOnAnEmptyOne) return
     createConversation()
   }
@@ -1085,93 +1123,103 @@ export function ChatPanel({
   const composerFooter = (
     <div className="lx-side-foot" ref={footRef}>
       <div className="lx-inputblock">
-        <LuciusComposer
-          /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside
+        <VoiceCallNotice
+          sessionId={activeId}
+          busy={streaming || sending}
+          onNewChat={handleNewConversation}
+        />
+        <VoiceCallSlot busy={streaming || sending} visible={open}>
+          <LuciusComposer
+            /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside
              attach/@//— not in `controls`, which is the model/effort/cost cluster. */
-          leadingControls={
-            <span data-tour="lucius-approval">
-              <ConversationApprovalPicker sessionId={activeId} />
-            </span>
-          }
-          /* Model / effort / cost ride in the composer's toolbar row, right-aligned against
+            leadingControls={
+              <span data-tour="lucius-approval">
+                <ConversationApprovalPicker sessionId={activeId} />
+              </span>
+            }
+            /* Model / effort / cost ride in the composer's toolbar row, right-aligned against
              Send — not as a strip above the field. */
-          controls={
-            <>
-              {/* No session-cost figure on a real phone — less room, less reason to see it at
+            controls={
+              <>
+                {/* No session-cost figure on a real phone — less room, less reason to see it at
                   a glance (owner). Desktop keeps it. */}
-              {density.showCost && !isMobile && sessionCost > 0 && (
-                <span className="chat-session-cost" title={`Session cost: ${fUsd(sessionCost)}`}>
-                  {fUsd(sessionCost)}
-                </span>
-              )}
-              {/* ONE control: the tier rides in the trigger, and the panel opens on a root
+                {density.showCost && !isMobile && sessionCost > 0 && (
+                  <span className="chat-session-cost" title={`Session cost: ${fUsd(sessionCost)}`}>
+                    {fUsd(sessionCost)}
+                  </span>
+                )}
+                {/* ONE control: the tier rides in the trigger, and the panel opens on a root
                   menu (Model › / Effort ›) — see EffortChoices for why it is not a peer
                   <select>, and ModelPicker's `panes` for why the two lists never share a
                   panel. Hidden on the narrowest panels — the trigger's own label had no
                   room left and clipped mid-word. */}
-              {density.showModel && (
-                <ModelPicker
-                  className="chat-model-picker"
-                  label="Chat model"
-                  size="sm"
-                  models={modelInfo.models}
-                  value={activeModel}
-                  defaultLabel="Default"
-                  defaultModelId={modelInfo.defaultModel}
-                  onChange={(next) => setConversationModel(activeId, next)}
-                  // The trigger shows just the model name on a phone — no effort trailing
-                  // label; the tier stays reachable one tap in, via `panes` below (unchanged).
-                  trailing={
-                    !isMobile && density.showEffortLabel && showEffort
-                      ? effortChoiceLabel(clampEffortChoice(effort, effortChoices))
-                      : null
-                  }
-                  panes={
-                    showEffort
-                      ? [
-                          {
-                            key: 'effort',
-                            label: 'Effort',
-                            value: effortChoiceLabel(clampEffortChoice(effort, effortChoices)),
-                            content: (close) => (
-                              <EffortChoices
-                                value={clampEffortChoice(effort, effortChoices)}
-                                choices={effortChoices}
-                                onChange={(lvl) => {
-                                  setEffort(lvl)
-                                  close()
-                                }}
-                              />
-                            ),
-                          },
-                        ]
-                      : undefined
-                  }
-                />
-              )}
-            </>
-          }
-          ref={composerRef}
-          busy={streaming || sending}
-          sendBlocked={(streaming || sending) && !multiTurnEnabled}
-          onStop={stopStreaming}
-          onSend={handleSend}
-          placeholder="Ask Lucius anything — @ to mention, / for skills…"
-          autoFocus={open && shouldAutoFocusComposer}
-          visibleIds={visibleIds}
-          screenId="lucius-side"
-          active={open}
-          /* Only true while the composer is actually rendered in its TOP/landing position
+                {density.showModel && (
+                  <ModelPicker
+                    className="chat-model-picker"
+                    label="Chat model"
+                    size="sm"
+                    models={modelInfo.models}
+                    value={activeModel}
+                    defaultLabel="Default"
+                    defaultModelId={modelInfo.defaultModel}
+                    onChange={(next) => setConversationModel(activeId, next)}
+                    // The trigger shows just the model name on a phone — no effort trailing
+                    // label; the tier stays reachable one tap in, via `panes` below (unchanged).
+                    trailing={
+                      !isMobile && density.showEffortLabel && showEffort
+                        ? effortChoiceLabel(clampEffortChoice(effort, effortChoices))
+                        : null
+                    }
+                    panes={
+                      showEffort
+                        ? [
+                            {
+                              key: 'effort',
+                              label: 'Effort',
+                              value: effortChoiceLabel(clampEffortChoice(effort, effortChoices)),
+                              content: (close) => (
+                                <EffortChoices
+                                  value={clampEffortChoice(effort, effortChoices)}
+                                  choices={effortChoices}
+                                  onChange={(lvl) => {
+                                    setEffort(lvl)
+                                    close()
+                                  }}
+                                />
+                              ),
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
+                )}
+              </>
+            }
+            // Mid-call the slot is Send again: what you type goes to Lucius, read aloud.
+            callAction={callInSendSlot ? <VoiceCallButton sessionId={activeId} /> : null}
+            ref={composerRef}
+            busy={streaming || sending}
+            sendBlocked={(streaming || sending) && !multiTurnEnabled}
+            onStop={stopStreaming}
+            onSend={handleSend}
+            placeholder="Ask Lucius anything — @ to mention, / for skills…"
+            autoFocus={open && shouldAutoFocusComposer}
+            visibleIds={visibleIds}
+            screenId="lucius-side"
+            active={open}
+            /* Only true while the composer is actually rendered in its TOP/landing position
              (isHomeEmpty) — once a real conversation starts on this tab, `composerFooter`
              relocates to the normal pinned-bottom spot (see its two render sites above/below),
              where the popup opening downward would run off the viewport instead of avoiding
              it. `homeMode` alone would stay true for that pinned-bottom case too. */
-          homeMode={homeMode && isHomeEmpty}
-          screenAwarenessDisabled={screenAwarenessDisabled}
-          noVisionModel={noVisionLabel(activeModel, modelInfo.models, modelInfo.defaultModel)}
-          imageReader={modelInfo.imageReader}
-          dismissKeyboardOnSend={dismissKeyboardOnSend}
-        />
+            homeMode={homeMode && isHomeEmpty}
+            screenAwarenessDisabled={screenAwarenessDisabled}
+            noVisionModel={noVisionLabel(activeModel, modelInfo.models, modelInfo.defaultModel)}
+            imageReader={modelInfo.imageReader}
+            dismissKeyboardOnSend={dismissKeyboardOnSend}
+            fileDrop={false}
+          />
+        </VoiceCallSlot>
       </div>
     </div>
   )
@@ -1183,7 +1231,9 @@ export function ChatPanel({
       data-dropzone="side"
       aria-hidden={!open}
       style={{ width: open && !fillWidth ? width + 'px' : undefined }}
+      {...fileDrop.handlers}
     >
+      {fileDrop.over && <FileDropMask className="lx-dropmask--side" />}
       {/* Left-edge resizer — meaningless once fillWidth/homeMode own the sizing. */}
       {!homeMode && (
         <div
@@ -1196,6 +1246,11 @@ export function ChatPanel({
       {!homeMode && documentsOpen && (
         <Suspense fallback={null}>
           <DocumentsSheet onClose={() => setDocumentsOpen(false)} />
+        </Suspense>
+      )}
+      {!homeMode && memory.open && (
+        <Suspense fallback={null}>
+          <MemorySheet onClose={memory.close} />
         </Suspense>
       )}
       {!homeMode && menuOpen && (
@@ -1272,6 +1327,10 @@ export function ChatPanel({
               <FolderLock size={15} />
             </button>
 
+            <button className="lx-side-x" onClick={memory.show} title="Memory" aria-label="Memory">
+              <Brain size={15} />
+            </button>
+
             <button
               className="lx-side-x"
               onClick={handleNewConversation}
@@ -1280,23 +1339,6 @@ export function ChatPanel({
             >
               <SquarePen size={15} />
             </button>
-
-            {messages.length > 0 && (
-              <button
-                className="lx-side-x"
-                title="Clear conversation"
-                aria-label="Clear conversation"
-                onClick={() => {
-                  // Keep the composer draft — clearing affects history only. Not gated on
-                  // `streaming` (same reasoning as handleNewConversation above). No "already
-                  // empty" guard needed here — this button only renders when
-                  // messages.length > 0, so the conversation being left is always a real one.
-                  createConversation()
-                }}
-              >
-                <Eraser size={15} />
-              </button>
-            )}
 
             <button
               className="lx-side-x"
@@ -1318,17 +1360,20 @@ export function ChatPanel({
           const el = messagesAreaRef.current
           if (!el) return
           isNearBottomRef.current = followsBottom(el, scrollIntentRef.current)
+          // Scrolling on while a page loads: what's held is where the message is NOW.
+          const held = heldPlaceRef.current
+          if (held?.node.isConnected) held.top = held.node.getBoundingClientRect().top
           // Soft top fade only once scrolled (CSS keys on it), so text dissolves under the
           // top edge like Claude's transcript without dimming the first message at rest.
           el.toggleAttribute('data-scrolled', el.scrollTop > 2)
           // Infinite scroll upward: nearing the top auto-reveals earlier messages —
           // nobody should have to hunt for the "show earlier" button (it stays as the
-          // explicit fallback). The anchor ref doubles as an in-flight guard: set when
-          // an expansion starts, cleared by the layout effect that restores position.
+          // explicit fallback). The held place doubles as an in-flight guard: set when
+          // an expansion starts, let go by the layout effect that restores position.
           if (
             el.scrollTop < 600 &&
             (hiddenTranscript > 0 || serverEarlier > 0) &&
-            transcriptAnchorRef.current === null
+            heldPlaceRef.current === null
           ) {
             showEarlierMessages()
           }
@@ -1364,7 +1409,8 @@ export function ChatPanel({
                 </div>
                 {!homeMode && (
                   <div className="lx-side-empty-hint">
-                    Use @ to add context with accounts, transactions, and more. Use / for skills.
+                    Use @, or drag anything on screen in, to add context with accounts,
+                    transactions, and more. Use / for skills.
                   </div>
                 )}
               </div>
@@ -1443,41 +1489,57 @@ export function ChatPanel({
                     {brief.automationId && <ChevronRight size={14} />}
                   </button>
                 ) : (
-                  <MessageBubble
+                  <LastAnswerReveal
                     key={msg.id}
                     message={msg}
-                    restoreGuide={changedTurns.has(msg.id)}
-                    onSendMessage={(text) =>
-                      sendMessage(
-                        text,
-                        [],
-                        effort,
-                        false,
-                        activeModel,
-                        [],
-                        undefined,
-                        undefined,
-                        captureScreen(),
-                      )
-                    }
-                    onResolvePendingToolUse={resolvePendingToolUse}
-                    onRespondToChange={respondToChange}
-                    onOpenAiSettings={() => {
-                      void navigate({ to: '/settings', search: { sub: 'model' } } as never)
-                    }}
-                    onRetry={
-                      msg.role === 'assistant' &&
-                      msg.error &&
-                      i === visibleDelivered.length - 1 &&
-                      canRetry
-                        ? retryLast
-                        : undefined
-                    }
-                    onPreviewCheckpoint={previewCheckpoint}
-                    onRestoreCheckpoint={restoreCheckpoint}
-                  />
+                    messages={messages}
+                    sessionId={activeId}
+                    live={i === visibleDelivered.length - 1}
+                  >
+                    {(shown) => (
+                      <MessageBubble
+                        key={msg.id}
+                        message={shown}
+                        restoreGuide={changedTurns.has(msg.id)}
+                        onSendMessage={(text) =>
+                          sendMessage(
+                            text,
+                            [],
+                            effort,
+                            false,
+                            activeModel,
+                            [],
+                            undefined,
+                            undefined,
+                            captureScreen(),
+                          )
+                        }
+                        onResolvePendingToolUse={resolvePendingToolUse}
+                        onRespondToChange={respondToChange}
+                        onOpenAiSettings={() => {
+                          void navigate({ to: '/settings', search: { sub: 'model' } } as never)
+                        }}
+                        onRetry={
+                          msg.role === 'assistant' &&
+                          msg.error &&
+                          i === visibleDelivered.length - 1 &&
+                          canRetry
+                            ? retryLast
+                            : undefined
+                        }
+                        onPreviewCheckpoint={previewCheckpoint}
+                        onRestoreCheckpoint={restoreCheckpoint}
+                      />
+                    )}
+                  </LastAnswerReveal>
                 )
               })}
+
+              <VoiceCallHeardMessage
+                sessionId={activeId}
+                lastUser={messages.findLast((m) => m.role === 'user')}
+              />
+              <VoiceCallSpokenMessage sessionId={activeId} messages={messages} />
 
               {/* Follow-up suggestions after a completed turn — a skeleton row while they're
                   still generating, so the gap doesn't read as "nothing is coming." Widths

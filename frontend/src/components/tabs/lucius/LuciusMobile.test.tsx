@@ -12,6 +12,7 @@ const mockChat: { conversations: { id: string; title: string }[]; [k: string]: u
   renameConversation: vi.fn(),
   statusFor: () => 'idle' as const,
   stopConversation: vi.fn(),
+  messages: [],
 }
 vi.mock('../../../state/luciusChat', () => ({ useLuciusChat: () => mockChat }))
 vi.mock('../../chat/ChatPanel', () => ({
@@ -32,6 +33,8 @@ vi.mock('../../vault/VaultPanel', () => ({
 afterEach(() => {
   mockChat.conversations = []
   mockChat.activeId = 'a'
+  mockChat.messages = []
+  vi.mocked(mockChat.createConversation as () => void).mockClear()
   cleanup()
   sessionStorage.clear()
 })
@@ -72,5 +75,20 @@ describe('LuciusMobile — conversation title', () => {
     render(<LuciusMobile />)
     expect(screen.queryByRole('button', { name: 'Some other chat' })).toBeNull()
     expect(document.querySelector('.lucius-mobile-head-title')).toBeNull()
+  })
+})
+
+describe('LuciusMobile — New conversation', () => {
+  it('does nothing on an empty draft', () => {
+    render(<LuciusMobile />)
+    fireEvent.click(screen.getByRole('button', { name: 'New conversation' }))
+    expect(mockChat.createConversation).not.toHaveBeenCalled()
+  })
+
+  it('starts one after a voice call filled a conversation the list has not caught up with', () => {
+    mockChat.messages = [{ role: 'user', content: 'Check my ACME performance' }]
+    render(<LuciusMobile />)
+    fireEvent.click(screen.getByRole('button', { name: 'New conversation' }))
+    expect(mockChat.createConversation).toHaveBeenCalledTimes(1)
   })
 })

@@ -256,7 +256,30 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # 1,500 chars (the per-tool cap), plus the CORE offer's get_net_worth / get_transactions /
     # get_payees / get_portfolio prose, which took the default offer from 50,265 to 49,873 so its
     # own 50_000 cap stays unraised. The cost-sensitive default-offer number is unchanged.
-    budget = 462_000
+    # 2026-10-29: 462_000 -> 465_000. Investment theses (ADR
+    # 2026-10-27-an-investment-thesis-lives-on-the-instrument) add three non-CORE tools —
+    # get/set/delete_investment_theses — a new domain, ~2.5K chars after trimming
+    # get_investment_theses' description; the watchlist intent fields it absorbs shed a little.
+    # 2026-10-29: 465_000 -> 468_000. Seven `<provider>_list_accounts` tools (one per bank
+    # connector, ai/tools/connector_fetch.py) — a provider's accounts without fetching any
+    # transactions, so "which accounts are there?" stops costing a full fetch. ~270 chars each
+    # after trimming the description to one sentence; all connector-scoped, so the CORE default
+    # offer is unchanged.
+    # 2026-10-31: 468_000 -> 470_000. search_connector_directory (ai/tools/connectors.py) — Lucius
+    # searches the Browse & add directory; ~1.1K chars after trimming, discoverable not CORE.
+    # 2026-11-02: 470_000 -> 474_000. GoCardless restored (ADR
+    # 2026-11-02-restore-gocardless-for-existing-accounts): its three connector-scoped tools
+    # (get_status / fetch_transactions / list_accounts), ~3.6K chars after trimming its provider
+    # note — the same shape and size as Enable Banking's three. Not CORE, so the default offer
+    # is unchanged.
+    # 2026-11-03: 474_000 -> 477_000. YNAB plan reads for Lucius (ai/tools/ynab.py):
+    # ynab_list_plans and ynab_get_plan, plus a plan_id on ynab_list_accounts /
+    # ynab_fetch_transactions — the connector keeps only the token and Lucius names the plan per
+    # call. ~1.4K chars, connector-scoped, so the CORE default offer is unchanged.
+    # 2026-11-05: 477_000 -> 479_000. get_asset_technicals / get_asset_fundamentals
+    # (ai/tools/asset_analysis.py) — the ticker Analysis tab's rows for Lucius. ~1.6K chars after
+    # trimming; discoverable, not CORE, so the default offer is unchanged.
+    budget = 479_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

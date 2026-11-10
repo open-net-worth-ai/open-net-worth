@@ -21,6 +21,7 @@ from backend.models.category_defs import BUILTIN_CATEGORIES
 from backend.services import ledger as ledger_service
 from backend.services.statements import decisions as svc
 from backend.services.statements import lucius_pass, profiles
+from tests.conftest import drop_stored_review
 
 
 def _no_llm_for_the_PARSE(monkeypatch):
@@ -268,11 +269,13 @@ def test_changed_instructions_bust_cached_parse_identical_stay_free(monkeypatch)
     # The FIRST call above already spent attempt 1; two more identical previews spend 2 and 3.
     for _ in range(2):
         captured.clear()
+        drop_stored_review(res["statement_id"])
         svc.decision_preview(content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE)
         assert not any(src == "statement_parse" and "Extract every" in p for src, p in captured)
         assert any("numbered transaction line" in p for _, p in captured)
     # The budget is now spent — a further identical preview is truly free: ZERO LLM calls.
     captured.clear()
+    drop_stored_review(res["statement_id"])
     svc.decision_preview(content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE)
     assert captured == []
     # Changed instructions → cache busted: the row extraction reruns under the new guidance,
@@ -300,18 +303,21 @@ def test_category_hint_pass_retries_across_previews_then_stops_at_the_cap(monkey
     captured: list = []
     _capture_stub(monkeypatch, captured, _ROWS)  # never resolves an actual hint — see below
     content = _make_pdf(_TEMPLATE + "COFFEE PLACE 001  12.50")
-    svc.decision_preview(content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE)
-    record = svc._statement_store().find_by_id(
-        svc.decision_preview(content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE)[
-            "statement_id"
-        ]
+    first = svc.decision_preview(
+        content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE
     )
+    sid = first["statement_id"]
+    drop_stored_review(sid)
+    svc.decision_preview(content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE)
+    record = svc._statement_store().find_by_id(sid)
     assert record["hints_attempts"] == 2  # NOT a boolean stuck True after attempt 1
     for _ in range(svc._MAX_HINT_ATTEMPTS - 2):
         captured.clear()
+        drop_stored_review(sid)
         svc.decision_preview(content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE)
         assert any("numbered transaction line" in p for _, p in captured)  # still retrying
     captured.clear()
+    drop_stored_review(sid)
     svc.decision_preview(content, "pdf", "acc", filename="mega-july.pdf", instructions=_NOTE)
     assert captured == []  # budget spent — quiet, not another silent-forever attempt
 
@@ -573,6 +579,7 @@ def test_preview_form_fields_remember_false_and_force_reparse(monkeypatch):
     assert profiles.find_instructions(content, "pdf") == ""
     # Default (field omitted) stays remember=true — persisted like before.
     captured.clear()
+    drop_stored_review(res["statement_id"])
     res2 = _post_preview(client, content, instructions=_NOTE)
     assert res2["instructions"]["remembered"] is True
     assert profiles.find_instructions(content, "pdf") == _NOTE
@@ -581,10 +588,12 @@ def test_preview_form_fields_remember_false_and_force_reparse(monkeypatch):
     # `_MAX_HINT_ATTEMPTS` (3) since this stub's reply never resolves an actual hint. `res`
     # and `res2` above already spent attempts 1 and 2 — one more identical call spends 3.
     captured.clear()
+    drop_stored_review(res["statement_id"])
     _post_preview(client, content, instructions=_NOTE)
     assert not any(src == "statement_parse" and "Extract every" in p for src, p in captured)
     # The budget is now spent — a further identical preview is truly free: ZERO LLM calls.
     captured.clear()
+    drop_stored_review(res["statement_id"])
     _post_preview(client, content, instructions=_NOTE)
     assert captured == []
     # force_reparse=true re-reads anyway, and resets the hint budget too.

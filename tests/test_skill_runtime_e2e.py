@@ -110,10 +110,6 @@ def _isolate_runtime(tmp_path, monkeypatch, db_isolated):
     monkeypatch.setattr(skill_store, "SKILLS_STATE_JSON", tmp_path / "skills_state.json")
     monkeypatch.setattr(assistant, "_record_cost", lambda *args, **kwargs: None)
 
-    async def _noop_memory(*args, **kwargs):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory)
     assistant.SESSIONS.clear()
     assistant._SESSION_LOCKS.clear()
     live_sessions._reset_for_tests()

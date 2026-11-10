@@ -14,7 +14,9 @@ builds, tests and publishes the three desktop apps, then (since 2026-10-08) the 
 (`ghcr.io/open-net-worth-ai/open-net-worth:<version>`), the wheel, the server files and a signed
 `manifest.json` to the published release, and (since 2026-10-15) its `pypi` job uploads the same
 wheel and sdist to PyPI. It has no gate, draft, verify or approve stages yet, and
-promotes on its own. The portal's hourly release watch (`onw-portal release-watch`,
+promotes on its own. After a release is published with its manifest, its `image-tags` job
+(`image-tags.yml`, dispatchable by hand to repair the tags) moves the image's `latest` and `X.Y`
+tags to that release. The portal's hourly release watch (`onw-portal release-watch`,
 `onw-release-watch.timer` in onw-cloud) rolls each new signed release to Stable; with no staging
 agent it does so straight away. Two ways to start it:
 
@@ -66,6 +68,12 @@ The same pipeline exists in this repo as `.github/workflows/release.yml` (trigge
 tag, always manual promotion). It is **dormant** until this repo's Actions run again (see Owner
 steps); never run both for one version. Keep the two in step when you change either.
 
+`mirror-releases.yml` copies each published release into this repo's own Releases list every hour,
+so people reading the code can see it: same notes, a link to the downloads, no files. Nothing reads
+those entries. Their tags have no `v` (`0.2.0`) because a `v*` tag here starts `release.yml`, so
+never create a `vX.Y.Z` release from this repo's page. Releases older than this repo's history
+(before 0.1.19) point at its first commit and say so, because the commit they were built from isn't here.
+
 ### Release assets
 
 Everything is in the public repo `open-net-worth-ai/open-net-worth-releases`, release `vX.Y.Z`:
@@ -73,6 +81,46 @@ the macOS DMG + ZIP, the Windows `setup.exe` + `RELEASES` + `.nupkg`, the Linux 
 `install.sh` / `install.ps1` (desktop installers), `install-server.sh` (the PyPI server installer),
 `docker-compose.yml` (pinned to this version), the wheel + sdist, `SHA256SUMS`, `manifest.json`, and
 `SHA256SUMS.minisig` / `manifest.json.minisig`.
+
+### Release notes
+
+Each release's notes list what changed since the previous release: the commit subjects between
+the two `Source:` commits, grouped by `scripts/release_notes.py` (`feat` → New, `fix` → Fixes,
+`style`/`copy`/`perf` → Polish; docs, ci, test, refactor and chore are left out), plus a compare
+link. So a commit subject is release-note copy: write it for a user. The releases repo's
+`release.yml` fetches the script at the source commit; a failure there leaves the list out and
+never blocks the release. Keep the trailing `Source: <sha>` line — the next run reads it.
+
+With `--highlights` (what the nightly passes, with the releases repo's `ANTHROPIC_API_KEY`),
+Claude (`claude-sonnet-5-5`, low effort, server-side refusal fallback) reads that list and a
+`## Highlights` section of 1–6 plain bullets goes on top: what users can now do first, then the
+fixes they would notice. The full list stays below it. It is best effort: no key, no SDK, an
+error, a refusal or an answer that isn't a bullet list leaves the notes exactly as before.
+
+### Discord announcement
+
+`scripts/release_announce.py` posts each published release to a Discord channel. It posts whenever
+the notes have anything under New, Fixes or Polish, so fixes-only nightlies are announced too. Its
+bullets are the release's Highlights, so the post and the release page say the same thing; notes
+without Highlights use their first New, then Fixes, lines as written. A line counts every fix
+and polish change and names the areas most of them touched ("Plus 35 fixes and 8 smaller
+improvements, especially in Import, Accounts and Chat."), then **How to get it** tells each kind
+of user what to do (desktop: automatic, or Check for Updates; server: `onw upgrade` or a new
+Docker image; new users: the download page) and the post ends with a link to the release. Try it locally with `--dry-run`: it prints the Discord payload and sends nothing.
+
+It runs as the `announce` job of the releases repo's `release.yml`, after `publish`, fetching the
+script at the source commit; it is `continue-on-error`, so it never fails a release. It needs the
+secret `DISCORD_RELEASE_WEBHOOK` (Discord channel → Edit Channel → Integrations → Webhooks) and the
+repository VARIABLE `DISCORD_ANNOUNCE=true` — a secret of that name does nothing. The secret
+`DISCORD_GENERAL_WEBHOOK`, when set, posts the same message to a second channel (#general while
+the community is small); delete it to stop.
+
+To see what a release's notes and post would look like without publishing anything, run the
+releases repo's **Preview release notes** workflow (`notes-preview.yml`):
+`gh workflow run notes-preview.yml -R open-net-worth-ai/open-net-worth-releases` (optional
+`-f version=0.1.26`, `-f ref=<source ref of the scripts>`). It rebuilds that release's notes with
+Highlights from the same commit range and writes them, and the Discord payload, to the run's
+summary. Only `-f post=true` sends the post to Discord.
 
 ### `manifest.json`
 
@@ -104,7 +152,8 @@ These are the things only the owner can do; the pipeline fails loudly and names 
 1. **minisign key** (blocks every release). On a trusted machine:
    `minisign -G -W -p onw-update.pub -s onw-update.key` (passwordless; CI has no tty). Put the
    public key (second line of the `.pub`, starting `RW`) into `UPDATE_PUBLIC_KEY` in
-   `desktop/src/main/update-key.ts` and commit it (also into the portal repo's configuration). Add the
+   `desktop/src/main/update-key.ts` and `backend/cli/release_check.py` (`onw start --auto-upgrade`
+   trusts it too) and commit it (also into the portal repo's configuration). Add the
    whole secret key file as the **releases repo** secret `ONW_MINISIGN_SECRET_KEY` (and in this
    repo too once its Actions run), then keep the file offline. Rotation procedure:
    `desktop/README.md` ("Linux update signing").

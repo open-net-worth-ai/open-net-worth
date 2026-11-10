@@ -11,6 +11,7 @@ import { showsInsured } from './assetCategoryRules'
 import { joinFacts, splitFacts, type Fact, type GuidedFact } from './detailsFacts'
 import { EditorFooter, SaveError, useEditorSave } from './editorKit'
 import { Icons } from './icons'
+import { X } from '../../../ui/icons'
 
 const FIELDS = ['maturity_date'] as const
 
@@ -73,7 +74,7 @@ function OtherDetailRow({ row, error, focus, onSet, onRemove }: OtherDetailRowPr
           aria-label="Remove this detail"
           onClick={onRemove}
         >
-          ×
+          <X size={14} aria-hidden="true" />
         </button>
       </div>
       {error && (

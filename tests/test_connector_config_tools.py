@@ -617,3 +617,20 @@ def _server_info(**kw):
     from backend.models.mcp_client import ServerInfo
 
     return ServerInfo(**kw)
+
+
+# ── what the user could add, beyond what is set up ──────────────────────────────────────
+# Lucius answered "what connectors are available?" without one broker: the ready-made MCP
+# servers in Browse & add live only in the frontend directory (owner report, 2026-10-31).
+
+
+def test_connector_reads_point_lucius_at_the_directory_tool(svc):
+    for out in (_call("get_connector_status", {}), _call("list_mcp_servers", {})):
+        note = out["more_in_directory"]
+        assert "Browse & add" in note
+        assert "search_connector_directory" in note
+
+
+def test_a_status_check_on_named_connectors_stays_on_topic(svc):
+    out = _call("get_connector_status", {"connectors": ["email"]})
+    assert "more_in_directory" not in out

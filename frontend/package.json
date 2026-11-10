@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "sync:connector-directory": "vite-node scripts/sync-connector-directory.ts",
+    "check:connector-tools": "vite-node scripts/check-connector-tools.ts",
     "build:tokens": "node scripts/build-tokens.mjs",
     "prebuild": "node scripts/build-tokens.mjs",
     "lint": "eslint .",
@@ -40,6 +42,7 @@
     "d3-sankey": "^0.12.3",
     "diff": "^9.0.0",
     "lightweight-charts": "^5.2.0",
+    "livekit-client": "2.15.8",
     "lucide-react": "^1.17.0",
     "prismjs": "^1.30.0",
     "react": "^19.2.6",

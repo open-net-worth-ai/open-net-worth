@@ -108,3 +108,13 @@ describe('buildSuggestions — date rows', () => {
     )
   })
 })
+
+describe('parseSegment — status:hidden', () => {
+  it('turns status:hidden into the Hidden token', () => {
+    expect(parseSegment('status: hidden', SUGGEST, '$')).toMatchObject({
+      field: 'hidden',
+      value: true,
+      label: 'Hidden',
+    })
+  })
+})

@@ -60,6 +60,9 @@ export interface ModalProps {
   title?: ReactNode
   /** Optional secondary line under the title. */
   subtitle?: ReactNode
+  /** Controls beside the close button — a view toggle that belongs to the whole dialog (the
+   *  import review's "Hide file"), not to one step's body. */
+  headerActions?: ReactNode
   size?: ModalSize
   footer?: ReactNode
   children: ReactNode
@@ -96,6 +99,7 @@ export function Modal({
   onClose,
   title,
   subtitle,
+  headerActions,
   size = 'md',
   footer,
   children,
@@ -292,6 +296,7 @@ export function Modal({
                   </Dialog.Description>
                 ) : null}
               </div>
+              {headerActions && <div className="ui-modal__actions">{headerActions}</div>}
               <Dialog.Close asChild>
                 <button type="button" className="ui-modal__close" aria-label="Close">
                   <X size={18} strokeWidth={1.6} aria-hidden="true" />

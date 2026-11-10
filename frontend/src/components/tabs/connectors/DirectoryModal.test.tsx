@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { render, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import { DirectoryModal } from './DirectoryModal'
 import type { Connector } from './types'
 
@@ -53,6 +53,10 @@ function open(props: Partial<Parameters<typeof DirectoryModal>[0]> = {}) {
       onAdded={props.onAdded}
       toast={props.toast}
       family={props.family}
+      previewId={props.previewId}
+      loading={props.loading}
+      addId={props.addId}
+      autoConnect={props.autoConnect}
     />,
   )
 }
@@ -190,9 +194,10 @@ describe('the 480px results floor', () => {
     // Any term matching exactly two cards will do — the COUNT is what this pins, not the word.
     // ("aggregation" used to match Plaid + Yodlee; "bank and card feeds" matched Plaid + Yodlee
     // too, until Yodlee's catalog entry was removed 2026-08-14 — see
-    // docs/adr/2026-08-14-hide-yodlee-enterprise-only-pricing.md.)
+    // docs/adr/2026-08-14-hide-yodlee-enterprise-only-pricing.md; "read-only" stopped being
+    // two once Upstox and Tiger joined, 2026-10-31.)
     fireEvent.change(getByLabelText('Search directory'), {
-      target: { value: 'read-only' },
+      target: { value: 'paper trading' },
     })
     expect(grid().querySelectorAll('.cn-dircard').length).toBe(2)
     expect(results().style.minHeight).toBe('480px')
@@ -207,19 +212,45 @@ describe('the 480px results floor', () => {
   })
 })
 
-describe('Popular tiles', () => {
-  it('show on the unfiltered, unsearched view only', () => {
+describe('Suggested (the Connectors list’s block, not a separate Popular row)', () => {
+  const suggested = (container: HTMLElement) =>
+    container.querySelector('[aria-label="Suggested connectors"]')
+
+  it('shows on the unfiltered, unsearched view only', () => {
     const { container, getByLabelText } = open()
-    expect(container.querySelector('.cn-poprow')).toBeTruthy()
+    expect(suggested(container)).toBeTruthy()
 
     fireEvent.change(getByLabelText('Search directory'), { target: { value: 'tav' } })
-    expect(container.querySelector('.cn-poprow')).toBeFalsy()
+    expect(suggested(container)).toBeFalsy()
   })
 
-  it('hide once a family chip is picked', () => {
-    const { container, getByText } = open()
-    fireEvent.click(getByText('Web'))
-    expect(container.querySelector('.cn-poprow')).toBeFalsy()
+  it('hides once a family chip is picked', () => {
+    const { container, getByRole } = open()
+    // A role query, not text: "Web" is also a category chip on the cards now.
+    fireEvent.click(getByRole('tab', { name: /^Web/ }))
+    expect(suggested(container)).toBeFalsy()
+  })
+
+  it('offers at most three, never one already added, as the dashed suggested cards', () => {
+    const { container } = open({
+      connectors: [
+        {
+          id: 'telegram',
+          kind: 'telegram',
+          name: 'Telegram',
+          enabled: true,
+          status: 'active',
+          pausable: true,
+          config: {},
+          secrets_public: {},
+          tools: [],
+        },
+      ],
+    })
+    const cards = [...suggested(container)!.querySelectorAll('.cn-dircard.suggested')]
+    expect(cards.length).toBeGreaterThan(0)
+    expect(cards.length).toBeLessThanOrEqual(3)
+    expect(cards.some((c) => c.textContent?.includes('Telegram'))).toBe(false)
   })
 })
 
@@ -239,11 +270,16 @@ describe('opening a card resets .rd-modal-body scroll — it must never inherit 
   })
 })
 
-describe('the generic MCP card skips the preview', () => {
-  it('goes straight to the add form when the card body is clicked', () => {
-    const { container, getByText, queryByText } = open()
+describe('the custom MCP server skips the preview', () => {
+  it('is pinned above the grid, not a card in it, and goes straight to the add form', () => {
+    const { container, getByText, getAllByText, queryByText } = open()
     fireEvent.click(getByText('MCP'))
-    fireEvent.click(card(container, 'Custom MCP server'))
+    // Its own row at the top AND a footer button beside Close — buried as one card among
+    // thirty, people never found it.
+    expect(container.querySelector('.cn-customrow')).toBeTruthy()
+    expect(container.querySelector('.rd-modal-foot')?.textContent).toContain('Add custom server')
+    expect(container.querySelector('.cn-dirgrid')?.textContent).not.toContain('Custom MCP server')
+    fireEvent.click(getAllByText('Add custom server')[1]!)
 
     // Step 1 of the add flow, not a preview page.
     expect(getByText('Connect')).toBeTruthy()
@@ -268,7 +304,7 @@ describe('step 1 → step 2: an unreached server is never saved', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0]!)
     return view
   }
 
@@ -312,6 +348,35 @@ describe('step 1 → step 2: an unreached server is never saved', () => {
     const paths = mockAuthFetch.mock.calls.map((c) => c[0])
     expect(paths).toEqual(['/api/mcp-clients/probe'])
     expect(paths).not.toContain('/api/mcp-clients')
+  })
+
+  it('offers the fix when a 401 says the server wants a sign-in, and switches in one click', async () => {
+    mockAuthFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: false,
+        server_info: null,
+        tools: [],
+        suggested_name: '',
+        suggested_id: '',
+        error: "server 'mcp-example-com' returned HTTP 401: authentication required",
+        needs_auth: 'oauth',
+      }),
+    })
+
+    const { getByText, getByLabelText, getByRole } = openAddForm()
+    fireEvent.change(getByLabelText(labelStartingWith('Server URL')), {
+      target: { value: 'https://mcp.example.com' },
+    })
+    fireEvent.click(getByText('Connect'))
+
+    await waitFor(() => expect(getByText(/needs you to sign in/)).toBeTruthy())
+    fireEvent.click(getByRole('button', { name: 'Switch to OAuth' }))
+
+    // Back on the form, with OAuth picked and its own one-line hint showing.
+    const auth = within(getByRole('group', { name: 'Authentication' }))
+    expect(auth.getByRole('button', { name: 'OAuth' }).getAttribute('aria-pressed')).toBe('true')
+    expect(getByText(/Sign in on the vendor/)).toBeTruthy()
   })
 
   it('persists nothing when the probe ENDPOINT itself fails, not just the server', async () => {
@@ -438,7 +503,7 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0]!)
     return view
   }
 
@@ -446,7 +511,11 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.mercury.com/mcp' },
     })
-    fireEvent.change(view.getByLabelText('Authentication'), { target: { value: 'oauth' } })
+    fireEvent.click(
+      within(view.getByRole('group', { name: 'Authentication' })).getByRole('button', {
+        name: 'OAuth',
+      }),
+    )
   }
 
   let popup: { location: { href: string }; closed: boolean; close: ReturnType<typeof vi.fn> }
@@ -664,7 +733,11 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
     expect((view.getByLabelText(labelStartingWith('Server URL')) as HTMLInputElement).value).toBe(
       'https://mcp.mercury.com/mcp',
     )
-    expect((view.getByLabelText('Authentication') as HTMLSelectElement).value).toBe('oauth')
+    expect(
+      within(view.getByRole('group', { name: 'Authentication' }))
+        .getByRole('button', { name: 'OAuth' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true')
   })
 })
 
@@ -683,7 +756,7 @@ describe('abandoning the add flow after a completed sign-in deletes the dormant 
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0]!)
     return view
   }
 
@@ -691,7 +764,11 @@ describe('abandoning the add flow after a completed sign-in deletes the dormant 
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.mercury.com/mcp' },
     })
-    fireEvent.change(view.getByLabelText('Authentication'), { target: { value: 'oauth' } })
+    fireEvent.click(
+      within(view.getByRole('group', { name: 'Authentication' })).getByRole('button', {
+        name: 'OAuth',
+      }),
+    )
   }
 
   let popup: { location: { href: string }; closed: boolean; close: ReturnType<typeof vi.fn> }
@@ -868,7 +945,7 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
   async function reviewCustomServer() {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0]!)
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.x.test' },
     })
@@ -904,7 +981,7 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
     })
     const { getByText, container } = await reviewCustomServer()
 
-    expect(getByText('Unknown publisher')).toBeTruthy() // the BADGE says it
+    expect(getByText('Unverified publisher')).toBeTruthy() // the BADGE says it
     expect(getByText(/can’t vouch for its code/)).toBeTruthy()
     // ...and the name slot stays empty. The prototype passed the literal string "Unknown
     // publisher" as the publisher NAME, which made the panel print the known-publisher note.
@@ -930,14 +1007,14 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
     await waitFor(() => expect(view.getByText(/Reachable — 1 tool found/)).toBeTruthy())
 
     expect(view.getByText('Verified publisher')).toBeTruthy()
-    expect(view.queryByText('Unknown publisher')).toBeNull()
+    expect(view.queryByText('Unverified publisher')).toBeNull()
   })
 
   it('still renders a panel when a backend sends no trust block at all', async () => {
     probeReturning(undefined)
     const { getByText } = await reviewCustomServer()
     expect(getByText('Publisher')).toBeTruthy()
-    expect(getByText('Unknown publisher')).toBeTruthy()
+    expect(getByText('Unverified publisher')).toBeTruthy()
   })
 })
 
@@ -945,7 +1022,7 @@ describe('paste is not a separate mode', () => {
   it('fills the very same fields typing would, and shares the same Test connect', () => {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0]!)
 
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), {
@@ -968,11 +1045,172 @@ describe('paste is not a separate mode', () => {
   it('says so plainly when a snippet will not parse, without clearing the box', () => {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0]!)
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), { target: { value: '{ oops' } })
 
     expect(view.getByText(/Couldn't parse that yet/)).toBeTruthy()
     expect((view.getByLabelText('Config snippet') as HTMLTextAreaElement).value).toBe('{ oops')
+  })
+})
+
+describe('an installed server merged into its catalog card', () => {
+  const IBKR_SERVER: Connector = {
+    id: 'mcp:api-ibkr-com',
+    kind: 'mcp',
+    name: 'Interactive Brokers',
+    enabled: true,
+    status: 'active',
+    pausable: true,
+    config: { transport: 'http', url: 'https://api.ibkr.com/v1/api/mcp-public' },
+    secrets_public: {},
+    tools: [],
+  }
+
+  it("opens ON that card from the server's View details, not on the plain browse", () => {
+    // The server has no directory row of its own any more — it is the `mcp-ibkr` card — so a
+    // lookup by its id alone fell through to the grid, and View details reopened Browse & add.
+    const { container } = open({ connectors: [IBKR_SERVER], previewId: 'mcp:api-ibkr-com' })
+    expect(container.querySelector('.cn-dirgrid')).toBeNull()
+    expect(container.textContent).toContain('Interactive Brokers')
+  })
+})
+
+describe('on a phone the preview’s action lives in the footer, not the header', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows ONE full-width Add in the footer, no header action and no footer Back', () => {
+    const onFocusConnector = vi.fn()
+    const { container, getAllByText } = open({ onFocusConnector })
+    fireEvent.click(card(container, 'Telegram'))
+
+    expect(container.querySelector('.cn-idhead-actions')).toBeNull()
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    expect(within(foot).queryByText('Back')).toBeNull()
+    const add = within(foot).getByText('Add connector')
+    expect(add.className).toContain('cn-foot-action')
+    expect(getAllByText('Add connector')).toHaveLength(1)
+
+    fireEvent.click(add)
+    expect(onFocusConnector).toHaveBeenCalledWith('telegram', { configure: true })
+  })
+
+  it('shows Open settings there for an installed connector', () => {
+    const { container } = open({
+      connectors: [connector({ id: 'telegram', name: 'Telegram', status: 'active' })],
+    })
+    fireEvent.click(card(container, 'Telegram'))
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    expect(within(foot).getByText('Open settings')).toBeTruthy()
+  })
+})
+
+describe('a search that finds nothing', () => {
+  it('offers the custom MCP server as the way forward', () => {
+    const { getByLabelText, getByText } = open()
+    fireEvent.change(getByLabelText('Search directory'), {
+      target: { value: 'zzz-no-such-vendor' },
+    })
+    expect(getByText('No matches')).toBeTruthy()
+    fireEvent.click(getByText('Add a custom MCP server'))
+    expect(getByText('Connect')).toBeTruthy()
+  })
+})
+
+describe('filter counts', () => {
+  const tabCounts = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('.cn-dirfilters .rd-tab')).map((t) => t.textContent)
+
+  it('a tab counts its whole kind — a chip or a search never changes it', () => {
+    const { container, getByLabelText } = open()
+    const before = tabCounts(container)
+    const brokerage = Array.from(container.querySelectorAll('.cn-catrow .cn-cat')).find((c) =>
+      c.textContent?.startsWith('Brokerage'),
+    ) as HTMLElement
+    fireEvent.click(brokerage)
+    expect(tabCounts(container)).toEqual(before)
+    fireEvent.change(getByLabelText('Search directory'), { target: { value: 'coinbase' } })
+    expect(tabCounts(container)).toEqual(before)
+  })
+
+  it('a chip counts within the tab you are on', () => {
+    const { container, getByRole } = open()
+    const brokerage = () =>
+      Array.from(container.querySelectorAll('.cn-catrow .cn-cat')).find((c) =>
+        c.textContent?.startsWith('Brokerage'),
+      )?.textContent
+    const onAll = brokerage()
+    fireEvent.click(getByRole('tab', { name: /^Data sources/ }))
+    expect(brokerage()).not.toBe(onAll)
+  })
+})
+
+describe('before the connectors read lands', () => {
+  // Opened early, the directory read every connector as not added: Email offered with a +, and
+  // Suggested proposing what the user already had (owner, 2026-10-31).
+  it('waits with a skeleton instead of guessing what is installed', () => {
+    const { container, queryByLabelText, getByText } = open({ loading: true })
+    expect(getByText('Loading connectors…')).toBeTruthy()
+    expect(queryByLabelText('Suggested connectors')).toBeNull()
+    expect(container.querySelector('.cn-dirgrid')).toBeNull()
+    // The header still works: search and tabs don't depend on what is installed.
+    expect(container.querySelector('.cn-dirfilters .rd-tabs')).toBeTruthy()
+  })
+})
+
+describe("Lucius's Connect on a sign-in connector", () => {
+  it('opens the add form AND starts the sign-in, without a second click', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: false, error: 'x' }) })
+    open({ addId: 'mcp-webull', autoConnect: true })
+    await waitFor(() =>
+      expect(mockAuthFetch.mock.calls.map((c) => c[0])).toContain('/api/mcp-clients/oauth/begin'),
+    )
+    openSpy.mockRestore()
+  })
+
+  it('without it, the form waits for the user', () => {
+    open({ addId: 'mcp-webull' })
+    expect(mockAuthFetch.mock.calls.map((c) => c[0])).not.toContain('/api/mcp-clients/oauth/begin')
+  })
+})
+
+describe('Save without connecting', () => {
+  function openCustomForm(props: Parameters<typeof open>[0] = {}) {
+    const view = open(props)
+    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    return view
+  }
+
+  it('stores the server switched off and untested, and says so', async () => {
+    mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'gemini' }) })
+    const toast = vi.fn()
+    const onAdded = vi.fn()
+    const { getByText, getByLabelText } = openCustomForm({ toast, onAdded })
+    fireEvent.click(getByText('Local command (stdio)'))
+    fireEvent.change(getByLabelText(labelStartingWith('Command')), { target: { value: 'node' } })
+    fireEvent.click(getByText('Save'))
+    await waitFor(() => expect(onAdded).toHaveBeenCalled())
+    // One POST, switched off — and no probe: the server is never reached.
+    const calls = mockAuthFetch.mock.calls
+    expect(calls.map((c) => c[0])).toEqual(['/api/mcp-clients'])
+    const body = JSON.parse((calls[0]![1] as { body: string }).body)
+    expect(body).toMatchObject({ transport: 'stdio', command: 'node', enabled: false })
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/saved, switched off/))
+  })
+
+  it('offers Save only once there is something to save', () => {
+    const { queryByText } = openCustomForm()
+    expect(queryByText('Save')).toBeNull()
   })
 })

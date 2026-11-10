@@ -1,7 +1,7 @@
 // The 50/30/20 hero's arithmetic (propMath.ts) on the book's real month shape: the groups are the
 // book's Zero-Based groups, each with an optional share of income (owner, 2026-09-26).
 import { describe, expect, it } from 'vitest'
-import { SAVE_COLOR, derive, fmt, groupFigures, paceLabel } from './propMath'
+import { SAVE_COLOR, derive, fmt, groupFigures, paceLabel, projectedEnvelope } from './propMath'
 import type { PropEnvelope, PropMonth } from './propApi'
 
 const env = (
@@ -311,6 +311,7 @@ describe('the savings line', () => {
       target: 20,
       gap: -900,
       running: false,
+      early: false,
     })
   })
 
@@ -346,6 +347,86 @@ describe('the savings line', () => {
       }),
     )
     expect(d.insights).toEqual([])
+  })
+})
+
+describe('the running month projection (owner, 2026-11-02: "heading for 22%" on the 2nd)', () => {
+  const hist = (over: Partial<PropEnvelope['history']>): PropEnvelope['history'] => ({
+    last: 0,
+    avg3: 0,
+    last_by_day: 0,
+    avg3_by_day: 0,
+    ...over,
+  })
+
+  it('a monthly payment made early is not expected again on its usual date', () => {
+    // Usually sent mid-month; this month on the 2nd.
+    const e = env('sister', 'bills', 844, {
+      history: hist({ avg3: 835, median3: 833, rest_median3: 833 }),
+    })
+    expect(projectedEnvelope(e, true, 0.07)).toBe(844)
+  })
+
+  it('a quiet start still expects the usual month, up to the usual month', () => {
+    const e = env('dining', 'fun', 13, {
+      history: hist({ avg3: 1171, avg3_by_day: 8, median3: 900, rest_median3: 880 }),
+    })
+    expect(projectedEnvelope(e, true, 0.07)).toBe(13 + 880)
+  })
+
+  it('one outlier month is not the usual month — the median is', () => {
+    // A trip in one of three months: mean S$1,307, median S$0.
+    const e = env('travel', 'fun', 0, {
+      history: hist({ avg3: 1307, avg3_by_day: 2, median3: 0, rest_median3: 0 }),
+    })
+    expect(projectedEnvelope(e, true, 0.07)).toBe(0)
+  })
+
+  it('a payback already in is not expected twice', () => {
+    // Paid out and back already this month; usually paid back later.
+    const e = env('loan', 'bills', 0, {
+      history: hist({ avg3: 0, avg3_by_day: 3868, median3: 0, rest_median3: -3868 }),
+    })
+    expect(projectedEnvelope(e, true, 0.5)).toBe(0)
+  })
+
+  it('a closed month is what it spent', () => {
+    const e = env('rent', 'bills', 2150, { history: hist({ avg3: 3000, median3: 3000 }) })
+    expect(projectedEnvelope(e, false, 1)).toBe(2150)
+  })
+})
+
+describe('the first days of a month', () => {
+  const early = (over: Partial<PropMonth> = {}) =>
+    derive(month({ day: 2, days_in_month: 30, ...over }))
+  // Usually S$6,000 a month on fun — a forecast 40% short of a 20% goal by itself.
+  const heavy = env('dining', 'fun', 13, {
+    history: {
+      last: 6000,
+      avg3: 6000,
+      last_by_day: 0,
+      avg3_by_day: 0,
+      median3: 6000,
+      rest_median3: 6000,
+    },
+  })
+
+  it('gives no savings verdict on what is mostly history', () => {
+    const d = early({ envelopes: [env('rent', 'bills', 2000), heavy] })
+    expect(d.verdict).toEqual({ text: `Too early to call — ${fmt(2013)} spent so far`, bad: false })
+    expect(d.tone).toBe(null)
+    expect(d.insights[0]).toMatchObject({ kind: 'save', running: true, early: true })
+  })
+
+  it('still says what has already happened', () => {
+    const d = early({ envelopes: [env('rent', 'bills', 9000), heavy] })
+    expect(d.verdict).toEqual({ text: 'Bills is already over', bad: true })
+    expect(d.tone).toBe('warn')
+  })
+
+  it('judges the forecast once the first week is over', () => {
+    const d = derive(month({ day: 8, envelopes: [env('rent', 'bills', 2000), heavy] }))
+    expect(d.verdict.text).toMatch(/^Heading for /)
   })
 })
 

@@ -16,9 +16,10 @@ export interface MoneyProps {
  * by construction — no per-selector CSS allowlist to maintain. The mask rule
  * lives in index.css (`body.hide-amounts .money`).
  *
- * Only the AMOUNT goes inside — keep labels/dates/percentages OUTSIDE so they
- * stay visible while masked (e.g. render `<Money>{fBase(x)}</Money> short`, not
- * the whole string). For elements that already carry layout classes (a `<td>`,
+ * Only the figure goes inside, an amount or a percentage of your own — keep labels
+ * and dates OUTSIDE so they stay visible while masked (e.g. render
+ * `<Money>{fBase(x)}</Money> short`, not the whole string). A market price stays
+ * visible. For elements that already carry layout classes (a `<td>`,
  * a flex cell), prefer the `moneyClass()` helper to just add the `.money` class
  * instead of nesting a wrapper.
  */

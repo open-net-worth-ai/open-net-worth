@@ -288,21 +288,23 @@ export function FeedTable({
                         )}
                       </span>
                     </td>
-                    <td className="muted mk-acctd" title={r.account}>
+                    <td className="muted mk-acctd not-money" title={r.account}>
                       {r.account}
                     </td>
                     <td className="mask">{r.qty.toLocaleString()}</td>
                     <td className="mask">{fUnitPrice(r.cost, r.ccy, priceDigits(r.cls))}</td>
-                    <td className="mask">{fUnitPrice(r.price, r.ccy, priceDigits(r.cls))}</td>
-                    <td className="muted">{r.ccy}</td>
+                    <td className="not-money">{fUnitPrice(r.price, r.ccy, priceDigits(r.cls))}</td>
+                    <td className="muted not-money">{r.ccy}</td>
                     <td className="mask">{fBase(r.value)}</td>
                     <td>{r.wt.toFixed(1)}%</td>
                     <td className="mask" style={{ color: tone(r.pl) }}>
                       {fSignedBase(r.pl)}
                     </td>
                     <td style={{ color: tone(r.pl) }}>{r.plpct == null ? '—' : fPct(r.plpct)}</td>
-                    <td style={{ color: tone(r.day), fontWeight: 600 }}>{fPct(r.day)}</td>
-                    <td className="mk-act-cell" onClick={(e) => e.stopPropagation()}>
+                    <td className="not-money" style={{ color: tone(r.day), fontWeight: 600 }}>
+                      {fPct(r.day)}
+                    </td>
+                    <td className="mk-act-cell not-money" onClick={(e) => e.stopPropagation()}>
                       {!merged && (
                         <KebabMenu
                           label={`${r.sym || r.name} actions`}

@@ -40,7 +40,7 @@ More on phrasing, attachments and files in [How to talk to Lucius](talking-to-lu
 | **Payees and rules** | Set a payee's default category, write a categorization rule, apply either to past transactions |
 | **Reports and files** | A chart or report right in the chat; a report for any period (net worth, income, spending, cash flow, budget vs. actual); a PDF, Excel or CSV file to keep |
 | **Your documents** | Read and answer questions about statements, receipts and files in [Documents](documents.md) |
-| **Connectors** (once set up) | Sync a bank or broker, search the web, read and send [email](../connectors/email-ingestion.md), message you on [Telegram](../connectors/telegram.md), use tools from another app over [MCP](../connectors/external-mcp.md) |
+| **Connectors** (once set up) | Sync a bank or broker, search the web, read and send [email](../connectors/email-ingestion.md), message you on [Telegram](../connectors/telegram.md), use tools from another app over [MCP](../connectors/external-mcp.md). Ask what you can connect and he searches the directory and opens the setup form for you to finish ([details](../connectors/external-mcp.md#ask-lucius-what-you-can-connect)) |
 | **Memory, skills and Automations** | Remember things about you ([Memory](memory.md)), follow your saved playbooks ([Skills](skills.md)), and do jobs on a schedule ([Automations](automations.md)) |
 
 You never need to know his tools' names. He has a few hundred; the common ones are always at
@@ -77,3 +77,10 @@ can be undone with the **Restore** button on the reply. See [Permissions](permis
 - [Permissions](permissions.md)
 - [Automations](automations.md)
 - [Connecting an AI provider](../getting-started/connecting-an-ai-provider.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [AI Agent for Personal Finance: A Personal Wealth Agent](https://opennetworth.ai/blog/ai-agent-for-personal-finance/): what a personal wealth agent does day to day
+- [Muse vs dots vs an Open-source Personal Wealth Agent](https://opennetworth.ai/blog/muse-vs-dots-vs-self-hosted-ai-wealth-assistant/): Lucius next to hosted AI money assistants

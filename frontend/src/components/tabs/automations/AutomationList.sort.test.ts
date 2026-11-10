@@ -74,3 +74,22 @@ describe('filterAndSortAutomations — paused sinks', () => {
     ])
   })
 })
+
+describe('filterAndSortAutomations — name', () => {
+  it('orders A→Z, case-insensitive and number-aware, with paused still last', () => {
+    const rows = [
+      make({ name: 'zeta' }),
+      make({ name: 'Report 10' }),
+      make({ name: 'alpha', status: 'paused' }),
+      make({ name: 'report 2' }),
+      make({ name: 'Beta' }),
+    ]
+    expect(names(filterAndSortAutomations(rows, '', 'name'))).toEqual([
+      'Beta',
+      'report 2',
+      'Report 10',
+      'zeta',
+      'alpha',
+    ])
+  })
+})

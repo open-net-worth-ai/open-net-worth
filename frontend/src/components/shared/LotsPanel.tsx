@@ -6,13 +6,21 @@ import type {
   IncomeEvent,
   IncomeSummary,
 } from '../../types/portfolio'
-import { fAmountNative, fBase, fDate, getBaseCurrency, plClass } from '../../utils/format'
+import {
+  fAmountNative,
+  fBase,
+  fDate,
+  fUnitCostNative,
+  getBaseCurrency,
+  plClass,
+} from '../../utils/format'
 import { authFetch } from '../../api/client'
 import { EntityRow } from '../../lucius/EntityRow'
 import { Button, Loading, Panel } from '../ui'
 import { AcquireLotForm } from './AcquireLotForm'
 import { DisposalForm } from './DisposalForm'
 import { WhichAccountModal, type WriteTarget } from './WhichAccountModal'
+import { Plus, ChevronDown, ChevronRight } from '../../ui/icons'
 
 export type { WriteTarget }
 
@@ -81,7 +89,9 @@ export function LotsPanel({
   useEffect(() => {
     if (merged || !positionId) return
     let alive = true
-    authFetch(`/api/positions/${positionId}/lots`)
+    // A sold-out-then-rebought holding lists its earlier (sold) lots too, like one that
+    // never split — the same with_predecessors scope as the realized/dividend reads below.
+    authFetch(`/api/positions/${positionId}/lots?with_predecessors=true`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: { lots: Lot[] }) => {
         if (alive) setFetchedLots(d.lots || [])
@@ -99,8 +109,9 @@ export function LotsPanel({
     let alive = true
     // Scope realized history to THIS position — not the instrument — so a disposal never
     // bleeds onto a sibling position of the same instrument (e.g. the unvested-grant row
-    // showing a sale that came from the sellable holding).
-    const params = new URLSearchParams({ position_id: positionId })
+    // showing a sale that came from the sellable holding). with_predecessors keeps the sale of
+    // a holding sold out and rebought at the same account, which the rebuy left on its old row.
+    const params = new URLSearchParams({ position_id: positionId, with_predecessors: 'true' })
     authFetch(`/api/realized-pnl?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: RealizedPnl) => {
@@ -120,9 +131,9 @@ export function LotsPanel({
   useEffect(() => {
     if (merged || !positionId) return
     let alive = true
-    // Scoped to THIS position, same as lots/realized above — a position-scoped path, not a
-    // query param (income.py's GET /api/positions/{id}/income).
-    authFetch(`/api/positions/${positionId}/income`)
+    // Scoped to THIS position (and its sold-out predecessors), same as realized above — a
+    // position-scoped path, not a query param (income.py's GET /api/positions/{id}/income).
+    authFetch(`/api/positions/${positionId}/income?with_predecessors=true`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: IncomeSummary) => {
         if (alive) {
@@ -190,8 +201,13 @@ export function LotsPanel({
       <Panel
         title={lotsTitle}
         actions={
-          <Button variant="ghost" size="sm" onClick={startAddLot}>
-            + Add lot
+          <Button
+            variant="ghost"
+            size="sm"
+            iconLeft={<Plus size={13} aria-hidden="true" />}
+            onClick={startAddLot}
+          >
+            Add lot
           </Button>
         }
       >
@@ -212,8 +228,13 @@ export function LotsPanel({
       <Panel
         title={realizedCount != null ? `Realized history (${realizedCount})` : 'Realized history'}
         actions={
-          <Button variant="ghost" size="sm" onClick={startRecordSale}>
-            + Record sale
+          <Button
+            variant="ghost"
+            size="sm"
+            iconLeft={<Plus size={13} aria-hidden="true" />}
+            onClick={startRecordSale}
+          >
+            Record sale
           </Button>
         }
       >
@@ -406,12 +427,12 @@ function LotsSection({
                     {eff == null ? (
                       <span className="lots-unknown">Unknown</span>
                     ) : (
-                      fAmountNative(eff, l.cost_currency || costCcy)
+                      fUnitCostNative(eff, l.cost_currency || costCcy)
                     )}
                   </td>
                   <td>{l.fees ? fAmountNative(l.fees, l.cost_currency || costCcy) : '—'}</td>
-                  <td>{kindLabel(l.kind)}</td>
-                  <td>
+                  <td className="not-money">{kindLabel(l.kind)}</td>
+                  <td className="not-money">
                     {closed ? (
                       '—'
                     ) : (
@@ -426,7 +447,7 @@ function LotsSection({
                   <td className={gain == null ? 'muted' : plClass(gain)}>
                     {gain == null ? '—' : (gain >= 0 ? '+' : '') + fBase(gain)}
                   </td>
-                  {showAccount && <td>{l.account_name || '—'}</td>}
+                  {showAccount && <td className="not-money">{l.account_name || '—'}</td>}
                 </EntityRow>
               )
             })}
@@ -531,7 +552,11 @@ function RealizedSection({
                             toggle(ev.id)
                           }}
                         >
-                          {isOpen ? '▾' : '▸'}
+                          {isOpen ? (
+                            <ChevronDown size={12} aria-hidden="true" />
+                          ) : (
+                            <ChevronRight size={12} aria-hidden="true" />
+                          )}
                         </button>
                       )}
                       {fDate(ev.disposed_at, 'short', 'always')}
@@ -540,11 +565,13 @@ function RealizedSection({
                     <td className="muted">
                       {buy.price == null
                         ? '—'
-                        : fAmountNative(buy.price, buy.currency ?? ev.proceeds_currency)}
+                        : fUnitCostNative(buy.price, buy.currency ?? ev.proceeds_currency)}
                     </td>
-                    <td>{fAmountNative(ev.proceeds_per_unit, ev.proceeds_currency)}</td>
-                    <td>{ev.method === 'specific_id' ? 'Specific' : 'FIFO'}</td>
-                    <td>
+                    <td>{fUnitCostNative(ev.proceeds_per_unit, ev.proceeds_currency)}</td>
+                    <td className="not-money">
+                      {ev.method === 'specific_id' ? 'Specific' : 'FIFO'}
+                    </td>
+                    <td className="not-money">
                       <span className={`term-badge term-${term}`} title={termTitle(term)}>
                         {term}
                       </span>
@@ -552,7 +579,7 @@ function RealizedSection({
                     <td className={gain == null ? 'muted' : plClass(gain)}>
                       {gain == null ? '—' : (gain >= 0 ? '+' : '') + fBase(gain)}
                     </td>
-                    {showAccount && <td>{ev.account_name || '—'}</td>}
+                    {showAccount && <td className="not-money">{ev.account_name || '—'}</td>}
                   </EntityRow>
                   {isOpen && (
                     <tr className="lots-consumption-row">
@@ -635,7 +662,7 @@ function DividendsSection({
                 toFields={(it) => ({ symbol, income_kind: it.income_kind, paid_at: it.paid_at })}
               >
                 <td>{ev.paid_at ? fDate(ev.paid_at, 'short', 'always') : '—'}</td>
-                <td>{incomeKindLabel(ev.income_kind)}</td>
+                <td className="not-money">{incomeKindLabel(ev.income_kind)}</td>
                 <td>{fAmountNative(ev.gross_amount, ev.currency)}</td>
                 <td>{ev.tax_withheld ? fAmountNative(ev.tax_withheld, ev.currency) : '—'}</td>
                 <td className={ev.base_amount === null ? 'muted' : undefined}>
@@ -643,8 +670,8 @@ function DividendsSection({
                     ? `${fAmountNative(ev.native_net_amount ?? ev.gross_amount - ev.tax_withheld, ev.currency)} (FX unavailable)`
                     : fBase(ev.base_amount)}
                 </td>
-                <td>{ev.is_drp ? 'DRP' : 'Cash'}</td>
-                {showAccount && <td>{ev.account_name || '—'}</td>}
+                <td className="not-money">{ev.is_drp ? 'DRP' : 'Cash'}</td>
+                {showAccount && <td className="not-money">{ev.account_name || '—'}</td>}
               </EntityRow>
             ))}
           </tbody>
@@ -746,10 +773,10 @@ function ConsumptionTable({ event }: { event: RealizedEvent }) {
               {c.unit_cost == null ? (
                 <span className="lots-unknown">Unknown</span>
               ) : (
-                fAmountNative(c.unit_cost, c.cost_currency || event.proceeds_currency)
+                fUnitCostNative(c.unit_cost, c.cost_currency || event.proceeds_currency)
               )}
             </td>
-            <td>
+            <td className="not-money">
               <span className={`term-badge term-${c.term}`} title={termTitle(c.term)}>
                 {c.term}
               </span>

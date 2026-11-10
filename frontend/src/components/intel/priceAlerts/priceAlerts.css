@@ -82,7 +82,6 @@
   padding-bottom: 16px;
 }
 .pa-body > span,
-.pa-set-b > span,
 .pa-formsw-b > span {
   display: block;
 }
@@ -101,14 +100,30 @@
 .pa-head-ch--dn {
   color: var(--bad);
 }
-.pa-head-sub {
+.pa-mute {
   margin-left: auto;
-  font-size: 12px;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
-.pa-head-sub--muted {
+.pa-mute:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.pa-mute--on,
+.pa-mute--on:hover {
   color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
 /* Alert prices share one scale; the 52-week range is separate context below. */
@@ -334,34 +349,6 @@
 .pa-set {
   margin-top: 22px;
   border-top: 1px solid var(--line);
-}
-.pa-setrow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 13px 2px;
-  border-bottom: 1px solid var(--line);
-  background: none;
-  border-left: none;
-  border-right: none;
-  border-top: none;
-  border-radius: 0;
-  text-align: left;
-  color: inherit;
-}
-.pa-set-b {
-  flex: 1;
-  min-width: 0;
-}
-.pa-set-t {
-  font-size: 12.5px;
-  color: var(--ink);
-}
-.pa-set-b {
-  display: flex;
-  align-items: center;
-  gap: 9px;
 }
 .pa-sugg {
   display: flex;

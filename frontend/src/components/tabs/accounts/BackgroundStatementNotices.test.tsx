@@ -64,6 +64,42 @@ describe('BackgroundStatementNotices', () => {
     await waitFor(() => expect(screen.queryByText('Couldn’t read')).toBeNull())
   })
 
+  it('a read just sent to the background shows as reading, then turns into Ready in the same pill', async () => {
+    // Owner, 2026-10-25: "Continue in background" put up a register toast AND, when the read
+    // finished quickly, this popup beside it — two pills, two centres. Now one pill changes state.
+    trackBackgroundStatement({
+      id: 's4',
+      accountId: 'acc1',
+      filename: 'fast.xlsx',
+      startedAt: Date.now(),
+    })
+    status('parsing')
+    render(<BackgroundStatementNotices />)
+
+    expect(await screen.findByText('Reading in the background')).toBeTruthy()
+    expect(screen.getByText('fast.xlsx')).toBeTruthy()
+
+    status('ready')
+    expect(await screen.findByText('Ready to review', {}, { timeout: 6000 })).toBeTruthy()
+    expect(screen.queryByText('Reading in the background')).toBeNull()
+    expect(screen.getAllByText('fast.xlsx')).toHaveLength(1)
+  }, 10000)
+
+  it('the reading pill steps aside after a few seconds while the read carries on', async () => {
+    trackBackgroundStatement({
+      id: 's5',
+      accountId: null,
+      filename: 'slow.xlsx',
+      startedAt: Date.now() - 4700,
+    })
+    status('parsing')
+    render(<BackgroundStatementNotices />)
+
+    expect(screen.getByText('Reading in the background')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByText('Reading in the background')).toBeNull())
+    expect(backgroundStatements().map((s) => s.id)).toEqual(['s5'])
+  })
+
   it('stays quiet and keeps watching while the read is still going', async () => {
     trackBackgroundStatement({ id: 's3', accountId: null, filename: 'slow.pdf' })
     status('parsing')

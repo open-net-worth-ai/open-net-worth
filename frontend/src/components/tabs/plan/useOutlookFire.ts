@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { getCachedQueryData, useQueryCache } from '../../../state/queryCache'
+import { fetchCachedQuery, getCachedQueryData, useQueryCache } from '../../../state/queryCache'
 import { makeFireConfig } from './planData'
 import type { FireConfig } from './planData'
 
@@ -98,15 +98,18 @@ export function useOutlookFire(
   // this fetches (and briefly settles on) /api/fire?current_nw=0 for every real user, and the
   // sim it unblocks runs a real Monte-Carlo pass against $0 net worth, flashing a wrong-but
   // real-looking odds % before the true net worth lands and corrects it.
-  const query = useQueryCache(
-    requestUrl,
-    async () => {
-      const response = await authFetch(requestUrl)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json() as Promise<FireApiRow>
-    },
-    { staleTime: 0, version: fireVersion + retryCount, enabled: !totalLoading },
-  )
+  const fetchRow = async () => {
+    const response = await authFetch(requestUrl)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return response.json() as Promise<FireApiRow>
+  }
+  // fireVersion is NOT this query's version: the effect below owns version refreshes, with a
+  // forced fetch (a second, non-forced one here would only duplicate the request).
+  const query = useQueryCache(requestUrl, fetchRow, {
+    staleTime: 0,
+    version: retryCount,
+    enabled: !totalLoading,
+  })
 
   useEffect(() => {
     // Re-gate (show the loading state, which lets the Outlook re-seed its levers) on the FIRST
@@ -127,9 +130,15 @@ export function useOutlookFire(
         return
       }
       if (versionChanged) {
-        setLoading(true)
+        // Only before the first config: a later version advance is usually a write elsewhere in
+        // the app ('*'), and re-gating then paused the scenario odds and screen commands for
+        // every one of them while showing nothing new.
+        if (configVersion === -1) setLoading(true)
         try {
-          const row = await query.refresh()
+          // Forced: the advance means something was just written, and joining a fetch already
+          // in flight could return the row from BEFORE that write — which, once handled, looks
+          // like "nothing changed" and drops e.g. a Lucius profile edit.
+          const row = await fetchCachedQuery(requestUrl, fetchRow, { force: true })
           if (cancelled) return
           setConfig(configFromRow(row, total))
           setLoading(false)
@@ -155,12 +164,14 @@ export function useOutlookFire(
     return () => {
       cancelled = true
     }
+    // configVersion is read only to gate `loading` before the first config; re-running when it
+    // advances would just re-apply the same row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     fireVersion,
     query.data,
     query.error,
     query.initialLoading,
-    query.refresh,
     query.refreshing,
     total,
     totalLoading,

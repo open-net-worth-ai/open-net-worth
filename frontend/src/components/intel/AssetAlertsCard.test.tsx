@@ -37,7 +37,7 @@ describe('AssetAlertsCard', () => {
   it('shows the empty state + add button when there are no alerts', () => {
     const { getByText } = render(<AssetAlertsCard {...props()} />)
     expect(getByText(/crosses a price you set/i)).toBeTruthy()
-    expect(getByText('+ Add price alert')).toBeTruthy()
+    expect(getByText('Add price alert')).toBeTruthy()
   })
 
   it('renders alert chips + a manage button when alerts exist', () => {
@@ -51,7 +51,7 @@ describe('AssetAlertsCard', () => {
 
   it('opens the editor directly when already following (no POST)', async () => {
     const { getByText, findByText } = render(<AssetAlertsCard {...props()} />)
-    fireEvent.click(getByText('+ Add price alert'))
+    fireEvent.click(getByText('Add price alert'))
     expect(await findByText('AAPL · Apple Inc.')).toBeTruthy()
     // Opening reads (the monitoring config for the News sources copy) but never writes.
     expect(mockAuthFetch.mock.calls.filter(([, opts]) => opts?.method)).toHaveLength(0)
@@ -61,7 +61,7 @@ describe('AssetAlertsCard', () => {
     const { getByText, findByText, queryByText } = render(
       <AssetAlertsCard {...props({ itemId: null })} />,
     )
-    fireEvent.click(getByText('+ Add price alert'))
+    fireEvent.click(getByText('Add price alert'))
     expect(await findByText('AAPL · Apple Inc.')).toBeTruthy()
     // No watchlist item → nowhere to store mute/feeds, so the ticker-level settings are hidden.
     expect(queryByText('Mute AAPL')).toBeNull()
@@ -69,15 +69,15 @@ describe('AssetAlertsCard', () => {
   })
 
   // ALERT-AD-MUTE: a muted ticker (monitor_news=false) opens the modal in the muted state and the
-  // mute switch commits itself — guards the prop→toggle→PATCH wiring against silent regressions.
+  // header mute toggle commits itself — guards the prop→toggle→PATCH wiring against silent regressions.
   it('opens muted and un-muting PATCHes monitor_news:true straight away', async () => {
     mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({}) })
     const { getByText, findByText, getByLabelText } = render(
       <AssetAlertsCard {...props({ monitorNews: false })} />,
     )
-    fireEvent.click(getByText('+ Add price alert'))
+    fireEvent.click(getByText('Add price alert'))
     expect(await findByText('Muted')).toBeTruthy()
-    expect((getByLabelText('Mute AAPL') as HTMLInputElement).checked).toBe(true)
+    expect(getByLabelText('Mute AAPL').getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(getByLabelText('Mute AAPL'))
     await waitFor(() => {
       const patch = mockAuthFetch.mock.calls.find(([, opts]) => opts?.method === 'PATCH')

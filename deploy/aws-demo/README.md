@@ -45,6 +45,7 @@ deploy/aws-demo/demo-aws.sh provision      # ~4 min: VM, firewall (22 only), sta
 deploy/aws-demo/demo-aws.sh ship           # build committed HEAD for linux/amd64, load it on the VM
 deploy/aws-demo/demo-aws.sh book --seed    # fresh fabricated book dated to today
 deploy/aws-demo/demo-aws.sh lucius         # optional: OpenRouter key (hidden prompt) + model
+deploy/aws-demo/demo-aws.sh voice          # optional: voice calls, on the demo's own LiveKit project
 deploy/aws-demo/demo-aws.sh verify         # http://127.0.0.1:15175 → the VM's demo, check it by hand
 ```
 
@@ -81,10 +82,71 @@ at `http://localhost:5175`, then pipe or paste its token into `demo-aws.sh tunne
 | Tail app logs | `demo-aws.sh logs` |
 | Shell on the VM | `demo-aws.sh ssh` |
 | Roll back | `demo-aws.sh ssh docker images onw-demo`, then set `ONW_DEMO_TAG=<old tag>` in `/srv/onw-demo-stack/.env` and run `docker compose up -d app` there |
-| Fresh book | stop the app, remove `/srv/onw-demo/data`, recreate it owned by `ubuntu`, then `demo-aws.sh book --seed` |
-| Change quotas | edit `DEMO_TOKENS_*` / `DEMO_TURNS_*` / `DEMO_TRUSTED_PROXY_HOPS` in `/srv/onw-demo-stack/.env`, then `docker compose up -d app` |
+| Fresh book | `demo-aws.sh book --reset` (keeps Lucius's AI settings and the voice-call setup) |
+| Bigger VM | Lightsail cannot resize in place: `aws lightsail create-instance-snapshot`, then `create-instances-from-snapshot` with the new `--bundle-id` and a new name, re-close the firewall to 22 only (`put-instance-public-ports`), move `onw-demo-ip` with `detach-static-ip` / `attach-static-ip`, stop then delete the old instance. Its tunnel connector comes up with the copy, so visitors see no gap; the scripts find the VM through the static IP, whatever the instance is called. The copy has a new SSH host key: compare `ssh-keyscan` of the static IP with the key you accepted at the copy's temporary IP, then `ssh-keygen -R` the old one. Pick by per-core speed, not cores: the app is one Python process, so a page's burst of requests is GIL-bound. The demo runs `c_xlarge_1_0` (compute-optimized, 3.0 GHz, no CPU credits) — same price as `xlarge_3_0`, about 20% faster on the Dashboard burst |
+| Back up the live book | `demo-aws.sh backup` — saves it to `~/.open-net-worth-demo-backups/` on this machine (newest 14 kept; `ONW_DEMO_BACKUP_DIR` / `ONW_DEMO_BACKUP_KEEP`). `book --reset` and `book DIR` take one first and refuse to replace the book if it fails |
+| Restore a backup | `tar xzf <backup>.tar.gz -C <dir>`, then `demo-aws.sh book <dir>` (Lucius's AI settings on the VM are kept) |
+| Change quotas | edit `DEMO_TOKENS_*` / `DEMO_TURNS_*` / `DEMO_CALL*` / `DEMO_TRUSTED_PROXY_HOPS` in `/srv/onw-demo-stack/.env`, then `docker compose up -d app` |
+| Turn calls off | set `ONW_FLAG_VOICE_CALLS=0` in `/srv/onw-demo-stack/.env`, then `docker compose up -d app` |
 
 Running more than one VM? `ONW_DEMO_VM=<name>` picks which one; the default is `onw-demo`.
+
+### Daily refresh from your Mac
+
+```bash
+AWS_PROFILE=… AWS_REGION=… deploy/aws-demo/daily.sh install 10:00   # or ONW_DEMO_HOST=<static ip>
+deploy/aws-demo/daily.sh run                                         # the same job, by hand
+deploy/aws-demo/daily.sh uninstall
+```
+
+The agent runs at that local time. Install looks up the VM's static IP once and stores it in the
+agent, so a run needs only SSH, never an AWS sign-in (an `aws login` session expires within a
+day). Each run ships `origin/main` if it differs from the live tag, then runs `book --reset`: a fresh
+fabricated book dated to today, with Lucius's AI settings carried over inside the VM. Visitors'
+edits, conversations and the app's nightly backups of them are discarded on the VM — but the
+book is first saved to `~/.open-net-worth-demo-backups/` on this Mac, and the reset is skipped if
+that save fails. To keep something for good, put it in the seed (`backend/scripts/demo/`). If the new image never
+reports healthy, the job rolls back to the tag that was running and raises a macOS
+notification. It starts Docker Desktop only when it needs to build, deletes the local
+`onw-demo` images and build cache afterwards, and quits Docker again if it started it. A Mac that
+is asleep at the hour runs the job on wake; one that is off skips the day. Log:
+`~/Library/Logs/onw-demo-daily.log`.
+
+It deploys `main` whatever CI said about it — the health check is the only gate.
+
+## Voice calls
+
+Visitors can call Lucius from the chat (`voice_calls` flag). Calls run on a **LiveKit Cloud
+project of the demo's own** — never your personal one — because LiveKit bills a call's speech
+and voice models by the minute, whether or not Lucius is asked anything.
+
+1. Create a LiveKit Cloud project for the demo, set a spending limit on it, and copy its URL
+   (`wss://….livekit.cloud`), API key and API secret.
+2. `demo-aws.sh ship` — every image carries the voice libraries (hash-pinned in the same lock as
+   the rest of the app), so this is only needed if the VM still runs an image from before them.
+3. `demo-aws.sh voice` — asks for the URL, key and secret with hidden prompts (or reads three
+   lines from a pipe), checks them against LiveKit from the VM, stores them in the book the way
+   Settings would (with `DEMO_MODE=0` for that one process), sets `ONW_FLAG_VOICE_CALLS=1` in
+   `.env` and recreates the app. Visitors can't read or change them: on the demo the only voice
+   route open to them is starting a call.
+
+Every call is capped (`services/demo_calls`; `.env` overrides the defaults):
+
+| Variable | Default | Limit |
+|---|---|---|
+| `DEMO_CALL_MAX_S` | 600 | longest call, in seconds — Lucius warns 30 s before, then says goodbye |
+| `DEMO_CALLS_PER_VISITOR_DAILY` | 3 | calls per visitor address per rolling day |
+| `DEMO_CALL_MINUTES_PER_VISITOR_DAILY` | 15 | call minutes per visitor address per rolling day |
+| `DEMO_CALL_MINUTES_TOTAL_DAILY` | 120 | call minutes per rolling day across all visitors |
+| `DEMO_CALLS_CONCURRENT` | 2 | calls at once |
+
+A call reserves its whole limit while it is on, so the minutes caps hold even with calls running
+side by side; if the worker doesn't hang up at the limit, the app closes the call's room itself
+20 s later. A call's Lucius turns spend the caller's token budget (`DEMO_TOKENS_PER_IP_DAILY`).
+The counts live in memory, so a restart (each `ship`, the daily reset) starts a fresh day — the
+LiveKit project's own spending limit is the hard stop. The voice worker is a second Python
+process with LiveKit loaded (a few hundred MB). The voice setup lives in the book and is carried
+across `book --reset` and `book DIR`.
 
 ## Spend
 

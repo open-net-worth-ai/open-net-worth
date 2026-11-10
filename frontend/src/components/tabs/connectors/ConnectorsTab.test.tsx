@@ -8,11 +8,16 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import { ConnectorsTab } from './ConnectorsTab'
+import { act } from '@testing-library/react'
+import { _resetBusForTests, dispatchScreenCommand } from '../../../lucius/bus'
+import { setupTargetFor } from './directoryRows'
 import { clearQueryCache } from '../../../state/queryCache'
 import type { Connector } from './types'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
+const signInWithOAuth = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true, error: null })))
+vi.mock('./oauthSignIn', () => ({ signInWithOAuth }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
   useRouterState: () => undefined,
@@ -84,6 +89,80 @@ async function renderTab() {
   return view
 }
 
+describe('Reconnect on a server that signs in', () => {
+  function server(oauth: { connected: boolean; needs_reauth: boolean }): Connector {
+    return {
+      id: 'mcp:acme',
+      name: 'Acme',
+      kind: 'mcp',
+      enabled: true,
+      config: {
+        auth_type: 'oauth',
+        oauth,
+        last_status: oauth.needs_reauth ? 'auth_error' : 'connect_error',
+      },
+      secrets_public: {},
+      status: 'error',
+      error: 'Can’t reach this server.',
+      pausable: true,
+      short_description: '',
+      tools: [],
+    }
+  }
+
+  function withServer(row: Connector) {
+    const fallback = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/connectors') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ connectors: [TELEGRAM, row] }),
+        })
+      }
+      if (url === '/api/mcp-clients/acme/test') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ last_status: 'connect_error' }),
+        })
+      }
+      return fallback(url, init)
+    })
+  }
+
+  const tested = () => authFetch.mock.calls.filter(([url]) => url === '/api/mcp-clients/acme/test')
+
+  beforeEach(() => signInWithOAuth.mockClear())
+
+  it('tries the connection again and opens no sign-in window for a network failure', async () => {
+    withServer(server({ connected: true, needs_reauth: false }))
+    await renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reconnect' }))
+
+    await waitFor(() => expect(tested()).toHaveLength(1))
+    expect(signInWithOAuth).not.toHaveBeenCalled()
+  })
+
+  it('says Authenticate, and opens the sign-in window, when it has never signed in', async () => {
+    withServer(server({ connected: false, needs_reauth: false }))
+    await renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Authenticate' }))
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({ server_id: 'acme' }))
+  })
+
+  it('opens the sign-in window straight away when the sign-in is dead', async () => {
+    withServer(server({ connected: true, needs_reauth: true }))
+    await renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reconnect' }))
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({ server_id: 'acme' }))
+    expect(tested()).toHaveLength(0)
+  })
+})
+
 describe('Browse & add is mounted, not a placeholder', () => {
   it('opens the real directory', async () => {
     await renderTab()
@@ -100,8 +179,8 @@ describe('Browse & add is mounted, not a placeholder', () => {
       (l) => l.textContent?.trim() === 'Add a channel',
     )!
     fireEvent.click(link)
-    const chips = await screen.findAllByRole('button', { name: 'Channels' })
-    expect(chips.some((c) => c.getAttribute('aria-pressed') === 'true')).toBe(true)
+    const tabs = await screen.findAllByRole('tab', { name: /^Channels/ })
+    expect(tabs.some((t) => t.getAttribute('aria-selected') === 'true')).toBe(true)
   })
 })
 
@@ -109,17 +188,18 @@ describe('a connector that is not in the list is still reachable and configurabl
   /** The directory's own control for one catalog entry — its `+`, or its gear once
    *  installed. Found by `aria-label` rather than an accessible-name role scan: the grid
    *  renders forty-odd cards and this block opens it four times over. */
-  function directoryButton(container: HTMLElement, label: string) {
+  function directoryButton(label: string) {
     return waitFor(() => {
-      const found = container.querySelector<HTMLElement>(`button[aria-label="${label}"]`)
+      // Scoped to the dialog: the list's own Suggested cards carry the same Add labels.
+      const found = document.querySelector<HTMLElement>(`.rd-modal button[aria-label="${label}"]`)
       if (!found) throw new Error(`no directory button labelled "${label}"`)
       return found
     })
   }
 
-  async function openDirectory(container: HTMLElement, label: string) {
+  async function openDirectory(label: string) {
     fireEvent.click(screen.getByRole('button', { name: /Browse & add/ }))
-    fireEvent.click(await directoryButton(container, label))
+    fireEvent.click(await directoryButton(label))
   }
 
   /** The modal title, which IS the back control on every view below the list. */
@@ -129,10 +209,11 @@ describe('a connector that is not in the list is still reachable and configurabl
 
   it('lands the directory’s Add ON Plaid’s real form — Add already said "set this up"', async () => {
     const { container } = await renderTab()
-    // Plaid is filtered out of the list — this is the whole point of the directory route.
-    expect(screen.queryByText('Bank + card aggregation')).toBeNull()
+    // Plaid is filtered out of the list's ROWS (it may still be a Suggested card) — this is the
+    // whole point of the directory route.
+    expect(container.querySelector('.cn-list')?.textContent).not.toContain('Plaid')
 
-    await openDirectory(container, 'Add Plaid')
+    await openDirectory('Add Plaid')
 
     // No Connect tap in between: the extra one was the defect. These are PlaidSection's own
     // fields, so it is the one real config surface and not a duplicate built for this entry.
@@ -143,7 +224,7 @@ describe('a connector that is not in the list is still reachable and configurabl
 
   it('leaves the user on the detail page when they back out of that form', async () => {
     const { container } = await renderTab()
-    await openDirectory(container, 'Add Plaid')
+    await openDirectory('Add Plaid')
     await screen.findByLabelText(/^Client ID/)
 
     fireEvent.click(backControl(container)) // `‹ Plaid`
@@ -156,8 +237,8 @@ describe('a connector that is not in the list is still reachable and configurabl
   })
 
   it('opens the PLAIN detail page from an installed entry’s gear, never the form', async () => {
-    const { container } = await renderTab()
-    await openDirectory(container, 'Configure Telegram')
+    await renderTab()
+    await openDirectory('Configure Telegram')
 
     // Telegram already holds credentials, so its gear means "show me its settings page".
     expect(await screen.findByRole('button', { name: 'Pause' })).toBeTruthy()
@@ -338,5 +419,42 @@ describe('the footer points inbound MCP at Settings → MCP', () => {
     const link = within(container).getByRole('link', { name: 'Settings → MCP' })
     expect(link.getAttribute('href')).toBe('/settings?sub=mcp')
     expect(container.textContent).not.toContain('Settings → Developer')
+  })
+})
+
+describe('connectors.open_setup (Lucius) — opens a form, changes nothing', () => {
+  afterEach(() => _resetBusForTests())
+
+  it('opens a directory MCP entry on its add form with the preset pre-filled', async () => {
+    await renderTab()
+    act(() => dispatchScreenCommand({ name: 'connectors.open_setup', args: { id: 'mcp-ibkr' } }))
+
+    // The add flow for a hosted OAuth server: its endpoint is pre-filled, nothing is saved.
+    expect(await screen.findByDisplayValue('https://api.ibkr.com/v1/api/mcp-public')).toBeTruthy()
+    expect(authFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
+  it('opens a native connector on its configuration form', async () => {
+    await renderTab()
+    act(() => dispatchScreenCommand({ name: 'connectors.open_setup', args: { id: 'plaid' } }))
+    expect(await screen.findByLabelText(/^Client ID/)).toBeTruthy()
+  })
+
+  it('fails cleanly on an id the directory does not have', async () => {
+    await renderTab()
+    act(() => dispatchScreenCommand({ name: 'connectors.open_setup', args: { id: 'nope' } }))
+    expect(await screen.findByText(/isn't in the directory/)).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('resolves the target from live state', () => {
+    const telegram = { ...TELEGRAM }
+    expect(setupTargetFor([telegram], 'telegram')).toEqual({ kind: 'settings', id: 'telegram' })
+    expect(setupTargetFor([PLAID_UNCONFIGURED], 'plaid')).toEqual({ kind: 'form', id: 'plaid' })
+    expect(setupTargetFor([], 'mcp-ibkr')).toEqual({ kind: 'add', id: 'mcp-ibkr' })
+    expect(setupTargetFor([], 'mcp-custom')).toEqual({ kind: 'unknown' })
+    // 'custom' is the Add custom server form — any MCP server the directory doesn't list.
+    expect(setupTargetFor([], 'custom')).toEqual({ kind: 'add', id: 'mcp-custom' })
+    expect(setupTargetFor([], 'zzz')).toEqual({ kind: 'unknown' })
   })
 })

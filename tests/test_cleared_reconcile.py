@@ -107,6 +107,23 @@ def test_account_with_balance_exposes_both(ledger_data):
     assert out["cleared_balance_base"] == 70.0
 
 
+@pytest.mark.asyncio
+async def test_ai_list_accounts_exposes_cleared_balance(ledger_data):
+    """Lucius reads balances through list_accounts — without cleared_balance it could only
+    re-derive the figure from row flags when asked to compare against the bank."""
+    import json
+
+    from backend.ai.tools import accounts as acct_tools
+
+    acct, _, txn_store = ledger_data
+    _expense(txn_store, acct["id"], 30.0, cleared=True)
+    _expense(txn_store, acct["id"], 20.0, cleared=False)
+    out, _ = await acct_tools.list_accounts({})
+    row = next(r for r in json.loads(out)["accounts"] if r["id"] == acct["id"])
+    assert row["balance"] == 50.0
+    assert row["cleared_balance"] == 70.0
+
+
 # ── set_transaction_cleared (the toggle) ────────────────────────────────────────
 
 

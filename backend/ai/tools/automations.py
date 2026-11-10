@@ -176,6 +176,18 @@ class _AutomationUpdatesPreview:
 _AUTOMATION_UPDATES_PREVIEW: PreviewAdapter = _AutomationUpdatesPreview()
 
 
+def _create_spec(input_data: dict) -> dict:
+    spec = {key: input_data[key] for key in _AI_UPDATABLE_FIELDS if input_data.get(key) is not None}
+    spec["execution"] = {"kind": "lucius"}
+    return spec
+
+
+def _precheck_create(input_data: dict) -> None:
+    from backend.services.automations.service import validate_new_automation
+
+    validate_new_automation(_create_spec(input_data))
+
+
 class UpdateAutomationsInput(ToolInput):
     updates: List[AutomationUpdateInput] = Field(
         min_length=1, description="One or more Automation patches."
@@ -241,12 +253,12 @@ async def list_automations(input_data: dict):
     ),
     input_schema=schema_of(CreateAutomationInput, tool_name="create_automation"),
     mutates=("automations",),
+    precheck=_precheck_create,
 )
 async def create_automation(input_data: dict):
     from backend.services.automations.service import apply_automation_change
 
-    spec = {key: input_data[key] for key in _AI_UPDATABLE_FIELDS if input_data.get(key) is not None}
-    spec["execution"] = {"kind": "lucius"}
+    spec = _create_spec(input_data)
     try:
         automation = apply_automation_change({"op": "create", "automation": spec})
         return json.dumps({"ok": True, "automation": automation}, ensure_ascii=False), None

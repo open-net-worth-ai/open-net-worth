@@ -7,6 +7,7 @@ import { Button } from '../../../ui'
 import { FitPicker, MethodCard, Spark } from './MethodCard'
 import { METHODS, fitColor } from './methodsData'
 import type { FitId, MethodId } from './methodsData'
+import { Arrow } from '../icons'
 
 export function FirstRun({
   onStart,
@@ -73,7 +74,7 @@ export function FirstRun({
           data-tour="setup-plan"
         >
           {chosen ? `Start with ${chosen.name}` : 'Start'}
-          <span style={{ marginLeft: 6 }}>→</span>
+          <Arrow size={14} />
         </Button>
       </div>
     </div>

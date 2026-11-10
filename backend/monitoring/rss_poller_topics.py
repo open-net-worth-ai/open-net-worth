@@ -197,7 +197,7 @@ async def _process_topic(
         feeds = [f for f in feeds if f.get("url") not in fetched_urls]
         fetched_urls.update(f["url"] for f in feeds if f.get("url"))
     if feeds:
-        await gather_rss(feeds, max_age=cache_ttl)
+        await gather_rss(feeds, max_age=cache_ttl, read_back=False)
 
     if not item.get("monitor_news"):
         return

@@ -99,7 +99,7 @@ describe('Actions & events tab', () => {
 
   it('renders "Manage with Lucius" styled with the lucius link variant', () => {
     const { getByRole } = render(<Actions commitment={commitment} fx={{ SGD: 1 }} m={m} />)
-    const btn = getByRole('button', { name: 'Manage with Lucius →' })
+    const btn = getByRole('button', { name: 'Manage with Lucius' })
     expect(btn.className).toContain('lucius')
   })
 

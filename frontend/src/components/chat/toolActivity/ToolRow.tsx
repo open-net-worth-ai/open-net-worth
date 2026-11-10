@@ -5,7 +5,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown } from '../../../ui/icons'
+import { useFlag } from '../../../hooks/useFlag'
+import type { AutoApproval } from '../../../types/chat'
 import { fetchToolDetail } from '../../../utils/chatStore'
+import { InfoPopover } from '../../ui/InfoPopover'
 import type { Cluster, ToolItem } from './cluster'
 import { failureOf } from './cluster'
 import { ICON_SIZE, MCP_PLACEHOLDER, connectorIcon, iconForVerb } from './icons'
@@ -92,6 +95,7 @@ function BusyDots() {
 /** One call's own expandable detail — used for a single-call row and for each member of an
  *  expanded multi-call cluster. */
 function CallDetail({ item, sessionId }: { item: ToolItem; sessionId?: string }) {
+  const declinedIsNotFailure = useFlag('permissions_v2') === true
   const elided = item.resultElided !== undefined || item.inputElided !== undefined
   const [detail, setDetail] = useState<{
     input?: Record<string, unknown>
@@ -161,8 +165,32 @@ function CallDetail({ item, sessionId }: { item: ToolItem; sessionId?: string })
       loadingLabel={busy ? 'Waiting for result…' : 'Loading full result…'}
       failedToLoad={failedToLoad || unavailable}
       onRetry={canFetch ? load : undefined}
-      resultFailed={failureOf({ ...item, result }).failed}
+      resultFailed={failureOf({ ...item, result }, declinedIsNotFailure).failed}
     />
+  )
+}
+
+/** What the Auto judge decided about this call: it ran without a card, or it asked first. Quiet
+ *  by design: a small faint "i" whose bubble says which and gives the judge's one-line reason. The
+ *  reason is model-written from the call's arguments, so it is rendered as text only — never
+ *  markdown, never a link. */
+function AutoApprovalHint({ approval }: { approval: AutoApproval }) {
+  const asked = approval.verdict === 'ask'
+  const lead = asked ? 'Auto asked you first' : 'Auto-approved'
+  const who = approval.model ? `${lead}${asked ? '' : ' by the judge'} (${approval.model})` : lead
+  return (
+    <InfoPopover
+      label={asked ? 'Why Auto asked about this' : 'Why this ran without asking'}
+      triggerClassName="msg-toolact__hint"
+      text={
+        <span className="msg-toolact__hint-text">
+          <span className="msg-toolact__hint-title">{who}</span>
+          {approval.reason && <span>{approval.reason}</span>}
+        </span>
+      }
+    >
+      i
+    </InfoPopover>
   )
 }
 
@@ -183,31 +211,44 @@ export function ToolRow({
   const expandable =
     !cluster.busy || cluster.items.some((i) => i.input !== undefined || i.result !== undefined)
 
+  const approval = call?.autoApproval
+  const head = (
+    <button
+      type="button"
+      className="msg-toolact__head"
+      aria-expanded={expandable ? open : undefined}
+      disabled={!expandable}
+      onClick={() => expandable && setOpen((o) => !o)}
+    >
+      <RowIcon
+        verb={cluster.verb}
+        look={look}
+        ownerId={cluster.ownerId}
+        ownerName={cluster.ownerName}
+      />
+      <span className="msg-toolact__label">
+        {cluster.ownerName && <span className="msg-toolact__owner">{cluster.ownerName}</span>}
+        <span className="msg-toolact__text">{cluster.label}</span>
+        {cluster.detail && <span className="msg-toolact__detail-inline">{cluster.detail}</span>}
+      </span>
+      {cluster.busy && <BusyDots />}
+      {expandable && (
+        <ChevronDown size={12} strokeWidth={1.5} className="msg-toolact__caret" aria-hidden />
+      )}
+    </button>
+  )
+
   return (
     <div className={`msg-toolact__row${open ? ' msg-toolact__row--open' : ''}`}>
-      <button
-        type="button"
-        className="msg-toolact__head"
-        aria-expanded={expandable ? open : undefined}
-        disabled={!expandable}
-        onClick={() => expandable && setOpen((o) => !o)}
-      >
-        <RowIcon
-          verb={cluster.verb}
-          look={look}
-          ownerId={cluster.ownerId}
-          ownerName={cluster.ownerName}
-        />
-        <span className="msg-toolact__label">
-          {cluster.ownerName && <span className="msg-toolact__owner">{cluster.ownerName}</span>}
-          <span className="msg-toolact__text">{cluster.label}</span>
-          {cluster.detail && <span className="msg-toolact__detail-inline">{cluster.detail}</span>}
-        </span>
-        {cluster.busy && <BusyDots />}
-        {expandable && (
-          <ChevronDown size={12} strokeWidth={1.5} className="msg-toolact__caret" aria-hidden />
-        )}
-      </button>
+      {/* The "i" is a button of its own, so it sits BESIDE the row's button, never inside it. */}
+      {approval ? (
+        <div className="msg-toolact__line">
+          {head}
+          <AutoApprovalHint approval={approval} />
+        </div>
+      ) : (
+        head
+      )}
 
       {/* A failure is stated on the row itself. Burying "account not found" one click down,
           under a row that looks like every successful one, is how a failed turn reads as a

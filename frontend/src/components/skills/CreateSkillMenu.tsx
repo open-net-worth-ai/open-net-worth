@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '../ui'
+import { Plus } from '../../ui/icons'
 
 interface CreateSkillMenuProps {
   onCreateWithLucius: () => void
@@ -92,11 +93,12 @@ export function CreateSkillMenu({
       <Button
         variant="primary"
         size="sm"
+        iconLeft={<Plus size={14} aria-hidden="true" />}
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        + New skill
+        New skill
       </Button>
 
       {open && (

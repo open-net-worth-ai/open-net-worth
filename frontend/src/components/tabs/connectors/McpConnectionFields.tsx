@@ -58,6 +58,19 @@ function SecretEye({
   )
 }
 
+const AUTH_OPTIONS: [McpAuth, string][] = [
+  ['none', 'None'],
+  ['key', 'API key'],
+  ['oauth', 'OAuth'],
+]
+
+/** One line under Authentication — a wrong pick otherwise surfaced only as a raw HTTP 401. */
+const AUTH_HINT: Record<McpAuth, string> = {
+  none: 'For a public server that needs no login.',
+  key: 'Paste a key or token from the vendor’s dashboard.',
+  oauth: 'Sign in on the vendor’s own page — no key to copy.',
+}
+
 export function McpConnectionFields({ flow }: { flow: McpAddFlow }): JSX.Element {
   const { form, setForm, editing } = flow
   const parsed = parsePastedConfig(form.paste)
@@ -206,16 +219,22 @@ export function McpConnectionFields({ flow }: { flow: McpAddFlow }): JSX.Element
             <span className="rd-label" id="mcp-auth-label">
               Authentication
             </span>
-            <select
-              className="rd-select"
-              aria-labelledby="mcp-auth-label"
-              value={form.auth}
-              onChange={(e) => setForm((f) => ({ ...f, auth: e.target.value as McpAuth }))}
-            >
-              <option value="none">None</option>
-              <option value="key">API key</option>
-              <option value="oauth">OAuth</option>
-            </select>
+            {/* Three short choices — a segmented control like Transport above, so all of them
+                are visible without opening a menu. */}
+            <div className="rd-seg" role="group" aria-labelledby="mcp-auth-label">
+              {AUTH_OPTIONS.map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={'rd-seg-b' + (form.auth === value ? ' on' : '')}
+                  aria-pressed={form.auth === value}
+                  onClick={() => setForm((f) => ({ ...f, auth: value }))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="rd-help">{AUTH_HINT[form.auth]}</span>
           </div>
           {form.auth === 'key' && (
             <div className="rd-field">

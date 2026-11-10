@@ -332,6 +332,24 @@ describe('Identity — skill', () => {
   })
 })
 
+// ── Identity: connector ───────────────────────────────────────────────────────
+
+describe('Identity — connector', () => {
+  it('a connector with no brand mark shows the Connectors glyph, not a bare swatch', () => {
+    const { container } = render(<Identity item={{ type: 'connector', label: 'Email' }} />)
+    expect(container.querySelector('.id-glyph svg')).toBeTruthy()
+    expect(container.querySelector('.id-swatch')).toBeNull()
+  })
+
+  it('a brand mark still wins over the glyph', () => {
+    const { container } = render(
+      <Identity item={{ type: 'connector', label: 'Plaid', logo: '/logos/plaid.svg' }} />,
+    )
+    expect(container.querySelector('.id-logo')).toBeTruthy()
+    expect(container.querySelector('.id-glyph')).toBeNull()
+  })
+})
+
 // ── Identity: rule marker ─────────────────────────────────────────────────────
 
 describe('Identity — rule (TYPE_MARKER_SVG)', () => {

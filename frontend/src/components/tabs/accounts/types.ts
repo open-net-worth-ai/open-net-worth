@@ -19,7 +19,11 @@ export interface ApiExternalId {
   mask: string
   linked_at: string
   provider_label: string
+  /** The connector's state: `paused` or `disconnected` (removed) means nothing syncs here. */
+  status?: LinkStatus
 }
+
+export type LinkStatus = 'connected' | 'paused' | 'disconnected'
 
 export interface ApiAccount {
   id: string
@@ -57,7 +61,7 @@ export interface ApiAccount {
 export interface ApiTxnSplit {
   category: string
   amount: number
-  note?: string | null
+  memo?: string | null
 }
 
 export interface ApiTxn {
@@ -92,6 +96,8 @@ export interface ApiTxn {
   base_amount: number
   base_currency?: string | null
   cleared: boolean
+  /** Register declutter (display-only) — absent on rows written before it existed. */
+  hidden?: boolean
   source?: string | null
   created_at?: string | null
   /** Review queue only: the automation that fired the create ("via …") and its stable id. */
@@ -171,6 +177,9 @@ export interface Txn {
   createdAt: string
   deleted: boolean
   needsReview: boolean
+  /** Hidden from the register unless "Show hidden" is on. Display-only: still counted in every
+   *  balance, budget and report. */
+  hidden?: boolean
   /** Review queue only: the automation that fired the create ("via …") and its stable id. */
   via?: string | null
   automationId?: string | null
@@ -188,6 +197,7 @@ export interface ExternalId {
   mask: string
   linkedAt: string
   providerLabel: string
+  status: LinkStatus
 }
 
 export interface Account {
@@ -387,6 +397,7 @@ export interface BulkUpdateData {
   category?: string | null
   tags?: string[]
   cleared?: boolean
+  hidden?: boolean
   payee_id?: string | null
   needs_review?: boolean
   to_account_id?: string | null
@@ -422,11 +433,14 @@ export interface ReconcileData {
   real_balance: number
   date?: string | null
   against?: 'cleared' | 'working'
+  /** The balance the user was asked about — the server refuses (409) if the book has moved. */
+  expected_balance?: number
 }
 
 export interface ReconcileResult {
   ok: boolean
-  adjustment: number | null
+  /** The booked `adjustment` txn, or null when the balance already matched. */
+  adjustment: { to_amount?: number | null; from_amount?: number | null } | null
   balance: number
   cleared_balance: number
 }
@@ -439,6 +453,8 @@ export interface AccountPrefill {
   currency?: string
   lastFour?: string
   institution?: string
+  /** The opening balance as the form shows it — for a card or loan, the amount owed. */
+  initial?: string
 }
 
 // ── Derived / selector types ──────────────────────────────────────────────
@@ -494,6 +510,11 @@ export interface TxnFilters {
   /** Exactly the rows created/merged by ONE statement import (Statement Import's "View
    *  imported" deep-link — mirrors GET /api/transactions?batch_id=X). Null = no filter. */
   batchId: string | null
+  /** Include hidden rows. Off (the default) sends `hidden=false`; on sends nothing. */
+  showHidden: boolean
+  /** The `Status: Hidden` token — ONLY hidden rows (`hidden=true`), whatever showHidden says.
+   *  The one way back to a hidden row on a phone, where the Display picker is not shown. */
+  hiddenOnly: boolean
 }
 
 export type TxnSortKey = 'date' | 'amount' | 'description' | 'category'

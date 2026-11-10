@@ -103,6 +103,13 @@ export interface VaultTable {
   more_columns: boolean
 }
 
+/** One item by its Vault id (`statement-<id>` for a statement) — what a single file preview
+ *  needs without listing every document. */
+export async function fetchVaultItem(id: string): Promise<VaultItem> {
+  const r = await authFetch(`/api/vault/items/${encodeURIComponent(id)}`)
+  return (await jsonOrThrow<{ item: VaultItem }>(r, 'Opening the file')).item
+}
+
 export async function fetchVaultTable(id: string, sheet?: string, offset = 0): Promise<VaultTable> {
   const q = new URLSearchParams()
   if (sheet) q.set('sheet', sheet)

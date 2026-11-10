@@ -16,7 +16,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from backend.services import watch_context
+from backend.services import investment_theses, watch_context
 from backend.services import watch_rules as rules
 from backend.services.fx_cache import load_fx_cache
 from backend.services.watch_history_rules import Z_NOTABLE
@@ -105,7 +105,7 @@ def gather_context(now: datetime | None = None) -> dict:
 
     now = now or datetime.now().astimezone()
     held, by_sector = _held_tickers_and_sectors()
-    items = watched_items(read_watchlist(), held)
+    items = investment_theses.with_intents(watched_items(read_watchlist(), held))
     ctx: dict = {
         "now": now,
         "items": items,

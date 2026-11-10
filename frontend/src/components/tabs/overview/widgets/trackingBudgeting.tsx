@@ -16,6 +16,7 @@ import { rowCap } from '../widgetDisplayShared'
 import { WidgetPlaceholder, WidgetSkeleton } from '../WidgetPlaceholder'
 import { useAnalytics } from '../useWidgetData'
 import { usePlanningSummary } from '../../../../hooks/serverState'
+import { ArrowRight } from '../../../../ui/icons'
 
 // ── debt / liabilities — real balances, no payoff curve ──────────────────
 //
@@ -59,7 +60,8 @@ const DebtPayoff: ComponentType<WidgetContentProps> = ({ instance, def, onNaviga
             variant="ghost"
             onClick={() => onNavigate(def.source?.tab || 'accounts')}
           >
-            {def.source?.label ? `View in ${def.source.label} →` : 'View accounts →'}
+            {def.source?.label ? `View in ${def.source.label}` : 'View accounts'}
+            <ArrowRight size={14} aria-hidden="true" />
           </Button>
         )
       }
@@ -141,7 +143,8 @@ const BudgetVsActual: ComponentType<WidgetContentProps> = ({ instance, def, onNa
       footer={
         onNavigate && (
           <Button size="sm" variant="ghost" onClick={() => onNavigate(def.source?.tab || 'plan')}>
-            Edit budgets →
+            Edit budgets
+            <ArrowRight size={14} aria-hidden="true" />
           </Button>
         )
       }

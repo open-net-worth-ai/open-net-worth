@@ -23,6 +23,17 @@ export function isLuciusDockVisible(open: boolean, isMobile: boolean, tabId: str
   return open && !isMobile && tabId !== 'lucius'
 }
 
+/** The desktop's Cmd/Ctrl+N: a new conversation where Lucius already is when the side panel
+ *  is showing, otherwise on the Lucius screen. */
+export function routeNewConversation(
+  panelVisible: boolean,
+  surfaces: { startFresh: () => void; focusPanel: () => void; openLuciusTab: () => void },
+): void {
+  surfaces.startFresh()
+  if (panelVisible) surfaces.focusPanel()
+  else surfaces.openLuciusTab()
+}
+
 export function useLuciusTab(): LuciusTabState {
   const [open, setOpenState] = useState(() => localStorage.getItem(KEY) === 'true')
 

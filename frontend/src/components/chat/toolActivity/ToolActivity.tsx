@@ -10,6 +10,7 @@
 
 import { useMemo, useState } from 'react'
 import { ChevronDown } from '../../../ui/icons'
+import { useFlag } from '../../../hooks/useFlag'
 import {
   clusterItems,
   isGateBounce,
@@ -44,6 +45,7 @@ function FetchRow({ url }: { url: string }) {
 }
 
 export function ToolActivity({ items, sessionId }: { items: ActionItem[]; sessionId?: string }) {
+  const declinedIsNotFailure = useFlag('permissions_v2') === true
   // Segment first, cluster within a segment. Clustering the tool items as one list and
   // rendering fetches separately would print every fetch above every tool call, silently
   // reordering the timeline — the one thing the grouping rules promise never to do.
@@ -56,7 +58,8 @@ export function ToolActivity({ items, sessionId }: { items: ActionItem[]; sessio
     let run: ToolItem[] = []
     const flush = () => {
       if (run.length === 0) return
-      for (const cluster of clusterItems(run)) out.push({ kind: 'cluster', cluster })
+      for (const cluster of clusterItems(run, declinedIsNotFailure))
+        out.push({ kind: 'cluster', cluster })
       run = []
     }
     for (const item of items) {
@@ -76,7 +79,7 @@ export function ToolActivity({ items, sessionId }: { items: ActionItem[]; sessio
     }
     flush()
     return out
-  }, [items])
+  }, [items, declinedIsNotFailure])
 
   const clusters = useMemo(
     () => rows.flatMap((r) => (r.kind === 'cluster' ? [r.cluster] : [])),

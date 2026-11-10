@@ -269,6 +269,7 @@ async def gather_rss(
     limit: int | None = None,
     max_concurrency: int = 5,
     max_age: float | None = None,
+    read_back: bool = True,
 ) -> list[dict]:
     """Fetch resolved RSS feeds → record into the EvidenceStore tagged with each feed's subjects →
     return the fresh union for all subjects (provider shape).
@@ -278,7 +279,11 @@ async def gather_rss(
     caching; a single feed's failure is swallowed so one bad feed never sinks the scan.
 
     max_age is forwarded to _fetch_feed to override the default cache TTL.  Callers with a shorter
-    polling window (the fast RSS poller) pass their own TTL; None preserves prior behaviour."""
+    polling window (the fast RSS poller) pass their own TTL; None preserves prior behaviour.
+
+    ``read_back=False`` records and emits arrivals but skips reading the subjects' evidence back
+    (returns []): that read decodes every matching row — tens of MB of JSON on a real book — and
+    a poller that only freshens the store discards it, holding the GIL against every request."""
     from backend.db.evidence_store import EvidenceStore
 
     store = store or EvidenceStore()
@@ -326,6 +331,8 @@ async def gather_rss(
             # "newly arrived" signal, no separate before/after diff needed (news-ingestion-
             # latency.md §3).
             new_rows.extend(r for r in merged if r.get("seen_count") == 1)
+        if not read_back:
+            return [], new_rows
         fresh = read_evidence(
             subjects=sorted(all_subjects), fresh_only=True, limit=limit, store=store
         )
@@ -349,6 +356,7 @@ async def gather_matched(
     store=None,
     max_age: float | None = None,
     via: str | None = None,
+    read_back: bool = True,
 ) -> list[dict]:
     """Fetch ONE shared feed (a regulatory firehose or a combined topic-engine query) and fan
     its hits out to whichever watched `entities` they match, instead of gather_rss's one-feed-
@@ -386,6 +394,8 @@ async def gather_matched(
         for subs, hh in batches.items():
             merged = record_evidence(hh, subjects=list(subs), kind="news", store=store)
             new_rows.extend(r for r in merged if r.get("seen_count") == 1)
+        if not read_back:
+            return [], new_rows
         fresh = read_evidence(subjects=sorted(all_subjects), fresh_only=True, store=store)
         return fresh, new_rows
 

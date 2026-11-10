@@ -19,9 +19,11 @@ import {
   Text,
 } from '../../ui'
 import { authFetch } from '../../../api/client'
+import { fDate, getBaseCurrency } from '../../../utils/format'
 import type { Account, AccountCreate, AccountUpdate, AccountPrefill, ExternalId } from './types'
-import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, LIABILITY_TYPES } from './categories'
+import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, TYPE_ICON, LIABILITY_TYPES } from './categories'
 import type { AccountType } from './categories'
+import { ChevronRight } from '../../../ui/icons'
 
 export interface AccountModalProps {
   open: boolean
@@ -52,15 +54,7 @@ function displayOpening(value: number, isAsset: boolean): string {
 
 // Seven-type vocab (ADR 2026-09-07-seven-account-types-one-axis) — one row per type, in
 // TYPE_ORDER; the label + meaning are the shared, final copy from categories.ts.
-const ICON: Record<AccountType, string> = {
-  cash: 'banknote',
-  fixed_deposit: 'coins',
-  investment: 'trending',
-  retirement: 'umbrella',
-  receivable: 'incoming',
-  credit: 'card',
-  loan: 'home',
-}
+const ICON = TYPE_ICON
 const TYPE_ROWS = ACCOUNT_TYPES.map((t) => ({
   t,
   ic: ICON[t],
@@ -99,7 +93,7 @@ function blankForm(): AccountForm {
     name: '',
     type: 'cash',
     institution: '',
-    currency: 'SGD',
+    currency: getBaseCurrency(),
     initial: '0',
     asOf: '',
     lastFour: '',
@@ -216,9 +210,10 @@ export default function AccountModal({
           ...blankForm(),
           type: prefill.type ?? 'cash',
           name: prefill.name ?? '',
-          currency: prefill.currency ?? 'SGD',
+          currency: prefill.currency ?? getBaseCurrency(),
           lastFour: prefill.lastFour ?? '',
           institution: prefill.institution ?? '',
+          initial: prefill.initial ?? '0',
         })
       } else {
         setStep('quick')
@@ -458,7 +453,9 @@ export default function AccountModal({
                     <span className="acct-type-chosen-lbl">{TYPE_LABELS[form.type]}</span>
                     <span className="acct-type-chosen-grp">{TYPE_MEANING[form.type]}</span>
                   </span>
-                  <span className="acct-type-chosen-change">›</span>
+                  <span className="acct-type-chosen-change">
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </span>
                 </button>
               </FormField>
               <FormField label="Currency" htmlFor="f-ccy" required reserveMessageSpace>
@@ -829,7 +826,9 @@ export default function AccountModal({
                         {!isAsset && (account?.initialBalance ?? 0) !== 0 ? ' owed' : ''}
                       </span>
                       <span className="acct-opening-meta">
-                        {form.asOf ? `as of ${form.asOf}` : 'tracked from the first transaction'}
+                        {form.asOf
+                          ? `as of ${fDate(form.asOf, 'short', 'always')}`
+                          : 'tracked from the first transaction'}
                       </span>
                       {onEditOpening && (
                         <button type="button" className="acct-opening-link" onClick={onEditOpening}>

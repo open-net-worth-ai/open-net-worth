@@ -5,14 +5,21 @@ import type { MentionRef } from '../types/mentions'
 import type { ScreenSnapshotWire } from '../state/screenSnapshot'
 import {
   applyRestoreResult,
+  completeUnfinishedTail,
   loadMessages,
   reconcileWithRemote,
+  repairCutReplies,
   withRestoreMarks,
 } from '../utils/chatStore'
 import { fetchRevision, forgetRevision, syncedRevision } from '../utils/chatRevision'
 import { blockCount, contentCount } from '../utils/chatBubbles'
 import { authFetch } from '../api/client'
-import { emitDataChanged, onLiveSessions } from '../lucius/bus'
+import {
+  emitDataChanged,
+  onConversationChanged,
+  onLiveSessions,
+  setLiveSessions,
+} from '../lucius/bus'
 import { useChatMultiTurnEnabled } from './useChatSuggestionsEnabled'
 import { chatSessions } from '../state/chatSessions'
 import {
@@ -89,6 +96,16 @@ function isRicher(fresher: Message[], prev: Message[]): boolean {
   return blockCount(fresher) > blockCount(prev)
 }
 
+/** What to show after a transcript re-read: the server's copy when it is richer, ours
+ *  completed with the reply we never saw finish, or ours carrying the server's restore marks. */
+function pickFresher(fresher: Message[], prev: Message[]): Message[] {
+  if (isRicher(fresher, prev)) return fresher
+  return (
+    completeUnfinishedTail(prev, fresher) ??
+    repairCutReplies(withRestoreMarks(prev, fresher), fresher)
+  )
+}
+
 /** Adopt the transcript re-read that ends an attach, unless a fresher attach owns the view. */
 function adoptReconciled(ownerId: string, full: Message[] | null): void {
   // NOT gated on `cancelled`: the attach ending is what flips the slice idle,
@@ -110,7 +127,7 @@ function adoptReconciled(ownerId: string, full: Message[] | null): void {
   if (chatSessions.getSlice(ownerId).status === 'streaming') {
     return forgetRevision(ownerId)
   }
-  setMessages(ownerId, (prev) => (isRicher(full, prev) ? full : withRestoreMarks(prev, full)))
+  setMessages(ownerId, (prev) => pickFresher(full, prev))
 }
 
 /** Paint a send that never reached the server: the failure IS assistant output, so it gets
@@ -217,9 +234,7 @@ export function useChat(
         if (cancelled) return forgetRevision(conversationId)
         // Only adopt it if nothing else has touched the conversation meanwhile — a turn
         // the user started while this was in flight owns the state now.
-        setMessages(conversationId, (prev) =>
-          isRicher(fresher, prev) ? fresher : withRestoreMarks(prev, fresher),
-        )
+        setMessages(conversationId, (prev) => pickFresher(fresher, prev))
       })
     return () => {
       cancelled = true
@@ -248,6 +263,32 @@ export function useChat(
   // either way.
   const [liveSessions, setLiveSessionIds] = useState<string[]>([])
   useEffect(() => onLiveSessions(setLiveSessionIds), [])
+  // Told this conversation may have changed (a voice call, every 1.5s: its small talk is
+  // recorded in a few ms, gone before the 4s live poll looks). A turn RUNNING there is joined
+  // live, through the live set; only a finished one is re-read. Re-reading mid-turn fetched a
+  // half-written answer, and the live replay then skipped that many characters as "already
+  // shown" — the answer lost its first words (live call, 2026-11-03).
+  useEffect(
+    () =>
+      onConversationChanged((id) => {
+        if (id !== conversationId) return
+        void (async () => {
+          try {
+            const res = await authFetch('/api/sessions/live')
+            if (!res.ok) return
+            const data = await res.json()
+            const live: string[] = Array.isArray(data.session_ids) ? data.session_ids : []
+            setLiveSessions(live)
+            if (!live.includes(id) && chatSessions.getSlice(id).status !== 'streaming') {
+              await resyncIfChanged(id)
+            }
+          } catch {
+            // The next tick, or the regular live poll, catches up.
+          }
+        })()
+      }),
+    [conversationId],
+  )
   const shouldAttach = hydrated && (streaming || liveSessions.includes(conversationId))
   // Exposed as `following` — kept to its ORIGINAL, narrower meaning ("watching a turn this
   // browser did not start") for every existing consumer of the hook's return value; it is
@@ -591,7 +632,7 @@ export function useChat(
   // the tab" would lose the continuation — the part that actually applies the approved
   // action's follow-through.
   const resolvePendingToolUse = useCallback(
-    async (toolUseId: string, decision: 'approve' | 'deny') => {
+    async (toolUseId: string, decision: 'approve' | 'deny', options?: { always?: boolean }) => {
       // You can only approve a card you are looking at — captured once, same as sendMessage.
       const ownerId = conversationId
       // Re-enter the streaming state on the SAME assistant message the card lives on. The
@@ -613,11 +654,15 @@ export function useChat(
       if (cardMessage) openAssistant(ownerId, cardMessage.id)
       updateLastAssistant(ownerId, (m) => {
         const status: ProposedChange['status'] = decision === 'approve' ? 'confirmed' : 'dismissed'
+        const resolution: ProposedChange['resolution'] =
+          decision === 'deny' ? 'denied' : options?.always ? 'always_allowed' : 'approved'
         // `refused: undefined` clears any previous refusal, so a re-tap of a card the
         // server refused once paints its tick again (and can be un-painted again if it
         // refuses again).
         const answer = (c: ProposedChange): ProposedChange =>
-          c.id === toolUseId ? { ...c, status, refused: undefined } : c
+          c.id === toolUseId
+            ? { ...c, status, resolution, refused: undefined, undelivered: undefined }
+            : c
         const proposedChanges = m.proposedChanges?.map(answer)
         const blocks = m.blocks?.map((block) =>
           block.type === 'change' && block.change.id === toolUseId
@@ -638,7 +683,11 @@ export function useChat(
         const res = await authFetch(`/api/chat/${ownerId}/resolve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tool_use_id: toolUseId, decision }),
+          body: JSON.stringify({
+            tool_use_id: toolUseId,
+            decision,
+            ...(options?.always ? { always: true } : {}),
+          }),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         await res.json() // {session_id, turn_id, accepted} — the attach effect takes it from here
@@ -654,11 +703,11 @@ export function useChat(
         }))
       } catch (err) {
         // The decision never reached the server (network drop, server restarting, non-2xx),
-        // so nothing ran and the call is still pending there. Un-paint the optimistic tick
-        // exactly like a refused approval (chatReducer's `error` branch) so the card offers
-        // Approve/Deny again instead of asserting "✓ Approved" above the error.
+        // so nothing ran and the call is still pending there. Un-paint the optimistic tick and
+        // mark it `undelivered`, NOT `refused`: refused renders the terminal "can't be reused"
+        // row, which is false here — the card must offer Approve/Deny again (2026-10-29).
         const unpaint = (c: ProposedChange): ProposedChange =>
-          c.id === toolUseId ? { ...c, status: undefined, refused: true } : c
+          c.id === toolUseId ? { ...c, status: undefined, undelivered: true } : c
         const message =
           err instanceof TypeError
             ? "Couldn't reach the server — nothing was approved or denied. Try again."

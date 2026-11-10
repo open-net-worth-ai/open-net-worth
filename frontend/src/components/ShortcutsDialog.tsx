@@ -18,7 +18,8 @@ const EVERYWHERE: Shortcut[] = [
 function desktopShortcuts(mac: boolean): Shortcut[] {
   return [
     { label: 'Open Lucius', keys: ['Mod', 'L'] },
-    { label: 'New transaction', keys: ['Mod', 'N'] },
+    { label: 'New Lucius conversation', keys: ['Mod', 'N'] },
+    { label: 'New transaction', keys: ['Mod', 'Shift', 'N'] },
     { label: 'Import statement or receipt', keys: ['Mod', 'O'] },
     { label: 'Export book', keys: ['Mod', 'Shift', 'E'] },
     { label: 'Settings', keys: ['Mod', ','] },

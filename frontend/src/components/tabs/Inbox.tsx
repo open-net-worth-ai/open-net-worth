@@ -20,6 +20,7 @@ import { useRegisterScreenFacts } from '../../lucius/useScreenContract'
 import { entityRefProps } from '../../utils/mentionable'
 import { buildCtxFields } from '../../lucius/ctxFields'
 import { filterByDescriptor } from '../../lucius/entityRegistry'
+import { X } from '../../ui/icons'
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 
@@ -348,7 +349,7 @@ function InboxRow({
               aria-label={DISMISS_TITLE[item.kind]}
               title={DISMISS_TITLE[item.kind]}
             >
-              ✕
+              <X size={14} aria-hidden="true" />
             </Button>
           </Cluster>
         </Cluster>

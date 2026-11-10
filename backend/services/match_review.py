@@ -664,6 +664,13 @@ def _merge_field_preservation(
     return patch, {"preserved_fields": preserved, "field_conflicts": conflicts}
 
 
+def adopt_if_blank(canonical: dict, incoming: dict) -> dict:
+    """The patch a merge applies to the surviving row from a row not booked (yet): the fields
+    the survivor leaves blank, never one it holds. For a caller pairing an incoming row with an
+    existing one without booking it (the YNAB import's linked accounts)."""
+    return _merge_field_preservation(canonical, incoming, become_transfer=False)[0]
+
+
 def merge_transactions_preserving_fields(
     canonical_id: str,
     absorbed_id: str,

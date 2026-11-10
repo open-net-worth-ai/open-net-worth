@@ -917,9 +917,12 @@ def test_money_bundle_import_never_undoes_the_audit_trail(db_isolated, tmp_path,
         ckpt.restore(cp_id, mode="data")
         with get_engine().connect() as conn:
             # Restore reverts accounts/transactions but — correctly — does NOT restore
-            # the wiped txn_audit rows either (never captured in the first place).
+            # the wiped txn_audit rows either (never captured in the first place). It only
+            # APPENDS its own "revert" event per transaction it put back.
             assert money_io.export_accounts(conn) == ACCOUNTS
-            assert money_io.export_txn_audit(conn) == []
+            after = money_io.export_txn_audit(conn)
+            assert not {e["id"] for e in after} & {e["id"] for e in TXN_AUDIT}
+            assert {e["op"] for e in after} <= {"revert"}
     finally:
         core_io.register_write_hook(prev_hook)
         core_io.register_db_write_hook(prev_db_hook)

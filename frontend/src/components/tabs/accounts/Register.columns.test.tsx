@@ -132,7 +132,7 @@ function Harness({
 const head = (c: HTMLElement) => c.querySelector('.acct-reg-head') as HTMLElement
 const headCols = (c: HTMLElement) => c.querySelectorAll('.acct-reg-head .acct-h').length
 function openPicker(c: HTMLElement): HTMLElement {
-  fireEvent.click(within(c).getByTitle('Show or hide columns'))
+  fireEvent.click(within(c).getByTitle('Display options'))
   return c.querySelector('[role="dialog"]') as HTMLElement
 }
 
@@ -153,12 +153,15 @@ describe('Register memo column', () => {
   })
 })
 
+const regTmpl = (c: HTMLElement) =>
+  (c.querySelector('.acct-reg') as HTMLElement).style.getPropertyValue('--reg-tmpl')
+
 describe('Register column-visibility picker', () => {
   it('hiding a column drops it from the header AND every row, and shrinks the grid template', () => {
     const { container } = render(
       <Harness txns={[makeTxn({ id: 't1', memo: 'a' }), makeTxn({ id: 't2', memo: 'b' })]} />,
     )
-    const tmplBefore = head(container).style.gridTemplateColumns
+    const tmplBefore = regTmpl(container)
     const colsBefore = headCols(container)
     expect(container.querySelectorAll('.acct-td-memo2').length).toBe(2)
 
@@ -168,7 +171,7 @@ describe('Register column-visibility picker', () => {
     expect(within(head(container)).queryByText('Memo')).toBeNull()
     expect(container.querySelectorAll('.acct-td-memo2').length).toBe(0)
     expect(headCols(container)).toBe(colsBefore - 1)
-    expect(head(container).style.gridTemplateColumns).not.toBe(tmplBefore)
+    expect(regTmpl(container)).not.toBe(tmplBefore)
     // Amount is structural — untouched by the toggle.
     expect(within(head(container)).getByText('Amount')).toBeTruthy()
   })
@@ -209,7 +212,7 @@ describe('Register column-visibility picker', () => {
     expect(within(head(container)).queryByText('Memo')).toBeNull()
   })
 
-  it('“Show all” restores every hidden column', () => {
+  it('“Reset” restores every hidden column', () => {
     const { container } = render(<Harness txns={[makeTxn({ memo: 'x' })]} />)
     const cols0 = headCols(container)
     let dialog = openPicker(container)
@@ -217,7 +220,7 @@ describe('Register column-visibility picker', () => {
     fireEvent.click(within(dialog).getByText('Source'))
     expect(headCols(container)).toBe(cols0 - 2)
     dialog = container.querySelector('[role="dialog"]') as HTMLElement
-    fireEvent.click(within(dialog).getByText('Show all'))
+    fireEvent.click(within(dialog).getByText('Reset'))
     expect(headCols(container)).toBe(cols0)
     expect(localStorage.getItem(REG_VIS_KEY)).toBe('[]')
   })

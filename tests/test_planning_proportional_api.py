@@ -103,7 +103,14 @@ def test_get_month_shape(client):
         "excluded",
         "history",
     }
-    assert set(row["history"]) == {"last", "avg3", "last_by_day", "avg3_by_day"}
+    assert set(row["history"]) == {
+        "last",
+        "avg3",
+        "last_by_day",
+        "avg3_by_day",
+        "median3",
+        "rest_median3",
+    }
     assert set(body["savings"]) == {"amount", "target"}
     assert isinstance(body["groups"], list) and body["groups"]
     group = body["groups"][0]

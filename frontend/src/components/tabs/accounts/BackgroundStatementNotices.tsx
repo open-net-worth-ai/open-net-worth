@@ -7,6 +7,9 @@
 // backgroundStatements store — only while the page is visible — and, when a read reaches a
 // terminal state, stops tracking it and shows one popup per statement until dismissed. "Review"
 // hands the statement to the Accounts tab (requestStatementReview) and asks the shell to go there.
+// A read that has just been sent to the background shows here too, briefly, as "Reading in the
+// background" — the same pill in the same place, so it turns into "Ready to review" instead of a
+// second toast stacking up beside it (owner, 2026-10-25).
 
 import { useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
@@ -23,14 +26,40 @@ import {
 type Finished = BackgroundStatement & { status: 'ready' | 'failed' | 'interrupted' }
 
 const POLL_MS = 4000
+const READING_MS = 5000
 const TERMINAL = new Set(['ready', 'failed', 'interrupted'])
 
 export function BackgroundStatementNotices({ onOpenAccounts }: { onOpenAccounts?: () => void }) {
   const [tracked, setTracked] = useState(backgroundStatements)
   const [finished, setFinished] = useState<Finished[]>([])
+  const [hiddenReading, setHiddenReading] = useState<string[]>([])
+  const [now, setNow] = useState(() => Date.now())
   const visible = useDocumentVisible()
 
-  useEffect(() => subscribeBackgroundStatements(() => setTracked(backgroundStatements())), [])
+  const reading = tracked.filter(
+    (s) =>
+      s.startedAt !== undefined &&
+      now - s.startedAt < READING_MS &&
+      !hiddenReading.includes(s.id) &&
+      !finished.some((f) => f.id === s.id),
+  )
+  const nextExpiry = reading.length
+    ? Math.min(...reading.map((s) => (s.startedAt as number) + READING_MS))
+    : null
+  useEffect(() => {
+    if (nextExpiry === null) return
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, nextExpiry - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [nextExpiry])
+
+  useEffect(
+    () =>
+      subscribeBackgroundStatements(() => {
+        setTracked(backgroundStatements())
+        setNow(Date.now())
+      }),
+    [],
+  )
 
   useEffect(() => {
     if (!tracked.length || !visible) return
@@ -66,10 +95,26 @@ export function BackgroundStatementNotices({ onOpenAccounts }: { onOpenAccounts?
     }
   }, [tracked, visible])
 
-  if (!finished.length) return null
+  if (!finished.length && !reading.length) return null
   const dismiss = (id: string) => setFinished((list) => list.filter((f) => f.id !== id))
   return (
     <div className="bgst-stack mb-anchored" role="status" aria-live="polite">
+      {reading.map((r) => (
+        <div key={r.id} className="bgst-note">
+          <span className="bgst-text">
+            <span className="bgst-title">Reading in the background</span>
+            <span className="bgst-detail">{r.filename || 'your statement'}</span>
+          </span>
+          <button
+            type="button"
+            className="bgst-x"
+            aria-label="Dismiss"
+            onClick={() => setHiddenReading((ids) => [...ids, r.id])}
+          >
+            <X size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+      ))}
       {finished.map((f) => {
         // The app's own toast pill (acct-toast / as-toast / ov-toast): one line, no card, no
         // colour bar — the state is in the words.
@@ -90,7 +135,12 @@ export function BackgroundStatementNotices({ onOpenAccounts }: { onOpenAccounts?
                 type="button"
                 className="bgst-review"
                 onClick={() => {
-                  requestStatementReview({ id: f.id, accountId: f.accountId, filename: f.filename })
+                  requestStatementReview({
+                    id: f.id,
+                    accountId: f.accountId,
+                    filename: f.filename,
+                    startedAt: f.startedAt,
+                  })
                   onOpenAccounts?.()
                   dismiss(f.id)
                 }}

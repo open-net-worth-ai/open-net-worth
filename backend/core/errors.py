@@ -54,7 +54,7 @@ class DuplicateTransactionError(ConflictError):
     (scheduled agents, connectors, the AI tool surface). The engine's own review CAP is
     deliberately NOT the bar: a cap means "never auto-MERGE unattended", which is a statement
     about a destructive irreversible edit, not about whether the rows are the same event.
-    Refusing is neither destructive nor irreversible — ``force=True`` books the row anyway —
+    Refusing is neither destructive nor irreversible — ``allow_duplicate=True`` books the row anyway —
     so it is safe in exactly the cases where auto-merge is not (``TRANSFER_LEG_ECHO``, capped
     to 0.75 forever, is the motivating one).
 
@@ -156,6 +156,14 @@ class ProviderTimeoutError(ExternalServiceError):
         self.stalled = stalled
 
 
+class CliNotSignedInError(ExternalServiceError):
+    """A local CLI provider has no login to spend, so its turn was refused. Installed is not
+    signed in: the Docker image ships the CLIs with no login at all. The message names the CLI
+    and where to sign in; the chat surface shows it as written, as a setup hint."""
+
+    code = "cli_not_signed_in"
+
+
 class MissingFxRateError(ExternalServiceError):
     """A conversion cannot be valued without a finite, positive exchange rate."""
 
@@ -193,6 +201,19 @@ class UnsupportedModalityError(ExternalServiceError):
         super().__init__(message, provider_ref=provider_ref, modality=modality, **context)
         self.provider_ref = provider_ref
         self.modality = modality
+
+
+class UnknownFeatureFlagError(NotFoundError):
+    """A feature-flag name that is not declared in ``core.feature_flags.FLAGS``. Raised, never
+    read as ``False`` — a typo would otherwise silently run the old path forever."""
+
+
+class FeatureFlagLockedError(ConflictError):
+    """A feature flag cannot be changed here (the public demo always runs the defaults)."""
+
+
+class ToolCallLimitError(OpenNetWorthError):
+    """A turn with an enforced tool list kept calling tools after being refused."""
 
 
 class ConfigurationError(OpenNetWorthError):
@@ -325,7 +346,7 @@ def duplicate_hint(
     existing_id: str,
     *,
     facts: Iterable[str] = (),
-    force_hint: str = "force=true",
+    force_hint: str = "allow_duplicate=true",
     tool_hint: str = "get_transactions",
     attach_hint: str = "",
 ) -> str:

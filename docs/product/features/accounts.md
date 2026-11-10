@@ -22,11 +22,15 @@ name. The figure beside **All accounts** is only your accounts added together, d
 leaves out what you own on [Assets](assets.md), so it can differ from net worth, even go
 negative while net worth is positive.
 
-On a narrow window (a laptop, or Lucius open beside the register) the register sets the **Memo**
-column aside first, then squeezes the others, then **Source**. A row that needs review shows a
-small dot beside its amount while Source is away. Widen the window and every column you chose
-comes back. If even that is too wide, the register scrolls sideways and the **Amount** column
-stays pinned at the right edge, so amounts are always in view.
+With the sidebar collapsed, rest the pointer on the **»** button beside the page title to float
+the sidebar over the page: pick an account and it closes again, still collapsed. Its **»** corner
+button keeps it open instead.
+
+On a narrow window (a laptop, or Lucius open beside the register) the register first squeezes its
+columns. If even that is too wide, it scrolls sideways — every column you chose is still there,
+**Memo** and **Source** included — and the **Amount** column stays pinned at the right edge, so
+amounts are always in view. While it scrolls, a row that needs review also shows a small dot
+beside its amount, in case the **Source** column is out of view.
 
 ## Add an account
 
@@ -36,7 +40,7 @@ stays pinned at the right edge, so amounts are always in view.
 3. **Account type** — click the type box to change it (it starts as **Cash**). Pick from the
    list, or type in the search box: "401k", "CPF", "mortgage", "fixed deposit" all find the
    right type. See [Which type to pick](#which-type-to-pick).
-4. **Currency** — the currency the bank shows this account in.
+4. **Currency** — the currency the bank shows this account in. It starts on your base currency.
 5. **Current balance** (or **Amount currently owed** for a card or loan) — what it holds or
    owes today. Type `0` if it's empty or you'd rather import its history. Enter what you owe
    as a positive number; the app knows a card or loan is a debt.
@@ -79,6 +83,10 @@ Open the account, click the **⋯** menu in its header → **Edit account**. Eve
 optional:
 
 - **Institution** — groups the account with others at the same bank or broker.
+  **Manage saved institutions** in its dropdown (or **Manage institutions** in the Accounts
+  **⋯** menu) lists every institution with the accounts filed under it: rename one and every
+  account under it follows; delete one and its accounts are simply unfiled (nothing else about
+  them changes).
 - **Note** — anything you or Lucius should know ("joint account with Alex").
 - **Last 4 digits** — helps Lucius and imports match the right account.
 - **Credit details** (Credit accounts) — **Interest rate (APR, %)**, **Credit limit**,
@@ -109,7 +117,8 @@ only goes away when you delete the whole account.
 
 When the balance in the app doesn't match your bank:
 
-1. Open the account and click **Reconcile** (on a narrow screen it's in the **⋯** menu).
+1. Open the account and click **Reconcile** on the line under the balance, next to when the
+   account was last reconciled.
 2. It asks *"Is the real balance …?"* showing the **cleared** balance — the part your bank has
    already posted. Pending (uncleared) transactions aren't included, because they're not on
    your statement yet either.
@@ -117,6 +126,17 @@ When the balance in the app doesn't match your bank:
    date.
 4. If not, click **No**, type the **Real balance**, check the **Adjustment** it shows, and
    click **Add adjustment**. The app books one adjustment transaction for the difference.
+
+The confirmation shows the balance it was reconciled at, or the adjustment it booked. Reconcile
+each account at least **once a month**: once the last reconcile is more than 30 days old, the
+**Reconciled** line under the balance turns to a warning and shows how many days ago it was,
+right beside the **Reconcile** button.
+
+You don't have to open each account to check. In the accounts list, an account says **Needs
+reconciling** when its last reconcile is more than 30 days old, or when it has been open over a
+month without one. A collapsed group such as a bank with several accounts says how many **need
+reconciling**, and so does **All accounts** at the top. Accounts that are up to date show nothing
+extra.
 
 ## Import a statement or connect a bank
 
@@ -180,6 +200,10 @@ add it again; if it already has transactions, re-import them into the new accoun
 
 **"Is the real balance …?" shows a different figure from the sidebar** — Reconcile asks about
 the cleared balance only. The sidebar includes pending (uncleared) transactions too.
+
+**"The balance changed since this was opened"** — something changed the cleared balance after
+Reconcile showed it (a transaction cleared, edited or added, here or by Lucius). Nothing was
+booked. Open Reconcile again; it now asks about the current figure.
 
 ## Related pages
 

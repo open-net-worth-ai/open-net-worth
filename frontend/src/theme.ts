@@ -92,8 +92,17 @@ export function subscribeTheme(fn: () => void): () => void {
   }
 }
 
+/** The theme the page is painted in NOW — the `data-theme` apply() stamped. React reads this,
+ *  never resolveTheme(): matchMedia flips before its change event fires, so a render in that gap
+ *  saw the new theme while the CSS vars a canvas chart reads were still the old palette, and the
+ *  event's re-notify then changed nothing to re-render for (a stuck white grid on a dark page). */
+function getAppliedTheme(): ResolvedTheme {
+  const stamped = document.documentElement.getAttribute('data-theme')
+  return stamped === 'dark' || stamped === 'warm' || stamped === 'light' ? stamped : resolveTheme()
+}
+
 export function useTheme() {
   const preference = useSyncExternalStore(subscribeTheme, getThemePreference)
-  const resolved = useSyncExternalStore(subscribeTheme, () => resolveTheme())
+  const resolved = useSyncExternalStore(subscribeTheme, getAppliedTheme)
   return { preference, resolved, setPreference: setThemePreference }
 }

@@ -135,8 +135,7 @@ def _net_worth_statement(period: str, base: str) -> dict:
 
     assets: list[dict] = []
     liabilities: list[dict] = []
-    for a in accts:
-        hydrated = ledger_service.account_with_balance(a, txns, idx=idx)
+    for a, hydrated in zip(accts, ledger_service.accounts_with_balances(accts, txns, idx=idx)):
         row = {
             "name": a.get("name") or "Account",
             "type": a.get("type"),

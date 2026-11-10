@@ -30,9 +30,11 @@ import {
   Text,
   TextArea,
   List,
+  SwipeActions,
   TextField,
 } from './index'
 import type { ButtonVariant, ButtonSize, CheckboxGroupOption, TextSize, TextTone } from './index'
+import { Plus } from '../../ui/icons'
 
 // Dev-only gallery: renders every primitive × every variant/state on one
 // scrollable screen so the whole vocabulary can be reviewed in a single
@@ -209,6 +211,17 @@ export function Gallery() {
         </List>
       </Section>
 
+      <Section title="SwipeActions" derives="new — swipe a row left for its actions (touch only)">
+        <SwipeActions
+          actions={[
+            { label: 'Edit', ariaLabel: 'Edit sample row', onClick: () => {} },
+            { label: 'Delete', ariaLabel: 'Delete sample row', onClick: () => {}, tone: 'danger' },
+          ]}
+        >
+          <Text>On a touch screen, swipe this row left.</Text>
+        </SwipeActions>
+      </Section>
+
       <Section title="Typography — <Text>" derives="new — phase-3 §3">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {TEXT_SIZES.map((size) => (
@@ -330,7 +343,7 @@ export function Gallery() {
           <Button variant="secondary" loading>
             loading
           </Button>
-          <Button variant="secondary" iconLeft={<span aria-hidden>＋</span>}>
+          <Button variant="secondary" iconLeft={<Plus size={14} aria-hidden="true" />}>
             iconLeft
           </Button>
         </div>

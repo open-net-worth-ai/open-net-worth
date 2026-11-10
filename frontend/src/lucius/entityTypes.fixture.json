@@ -291,6 +291,42 @@
     ]
   },
   {
+    "type": "payee",
+    "label": "Payee",
+    "icon": "◉",
+    "tone": "invest",
+    "field_schema": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "sensitive": false,
+        "showInPopover": true
+      },
+      {
+        "key": "default_categories",
+        "label": "Default categories",
+        "type": "text",
+        "sensitive": false,
+        "showInPopover": true
+      },
+      {
+        "key": "txn_count",
+        "label": "Transactions",
+        "type": "qty",
+        "sensitive": false,
+        "showInPopover": true
+      },
+      {
+        "key": "hidden",
+        "label": "Hidden",
+        "type": "text",
+        "sensitive": false,
+        "showInPopover": true
+      }
+    ]
+  },
+  {
     "type": "transaction",
     "label": "Transaction",
     "icon": "↕",
@@ -739,42 +775,6 @@
         "key": "end_value",
         "label": "End value",
         "type": "money",
-        "sensitive": false,
-        "showInPopover": true
-      }
-    ]
-  },
-  {
-    "type": "payee",
-    "label": "Payee",
-    "icon": "◉",
-    "tone": "invest",
-    "field_schema": [
-      {
-        "key": "name",
-        "label": "Name",
-        "type": "text",
-        "sensitive": false,
-        "showInPopover": true
-      },
-      {
-        "key": "default_categories",
-        "label": "Default categories",
-        "type": "text",
-        "sensitive": false,
-        "showInPopover": true
-      },
-      {
-        "key": "txn_count",
-        "label": "Transactions",
-        "type": "qty",
-        "sensitive": false,
-        "showInPopover": true
-      },
-      {
-        "key": "hidden",
-        "label": "Hidden",
-        "type": "text",
         "sensitive": false,
         "showInPopover": true
       }

@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from backend.core import audit_context
 from backend.core.errors import (
+    ConflictError,
     DuplicateTransactionError,
     OpenNetWorthError,
     PreviouslyDeletedError,
@@ -188,6 +189,7 @@ class ReconcileBody(BaseModel):
     real_balance: float  # asserted native-currency balance
     date: Optional[str] = None
     against: str = "cleared"  # "cleared" (YNAB reconcile-to-cleared) | "working" (legacy true-up)
+    expected_balance: Optional[float] = None  # the figure the user was shown; 409 if stale
 
 
 class DescribeAccountBody(BaseModel):
@@ -196,6 +198,10 @@ class DescribeAccountBody(BaseModel):
 
 class ClearedBody(BaseModel):
     cleared: bool  # the new reconciliation state for the transaction
+
+
+class HiddenBody(BaseModel):
+    hidden: bool  # True drops the row from the register unless "Show hidden" is on
 
 
 class DetachRefBody(BaseModel):
@@ -210,7 +216,7 @@ class TransactionCreate(BaseModel):
     # payload. The pre-write duplicate guard (ADR 2026-08-01) refuses a row matching an
     # existing one; the AI tool has carried this escape hatch since day one, and without it a
     # REST/UI caller is refused with no way to say "yes, book it anyway".
-    force: bool = False
+    allow_duplicate: bool = False
     resurrect: bool = False
     date: str
     kind: str = "expense"  # expense | income | transfer | adjustment
@@ -297,7 +303,7 @@ class BulkTransactionImport(BaseModel):
     # Book every row even when the pre-write duplicate guard (ADR 2026-08-01) matches it
     # against an existing one. Same escape hatch the AI tool and the single-row POST carry;
     # without it a REST caller can be refused with no way to proceed.
-    force: bool = False
+    allow_duplicate: bool = False
 
 
 class BulkTxnChanges(BaseModel):
@@ -307,6 +313,7 @@ class BulkTxnChanges(BaseModel):
     category: Optional[str] = None  # SET the category (validated; skipped on adjustment only)
     tags: Optional[List[str]] = None  # ADD these tags (additive union — never clobbers)
     cleared: Optional[bool] = None  # SET the cleared flag
+    hidden: Optional[bool] = None  # SET the register-declutter flag (display-only)
     payee_id: Optional[str] = (
         None  # LINK the payee entity (validated; skipped on transfer/adjustment)
     )
@@ -329,6 +336,7 @@ class BulkTxnUpdateFlat(BaseModel):
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     cleared: Optional[bool] = None
+    hidden: Optional[bool] = None
     payee_id: Optional[str] = None
     needs_review: Optional[bool] = None
     to_account_id: Optional[str] = None
@@ -453,7 +461,7 @@ def get_accounts(include_archived: bool = False):
     _t3 = _time.perf_counter()
     # account_with_balance adds balance/balance_base + cleared_balance/cleared_balance_base
     # (cleared/reconcile MVP) + the derived opening fields, over the shared txn list.
-    result = [svc.account_with_balance(a, txns, idx=idx) for a in accts]
+    result = svc.accounts_with_balances(accts, txns, idx=idx)
     _t4 = _time.perf_counter()
     _perf_log.info(
         "PERF get_accounts txns_all=%.1fms query_accounts=%.1fms opening_index=%.1fms "
@@ -699,7 +707,16 @@ def reconcile_account(account_id: str, body: ReconcileBody):
     and locks the cleared set. ``against="working"`` diffs the full computed balance."""
     if svc.accounts.find_by_id(account_id) is None:
         raise HTTPException(404, "Account not found")
-    adjustment = svc.reconcile(account_id, body.real_balance, body.date, against=body.against)
+    try:
+        adjustment = svc.reconcile(
+            account_id,
+            body.real_balance,
+            body.date,
+            against=body.against,
+            expected_balance=body.expected_balance,
+        )
+    except ConflictError as e:
+        raise HTTPException(409, e.message) from e
     acct = svc.accounts.find_by_id(account_id)
     txns = svc.transactions.all()
     cutoff = svc.opening_date(acct, txns)
@@ -761,12 +778,15 @@ def get_recently_added_transactions(
     needs_review: Optional[bool] = None,
     automation_only: bool = False,
     exclude_openings: bool = False,
+    account_id: Optional[str] = None,
 ) -> dict:
     """Last `limit` transactions by INSERTION time (`created_at`), not transaction date — the
     "recently added" dashboard widget's feed. A backfilled import lands here even when its own
     date is weeks old; use plain `GET /api/transactions` for "recent by date" instead.
     `exclude_openings` leaves out every account's Starting Balance row, which is a balance, not
-    something that was added or spent."""
+    something that was added or spent. `account_id` keeps rows with either leg in that account —
+    the same predicate the register's account filter uses, so an account's review count and its
+    Needs review filter agree."""
     _opening_ids = svc.opening_txn_ids()
     page, total = svc.transactions.recent_page_by_created_at(
         limit=limit,
@@ -774,6 +794,7 @@ def get_recently_added_transactions(
         needs_review=needs_review,
         automation_only=automation_only,
         exclude_ids=_opening_ids if exclude_openings else frozenset(),
+        account_id=account_id,
     )
     _base = svc.base_currency()
     _rates = load_fx_cache()
@@ -837,6 +858,9 @@ def get_transactions(
     cleared: Optional[bool] = None,
     needs_review: Optional[bool] = None,
     uncategorized: Optional[bool] = None,
+    # Register declutter. None = every row (the default for every non-register caller);
+    # False = hide hidden rows. Like a date range it narrows, never implies all-time.
+    hidden: Optional[bool] = None,
     amount: Optional[str] = None,
     batch_id: Optional[str] = None,
 ):
@@ -913,6 +937,7 @@ def get_transactions(
             cleared=cleared,
             needs_review=needs_review,
             uncategorized=uncategorized,
+            hidden=hidden,
             limit=limit,
             offset=offset or 0,
         )
@@ -1041,6 +1066,8 @@ def get_transactions(
         txns = [t for t in txns if t["needs_review"] == needs_review]
     if uncategorized is not None:
         txns = [t for t in txns if svc.is_uncategorized(t) == uncategorized]
+    if hidden is not None:
+        txns = [t for t in txns if bool(t.get("hidden", False)) == hidden]
     if source:
         wanted_sources = set(source)
         txns = [t for t in txns if t["source"] in wanted_sources]
@@ -1107,10 +1134,12 @@ def get_transactions(
 @router.post("/api/transactions")
 def add_transaction(body: TransactionCreate):
     payload = body.model_dump()
-    force = bool(payload.pop("force", False))
+    allow_duplicate = bool(payload.pop("allow_duplicate", False))
     resurrect = bool(payload.pop("resurrect", False))
     try:
-        created = svc.create_transaction(payload, force=force, resurrect=resurrect)
+        created = svc.create_transaction(
+            payload, allow_duplicate=allow_duplicate, resurrect=resurrect
+        )
     except PreviouslyDeletedError as exc:
         raise HTTPException(
             to_http_status(exc),
@@ -1134,7 +1163,7 @@ def add_transaction(body: TransactionCreate):
                 "message": exc.message,
                 "duplicate_of": exc.context.get("existing_id"),
                 "existing": exc.context.get("existing"),
-                "retry_with": {"force": True},
+                "retry_with": {"allow_duplicate": True},
             },
         ) from exc
     except OpenNetWorthError as exc:
@@ -1217,6 +1246,15 @@ def set_transaction_cleared(txn_id: str, body: ClearedBody):
         updated = svc.set_transaction_cleared(txn_id, body.cleared)
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    if updated is None:
+        raise HTTPException(404, "Transaction not found")
+    return updated
+
+
+@router.patch("/api/transactions/{txn_id}/hidden")
+def set_transaction_hidden(txn_id: str, body: HiddenBody):
+    """Hide/unhide a transaction from the register — display-only, no balance moves."""
+    updated = svc.set_transaction_hidden(txn_id, body.hidden)
     if updated is None:
         raise HTTPException(404, "Transaction not found")
     return updated
@@ -1451,7 +1489,7 @@ def bulk_add_transactions(body: BulkTransactionImport):
         rows_to_create.append(d)
 
     created, refused = svc.bulk_create_transactions(
-        rows_to_create, batch_id=batch_id, force=bool(body.force)
+        rows_to_create, batch_id=batch_id, allow_duplicate=bool(body.allow_duplicate)
     )
 
     # Security-review fix: `refused` (the semantic-duplicate / previously-deleted guard's
@@ -1570,17 +1608,13 @@ def list_import_batches(status: Optional[str] = None):
 
 @router.post("/api/transactions/batches/{batch_id}/rollback")
 def rollback_import_batch(batch_id: str):
-    batch = svc.import_batches.find_by_id(batch_id)
-    if batch is None:
-        raise HTTPException(404, "Batch not found")
-    if batch.get("status") == "rolled_back":
-        raise HTTPException(409, "Batch is already rolled back")
-    txns = svc.transactions.query_by_batch(batch_id, include_deleted=False)
-    txn_ids = [t["id"] for t in txns]
-    deleted, _ = svc.transactions.bulk_soft_delete(txn_ids)
-    svc.import_batches.set_status(batch_id, "rolled_back")
-    logger.info("rollback_import_batch: batch=%s deleted=%d", batch_id, len(deleted))
-    return {"ok": True, "batch_id": batch_id, "deleted": len(deleted)}
+    """Undo the whole import — created rows removed AND linked rows restored (import_undo)."""
+    from backend.services.import_undo import undo_import
+
+    try:
+        return {"ok": True, **undo_import(batch_id)}
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), str(exc))
 
 
 @router.post("/api/transactions/batches/{batch_id}/rollforward")

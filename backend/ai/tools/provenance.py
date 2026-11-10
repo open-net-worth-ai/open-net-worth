@@ -143,7 +143,7 @@ _ATTACH_REFS_PREVIEW: PreviewAdapter = _AttachRefsPreview()
         "new instead of colliding again.\n\n"
         "Only call this when you have genuinely confirmed it is the SAME event — never to "
         "silence a refusal you have not actually checked. If it is a different, separate "
-        "charge, book it with force=true instead of attaching. Never use this to MOVE a ref "
+        "charge, book it with allow_duplicate=true instead of attaching. Never use this to MOVE a ref "
         "between rows — it only ADDS to the target; detaching a wrong link is a user action "
         "in the transaction drawer, not something this tool does. `reason` is REQUIRED: state "
         "the specific amount/date/wording match — this writes without human review, so it "

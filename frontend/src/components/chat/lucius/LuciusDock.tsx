@@ -23,14 +23,22 @@ import { useScreenSnapshot } from '../../../state/screenSnapshot'
 import { LuciusComposer } from './Composer'
 import { ModelEffortCluster } from './ModelEffortRow'
 import { ConversationApprovalPicker } from '../ConversationApprovalPicker'
+import { useCallInSendSlot, VoiceCallButton } from './VoiceCallButton'
+import { VoiceCallNotice } from './VoiceCallNotice'
+import { LastAnswerReveal, VoiceCallHeardMessage, VoiceCallSpokenMessage } from './VoiceCallLive'
+import { VoiceCallSlot } from './VoiceCallSlot'
+import { VoiceCallPill } from './VoiceCallPill'
 import type { LuciusComposerHandle, ComposerParsed } from './Composer'
 import { MessageBubble } from '../MessageBubble'
 import { CompactingActivity } from '../CompactingActivity'
 import { TurnActivity, turnProgress } from '../TurnActivity'
 import { Spark } from '../../../lucius/identity'
 import { useHasAi } from '../../../hooks/useHasAi'
-import { SquarePen, Eraser, PanelRight, ChevronDown } from '../../../ui/icons'
+import { SquarePen, PanelRight, ChevronDown } from '../../../ui/icons'
 import type { Message } from '../../../types/chat'
+import { useFlag } from '../../../hooks/useFlag'
+import { hasOpenCard } from '../../../utils/chatStore'
+import { useVoiceCall } from './voiceCall'
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -73,6 +81,9 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
   const { hasAi, loaded: aiLoaded } = useHasAi()
   const needsSetup = aiLoaded && !hasAi
   const [open, setOpen] = useState(false)
+  const voiceOn = useFlag('voice_calls') === true
+  const callIdle = useVoiceCall().phase === 'idle'
+  const callInSendSlot = useCallInSendSlot()
   const dockRef = useRef<HTMLDivElement>(null)
   const answerRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<LuciusComposerHandle>(null) as RefObject<LuciusComposerHandle>
@@ -336,25 +347,41 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
       role="complementary"
       aria-label="Ask Lucius"
     >
-      {/* Collapsed pill */}
-      <button
-        className="lx-dock-pill"
-        onMouseEnter={() => {
-          if (!needsSetup) setOpen(true)
-        }}
-        onClick={() => {
-          if (needsSetup) {
-            onSetUpAi?.()
-            return
-          }
-          setOpen(true)
-          requestAnimationFrame(() => composerRef.current?.focus())
-        }}
-        aria-label={needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
-      >
-        <Spark size={13} />
-        {needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
-      </button>
+      {/* Collapsed pill — with voice calls on, Call sits in it and the call happens there. */}
+      {voiceOn && !needsSetup ? (
+        <VoiceCallPill
+          sessionId={activeId}
+          busy={streaming || sending}
+          needsApproval={hasOpenCard(messages)}
+          onAsk={() => {
+            setOpen(true)
+            requestAnimationFrame(() => composerRef.current?.focus())
+          }}
+          onHoverOpen={() => {
+            if (callIdle) setOpen(true)
+          }}
+          onOpenDock={() => setOpen(true)}
+        />
+      ) : (
+        <button
+          className="lx-dock-pill"
+          onMouseEnter={() => {
+            if (!needsSetup) setOpen(true)
+          }}
+          onClick={() => {
+            if (needsSetup) {
+              onSetUpAi?.()
+              return
+            }
+            setOpen(true)
+            requestAnimationFrame(() => composerRef.current?.focus())
+          }}
+          aria-label={needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
+        >
+          <Spark size={13} />
+          {needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
+        </button>
+      )}
 
       {/* Expanded card */}
       <div
@@ -369,10 +396,10 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
         <div className="lx-dock-head">
           <LuciusLabel />
           <div className="lx-dock-head-actions">
-            {/* Trash: clear the conversation — shown only when there are messages.
-                Neither button below gates on `streaming` (RFC concurrent-conversations,
-                acceptance B4): starting or clearing a conversation is a DIFFERENT
-                conversation's slice than whatever is mid-turn, so it can never disturb it. */}
+            {/* New conversation — shown only when there are messages. Not gated on
+                `streaming` (RFC concurrent-conversations, acceptance B4): starting a
+                conversation is a DIFFERENT conversation's slice than whatever is mid-turn, so
+                it can never disturb it. */}
             {messages.length > 0 && (
               <button
                 className="lx-dock-collapse"
@@ -389,21 +416,6 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
                 title="New conversation"
               >
                 <SquarePen size={14} />
-              </button>
-            )}
-            {messages.length > 0 && (
-              <button
-                className="lx-dock-collapse"
-                onMouseDown={(e) => e.preventDefault()}
-                title="Clear conversation"
-                aria-label="Clear conversation"
-                onClick={() => {
-                  // Keep the composer draft — clearing affects history only. `persist: false`,
-                  // same reasoning as the New button above.
-                  createConversation()
-                }}
-              >
-                <Eraser size={14} />
               </button>
             )}
             <button
@@ -430,31 +442,45 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
             as the side panel (not a stripped-down raw-text view). */}
         {lastExchange.length > 0 && (
           <div className="lx-dock-answer" ref={answerRef}>
-            {lastExchange.map((m) => (
-              <MessageBubble
+            {lastExchange.map((m, i) => (
+              <LastAnswerReveal
                 key={m.id}
                 message={m}
-                onSendMessage={(text) =>
-                  sendMessage(
-                    text,
-                    [],
-                    effort,
-                    false,
-                    conversationModel,
-                    [],
-                    undefined,
-                    undefined,
-                    screenEnabled
-                      ? captureAndSerialize('lucius-dock', visibleIds, pinnedHandleIds)
-                      : undefined,
-                  )
-                }
-                onResolvePendingToolUse={resolvePendingToolUse}
-                onRespondToChange={respondToChange}
-                onPreviewCheckpoint={previewCheckpoint}
-                onRestoreCheckpoint={restoreCheckpoint}
-              />
+                messages={messages}
+                sessionId={activeId}
+                live={i === lastExchange.length - 1}
+              >
+                {(shown) => (
+                  <MessageBubble
+                    message={shown}
+                    onSendMessage={(text) =>
+                      sendMessage(
+                        text,
+                        [],
+                        effort,
+                        false,
+                        conversationModel,
+                        [],
+                        undefined,
+                        undefined,
+                        screenEnabled
+                          ? captureAndSerialize('lucius-dock', visibleIds, pinnedHandleIds)
+                          : undefined,
+                      )
+                    }
+                    onResolvePendingToolUse={resolvePendingToolUse}
+                    onRespondToChange={respondToChange}
+                    onPreviewCheckpoint={previewCheckpoint}
+                    onRestoreCheckpoint={restoreCheckpoint}
+                  />
+                )}
+              </LastAnswerReveal>
             ))}
+            <VoiceCallHeardMessage
+              sessionId={activeId}
+              lastUser={messages.findLast((m) => m.role === 'user')}
+            />
+            <VoiceCallSpokenMessage sessionId={activeId} messages={messages} />
           </div>
         )}
 
@@ -512,35 +538,44 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
 
         {/* Screen bar + composer + its toolbar are ONE input field — see .lx-inputblock. */}
         <div className="lx-inputblock">
-          {/* Shared composer — model/effort/cost ride in ITS toolbar row, next to Send. */}
-          <LuciusComposer
-            controls={
-              <ModelEffortCluster
-                storedModel={conversationModel}
-                onModelChange={(v) => setConversationModel(activeId, v)}
-                messages={messages}
-                effort={effort}
-                onEffortChange={setEffort}
-              />
-            }
-            leadingControls={<ConversationApprovalPicker sessionId={activeId} />}
-            ref={composerRef}
-            busy={(streaming && !following) || sending}
-            sendBlocked={((streaming && !following) || sending) && !multiTurnEnabled}
-            onStop={stopStreaming}
-            onSend={handleSend}
-            placeholder="Ask Lucius — type @ to mention, / for skills…"
-            visibleIds={visibleIds}
-            screenBar="compact"
-            screenId="lucius-dock"
-            active={open}
-            noVisionModel={noVisionLabel(
-              conversationModel,
-              dockModels.models,
-              dockModels.defaultModel,
-            )}
-            imageReader={dockModels.imageReader}
+          <VoiceCallNotice
+            sessionId={activeId}
+            busy={streaming || sending}
+            onNewChat={() => createConversation()}
           />
+          {/* Shared composer — model/effort/cost ride in ITS toolbar row, next to Send. */}
+          <VoiceCallSlot busy={streaming || sending} visible={open}>
+            <LuciusComposer
+              controls={
+                <ModelEffortCluster
+                  storedModel={conversationModel}
+                  onModelChange={(v) => setConversationModel(activeId, v)}
+                  messages={messages}
+                  effort={effort}
+                  onEffortChange={setEffort}
+                />
+              }
+              leadingControls={<ConversationApprovalPicker sessionId={activeId} />}
+              // Mid-call the slot is Send again: what you type goes to Lucius, read aloud.
+              callAction={callInSendSlot ? <VoiceCallButton sessionId={activeId} /> : null}
+              ref={composerRef}
+              busy={(streaming && !following) || sending}
+              sendBlocked={((streaming && !following) || sending) && !multiTurnEnabled}
+              onStop={stopStreaming}
+              onSend={handleSend}
+              placeholder="Ask Lucius — type @ to mention, / for skills…"
+              visibleIds={visibleIds}
+              screenBar="compact"
+              screenId="lucius-dock"
+              active={open}
+              noVisionModel={noVisionLabel(
+                conversationModel,
+                dockModels.models,
+                dockModels.defaultModel,
+              )}
+              imageReader={dockModels.imageReader}
+            />
+          </VoiceCallSlot>
         </div>
       </div>
     </div>

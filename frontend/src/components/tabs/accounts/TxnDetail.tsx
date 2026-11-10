@@ -17,7 +17,7 @@ import {
 import { toBase, fBase } from './format'
 import { txnMentionSublabel, fDate } from '../../../utils/format'
 import { EntityRow } from '../../../lucius/EntityRow'
-import { Minus, Plus, X } from '../../../ui/icons'
+import { Minus, Plus, X, ChevronUp, ChevronDown, Eye, EyeOff } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { usePointerResize } from '../../../hooks/usePointerResize'
 import { DRAG_SURFACE_PROPS, useSheetDragToDismiss } from '../../../hooks/useSheetDragToDismiss'
@@ -32,6 +32,7 @@ import type {
 } from './types'
 import { AddAccountSelect, AddDateField, AddPayeeField, AddCategoryField } from './pickers'
 import { SplitEditor, type EditSplit } from './SplitEditor'
+import { SplitLines } from './SplitView'
 import { ConfirmModal } from './ConfirmModal'
 import { Checkbox } from '../../ui/Checkbox'
 import { InfoPopover } from '../../ui/InfoPopover'
@@ -49,6 +50,7 @@ const CHANGE_FIELD_LABEL: Record<string, string> = {
   memo: 'Memo',
   date: 'Date',
   cleared: 'Cleared',
+  hidden: 'Hidden',
   kind: 'Type',
   tags: 'Tags',
   from_account_id: 'From account',
@@ -57,6 +59,7 @@ const CHANGE_FIELD_LABEL: Record<string, string> = {
   to_currency: 'Currency',
   original_amount: 'Original amount',
   original_currency: 'Original currency',
+  splits: 'Split',
 }
 // Internal bookkeeping fields that are never meaningful in a user-facing diff.
 // needs_review renders as its own verb (Approved / Flagged for review), never as a field edit.
@@ -74,9 +77,26 @@ function fmtChangeVal(field: string, v: unknown, ctx: ChangeCtx): string {
   if (field.endsWith('account_id')) return ctx.acctMap[String(v)]?.name ?? String(v)
   if (field === 'payee_id') return ctx.payeeMap[String(v)] ?? String(v)
   if (field === 'category') return ctx.catMap[String(v)]?.label ?? 'Uncategorized'
-  if (Array.isArray(v)) return v.length ? v.join(', ') : '—'
+  if (Array.isArray(v)) return v.length ? v.map((x) => fmtChangeItem(x, ctx)).join(', ') : '—'
   if (typeof v === 'number') return v.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  if (typeof v === 'object') return JSON.stringify(v)
   return String(v)
+}
+// One element of a list-valued change. A split line is `{category, amount, memo}`; a bare
+// String() of it painted "[object Object]" for every line (owner, 2026-10-29).
+function fmtChangeItem(x: unknown, ctx: ChangeCtx): string {
+  if (x == null || typeof x !== 'object') return String(x)
+  const o = x as { category?: unknown; amount?: unknown; memo?: unknown }
+  if (!('category' in o) && !('amount' in o)) return JSON.stringify(x)
+  const label = o.category
+    ? (ctx.catMap[String(o.category)]?.label ?? 'Uncategorized')
+    : 'Uncategorized'
+  const amt =
+    typeof o.amount === 'number'
+      ? ' ' +
+        o.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : ''
+  return `${label}${amt}${o.memo ? ` (${String(o.memo)})` : ''}`
 }
 
 export interface TxnDetailProps {
@@ -99,6 +119,9 @@ export interface TxnDetailProps {
   /** Flip cleared ⇄ uncleared from View, at once — like the register's cleared column. Omitted
    *  (the import review's drafts), the status shows but can't be flipped there. */
   onToggleCleared?: (txn: Txn, cleared: boolean) => void
+  /** Hide ⇄ unhide from the register (display-only). Omitted (the import review's drafts),
+   *  the drawer offers no Hide button. */
+  onToggleHidden?: (txn: Txn, hidden: boolean) => void
   onManagePayees: () => void
   onCreateCategory: (
     prefill: string,
@@ -144,7 +167,6 @@ type SourceState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ok'; data: SourceEntry[] }
-  | { status: 'unavailable' }
   | { status: 'error' }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -155,7 +177,7 @@ export function fmtDay(iso: string | null | undefined): string {
   return iso ? fDate(iso.split('T')[0]!, 'short', 'always') : '—'
 }
 // Date-only values stay verbatim (no timezone shift). A full timestamp is stored in UTC
-// (…Z) — render it in the viewer's LOCAL time (HH:MM, 24h, no seconds), like the rest of the drawer.
+// (…Z) — render it in the viewer's LOCAL time, (HH:MM, 24h, no seconds); the date follows the app's Date-format preference.
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   const d = iso.includes('T') ? new Date(iso) : null
@@ -860,6 +882,7 @@ interface ViewBodyProps {
   onDelete: (txn: Txn) => void
   onMarkReviewed: (txn: Txn) => void
   onToggleCleared?: (txn: Txn, cleared: boolean) => void
+  onToggleHidden?: (txn: Txn, hidden: boolean) => void
   /** The row itself has not arrived yet — see TxnDetail's `loading`. */
   pending?: boolean
   actionError?: string | null
@@ -884,6 +907,7 @@ function ViewBody({
   onDelete,
   onMarkReviewed,
   onToggleCleared,
+  onToggleHidden,
   pending = false,
   actionError,
 }: ViewBodyProps) {
@@ -1107,7 +1131,7 @@ function ViewBody({
         toFields={txnFields}
         className="acct-detail-hero"
       >
-        <div className={`acct-detail-amt ${heroPos ? 'pos' : 'neg'}`}>
+        <div className={`acct-detail-amt mask l ${heroPos ? 'pos' : 'neg'}`}>
           {heroSign}
           {amtStr}
           <span className="acct-detail-ccy">{currency}</span>
@@ -1124,7 +1148,7 @@ function ViewBody({
                     : (fx.est ?? '') + ' • reporting rate, ≈ today'
                 }
               >
-                ≈ {fCur(shown, baseCurrency, { cents: true })}
+                ≈ <span className="mask l">{fCur(shown, baseCurrency, { cents: true })}</span>
                 <span className="acct-detail-base-sub">
                   {' '}
                   in {baseCurrency}
@@ -1141,7 +1165,8 @@ function ViewBody({
               className="acct-detail-base"
               title="Amount that arrived, in the destination currency"
             >
-              → {fCur(txn.toAmount, txn.toCurrency, { cents: true })}
+              →{' '}
+              <span className="mask l">{fCur(txn.toAmount, txn.toCurrency, { cents: true })}</span>
               <span className="acct-detail-base-sub"> received in {txn.toCurrency}</span>
             </div>
           )}
@@ -1193,17 +1218,17 @@ function ViewBody({
         {txn.kind !== 'adjustment' && (
           <DRow label="Category">
             {isSplit ? (
-              <span className="acct-detail-chip acct-detail-splitcat">
-                {splitGlyph}Split
-                <span className="acct-detail-splitdots">
-                  {txn.splits.map((s, i) => (
-                    <i
-                      key={i}
-                      style={{ background: catMap[s.category]?.color }}
-                      title={catMap[s.category]?.label ?? 'Uncategorized'}
-                    />
-                  ))}
+              <span className="acct-detail-splitcat">
+                <span className="acct-detail-splithead">
+                  {splitGlyph}Split across {txn.splits.length} categories
                 </span>
+                <SplitLines
+                  splits={txn.splits}
+                  catMap={catMap}
+                  currency={currency}
+                  sign={heroSign === '+' ? '+' : '−'}
+                  className="acct-detail-splitlines"
+                />
               </span>
             ) : cat ? (
               <span className="acct-detail-chip">
@@ -1236,8 +1261,9 @@ function ViewBody({
             <span className="acct-payee-sub">—</span>
           )}
         </DRow>
-        {txn.tags.length > 0 && (
-          <DRow label="Tags">
+        {/* Always shown, like Memo — an empty row is how people learn tags exist. */}
+        <DRow label="Tags">
+          {txn.tags.length > 0 ? (
             <span className="acct-detail-tags">
               {txn.tags.map((tg) => (
                 <span key={tg} className="acct-detail-tag">
@@ -1245,11 +1271,13 @@ function ViewBody({
                 </span>
               ))}
             </span>
-          </DRow>
-        )}
+          ) : (
+            <span className="acct-payee-sub">—</span>
+          )}
+        </DRow>
         {txn.origCurrency && txn.origCurrency !== currency && (
           <DRow label="Original charge">
-            {fCur(txn.origAmount ?? 0, txn.origCurrency)}
+            <span className="mask l">{fCur(txn.origAmount ?? 0, txn.origCurrency)}</span>
             {fx.fact && (
               <span className="acct-detail-fxfact" title="Your card's actual settled rate">
                 {' '}
@@ -1262,28 +1290,6 @@ function ViewBody({
           <DRow label="Refund">Returned to {cat?.label ?? 'budget'} envelope</DRow>
         )}
       </div>
-      {isSplit && (
-        <>
-          <div className="acct-detail-sec">Split into {txn.splits.length}</div>
-          <div className="acct-detail-splits">
-            {txn.splits.map((s, i) => {
-              const sc = catMap[s.category]
-              return (
-                <div className="acct-detail-split" key={i}>
-                  <span className="acct-detail-chip">
-                    <i style={{ background: sc?.color }} />
-                    {sc?.label ?? 'Uncategorized'}
-                  </span>
-                  {s.note && <span className="acct-detail-split-note">{s.note}</span>}
-                  <span className="acct-detail-split-amt">
-                    {fCur(s.amount, currency, { cents: true })}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
       {/* key={txn.id}: the drawer never unmounts on a row switch (this component's own
           docstring above), so without a key ReceiptsSection's local UI state — armed row,
           open viewer, in-flight attach — would leak from the previous transaction onto the
@@ -1374,7 +1380,7 @@ function ViewBody({
           )}
         </DRow>
       </div>
-      {hasSourceRef && (
+      {hasSourceRef && source.status !== 'idle' && (
         <>
           <div className="acct-detail-sec">
             {source.status === 'ok' && source.data.length > 1
@@ -1432,7 +1438,12 @@ function ViewBody({
                             aria-controls={`src-email-body-${key}`}
                             onClick={toggle}
                           >
-                            {open ? 'Hide full email ▴' : 'Show full email ▾'}
+                            {open ? 'Hide full email' : 'Show full email'}{' '}
+                            {open ? (
+                              <ChevronUp size={12} aria-hidden="true" />
+                            ) : (
+                              <ChevronDown size={12} aria-hidden="true" />
+                            )}
                           </button>
                           {open && (
                             <pre id={`src-email-body-${key}`} className="acct-detail-email-body">
@@ -1490,7 +1501,12 @@ function ViewBody({
                           aria-controls={`src-raw-${key}`}
                           onClick={toggle}
                         >
-                          {open ? 'Hide raw fields ▴' : 'Show raw fields ▾'}
+                          {open ? 'Hide raw fields' : 'Show raw fields'}{' '}
+                          {open ? (
+                            <ChevronUp size={12} aria-hidden="true" />
+                          ) : (
+                            <ChevronDown size={12} aria-hidden="true" />
+                          )}
                         </button>
                         {open && (
                           <div id={`src-raw-${key}`} className="acct-detail-raw-body">
@@ -1525,18 +1541,6 @@ function ViewBody({
                 </Fragment>
               )
             })}
-          {source.status === 'unavailable' &&
-            (txn.externalRefs.every((r) => r.source === 'email') ? (
-              <div className="acct-detail-email-empty">
-                Snapshot unavailable — this transaction was booked from email before snapshots were
-                kept (or the original message is no longer stored).
-              </div>
-            ) : (
-              <div className="acct-detail-email-empty">
-                Snapshot unavailable — this transaction was booked before evidence was kept (or the
-                original record is no longer stored).
-              </div>
-            ))}
           {source.status === 'error' && (
             <div className="acct-detail-email-empty">
               Couldn't load the source details.{' '}
@@ -1637,6 +1641,25 @@ function ViewBody({
         <button className="acct-detail-edit" onClick={onEdit}>
           Edit transaction
         </button>
+        {onToggleHidden && (
+          <button
+            className="acct-detail-hide"
+            disabled={pending}
+            onClick={() => onToggleHidden(txn, !txn.hidden)}
+            title={
+              txn.hidden
+                ? 'Show this transaction in the register again'
+                : 'Hide from the register. It still counts in every balance, budget and report.'
+            }
+          >
+            {txn.hidden ? (
+              <Eye size={14} aria-hidden="true" />
+            ) : (
+              <EyeOff size={14} aria-hidden="true" />
+            )}
+            {txn.hidden ? 'Unhide' : 'Hide'}
+          </button>
+        )}
         <button
           className="acct-detail-del"
           disabled={isStartingBalance}
@@ -1736,6 +1759,7 @@ export default function TxnDetail({
   onDelete,
   onMarkReviewed,
   onToggleCleared,
+  onToggleHidden,
   onManagePayees,
   onCreateCategory,
   onLoadActivity,
@@ -1844,7 +1868,9 @@ export default function TxnDetail({
     onLoadSourceEntries(id)
       .then((data) => {
         if (currentTxnIdRef.current !== id) return
-        setSource(data && data.length ? { status: 'ok', data } : { status: 'unavailable' })
+        // Nothing to show (404) means no ref behind this row carries evidence — an iOS
+        // shortcut's key, a vest id. A pruned snapshot still arrives as its own entry.
+        setSource(data && data.length ? { status: 'ok', data } : { status: 'idle' })
       })
       .catch(() => {
         if (currentTxnIdRef.current !== id) return
@@ -1910,7 +1936,10 @@ export default function TxnDetail({
       .catch(() => {
         if (currentTxnIdRef.current === id) setStatementLinks([])
       })
-  }, [txn?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    // `hasAnyRef` too: a row opened by id (a Lucius chip) first renders as a ref-less
+    // placeholder, and the real row arrives under the SAME id — keyed on the id alone, the
+    // lookup never re-ran and the drawer showed no statement (owner, 2026-10-26).
+  }, [txn?.id, hasAnyRef]) // eslint-disable-line react-hooks/exhaustive-deps
   // Publish the open drawer's width so the floating Lucius dock can shift left to clear it
   // (Lucius must stay reachable while the drawer is open). Tracks resize; cleared on close.
   // Skipped on phones: the sheet is full-width, and `.lx-dock` is display:none there anyway
@@ -2091,6 +2120,7 @@ export default function TxnDetail({
                   onDelete={onDelete}
                   onMarkReviewed={onMarkReviewed}
                   onToggleCleared={onToggleCleared}
+                  onToggleHidden={onToggleHidden}
                   actionError={actionError}
                 />
               )}

@@ -29,6 +29,7 @@ or block a teardown.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections import deque
 from typing import Optional, Protocol
@@ -50,6 +51,12 @@ TAIL_LINES = 12
 # the download that is still running actually lives.
 ERROR_TAIL_LINES = 2
 
+# A line that states what failed: "Error: Cannot find module …", "TypeError: …",
+# "ModuleNotFoundError: …", "npm error 404 …", "error: unrecognized argument", "ERR_…".
+_FAILURE_LINE = re.compile(
+    r"(^|\s)(\w*(Error|Exception)\b:?|error\b:?|ERR_[A-Z_]+|Cannot find module|command not found)",
+)
+
 _READ_CHUNK_BYTES = 8192
 
 
@@ -70,6 +77,10 @@ class StderrTail:
         self._lines: deque[str] = deque()
         self._bytes = 0
         self._partial = bytearray()
+        # The last line that names a failure, kept OUTSIDE the rolling tail: a Node crash prints
+        # "Error: Cannot find module …" then a ten-line stack, so by the time the tail is quoted
+        # the line that says what went wrong has already scrolled out (live, 2026-10-31).
+        self._failure: Optional[str] = None
         self._lock = threading.Lock()
         self._thread = threading.Thread(target=self._pump, name="mcp-stdio-stderr", daemon=True)
         self._thread.start()
@@ -88,6 +99,14 @@ class StderrTail:
         persisted as ``last_error``. Sanitizing is the CALLER's (it owns the surrounding
         message), which is what ``stdio_client._StdioSession._explain`` does.
         """
+        # A crashed runtime ends its report with boilerplate — Node prints a stack, a closing
+        # brace and "Node.js v26.0.0" — so the last lines said nothing ("} • Node.js v26.0.0",
+        # owner, 2026-10-31). Quote the last line that named the failure instead, when there was
+        # one; otherwise the end of the output, as before.
+        with self._lock:
+            failure = self._failure
+        if failure:
+            return failure.strip()[:max_chars]
         tail = self.lines()[-ERROR_TAIL_LINES:]
         if not tail:
             return ""
@@ -138,6 +157,8 @@ class StderrTail:
         if not text:
             return
         with self._lock:
+            if _FAILURE_LINE.search(text):
+                self._failure = text[:MAX_LINE_BYTES]
             self._lines.append(text)
             self._bytes += len(text)
             while self._lines and (len(self._lines) > TAIL_LINES or self._bytes > MAX_TAIL_BYTES):

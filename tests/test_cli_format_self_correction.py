@@ -30,6 +30,47 @@ def test_an_empty_call_the_reply_then_makes_properly_is_dropped():
     assert calls == [{"name": "create_account", "input": {"name": "DBS"}}]
 
 
+def _shown(text: str) -> tuple[str, list[dict]]:
+    """What the live stream shows, one character at a time, and the calls it found."""
+    scanner = ToolCallScanner()
+    shown = "".join("".join(scanner.feed(ch)) for ch in text) + scanner.flush()
+    return shown, scanner.calls
+
+
+def test_loose_parameter_tags_never_reach_the_live_screen():
+    """A digest wrote its call's arguments as text with no `<invoke>` around them, then made the
+    call properly. The call ran once and the saved reply was clean, but the screen showed them."""
+    shown, calls = _shown(
+        '<parameter name="transactions">[{"description": "ACME", "amount": 5}]</parameter> '
+        '<parameter name="import_description">Email: ACME</parameter>\n'
+        "Now logging it.\n"
+        '<tool_call>{"name": "add_transactions", "input": {"transactions": []}}</tool_call>'
+    )
+    assert "parameter" not in shown
+    assert "ACME" not in shown
+    assert "Now logging it." in shown
+    assert calls == [{"name": "add_transactions", "input": {"transactions": []}}]
+
+
+def test_parameters_inside_a_real_call_are_still_its_arguments():
+    shown, calls = _shown(
+        '<invoke name="add_transactions"><parameter name="note">ACME</parameter></invoke>'
+    )
+    assert shown == ""
+    assert calls == [{"name": "add_transactions", "input": {"note": "ACME"}}]
+
+
+def test_prose_that_only_mentions_a_parameter_stays_visible():
+    text = "Set the <parameter> field, then check the parameter name in the form."
+    assert _shown(text) == (text, [])
+
+
+def test_an_unfinished_parameter_tag_is_dropped_not_half_shown():
+    shown, calls = _shown('Checking.\n<parameter name="transactions">[{"description": "ACM')
+    assert shown == "Checking.\n"
+    assert calls == []
+
+
 def test_a_genuine_zero_argument_call_still_runs():
     assert _scan('<invoke name="list_accounts"></invoke>') == [
         {"name": "list_accounts", "input": {}}
@@ -48,6 +89,8 @@ def test_a_held_call_keeps_its_place_ahead_of_a_different_call():
     "leak",
     [
         "Wait, I must use the required format.",
+        "Note: I used an incorrect format above. Correcting to the required protocol.",
+        "Correcting to the required protocol.",
         "Actually, using the required format:",
         "Actually, I need to use the correct format.",
         "I need to use the proper tool call format.",

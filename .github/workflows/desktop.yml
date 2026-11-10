@@ -2,10 +2,10 @@ name: Desktop
 
 on:
   pull_request:
-    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/runtime_zip.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
   push:
     branches: [main]
-    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/runtime_zip.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
   workflow_dispatch:
     inputs:
       signed:
@@ -46,6 +46,9 @@ jobs:
           # The watched-folder helper tests run the real backend.cli.desktop_file under this python.
           python3 -m pip install -r requirements.txt
           export ONW_DESKTOP_PYTHON="$(command -v python3)"
+          # The desktop pretest (resources/build-onboarding.mjs) embeds the app font from
+          # frontend/node_modules; the runtime build below reuses this install.
+          (cd frontend && npm ci --no-audit --no-fund)
           cd desktop
           npm ci
           npm run typecheck
@@ -95,7 +98,7 @@ jobs:
           ONW_DESKTOP_UPDATES: '0'
         run: |
           cd desktop
-          python3 -c 'from pathlib import Path; import subprocess; app = next(Path("out").glob("*/Open Net Worth.app/Contents/MacOS/open-net-worth")); subprocess.run(["node", "qa/packaged-smoke.mjs", str(app.resolve())], check=True)'
+          python3 -c 'from pathlib import Path; import subprocess; app = next(Path("out").glob("*/Open Net Worth.app/Contents/MacOS/Open Net Worth")); subprocess.run(["node", "qa/packaged-smoke.mjs", str(app.resolve())], check=True)'
       - name: Verify Gatekeeper acceptance and stage release files
         if: inputs.signed == true
         run: |
@@ -159,6 +162,9 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           export ONW_DESKTOP_PYTHON="$(python -c 'import sys; print(sys.executable)')"
+          # The desktop pretest (resources/build-onboarding.mjs) embeds the app font from
+          # frontend/node_modules; the runtime build below reuses this install.
+          (cd frontend && npm ci --no-audit --no-fund)
           cd desktop
           npm ci
           npm run typecheck
@@ -229,7 +235,11 @@ jobs:
           Start-Sleep -Seconds 10
           Get-Process open-net-worth -ErrorAction SilentlyContinue | Stop-Process -Force
           Start-Sleep -Seconds 5
-          $exe = (Get-ChildItem "$env:LOCALAPPDATA\OpenNetWorth" -Recurse -Filter open-net-worth.exe | Select-Object -First 1).FullName
+          # The open-net-worth.exe at the install root is Squirrel's stub: it starts the app in
+          # app-<version>\ and exits 0 at once, which the smoke reads as the app quitting.
+          $apps = @(Get-ChildItem "$env:LOCALAPPDATA\OpenNetWorth" -Directory -Filter 'app-*')
+          if ($apps.Count -ne 1) { throw "Expected one installed app-* folder, found $($apps.Count)" }
+          $exe = Join-Path $apps[0].FullName 'open-net-worth.exe'
           Write-Host "installed: $exe"
           Push-Location desktop
           node qa/packaged-smoke.mjs $exe
@@ -305,6 +315,9 @@ jobs:
       - name: Install and check desktop host
         run: |
           export ONW_DESKTOP_PYTHON="$(command -v python3)"
+          # The desktop pretest (resources/build-onboarding.mjs) embeds the app font from
+          # frontend/node_modules; the runtime build below reuses this install.
+          (cd frontend && npm ci --no-audit --no-fund)
           cd desktop
           npm ci
           npm run typecheck
@@ -327,8 +340,8 @@ jobs:
           xvfb-run -a node qa/close.mjs
           npx playwright install --with-deps chromium
           xvfb-run -a node qa/browser.mjs
-          # qa/server-client.mjs is not run on Linux yet: it already fails on macOS main and closes
-          # the app on Escape in the activity prompt on Linux (follow-up).
+          # qa/server-client.mjs runs on macOS only: on Linux, Escape in the activity prompt closes
+          # the app (follow-up).
       - name: Package AppImage and .deb
         run: cd desktop && npm run make
       - name: Verify the packaged AppImage

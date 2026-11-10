@@ -108,6 +108,38 @@ async function nativeChoice(folder, cancelled = false) {
     dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
   }, { folder, cancelled });
 }
+// The macOS runner's compositor now and then gives no frame for the window (the same capture
+// passed on one run and failed on the next): Chromium refuses it ("Unable to capture screenshot")
+// and so can Electron's capturePage ("UnknownVizError"). A screenshot here is evidence, not a
+// check, so a frame that never comes is logged with every window's state and the run goes on.
+async function shot(file) {
+  try {
+    await page.screenshot({ path: file });
+    return;
+  } catch (error) {
+    if (!/Unable to capture screenshot/.test(String(error))) throw error;
+  }
+  const url = page.url();
+  const result = await app.evaluate(async ({ BrowserWindow }, url) => {
+    const windows = BrowserWindow.getAllWindows();
+    const state = windows.map((window) => ({
+      page: window.webContents.getURL() === url,
+      visible: window.isVisible(),
+      minimized: window.isMinimized(),
+      focused: window.isFocused(),
+      bounds: window.getBounds(),
+    }));
+    const owner = windows.find((window) => window.webContents.getURL() === url);
+    try {
+      return { state, png: owner ? (await owner.webContents.capturePage()).toPNG().toString("base64") : null };
+    } catch (error) {
+      return { state, png: null, error: String(error) };
+    }
+  }, url);
+  console.log("NOTE renderer capture refused:", path.basename(file), JSON.stringify({ windows: result.state, error: result.error }));
+  if (result.png) await writeFile(file, Buffer.from(result.png, "base64"));
+  else console.log("NOTE no frame to capture, screenshot skipped:", path.basename(file));
+}
 async function close() {
   if (app) {
     await app.close();
@@ -116,6 +148,40 @@ async function close() {
 }
 async function accounts() {
   return page.evaluate(async () => (await fetch("/api/accounts")).json());
+}
+// Restoring a backup gives the book a new id. The page notices on its next setup-status read,
+// drops the old book's caches and reloads onto the new one (frontend/src/utils/bookIdentity.ts),
+// a few hundred ms AFTER the URL has already moved on. A fetch or evaluate that straddles the
+// reload dies with "Failed to fetch" / "Execution context was destroyed", so wait until the page
+// has reconciled with the server's current book and no reload is pending.
+async function onCurrentBook() {
+  await page.waitForFunction(
+    async () => {
+      try {
+        const { book_id } = await (await fetch("/api/setup-status")).json();
+        return localStorage.getItem("onw-book-id") === book_id && sessionStorage.getItem("onw-book-reload") === null;
+      } catch {
+        return false; // the old document is going away mid-reload
+      }
+    },
+    undefined,
+    { polling: 100 },
+  );
+}
+// onCurrentBook alone still lost the race on CI (linux, 2026-10-31: "Execution context was
+// destroyed" on the very next evaluate), so a read after a restore also survives one more
+// navigation: it waits for the current book again and repeats. Only those two errors, at most
+// three tries — anything else, or a page that keeps reloading, still fails the run.
+const NAVIGATED = /Execution context was destroyed|Failed to fetch/;
+async function onRestoredBook(read) {
+  for (let attempt = 1; ; attempt++) {
+    await onCurrentBook();
+    try {
+      return await read();
+    } catch (error) {
+      if (attempt >= 3 || !NAVIGATED.test(String(error?.message ?? error))) throw error;
+    }
+  }
 }
 const preferences = (selectedBookFolder) => ({
   background: false,
@@ -139,7 +205,7 @@ try {
     assert.equal(style.background,scheme==='dark'?'rgb(14, 16, 20)':'rgb(255, 255, 255)');
     assert.equal(style.heading,'44px');
     assert.ok(style.font.includes('Plus Jakarta Sans'));
-    await page.screenshot({path:`qa/artifacts/first-launch-welcome-${scheme}.png`});
+    await shot(`qa/artifacts/first-launch-welcome-${scheme}.png`);
   }
   await app.evaluate(({nativeTheme})=>{nativeTheme.themeSource='system';});
   check("Welcome follows native system appearance and switches palettes with matching onboarding typography");
@@ -158,7 +224,7 @@ try {
   if (process.env.ONW_QA_SHOTS) for (const scheme of ["dark", "light"]) {
     await app.evaluate(({nativeTheme},scheme)=>{nativeTheme.themeSource=scheme;},scheme);
     await page.waitForTimeout(300);
-    await page.screenshot({path:path.join(process.env.ONW_QA_SHOTS,`chooser-${scheme}.png`)});
+    await shot(path.join(process.env.ONW_QA_SHOTS,`chooser-${scheme}.png`));
   }
   await app.evaluate(({nativeTheme})=>{nativeTheme.themeSource='system';});
   assert.equal(await readFile(path.join(root, '.instance.lock'), 'utf8').catch(()=>null), initialLock);
@@ -237,7 +303,7 @@ try {
   assert.equal(await page.getByRole("button", { name: "Back", exact: true }).count(), 0);
   assert.equal(await readFile(path.join(root, '.instance.lock'), 'utf8'), lockBefore);
   assert.equal(await hash(), before);
-  await page.screenshot({path:'qa/artifacts/first-launch-welcome.png'});
+  await shot('qa/artifacts/first-launch-welcome.png');
   check("a locked suggested book stays untouched through Welcome and the folder choice (which has no Back); pre-book capabilities are denied");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
@@ -246,7 +312,7 @@ try {
   await page.getByText(/port 8097.*stop that server and retry/i).waitFor();
   await page.getByText(await realpath(root), { exact: true }).waitFor();
   assert.equal(await hash(), before);
-  await page.screenshot({ path: "qa/artifacts/default-book-in-use.png" });
+  await shot("qa/artifacts/default-book-in-use.png");
   check(
     "a default book held by another server stays untouched and recovery explains the conflict",
   );
@@ -280,10 +346,10 @@ try {
   await page.getByRole("heading", { name: "Choose your app currency." }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Get started", exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', {name:'Change book folder'}).count(), 0);
-  await page.getByRole('button', {name:'← Back',exact:true}).waitFor();
+  await page.getByRole('button', {name:'Back',exact:true}).waitFor();
   assert.equal((await page.evaluate(() => window.onwDesktop.getSettings())).bookFolder, await realpath(path.join(freshHome,'.open-net-worth')));
   await page.waitForFunction(()=>[...document.querySelectorAll('.firstrun-topbar img')].every(img=>img.complete && img.naturalWidth>0));
-  await page.screenshot({path:'qa/artifacts/first-launch-currency.png'});
+  await shot('qa/artifacts/first-launch-currency.png');
   assert.equal((await accounts()).length, 0);
   assert.equal(await exists(path.join(profile, "book")), false);
   check("a missing default stays absent until confirmation, then goes directly to currency");
@@ -307,11 +373,12 @@ try {
   await page.locator('.firstrun-drop__input').setInputFiles(archive);
   await page.getByRole("button",{name:"Restore this backup"}).waitFor();
   assert.deepEqual(await accounts(),[]);
-  await page.screenshot({path:'qa/artifacts/first-launch-restore-preview.png'});
+  await shot('qa/artifacts/first-launch-restore-preview.png');
   await page.getByRole("button",{name:"Restore this backup"}).click();
   await page.waitForURL(/\/setup\/model$/);
-  assert.equal((await page.evaluate(async () => (await fetch('/api/setup-status')).json())).restore_pending, true);
-  assert.ok((await accounts()).some(account=>account.name==='Explicit Book'));
+  const restored = await onRestoredBook(() => page.evaluate(async () => (await fetch('/api/setup-status')).json()));
+  assert.equal(restored.restore_pending, true);
+  assert.ok((await onRestoredBook(accounts)).some(account=>account.name==='Explicit Book'));
   check("restore follows empty folder selection, previews without importing, and continues to AI setup with the restored book");
   await writeFile(
     "qa/artifacts/default-book-report.json",

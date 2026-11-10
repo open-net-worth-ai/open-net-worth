@@ -1,35 +1,18 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Eye, EyeOff, ListChecks, MessageSquare, SquarePen, X, Zap } from '../../ui/icons'
+import { ListChecks, MessageSquare, Plus, SquarePen, X, Zap } from '../../ui/icons'
 import { ConversationRenameInput, ConversationRowMenu } from './ConversationRowActions'
 import { ConversationStatusBadge, conversationStatusLabel } from './ConversationStatusBadge'
 import type { ConversationMeta } from '../../hooks/useConversations'
 import type { ConvRowStatus } from '../../types/chat'
 import { fDateTime } from '../../utils/format'
-import { useShowBackgroundConversations } from '../../hooks/useShowBackgroundConversations'
+
+export type ConversationKind = 'chat' | 'automation' | 'capture'
 
 /** The row's type glyph: an Automation run, a capture, or a chat. */
 export function ConversationIcon({ conv }: { conv: ConversationMeta }) {
   if (conv.source === 'automation') return <ListChecks size={14} />
   if (conv.origin === 'capture') return <Zap size={14} />
   return <MessageSquare size={14} />
-}
-
-/** Section-header switch for background conversations (captures) — hidden by default. */
-export function BackgroundConversationsToggle() {
-  const [on, setOn] = useShowBackgroundConversations()
-  const label = on ? 'Hide background conversations' : 'Show background conversations'
-  return (
-    <button
-      type="button"
-      className={`conv-menu-bgtoggle${on ? ' on' : ''}`}
-      onClick={() => setOn(!on)}
-      aria-pressed={on}
-      aria-label={label}
-      title={label}
-    >
-      {on ? <Eye size={14} /> : <EyeOff size={14} />}
-    </button>
-  )
 }
 
 /**
@@ -53,6 +36,9 @@ const RECENT_RUNS = 5
 // Still bounded, and still backed by "View all conversations": the section flexes to the
 // available height and scrolls past it, so a tall screen shows more without loading the lot.
 const RECENT_CHATS = 25
+// Captures are a record of what came in and what got booked — you look one up, you don't
+// navigate by them. Three is enough to see the latest landed; the rest are a click away.
+export const RECENT_CAPTURES = 3
 
 /** §5.1.1 rule 2 — force-inclusion past the N-item cap. `items` is assumed already
  *  recency-sorted (newest first). A `needs_you`/`working` conversation must never be
@@ -135,13 +121,13 @@ export function ConversationMenu({
 }: {
   /** Already split and sorted by ChatPanel.conversationGroups — newest first, by when the
    *  conversation HAPPENED (an Automation's updated_at is unusable; see byRecency). */
-  groups: { key: 'chat' | 'automation'; items: ConversationMeta[]; total: number }[]
+  groups: { key: ConversationKind; items: ConversationMeta[]; total: number }[]
   activeId: string
   statusFor: (id: string) => ConvRowStatus
   onClose: () => void
   onNewChat: () => void
   onSelect: (id: string) => void
-  onViewAll: (kind: 'chat' | 'automation') => void
+  onViewAll: (kind: ConversationKind) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
   onStop: (id: string) => void
@@ -159,9 +145,30 @@ export function ConversationMenu({
   }, [onClose])
 
   const runs = groups.find((g) => g.key === 'automation')?.items ?? []
+  const captures = groups.find((g) => g.key === 'capture')?.items ?? []
   const chats = groups.find((g) => g.key === 'chat')?.items ?? []
   const visibleRuns = sortWithinSection(selectVisibleRows(runs, statusFor, RECENT_RUNS), statusFor)
+  const visibleCaptures = selectVisibleRows(captures, statusFor, RECENT_CAPTURES)
   const visibleChats = selectVisibleRows(chats, statusFor, RECENT_CHATS)
+  const row = (conv: ConversationMeta) => (
+    <ConversationRow
+      key={conv.id}
+      conv={conv}
+      active={conv.id === activeId}
+      status={statusFor(conv.id)}
+      when={formatWhen(conv)}
+      editing={editingId === conv.id}
+      onSelect={onSelect}
+      onStartRename={setEditingId}
+      onCommitRename={(title) => {
+        setEditingId(null)
+        onRename(conv.id, title)
+      }}
+      onCancelRename={() => setEditingId(null)}
+      onDelete={onDelete}
+      onStop={onStop}
+    />
+  )
 
   return (
     <div className="conv-menu" role="dialog" aria-label="Conversations">
@@ -186,25 +193,7 @@ export function ConversationMenu({
               <ListChecks size={14} />
               <span>Automation runs</span>
             </div>
-            {visibleRuns.map((conv) => (
-              <ConversationRow
-                key={conv.id}
-                conv={conv}
-                active={conv.id === activeId}
-                status={statusFor(conv.id)}
-                when={formatWhen(conv)}
-                editing={editingId === conv.id}
-                onSelect={onSelect}
-                onStartRename={setEditingId}
-                onCommitRename={(title) => {
-                  setEditingId(null)
-                  onRename(conv.id, title)
-                }}
-                onCancelRename={() => setEditingId(null)}
-                onDelete={onDelete}
-                onStop={onStop}
-              />
-            ))}
+            {visibleRuns.map(row)}
             <button
               type="button"
               className="conv-menu-more"
@@ -215,18 +204,30 @@ export function ConversationMenu({
           </div>
         )}
 
+        {captures.length > 0 && (
+          <div className="conv-menu-sec">
+            <div className="conv-menu-sec-h">
+              <Zap size={14} />
+              <span>Captures</span>
+            </div>
+            {visibleCaptures.map(row)}
+            <button type="button" className="conv-menu-more" onClick={() => onViewAll('capture')}>
+              View all captures
+            </button>
+          </div>
+        )}
+
         <div className="conv-menu-sec conv-menu-sec--fill">
           <div className="conv-menu-sec-h">
             <MessageSquare size={14} />
             <span>Chats</span>
-            <BackgroundConversationsToggle />
             <button
               type="button"
               className="conv-menu-plus"
               onClick={onNewChat}
               aria-label="New chat"
             >
-              +
+              <Plus size={14} />
             </button>
           </div>
           {chats.length === 0 ? (
@@ -238,28 +239,7 @@ export function ConversationMenu({
             groupByAge(visibleChats).map((bucket) => (
               <div key={bucket.label} className="conv-menu-bucket">
                 <div className="conv-menu-bucket-h">{bucket.label}</div>
-                {sortWithinSection(bucket.items, statusFor).map((conv) => (
-                  <ConversationRow
-                    key={conv.id}
-                    conv={conv}
-                    active={conv.id === activeId}
-                    status={statusFor(conv.id)}
-                    // Stamped like a run is — the age bucket says WHICH DAY, the stamp says
-                    // when the last message landed, which is what tells two of today's chats
-                    // apart.
-                    when={formatWhen(conv)}
-                    editing={editingId === conv.id}
-                    onSelect={onSelect}
-                    onStartRename={setEditingId}
-                    onCommitRename={(title) => {
-                      setEditingId(null)
-                      onRename(conv.id, title)
-                    }}
-                    onCancelRename={() => setEditingId(null)}
-                    onDelete={onDelete}
-                    onStop={onStop}
-                  />
-                ))}
+                {sortWithinSection(bucket.items, statusFor).map(row)}
               </div>
             ))
           )}

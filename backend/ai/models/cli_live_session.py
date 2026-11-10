@@ -291,13 +291,14 @@ def pool_for(registry: "dict[int, SessionPool]", idle_seconds: Callable[[], floa
 
 
 def pending_turn(messages: list[dict], consumed: int) -> tuple[str, list[dict]]:
-    """Return the unseen text and images after skipping replies this session generated.
+    """Return the unseen text and images after skipping the reply this session generated.
 
-    Assistant messages at the boundary are skipped: the CLI produced them, so it already
-    holds them, and re-sending would duplicate its own words back at it.
+    The one assistant message at the boundary is skipped: the CLI produced it, so it already
+    holds it. Any other there is an alert or a briefing pushed since that reply. The CLI has
+    never seen those, and the person may be answering one, so they are sent.
     """
     i = consumed
-    while i < len(messages) and (messages[i].get("role") or "user") == "assistant":
+    if i < len(messages) and (messages[i].get("role") or "user") == "assistant":
         i += 1
     return flatten_messages_with_images(messages[i:])
 

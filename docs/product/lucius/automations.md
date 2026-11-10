@@ -25,7 +25,7 @@ bank every few hours, or logging the purchases in your card emails.
 
    | Template | What it does | When |
    |---|---|---|
-   | **Auto-log transactions from email** | Reads bank, card and trade confirmation emails and logs them — payees resolved, nothing double-booked | Every 12 hours |
+   | **Email finance digest** | Logs bank, card and trade confirmation emails, then tells you what else needs you — a failed payment, a bill due, a new login to a money account, a deposit maturing | Every day at 12:00 AM and 12:00 PM |
    | **Daily briefing** | A short, friendly update on yesterday's money and investments | Every day at 9:00 |
    | **Weekly report** | How last week went: spending, bills, investments and anything unusual — as a designed report page | Mondays at 8:30 |
    | **Monthly report** | How last month went: what you earned and kept, spending and investments | The 1st of each month at 9:30 |
@@ -39,8 +39,8 @@ if that's what you use; with neither set up, they appear in the app.
 Other templates on the same page:
 
 - **Sync a connector** — one per bank or broker connector (**Sync SimpleFIN**, **Sync Plaid**,
-  **Sync Lunch Money**, **Sync Lunch Flow**, **Sync YNAB**, **Sync Enable Banking**, **Sync
-  Alpaca**, **Sync Interactive Brokers**). Each fetches new activity on a schedule and books it.
+  **Sync Lunch Money**, **Sync Lunch Flow**, **Sync YNAB**, **Sync Enable Banking**,
+  **Sync GoCardless**). Each fetches new activity on a schedule and books it.
   You can also start these from the **Automate** button on the connector's own page.
 - **Start from a template** — **Subscription creep**, **Budget pacing**, **Cash floor guard**,
   **Large charge alert**; **Browse all templates** adds **New payee check** and **Portfolio
@@ -145,6 +145,9 @@ as **Paused**, which is only ever your choice. To run a finished one again, choo
 again** and give it a new date or schedule. **Clear finished** deletes all of them, with their run
 history, after you confirm.
 
+**Sort by** orders your list by **Next run**, **Recently run**, **Cost this month** or **Name**
+(A→Z). Paused Automations always sit at the bottom, whatever the sort.
+
 ## Approval mode
 
 Each Automation has its own approval mode. Inside a run, it decides — not the mode of any chat.
@@ -188,26 +191,75 @@ runs**; **Mark all read** there clears the unread ones in one click.
 
 A run that failed keeps saying **Failed** there, even after you've opened it. And while an
 Automation's latest run has failed, the Lucius home screen lists it under **Needs attention** — on
-your phone too — with the reason. **Open** takes you to the run, where **Try again** is. It drops off
-the list once a later run, or your retry, succeeds — and after 24 hours in any case, so a paused or
-finished Automation doesn't sit there for good.
+your phone too — with the reason. **Open** takes you to the run, where **Try again** is, and clears
+it from the list on all your devices: you've seen it. If the Automation fails again, it comes back.
+It also drops off once a later run, or your retry, succeeds — and after 24 hours in any case, so a
+paused or finished Automation doesn't sit there for good.
 
 Deleting an Automation also deletes its run history. It can't be undone.
 
+## Data syncs
+
+The switch at the top of **Automations** has two sides. **Lucius** holds the jobs you give Lucius
+(everything on this page). **Data sync** holds syncs that keep this book and another app in step
+by fixed rules instead: no prompt, model or permission mode, no AI involved, nothing to pay. Each
+opens to its own page with its settings and history, and the switch shows how many items wait for
+your review.
+
+The switch appears once a data sync is turned on in
+[Settings → Developer → Experimental](../features/settings.md#experimental-features); until then
+**Automations** is the Lucius list alone.
+
+There are two: [YNAB](../features/imports-and-sync.md) and
+[Actual](../features/actual-budget-import.md), which is off until you turn it on in
+**Settings → Developer → Experimental**. Each imports your budget and then keeps it and this
+book in step: from the app, to the app, or both ways. A book syncs with one of them at a time. The
+**Sync YNAB** template under Lucius is the one-way version: Lucius fetches new YNAB transactions and
+books them here, and doesn't copy categories or Assigned.
+
 ## Logging transactions from your email
 
-**Auto-log transactions from email** is in **Recommended**, and behind the **Automate** button on
-the [Email connector](../connectors/email-ingestion.md)'s page. Every 12 hours it reads new bank,
-card and trade confirmation emails, logs what it finds and messages you a summary. Each run reads
-the mail since the last run that finished (at least a day's worth), so a slower schedule or a
-failed run never leaves a gap. It follows the
-built-in **log-transactions-from-email** [skill](skills.md), so when that skill improves, your
-Automation does too (unless you've edited the skill).
+**Email finance digest** is in **Recommended**, and behind the **Automate** button on the
+[Email connector](../connectors/email-ingestion.md)'s page. Every day at 12:00 AM and 12:00 PM it
+does two things:
 
-It needs the Email connector set up first; without a mailbox, the run says so and stops without
-logging anything. Running it twice over the same email never books it twice.
+- **Logs** new bank, card and trade confirmation emails, with payees resolved and nothing booked
+  twice.
+- **Tells you what else affects your money**, in one short message, and what it means going by
+  your books: a new login to a bank, broker or other finance app, a failed payment of any size,
+  a bill due and not yet paid, a margin call, a deposit maturing, a new rate on your savings, a
+  deadline on something you hold, a large amount moving. It judges each email by what it says,
+  not whose name is on it. Promotions, newsletters and security notices from anything that isn't
+  a finance app, like your email, shops or streaming, stay out. A first run looks back 3 days.
 
-Older installs may have a paused copy of this Automation that was added automatically. It's
+The message opens with a greeting, then follows one order: anything that puts your money at risk
+right now, what it logged, money going wrong, decisions with a deadline, a couple of things worth
+knowing, and small things in one line. Lucius can't tell from an email who did something, so he
+lightly mentions every new security notice on a finance app, and you can ignore it if it was you.
+The part on what he logged gives each charge's amount, payee, account and category (grouped when
+there are more than five), and says what you may want to correct and whether a bank email wouldn't
+open.
+
+Everything except logging is read-only: Lucius won't reply, pay or follow a link because an email
+asks, and he won't repeat a login code. If nothing was logged and nothing needs you, he doesn't
+message you.
+
+Logging reads the mail since the last run that finished (at least a day's worth), so a slower
+schedule or a failed run never leaves a gap. The message reads back to the run before last, so
+what one run skips gets a second chance. Each run sees what the last one sent you and whether it
+arrived: it leaves out what you've been told and tells you again what didn't reach you. Those
+rules are in the Automation's own instructions, where you can change them. It follows the built-in **email-finance-digest** and
+**log-transactions-from-email** [skills](skills.md), so when they improve, your Automation does
+too (unless you've edited them). Turning off **log-transactions-from-email** stops the logging, and
+the message tells you so.
+
+For logging with no digest, **Auto-log transactions from email** is under **Start from a
+template**. Use one or the other: both on means two runs reading the same mail, and paying for it.
+
+Both need the Email connector set up first; without a mailbox, the run says so and stops without
+logging anything. Running either twice over the same email never books it twice.
+
+Older installs may have a paused copy of the logging Automation that was added automatically. It's
 yours to edit, turn on or delete — a deleted copy doesn't come back.
 
 ## Cost
@@ -225,8 +277,9 @@ Check both before pointing an **Auto** or **Skip** Automation at anything that c
 money.
 
 Open Net Worth has to be running (and the computer awake) for a scheduled run to happen. In the
-desktop app, the **Keep awake** switch at the top of the Automations list stops the computer
-from idling to sleep while the app runs — see [Keep computer awake](../operations/desktop.md#keep-it-running-in-the-background).
+[desktop app](../operations/desktop.md#keep-it-running-in-the-background), or with a server you run yourself on
+macOS or Windows, the **Keep awake** switch at the top of **Automations** stops idle sleep while it
+runs. A server on Linux or in Docker doesn't offer it — use the machine's own power settings there.
 
 ## Troubleshooting
 
@@ -235,7 +288,9 @@ the time, and look at its **History** tab. More in [A scheduled Automation didn'
 run](../troubleshooting/automations-not-running.md).
 
 **A run is stuck on "Needs you".** It's in **Manually approve** and waiting on a confirm card.
-Open the run and answer it, or switch the Automation to **Automatically approve**.
+Open the run and answer it, or switch the Automation to **Automatically approve**. A waiting run has
+used its scheduled time, so that time won't start a second run, and the next scheduled run still
+starts on time.
 
 **"This turn hit its 20-minute time limit and was stopped."** The model was too slow for the job.
 Pick a faster **Model** for this Automation, or raise the **Turn time limit** — see [Models and

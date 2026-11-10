@@ -828,10 +828,10 @@ export function Plan({
                 active={tab === 'outlook'}
                 onAskLucius={onAskLucius}
                 toast={showToast}
-                onOpenSettings={() => setFireOpen(true)}
                 total={netWorthQuery.data?.net_worth ?? 0}
                 totalLoading={netWorthQuery.initialLoading}
                 fireVersion={fireVersion + profileDomainV}
+                fireSaveVersion={fireVersion}
                 onFireSettingsSaved={handleFireSettingsChanged}
               />
             )}

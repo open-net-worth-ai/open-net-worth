@@ -183,7 +183,7 @@ def _holdings_total(rows: list[dict]) -> float:
     )
 
 
-def _card_debt_covered(debt_total: float) -> float:
+def _card_debt_covered(debt_total: float, book: ledger_service.LedgerBook | None = None) -> float:
     """How much of the book's debt its credit cards' payment envelopes already hold, in base
     currency (0 when nothing is owed, or no card has such an envelope). The Budget's Credit
     Card Payments rows are the authority (``planning.card_payment_coverage``); a failed read
@@ -194,14 +194,16 @@ def _card_debt_covered(debt_total: float) -> float:
     from backend.services import planning
 
     try:
-        coverage = planning.card_payment_coverage(user_today().strftime("%Y-%m"))
+        coverage = planning.card_payment_coverage(user_today().strftime("%Y-%m"), book=book)
     except Exception:
         logger.warning("card payment coverage unavailable", exc_info=True)
         return 0.0
     return round(sum(min(c["owed"], c["held"]) for c in coverage), 2)
 
 
-def _attention(rows: list[dict], runway: dict | None = None) -> dict:
+def _attention(
+    rows: list[dict], runway: dict | None = None, book: ledger_service.LedgerBook | None = None
+) -> dict:
     # The concentration call is NOT here: the Portfolio Brief (`portfolio_brief`, reading
     # `investments_book.concentration_by_name`) is its one authority, and Needs attention lists the
     # brief's open decisions. A second, gross-holdings-based flag said "All clear" while
@@ -227,7 +229,7 @@ def _attention(rows: list[dict], runway: dict | None = None) -> dict:
         else sum(r["base_value"] for r in rows if r["asset_class"] == "cash")
     )
     runway_months = runway["months"] if runway else None
-    debt_covered = _card_debt_covered(debt_total)
+    debt_covered = _card_debt_covered(debt_total, book)
     return {
         "holdings_total": round(holdings_total, 2),
         "debt_total": round(debt_total, 2),
@@ -507,15 +509,16 @@ def _drift(rows: list[dict], targets: dict[str, float]) -> dict:
     }
 
 
-@read_cache.cached(lambda base=None: base)
-def market_book(base: str | None = None) -> dict:
+@read_cache.cached(lambda base=None, book=None: base, when=lambda *a, **kw: kw.get("book") is None)
+def market_book(base: str | None = None, *, book: ledger_service.LedgerBook | None = None) -> dict:
     """The investments book and the market's unrealized P&L (`kpis.upl`) from ONE projection —
     for a caller that shows only those two figures (the Assets summary) and must not pay for
     the rest of the Overview's folds, a second net-worth fold (`net_worth_bands`) among them.
     The same projection and the same book function as `portfolio_analytics`, so the figures are
-    identical to its `book` and `kpis.upl`."""
+    identical to its `book` and `kpis.upl`. `book` is the ledger snapshot a caller that already
+    read it shares (`ledger.read_book`)."""
     base = (base or base_currency()).upper()
-    projection = projected_rows(base)
+    projection = projected_rows(base, book=book)
 
     return {
         "book": investments_book_service.investments_book(base, None, projection),
@@ -532,11 +535,14 @@ def portfolio_analytics(base: str | None = None, guideline_pct: float | None = N
     ever doing arithmetic on money.
     """
     base = (base or base_currency()).upper()
-    projection = projected_rows(base)
+    # ONE read of the ledger for the whole payload: the projection, the bands, the runway and
+    # the card coverage each used to load the full transaction table for themselves.
+    ledger_book = ledger_service.read_book()
+    projection = projected_rows(base, book=ledger_book)
     rows = projection["rows"]
     portfolio_total = projection["portfolio_total"]
 
-    bands = ledger_service.net_worth_bands(base)
+    bands = ledger_service.net_worth_bands(base, book=ledger_book)
     classes, liquidity = _class_and_liquidity(rows)
     venues, venue_colors = _venues(rows)
     targets = (profile_service.read_profile() or {}).get("target_allocation") or {}
@@ -558,7 +564,7 @@ def portfolio_analytics(base: str | None = None, guideline_pct: float | None = N
         # dividing by a net-worth total (assets MINUS debt) would push the shares past 100%.
         "reach": _breakdown(liquidity, round(sum(liquidity.values()), 2)),
         "venues": _breakdown(venues, round(sum(venues.values()), 2), venue_colors),
-        "attention": _attention(rows, cashflow_service.cash_runway()),
+        "attention": _attention(rows, cashflow_service.cash_runway(book=ledger_book), ledger_book),
         "debts": _debts(rows),
         "fx_exposure": _fx_exposure(rows, base),
         "gains": _gains(rows),

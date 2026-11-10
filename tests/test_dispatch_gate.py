@@ -110,14 +110,10 @@ def _drive(monkeypatch, turns, *, headless=False, skill=None, offer=None):
     def spy_upsert(session_id, **kw):  # avoid real disk writes
         captured_meta.append(kw)
 
-    async def _noop_memory(*args, **kwargs):
-        return None
-
     monkeypatch.setattr(assistant, "get_provider", lambda: _ScriptedProvider(turns))
     monkeypatch.setattr(assistant, "execute_tool", fake_execute_tool)
     monkeypatch.setattr(assistant, "upsert_session_meta", spy_upsert)
     monkeypatch.setattr(assistant, "_save_session", lambda *a, **k: None)  # no disk, no reload
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
 
     if headless:
         _skill_scope.set_offer_scope(offer if offer is not None else _SAMPLE_OFFER)

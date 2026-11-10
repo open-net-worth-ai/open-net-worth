@@ -1,0 +1,422 @@
+"""The transactions half of a run: pair every changed ledger transaction with YNAB's version,
+decide, apply the pulls through the ledger's chokes, and send the pushes."""
+
+from __future__ import annotations
+
+import logging
+from collections import Counter
+
+from backend.core.errors import OpenNetWorthError
+from backend.services import ledger as ledger_service
+from backend.services.budget_app import current
+from backend.services.ynab_sync import conflicts, context, pull, push, recorder, units
+from backend.services.ynab_sync.baselines import Baselines
+from backend.services.ynab_sync.canon import canon, view
+from backend.services.ynab_sync.client import YnabClient
+from backend.services.ynab_sync.context import Context
+from backend.services.ynab_sync.delta import Change
+from backend.services.ynab_sync.units import Unit, decide_unit
+
+logger = logging.getLogger(__name__)
+
+MAX_REMOVAL_FRACTION = 0.25  # a read that would delete more of the ledger than this is refused
+MIN_REMOVAL_GUARD = 25  # ...but never for fewer rows than this
+
+
+def _moved_links(refs_of: dict[str, list[str]], everything: dict[str, dict]) -> dict[str, str]:
+    """Rows whose YNAB ids now sit on another live row, old id -> that row. A merge carries them
+    onto the survivor and leaves a tombstone, and undoing it carries them back; neither is a
+    deletion here. A row deleted outright keeps its ids and no one else holds them."""
+    holder = {
+        ref: r["id"]
+        for r in everything.values()
+        if not r.get("deleted")
+        for ref in units.ynab_refs(r)
+    }
+    moved: dict[str, str] = {}
+    for i, refs in refs_of.items():
+        row = everything.get(i)
+        if row is None or (row.get("deleted") and not row.get("merged_into")):
+            continue
+        if not row.get("deleted") and set(refs) <= set(units.ynab_refs(row)):
+            continue
+        found = {holder.get(r) for r in refs}
+        if len(found) == 1 and None not in found:
+            moved[i] = found.pop()
+    return moved
+
+
+def follow_merges(base: Baselines, everything: dict[str, dict] | None = None) -> dict[str, str]:
+    """Put each baseline on the row that holds its YNAB ids now, so that row is what gets compared
+    with YNAB and the tombstone never reads as a deletion to send. A review item about the old
+    row closes: comparing the row that holds the link now asks again if it still has to."""
+    if everything is None:
+        everything = {r["id"]: r for r in ledger_service.transactions.all()}
+    moved = _moved_links({i: d["refs"] for i, d in base.txns.items()}, everything)
+    for old, new in moved.items():
+        agreed = base.txns.get(new) or base.txns[old]
+        base.set_txn(new, units.ynab_refs(everything[new]), agreed["canon"])
+        base.drop_txn(old)
+        conflicts.close(old)
+    return moved
+
+
+def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[str]):
+    """(ledger rows to look at, their baselines, ref -> ledger id, refs YNAB no longer holds)."""
+    everything = {r["id"]: r for r in ledger_service.transactions.all()}
+    moved = follow_merges(base, everything)
+    index = {ref: i for i, d in base.txns.items() for ref in d["refs"]}
+    if current().caps.budget_scoped_accounts:
+        ctx.meta["other_budget_rows"] = _on_other_budgets(ctx, everything)
+    if first:
+        linked = {r["id"]: units.ynab_refs(r) for r in everything.values() if units.ynab_refs(r)}
+        moved_before = _moved_links(linked, everything)
+        rows = {
+            i: r
+            for i, r in everything.items()
+            if i not in moved_before
+            and (i in linked or (r["kind"] in units.CREATABLE and not r.get("deleted")))
+        }
+        for r in rows.values():
+            for ref in units.ynab_refs(r):
+                index.setdefault(ref, r["id"])
+        bases = units.first_run_bases([everything[i] for i in linked])
+        for old, new in moved_before.items():
+            bases[new] = bases.pop(old)  # YNAB holds what the merged row was booked as
+        gone = (
+            {ref for r in rows.values() for ref in units.ynab_refs(r)}
+            - set(ctx.mirror)
+            - set(ctx.sub_parent)
+        )
+        return rows, bases, index, gone
+    wanted = scan | set(moved) | set(moved.values())
+    if current().caps.links_without_baseline:
+        wanted |= _links_without_baseline(everything, base, index)
+    wanted |= {index[r] for r in change.touched if r in index}
+    wanted |= {index[s] for t in change.touched for s in _line_ids(ctx, t) if s in index}
+    # Changes nobody audited (a checkpoint rewind, a batch rollback) are found by comparing
+    # every baselined row with the ledger as it is now — local, no audit event needed.
+    wanted |= {
+        i
+        for i, d in base.txns.items()
+        if i in everything
+        and (None if everything[i].get("deleted") else canon(everything[i])) != d["canon"]
+    }
+    rows = {i: everything[i] for i in wanted if i in everything}
+    bases = {i: base.txns[i]["canon"] for i in rows if i in base.txns}
+    gone = {r for r in change.touched if r not in ctx.mirror and r not in ctx.sub_parent}
+    return rows, bases, index, gone
+
+
+def _on_other_budgets(ctx: Context, everything: dict) -> int:
+    """How many live rows sit on an account of another budget. ``units._eligible`` leaves them out,
+    so the sync never reads their absence as a deletion, and the status says so once."""
+    others = ctx.other_budget_accounts
+    return sum(
+        1
+        for r in everything.values()
+        if not r.get("deleted") and {r.get("from_account_id"), r.get("to_account_id")} & others
+    )
+
+
+def _links_without_baseline(everything: dict, base: Baselines, index: dict[str, str]) -> set[str]:
+    """Live rows that carry their ids: each is that row, baseline or none, and joins ``index``. One
+    with no baseline was left by a run killed before saving: it is looked at whether or not this
+    read mentions it, as the row may be gone from the app by now."""
+    loose = set()
+    for r in everything.values():
+        linked = [] if r.get("deleted") else units.ynab_refs(r)
+        for ref in linked:
+            index.setdefault(ref, r["id"])
+        if linked and r["id"] not in base.txns:
+            loose.add(r["id"])
+    return loose
+
+
+def _line_ids(ctx: Context, top: str) -> list[str]:
+    return [s["id"] for s in ctx.mirror.get(top, {}).get("subtransactions") or []]
+
+
+def _file(ctx: Context, unit: Unit, kind: str, reason: str) -> None:
+    onw, ynab = view(unit.onw, ctx.names), view(unit.ynab, ctx.names)
+    shown = unit.onw or unit.ynab or unit.base
+    title = (shown or {}).get("description") or "(no payee)"
+    conflicts.file(
+        kind,
+        unit.key,
+        title,
+        reason,
+        onw,
+        ynab,
+        entity="txn",
+        onw_txn_id=unit.onw_id,
+        date=(shown or {}).get("date"),
+    )
+
+
+def _title(unit: Unit) -> str:
+    return ((unit.row or {}).get("description") or "").strip() or "(no payee)"
+
+
+def _apply_pull(ctx: Context, unit: Unit, base: Baselines, tally: Counter) -> None:
+    try:
+        now, row_id = pull.apply(unit.row, unit.rendered if unit.ynab is not None else None)
+    except pull.LedgerChanged:
+        _file(ctx, unit, conflicts.CONFLICT, "Changed here while the sync was running.")
+        return
+    except OpenNetWorthError as exc:
+        _file(
+            ctx,
+            unit,
+            conflicts.FAILED,
+            f"The ledger refused {current().name}'s version: {exc.message}",
+        )
+        return
+    if unit.onw_id and row_id != unit.onw_id:
+        base.drop_txn(unit.onw_id)  # a deleted row booked back is a new row
+    if now is None:
+        base.drop_txn(row_id) if row_id else None
+    else:
+        base.set_txn(row_id, unit.refs, now)
+    recorder.txn_change("pulled", ctx, row_id, unit.onw, unit.ynab)
+    tally["pulled"] += 1
+
+
+def _seed(unit: Unit, base: Baselines) -> None:
+    """Record the agreed state of a linked transaction when nothing needed doing."""
+    if not (unit.onw_id and unit.refs):
+        return
+    if unit.attach:
+        ledger_service.update_transaction(
+            unit.onw_id,
+            {"external_refs": [{"source": current().source, "ref": r} for r in unit.refs]},
+        )
+    if unit.onw is None:
+        base.drop_txn(unit.onw_id)
+    elif unit.onw_id not in base.txns or base.txns[unit.onw_id]["canon"] != unit.onw:
+        base.set_txn(unit.onw_id, unit.refs, unit.onw)
+
+
+def settle(
+    ctx: Context,
+    client: YnabClient,
+    base: Baselines,
+    change: Change,
+    first: bool,
+    scan: set[str],
+    tally: Counter,
+    direction: str = "both",
+    held: dict[str, set[str]] | None = None,
+    switched: bool = False,
+) -> list[str]:
+    """Reconcile every changed transaction; returns the ledger ids whose push is still owed.
+
+    ``direction`` "from_ynab" skips sends and "to_ynab" skips pulls; a change on both sides is
+    filed for review either way. What was skipped lands in ``held`` (``onw``: ledger ids,
+    ``ynab``: YNAB ids) so the run can remember it for a later switch back to both ways.
+    ``switched``: the first run since the plan was changed, whose removals are all held."""
+    held = held if held is not None else {"onw": set(), "ynab": set()}
+    rows, bases, index, gone = _rows(ctx, base, change, first, scan)
+    open_items = conflicts.open_keys()
+    if not current().caps.delta_read:
+        _close_now_owned(ctx, open_items, index)
+    built = units.build(ctx, rows, bases, index, change.touched, gone)
+    all_units = _hold_removals(ctx, built, open_items, direction, switched)
+    todo: list[Unit] = []
+    for u in all_units:
+        _close_if_it_flipped(u, open_items)
+        if u.missing:
+            reason = _missing_reason(direction)
+            if (open_items.get(u.key) or {}).get("reason") != reason:
+                _file(ctx, u, conflicts.CONFLICT, reason)
+            continue
+        action = decide_unit(u)
+        if u.blocked and u.onw_id is None:
+            _file(ctx, u, conflicts.UNSUPPORTED, u.blocked)
+            continue
+        if u.key in open_items:
+            waiting_on_a_category = (
+                open_items[u.key]["kind"] == conflicts.UNSUPPORTED
+                and u.onw_id is None
+                and not u.blocked
+            )
+            # Where every read is whole, something held can come back as it was: nothing's left
+            # to ask about.
+            back_as_it_was = action == "noop" and not current().caps.delta_read
+            if action != "adopt" and not waiting_on_a_category and not back_as_it_was:
+                continue
+            conflicts.close(u.key)
+        if action == "conflict":
+            _file(ctx, u, conflicts.CONFLICT, _conflict_reason(u, direction))
+        elif action == "pull" and direction == "to_ynab":
+            held["ynab"].update(u.refs)
+        elif action == "pull":
+            _apply_pull(ctx, u, base, tally)
+        elif action == "push" and direction == "from_ynab":
+            if u.onw_id:
+                held["onw"].add(u.onw_id)
+        elif action == "push":
+            todo.append(u)
+        else:
+            _seed(u, base)
+    return _push_all(ctx, client, base, todo, tally)
+
+
+def _close_now_owned(ctx: Context, open_items: dict, index: dict[str, str]) -> None:
+    """An item about a row with no home here is moot once a row here holds it, by any of its
+    ids: its budget was imported since, and from now on that row answers for it."""
+    for key in [k for k in open_items if k.startswith("y:")]:
+        ref = key[2:]
+        ids = {ref}
+        if context.top_of(ctx, ref):
+            ids |= {r for p in context.pieces(ctx, {ref}) if ref in p["refs"] for r in p["refs"]}
+        if ids & index.keys():
+            conflicts.close(key)
+            del open_items[key]
+
+
+def _conflict_reason(u: Unit, direction: str) -> str:
+    """Both sides changed it. Where a row keeps its ids, "changed" there can be "deleted": then
+    the question is which side to keep, and what that does in this direction."""
+    if u.ynab is None and current().caps.links_without_baseline:
+        return _missing_reason(direction)
+    return f"Changed in both Open Net Worth and {current().name} since the last sync."
+
+
+def _close_if_it_flipped(u: Unit, open_items: dict) -> None:
+    """Where every read is whole, a filed item can stop being true: the row it shows as gone came
+    back, or the row it shows went. Its words and snapshot would have a person pick a version and
+    get a deletion, or the reverse, so it is asked afresh."""
+    item = open_items.get(u.key)
+    if item is None or current().caps.delta_read or item.get("entity") != "txn":
+        return
+    if (item.get("ynab") is None) != (u.ynab is None):
+        conflicts.close(u.key)
+        del open_items[u.key]
+
+
+def _missing_reason(direction: str, gone: str | None = None) -> str:
+    """``gone``: why the app doesn't hold the row, where "no longer" isn't the whole story."""
+    app = current().name
+    gone = gone or f"This transaction is no longer in {app}."
+    if direction == "from_ynab":
+        return (
+            f"{gone} Keep {app}'s to remove it here now. Keep Open Net Worth's to keep it, and it "
+            f"goes to {app} as new when the sync goes both ways: this sync doesn't write to {app}."
+        )
+    if direction == "to_ynab":
+        return (
+            f"{gone} Keep Open Net Worth's to send it to {app} as new now. Keep {app}'s and it "
+            "stays here until the sync goes both ways, then it is removed: this sync doesn't "
+            "change this book."
+        )
+    return f"{gone} Keep Open Net Worth's to send it to {app} as new, or keep {app}'s to remove it here."
+
+
+def _hold_removals(
+    ctx: Context,
+    all_units: list[Unit],
+    open_items: dict,
+    direction: str = "both",
+    switched: bool = False,
+) -> list[Unit]:
+    """A read that would delete many synced rows here at once is held: each deletion waits in
+    the review list, where keeping YNAB's confirms it, and the rest of the run goes ahead. So is
+    every removal the first read after a plan change finds (``switched``): a copy of the old plan
+    holds the same ids, and a row it lacks may be one added here since. Where every read is
+    whole, a To-app run holds nothing: it deletes nothing here, and what it skips is read again
+    under both ways, where this applies; held, each answer would be read as a fresh deletion."""
+    if direction == "to_ynab" and not current().caps.delta_read:
+        return all_units
+    linked = sum(1 for u in all_units if u.refs and not u.missing)
+    removals = [
+        u
+        for u in all_units
+        if u.refs
+        and u.ynab is None
+        and u.onw is not None
+        and units.comparable(u.base) == units.comparable(u.onw)
+    ]
+    # A whole read with no rows at all says more about the read than about a small book's rows.
+    read_nothing = removals and not ctx.mirror and not current().caps.delta_read
+    many = len(removals) > max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked)
+    if not (read_nothing or many or (switched and removals)):
+        return all_units
+    if switched:
+        app = current().name
+        reason = _missing_reason(
+            direction, f"The sync moved to another {app} budget, and this transaction isn't in it."
+        )
+    else:
+        reason = (
+            f"{len(removals)} of {linked} synced transactions were deleted in {current().name} at "
+            "once; confirm each deletion here."
+        )
+    for u in removals:
+        if u.key not in open_items:
+            _file(ctx, u, conflicts.CONFLICT, reason)
+    held = {id(u) for u in removals}
+    return [u for u in all_units if id(u) not in held]
+
+
+def _push_all(
+    ctx: Context, client: YnabClient, base: Baselines, todo: list[Unit], tally: Counter
+) -> list[str]:
+    out = push.Outcome()
+    out.on_sent = lambda unit: _recorded(ctx, unit, out, base)
+    creates = [u for u in todo if not u.refs and u.onw]
+    deletes = [u for u in todo if u.refs and u.onw is None]
+    updates = [u for u in todo if u.refs and u.onw]
+    if len(deletes) > max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * max(len(base.txns), 1)):
+        for u in deletes:
+            _file(
+                ctx,
+                u,
+                conflicts.CONFLICT,
+                f"{len(deletes)} deletions would be sent to {current().name} at once; confirm each one.",
+            )
+        deletes = []
+    push.send_updates(ctx, client, updates, out)
+    push.send_creates(ctx, client, creates, out)
+    push.send_deletes(ctx, client, deletes, out)
+    for u, reason in out.unsupported:
+        _file(ctx, u, conflicts.UNSUPPORTED, reason)
+    for u, reason in out.failed:
+        _file(ctx, u, conflicts.FAILED, f"{current().name} did not accept it: {reason}")
+    for u in out.moved:
+        _file(
+            ctx, u, conflicts.CONFLICT, f"Changed in {current().name} while the sync was running."
+        )
+    tally["sent"] += len(out.sent)
+    for u in out.deferred:
+        recorder.deferred(_title(u), f"Waiting for the next run ({current().name} request limit).")
+    return [u.onw_id for u in out.deferred if u.onw_id]
+
+
+def _recorded(ctx: Context, unit: Unit, out: push.Outcome, base: Baselines) -> None:
+    """Link and baseline one confirmed unit now. If the ledger refuses the link, YNAB still holds
+    the row: file it, and the unowned row is claimed by the ledger row on the next read."""
+    recorder.txn_change("sent", ctx, unit.onw_id, unit.base, unit.onw)
+    try:
+        _record_sent(unit, out, base)
+    except OpenNetWorthError as exc:
+        _file(
+            ctx,
+            unit,
+            conflicts.FAILED,
+            f"Sent to {current().name}, but linking it here failed: {exc.message}",
+        )
+
+
+def _record_sent(u: Unit, out: push.Outcome, base: Baselines) -> None:
+    if u.onw is None:
+        base.drop_txn(u.onw_id)
+        return
+    refs, now = u.refs, u.onw
+    if u.key in out.new_refs:
+        refs = out.new_refs[u.key]
+        updated = ledger_service.update_transaction(
+            u.onw_id, {"external_refs": [{"source": current().source, "ref": r} for r in refs]}
+        )
+        now = canon(updated)
+    base.set_txn(u.onw_id, refs, now)

@@ -6,7 +6,7 @@ order: 20
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/mentions, lucius/permissions, lucius/models-and-cost]
-keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread]
+keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone]
 ---
 
 # How to talk to Lucius
@@ -21,6 +21,8 @@ no need to be formal.
   looking at (<kbd>Ctrl</kbd> <kbd>/</kbd> shows or hides it — see [Keyboard
   shortcuts](../reference/keyboard-shortcuts.md)).
 - **On your phone** — through [Telegram](../connectors/telegram.md), once it's set up.
+- **Out loud** — press the Call button in the chat for a [voice call](../connectors/voice-calls.md)
+  (experimental, off by default).
 
 Lucius needs an AI model first. If he asks to be set up, see [Connecting an AI
 provider](../getting-started/connecting-an-ai-provider.md).
@@ -50,10 +52,38 @@ still ask. Pick **Manual** if you want to approve every change. See
 Changed your mind? The **Restore** button on a reply puts your data back as it was before that
 message.
 
+## Say it instead of typing
+
+Press the **microphone** beside the send button and speak: your words appear in the message box as
+you say them, and nothing is sent until you press send.
+
+- **In the Mac desktop app** it starts macOS's own dictation in the message box, the same as
+  **Edit → Start Dictation…**: it runs on your Mac, in the language macOS is set to, and macOS
+  shows its own listening mark, and the microphone shows as pressed while it listens. The first
+  time, macOS asks to turn Dictation on. It keeps listening after you send, so you can dictate
+  message after message; the red microphone says it's still on. Press it again to finish.
+  Starting a voice call finishes it too, so it never types what you say on a call. (Esc or the
+  Globe key also stop it, the macOS way.)
+- **In a browser** it uses the browser's own speech recognition, so your speech is handled by the
+  browser's provider (Google in Chrome and Edge, Apple in Safari), not by Open Net Worth. Press it
+  again to stop.
+
+The button only shows where dictation can work: not in Firefox, not in the desktop app on Windows
+or Linux, not on an iPhone or iPad (Safari there gives a page one dictation, then hears nothing;
+the microphone key on the iPhone's keyboard dictates into the box instead), and not during a
+[voice call](../connectors/voice-calls.md), which already hears you.
+If dictation can't work, the button turns amber and says why above it, until you type or click,
+or for a few seconds; then it's back to normal. The reason is a blocked microphone (allow it for
+this site and press it again), no microphone, or a browser that has the button but no speech
+service behind it (Arc, Brave, the Claude app's browser), where Chrome, Edge or Safari will
+work. The button stays either way, so a browser that gains dictation later just works. Anywhere at all, your computer's own dictation types into the box too: press the
+Globe key twice on a Mac, or Win+H on Windows.
+
 ## Attach a file or picture
 
-Click the paperclip (**Attach file or image**) or drop a file into the message box: a statement
-(PDF, CSV, Excel), a receipt photo, a screenshot of your banking app, a Word document. Then say
+Click the paperclip (**Attach file or image**) or drop a file anywhere on the Lucius panel (or
+into the message box of the floating dock): a statement (PDF, CSV, Excel), a receipt photo, a
+screenshot of your banking app, a Word document. Then say
 what to do — *"import this"*, *"log these purchases"*, *"what's my deductible?"*. Files you send
 are stored so the conversation can refer back to them (they're listed in **Settings → Data →
 Uploaded files**). To keep one with your other papers, ask Lucius to save it to
@@ -91,7 +121,8 @@ Want everything? Say so: *"give me a full breakdown of…"*.
 ## He can see what you're looking at
 
 With **Screen awareness** on (the default), what's on your screen goes along with your message —
-*"why did this drop?"* while looking at a chart is enough. Password and key fields are never
+*"why did this drop?"* while looking at a chart is enough. With it off, nothing goes along
+automatically, but he can still look if you ask about your screen. Password and key fields are never
 included. See [Mentioning things in chat](mentions.md#screen-awareness--lucius-sees-what-youre-looking-at).
 
 ## What you see while he works
@@ -99,6 +130,9 @@ included. See [Mentioning things in chat](mentions.md#screen-awareness--lucius-s
 While Lucius works, his thinking shows as he writes it; once the reply is done it folds into a
 short preview you can open. Each step he takes shows as its own row, named after what it does
 (*"Get net worth"*, *"Delete envelope"*), and you can open a row for its details.
+
+A code block in a reply, such as a terminal command, has a **Copy** button in its corner: it shows
+when you point at the block (always, on a touch screen) and copies the block's text exactly.
 
 If a reply goes quiet, a small **Still working…** line with the time so far shows up after about
 ten seconds, so you can tell Lucius is alive and not stuck.
@@ -114,7 +148,7 @@ something, the retry adds your message again so Lucius still knows what was done
 
 ## Chat settings
 
-**Settings → Chat & Memory** has a few switches for how chat behaves:
+**Settings → Chat** has a few switches for how chat behaves:
 
 - **Follow-up suggestions** — suggested next questions under a reply. Off also saves the model
   call that writes them.
@@ -139,6 +173,17 @@ stands:
 "Read" is remembered by your Open Net Worth server, not by one window: reading a reply on your
 phone, in another browser or in the desktop app clears **New reply** everywhere.
 
+### Back and Forward move between conversations
+
+Opening a conversation — from the list, from a link in one of Lucius's replies, or by starting a
+new one — is a step your browser remembers, so **Back** returns to the conversation you were in and
+**Forward** goes to it again. This works on the Lucius page, in the side panel, in the floating chat
+and on a phone. On the Lucius page the address shows the open conversation
+(`/lucius?conversation=…`), so reloading keeps it open and you can copy the link. A new conversation
+stays at plain `/lucius` until you send its first message; if you go **Back** from a new one you
+never typed in, it's simply dropped. In the side panel and the floating chat the page's own address
+doesn't change.
+
 Lucius keeps working when you leave — switch apps, lock your phone, close the tab, or open another
 conversation. When you come back, the conversation catches up on its own. **Loading messages** or **Catching up…** appear
 only while that takes a noticeable moment.
@@ -151,10 +196,9 @@ Automation runs can pile up unread. **Mark all read** (the check-mark button in 
 clears them all at once; it never touches a conversation that is **Working…** or **Needs you**.
 
 Each purchase your [phone shortcut](../features/phone-shortcuts.md) sends is booked in a
-conversation of its own, titled **Capture · …** with the text that came in. They're hidden from the
-list. To see one, press the eye button in the **Chats** header, or in **View all conversations**.
-They're marked with a lightning bolt and never show **New reply**. The setting applies only to this
-device.
+conversation of its own, titled **Capture · …** with the text that came in. They're kept out of
+**Chats**, in a **Captures** group of their own that shows the latest three — **View all captures**
+lists the rest. They never show **New reply**.
 
 To stop a reply partway, press **Stop** in the message box.
 

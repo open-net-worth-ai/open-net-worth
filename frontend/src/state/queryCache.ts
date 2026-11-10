@@ -18,6 +18,8 @@ interface QueryEntry<T> {
   fetcher: () => Promise<T>
   /** Pending eviction timer, armed when the last listener unsubscribes. See scheduleGc. */
   gcTimer: ReturnType<typeof setTimeout> | null
+  /** Bumped per request; only the newest request may publish. See revalidate. */
+  generation: number
 }
 
 /**
@@ -121,6 +123,7 @@ function hydrateFromStorage(): void {
     if (!parsed || typeof parsed !== 'object') return
     for (const [key, record] of Object.entries(parsed)) {
       if (!record || record.data === undefined || typeof record.updatedAt !== 'number') continue
+      if (!isPersistable(key)) continue
       entries.set(key, {
         snapshot: {
           data: record.data,
@@ -135,6 +138,7 @@ function hydrateFromStorage(): void {
         // nothing, and nothing can invoke this without having supplied a fetcher first.
         fetcher: () => Promise.reject(new Error(`No fetcher registered for ${key}`)),
         gcTimer: null,
+        generation: 0,
       })
     }
   } catch {
@@ -157,6 +161,20 @@ function isSecretKey(key: string): boolean {
   return SECRET_KEY_SEGMENTS.some((seg) => key.startsWith(`/api/${seg}/`))
 }
 
+/** Reads that must never paint from a previous session. Feature flags pick which code path
+ *  renders, and "off means the old code" (docs/FEATURE_FLAGS.md): a hydrated `true` would show
+ *  the new path for a flag the owner has since switched off, until — or, offline, instead of —
+ *  the refetch. `useFlag` reads `undefined` until this session has fetched instead. */
+const LIVE_ONLY_KEYS = new Set(['/api/feature-flags'])
+
+/** A read that names something meant to stay on its own screen: the Actual connector's status
+ *  holds the server's address, which localStorage would keep long after the form is closed. */
+const SCREEN_ONLY_KEYS = new Set(['/api/actual-budget/status'])
+
+function isPersistable(key: string): boolean {
+  return !isSecretKey(key) && !LIVE_ONLY_KEYS.has(key) && !SCREEN_ONLY_KEYS.has(key)
+}
+
 function persistNow(): void {
   if (persistClean) return
   persistClean = true
@@ -165,7 +183,7 @@ function persistNow(): void {
     const ordered = [...entries.entries()]
       .filter(
         ([key, e]) =>
-          e.snapshot.data !== undefined && e.snapshot.updatedAt > 0 && !isSecretKey(key),
+          e.snapshot.data !== undefined && e.snapshot.updatedAt > 0 && isPersistable(key),
       )
       .sort((a, b) => b[1].snapshot.updatedAt - a[1].snapshot.updatedAt)
 
@@ -232,6 +250,7 @@ function entryFor<T>(key: string, fetcher: () => Promise<T>): QueryEntry<T> {
       promise: null,
       fetcher,
       gcTimer: null,
+      generation: 0,
     }
     entries.set(key, entry as QueryEntry<unknown>)
   }
@@ -279,27 +298,49 @@ function publish<T>(entry: QueryEntry<T>, patch: Partial<QuerySnapshot<T>>): voi
   for (const listener of [...entry.listeners]) listener()
 }
 
-function revalidate<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+/**
+ * `force` is a post-write reload: it must reflect the write that preceded it, so it never
+ * joins a request already in flight — that one may have left before the write landed. Only
+ * the NEWEST request publishes, and a superseded one resolves with the newest result instead
+ * of its own body: its awaiter applies the value to its own state, possibly after the newer
+ * awaiter did, so a stale body there would win the race (owner report 2026-10-26 — a phantom
+ * reconcile adjustment from a cleared balance one toggle behind).
+ */
+function revalidate<T>(key: string, fetcher: () => Promise<T>, force = false): Promise<T> {
   const entry = entryFor(key, fetcher)
-  if (entry.promise) return entry.promise
+  if (entry.promise && !force) return entry.promise
+  const generation = ++entry.generation
+  const isNewest = () => generation === entry.generation
   publish(entry, { refreshing: true, error: null })
-  entry.promise = entry
+  const promise: Promise<T> = entry
     .fetcher()
-    .then((data) => {
-      publish(entry, { data, error: null, updatedAt: Date.now(), refreshing: false })
-      return data
-    })
-    .catch((error: unknown) => {
-      publish(entry, { error, refreshing: false })
-      throw error
-    })
+    .then(
+      (data) => {
+        if (!isNewest()) return followNewest(entry)
+        publish(entry, { data, error: null, updatedAt: Date.now(), refreshing: false })
+        return data
+      },
+      (error: unknown) => {
+        if (!isNewest()) return followNewest(entry)
+        publish(entry, { error, refreshing: false })
+        throw error
+      },
+    )
     .finally(() => {
-      entry.promise = null
+      if (entry.promise === promise) entry.promise = null
     })
+  entry.promise = promise
   // Effects initiate background revalidation; attach a rejection handler so a failed
   // refresh is represented in the snapshot without becoming an unhandled promise.
-  entry.promise.catch(() => {})
-  return entry.promise
+  promise.catch(() => {})
+  return promise
+}
+
+function followNewest<T>(entry: QueryEntry<T>): Promise<T> | T {
+  if (entry.promise) return entry.promise
+  if (entry.snapshot.error !== null && entry.snapshot.error !== undefined)
+    throw entry.snapshot.error
+  return entry.snapshot.data as T
 }
 
 export interface QueryCacheResult<T> {
@@ -438,6 +479,7 @@ export function setCachedQueryData<T>(
         throw new Error(`No fetcher registered for ${key}`)
       },
       gcTimer: null,
+      generation: 0,
     }
     entries.set(key, entry as QueryEntry<unknown>)
   }
@@ -492,7 +534,7 @@ export function fetchCachedQuery<T>(
   ) {
     return Promise.resolve(entry.snapshot.data)
   }
-  return revalidate(key, fetcher)
+  return revalidate(key, fetcher, options.force)
 }
 
 export function clearQueryCache(): void {

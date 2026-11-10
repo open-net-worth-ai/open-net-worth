@@ -5,6 +5,7 @@
 
 import { useMemo } from 'react'
 import type { ComponentType } from 'react'
+import { useMaskText } from '../../../../utils/amountMask'
 import { fBase, fBaseCompact } from '../../../../utils/format'
 import { Skeleton, Text } from '../../../ui'
 import { useCashFlowGraph } from '../../../../hooks/serverState'
@@ -31,6 +32,7 @@ function shortMonth(ym: string): string {
 }
 
 export const CashFlowCard: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate }) => {
+  const maskText = useMaskText()
   const month = lastFullMonth()
   const query = useCashFlowGraph(month, true)
   const g = query.data
@@ -139,7 +141,7 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({ instance, def,
             ))}
             {laid.nodes.map((n) => (
               <g key={n.id} className="mf-node">
-                <title>{`${n.label}: ${fBase(n.amount)} (${n.pct}%)`}</title>
+                <title>{maskText(`${n.label}: ${fBase(n.amount)} (${n.pct}%)`)}</title>
                 <rect
                   x={n.x0}
                   y={n.y0}

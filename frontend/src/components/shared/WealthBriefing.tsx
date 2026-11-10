@@ -4,6 +4,7 @@ import { PROFILE_KEY, fetchJson } from '../../hooks/serverState'
 import { fetchCachedQuery } from '../../state/queryCache'
 import { fDateTime } from '../../utils/format'
 import { BRIEFING_REGENERATE_EVENT } from './briefingFocus'
+import { Settings, RefreshCw, ChevronDown, ChevronUp } from '../../ui/icons'
 
 interface BriefingData {
   note: string
@@ -176,7 +177,7 @@ export function WealthBriefing({ onChatSuggest, hideTitle }: Props) {
                 title="Customise this briefing"
                 aria-label="Customise this briefing"
               >
-                ⚙
+                <Settings size={14} aria-hidden="true" />
               </button>
               {settingsOpen && (
                 <div className="briefing-settings-pop">
@@ -216,11 +217,21 @@ export function WealthBriefing({ onChatSuggest, hideTitle }: Props) {
               className="briefing-refresh-btn"
               onClick={() => fetchBriefing(true)}
               disabled={refreshing || loading}
+              aria-label={refreshing ? undefined : 'Refresh briefing'}
             >
-              {refreshing ? 'Generating…' : '↻'}
+              {refreshing ? 'Generating…' : <RefreshCw size={14} aria-hidden="true" />}
             </button>
-            <button className="briefing-collapse-btn" onClick={() => setCollapsed((c) => !c)}>
-              {collapsed ? '▾' : '▴'}
+            <button
+              className="briefing-collapse-btn"
+              onClick={() => setCollapsed((c) => !c)}
+              aria-label={collapsed ? 'Expand briefing' : 'Collapse briefing'}
+              aria-expanded={!collapsed}
+            >
+              {collapsed ? (
+                <ChevronDown size={14} aria-hidden="true" />
+              ) : (
+                <ChevronUp size={14} aria-hidden="true" />
+              )}
             </button>
           </div>
         </div>

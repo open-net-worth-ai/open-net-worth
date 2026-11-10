@@ -6,7 +6,7 @@ order: 150
 audience: [user, operator]
 status: stable
 related: [features/settings, connectors/telegram, operations/exposing-beyond-localhost, operations/security-and-privacy]
-keywords: [iphone, ios, shortcut, apple pay, wallet, transaction automation, android, tasker, macrodroid, telegram, capture, api, setup code, tap to log]
+keywords: [iphone, ios, shortcut, apple pay, wallet, transaction automation, android, tasker, macrodroid, telegram, capture, api, setup code, tap to log, cloudflare access]
 ---
 
 # Log a spend from your phone
@@ -33,7 +33,8 @@ not your home Wi-Fi. So the address you give them must work from anywhere:
   and use the computer's Tailscale address (`http://100.x.y.z:8080` or its `.ts.net` name).
   Nothing is exposed to the internet.
 - **A public HTTPS address**: a reverse proxy or tunnel. Use `https://`, never plain `http://`:
-  your API token travels with every request.
+  your API token travels with every request. A login in front of the address, such as Cloudflare
+  Access, stops the shortcut: [let `/api/capture` through](#cloudflare-access).
 - `localhost`, `127.0.0.1` or a home-network address (`192.168.…`) won't work away from home.
   Settings warns you when the address looks like one of these.
 
@@ -250,7 +251,8 @@ The reply carries Lucius's own summary in `reply`, which is what the iPhone shor
 - **The shortcut fails with a connection error away from home**: the address only works on your
   home network. See [Your phone has to reach the app](#your-phone-has-to-reach-the-app).
 - **"Not logged: no answer from Open Net Worth…"**: something answered, but not the app. It may
-  be offline, or the address in your setup code is wrong.
+  be offline, or the address in your setup code is wrong. A login page in front of the address
+  looks the same to the shortcut: see [Cloudflare Access](#cloudflare-access).
 - **`401`**, or **"Not logged: Open Net Worth said "authentication required""**: wrong token.
   Copy the setup code again, after a rotation especially.
 - **"…Lucius's AI provider failed 3 times. Try again later"**: the AI provider was unreachable.
@@ -260,7 +262,29 @@ The reply carries Lucius's own summary in `reply`, which is what the iPhone shor
   your AI bill; wait and retry.
 - **"Already logged" for a purchase that isn't**: your `ref` repeats across payments. See the capture API section above.
 - **What did Lucius do with a capture?** Every capture keeps its conversation: the text that came
-  in, what Lucius booked, and why. Turn on the eye button in the Lucius **Chats** header to list
-  them, under **Capture · …**.
+  in, what Lucius booked, and why. Find it in the Lucius **Captures** list, under **Capture · …**.
 - **It booked to the wrong account**: name the card the way your account is named, e.g.
   `… with the Meridian Multiplier card`, or rename the account to match the card.
+
+## Cloudflare Access
+
+Cloudflare Access answers a request that has no Access login with a redirect to its login page.
+A shortcut can't log in, so nothing reaches the app, and the app's logs show no capture at all.
+The purchase isn't logged and isn't retried, so add any you missed by hand.
+
+To let captures through, add a self-hosted Access application for your domain with the path
+`api/capture`, and give it a **Bypass** policy that includes **Everyone**. The rest of the site
+stays behind the login, and the app still refuses a capture without your API token.
+
+To check it, send a capture with no token from any computer, using your own address:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' --data '{}' https://you.example.com/api/capture
+```
+
+`401` means the request reached the app and was refused for having no token, which is what you
+want. `302` means Access is still answering.
+
+If you'd rather keep Access in front of the path, use a **Service Auth** policy and add the service
+token's `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers to the shortcut's request on
+your phone. A reinstall removes them, so add them again afterwards.

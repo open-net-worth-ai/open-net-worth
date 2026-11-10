@@ -64,6 +64,8 @@ export type Insight =
       /** Past the goal (+) or short of it (−), in money; null with no goal. */
       gap: number | null
       running: boolean
+      /** The running month's first days — the figure is mostly recent months, said as such. */
+      early: boolean
     }
   | {
       kind: 'up'
@@ -111,21 +113,34 @@ export interface PropDerived {
 export type HeroTone = 'good' | 'warn' | 'bad'
 
 /** Each envelope by month-end: what it has spent, plus what the rest of the month usually adds —
- *  its 3-month average less that average by this day. Signed, so a pass-through expects its usual
- *  payback. (It was a floor, max(spent, average): one past trip in the average forecast S$1,967
- *  more travel in the month's last four days, and a loan paid back every month-end was never paid
- *  back — "on pace to spend S$6,136 more than you earn" when the pace said save S$840.) With no
- *  history at all, the pace so far carries on. */
-function projectedSpend(rows: PropEnvelope[], isCurrent: boolean, elapsed: number): number {
-  return sum(
-    rows.map((e) => {
-      if (!isCurrent) return e.activity
-      const { avg3, avg3_by_day } = e.history
-      if (avg3 === 0 && avg3_by_day === 0) return elapsed > 0 ? e.activity / elapsed : e.activity
-      return e.activity + avg3 - avg3_by_day
-    }),
-  )
+ *  the median of what each of the last 3 months added after this day. Signed, so a pass-through
+ *  expects its usual payback. (It was a floor, max(spent, average): one past trip in the average
+ *  forecast S$1,967 more travel in the month's last four days, and a loan paid back every
+ *  month-end was never paid back.) Two limits, owner 2026-11-02 ("it's just the new month and it
+ *  says I am heading to 22%"):
+ *   · the rest never carries an envelope past its usual (median) month — a payment made early is
+ *     not expected again on its usual date, and a payback already in is not expected twice;
+ *   · medians, not means — one trip or tax bill in three months is not the usual month.
+ *  With no history at all, the pace so far carries on. */
+export function projectedEnvelope(e: PropEnvelope, isCurrent: boolean, elapsed: number): number {
+  if (!isCurrent) return e.activity
+  const h = e.history
+  if (h.avg3 === 0 && h.avg3_by_day === 0) return elapsed > 0 ? e.activity / elapsed : e.activity
+  const usual = h.median3 ?? h.avg3
+  const rest = h.rest_median3 ?? h.avg3 - h.avg3_by_day
+  const toUsual = usual - e.activity
+  const add =
+    rest >= 0 ? Math.min(rest, Math.max(0, toUsual)) : Math.max(rest, Math.min(0, toUsual))
+  return e.activity + add
 }
+
+function projectedSpend(rows: PropEnvelope[], isCurrent: boolean, elapsed: number): number {
+  return sum(rows.map((e) => projectedEnvelope(e, isCurrent, elapsed)))
+}
+
+/** The first days of a month say little about where it ends: no savings verdict before this day,
+ *  only what has happened (spend past income, a group or envelope already over). */
+export const EARLY_DAYS = 7
 
 function figuresOf(m: PropMonth): GroupFigures[] {
   const income = m.income.amount
@@ -248,7 +263,10 @@ export function derive(m: PropMonth): PropDerived {
   const overNames = names(overGroups)
   const are = overGroups.length > 1 ? 'are' : 'is'
   const overIncome = income > 0 && outflow > income
-  const shortOfGoal = income > 0 && !overIncome && saveTarget !== null && saveP - saveTarget < -1
+  // Early in a running month the forecast is mostly history: no savings verdict on it yet.
+  const early = isCurrent && m.day <= EARLY_DAYS
+  const shortOfGoal =
+    income > 0 && !early && !overIncome && saveTarget !== null && saveP - saveTarget < -1
   const capsOver = counted.find((f) => f.targetAmt !== null && f.capSum > f.targetAmt) ?? null
   // An envelope past its own cap is not "on track", whatever its group's total says: Rent over by
   // S$600 beside a roomy Groceries nets to nothing at the group (persona QA round 7, 2026-10-14).
@@ -286,8 +304,10 @@ export function derive(m: PropMonth): PropDerived {
             ? {
                 text: isPast
                   ? `${overNames} went over, but you still saved ${saveP}%`
-                  : `${overNames} ${are} over, but savings are on track`,
-                bad: false,
+                  : early
+                    ? `${overNames} ${are} already over`
+                    : `${overNames} ${are} over, but savings are on track`,
+                bad: early,
               }
             : overCap.length
               ? { text: overCapText(overCap, isPast), bad: true }
@@ -304,12 +324,14 @@ export function derive(m: PropMonth): PropDerived {
                           : `Saved ${saveP}%, your goal was ${saveTarget}%`,
                       bad: false,
                     }
-                  : { text: isCurrent ? 'On track this month' : 'On target', bad: false }
+                  : early
+                    ? { text: `Too early to call — ${fmt(outflow)} spent so far`, bad: false }
+                    : { text: isCurrent ? 'On track this month' : 'On target', bad: false }
   // Owner, 2026-09-26: "on track is green a bit, off track is yellow a bit … red a bit" — red
   // once spending passes income, yellow for every other warning the verdict gives, green when it
   // gives none.
   const tone: HeroTone | null =
-    !income || spent <= 0 ? null : overIncome ? 'bad' : verdict.bad ? 'warn' : 'good'
+    !income || spent <= 0 ? null : overIncome ? 'bad' : verdict.bad ? 'warn' : early ? null : 'good'
 
   const insights: Insight[] = []
   const saving = isCurrent ? projSave : m.savings.amount
@@ -323,6 +345,7 @@ export function derive(m: PropMonth): PropDerived {
       target: saveTarget,
       gap: saveTarget === null ? null : Math.round(saving - (income * saveTarget) / 100),
       running: isCurrent,
+      early,
     })
   if (hasCmp && !isFuture) insights.push(...ups(counted, byDay, Math.max(1, base * 0.005)))
   if (capsOver && !capsOnly)

@@ -69,8 +69,8 @@ spending draws it down. See [Envelopes and budgeting](../concepts/envelopes-and-
 **Available** — what's left in an envelope right now: carried over from last month, plus
 assigned, minus spent. Red means overspent.
 
-**Ready to Assign** — cash in your budget that hasn't been given to an envelope yet. Your goal
-is to get it to zero by assigning it.
+**Ready to Assign** — money in your budget that hasn't been given to an envelope yet: cash in
+your Cash accounts plus any credit on your cards. Your goal is to get it to zero by assigning it.
 
 **Move money** — shift money between two envelopes, or between an envelope and Ready to
 Assign.

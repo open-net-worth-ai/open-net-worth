@@ -375,7 +375,7 @@ def test_demo_memory_is_read_but_never_written(demo):
     assert MemorySettingsStore().enabled() is True, "the seeded facts still reach the prompt"
     assert memory_writes_enabled() is False
     with pytest.raises(memory.MemoryDisabledError):
-        memory.add_explicit("Bob earns 400k and lives at 1 Example Street")
+        memory.add_explicit("Bob earns 400k and lives at 1 Example Street", section="other")
     assert asyncio.run(memory.extract_and_merge([{"role": "user", "content": "secret"}])) is None
 
 

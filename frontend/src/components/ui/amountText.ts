@@ -8,7 +8,7 @@ interface Separators {
 
 // The marks the user's number format writes amounts with — read from the same locale `fNum`
 // and `fCurrency` format in, so a figure the app displays reads back as itself.
-function separators(): Separators {
+export function numberSeparators(): Separators {
   const parts = new Intl.NumberFormat(getNumberLocale()).formatToParts(1234567.5)
   const mark = (type: 'group' | 'decimal', fallback: string) =>
     parts.find((part) => part.type === type)?.value ?? fallback
@@ -18,7 +18,7 @@ function separators(): Separators {
 /** Raw digits to edit, with the format's own decimal mark ("1234,5" under the dot format). */
 export function amountDraft(value: number | null): string {
   if (value == null) return ''
-  return String(Math.round(value * 100) / 100).replace('.', separators().decimal)
+  return String(Math.round(value * 100) / 100).replace('.', numberSeparators().decimal)
 }
 
 const escaped = (mark: string) => mark.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -72,20 +72,27 @@ const SHORTHAND: Record<string, number> = { k: 1e3, m: 1e6 }
 /** Reads what someone typed as an amount in their own number format — grouped thousands, the
  *  field's own currency around it, k/m shorthand — or null when it can't be read (never a guess). */
 export function parseAmount(text: string, marks: string[] = currencyMarks()): number | null {
+  const n = parseExact(text, marks)
+  return n == null ? null : Math.round(n * 100) / 100
+}
+
+/** parseAmount without the rounding to cents — for a per-unit price, where a coin's 0.00001234
+ *  is the figure itself, not dust to round away. */
+export function parseExact(text: string, marks: string[] = currencyMarks()): number | null {
   let t = withoutOwnCurrency(text, marks)
   const scale = SHORTHAND[t.slice(-1).toLowerCase()]
   if (scale) t = t.slice(0, -1).trimEnd()
-  const seps = separators()
+  const seps = numberSeparators()
   const digits = ambiguous(t, seps) ? null : plainDigits(t, seps)
   if (digits == null) return null
   const n = Number(digits) * (scale ?? 1)
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null
+  return Number.isFinite(n) ? n : null
 }
 
 /** The figure a refused thousandfold entry most likely meant, written in the user's own format
  *  ("17,000" under the dot format → "17.000") — null for any other text. */
 export function thousandsReading(text: string, marks: string[] = currencyMarks()): string | null {
   const t = withoutOwnCurrency(text, marks)
-  const seps = separators()
+  const seps = numberSeparators()
   return ambiguous(t, seps) ? t.replace(seps.decimal, seps.group) : null
 }

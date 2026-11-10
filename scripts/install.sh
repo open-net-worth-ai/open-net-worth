@@ -3,6 +3,7 @@
 #
 #   curl -fsSL https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/install-server.sh | sh
 #   curl -fsSL ...install-server.sh | sh -s -- --autostart   # also start at login/boot, restart on crash
+#   curl -fsSL ...install-server.sh | sh -s -- --auto-upgrade   # the same, and stay on the newest release
 #
 # This is the SERVER installer (a release asset named install-server.sh). The desktop app has its own,
 # https://opennetworth.ai/install.sh.
@@ -12,12 +13,33 @@
 #   2. `uv tool install open-net-worth` on uv's OWN Python 3.12 (--managed-python), never a
 #      system/Homebrew one — a `brew upgrade` deletes the old interpreter and would leave the
 #      install dangling. No system Python or Node.js is needed; everything lands in uv's tool dir
-#   3. with --autostart: `onw autostart install`
+#   3. with --autostart: `onw autostart install`; with --auto-upgrade: `onw start --autostart --auto-upgrade`
 # Re-running it upgrades to the newest release. Your data lives in ~/.open-net-worth/, outside
 # the install, so upgrades and reinstalls never touch it. Windows: use Docker (docs, Installation).
 set -eu
 
 say() { printf '==> %s\n' "$1"; }
+
+# The file that puts ~/.local/bin on PATH for the user's shell, as ~/..., or nothing if unsure.
+path_profile() {
+  ZDOT="${ZDOTDIR:-$HOME}"
+  case "$(basename "${SHELL:-}")" in
+    zsh) set -- "$ZDOT/.zshenv" "$ZDOT/.zshrc" "$ZDOT/.zprofile" ;;
+    bash) set -- "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" ;;
+    fish) set -- "$HOME/.config/fish/config.fish" ;;
+    *) return 0 ;;
+  esac
+  for file in "$@"; do
+    if [ -f "$file" ] && grep -q '\.local/bin' "$file"; then
+      # shellcheck disable=SC2088  # a literal ~, shown to the user
+      case "$file" in
+        "$HOME"/*) printf '~/%s\n' "${file#"$HOME"/}" ;;
+        *) printf '%s\n' "$file" ;;
+      esac
+      return 0
+    fi
+  done
+}
 die() { printf '\nERROR: %s\n' "$1" >&2; exit 1; }
 
 INSTALL_DOCS="https://docs.opennetworth.ai/getting-started/installation/"
@@ -29,10 +51,12 @@ case "$(uname -s 2>/dev/null || echo unknown)" in
 esac
 
 AUTOSTART=0
+AUTO_UPGRADE=0
 for arg in "$@"; do
   case "$arg" in
-    --autostart) AUTOSTART=1 ;;
-    *) die "unknown option: $arg (the only option is --autostart)" ;;
+    --autostart|--auto-start) AUTOSTART=1 ;;
+    --auto-upgrade|--auto-update) AUTOSTART=1; AUTO_UPGRADE=1 ;;
+    *) die "unknown option: $arg (the options are --autostart and --auto-upgrade)" ;;
   esac
 done
 
@@ -77,20 +101,62 @@ if [ "$ON_USER_PATH" = 0 ]; then
     || say "Could not add ~/.local/bin to your shell profile — run: uv tool update-shell"
 fi
 
-if [ "$AUTOSTART" = 1 ]; then
+if [ "$AUTO_UPGRADE" = 1 ]; then
+  "$ONW" start --autostart --auto-upgrade
+elif [ "$AUTOSTART" = 1 ]; then
   "$ONW" autostart install
 fi
 
+# What to type next. A release older than `onw help` lacks some of these commands, so they're only
+# listed when the installed copy has them.
+VERSION="$("$ONW" version 2>/dev/null | awk '{print $NF}')"
+if "$ONW" help >/dev/null 2>&1; then CURRENT=1; else CURRENT=0; fi
+
 echo ""
-echo "==> Done."
+say "Done. Open Net Worth $VERSION is installed."
+echo ""
 if [ "$ON_USER_PATH" = 0 ]; then
-  echo "    Open a NEW terminal first — this one started before ~/.local/bin was on your PATH."
+  # A pipe into sh can't change the PATH of the terminal that ran it, so name the file that now
+  # adds ~/.local/bin, for the user to `source`. Found, not guessed: for zsh, `uv tool
+  # update-shell` writes ~/.zshenv, and with uv already installed ~/.zshrc doesn't get the line.
+  PROFILE="$(path_profile)"
+  if [ -n "$PROFILE" ]; then
+    echo "    onw was added to your PATH. Reload it before running any command:"
+    echo "        source $PROFILE"
+  else
+    echo "    onw was added to your PATH. Open a new terminal to use it."
+  fi
+  echo ""
 fi
-echo "    Run it:           onw start --open"
 if [ "$AUTOSTART" = 1 ]; then
-  echo "    It is running now and will start at login: open http://127.0.0.1:8080"
+  echo "    It's running now, and starts by itself at every login:"
+  echo "        http://127.0.0.1:8080"
+  if [ "$AUTO_UPGRADE" = 1 ]; then
+    echo "    It also keeps itself up to date."
+  else
+    echo "    To keep it up to date too:"
+    echo "        onw start --autostart --auto-upgrade"
+  fi
 else
-  echo "    Start at login:   onw autostart install"
+  echo "    Start it now:"
+  echo "        onw start --open"
+  echo "    Always on, and kept up to date:"
+  echo "        onw start --autostart --auto-upgrade"
+  if [ "$CURRENT" = 1 ]; then
+    echo "    Without this terminal, until you stop it or restart:"
+    echo "        onw start --background"
+  fi
 fi
-echo "    Update later:     onw upgrade"
-echo "    Your data:        ~/.open-net-worth/  (outside the install; upgrades never touch it)"
+echo ""
+if [ "$CURRENT" = 1 ]; then
+  echo "    Stop it:        onw stop"
+fi
+echo "    Is it running?  onw status"
+echo "    Update now:     onw upgrade"
+if [ "$CURRENT" = 1 ]; then
+  echo "    Every command:  onw help"
+else
+  echo "    Every command:  onw --help"
+fi
+echo ""
+echo "    Your data: ~/.open-net-worth/ (updates never touch it)"

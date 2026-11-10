@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Cluster, Modal, Select } from '../ui'
+import { ArrowRight } from '../../ui/icons'
 
 export interface WriteTarget {
   positionId: string
@@ -34,7 +35,8 @@ export function WhichAccountModal({ targets, onPick, onClose }: Props) {
             disabled={!selected}
             onClick={() => selected && onPick(selected)}
           >
-            Continue →
+            Continue
+            <ArrowRight size={14} aria-hidden="true" />
           </Button>
         </Cluster>
       }

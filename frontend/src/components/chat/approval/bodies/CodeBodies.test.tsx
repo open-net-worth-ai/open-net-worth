@@ -55,7 +55,14 @@ describe('code approval cards — shared contract', () => {
         expect(body.querySelector(`[class*="${cls}"]`), cls).toBeNull()
       }
       expect(container.querySelector('[style]')).toBeNull()
-      expect(container.querySelector('details')).toBeNull()
+      // The one fold an external MCP card has is its raw call (owner, 2026-10-31); a code
+      // card shows its source unfolded.
+      const folds = [...container.querySelectorAll('details summary')].map((x) => x.textContent)
+      expect(folds).toEqual(
+        change.type === 'external_mcp_call' && Object.keys(change.display?.args ?? {}).length
+          ? ['Raw call']
+          : [],
+      )
     },
   )
 })
@@ -69,14 +76,21 @@ describe('external_mcp_call card', () => {
     expect(rows).toContain('Filters{"tag":"housing","archived":false}')
   })
 
-  it('names the tool and server once, in the lead only', () => {
+  it('is titled by the tool name and server alone — no "Lucius wants to use" lead', () => {
     const { container } = mount(fixture('external_mcp_call · ordinary'))
-    expect(container.querySelector('.ac-lead')?.textContent).toBe(
-      'Lucius wants to use search_notes from Notes',
-    )
+    expect(container.querySelector('.change-preview-tool')?.textContent).toBe('search_notes')
+    expect(container.querySelector('.change-preview-label')?.textContent).toBe('Notes')
+    expect(container.querySelector('.ac-lead')).toBeNull()
     const labels = [...container.querySelectorAll('.ac-fact-label')].map((l) => l.textContent)
     expect(labels).not.toContain('Server')
     expect(labels).not.toContain('Tool')
+  })
+
+  it('folds the raw call: the tool name and the exact arguments sent', () => {
+    const { container } = mount(fixture('external_mcp_call · ordinary'))
+    const raw = JSON.parse(container.querySelector('details .ac-code')?.textContent ?? '')
+    expect(raw.name).toBe('search_notes')
+    expect(raw.arguments.query).toBe('rent receipts')
   })
 
   it('shows no money-movement warning on an ordinary call', () => {
@@ -96,6 +110,8 @@ describe('external_mcp_call card', () => {
     const base = fixture('external_mcp_call · ordinary')
     mount({ ...base, args: {}, display: { ...base.display, args: {} } })
     expect(screen.getByText('No arguments')).toBeTruthy()
+    // A raw call of `{}` adds nothing to "No arguments".
+    expect(screen.queryByText('Raw call')).toBeNull()
   })
 })
 

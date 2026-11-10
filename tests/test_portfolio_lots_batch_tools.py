@@ -451,19 +451,20 @@ def test_apply_position_update_batch_partial_failure_legible(isolated):
     inst = _seed_instrument("AAA")
     acc = _seed_account()
     added = _add(inst, acc)
+    other = _seed_account("Other Brokerage")
 
     res, proposed = call(
         "update_positions",
         updates=[
-            {"position_id": added["position_id"], "changes": {"note": "moved"}},
-            {"position_id": "ghost-position", "changes": {"note": "x"}},
+            {"position_id": added["position_id"], "changes": {"account_id": other["id"]}},
+            {"position_id": "ghost-position", "changes": {"account_id": other["id"]}},
         ],
     )
     assert proposed is None
     assert res["total"] == 2
     assert res["succeeded"] == 1
     assert res["failed"] == 1
-    assert PositionStore().find_by_id(added["position_id"])["note"] == "moved"
+    assert PositionStore().find_by_id(added["position_id"])["account_id"] == other["id"]
 
 
 # ── update_positions: empty-patch no-op guard (harness reliability program) ─────
@@ -536,14 +537,15 @@ def test_update_positions_single_item_real_edit_still_writes_and_returns_normal_
     inst = _seed_instrument("AAA")
     acc = _seed_account()
     added = _add(inst, acc)
+    other = _seed_account("Other Brokerage")
 
     res, proposed = call(
-        "update_positions", position_id=added["position_id"], changes={"note": "moved"}
+        "update_positions", position_id=added["position_id"], changes={"account_id": other["id"]}
     )
 
     assert proposed is None
     assert res == {"ok": True, "position_id": added["position_id"]}
-    assert PositionStore().find_by_id(added["position_id"])["note"] == "moved"
+    assert PositionStore().find_by_id(added["position_id"])["account_id"] == other["id"]
 
 
 def test_update_positions_empty_patch_on_nonexistent_position_still_reports_not_found(isolated):
@@ -567,11 +569,12 @@ def test_apply_position_update_batch_marks_empty_item_no_op_and_still_books_the_
     inst2 = _seed_instrument("BBB")
     pos2 = _add(inst2, acc)
     before2 = PositionStore().find_by_id(pos2["position_id"])
+    other = _seed_account("Other Brokerage")
 
     res, proposed = call(
         "update_positions",
         updates=[
-            {"position_id": pos1["position_id"], "changes": {"note": "moved"}},
+            {"position_id": pos1["position_id"], "changes": {"account_id": other["id"]}},
             {"position_id": pos2["position_id"], "changes": {}},
         ],
     )
@@ -582,7 +585,7 @@ def test_apply_position_update_batch_marks_empty_item_no_op_and_still_books_the_
     assert res["failed"] == 0
     by_id = {r["position_id"]: r for r in res["results"]}
     assert by_id[pos1["position_id"]].get("no_op") is not True
-    assert PositionStore().find_by_id(pos1["position_id"])["note"] == "moved"
+    assert PositionStore().find_by_id(pos1["position_id"])["account_id"] == other["id"]
     assert by_id[pos2["position_id"]]["no_op"] is True
     assert PositionStore().find_by_id(pos2["position_id"]) == before2
 

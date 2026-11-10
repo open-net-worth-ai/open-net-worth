@@ -13,6 +13,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+# Every HTTP request to an MCP server or its sign-in service names us. Cloudflare's "browser
+# integrity" rule (error 1010) refuses urllib's default ``Python-urllib/x.y`` outright — Zerodha's
+# mcp.kite.trade and Upstox's mcp.upstox.com both did, 2026-10-31 — while an honest product UA
+# passes. Lives here because it is the one module both ``client`` and ``oauth`` already import.
+USER_AGENT = "OpenNetWorth/1.0 (+https://github.com/open-net-worth-ai/open-net-worth)"
+
 
 def parse_rpc_body(raw: bytes, content_type: str, request_id: int) -> Any:
     """Parse an ``_rpc`` response body — plain JSON or SSE-framed — into the same JSON value.

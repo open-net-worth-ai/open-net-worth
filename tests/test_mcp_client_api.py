@@ -588,6 +588,28 @@ def test_create_disabled_reaches_out_to_nothing(client, monkeypatch):
     assert calls == []
 
 
+def test_repointing_the_endpoint_forgets_the_old_servers_tools(client, monkeypatch):
+    """A failed read keeps the list, so the new endpoint being down must not leave the old
+    endpoint's tools standing in for it."""
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    c.post(
+        "/api/mcp-clients",
+        json={"id": "moved", "url": "https://a.example.com/mcp", "enabled": True},
+    )
+    assert c.post("/api/mcp-clients/moved/test").json()["discovered_tools"]
+
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS, down=True)
+    assert (
+        c.patch("/api/mcp-clients/moved", json={"url": "https://b.example.com/mcp"}).status_code
+        == 200
+    )
+    body = c.post("/api/mcp-clients/moved/test").json()
+
+    assert body["discovered_tools"] == []
+    assert body["last_status"] == "connect_error"
+
+
 def test_create_enabled_records_a_failed_handshake_and_keeps_the_server(client, monkeypatch):
     """A create whose handshake fails is RECORDED, not rolled back.
 
@@ -681,3 +703,236 @@ def test_the_add_flow_leaves_the_ladder_populated_at_the_chosen_levels(app_clien
     # D4: configured + enabled + reachable is "active" — never "not_configured", and never
     # the MCP-only `last_status` vocabulary ("ok") in a field that holds the shared one.
     assert view["status"] == "active"
+
+
+# ── switching on a server that has never listed its tools discovers them ───────────────────
+#
+# Regression: an OAuth sign-in that finished after the add screen gave up saved the server
+# dormant with no tools; switching it on from the Connectors list read "Connected" with an
+# empty ladder until the user knew to press "Refresh tools list".
+
+
+def test_enabling_a_toolless_server_discovers_its_tools(client, monkeypatch):
+    c, _ = client
+    c.post("/api/mcp-clients", json={"id": "late", "url": "https://mcp.example.com/mcp"})
+    calls = _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+
+    res = c.patch("/api/mcp-clients/late", json={"enabled": True})
+    assert res.status_code == 200
+    assert len(res.json()["discovered_tools"]) == 4
+    assert res.json()["last_status"] == "ok"
+    assert calls == ["initialize", "tools/list"]
+
+
+def test_enabling_through_the_connectors_toggle_discovers_its_tools(client, monkeypatch):
+    """The Connectors list's Resume (and Lucius's set_connector_enabled) go through
+    ``services.connectors.set_connector_enabled``, not the MCP route — the path the bug took."""
+    from backend.services import connectors as connectors_service
+
+    c, _ = client
+    c.post("/api/mcp-clients", json={"id": "late", "url": "https://mcp.example.com/mcp"})
+    calls = _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+
+    connectors_service.set_connector_enabled("mcp:late", True)
+    listed = c.get("/api/mcp-clients").json()["servers"][0]
+    assert len(listed["discovered_tools"]) == 4
+    assert calls == ["initialize", "tools/list"]
+
+
+def test_enabling_a_server_that_already_listed_its_tools_reaches_out_to_nothing(
+    client, monkeypatch
+):
+    from backend.services import connectors as connectors_service
+
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    c.post(
+        "/api/mcp-clients",
+        json={"id": "known", "url": "https://mcp.example.com/mcp", "enabled": True},
+    )
+    connectors_service.set_connector_enabled("mcp:known", False)
+    calls = _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+
+    connectors_service.set_connector_enabled("mcp:known", True)
+    assert calls == []
+
+
+# ── display name + icon from the server's own website (mcp.site_identity) ────────────────
+
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+
+
+def _fake_identity(monkeypatch, *, name="Example Brokers", source="www.broker.example"):
+    from backend.mcp import site_identity
+
+    calls: list[str] = []
+
+    def fake(url, **_kw):
+        calls.append(url)
+        return site_identity.SiteIdentity(
+            name=name, icon=_PNG, icon_type="image/png", source=source
+        )
+
+    monkeypatch.setattr(site_identity, "lookup", fake)
+    return calls
+
+
+def test_discovery_names_a_host_named_server_after_its_site_and_serves_its_icon(
+    client, monkeypatch
+):
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch)
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "api-broker-example",
+            "name": "api.broker.example",
+            "url": "https://api.broker.example/mcp",
+            "enabled": True,
+        },
+    )
+    listed = c.get("/api/mcp-clients").json()["servers"][0]
+    assert listed["name"] == "Example Brokers"
+    assert listed["site_source"] == "www.broker.example"
+    assert isinstance(listed["icon_version"], int)
+
+    icon = c.get("/api/mcp-clients/api-broker-example/icon")
+    assert icon.status_code == 200
+    assert icon.content == _PNG
+    assert icon.headers["content-type"] == "image/png"
+    assert icon.headers["x-content-type-options"] == "nosniff"
+    assert "default-src 'none'" in icon.headers["content-security-policy"]
+
+
+def test_a_name_the_user_chose_is_never_overwritten(client, monkeypatch):
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch)
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "mine",
+            "name": "My broker",
+            "url": "https://api.broker.example/mcp",
+            "enabled": True,
+        },
+    )
+    assert c.get("/api/mcp-clients").json()["servers"][0]["name"] == "My broker"
+
+
+def test_a_request_body_cannot_choose_a_servers_identity(client, monkeypatch):
+    c, _ = client
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "liar",
+            "url": "https://mcp.example.com/mcp",
+            "site_name": "Bank",
+            "site_source": "bank.example",
+        },
+    )
+    listed = c.get("/api/mcp-clients").json()["servers"][0]
+    assert listed["site_name"] is None and listed["site_source"] is None
+    assert c.get("/api/mcp-clients/liar/icon").status_code == 404
+
+
+def test_boot_discovery_reads_a_website_once_and_refresh_reads_it_again(client, monkeypatch):
+    from backend.mcp.client_manager import get_manager
+
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    calls = _fake_identity(monkeypatch)
+    c.post(
+        "/api/mcp-clients",
+        json={"id": "once", "url": "https://api.broker.example/mcp", "enabled": True},
+    )
+    assert len(calls) == 1
+    server = get_manager()._store.find("once")
+    get_manager()._discover(server)  # the unattended boot path
+    assert len(calls) == 1
+    c.post("/api/mcp-clients/once/test")  # the human "Refresh tools list"
+    assert len(calls) == 2
+
+
+def test_the_probe_prefills_the_sites_name(client, monkeypatch):
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS, server_info={"name": "broker-mcp"})
+    _fake_identity(monkeypatch)
+    res = c.post("/api/mcp-clients/probe", json={"url": "https://api.broker.example/mcp"})
+    assert res.json()["suggested_name"] == "Example Brokers"
+
+
+def test_a_site_name_a_builtin_connector_already_uses_gets_an_mcp_suffix(client, monkeypatch):
+    """A vendor's site may claim a name a built-in connector already shows; two identical rows
+    in Lucius's @-mention list cannot be told apart."""
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch, name="Plaid")
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "mcp-plaid-example",
+            "name": "mcp.plaid.example",
+            "url": "https://mcp.plaid.example/mcp",
+            "enabled": True,
+        },
+    )
+    assert c.get("/api/mcp-clients").json()["servers"][0]["name"] == "Plaid (MCP)"
+
+    res = c.post("/api/mcp-clients/probe", json={"url": "https://mcp.plaid.example/mcp"})
+    assert res.json()["suggested_name"] == "Plaid (MCP)"
+
+
+def test_ibkrs_mcp_server_keeps_its_own_name_beside_ibkr_flex(client, monkeypatch):
+    """The built-in IBKR connector is "IBKR Flex" (the Flex report import), so IBKR's hosted MCP
+    server is simply "Interactive Brokers" — no suffix needed."""
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch, name="Interactive Brokers")
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "api-ibkr-com",
+            "name": "api.ibkr.com",
+            "url": "https://api.ibkr.com/v1/api/mcp-public",
+            "enabled": True,
+        },
+    )
+    assert c.get("/api/mcp-clients").json()["servers"][0]["name"] == "Interactive Brokers"
+
+
+# ── a 401 says what kind of login it wants (the add flow's "switch to OAuth" hint) ─────────
+
+
+@pytest.mark.parametrize(
+    ("challenge", "expected"),
+    [
+        (
+            'Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
+            "oauth",
+        ),
+        ('Bearer realm="api"', "key"),
+        (None, None),
+    ],
+)
+def test_a_401_probe_reports_what_login_the_server_wants(client, monkeypatch, challenge, expected):
+    import io
+    import urllib.error
+
+    from backend.mcp import client as client_module
+
+    def unauthorized(request, timeout=None):
+        headers = {"WWW-Authenticate": challenge} if challenge else {}
+        raise urllib.error.HTTPError(
+            request.full_url, 401, "Unauthorized", headers, io.BytesIO(b"authentication required")
+        )
+
+    monkeypatch.setattr(client_module, "_urlopen", unauthorized)
+    c, _ = client
+    res = c.post("/api/mcp-clients/probe", json={"url": "https://mcp.example.com/mcp"})
+    body = res.json()
+    assert body["ok"] is False
+    assert "401" in body["error"]
+    assert body["needs_auth"] == expected

@@ -28,6 +28,7 @@ import {
   Filler,
   type ChartConfiguration,
 } from 'chart.js'
+import { amountsHidden, subscribeAmountsHidden } from '../../../utils/amountMask'
 import { cssToken } from '../../../utils/chartTheme'
 import { fBase, fBaseCompact } from '../../../utils/format'
 
@@ -72,12 +73,14 @@ if (Chart.defaults) {
   Chart.defaults.elements.bar.borderSkipped = 'start'
 }
 
-/** Privacy mode, read live off the DOM. Canvas charts can't inherit the
- * `body.hide-amounts .money` CSS mask (ticks/tooltips are pixels, not nodes),
- * so every canvas-side money formatter consults this at draw time instead. */
-export function amountsHidden(): boolean {
-  return document.body.classList.contains('hide-amounts')
-}
+export { amountsHidden }
+
+// Canvas charts can't inherit the `body.hide-amounts .money` CSS mask (ticks/tooltips are pixels,
+// not nodes), so every canvas-side money formatter consults amountsHidden() at draw time, and a
+// flip redraws whatever is on screen: its ticks were painted under the old state.
+subscribeAmountsHidden(() => {
+  Object.values(Chart.instances).forEach((chart) => chart?.update('none'))
+})
 
 /** Compact currency tick: S$2k, S$14k. Masks to `***` in privacy mode — the
  * same glyph the DOM `.money` convention overlays, so canvas and DOM read as

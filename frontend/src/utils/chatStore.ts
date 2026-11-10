@@ -246,6 +246,41 @@ export function shouldAdoptRemote(local: Message[] | null, remote: Message[]): b
   return blockCount(remote) > blockCount(local)
 }
 
+/** A reply this browser saw START but never saw finish — the page was suspended (a phone
+    switching apps) after the thinking arrived and before the answer did. Both copies hold
+    the same messages with the same blocks, so neither `shouldAdoptRemote` nor
+    `useChat.isRicher` can tell the half-drawn bubble from the finished one, and the cache
+    won forever: thinking on screen, no answer, on the phone AND after a restart (live report
+    2026-10-30). Returns `local` with its last bubble replaced by the server's finished reply,
+    or null when that is not the case.
+
+    The server writes a turn's user message and reply together, AT THE END — so mid-turn its
+    tail still ends on the PREVIOUS reply. Both checks below rule that out: the server's last
+    reply must answer the same user message as ours, and must not be the reply before it. */
+export function completeUnfinishedTail(
+  local: Message[] | null,
+  remote: Message[],
+): Message[] | null {
+  if (!local || local.length < 2 || remote.length < 2) return null
+  const mine = local[local.length - 1]
+  const theirs = remote[remote.length - 1]
+  if (!mine || !theirs) return null
+  if (mine.role !== 'assistant' || mine.usage || mine.error) return null
+  if (theirs.role !== 'assistant' || theirs.error || !theirs.text?.trim()) return null
+  if (theirs.text.trim().length <= (mine.text ?? '').trim().length) return null
+  const myAsk = local[local.length - 2]
+  const theirAsk = remote[remote.length - 2]
+  if (!myAsk || !theirAsk) return null
+  if (myAsk.role !== 'user' || theirAsk.role !== 'user') return null
+  if ((myAsk.text ?? '').trim() !== (theirAsk.text ?? '').trim()) return null
+  if ((myAsk.attachments?.length ?? 0) !== (theirAsk.attachments?.length ?? 0)) return null
+  const previousReply = local[local.length - 3]
+  if (previousReply?.role === 'assistant' && previousReply.text.trim() === theirs.text.trim()) {
+    return null
+  }
+  return [...local.slice(0, -1), theirs]
+}
+
 /**
  * Second-pass reconcile against the backend transcript, for a conversation that was
  * served from the local cache.
@@ -271,9 +306,14 @@ export async function reconcileWithRemote(
   // adding a message, so a cache taken before the card existed has the same last id and
   // would win forever — `shouldAdoptRemote` folds that in beside the advanced-past check.
   if (!shouldAdoptRemote(local, remote)) {
+    const completed = completeUnfinishedTail(local, remote)
+    if (completed) {
+      void saveMessages(convId, completed)
+      return completed
+    }
     // The cache stays — but whether a message is restored is the SERVER's fact, never this
     // browser's: a restore (or its Undo) made in another tab or device must show here too.
-    const marked = local ? withRestoreMarks(local, remote) : local
+    const marked = local ? repairCutReplies(withRestoreMarks(local, remote), remote) : local
     if (!marked || marked === local) return null
     void saveMessages(convId, marked)
     return marked
@@ -281,6 +321,30 @@ export async function reconcileWithRemote(
   void saveMessages(convId, remote)
   return remote
 }
+
+/** A finished reply this browser drew with its START missing — the server's copy of it is
+ *  longer and ENDS with exactly what is on screen (a replay skip once ate an answer's first
+ *  words: live call, 2026-11-03). The cache kept the cut copy forever, since both sides held
+ *  the same messages. Replaced by the server's reply, keeping this bubble's id. Returns
+ *  `target` itself when nothing is cut. */
+export function repairCutReplies(target: Message[], source: Message[]): Message[] {
+  const full = source.filter((m) => m.role === 'assistant' && !m.error && m.text?.trim())
+  if (!full.length) return target
+  let changed = false
+  const out = target.map((m) => {
+    const mine = m.text?.trim() ?? ''
+    if (m.role !== 'assistant' || m.streaming || mine.length < MIN_CUT_MATCH) return m
+    const whole = full.find(
+      (f) => f.text.trim().length > mine.length && f.text.trim().endsWith(mine),
+    )
+    if (!whole) return m
+    changed = true
+    return { ...whole, id: m.id, usage: m.usage ?? whole.usage }
+  })
+  return changed ? out : target
+}
+
+const MIN_CUT_MATCH = 40
 
 /** Copy the server's restore state for each checkpointed message — "Restored to before this
  *  message · Undo" (`restored` / `undoCheckpointId`) and "a later restore rewound past this
@@ -346,7 +410,7 @@ export function applyRestoreResult(
 }
 
 /** Does this conversation end on an unanswered confirm/permission card? */
-function hasOpenCard(messages: Message[] | null): boolean {
+export function hasOpenCard(messages: Message[] | null): boolean {
   const last = messages?.[messages.length - 1]
   return Boolean(last?.awaitingApproval || last?.proposedChanges?.length)
 }

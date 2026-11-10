@@ -12,12 +12,15 @@ def test_catalog_lists_every_kind_the_migration_creates():
         "email",
         "webhook",
         "telegram",
+        "voice",
         "simplefin",
         "plaid",
         "lunch_money",
         "lunch_flow",
         "ynab",
+        "actual_budget",
         "enable_banking",
+        "gocardless",
         "yodlee",
         "alpaca",
         "ibkr",
@@ -50,9 +53,10 @@ def test_notify_channels():
     [
         ("email", {"password"}, set()),
         ("webhook", {"url", "secret"}, set()),
-        ("plaid", {"secret"}, {"access_token", "item_id"}),
+        ("plaid", {"secret"}, {"access_token", "item_id", "link_token", "items"}),
         ("lunch_flow", {"client_secret"}, {"access_token", "refresh_token"}),
         ("enable_banking", {"private_key"}, {"session_id"}),
+        ("gocardless", {"secret_key"}, {"access_token", "requisitions"}),
         ("yodlee", {"secret", "password"}, {"cobrand_session_token", "user_session_token"}),
         ("simplefin", set(), {"access_url"}),
         ("coingecko", {"api_key"}, set()),
@@ -162,6 +166,41 @@ def test_the_set_up_rule_of_each_kind(kind, config, have, expected):
     assert CATALOG[kind].configured(_row(kind, config), frozenset(have)) is expected
 
 
+def _banks(*statuses):
+    return {"banks": {f"k{i}": {"status": st} for i, st in enumerate(statuses)}}
+
+
+@pytest.mark.parametrize(
+    "have, expected",
+    [
+        ({"secret_key", "requisitions"}, True),  # linked, expired or unfinished: stays a row
+        ({"secret_key"}, False),  # no bank link started
+    ],
+)
+def test_gocardless_is_set_up_once_a_bank_link_exists(have, expected):
+    row = _row("gocardless", {"secret_id": "s"}, state=_banks("EX"))
+    assert CATALOG["gocardless"].configured(row, frozenset(have)) is expected
+
+
+@pytest.mark.parametrize(
+    "state, expected",
+    [
+        (_banks("LN"), None),
+        ({**_banks("LN"), "last_error": "GoCardless HTTP 503"}, "GoCardless HTTP 503"),
+        (_banks("EX"), "Bank access expired — link the bank again"),
+        (_banks("LN", "EX", "LN"), "1 of 3 banks need linking again"),
+        (_banks("RJ", "EX"), "2 of 2 banks need linking again"),
+        (_banks("LN", "CR"), None),  # mid-consent for one more bank
+        (
+            _banks("CR"),
+            "Bank link not finished — open the connector and select Check links",
+        ),
+    ],
+)
+def test_an_unfinished_or_ended_gocardless_link_reads_as_an_error(state, expected):
+    assert CATALOG["gocardless"].error(_row("gocardless", state=state), {}) == expected
+
+
 def test_the_web_search_set_up_rule_follows_whether_the_provider_needs_a_key():
     configured = CATALOG["web_search"].configured
     ddg = _row("web_search", id="web_search:duckduckgo")
@@ -230,6 +269,7 @@ def test_each_kinds_config_keys_are_the_settings_its_store_writes_to_config():
     """``config_keys`` is what Move keeps from a received row. It must name exactly the
     settings the kind's facade store files under ``connectors.config`` — a key missing here is
     silently dropped by a move, a key extra here is a field nothing reads."""
+    from backend.db.actual_budget_config_store import ActualBudgetConfigStore
     from backend.db.alpaca_config_store import AlpacaConfigStore
     from backend.db.channel_config_store import DEFAULTS as WEBHOOK_DEFAULTS
     from backend.db.email_config_store import DEFAULTS as EMAIL_DEFAULTS
@@ -249,6 +289,7 @@ def test_each_kinds_config_keys_are_the_settings_its_store_writes_to_config():
         LunchMoneyConfigStore,
         LunchFlowConfigStore,
         YnabConfigStore,
+        ActualBudgetConfigStore,
         EnableBankingConfigStore,
         YodleeConfigStore,
         AlpacaConfigStore,
@@ -270,10 +311,14 @@ def test_a_token_minted_by_the_senders_authorization_is_never_moved():
     assert flow.moved_state == ()
 
 
-def test_yodlee_alone_is_withdrawn_by_policy():
-    assert {k for k, v in CATALOG.items() if v.disabled} == {"yodlee"}
+def test_only_the_retired_connectors_are_withdrawn_by_policy():
+    """Yodlee (enterprise-only pricing), IBKR Flex and the Alpaca data source (both retired
+    2026-10-29 for the vendor's own MCP server) — code kept, none offered."""
+    assert {k for k, v in CATALOG.items() if v.disabled} == {"yodlee", "ibkr", "alpaca"}
     from backend.ai.tools._connector_gate import DISABLED_CONNECTORS
     from backend.services.aggregation.providers import PROVIDER_KEYS, PROVIDERS
 
-    assert DISABLED_CONNECTORS == frozenset({"yodlee"})
+    assert DISABLED_CONNECTORS == frozenset({"yodlee", "ibkr", "alpaca"})
     assert "yodlee" in PROVIDERS and "yodlee" not in PROVIDER_KEYS
+    assert "ibkr" in PROVIDERS and "ibkr" not in PROVIDER_KEYS
+    assert "alpaca" in PROVIDERS and "alpaca" not in PROVIDER_KEYS

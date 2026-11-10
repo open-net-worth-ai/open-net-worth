@@ -161,8 +161,9 @@ INSTRUMENTS: list[dict] = [
 ]
 
 
-def live_anchors() -> dict[str, float]:
+def live_anchors(specs: list[dict] | None = None) -> dict[str, float]:
     """Today's REAL price per symbol, when the host can reach a provider. ``{}`` otherwise.
+    ``specs`` defaults to ``INSTRUMENTS``; the Singapore chapter's ETFs ask for their own.
 
     These are real tickers with real price sources, so a demo with network gets live prices the
     moment the app boots — and a synthetic history ending on a GUESSED anchor then joins that
@@ -175,7 +176,8 @@ def live_anchors() -> dict[str, float]:
     unreachable provider, rate limit, a symbol the provider does not know — falls back to that
     symbol's static anchor alone.
     """
-    tickers = [spec["price_source_id"] for spec in INSTRUMENTS if spec["price_source_id"]]
+    specs = INSTRUMENTS if specs is None else specs
+    tickers = [spec["price_source_id"] for spec in specs if spec["price_source_id"]]
     try:
         from backend.services import prices as prices_service
 
@@ -188,12 +190,12 @@ def live_anchors() -> dict[str, float]:
         return {}
     quoted = result.get("prices") or {}
     out: dict[str, float] = {}
-    for spec in INSTRUMENTS:
+    for spec in specs:
         value = quoted.get(spec["price_source_id"])
         if isinstance(value, (int, float)) and value > 0:
             out[spec["symbol"]] = float(value)
     if out:
-        log.info("demo: anchored %d of %d instruments on live prices", len(out), len(INSTRUMENTS))
+        log.info("demo: anchored %d of %d instruments on live prices", len(out), len(specs))
     return out
 
 

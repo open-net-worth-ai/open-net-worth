@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useHoldingsNarration, useIntelDigest } from '../../hooks/useIntelDigest'
-import { Skeleton } from '../ui'
+import { MaskedText, Skeleton } from '../ui'
 import { Sparkles } from '../../ui/icons'
 import { IntelCardHead } from './IntelCardHead'
 import { OpinionLine } from './OpinionLine'
@@ -57,7 +57,9 @@ export function IntelBriefCard({ onChatSuggest, children, verbosity = 3 }: Props
       <div className="intel-brief-body">
         {narrative ? (
           <>
-            <p className="intel-brief-narrative">{narrative}</p>
+            <p className="intel-brief-narrative">
+              <MaskedText>{narrative}</MaskedText>
+            </p>
             {narration && <OpinionLine opinion={narrated.data?.opinion} />}
           </>
         ) : loading ? (

@@ -27,6 +27,7 @@ import { ErrorState, Modal, ConfirmDialog, TabSkeleton } from '../../ui'
 import type { ConfirmDialogData } from '../../ui'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { usePointerResize } from '../../../hooks/usePointerResize'
+import { useSidebarPeek } from '../../../hooks/useSidebarPeek'
 import { localIso, fDate } from '../../../utils/format'
 import './accounts.css'
 
@@ -56,9 +57,11 @@ import { Filters, ActiveChips } from './SearchFilter'
 import type { FilterState, FilterToken } from './SearchFilter'
 import { useTransactionSurfaces } from './transactionSurfacesContext'
 import { useDataVersion } from '../../../hooks/useDataVersion'
+import { emitDataChanged } from '../../../lucius/bus'
+import { fetchCachedQuery, useQueryCache } from '../../../state/queryCache'
 import AccountModal from './AccountModal'
 import type { InstitutionOption } from './ds'
-import type { InstitutionDeleteResult } from './InstitutionManager'
+import { InstitutionManager, type InstitutionDeleteResult } from './InstitutionManager'
 import { PayeesModal } from './PayeesModal'
 // The categories admin surface is shared, not Plan's property — same rationale as Manage payees
 // living here while every tab uses payees. One implementation, several entry points.
@@ -66,12 +69,14 @@ import { CategoriesManager } from '../plan/categoriesManager'
 import { AddCategoryModal } from './AddCategoryModal'
 import type { CatKind } from './AddCategoryModal'
 import { ConfirmModal } from './ConfirmModal'
-import { ImportModal } from './ImportModal'
+import { ImportModal, type ReopenOptions } from './ImportModal'
 import { mapServerPreview } from './importHelpers'
 import { Toast } from './Toast'
+import { reconcileToastMessage } from './reconcileCadence'
 import type { AddData } from './AddRow'
 import type { RowPatch } from './TxnRow'
 import { DataInHero } from '../../dataIn/DataInHero'
+import { ReviewConfetti } from './ReviewConfetti'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { SCREEN_INTROS } from '../../intro/screenIntros'
 
@@ -154,6 +159,17 @@ interface StatementSummary {
   statement_missing_for_cycle?: boolean
 }
 
+const statementKey = (accountId: string) => `/api/accounts/${accountId}/statement`
+/** Stands in for a non-credit selection, whose banner never fetches. */
+const NO_STATEMENT_KEY = 'accounts:no-statement'
+
+async function fetchStatementSummary(accountId: string): Promise<StatementSummary | null> {
+  const res = await authFetch(statementKey(accountId))
+  if (res.status === 204) return null
+  if (!res.ok) throw new Error('Failed to load the statement summary')
+  return res.json() as Promise<StatementSummary>
+}
+
 // txPrimaryAmount is still needed for CSV export's signed-amount column (unrelated to
 // register filtering, which is now entirely server-side — see tokenFilters.ts).
 function txPrimaryAmount(t: Txn): { mag: number; ccy: string } {
@@ -230,9 +246,12 @@ export function AccountsTab({
   const { accounts, transactions, categories, payees, fx, baseCurrency } = L
 
   // Reload when the AI mutates the ledger (RouterShell bumps refreshSignal on every portfolio/ledger
-  // change). Skip the initial 0 — the hook already loads on mount.
+  // change). Only a bump AFTER mount: the shell's counter is already nonzero when this tab
+  // remounts (e.g. back from Lucius on mobile), and the hook's own mount load covers that —
+  // reacting to the stale value ran a second full reload on every tab return.
+  const mountSignalRef = useRef(refreshSignal)
   useEffect(() => {
-    if (refreshSignal) L.refresh()
+    if (refreshSignal && refreshSignal !== mountSignalRef.current) L.refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal])
 
@@ -256,7 +275,6 @@ export function AccountsTab({
   // them. "Start review" reviews everything flagged — the same set the register filter and
   // the count show; Lucius's door reviews automation rows only.
   const surfaces = useTransactionSurfaces()
-  const [reviewTotal, setReviewTotal] = useState(0)
   // The count follows the ledger bus directly: the app-level surfaces' approvals announce
   // there (the shell's refreshSignal follows it too, a beat later).
   const ledgerVersion = useDataVersion('ledger')
@@ -266,23 +284,26 @@ export function AccountsTab({
   // Everything flagged, whatever wrote it — the number beside "Needs review" must be the
   // count of what that filter shows (owner decision 2026-09-20). Lucius's "added by
   // automations" keeps its own, narrower count.
-  const loadReviewTotal = useCallback(async (isCurrent: () => boolean = () => true) => {
-    try {
-      const response = await authFetch('/api/transactions/recently-added?needs_review=true&limit=1')
-      if (!response.ok) return
-      const body = (await response.json()) as { total?: number }
-      if (isCurrent()) setReviewTotal(body.total ?? 0)
-    } catch {
-      /* the count keeps its last value */
-    }
-  }, [])
-  useEffect(() => {
-    let active = true
-    void loadReviewTotal(() => active)
-    return () => {
-      active = false
-    }
-  }, [refreshSignal, ledgerVersion, loadReviewTotal])
+  // On an account page both are that account's alone — the filter is scoped to it, so a
+  // book-wide count there promised rows the filter then didn't show (owner report 2026-10-26).
+  // Read through the query cache so coming back from another screen (Lucius → Accounts) paints
+  // the last count in the first frame: a fresh `0` hid the review pill and the line grew when the
+  // fetch landed (owner report 2026-11-06). It still revalidates on every mount and write.
+  const reviewScope = selectedId ? `&account_id=${encodeURIComponent(selectedId)}` : ''
+  // The whole response, not its total: the Dashboard reads this same key (`attentionFlags.ts`), and a
+  // bare count here drew its object on Accounts and crashed the tab (owner's phone, 2026-11-07).
+  const reviewQuery = useQueryCache<{ total?: number }>(
+    `/api/transactions/recently-added?needs_review=true${reviewScope}&limit=1`,
+    async () => {
+      const response = await authFetch(
+        `/api/transactions/recently-added?needs_review=true${reviewScope}&limit=1`,
+      )
+      if (!response.ok) throw new Error('review count unavailable')
+      return (await response.json()) as { total?: number }
+    },
+    { version: (refreshSignal ?? 0) + ledgerVersion },
+  )
+  const reviewTotal = reviewQuery.data?.total ?? 0
   const selectAccount = (id: string | null) => {
     setSelectedId(id)
     onSelectAccount?.(id)
@@ -305,6 +326,10 @@ export function AccountsTab({
   // Register column visibility (localStorage-backed) — `hidden` flows to the Register (filters
   // `cols`), the toggle/reset to the toolbar's Columns picker (rendered by Filters).
   const columnVis = useColumnVisibility()
+  // Register declutter: hidden rows are left out of the register unless this is on. A view
+  // choice for this visit, not a stored setting — a hidden row should never stay hidden from
+  // the user by an option they've forgotten they turned on.
+  const [showHidden, setShowHidden] = useState(false)
   const [adding, setAdding] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [acctModal, setAcctModal] = useState<{
@@ -390,6 +415,9 @@ export function AccountsTab({
                   name: institution.name,
                   accountCount:
                     typeof institution.account_count === 'number' ? institution.account_count : 0,
+                  accountNames: Array.isArray(institution.account_names)
+                    ? institution.account_names.filter((n): n is string => typeof n === 'string')
+                    : undefined,
                 },
               ]
             : []
@@ -410,8 +438,18 @@ export function AccountsTab({
         body: JSON.stringify({ name }),
       })
       if (!response?.ok) throw new Error('Could not rename institution')
-      const body = (await response.json()) as { id: string; name: string; account_count: number }
-      const renamed = { id: body.id, name: body.name, accountCount: body.account_count }
+      const body = (await response.json()) as {
+        id: string
+        name: string
+        account_count: number
+        account_names?: string[]
+      }
+      const renamed = {
+        id: body.id,
+        name: body.name,
+        accountCount: body.account_count,
+        accountNames: body.account_names,
+      }
       setInstitutions((current) => current.map((item) => (item.id === id ? renamed : item)))
       await refreshAccounts()
       return renamed
@@ -451,6 +489,7 @@ export function AccountsTab({
     /** B20 async: reopen this statement's review by id instead of an upload. */
     resumeStatementId?: string
     resumeFilename?: string
+    resumeUploadedAt?: string
   } | null>(null)
   const nativeImports = useSyncExternalStore(subscribeNativeImports, nativeActionCount)
   const [showPayees, setShowPayees] = useState(showPayeesRoute)
@@ -461,7 +500,16 @@ export function AccountsTab({
   } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const showToast = useCallback((m: string) => setToast(m), [])
+  // A finished reconcile is the moment the book is proven against the bank — it earns the
+  // same burst as clearing the review deck. Keyed so a second reconcile replays it.
+  const [reconcileBurst, setReconcileBurst] = useState(0)
+  useEffect(() => {
+    if (!reconcileBurst) return
+    const timer = window.setTimeout(() => setReconcileBurst(0), 4000)
+    return () => window.clearTimeout(timer)
+  }, [reconcileBurst])
   const [showCategories, setShowCategories] = useState(false)
+  const [showInstitutions, setShowInstitutions] = useState(false)
 
   useEffect(() => {
     setShowPayees(showPayeesRoute)
@@ -505,9 +553,21 @@ export function AccountsTab({
       sidebarResize.current = null
     },
   })
+  // Hover on "Show accounts" floats the rail over the page without re-docking it — the Lucius
+  // chat-history peek's twin, carrying its fixes: a close grace for the dead zone between button
+  // and panel (useSidebarPeek), and a cooldown so a cursor still resting where the collapse
+  // click landed can't fire a stale enter.
+  const peek = useSidebarPeek(!isMobile && collapsed)
+  const collapsedAtRef = useRef(0)
+  const peekEnter = () => {
+    if (Date.now() - collapsedAtRef.current < 400) return
+    peek.enter()
+  }
   const pinCollapse = (v: boolean) => {
     railPinned.current = true
     localStorage.setItem('acctSidePinned', '1')
+    if (v) collapsedAtRef.current = Date.now()
+    peek.close()
     setCollapsed(v)
   }
   const railCollapsed = isMobile || collapsed
@@ -622,6 +682,7 @@ export function AccountsTab({
         accountId: pending.accountId,
         resumeStatementId: pending.id,
         resumeFilename: pending.filename,
+        resumeUploadedAt: pending.startedAt ? new Date(pending.startedAt).toISOString() : undefined,
       })
     }
   }, [statementReviewTick, importState])
@@ -679,46 +740,23 @@ export function AccountsTab({
   // CC1: the due banner must reflect the last CLOSED statement's balance minus any payment
   // already received — never the raw live account.balance, which is negative (liability sign)
   // and folds in brand-new post-payment spending from the still-open cycle.
-  const [statementSummary, setStatementSummary] = useState<StatementSummary | null>(null)
-  // Which account the CURRENT summary describes. `selectedAccount` is a fresh object on every
-  // accounts refetch (toggling cleared, editing a row), so blanking on each run made the
-  // payment-due banner unmount and remount — the page jumped under the cursor. Blank only when
-  // the account genuinely changed; otherwise keep showing the old figures until the new ones
-  // land, which is what a refresh should look like.
-  const summaryFor = useRef<string | null>(null)
-  const [dueLoading, setDueLoading] = useState(false)
+  // Cached per card and prefetched for EVERY credit card each time the accounts list loads (on
+  // open, and after any write — the list reloads then), so opening a card paints its banner in
+  // the first frame. A late banner pushed the page down; a reserved box could only guess its
+  // height — wrong when nothing was due, and far too short once it wrapped on a phone.
+  const selectedCreditId = selectedAccount?.type === 'credit' ? selectedAccount.id : null
+  const summaryQuery = useQueryCache(
+    selectedCreditId ? statementKey(selectedCreditId) : NO_STATEMENT_KEY,
+    selectedCreditId ? () => fetchStatementSummary(selectedCreditId) : async () => null,
+    { enabled: selectedCreditId !== null },
+  )
+  const statementSummary = selectedCreditId ? (summaryQuery.data ?? null) : null
   useEffect(() => {
-    if (!selectedAccount || selectedAccount.type !== 'credit') {
-      summaryFor.current = null
-      setStatementSummary(null)
-      setDueLoading(false)
-      return
+    for (const a of accounts) {
+      if (a.type !== 'credit' || a.archived) continue
+      fetchCachedQuery(statementKey(a.id), () => fetchStatementSummary(a.id)).catch(() => {})
     }
-    if (summaryFor.current !== selectedAccount.id) {
-      summaryFor.current = selectedAccount.id
-      setStatementSummary(null)
-      setDueLoading(true)
-    }
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await authFetch(`/api/accounts/${selectedAccount.id}/statement`)
-        if (res.status === 204 || !res.ok) {
-          if (!cancelled) setStatementSummary(null)
-          return
-        }
-        const data = await res.json()
-        if (!cancelled) setStatementSummary(data)
-      } catch {
-        if (!cancelled) setStatementSummary(null)
-      } finally {
-        if (!cancelled) setDueLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [selectedAccount])
+  }, [accounts])
 
   const dueInfo = useMemo((): DueInfo | null => {
     if (!selectedAccount || selectedAccount.type !== 'credit') return null
@@ -857,14 +895,23 @@ export function AccountsTab({
     }
     const { dateFrom, dateTo } = combineDateRange(presetFrom, presetTo, filter.tokens)
     const patch = tokensToFilterPatch(filter.tokens, { resolvePayeeId })
-    L.setFilters({ accountId: selectedId, dateFrom, dateTo, ...patch })
+    L.setFilters({ accountId: selectedId, dateFrom, dateTo, showHidden, ...patch })
     // This is a fresh (non-append) view, not a loadMore append — the previously loaded scroll
     // position almost certainly no longer matches the new (often much shorter) result set, which
     // could otherwise leave the "near bottom" check in the .acct-main onScroll handler true and
     // spuriously fire loadMore() right after the filter change (REG2).
     if (mainRef.current) mainRef.current.scrollTop = 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter.preset, filter.cfM, filter.cfY, filter.ctM, filter.ctY, filter.tokens, selectedId])
+  }, [
+    filter.preset,
+    filter.cfM,
+    filter.cfY,
+    filter.ctM,
+    filter.ctY,
+    filter.tokens,
+    selectedId,
+    showHidden,
+  ])
 
   // Skip the very first run — an effect fires on mount too, which would immediately wipe out
   // a selection just restored from PENDING_SELECTION_KEY (the mobile "Ask Lucius" round trip).
@@ -1213,10 +1260,17 @@ export function AccountsTab({
   }
 
   const onReconcile = (account: Account, real: number) => {
-    void L.reconcile(account.id, { real_balance: real, against: 'cleared' })
-      .then((r) =>
-        showToast(r.adjustment ? 'Reconciled — adjustment booked' : 'Reconciled — in sync'),
-      )
+    // `account` is the row the popover rendered, so its cleared balance is the figure the user
+    // just confirmed or diffed against — sent so a screen one write behind can't book the gap.
+    void L.reconcile(account.id, {
+      real_balance: real,
+      against: 'cleared',
+      expected_balance: account.clearedBalance,
+    })
+      .then((r) => {
+        showToast(reconcileToastMessage(r.adjustment, r.cleared_balance, account.currency))
+        setReconcileBurst((n) => n + 1)
+      })
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
   }
 
@@ -1332,6 +1386,8 @@ export function AccountsTab({
     review: selList.filter((t) => t.needsReview).length,
     clear: selList.filter((t) => !t.cleared).length,
     unclear: selList.filter((t) => t.cleared).length,
+    hide: selList.filter((t) => !t.hidden).length,
+    unhide: selList.filter((t) => t.hidden).length,
   }
   const bulkCategory = (cat: string) =>
     runBulk(ids(), { category: cat }, (n) => 'Re-categorised ' + n)
@@ -1378,6 +1434,24 @@ export function AccountsTab({
       return
     }
     runBulk(reviewIds, { needs_review: false }, (n) => `${n} marked as reviewed`)
+  }
+  // Hiding drops the rows out of view unless "Show hidden" is on — then, like a move, the
+  // selection clears rather than counting rows that are no longer on screen.
+  const bulkSetHidden = (v: boolean) => {
+    const targetIds = selList.filter((t) => !!t.hidden !== v).map((t) => t.id)
+    if (targetIds.length === 0) {
+      showToast(v ? 'All selected are already hidden' : 'None of the selected are hidden')
+      return
+    }
+    runBulk(
+      targetIds,
+      { hidden: v },
+      (n) =>
+        v
+          ? `${n} hidden${showHidden ? '' : isMobile ? ' · search Status: Hidden to find them' : ' · Display › Show hidden brings them back'}`
+          : `${n} unhidden`,
+      !v || showHidden,
+    )
   }
   const bulkMemo = (text: string) =>
     runBulk(ids(), { description: text }, (n) => 'Description set on ' + n)
@@ -1636,9 +1710,18 @@ export function AccountsTab({
   }
   // B20 async: reopen a statement's review BY ID — no re-upload, reads the record's own
   // file server-side. Same response shape as importPreview (mapServerPreview).
-  const importReopenPreview = async (statementId: string, accountId?: string) => {
+  const importReopenPreview = async (
+    statementId: string,
+    accountId?: string,
+    opts: ReopenOptions = {},
+  ) => {
     const fd = new FormData()
     if (accountId) fd.append('account_id', accountId)
+    if (opts.instructions) fd.append('instructions', opts.instructions)
+    if (opts.rememberInstructions !== undefined)
+      fd.append('remember_instructions', String(opts.rememberInstructions))
+    if (opts.forceReparse) fd.append('force_reparse', 'true')
+    if (opts.background) fd.append('mode', 'async')
     const res = await authFetch(`/api/statements/${statementId}/preview`, {
       method: 'POST',
       body: fd,
@@ -1647,16 +1730,18 @@ export function AccountsTab({
     return mapServerPreview(await res.json())
   }
   // "Continue in background" (B20 async): the server-side parse outlives the connection
-  // regardless of how the modal closes, so this is purely the toast — the statements list's
-  // own polling is what actually shows the row moving from `parsing` to `ready`.
+  // regardless of how the modal closes. Tracked app-wide, BackgroundStatementNotices says it is
+  // reading and then, in the same pill, when it is ready — from any tab. Only an untrackable
+  // read (no statement id) falls back to the register's own toast.
   const importContinueInBackground = (statementId: string | null, filename?: string) => {
-    // Tracked app-wide so BackgroundStatementNotices can say when the read finishes, from any tab.
     if (statementId) {
       trackBackgroundStatement({
         id: statementId,
         accountId: importState?.accountId ?? null,
         filename,
+        startedAt: Date.now(),
       })
+      return
     }
     showToast("We'll keep reading — we'll tell you when it's ready to review.")
   }
@@ -1677,6 +1762,8 @@ export function AccountsTab({
         decisions,
         default_action: 'create',
         delete_ids: deleteIds,
+        // The owner's own Confirm on the review: book exactly what it showed and they decided.
+        reviewed: true,
       }),
     })
     if (!res.ok) throw new Error(await res.text())
@@ -1688,12 +1775,17 @@ export function AccountsTab({
     // makes the reload actually hit the server. Awaited so the Done screen's counts and the
     // refreshed register can never disagree.
     await L.refresh()
+    // A REST write is not broadcast (ADR 2026-09-29), so only THIS ledger hook reloaded — the
+    // Transactions register, Budget and Dashboard kept pre-import rows until a page reload
+    // (owner, 2026-10-26). One import moves every screen, so tell every screen.
+    emitDataChanged(['*'])
     // refusedDuplicates: rows the LEDGER refused because they duplicate something already
     // booked. Same contract as deleteErrors — the user asked for these and did not get them,
     // so the Done screen names them rather than letting "import 4" quietly become "3 imported".
     return {
       ...out,
       batchId: out.batch_id ?? null,
+      linkedNeedsReview: out.linked_needs_review ?? 0,
       deleteErrors: out.delete_errors ?? [],
       refusedDuplicates: out.refused_duplicates ?? [],
     } as {
@@ -1703,6 +1795,7 @@ export function AccountsTab({
       skipped: number
       transfers?: number
       batchId?: string | null
+      linkedNeedsReview?: number
       deleted?: number
       deleteErrors?: Array<{ id: string; error: string }>
       refusedDuplicates?: Array<{
@@ -1722,7 +1815,24 @@ export function AccountsTab({
     if (!res.ok) throw new Error(await res.text())
     const out = await res.json()
     L.refreshTxns()
+    emitDataChanged(['*'])
     return out as { updated: number }
+  }
+
+  // Undo import (Booked screen): the whole import — added rows removed, linked entries restored.
+  // A FULL refresh, like the commit's: balances and the review strip moved too.
+  const undoImportBatch = async (batchId: string) => {
+    const res = await authFetch(`/api/transactions/batches/${batchId}/rollback`, {
+      method: 'POST',
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      throw new Error(body?.detail || 'Could not undo this import — try again.')
+    }
+    const out = await res.json()
+    await L.refresh()
+    emitDataChanged(['*'])
+    return { deleted: out.deleted ?? 0, unmerged: out.unmerged ?? 0, restored: out.restored ?? 0 }
   }
 
   // payee ops
@@ -1912,6 +2022,37 @@ export function AccountsTab({
             onManagePayees={() => setShowPayees(true)}
           />
         )}
+        {peek.open && (
+          <div
+            className="acct-side-peek"
+            style={{ width: sideW }}
+            onMouseEnter={peek.enter}
+            onMouseLeave={peek.leave}
+          >
+            <Sidebar
+              accounts={accounts}
+              groups={L.groups}
+              totals={totals}
+              selectedId={selectedId}
+              netWorth={L.netWorth}
+              peek
+              collapsed={false}
+              onToggleCollapse={() => pinCollapse(false)}
+              onSelect={(id) => {
+                peek.close()
+                selectAccount(id)
+              }}
+              onAdd={() => {
+                peek.close()
+                setAcctModal({ open: true, mode: 'add', account: null })
+              }}
+              onManagePayees={() => {
+                peek.close()
+                setShowPayees(true)
+              }}
+            />
+          </div>
+        )}
 
         <main
           ref={mainRef}
@@ -1944,12 +2085,13 @@ export function AccountsTab({
                   <AccountHeader
                     account={selectedAccount}
                     dueInfo={dueInfo}
-                    dueLoading={dueLoading}
                     stats={stats}
                     menuOpen={menuOpen}
                     setMenuOpen={setMenuOpen}
                     collapsed={railCollapsed}
                     onReopen={openAccountNavigator}
+                    onReopenHover={peekEnter}
+                    onReopenLeave={peek.leave}
                     onAddTxn={handleAddTxn}
                     onEdit={() => {
                       setMenuOpen(false)
@@ -1971,17 +2113,23 @@ export function AccountsTab({
                       setMenuOpen(false)
                       setShowCategories(true)
                     }}
+                    onManageInstitutions={() => {
+                      setMenuOpen(false)
+                      void loadInstitutions()
+                      setShowInstitutions(true)
+                    }}
                     onAskLucius={onAskLucius}
                     onImport={() => {
                       setMenuOpen(false)
                       setImportState({ accountId: selectedAccount?.id ?? null })
                     }}
-                    onReviewStatement={(statementId, filename) => {
+                    onReviewStatement={(statementId, filename, uploadedAt) => {
                       setMenuOpen(false)
                       setImportState({
                         accountId: null,
                         resumeStatementId: statementId,
                         resumeFilename: filename,
+                        resumeUploadedAt: uploadedAt,
                       })
                     }}
                     onExport={() => {
@@ -1990,7 +2138,7 @@ export function AccountsTab({
                     }}
                     onReconcile={onReconcile}
                     onReview={addReviewToken}
-                    onStartReview={() => surfaces.openReview('all')}
+                    onStartReview={() => surfaces.openReview('all', selectedAccount.id)}
                   />
                 </>
               ) : (
@@ -2002,10 +2150,16 @@ export function AccountsTab({
                   baseCurrency={baseCurrency}
                   collapsed={railCollapsed}
                   onReopen={openAccountNavigator}
+                  onReopenHover={peekEnter}
+                  onReopenLeave={peek.leave}
                   onAddTxn={handleAddTxn}
                   onAdd={() => setAcctModal({ open: true, mode: 'add', account: null })}
                   onManagePayees={() => setShowPayees(true)}
                   onManageCategories={() => setShowCategories(true)}
+                  onManageInstitutions={() => {
+                    void loadInstitutions()
+                    setShowInstitutions(true)
+                  }}
                   onImport={() => setImportState({ accountId: null })}
                   onExport={() => exportCsv(filtered)}
                   onReview={addReviewToken}
@@ -2034,6 +2188,8 @@ export function AccountsTab({
                     onAddTxn={handleAddTxn}
                     showAccount={showAccount}
                     columnVis={columnVis}
+                    showHidden={showHidden}
+                    onToggleShowHidden={() => setShowHidden((v) => !v)}
                   />
                   <ActiveChips
                     filter={filter}
@@ -2073,6 +2229,7 @@ export function AccountsTab({
                 onAskLucius={onAskLucius}
                 allEmpty={allEmpty}
                 loadingTxns={L.loadingTxns}
+                reloadingRows={L.reloadingRows}
                 isLoadingMore={L.isLoadingMore}
                 onAddTxn={handleAddTxn}
                 onClearFilters={clearAll}
@@ -2095,6 +2252,8 @@ export function AccountsTab({
             onMarkCleared={() => bulkSetCleared(true)}
             onMarkUncleared={() => bulkSetCleared(false)}
             onMarkReviewed={bulkMarkReviewed}
+            onHide={() => bulkSetHidden(true)}
+            onUnhide={() => bulkSetHidden(false)}
             actionable={actionable}
             onDuplicate={() => void bulkDuplicate()}
             onMemo={bulkMemo}
@@ -2207,6 +2366,7 @@ export function AccountsTab({
             defaultAccountId={importState.accountId || undefined}
             resumeStatementId={importState.resumeStatementId}
             resumeFilename={importState.resumeFilename}
+            resumeUploadedAt={importState.resumeUploadedAt}
             onReopenPreview={importReopenPreview}
             onContinueInBackground={importContinueInBackground}
             categories={categories}
@@ -2227,6 +2387,7 @@ export function AccountsTab({
               return result
             }}
             onMarkImportReviewed={markImportBatchReviewed}
+            onUndoImport={undoImportBatch}
             payeeOptions={payeeOptions}
             payeeById={payeeNames}
             importReviewDefault={importReviewDefault}
@@ -2255,6 +2416,13 @@ export function AccountsTab({
             }}
           />
         )}
+        <InstitutionManager
+          open={showInstitutions}
+          institutions={institutions}
+          onClose={() => setShowInstitutions(false)}
+          onRename={renameInstitution}
+          onDelete={deleteInstitution}
+        />
         {showCategories && (
           <CategoriesManager
             toast={showToast}
@@ -2296,12 +2464,14 @@ export function AccountsTab({
           />
         )}
 
-        <Toast
-          message={toast}
-          onDone={() => setToast(null)}
-          anchor="register"
-          railWidth={railCollapsed ? 0 : sideW}
-        />
+        {reconcileBurst > 0 && (
+          <div key={reconcileBurst} className="acct-reconcile-burst">
+            <ReviewConfetti />
+          </div>
+        )}
+        {/* Centred on the app window, the same line as every other floating pill (the
+            background-read notices included) — not on the register (owner, 2026-10-25). */}
+        <Toast message={toast} onDone={() => setToast(null)} aboveBulkBar={selectedIds.size > 0} />
       </div>
     </>
   )

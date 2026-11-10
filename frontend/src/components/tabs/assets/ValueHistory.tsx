@@ -4,6 +4,7 @@
 // removed (never the last one); the purchase point opens the Purchase editor. A phone gets a
 // two-line list whose amounts line up in one column — one line when there's no note or change.
 import { useState } from 'react'
+import { useMaskText } from '../../../utils/amountMask'
 import type { AssetMark, OwnedAsset } from '../../../types/assets'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { ConfirmDialog, EmptyState, Text } from '../../ui'
@@ -11,6 +12,7 @@ import * as api from './api'
 import { canRemoveMark, fmt, fullDate } from './assetsData'
 import { SaveError, useEditorSave } from './editorKit'
 import { CorrectValueDialog } from './ValueDialogs'
+import { ChevronRight } from '../../../ui/icons'
 
 export interface ValueHistoryProps {
   a: OwnedAsset
@@ -66,6 +68,7 @@ interface HistoryViewProps {
 
 /** Desktop: the whole row opens its editor; the trailing › is its keyboard/AT control. */
 function HistoryTable({ rows, onOpen }: HistoryViewProps) {
+  const maskText = useMaskText()
   return (
     <div className="as-tbl-wrap">
       <div className="as-tbl-scroll">
@@ -86,7 +89,7 @@ function HistoryTable({ rows, onOpen }: HistoryViewProps) {
               <tr key={m.id} className="data" onClick={() => onOpen(m)}>
                 <td className="l">{fullDate(m.date)}</td>
                 <td className="money">{fmt(m.value)}</td>
-                <td className="l dim">{note || '—'}</td>
+                <td className="l dim not-money">{note || '—'}</td>
                 <td className="money">
                   {change == null ? (
                     <Text size="sm" tone="faint">
@@ -96,10 +99,10 @@ function HistoryTable({ rows, onOpen }: HistoryViewProps) {
                     <Change change={change} />
                   )}
                 </td>
-                <td>
+                <td className="not-money">
                   {/* Its click bubbles to the row, which opens the editor. */}
-                  <button type="button" className="as-row-chevron" aria-label={label}>
-                    ›
+                  <button type="button" className="as-row-chevron" aria-label={maskText(label)}>
+                    <ChevronRight size="1em" aria-hidden="true" />
                   </button>
                 </td>
               </tr>
@@ -114,6 +117,7 @@ function HistoryTable({ rows, onOpen }: HistoryViewProps) {
 /** Phone: each row is one button — date and value, then note and change, a › at the end. No
  *  "—" stands in for a missing note or change; with neither, the row is one line. */
 function HistoryList({ rows, onOpen }: HistoryViewProps) {
+  const maskText = useMaskText()
   return (
     <div className="as-history-list">
       {rows.map(({ m, change, note, label }) => (
@@ -123,7 +127,7 @@ function HistoryList({ rows, onOpen }: HistoryViewProps) {
           className={
             note || change != null ? 'as-history-list-row' : 'as-history-list-row one-line'
           }
-          aria-label={label}
+          aria-label={maskText(label)}
           onClick={() => onOpen(m)}
         >
           <Text size="sm" weight={600} className="as-history-when">
@@ -133,7 +137,7 @@ function HistoryList({ rows, onOpen }: HistoryViewProps) {
             {fmt(m.value)}
           </Text>
           <span className="as-row-chevron" aria-hidden="true">
-            ›
+            <ChevronRight size="1em" />
           </span>
           {note && (
             <Text size="xs" tone="faint" truncate title={note} className="as-history-note">

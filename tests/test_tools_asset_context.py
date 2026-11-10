@@ -386,6 +386,26 @@ def test_neither_held_nor_watched(env):
     assert res["position"] is None
 
 
+def test_carries_the_users_thesis_and_null_without_one(env):
+    from backend.services import investment_theses
+
+    inst = _seed_instrument_and_position()
+    res, _ = call("get_asset_context", instrument_id=inst["id"])
+    assert res["thesis"] is None
+    investment_theses.apply_thesis_change(
+        {
+            "op": "set",
+            "instrument_id": inst["id"],
+            "fields": {"role": "core", "reason": "Steady compounder", "stop_below": 80.0},
+        }
+    )
+    res, _ = call("get_asset_context", instrument_id=inst["id"])
+    assert res["thesis"]["role"] == "core"
+    assert res["thesis"]["reason"] == "Steady compounder"
+    assert res["thesis"]["stop_below"] == 80.0
+    assert res["thesis"]["trim_above"] is None
+
+
 # ── no intel signal yet ──────────────────────────────────────────────────────────
 
 

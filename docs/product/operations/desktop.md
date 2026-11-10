@@ -72,10 +72,11 @@ download screens instead. Your last local book is remembered; switch back from t
 **Connection** screen (**On this computer**).
 
 When the app starts, it waits up to a minute for the server to answer, so a server on this
-computer that starts at login (`onw autostart install`) has time to come up. If it still can't be
-reached, you see **Can't reach your server.** with **Try again**, **Change connection…** and
-**Use a book on this computer**. The app keeps checking in the background on that screen, and
-opens the server by itself as soon as it answers.
+computer that starts at login (`onw autostart on`) has time to come up. If it still can't be
+reached, you see **Can't reach your server.** with **Try again** and **Change connection…** (which
+also offers **On this computer**, to use a local book instead). The app keeps checking in the background on that screen — it
+shows **Trying again in 8s…** counting down to the next check, waiting a little longer each time up
+to 15 seconds — and opens the server by itself as soon as it answers.
 
 ## Keep it running in the background
 
@@ -94,7 +95,12 @@ turn them on. Change them later in **Settings → Desktop → Background activit
 
 **Keep computer awake** (Settings → Desktop → Background activity, or the **Keep awake** switch on
 Automations) stops idle sleep while the app runs, so Automations run on time. The display can
-still turn off; closing a laptop lid still sleeps. Off by default; local books only.
+still turn off; closing a laptop lid still sleeps (unless it's plugged in with an external display,
+where Keep awake still holds). Off by default.
+
+Running the server yourself (`onw`) on macOS or Windows? The same **Keep awake** switch appears on
+Automations in the browser and holds that computer awake while the server runs. It isn't offered
+on Linux or in Docker — use the machine's own power settings there.
 
 With background mode off, closing the window quits the app on Windows and Linux. On macOS,
 closing the window only hides it; the app keeps running until you quit.
@@ -144,11 +150,29 @@ The app checks for a new version 30 seconds after it starts and every 4 hours af
 
 1. When one is out, it downloads in the background — nothing to answer — and the menu shows
    **Downloading Update…**.
-2. When it's ready, you get a notification and the menu shows **Restart to Update to Open Net
-   Worth X**. Choose it to restart now, or keep working: the update installs the next time you
+2. When it's ready, you get a notification, the menu shows **Restart to Update**, and a small
+   **Open Net Worth X is ready** bar appears at the bottom of the window with **Restart** and
+   **Later** (the bar shows even if notifications are off; **Restart** asks you to confirm with
+   **Restart Now**). Restart now, or keep working: the update installs the next time you
    quit. The app never restarts on its own, and it closes your book safely before installing — a
-   small **Installing Open Net Worth X…** window shows while it does.
-3. After restarting, a notification confirms "Open Net Worth was updated to X."
+   small **Installing Open Net Worth X…** window shows while it does. On a Mac the install finishes
+   a few seconds after the app closes (on a busy computer it can take a few minutes), so the app
+   leaves a notification, **Installing Open Net Worth X…**, saying your book is closed safely and
+   that it reopens by itself when it's done (if notifications are off, it stays silent). If you
+   open it again during the install, the same notification appears and the app reopens by itself,
+   updated, once it's done.
+   If an even newer version comes out while one is waiting, the app keeps checking and swaps the
+   newer one in. Choosing **Restart to Update** also checks first: when a newer version is out, it
+   downloads that one and asks you to restart into it, so you never land on a version that
+   immediately offers the next.
+3. After restarting, a notification confirms "Open Net Worth was updated to X.", and the window
+   shows **What's new in X** once: the release's highlights, with **All changes** to open its full
+   release notes. With no highlights to show (a release without any, or you're offline), it says only which version you're on and offers **See what's new** to open the notes.
+
+When a new version can't download by itself — this copy can't update itself (a Linux `.deb`, or
+an AppImage in a read-only folder), the download failed, or you chose **Later** — the bar says
+**Open Net Worth X is available** instead, and **Update** opens the same choice as the menu's
+**Update Available…**: download and install it, open the download page, or skip that version.
 
 To check right away: **Open Net Worth → Check for Updates…** on macOS, **Help → Check for
 Updates…** on Windows and Linux. A manual check asks first — **Download and Install**, **Skip This
@@ -184,6 +208,9 @@ On macOS the window has no separate title bar: the traffic-light buttons sit in 
 next to a sidebar toggle and Back / Forward arrows. Drag an empty part of the bar to move the
 window; double-click it to zoom. Windows and Linux use the system title bar and a menu bar.
 
+The window reopens at the size and position you left it, zoomed or maximized if it was. If that
+spot was on a display that is no longer connected, it opens at the same size on the main display.
+
 | Action | macOS | Windows / Linux |
 |---|---|---|
 | Reload / Force Reload (View menu) | <kbd>⌘</kbd><kbd>R</kbd> / <kbd>⇧</kbd><kbd>⌘</kbd><kbd>R</kbd> | <kbd>Ctrl</kbd><kbd>R</kbd> or <kbd>F5</kbd> / <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>R</kbd> |
@@ -194,7 +221,8 @@ window; double-click it to zoom. Windows and Linux use the system title bar and 
 | Close Window (hides it, like the red button) | <kbd>⌘</kbd><kbd>W</kbd> | not applicable |
 | Keyboard Shortcuts (Help menu) | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>/</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>/</kbd> |
 | Open Lucius | <kbd>⌘</kbd><kbd>L</kbd> | <kbd>Ctrl</kbd><kbd>L</kbd> |
-| New transaction | <kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>N</kbd> |
+| New Lucius conversation — in the Lucius side panel when it's open, otherwise on the Lucius screen | <kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>N</kbd> |
+| New transaction | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>N</kbd> |
 | Import statement or receipt | <kbd>⌘</kbd><kbd>O</kbd> | <kbd>Ctrl</kbd><kbd>O</kbd> |
 | Export book | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd> |
 | Settings | <kbd>⌘</kbd><kbd>,</kbd> | <kbd>Ctrl</kbd><kbd>,</kbd> |
@@ -210,7 +238,7 @@ Where things are in the menus:
 - **Open Net Worth** (macOS only): About, **Settings…**, **Check for Updates…**,
   **Background and startup…**, Quit.
 - **File**: **Connection…**, **Open book folder…**, **Open in browser**, **Import statement or
-  receipt…**, **Export book…**, **New transaction**. On Windows and Linux, File also holds
+  receipt…**, **Export book…**, **New conversation**, **New transaction**. On Windows and Linux, File also holds
   **Settings…**, **Background and startup…** and Quit.
 - **View**: command palette, **Toggle Sidebar**, Lucius, **Review documents**, zoom, reload, full
   screen.

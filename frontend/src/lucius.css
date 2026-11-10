@@ -7,6 +7,15 @@
    dropmask/resizer internal raw 5 kept; drag-ghost → --z-toast (top of stack).
 */
 
+/* How far the orb has turned to its reconnecting colour, registered so it can fade: an unregistered
+   property has no in-between value and jumps. Without @property support it still jumps, nothing
+   worse. */
+@property --lx-orb-warn {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 @layer legacy {
   /* ════════════════ Lucius dock ════════════════ */
   /* The floating Ask-Lucius dock sits above modals (--z-modal) and toasts (--z-toast) — it's the
@@ -63,6 +72,174 @@
   }
   .lx-dock-pill .acct-spark {
     color: #fff;
+  }
+  /* The pill with voice calls on: Call │ Ask Lucius at rest, and the whole call inside it. It
+     is right-anchored, so it grows leftward; its width steps by mode, never by content. */
+  .lx-dock-pill--call {
+    --lx-pill-w: 11rem;
+    width: var(--lx-pill-w);
+    min-height: var(--tap-min);
+    padding: 0 var(--space-2);
+    gap: var(--space-2);
+    justify-content: flex-start;
+    overflow: hidden;
+    cursor: default;
+  }
+  /* No inner top highlight: on this pill it read as a white border round the call (owner,
+     2026-11-03). The drop shadows stay. */
+  .lx-dock-pill--call,
+  .lx-dock-pill--call:hover {
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.3),
+      0 10px 26px rgba(0, 0, 0, 0.5);
+  }
+  .lx-dock-pill--call[data-mode='calling'],
+  .lx-dock-pill--call[data-mode='live'],
+  .lx-dock-pill--call[data-mode='reconnecting'] {
+    --lx-pill-w: 13rem;
+  }
+  /* Room for the words beside the bars: "Reconnecting…" was cut to "Reconne…". */
+  .lx-dock-pill--call[data-mode='reconnecting'],
+  .lx-dock-pill--call[data-mode='poor'] {
+    --lx-pill-w: 16.5rem;
+  }
+  .lx-dock-pill--call[data-mode='attention'] {
+    --lx-pill-w: 17.5rem;
+  }
+  .lx-dock-pill--call[data-mode='ended'] {
+    --lx-pill-w: 11rem;
+    padding: 0 var(--space-5);
+  }
+  .lx-dock-pill--call[data-mode='problem'] {
+    --lx-pill-w: 21rem;
+  }
+  .lx-dock-pill--call .lx-orb {
+    --lx-orb-base: #fff;
+  }
+  /* Beats .lx-call-btn's composer fill, which is declared later in this file. */
+  .lx-call-btn.lx-call-btn--pill {
+    width: 2rem;
+    height: 2rem;
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+  }
+  .lx-dock-pill-ask,
+  .lx-dock-pill-open {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    flex: 1;
+    align-self: stretch;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    padding: 0 var(--space-2);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .lx-dock-pill-ask {
+    padding-right: var(--space-4);
+  }
+  .lx-dock-pill-time {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+    /* The font's letters sit low in their box: centred boxes still read as words below the orb. */
+    translate: 0 -1px;
+  }
+  .lx-dock-pill-btn {
+    width: 1.75rem;
+    height: 1.75rem;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    cursor: pointer;
+  }
+  .lx-dock-pill-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .lx-dock-pill-btn[aria-pressed='true'] {
+    background: #fff;
+    color: var(--lucius);
+  }
+  .lx-dock-pill-btn--end {
+    background: var(--bad);
+  }
+  .lx-dock-pill-review {
+    flex: none;
+    border: none;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--lucius);
+    font: inherit;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    padding: var(--space-1) var(--space-3);
+    cursor: pointer;
+  }
+  .lx-dock-pill-alert {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bad);
+    margin-left: var(--space-2);
+  }
+  .lx-dock-pill-alert[data-ready] {
+    background: var(--good);
+  }
+  @media (hover: hover) {
+    .lx-dock-pill--call:hover {
+      transform: none;
+    }
+    .lx-call-btn.lx-call-btn--pill:hover,
+    .lx-dock-pill-btn:not(:disabled, [aria-pressed='true'], .lx-dock-pill-btn--end):hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-dock-pill--call {
+      transition:
+        width 0.26s cubic-bezier(0.32, 0.72, 0, 1),
+        opacity 0.2s ease;
+    }
+    .lx-dock-pill--call > * {
+      animation: lx-pill-in 0.16s ease 0.1s both;
+    }
+    .lx-dock-pill--call[data-mode='attention'] {
+      animation: lx-dock-pill-attn 1.6s ease-in-out infinite;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lx-dock-pill--call[data-mode='attention'] {
+      outline: 2px solid #fff;
+      outline-offset: 2px;
+    }
+  }
+  @keyframes lx-pill-in {
+    from {
+      opacity: 0;
+      transform: translateX(6px);
+    }
+  }
+  @keyframes lx-dock-pill-attn {
+    50% {
+      box-shadow:
+        0 0 0 4px rgba(255, 255, 255, 0.35),
+        0 10px 26px rgba(0, 0, 0, 0.5);
+    }
   }
   @media (hover: hover) {
     .lx-dock-pill:hover {
@@ -345,7 +522,7 @@
     display: block;
   }
   .lx-aw.on .lx-aw-toggle {
-    color: var(--primary);
+    color: var(--ink);
   }
   .lx-aw-label {
     white-space: nowrap;
@@ -626,6 +803,16 @@
     width: 26px;
     height: 26px;
   }
+  /* The side panel is one drop target, so its mask covers the whole panel above every layer. */
+  .lx-dropmask--side {
+    inset: 8px;
+    z-index: 50;
+    font-size: 14px;
+  }
+  .lx-dropmask--side svg {
+    width: 34px;
+    height: 34px;
+  }
   /* The screen-awareness bar keeps its own card (border + --bg-2 fill, see .lx-scope below) —
    it is a distinct control with a toggle and a Peek panel, not a band of the text field. */
   /* Vertical stack: editor spans full width on top; toolbar row sits below. */
@@ -714,6 +901,1116 @@
     display: block;
     width: 16px;
     height: 16px;
+  }
+  /* Voice calls (the `voice_calls` flag). The Call button takes the Send slot while the box is
+     empty; during a call the call bar replaces the composer card's contents; a reason a call
+     can't start or stopped is a notice strip ABOVE the card, never inside the toolbar (owner,
+     2026-11-03). */
+  .lx-call-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 50%;
+    border: none;
+    /* The same circle as Send — it is the same slot, so the same look (owner, 2026-11-03). */
+    background: var(--cta);
+    color: var(--ink-on-cta);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex: none;
+  }
+  .lx-call-btn svg {
+    display: block;
+  }
+  /* A phone's call away from the Lucius tab: one round button above the tab bar, and a call's
+     problem above that. */
+  .lx-call-float {
+    position: fixed;
+    right: var(--space-4);
+    bottom: calc(24px + var(--safe-b));
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-2);
+    max-width: calc(100vw - 2 * var(--space-4));
+    pointer-events: none;
+  }
+  .lx-call-float > * {
+    pointer-events: auto;
+  }
+  .lx-call-float .lx-call-notice {
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  }
+  .lx-call-btn.lx-call-btn--fab {
+    width: 3rem;
+    height: 3rem;
+    flex: none;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      0 6px 16px rgba(0, 0, 0, 0.22);
+  }
+  .lx-call-fab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 3rem;
+    padding: 0 var(--space-4) 0 var(--space-2);
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--cta);
+    color: var(--ink-on-cta);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      0 6px 16px rgba(0, 0, 0, 0.22);
+  }
+  .lx-call-fab .lx-orb {
+    --lx-orb-size: 2rem;
+  }
+  /* A response to the press: without one a tap looked like nothing until the call rang. A darker
+     or lighter shade, not reversed colours, which on a same-coloured page made the button vanish. */
+  .lx-call-btn:active,
+  .lx-call-fab:active {
+    background: var(--cta-hover);
+  }
+  .lx-call-btn.lx-call-btn--pill:active {
+    background: rgba(255, 255, 255, 0.34);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-call-btn,
+    .lx-call-fab {
+      transition:
+        scale 0.12s ease,
+        background-color 0.12s ease;
+    }
+    .lx-call-btn:active,
+    .lx-call-fab:active {
+      scale: 0.94;
+    }
+  }
+  .lx-call-fab-text {
+    font-variant-numeric: tabular-nums;
+  }
+  /* The call's big view: `--screen` is the phone's full-screen call, `--card` takes the composer's
+     place on a computer so the chat above stays readable. One look on every surface. */
+  .lx-callstage {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    color: var(--ink);
+    outline: none;
+  }
+  /* The layout lives one level in: a container query styles what is INSIDE the container. */
+  .lx-callstage-inner {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-5);
+  }
+  .lx-callstage--screen .lx-callstage-inner {
+    justify-content: space-between;
+  }
+  /* The strip is the top of the message card, parted from the box below by space alone — no
+     separator (owner, 2026-11-03). No padding of its own: the card's is around it, so the orb
+     sits the same distance from the card's top and left edges. */
+  .lx-callstage--card {
+    padding: 0;
+    margin-bottom: var(--space-6);
+  }
+  .lx-callstage--screen {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-toast) - 1);
+    padding: max(var(--space-6), var(--safe-t)) max(var(--space-6), var(--safe-r))
+      max(var(--space-8), var(--safe-b)) max(var(--space-6), var(--safe-l));
+    background:
+      radial-gradient(
+        circle at 50% 42%,
+        color-mix(in srgb, var(--lucius) 14%, transparent),
+        transparent 60%
+      ),
+      var(--bg);
+  }
+  /* The full-screen call's light, whose turn it is at a glance (VoiceCallGlow). Under the call,
+     never in its way: the levels only ever change opacity, which costs a phone nothing. */
+  .lx-callstage--screen .lx-callstage-inner {
+    position: relative;
+    z-index: 1;
+  }
+  .lx-callglow {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .lx-callglow-you,
+  .lx-callglow-lucius {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    /* Along the edges, heaviest at the bottom, gone before the top: iOS paints the status bar
+       itself in the plain background, so light on the page's top edge draws a line under it
+       (owner, 2026-11-06). Boosted because real speech uses only part of the level's range. */
+    -webkit-mask-image: linear-gradient(to top, #000 28%, transparent 72%);
+    mask-image: linear-gradient(to top, #000 28%, transparent 72%);
+  }
+  /* You: light rising from the bottom, higher at the sides and dipping in the middle, so its top
+     curves down rather than up (owner, 2026-11-06). Low and dense, as reaching halfway up in one
+     long ramp read as an even wash, with a long tail of stops, as a quick fall-off drew an edge you
+     could trace. Follows the level itself: squared, normal speech came out too pale. */
+  .lx-callglow-you {
+    -webkit-mask-image: none;
+    mask-image: none;
+    inset: 0 -12%;
+    background:
+      radial-gradient(
+        70% 50% at 2% 100%,
+        color-mix(in srgb, var(--accent) 56%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 40%, transparent) 34%,
+        color-mix(in srgb, var(--accent) 18%, transparent) 62%,
+        color-mix(in srgb, var(--accent) 5%, transparent) 84%,
+        transparent 100%
+      ),
+      radial-gradient(
+        62% 35% at 98% 100%,
+        color-mix(in srgb, var(--accent) 56%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 40%, transparent) 34%,
+        color-mix(in srgb, var(--accent) 18%, transparent) 62%,
+        color-mix(in srgb, var(--accent) 5%, transparent) 84%,
+        transparent 100%
+      ),
+      linear-gradient(
+        to top,
+        color-mix(in srgb, var(--accent) 52%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 34%, transparent) 9%,
+        color-mix(in srgb, var(--accent) 14%, transparent) 16%,
+        color-mix(in srgb, var(--accent) 4%, transparent) 22%,
+        transparent 26%
+      );
+    opacity: min(0.85, calc(var(--lx-orb-you, 0) * 1.05));
+    transform-origin: bottom;
+    transform: scaleY(calc(0.76 + var(--lx-orb-you, 0) * 0.24));
+    transition: opacity 0.2s ease;
+  }
+  /* While Lucius talks the light is his: talking over him lights the mic alone (owner, 2026-11-06). */
+  .lx-callglow[data-lucius-talking] .lx-callglow-you {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-callglow-you {
+      animation: lx-callglow-drift 9s ease-in-out infinite alternate;
+    }
+  }
+  @keyframes lx-callglow-drift {
+    from {
+      translate: -7% 0;
+    }
+    to {
+      translate: 7% 0;
+    }
+  }
+  .lx-callglow-lucius {
+    /* The phone's own corners, or the light cuts across them. */
+    border-radius: 0 0 3.5rem 3.5rem;
+    box-shadow:
+      inset 0 -6px 36px 2px color-mix(in srgb, var(--lucius) 82%, transparent),
+      inset 0 -26px 96px -6px color-mix(in srgb, var(--lucius) 62%, transparent);
+    opacity: min(1, calc(var(--lx-orb-lucius, 0) * 1.3));
+  }
+  .lx-callglow-wave {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    width: 120vmax;
+    height: 120vmax;
+    margin: -60vmax 0 0 -60vmax;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--lucius) 60%, transparent),
+      transparent 65%
+    );
+    opacity: 0;
+  }
+  /* No moving levels for someone who asked for less motion: a steady light says the same thing. */
+  @media (prefers-reduced-motion: reduce) {
+    .lx-callglow[data-speaker='you']:not([data-lucius-talking]) .lx-callglow-you,
+    .lx-callglow[data-speaker='lucius'] .lx-callglow-lucius {
+      opacity: 0.7;
+    }
+  }
+  .lx-callstage-top {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .lx-callstage-clock {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .lx-callstage--screen .lx-callstage-clock {
+    font-size: var(--text-md);
+  }
+  /* The clock's own row on the card; on the full screen, centred between the two round buttons. */
+  .lx-callstage-when {
+    display: contents;
+  }
+  .lx-callstage--screen .lx-callstage-when {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+  }
+  .lx-callstage--screen .lx-callstage-clock {
+    flex: none;
+  }
+  .lx-callstage--screen .lx-callstage-top > .lx-callstage-min {
+    border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+    background: color-mix(in srgb, var(--bg) 45%, transparent);
+    color: var(--ink);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
+  }
+  .lx-callstage-signal {
+    --lx-signal-on: var(--good);
+    --lx-signal-off: color-mix(in srgb, var(--ink) 16%, transparent);
+    flex: none;
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+  }
+  .lx-callstage-signal[data-bars='1'] {
+    --lx-signal-on: var(--warn);
+  }
+  /* No network: red, never a stale green. */
+  .lx-callstage-signal[data-bars='0'] {
+    --lx-signal-on: var(--bad);
+  }
+  /* Amber and red would vanish on the pill's colour; its words say which. */
+  .lx-dock-pill--call .lx-callstage-signal {
+    --lx-signal-on: #fff;
+    --lx-signal-off: rgba(255, 255, 255, 0.3);
+  }
+  /* Whole pixels only: at 3.5px browsers rounded the bars to 4, 3, 4, 3 wide. */
+  .lx-callstage-signal > span {
+    width: 3px;
+    border-radius: 99px;
+    background: var(--lx-signal-off);
+    transition: background-color 0.3s ease;
+  }
+  .lx-callstage-signal > span:nth-child(1) {
+    height: 5px;
+  }
+  .lx-callstage-signal > span:nth-child(2) {
+    height: 8px;
+  }
+  .lx-callstage-signal > span:nth-child(3) {
+    height: 11px;
+  }
+  .lx-callstage-signal > span:nth-child(4) {
+    height: 14px;
+  }
+  /* Lost and poor both light the first bar: the colour says which. */
+  .lx-callstage-signal[data-bars='0'] > span:nth-child(1),
+  .lx-callstage-signal[data-bars='1'] > span:nth-child(1),
+  .lx-callstage-signal[data-bars='3'] > span:nth-child(-n + 3),
+  .lx-callstage-signal[data-bars='4'] > span {
+    background: var(--lx-signal-on);
+  }
+  .lx-callstage-min {
+    width: var(--tap-min);
+    height: var(--tap-min);
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .lx-callstage-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+  }
+  /* Its height is kept while empty, so nothing jumps when it appears. */
+  .lx-callstage-line {
+    margin: var(--space-3) 0 0;
+    min-height: 1.5em;
+    font-size: var(--text-sm);
+    color: var(--muted);
+    text-align: center;
+  }
+  .lx-callstage--screen .lx-callstage-line {
+    margin-top: var(--space-6);
+    font-size: var(--text-lg);
+  }
+  /* The ring and halo reach past the orb's box: keep the line clear of them. */
+  .lx-callstage--screen .lx-callstage-body {
+    gap: var(--space-8);
+  }
+  /* Ended: the buttons stay, dimmed and off, for the moment "Call ended" shows — gone, they
+     left the orb looking off-centre (owner, 2026-11-03). */
+  .lx-callstage-controls[data-ended] {
+    opacity: 0.7;
+    transition: opacity 0.4s ease;
+  }
+  .lx-callstage-min[data-ended] {
+    visibility: hidden;
+  }
+  .lx-callstage-controls {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: var(--space-8);
+  }
+  .lx-callstage-ctl {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .lx-callstage-btn {
+    --lx-callstage-btn: var(--tap-min);
+    width: var(--lx-callstage-btn);
+    height: var(--lx-callstage-btn);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--surface2);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .lx-callstage-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .lx-callstage-btn[aria-pressed='true'] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
+  }
+  .lx-callstage-btn--end {
+    border-color: var(--bad);
+    background: var(--bad);
+    color: var(--ink-on-cta);
+  }
+  /* The phone's full screen, laid out like the voice modes people know (owner, 2026-11-06): the mic
+     big and raised on its own, the rest small along the bottom, and End alone on the right. */
+  .lx-callstage--screen .lx-callstage-controls {
+    align-self: stretch;
+    display: grid;
+    grid-template-columns: auto minmax(0, auto) 1fr auto auto;
+    align-items: center;
+    column-gap: var(--space-2);
+    row-gap: var(--space-4);
+  }
+  .lx-callstage-attachnote {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--muted);
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+  .lx-callstage-ctl--mic {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+  .lx-callstage-ctl--attach,
+  .lx-callstage-ctl--model,
+  .lx-callstage-ctl--type,
+  .lx-callstage-ctl--end {
+    grid-row: 3;
+  }
+  .lx-callstage-ctl--attach {
+    grid-column: 1;
+  }
+  .lx-callstage-ctl--model {
+    grid-column: 2;
+    min-width: 0;
+    align-items: stretch;
+  }
+  .lx-callstage-ctl--type {
+    grid-column: 4;
+  }
+  .lx-callstage-ctl--end {
+    grid-column: 5;
+  }
+  /* The sheet behind the gear. */
+  .lx-callsettings {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .lx-callsettings-scrim {
+    position: absolute;
+    inset: 0;
+    border: none;
+    background: color-mix(in srgb, #000 28%, transparent);
+    cursor: default;
+  }
+  .lx-callsettings-sheet {
+    position: relative;
+    max-height: 90dvh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) max(var(--space-4), var(--safe-r)) max(var(--space-8), var(--safe-b))
+      max(var(--space-4), var(--safe-l));
+    border-radius: 1.75rem 1.75rem 0 0;
+    background: var(--bg);
+    /* Pull down to dismiss (useSheetDragToDismiss). */
+    touch-action: none;
+  }
+  .lx-callsettings-handle {
+    flex: none;
+    align-self: center;
+    width: 2.25rem;
+    height: 0.25rem;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--ink) 22%, transparent);
+  }
+  .lx-callsettings-head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--tap-min);
+    margin-bottom: var(--space-3);
+  }
+  .lx-callsettings-head .lx-callstage-min {
+    position: absolute;
+    left: 0;
+    color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  }
+  .lx-callsettings-head h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: 600;
+  }
+  .lx-callsettings-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: calc(var(--tap-min) * 1.25);
+    padding: var(--space-2) var(--space-5);
+    border-radius: 1.5rem;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    font-size: var(--text-md);
+  }
+  /* Whoever's talking, above the mic: three lines, the newest kept in view. */
+  .lx-callcaption {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + var(--space-3));
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    height: 4.5em;
+    overflow: hidden;
+    font-size: var(--text-md);
+    line-height: 1.5;
+    text-align: center;
+    color: var(--ink);
+    pointer-events: none;
+  }
+  .lx-callcaption > span {
+    flex: none;
+  }
+  /* Past three lines, the top line fades out. Not blurred: that smeared the words (owner, 2026-11-07). */
+  .lx-callcaption[data-long] {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 1.5em);
+    mask-image: linear-gradient(to bottom, transparent, #000 1.5em);
+  }
+  .lx-callcaption[data-who='you'] {
+    font-style: italic;
+  }
+  .lx-callstage--screen .lx-callstage-controls {
+    position: relative;
+  }
+  /* Your words in the chat before they become your message. */
+  .lx-callheard-msg {
+    font-style: italic;
+    opacity: 0.75;
+  }
+  /* A label with its Beta pill, both on one centre line. */
+  .lx-beta-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .lx-callsettings-value {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    color: var(--muted);
+    text-align: right;
+  }
+  .lx-callsettings-value svg {
+    flex: none;
+  }
+  /* The phone's own menu, opened by tapping anywhere on the row. 16px: iOS zooms in on less. */
+  .lx-callsettings-row select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  /* Frosted, so the call's light passes through them (owner, 2026-11-06). */
+  .lx-callstage--screen .lx-callstage-ctl--mic .lx-callstage-btn {
+    --lx-callstage-btn: calc(var(--tap-min) * 1.5);
+  }
+  .lx-callstage--screen .lx-callstage-btn {
+    background: color-mix(in srgb, var(--bg) 45%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
+  }
+  /* The mic's light: only while you talk, over Lucius too, and never for his voice (owner,
+     2026-11-06). Squared like the glow so a quiet line stays dark. Under the icon, and never in
+     the way of a tap. */
+  .lx-callstage--screen .lx-callstage-btn {
+    position: relative;
+  }
+  .lx-callstage--screen .lx-callstage-btn svg {
+    position: relative;
+  }
+  .lx-callstage-miclight {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 38%, transparent);
+    box-shadow: 0 0 20px 4px color-mix(in srgb, var(--accent) 70%, transparent);
+    opacity: calc(var(--lx-orb-you, 0) * var(--lx-orb-you, 0));
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lx-callstage-miclight {
+      opacity: 0;
+    }
+    .lx-callstage-miclight[data-speaker='you'] {
+      opacity: 0.8;
+    }
+  }
+  .lx-callstage--screen .lx-callstage-btn[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--ink) 72%, transparent);
+    border-color: transparent;
+  }
+  .lx-callstage--screen .lx-callstage-btn--end {
+    background: color-mix(in srgb, var(--bad) 74%, transparent);
+    border-color: transparent;
+  }
+  .lx-callstage-label {
+    font-size: var(--text-xs);
+    color: var(--muted);
+  }
+  /* Icons alone on the full call screen; each button still has its name for a screen reader. */
+  .lx-callstage--screen .lx-callstage-label {
+    display: none;
+  }
+  @media (hover: hover) {
+    .lx-callstage-min:hover {
+      background: var(--surface2);
+      color: var(--ink);
+    }
+    .lx-callstage-btn:not(:disabled, [aria-pressed='true'], .lx-callstage-btn--end):hover {
+      background: var(--hover-surface2);
+    }
+  }
+  /* The strip's heading, hidden everywhere but the wide strip. */
+  .lx-callstage-name,
+  .lx-callstage-sub {
+    display: none;
+  }
+  /* A wide card is one strip: orb | "Lucius" over the status | Mute End | minimise. The two
+     text lines sit as one block on the orb's middle (owner, 2026-11-03). */
+  @container (min-width: 16rem) {
+    .lx-callstage--card .lx-callstage-inner {
+      display: grid;
+      /* Orb, words, bars, controls. The expand button (phone only) opens a fifth column; without
+         it, none is held. */
+      grid-template-columns: auto 1fr auto auto;
+      grid-template-rows: 1fr auto auto 1fr;
+      /* The stacked layout's gap would also space these rows: 36px of air above and below. */
+      row-gap: 0;
+      column-gap: var(--space-4);
+      align-items: center;
+      justify-items: start;
+    }
+    .lx-callstage--card .lx-callstage-top,
+    .lx-callstage--card .lx-callstage-body {
+      display: contents;
+    }
+    .lx-callstage--card .lx-callstage-clock,
+    .lx-callstage--card .lx-callstage-line,
+    .lx-callstage--card .lx-callstage-label {
+      display: none;
+    }
+    /* 14px to the name: 10 read cramped beside the bigger orb, 20 loose beside this one. */
+    .lx-callstage--card .lx-orb {
+      /* Send's size, like the buttons beside it: one row of equal circles, none outsizing the
+         composer's own (owner, 2026-11-03). */
+      --lx-orb-size: 1.75rem;
+      grid-area: 1 / 1 / 5 / 2;
+      margin-right: var(--space-1);
+    }
+    /* A column of its own, centred on the strip like the words and buttons beside it. */
+    .lx-callstage--card .lx-callstage-signal {
+      grid-area: 1 / 3 / 5 / 4;
+      align-self: center;
+    }
+    .lx-callstage--card .lx-callstage-name {
+      display: block;
+      grid-area: 2 / 2;
+      font-size: var(--text-md);
+      font-weight: 600;
+      line-height: 1.3;
+      color: var(--ink);
+    }
+    .lx-callstage--card .lx-callstage-sub {
+      display: block;
+      grid-area: 3 / 2;
+      font-size: var(--text-sm);
+      line-height: 1.3;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .lx-callstage--card .lx-callstage-btn {
+      --lx-callstage-btn: 1.75rem;
+    }
+    /* Ringing doesn't shrink it here: the three circles stay one size. */
+    .lx-callstage--card .lx-orb[data-state='calling'] .lx-orb-core {
+      scale: 1;
+    }
+    .lx-callstage--card .lx-callstage-controls {
+      grid-area: 1 / 4 / 5 / 5;
+      gap: var(--space-3);
+    }
+    .lx-callstage--card .lx-callstage-min {
+      grid-area: 1 / 5 / 5 / 6;
+    }
+  }
+  /* "Ringing…", "Lucius is working…": a soft light passing across the words while you wait. */
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-callstage-line[data-shimmer],
+    .lx-callstage-sub[data-shimmer] {
+      background: linear-gradient(
+          90deg,
+          var(--muted) 0%,
+          var(--muted) 40%,
+          color-mix(in srgb, var(--lucius) 70%, var(--ink)) 50%,
+          var(--muted) 60%,
+          var(--muted) 100%
+        )
+        0 0 / 250% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: lx-callstage-shimmer 2.2s linear infinite;
+    }
+  }
+  @keyframes lx-callstage-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -150% 0;
+    }
+  }
+
+  /* The orb: one sphere and its glow, nothing circling it (owner, 2026-11-03). Inside it, soft
+     colour that sways like liquid, so it is alive even in silence (circling lights read as a
+     spinner: owner, 2026-11-05); it swells with whoever is talking, you as much as Lucius. The level
+     loop sets --lx-orb-lucius / --lx-orb-you (0–1) each frame and drives `scale`; the keyframes
+     drive `translate` and `rotate`, so the two never fight over one transform. */
+  .lx-orb {
+    --lx-orb-size: 6rem;
+    --lx-orb-base: var(--lucius);
+    /* Purple to amber by way of pink and orange: mixed directly, opposite colours pass through a
+       dirty beige (owner, 2026-11-05). Blue and pink lights on amber would make the same beige,
+       so every colour turns with it. */
+    --lx-orb-warn: 0;
+    --lx-orb-warn-pct: calc(var(--lx-orb-warn) * 100%);
+    --lx-orb-tint: color-mix(in oklch, var(--lx-orb-base), #f5a300 var(--lx-orb-warn-pct));
+    --lx-orb-indigo: color-mix(in oklch, #5b8cff, #ff9500 var(--lx-orb-warn-pct));
+    --lx-orb-cyan: color-mix(in oklch longer hue, #4cc9ff, #ffc04d var(--lx-orb-warn-pct));
+    --lx-orb-pink: color-mix(in oklch, #ff7ad0, #ff8a1f var(--lx-orb-warn-pct));
+    --lx-orb-deep: color-mix(in oklch, #1b1464, #8a4f00 var(--lx-orb-warn-pct));
+    --lx-orb-halo-mix: 38%;
+    --lx-orb-voice: min(1, var(--lx-orb-lucius, 0) + var(--lx-orb-you, 0));
+    position: relative;
+    width: var(--lx-orb-size);
+    height: var(--lx-orb-size);
+    flex: none;
+  }
+  @container (min-width: 30rem) {
+    .lx-orb {
+      --lx-orb-size: 7rem;
+    }
+  }
+  @container (min-width: 40rem) {
+    .lx-orb {
+      --lx-orb-size: 8rem;
+    }
+  }
+  .lx-callstage--screen .lx-orb {
+    --lx-orb-size: min(64vw, 40dvh, 18rem);
+  }
+  :root:is([data-theme='light'], [data-theme='warm']) .lx-orb {
+    --lx-orb-halo-mix: 30%;
+  }
+  .lx-orb-halo,
+  .lx-orb-core {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    will-change: scale, opacity;
+    transition: opacity 0.4s ease;
+  }
+  /* Fades along a curve to nothing at the very edge of its box. A straight fade that stops partway
+     ends at a visible corner, which the eye reads as a second circle (owner, 2026-11-07). */
+  .lx-orb-halo {
+    /* Where the fade starts: well behind the sphere's edge, as the glow grows with the voice and a
+       flat band would otherwise show around it. */
+    --lx-orb-halo-rim: 50%;
+    inset: -22%;
+    background: radial-gradient(
+      circle closest-side,
+      color-mix(in srgb, var(--lx-orb-tint) var(--lx-orb-halo-mix), transparent)
+        var(--lx-orb-halo-rim),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.62), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.2),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.34), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.4),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.15), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.6),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.05), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.8),
+      transparent 100%
+    );
+    scale: calc(0.88 + var(--lx-orb-voice) * 0.42);
+    opacity: calc(0.4 + var(--lx-orb-voice) * 0.6);
+  }
+  /* The big ball has the room to let it go out gradually. */
+  .lx-callstage--screen .lx-orb-halo {
+    --lx-orb-halo-rim: 30%;
+    --lx-orb-halo-mix: 30%;
+    inset: -60%;
+  }
+  :root:is([data-theme='light'], [data-theme='warm']) .lx-callstage--screen .lx-orb-halo {
+    --lx-orb-halo-mix: 24%;
+  }
+  /* clip-path, not overflow + border-radius: Safari doesn't clip blurred children to a
+     rounded box, and the moving light showed as a square (owner's phone, 2026-11-03). */
+  .lx-orb-core {
+    clip-path: circle(50%);
+    isolation: isolate;
+    background: radial-gradient(
+      circle at 50% 55%,
+      color-mix(in srgb, var(--lx-orb-tint) 85%, #000) 0%,
+      color-mix(in srgb, var(--lx-orb-tint) 50%, #000) 100%
+    );
+    /* A soft glow at the rim instead of a shine on top: lit from inside, not polished. */
+    box-shadow:
+      inset 0 0 1.2em color-mix(in srgb, var(--lx-orb-tint) 40%, #fff),
+      inset 0 0 0.3em rgba(255, 255, 255, 0.35);
+    font-size: calc(var(--lx-orb-size) / 8);
+    scale: calc(1 + var(--lx-orb-lucius, 0) * 0.14 + var(--lx-orb-you, 0) * 0.12);
+  }
+  /* The colour under the moving light, swaying a little with it. */
+  .lx-orb-core::before {
+    content: '';
+    position: absolute;
+    inset: -30%;
+    background: conic-gradient(
+      from 0deg,
+      var(--lx-orb-tint),
+      color-mix(in srgb, var(--lx-orb-tint) 40%, var(--lx-orb-indigo)),
+      color-mix(in srgb, var(--lx-orb-tint) 30%, var(--lx-orb-cyan)),
+      var(--lx-orb-tint),
+      color-mix(in srgb, var(--lx-orb-tint) 40%, var(--lx-orb-pink)),
+      var(--lx-orb-tint)
+    );
+    filter: blur(1.6em);
+    opacity: calc(0.6 + var(--lx-orb-voice) * 0.3);
+  }
+  /* Liquid tipping in a box, not lights going round: wide, low pools of soft colour that sway
+     from side to side out of step, piling up against one wall and running back (owner,
+     2026-11-05). No surface line: drawn waves looked like a cartoon in this soft ball. Each fades
+     to nothing inside its box, or the box's edge shows as a circle (owner, 2026-11-03). */
+  .lx-orb-pool {
+    position: absolute;
+    z-index: 1;
+    inset: -15%;
+    filter: blur(1em);
+    mix-blend-mode: screen;
+    opacity: calc(0.85 + var(--lx-orb-voice) * 0.15);
+    transform-origin: 50% 100%;
+    scale: calc(1 + var(--lx-orb-voice) * 0.25);
+  }
+  .lx-orb-pool:nth-child(1) {
+    background: radial-gradient(
+      ellipse 44% 21% at 50% 58%,
+      color-mix(in srgb, var(--lx-orb-tint) 60%, #fff) 0%,
+      color-mix(in srgb, color-mix(in srgb, var(--lx-orb-tint) 60%, #fff) 45%, transparent) 55%,
+      transparent 100%
+    );
+  }
+  .lx-orb-pool:nth-child(2) {
+    background: radial-gradient(
+      ellipse 40% 19% at 50% 70%,
+      color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-cyan)) 0%,
+      color-mix(
+          in srgb,
+          color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-cyan)) 45%,
+          transparent
+        )
+        55%,
+      transparent 100%
+    );
+  }
+  .lx-orb-pool:nth-child(3) {
+    background: radial-gradient(
+      ellipse 34% 20% at 50% 42%,
+      color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-pink)) 0%,
+      color-mix(
+          in srgb,
+          color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-pink)) 45%,
+          transparent
+        )
+        55%,
+      transparent 100%
+    );
+  }
+  /* The one dark pool: depth, and bright pools that stand out against it (owner, 2026-11-05). At
+     80% it looked like a bruise against the ball's edge. */
+  .lx-orb-pool:nth-child(4) {
+    mix-blend-mode: multiply;
+    opacity: 0.6;
+    background: radial-gradient(
+      ellipse 38% 25% at 50% 50%,
+      color-mix(in srgb, var(--lx-orb-tint) 50%, var(--lx-orb-deep)) 0%,
+      color-mix(
+          in srgb,
+          color-mix(in srgb, var(--lx-orb-tint) 50%, var(--lx-orb-deep)) 45%,
+          transparent
+        )
+        55%,
+      transparent 100%
+    );
+  }
+  /* Ringing: the same colour, a little smaller — fading it made it look washed out. */
+  .lx-orb[data-state='calling'] .lx-orb-core {
+    scale: 0.9;
+  }
+  .lx-orb[data-state='reconnecting'] {
+    --lx-orb-warn: 1;
+  }
+  .lx-orb[data-state='ended'] .lx-orb-core {
+    scale: 0.92;
+    opacity: 0.6;
+    transition:
+      scale 0.6s ease,
+      opacity 0.6s ease;
+  }
+  .lx-orb[data-state='ended'] .lx-orb-halo {
+    opacity: 0;
+  }
+  .lx-orb--mini {
+    --lx-orb-size: 1.125rem;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-orb {
+      animation: lx-orb-breathe 5.5s ease-in-out infinite;
+      /* Into and out of reconnecting: a blip washes through instead of flashing. */
+      transition: --lx-orb-warn 0.8s ease;
+    }
+    /* Out of step, so the pools are never all at a wall at once and the ball never rests. */
+    .lx-orb-core::before {
+      animation: lx-orb-sway 13.5s ease-in-out infinite;
+    }
+    .lx-orb-pool:nth-child(1) {
+      animation: lx-orb-slosh 7.5s ease-in-out infinite;
+    }
+    .lx-orb-pool:nth-child(2) {
+      animation: lx-orb-slosh 9.75s ease-in-out -3.9s infinite reverse;
+    }
+    .lx-orb-pool:nth-child(3) {
+      animation: lx-orb-slosh 6s ease-in-out -1.65s infinite;
+    }
+    .lx-orb-pool:nth-child(4) {
+      animation: lx-orb-slosh 11.5s ease-in-out -5s infinite reverse;
+    }
+    /* Working: the liquid moves faster and the breath deepens — busy, never frantic. */
+    .lx-orb[data-state='working'] {
+      animation-duration: 2.6s;
+    }
+    .lx-orb[data-state='working'] .lx-orb-pool {
+      animation-duration: 3.6s;
+    }
+    .lx-orb[data-state='working'] .lx-orb-core::before {
+      animation-duration: 6.75s;
+    }
+    .lx-orb[data-state='calling'] .lx-orb-halo {
+      animation: lx-orb-glow 2s ease-in-out infinite;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lx-orb[data-speaker] .lx-orb-halo {
+      opacity: 1;
+    }
+  }
+  @keyframes lx-orb-breathe {
+    50% {
+      scale: 1.03;
+    }
+  }
+  @keyframes lx-orb-slosh {
+    0%,
+    100% {
+      translate: -30% 5%;
+      rotate: -9deg;
+    }
+    50% {
+      translate: 30% -5%;
+      rotate: 9deg;
+    }
+  }
+  @keyframes lx-orb-sway {
+    0%,
+    100% {
+      translate: -9% 3%;
+    }
+    50% {
+      translate: 9% -3%;
+    }
+  }
+  @keyframes lx-orb-glow {
+    50% {
+      opacity: 0.15;
+    }
+  }
+  /* The composer card's top row: the card's own width and corners, a hairline under it. */
+  /* Icon | words | ×, then the ways out on a row of their own under the words. */
+  .lx-call-notice {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: start;
+    column-gap: var(--space-2);
+    row-gap: var(--space-1);
+    /* The card's own padding is the inset; 2px lines the icon up with the editor's text. */
+    margin: 0 0 var(--space-3);
+    padding: 0 2px;
+    color: var(--ink);
+    font-size: var(--text-xs);
+    line-height: 1.45;
+  }
+  .lx-call-notice > svg {
+    color: var(--bad);
+    /* On the first line of the words, not the middle of a wrapped paragraph. */
+    margin-top: 0.15em;
+  }
+  .lx-call-notice[data-ready] > svg {
+    color: var(--good);
+  }
+  .lx-call-notice-text {
+    min-width: 0;
+  }
+  .lx-call-notice-actions {
+    grid-column: 2 / 4;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-6);
+  }
+  .lx-call-notice-actions:empty {
+    display: none;
+  }
+  /* The ways out read as words in the notice's own size, starting under its first letter: kit
+     buttons brought their own padding and a bigger font (owner, 2026-11-03). */
+  .lx-call-notice-action,
+  .lx-call-notice-link {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  /* Somewhere else (LiveKit's own dashboard): a real link, so it looks like one. */
+  .lx-call-notice-link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  @media (hover: hover) {
+    .lx-call-notice-action:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+  /* LiveKit's own words, under the actions when Details is open: the app's font, in the
+     notice's own size, selectable and wrapping anywhere. */
+  .lx-call-notice-detail {
+    grid-column: 2 / 4;
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--surface2);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .lx-call-notice-close {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 2px;
+    cursor: pointer;
+    display: flex;
+  }
+  .lx-call-audio {
+    display: none;
   }
   /* Hover now sits ON the --surface2 editrow, so --surface2 here would be invisible. The step has
    to follow the theme, not a fixed direction: dark mode steps UP (--line is lighter than
@@ -907,14 +2204,75 @@
   .lx-compact-bar {
     width: 100%;
   }
+  /* Dictation, left of Send: Send's own circle, quiet until it listens. */
+  .lx-dictate-wrap {
+    position: relative;
+    display: flex;
+    flex: none;
+  }
+  /* Why dictation just failed, said beside the mic for a few seconds. */
+  .lx-dictate-tip {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + var(--space-2));
+    z-index: 5;
+    width: max-content;
+    max-width: min(16rem, 70vw);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 11px;
+    line-height: 1.4;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+    pointer-events: none;
+  }
+  .lx-dictate {
+    width: 28px;
+    height: 28px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .lx-dictate[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--bad) 14%, transparent);
+    color: var(--bad);
+  }
+  .lx-dictate[data-problem] {
+    color: var(--warn);
+  }
+  @media (hover: hover) {
+    .lx-dictate:not([aria-pressed='true']):hover {
+      background: var(--surface2);
+      color: var(--ink);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-dictate[aria-pressed='true'] {
+      animation: lx-dictate-pulse 1.4s ease-in-out infinite;
+    }
+  }
+  @keyframes lx-dictate-pulse {
+    50% {
+      background: color-mix(in srgb, var(--bad) 26%, transparent);
+    }
+  }
   .lx-send {
     width: 28px;
     height: 28px;
     padding: 0;
-    border-radius: 6px;
+    border-radius: 50%;
     border: none;
-    background: var(--primary);
-    color: var(--ink-on-accent);
+    background: var(--cta);
+    color: var(--ink-on-cta);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -944,8 +2302,17 @@
       border-color: var(--hover-line);
     }
   }
+  @media (hover: hover) {
+    .lx-send:not(:disabled, .lx-stop):hover {
+      background: var(--cta-hover);
+    }
+  }
+  /* A queued send (aria-busy) is disabled too but keeps its ink — it is working, not unavailable. */
+  .lx-send:disabled:not([aria-busy='true']) {
+    background: var(--bg-2);
+    color: var(--faint);
+  }
   .lx-send:disabled {
-    opacity: 0.4;
     cursor: default;
   }
 
@@ -1278,7 +2645,7 @@
     padding: 7px 9px;
   }
   .lx-scope-ic {
-    color: var(--primary);
+    color: var(--ink);
     font-size: 12px;
     flex: none;
     line-height: 1;
@@ -1313,7 +2680,7 @@
     border: 1px solid var(--line);
     background: transparent;
     color: var(--muted);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-md);
     font: inherit;
     font-size: 10.5px;
     font-weight: 600;
@@ -1337,7 +2704,7 @@
   /* open / peeking — filled pill + eye-off icon (the momentary-disclosure tapped state) */
   .lx-scope-peek.open {
     background: var(--selected);
-    border-color: var(--primary);
+    border-color: var(--ink);
     color: var(--ink);
   }
   .lx-scope-peek.open .ic-eye {
@@ -1373,7 +2740,7 @@
     border: 1px solid var(--line-strong);
     /* OFF track is --line, not --surface2: the field it sits on IS --surface2 now, so the old
        fill left a surface-on-surface pill in bright themes with only its outline to read. */
-    background: var(--line);
+    background: var(--line-strong);
     position: relative;
     cursor: pointer;
     padding: 0;
@@ -1428,6 +2795,24 @@
   }
   :root:is([data-theme='warm'], [data-theme='light']) .lx-scope-peekbox {
     /* Warm-tinted like every other light-theme elevation token, and fainter still. */
+    box-shadow: 0 -4px 14px rgba(48, 42, 30, 0.08);
+  }
+  /* What the Screen awareness switch just did: floats over the bar like Peek, so it never moves
+     the composer, and takes no clicks. */
+  .lx-scope-notice {
+    position: fixed;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--modal-bg);
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted);
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.16);
+    z-index: calc(var(--z-toast) + 20);
+    pointer-events: none;
+  }
+  :root:is([data-theme='warm'], [data-theme='light']) .lx-scope-notice {
     box-shadow: 0 -4px 14px rgba(48, 42, 30, 0.08);
   }
   .lx-scope-peek-h {
@@ -1576,6 +2961,9 @@
     font-size: 10.5px;
     font-weight: 700;
     color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .lx-handle.on .lx-handle-act {
     color: var(--lucius);
@@ -1978,12 +3366,13 @@
     }
   }
   /* Flat filled pill, not an underline — same "on" treatment as .imp3-seg button.on
-     (statementImport.css) — and --primary (genuine blue), not --lucius (the AI-brand
+     (statementImport.css) — in ink, not --lucius (the AI-brand
      purple used everywhere else in this file): this is a plain UI selection state, not
      a Lucius-branded affordance (owner correction 2026-08-11). */
   .ac-tab.active {
-    background: var(--primary);
-    color: #fff;
+    color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
   .ac-zone {
     font-size: 10px;
@@ -2092,6 +3481,33 @@
     height: 14px;
     display: block;
   }
+  /* A connector's brand mark — the logo its Connectors card shows, on a white tile so dark
+     marks stay legible on the dark theme. */
+  .id-logo,
+  .chip-logo {
+    display: block;
+    flex: none;
+    object-fit: contain;
+    background: #fff;
+  }
+  /* The whole tile is the plate, as on the Connectors page (.cn-tile.plate) — a small white
+     square inside the grey tile read as a box in a box, with the mark crammed to its edges. */
+  .ac-item-ic.id-box.plate {
+    background: #fff;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .id-logo {
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+    box-sizing: border-box;
+    background: transparent;
+  }
+  .chip-logo {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+  }
   .id-swatch {
     width: 11px;
     height: 11px;
@@ -2111,7 +3527,8 @@
   }
   .ac-item-sub {
     font-size: 11px;
-    color: var(--faint);
+    /* --muted, not --faint: --faint is ~3.3:1 on the popup at 11px — too dim to read. */
+    color: var(--muted);
     margin-top: 1px;
     white-space: nowrap;
     overflow: hidden;
@@ -2174,6 +3591,9 @@
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.12s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .ac-item.hi .ac-item-add {
     opacity: 1;
@@ -3157,16 +4577,18 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: calc(var(--z-toast) + 20);
+    width: max-content;
     max-width: min(440px, calc(100vw - 32px));
-    padding: 10px 14px;
-    border-radius: 10px;
-    font-size: 12.5px;
+    padding: var(--toast-padding);
+    border-radius: var(--toast-radius);
+    font-size: var(--toast-font-size);
     line-height: 1.4;
-    color: var(--ink);
-    background: var(--modal-bg);
-    border: 1px solid color-mix(in srgb, var(--lucius) 45%, var(--line));
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    color: var(--toast-ink);
+    background: var(--toast-bg);
+    border: 1px solid var(--toast-bg);
+    box-shadow: var(--shadow-toast);
     cursor: pointer;
+    font-weight: var(--toast-font-weight);
   }
   @media (prefers-reduced-motion: no-preference) {
     .mx-drag-toast {

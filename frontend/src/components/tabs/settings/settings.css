@@ -138,7 +138,7 @@
   width: 100%;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -212,7 +212,7 @@
   background: var(--selected);
 }
 .onw-settings .rd-set-navitem.on .ic {
-  color: var(--accent);
+  color: var(--ink);
 }
 .onw-settings .rd-set-nohits {
   font-size: var(--text-xs);
@@ -245,6 +245,14 @@
   align-items: flex-start;
   gap: 12px;
   padding: 20px 24px 10px;
+}
+/* a section's own title-bar node (a topic page's "← Memory") takes the title's place */
+.onw-settings .rd-set-hslot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
 }
 .onw-settings .rd-set-x {
   flex: none;
@@ -327,21 +335,25 @@
 }
 /* thin, self-effacing scrollbars — the default chrome is far too heavy in a dialog */
 .onw-settings .rd-set-navlist,
-.onw-settings .rd-modal {
+.onw-settings .rd-modal-body,
+.onw-settings .rd-factlist {
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
 .onw-settings .rd-set-navlist::-webkit-scrollbar,
-.onw-settings .rd-modal::-webkit-scrollbar {
+.onw-settings .rd-modal-body::-webkit-scrollbar,
+.onw-settings .rd-factlist::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 .onw-settings .rd-set-navlist::-webkit-scrollbar-track,
-.onw-settings .rd-modal::-webkit-scrollbar-track {
+.onw-settings .rd-modal-body::-webkit-scrollbar-track,
+.onw-settings .rd-factlist::-webkit-scrollbar-track {
   background: transparent;
 }
 .onw-settings .rd-set-navlist::-webkit-scrollbar-thumb,
-.onw-settings .rd-modal::-webkit-scrollbar-thumb {
+.onw-settings .rd-modal-body::-webkit-scrollbar-thumb,
+.onw-settings .rd-factlist::-webkit-scrollbar-thumb {
   background: var(--line-strong);
   border: 3px solid transparent;
   background-clip: content-box;
@@ -349,7 +361,8 @@
 }
 @media (hover: hover) {
   .onw-settings .rd-set-navlist::-webkit-scrollbar-thumb:hover,
-  .onw-settings .rd-modal::-webkit-scrollbar-thumb:hover {
+  .onw-settings .rd-modal-body::-webkit-scrollbar-thumb:hover,
+  .onw-settings .rd-factlist::-webkit-scrollbar-thumb:hover {
     background: var(--faint);
     background-clip: content-box;
   }
@@ -523,6 +536,12 @@
   grid-row: auto;
   margin-top: 3px;
   line-height: 1.5;
+}
+/* a one-click fix for the setting sits under its caption, in the label column — as a bare
+   child of .rd-formgrid it became a borderless full-width "row" of its own */
+.onw-settings .rd-set-body .rd-help-action {
+  display: flex;
+  margin-top: 8px;
 }
 /* A TOGGLE is excluded from the stretch: it is a fixed-size switch, not a field control, and
    width:100% turned it into a full-width blue slab across the 264px column (owner,
@@ -705,7 +724,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   font-size: 12.5px;
   font-weight: 600;
   padding: 7px 13px;
@@ -719,12 +738,12 @@
     border-color 0.12s ease;
 }
 .onw-settings .rd-btn.primary {
-  background: var(--accent);
-  color: var(--ink-on-accent);
+  background: var(--cta);
+  color: var(--ink-on-cta);
 }
 @media (hover: hover) {
-  .onw-settings .rd-btn.primary:hover {
-    background: color-mix(in srgb, var(--accent) 88%, #fff);
+  .onw-settings .rd-btn.primary:hover:not(:disabled) {
+    background: var(--cta-hover);
   }
 }
 .onw-settings .rd-btn.secondary {
@@ -764,10 +783,15 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+.onw-settings .rd-btn.primary:disabled {
+  opacity: 1;
+  color: var(--faint);
+  background: var(--bg-2);
+}
 .onw-settings .rd-btn.xs {
   padding: 4px 9px;
   font-size: 11.5px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 /* ── badges ───────────────────────────────────────────────────────────────── */
@@ -932,9 +956,11 @@
 .onw-settings .rd-select,
 .onw-settings .rd-textarea {
   width: 100%;
+  /* taller only: the browser default (both) let it be dragged wider than its panel */
+  resize: vertical;
   background: var(--surface2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -943,6 +969,10 @@
   transition:
     border-color 0.12s ease,
     background 0.12s ease;
+}
+/* PasswordField's eye sits inside the input; keep room for it over the shared padding. */
+.onw-settings .ui-password > .rd-input {
+  padding-right: 40px;
 }
 /* A field must read lighter than the surface it sits on — that is what says "you can type here".
    `--surface2` preserves that step in every named theme; disabled controls use the recessed
@@ -1062,7 +1092,7 @@
   overflow: hidden;
   display: flex;
   align-items: center;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -1100,7 +1130,7 @@
   width: 32px;
   height: 18px;
   border-radius: 999px;
-  background: var(--line);
+  background: var(--line-strong);
   border: none;
   cursor: pointer;
   flex: none;
@@ -1115,7 +1145,8 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--ink-on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s;
 }
 .onw-settings .rd-toggle.on {
@@ -1266,14 +1297,18 @@
 /* disclosure row (advanced groups) */
 
 /* stored-memory list */
+/* The list, not the dialog body, scrolls: it is the one body child allowed to shrink, so the
+   description and search above it keep their height and stay on screen. */
 .onw-settings .rd-factlist {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
 }
 .onw-settings .rd-fact {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1287,17 +1322,601 @@
   flex: 1;
   min-width: 0;
 }
-.onw-settings .rd-fact-t {
-  font-size: 12.5px;
-  color: var(--ink);
-  line-height: 1.45;
+/* the memory dialog keeps one height — the list scrolls inside it — so searching never
+   shrinks it; on a phone it is a tall bottom sheet (see the max-width block) */
+.onw-settings .rd-modal.rd-mem-modal {
+  height: min(80vh, 720px);
 }
-.onw-settings .rd-fact-meta {
+/* The change box stays in view at the bottom while a long list scrolls, in Settings and in the
+   dialog alike; the ring is the shell's own colour so rows don't show around it, and on a phone
+   it clears the home indicator. When the list or a topic is short it is pushed to the bottom. */
+.onw-settings .rd-set-body > .rd-mem-browser,
+.onw-settings .rd-set-body > .rd-mem-detail {
+  flex: 1 0 auto;
+}
+.onw-settings .rd-mem-dock {
+  margin-top: auto;
+  position: sticky;
+  /* 0, not the safe-area inset: the scroll pane's bottom padding already holds it */
+  bottom: 0;
+  z-index: 1;
+  /* a shadow paints only outside the box, so the dock (the outcome line) needs its own fill */
+  background: var(--modal-bg);
+  /* Solid from the box's top down to the pane's bottom edge (a home-indicator inset included),
+     so no row shows beside or beneath it: copies stepped down, each starting at the box's top.
+     Shadows, not a block below the box — a block is content, and let the pane scroll past its
+     end, the box riding up over empty space. */
+  box-shadow:
+    0 var(--space-4) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9)) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 2) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 3) 0 var(--space-4) var(--modal-bg);
+}
+/* Above it, rows blur and fade out instead of meeting a hard edge — like the fade under
+   Documents' filter chips (vault.css), drawn on the dock because masking the pane would fade the
+   box too. Tall enough to take a whole two-line row: a 20px fade cut a row in half. The blur
+   strengthens toward the box (the mask), under the colour fade. */
+.onw-settings .rd-mem-dock::before {
+  content: '';
+  position: absolute;
+  inset-inline: calc(var(--space-4) * -1);
+  bottom: 100%;
+  height: calc(var(--space-9) * 1.5);
+  background: linear-gradient(to bottom, transparent, var(--modal-bg) 90%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 70%);
+  mask-image: linear-gradient(to bottom, transparent, black 70%);
+  pointer-events: none;
+}
+.onw-settings .rd-mem-modal .rd-mem-browser,
+.onw-settings .rd-mem-modal .rd-mem-detail {
+  flex: 1 0 auto;
+}
+.onw-settings .rd-mem-modal .rd-mem-dock {
+  bottom: 0;
+  box-shadow: 0 20px 0 20px var(--modal-bg);
+}
+.onw-settings .rd-mem-empty {
+  flex: 1;
   display: flex;
-  gap: 12px;
-  font-size: var(--text-xs);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 12px;
+  font-size: var(--text-base);
   color: var(--faint);
-  margin-top: 3px;
+}
+.onw-settings .rd-fact.rd-fact-skel {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 14px 13px;
+}
+/* Settings → Memory's inline browser (MemoryBrowser), laid out like Claude's memory. Type sizes are
+   the app's tokens; colours are the theme's ink/muted/faint. */
+.onw-settings .rd-mem-browser,
+.onw-settings .rd-mem-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  /* scrolled to on opening a topic: keep the container's top padding visible */
+  scroll-margin-top: 24px;
+}
+.onw-settings .rd-mem-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.onw-settings .rd-mem-sec {
+  display: flex;
+  flex-direction: column;
+}
+.onw-settings .rd-mem-sec-h {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--ink);
+  padding: 0 12px 10px;
+}
+.onw-settings .rd-mem-sec-note {
+  margin-top: -4px;
+  padding: 0 12px 12px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* a topic page's Details, laid out like Claude's: the text starts where the "Details" label ends
+   (about 3.2 of its characters) and each dot sits under the label's middle — drawn here, since
+   the browser's own marker can't be placed that precisely */
+.onw-settings .rd-mem-field > .ui-list {
+  --rd-mem-indent: calc(var(--text-sm) * 3.2);
+  list-style: none;
+  padding-inline-start: var(--rd-mem-indent);
+}
+.onw-settings .rd-mem-field > .ui-list > li {
+  /* the body size, as Summary and Last updated (.ui-list alone is a size up) */
+  font-size: var(--text-base);
+  position: relative;
+}
+.onw-settings .rd-mem-field > .ui-list > li::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--rd-mem-indent) / -2 - 2px);
+  top: calc(0.75em - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+/* "Moved out of memory": the header is a disclosure button, its rows read like topic rows */
+.onw-settings .rd-mem-bullet-until {
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* a topic row: a faint hairline only BETWEEN rows, a rounded wash and Edit/Delete on hover */
+.onw-settings .rd-mem-topic {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.onw-settings .rd-mem-topic + .rd-mem-topic {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-topic:hover {
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    border-radius: var(--radius-lg);
+  }
+}
+.onw-settings .rd-mem-topic-open {
+  display: grid;
+  /* a fixed date column, so names, descriptions and dates line up row to row */
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.6fr) 8.5em;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 14px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.onw-settings .rd-mem-topic-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* name and description at the app's body size, only the colour stepping down; the date one step
+   smaller — at the same size, "Updated Oct 28" beside a short name on a phone read as the bigger
+   text. Not a heavier name: that reads as a section heading (owner, 2026-10-29). */
+.onw-settings .rd-mem-topic-name {
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.onw-settings .rd-mem-topic-preview {
+  font-size: var(--text-base);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onw-settings .rd-mem-topic-date {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.onw-settings .rd-mem-topic-acts {
+  display: flex;
+  gap: 4px;
+  padding-right: 8px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.onw-settings .rd-mem-topic:focus-within .rd-mem-topic-acts {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-topic:hover .rd-mem-topic-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .onw-settings .rd-mem-topic-acts {
+    opacity: 1;
+  }
+}
+.onw-settings .rd-mem-topic-acts .rd-fact-ibtn {
+  width: 32px;
+  height: 32px;
+}
+/* an open item or older memory: a topic row whose text runs where the name and summary go */
+.onw-settings .rd-mem-fact-body {
+  cursor: default;
+}
+.onw-settings .rd-mem-fact-t {
+  grid-column: 1 / 3;
+  font-size: var(--text-base);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* rows that swipe (touch): the hairline sits between the swipe wrappers */
+.onw-settings .rd-mem-sec > .ui-swipe + .ui-swipe {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+/* a swiping bullet gets a taller face, so its actions are big enough to tap; the dot drops to stay
+   level with the text */
+.onw-settings .rd-mem-bullet--swipe .ui-swipe-face {
+  padding-block: var(--space-2);
+}
+.onw-settings .rd-mem-field > .ui-list > li.rd-mem-bullet--swipe::before {
+  top: calc(0.75em - 2px + var(--space-2));
+}
+/* a topic's own page */
+.onw-settings .rd-mem-back,
+.onw-settings .rd-set-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-back:hover,
+  .onw-settings .rd-set-back:hover {
+    color: var(--ink);
+  }
+}
+.onw-settings .rd-mem-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.onw-settings .rd-mem-detail-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-mem-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.onw-settings .rd-mem-field-label {
+  font-size: var(--text-sm);
+  color: var(--faint);
+}
+/* a bullet's Edit/Forget surface on hover (always on touch), in a column of its own on the right:
+   inline after the text, a fact that filled its last line wrapped the (hidden) icons onto a line
+   of their own, and that bullet stood taller than the rest */
+.onw-settings .rd-mem-bullet:not(.rd-mem-bullet--swipe) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-3);
+  align-items: start;
+}
+.onw-settings .rd-mem-bullet-t {
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-bullet-acts {
+  display: inline-flex;
+  gap: 2px;
+  /* level with the first line, adding no height to it (24px buttons on a 16px line) */
+  margin-block: -4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.onw-settings .rd-mem-bullet:focus-within .rd-mem-bullet-acts {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-bullet:hover .rd-mem-bullet-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .onw-settings .rd-mem-bullet-acts {
+    opacity: 1;
+  }
+}
+.onw-settings .rd-mem-bullet-acts .rd-fact-ibtn {
+  width: 24px;
+  height: 24px;
+}
+/* the bullet being edited: the box sits in the text column, with no dot over it */
+.onw-settings .rd-mem-bullet-edit {
+  list-style: none;
+}
+.onw-settings .rd-mem-field > .ui-list > li.rd-mem-bullet-edit::before {
+  content: none;
+}
+.onw-settings .rd-mem-bullet-edit > .rd-fact-edit {
+  padding-inline: 0;
+}
+/* "Forget this memory?" — a small confirm above the memory dialog */
+.onw-settings .rd-confirm-scrim {
+  position: fixed;
+  inset: 0;
+  right: var(--chat-width, 0px);
+  z-index: calc(var(--z-modal) + 1);
+  background: rgba(6, 8, 12, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.onw-settings .rd-confirm {
+  width: min(400px, 100%);
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-modal);
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.onw-settings .rd-confirm-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-confirm-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.onw-settings .rd-confirm-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+/* fact row actions: quiet icon buttons that surface on hover (always shown on touch) */
+.onw-settings .rd-fact {
+  transition: background 0.12s ease;
+}
+.onw-settings .rd-fact-ibtn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .onw-settings .rd-fact-ibtn:hover {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink);
+  }
+  .onw-settings .rd-fact-ibtn--forget:hover {
+    color: var(--bad);
+  }
+}
+.onw-settings .rd-fact-ibtn:focus-visible,
+.onw-settings .rd-mem-send:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* a fact being edited in place: a box that grows to the whole fact, Save and Cancel under it */
+.onw-settings .rd-fact.rd-fact-edit {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.onw-settings .rd-fact-edit-text {
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  min-height: 0;
+}
+.onw-settings .rd-fact > .rd-fact-edit-acts {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+/* The outcome of the last "Tell Lucius" message, a card above the box: what happened on the
+   left, See why / Hide on the right, Lucius's reason and the changes under it when open. A card
+   in full-strength text, not muted lines: as plain grey text it ran into the topic above it and
+   could hardly be read (owner, 2026-10-31). */
+.onw-settings .rd-mem-outcome {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--ink) 4%, var(--modal-bg));
+  font-size: var(--text-base);
+}
+.onw-settings .rd-mem-outcome-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  color: var(--ink);
+  font-weight: 600;
+}
+.onw-settings .rd-mem-outcome-toggle {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.onw-settings .rd-mem-outcome-toggle:hover {
+  text-decoration-color: currentColor;
+}
+.onw-settings .rd-mem-outcome-body {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.onw-settings .rd-mem-outcome-reply,
+.onw-settings .rd-mem-outcome-refused {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-outcome-refused {
+  color: var(--muted);
+}
+.onw-settings .rd-mem-changes-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.onw-settings .rd-mem-outcome-body > .rd-mem-changes-list:first-child {
+  margin-top: 0;
+}
+/* each change on an edge in its kind's colour, so added / updated / forgotten read at a glance */
+.onw-settings .rd-mem-changes-list > li {
+  --kind: var(--lucius);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--kind);
+  line-height: 1.5;
+}
+.onw-settings .rd-mem-changes-list > li.is-added {
+  --kind: var(--good);
+}
+.onw-settings .rd-mem-changes-list > li.is-removed {
+  --kind: var(--bad);
+}
+.onw-settings .rd-mem-change-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.onw-settings .rd-mem-change-kind {
+  color: var(--kind);
+  font-weight: 600;
+}
+.onw-settings .rd-mem-changes-list > li.is-removed .rd-mem-change-kind {
+  color: var(--bad-light);
+}
+.onw-settings .rd-mem-change-where {
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-t {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-t.is-gone {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.onw-settings .rd-mem-change-was {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+/* While Lucius works: the chat's own working line (TurnActivity), in the outcome's slot */
+.onw-settings .rd-mem-dock .lx-activity {
+  padding: 0 var(--space-2) var(--space-3);
+}
+/* Claude-style composer: a box that grows with the text, the round send pinned bottom-right */
+.onw-settings .rd-mem-ask {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 5px 5px 5px 18px;
+  border-radius: 23px;
+  background: color-mix(in srgb, var(--ink) 6%, var(--modal-bg));
+  border: 1px solid var(--line);
+  transition: border-color 0.12s ease;
+}
+.onw-settings .rd-mem-ask:focus-within {
+  border-color: var(--line-strong);
+}
+.onw-settings .rd-mem-ask-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-base);
+  line-height: 1.45;
+  padding: 7px 0;
+  resize: none;
+  overflow-y: auto;
+}
+.onw-settings .rd-mem-ask-input::placeholder {
+  color: var(--faint);
+}
+/* padding: 0 — the base `button` rule pads 6px 14px, which on a 34px circle leaves a 6px
+   content box the 16px arrow overflows, so it sat off-centre. Same for the row icons. */
+.onw-settings .rd-mem-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.onw-settings .rd-mem-send:disabled {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--faint);
+  cursor: default;
+}
+.onw-settings .rd-mem-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: rd-mem-spin 0.8s linear infinite;
+}
+@keyframes rd-mem-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.onw-settings .rd-mem-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
 }
 
 .onw-settings a {
@@ -1569,7 +2188,7 @@
   color: var(--ink);
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -1638,7 +2257,8 @@
 }
 .onw-settings .rd-seg-b.on {
   color: var(--ink);
-  background: var(--selected);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 /* a long tab row (the MCP client list) must stay inside its card and scroll, not be
    amputated by the dialog's overflow — narrow rows like the cost window are unaffected */
@@ -1929,10 +2549,11 @@
   justify-content: center;
   padding: 24px;
 }
+/* Only the body scrolls, so the title, close and footer buttons stay on screen (Connectors' dialog). */
 .onw-settings .rd-modal {
   width: min(520px, 100%);
   max-height: min(80vh, 720px);
-  overflow: auto;
+  overflow: hidden;
   background: var(--modal-bg);
   border: 1px solid var(--modal-border);
   border-radius: var(--radius-2xl);
@@ -1949,6 +2570,7 @@
   gap: 10px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--line);
+  flex: none;
 }
 .onw-settings .rd-modal-title {
   flex: 1;
@@ -1981,6 +2603,9 @@
   font-size: 13px;
   color: var(--muted);
   line-height: 1.55;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .onw-settings .rd-modal-foot {
   display: flex;
@@ -1988,6 +2613,7 @@
   gap: 9px;
   padding: 14px 20px;
   border-top: 1px solid var(--line);
+  flex: none;
 }
 
 /* ── banner (attention / review) ──────────────────────────────────────────── */
@@ -2038,19 +2664,64 @@
   left: calc(50% - var(--chat-width, 0px) / 2);
   transform: translateX(-50%);
   z-index: var(--z-toast);
-  background: var(--modal-bg);
-  border: 1px solid var(--modal-border);
-  color: var(--ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 9px 18px;
-  box-shadow: var(--shadow-lg);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
+  color: var(--toast-ink);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
+  box-shadow: var(--shadow-toast);
   /* Sized to its text, never squeezed: centred with left 50% + translate, a shrink-to-fit box
      only gets half the viewport, so a long message wrapped into a tall pill-shaped oval. */
   width: max-content;
   max-width: min(520px, calc(100vw - 32px));
   text-align: center;
-  border-radius: 14px;
+  border-radius: var(--toast-radius);
+}
+
+/* "Saving…": the shell's one pill for any settings write in flight (useSaving). It takes the
+   toast's place and is gone before the result toast replaces it, so the two never overlap. */
+.onw-settings .rd-saving {
+  position: fixed;
+  bottom: 22px;
+  left: calc(50% - var(--chat-width, 0px) / 2);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
+  color: var(--toast-ink);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
+  box-shadow: var(--shadow-toast);
+  width: max-content;
+  border-radius: var(--toast-radius);
+}
+.onw-settings .rd-saving__spin {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: rd-saving-spin 0.7s linear infinite;
+}
+/* Confirmation, not progress: the toast's own look, with the check riding the text. */
+.onw-settings .rd-saving--done {
+  gap: 6px;
+}
+@keyframes rd-saving-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onw-settings .rd-saving__spin {
+    animation-duration: 2s;
+  }
 }
 
 /* an inline SVG used as a flex child can collapse to 0px width (its flex min-content
@@ -2086,6 +2757,20 @@
     max-height: 100dvh;
     border: none;
     border-radius: 0;
+  }
+}
+/* …except in an installed iOS app: it has no browser chrome to hide behind, and with the
+   `default` status bar iOS resolves 100dvh to the FULL screen while the web view starts below
+   the status bar, so the pane's bottom fell off the screen. The fixed overlay IS the web view.
+   Not on a phone: there Settings is a bottom sheet sized from the visible viewport (below),
+   and this rule's higher specificity made it full-height — the white card reached the top
+   edge, so the status-bar tint (utils/statusBarTint.ts) sampled white (owner, 2026-11-09). */
+@supports (-webkit-touch-callout: none) {
+  @media (min-width: 640px) and (max-width: 1023.98px) {
+    :root[data-onw-display-mode='standalone'] .ui-modal-card--workspace.onw-settings {
+      height: 100%;
+      max-height: 100%;
+    }
   }
 }
 
@@ -2138,11 +2823,22 @@
        published — the asymmetric margin. index.css already resets this at this width for
        every modal EXCEPT the workspace tier; this is that missing case. */
     right: 0;
+    /* The overlay IS the visible viewport, as the command palette's band is (index.css): iOS
+       does not shrink the layout viewport for the keyboard, so a sheet docked to its bottom sat
+       behind the keyboard and iOS scrolled the page up to reveal the focused field — the head
+       and everything above the field went off the top (owner, 2026-10-29, Tell Lucius on a
+       memory topic). Placed by the measurement itself, never by `100dvh`, which an installed
+       iOS app resolves to the whole screen; and every height rule on the card below (the
+       installed app's 100% included) is then a share of what is visible. */
+    top: var(--visual-viewport-top, 0px);
+    bottom: auto;
+    height: var(--visual-viewport-height, 100%);
   }
   .ui-modal-card--workspace.onw-settings {
     flex-direction: column;
-    height: var(--sheet-max-height);
-    max-height: var(--sheet-max-height);
+    /* …and no taller than what is visible above the keyboard, so its head stays on screen */
+    height: var(--sheet-visible-max-height);
+    max-height: var(--sheet-visible-max-height);
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
     animation: onw-settings-sheet-up 0.26s cubic-bezier(0.32, 0.72, 0, 1);
     /* Whole-card drag-to-dismiss surface (useSheetDragToDismiss, wired via Modal's
@@ -2168,6 +2864,16 @@
   }
   .onw-settings > .ui-modal__body {
     flex-direction: column;
+  }
+  /* While a field has focus the keyboard covers the home indicator, so the pane's inset for it
+     was an empty band between the field and the keyboard. Focus, as for the tab bar
+     (index.css), not a guess at whether a keyboard is up. */
+  .ui-modal-card--workspace.onw-settings:has(
+      textarea:focus,
+      input:not([type='checkbox']):not([type='radio']):not([type='range']):focus
+    )
+    .rd-set-body {
+    padding-bottom: 12px;
   }
   .onw-settings .rd-set-nav {
     width: 100%;
@@ -2435,16 +3141,47 @@
     padding: 0;
     right: 0;
     align-items: flex-end;
+    /* the visible viewport, as the Settings sheet's own overlay (above) */
+    top: var(--visual-viewport-top, 0px);
+    bottom: auto;
+    height: var(--visual-viewport-height, 100%);
   }
   .onw-settings .rd-modal {
     width: 100%;
-    max-height: 90vh;
+    max-height: min(90vh, var(--sheet-visible-max-height));
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
   }
   .onw-settings .rd-modal-foot {
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   }
   .onw-settings .rd-modal-foot .rd-btn {
+    flex: 1;
+  }
+  .onw-settings .rd-modal.rd-mem-modal {
+    height: 85vh;
+    height: min(85dvh, var(--sheet-visible-max-height));
+  }
+  /* a topic row stacks: name and date on top, the preview under them */
+  .onw-settings .rd-mem-topic-open {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+  .onw-settings .rd-mem-topic-preview {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  /* the forget confirm docks to the bottom edge like the dialog it sits over */
+  .onw-settings .rd-confirm-scrim {
+    padding: 0;
+    right: 0;
+    align-items: flex-end;
+  }
+  .onw-settings .rd-confirm {
+    width: 100%;
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .onw-settings .rd-confirm-acts .rd-btn {
     flex: 1;
   }
 }
@@ -2497,6 +3234,17 @@
   flex-direction: column;
   gap: 22px;
   padding-top: 4px;
+}
+.onw-settings .rd-set-version {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-set-nav .rd-set-version {
+  flex: none;
+  margin-top: auto;
 }
 .onw-settings .rd-set-menugroup {
   display: flex;
@@ -2764,6 +3512,9 @@
     .onw-settings .rd-set-navlabel {
       display: none;
     }
+    .onw-settings .rd-set-versionlabel {
+      display: none;
+    }
     .onw-settings .rd-set-topbar {
       padding: 16px 14px 10px;
     }
@@ -2822,14 +3573,6 @@
 .onw-settings .rd-nroutes-wrap {
   position: relative;
 }
-/* The channel header's (i): open down-left so it stays inside the card, in sentence case. */
-.onw-settings .rd-nroutes .info-pop-bubble {
-  left: auto;
-  right: 0;
-  text-align: left;
-  text-transform: none;
-  letter-spacing: normal;
-}
 .onw-settings .rd-nroutes th[scope='row'] {
   text-transform: none;
   letter-spacing: normal;
@@ -2868,7 +3611,7 @@
 .onw-settings .rd-nroutes input[type='checkbox'] {
   width: 15px;
   height: 15px;
-  accent-color: var(--accent);
+  accent-color: var(--ink);
   cursor: pointer;
 }
 .onw-settings .rd-nroutes input[type='checkbox']:disabled {
@@ -2901,7 +3644,8 @@
   flex-wrap: wrap;
 }
 @media (max-width: 700px) {
-  .onw-settings .rd-toast {
+  .onw-settings .rd-toast,
+  .onw-settings .rd-saving {
     bottom: calc(96px + env(safe-area-inset-bottom));
   }
 }
@@ -3124,5 +3868,187 @@
   }
   .onw-settings .rd-row--option > .rd-steps {
     gap: var(--space-3);
+  }
+}
+
+/* Settings → Memory → Start import: the three-step dialog (MemoryImport) */
+.onw-settings .rd-mi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.onw-settings .rd-mi > * {
+  max-width: 100%;
+}
+.onw-settings .rd-mi-lead {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.onw-settings .rd-mi-prompt {
+  align-self: stretch;
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+.onw-settings .rd-mi-paste {
+  align-self: stretch;
+  resize: vertical;
+  min-height: 180px;
+}
+.onw-settings .rd-mi-count {
+  align-self: flex-end;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.onw-settings .rd-mi-count.over {
+  color: var(--bad);
+}
+.onw-settings .rd-mi-error {
+  align-self: stretch;
+  padding: 9px 12px;
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  color: var(--bad);
+}
+.onw-settings .rd-mi-group {
+  align-self: stretch;
+}
+.onw-settings .rd-mi-group-h {
+  margin: 0 0 6px;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-mi-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+}
+.onw-settings .rd-mi-item + .rd-mi-item {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.onw-settings .rd-mi-item input[type='checkbox'] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.onw-settings .rd-mi-item input[type='checkbox']:disabled {
+  cursor: default;
+}
+.onw-settings .rd-mi-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.onw-settings .rd-mi-item-body label {
+  display: block;
+  font-size: var(--text-base);
+  color: var(--ink);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mi-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.onw-settings .rd-mi-foot-gap {
+  flex: 1;
+}
+.onw-settings .rd-mi-said {
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* ── permissions_v2: Settings → Permissions rows ──────────────────────────────────────────
+   tool | value | reset — one row per tool. Every tool has a value (Always allow / Ask / Block);
+   Reset appears only when it differs from the default. */
+.onw-settings .rd-permtoolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.onw-settings .rd-permtoolbar .rd-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.onw-settings .rd-permrow-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 148px 76px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.onw-settings .rd-permrow-v2.head {
+  padding: 0 0 7px;
+  font-size: var(--text-xs);
+  color: var(--faint);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line-strong);
+}
+.onw-settings .rd-set-body .rd-permrow-v2.head {
+  padding: 11px 16px 8px;
+}
+.onw-settings .rd-set-body .rd-permrow-v2 {
+  padding: 12px 16px;
+}
+.onw-settings .rd-permrow-v2:last-of-type {
+  border-bottom: none;
+}
+.onw-settings .rd-permrow-tool-v2 {
+  font-size: 13px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-permrow-desc {
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onw-settings .rd-permrow-default {
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+.onw-settings .rd-permrow-v2 > span:last-child {
+  display: flex;
+  justify-content: flex-end;
+}
+@media (max-width: 639.98px) {
+  .onw-settings .rd-permrow-v2 {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+  .onw-settings .rd-permrow-v2.head {
+    display: none;
+  }
+  .onw-settings .rd-permrow-tool-v2 {
+    grid-column: 1 / -1;
   }
 }

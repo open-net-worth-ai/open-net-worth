@@ -26,6 +26,7 @@ from backend.services import ledger as ledger_service
 from backend.services.statements import decisions as svc
 from backend.services.statements import guards
 from backend.services.statements.canonical import CanonicalRow, ParseResult, StatementMeta
+from tests.conftest import drop_stored_review
 
 # ── the sample-shape fixture: 45 rows, opening 1,040,000 → closing 456,000 ────────
 
@@ -323,6 +324,7 @@ def test_cached_record_self_heals_reconcile_on_next_preview(env):
             },
         },
     )
+    drop_stored_review(sid)  # the heal runs on the recompute path
     prev2 = svc.decision_preview(_CSV_OK, "csv", "acc", filename="riverside.csv")
     assert prev2["statement_id"] == sid  # cached reuse — zero re-parse
     assert prev2["llm_cost_usd"] == 0  # and zero LLM (the seam would raise loudly anyway)

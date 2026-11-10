@@ -67,3 +67,14 @@ All three decisions shipped, test-first (red→green), behind the existing write
 
 **Intentionally NOT changed:** `corrections.suggestions()` (the rule-PROPOSAL path) stays keyed on `payee_key` — it emits a `description_contains` rule, so a description-derived key is the correct grouping there; an entity id can't seed a description rule.
 
+
+## Amendment 2026-11-09 — a user's standing rule may override the pinned default, and the swap is reported
+
+The keystone treated every model-supplied category as a guess. A standing instruction from the owner (e.g. a meal-by-time rule in Instructions) arrives through the same path, so a payee pinned to Lunch silently turned a 21:36 Dinner into Lunch — and neither the model nor the notification could tell.
+
+- `add_transactions` items accept `override_payee_default` (default false). When true, `_txn_data_from_ai` keeps the model's category; unset, the keystone is unchanged. The description reserves it for a category a standing user instruction decides — never a guess.
+- When the keystone does replace a model-supplied category, the result carries a `category_replaced_by_payee_default` warning (single-row and multi-row paths) naming both categories and the two ways to correct it.
+- The capture prompt tells the model to use the flag for such rules and to fix a reported replacement before replying.
+- Verified live through `POST /api/capture` on a scratch instance with two models: both set the flag on the first call for a time-ruled restaurant payee and neither set it for a plain default.
+
+Rejected: making the flag implicit whenever Instructions exist (the ledger cannot read prose rules); a deterministic meal-by-time setting (a larger feature, not needed to close this gap).

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { inlineAppleTouchIcon } from './inlineAppleTouchIcon'
 
 // Dev-server proxy target. Defaults to the local backend on :8080.
 // WARNING: :5174 (npm run dev) proxies /api here — that is the owner's LIVE
@@ -57,6 +58,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    inlineAppleTouchIcon(),
   ],
   build: {
     // KEEP the previous build's chunks when VITE_KEEP_OLD_CHUNKS is set (the hosted demo).

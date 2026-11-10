@@ -27,6 +27,20 @@ make desktop-package
 with `scripts/build_desktop_runtime.py --output desktop/runtime-next`, stop the app, and
 replace the previous generated runtime. No user book is included in the runtime.
 
+The runtime has about half the files of a plain install, because the installer (Squirrel.Mac's
+ShipIt) verifies and moves every file of the bundle and took minutes on a busy Mac. The pure-Python
+packages in `ZIPPED_PACKAGES` (`scripts/build_desktop_runtime.py`: `openai`, `anthropic`, `pydantic`,
+`fastapi`, `tzdata` ...) ship as ONE archive, `site-packages/onw-packages.zip`, put on `sys.path` by
+`onw-packages.pth`; each module is stored with an unchecked-hash `.pyc` (the signed app is read-only to
+Python). Everything compiled, and everything that opens a file beside its own `__file__` (`backend` with
+its bundled frontend, docs and Alembic scripts, `babel`, `pytz`, `dateutil`, `certifi`), stays plain
+files. A new dependency stays plain files until it is added to the list; `scripts/runtime_zip.py` refuses
+a listed package that holds a compiled module, and the build's import smoke fails if a listed package
+does not import from the archive. To read a zipped package's source, unzip the archive. Wheel build
+files (`.pyi`, headers, Cython sources), `python/include`, `python/bin` console scripts and
+`dist-info` install records are pruned. Reasoning and numbers: ADR
+`2026-11-02-desktop-runtime-ships-pure-python-packages-as-one-archive`.
+
 Forge emits the `.app`, `.dmg` and ZIP under `desktop/out`. The runtime manifest version must
 match `desktop/package.json` and `pyproject.toml`; bump all release versions together. Runtime
 dependencies resolve from `requirements.txt` into `desktop/runtime-requirements.lock` and
@@ -39,7 +53,7 @@ uv pip compile requirements.txt --universal --python-version 3.12 --generate-has
 ```
 
 The desktop build uses `frontend/public/logo-mark.svg` for its transparent splash/recovery
-mark and the menu-bar images; the Dock icon is `resources/app-icon.svg` (mark centred) with its BETA badge under it.
+mark and the menu-bar images; the Dock icon is `resources/app-icon.svg` (the official logo tile, no badge).
 It uses the frontend's theme palette and bundled fonts;
 macOS icons include Retina sizes. Local unsigned preview packages are ad-hoc signed after
 packaging and signature-verified; public releases still require Developer ID signing and
@@ -305,7 +319,7 @@ preferences and the book. The profile flag alone does not change the default boo
 fuses disable inspector/Node launch
 modes, so Playwright's Electron debugger is used against the source host with the exact bundled
 runtime; the installed executable is additionally tested as a standalone process.
-`node qa/packaged-smoke.mjs /absolute/App.app/Contents/MacOS/open-net-worth` relocates the
+`node qa/packaged-smoke.mjs "/absolute/App.app/Contents/MacOS/Open Net Worth"` relocates the
 app into a temporary path containing spaces, removes developer tools from PATH, and checks
 local browser access, host/origin guards, desktop-only native APIs, isolated data and graceful
 shutdown. Run it against an app in a mounted
@@ -346,9 +360,40 @@ Windows and Linux; the unauthenticated 60/h limit is ample at one request per 4 
 BACKGROUND find then calls the updater straight away, quietly — it fetches the ZIP from
 `opennetworth.ai/update/<platform-arch>/<version>`
 (→ `update.electronjs.org/open-net-worth-ai/open-net-worth-releases`) — and on
-`update-downloaded` the menu (and tray) reads **Restart to Update to Open Net Worth X.Y.Z**, which
-installs at once when chosen, plus one notification; nothing installs before a restart or the next
+`update-downloaded` the menu (and tray) reads **Restart to Update**, which
+installs at once when chosen, plus one notification. The page sees the same state through the
+client bridge (`getUpdateState`/`onUpdateState`, pushed on every phase change) and shows a
+**Restart** pill (`frontend/src/DesktopUpdateNotices.tsx`) so an update is visible with OS
+notifications off. The page can only OPEN native choices: `restartToUpdate` opens `offerRestart`'s
+Restart Now / Later confirm (the same one the notification opens) and installs only on that answer,
+and after a page-opened dialog closes the page waits 30 s before it may open another — a hostile
+Private Cloud page can neither restart the app nor reopen the dialog in a loop. In phase `available`
+(cannot install in place, a failed download, or Later on a manual check) the pill says "available"
+and **Update** calls `offerUpdate`, the Update Available… dialog. Release notes are capped (64 KB,
+lines over 2,000 characters skipped) before any pattern runs on them. On the first launch after
+an update, `announceUpdate` also starts fetching THAT version's release (`fetchReleaseNotes`) and
+`releaseHighlights` reduces its notes to the Highlights bullets (else New then Fixes, as
+`scripts/release_announce.py` does) as plain text; `takeWhatsNew` hands it to the page once.
+Checks keep running while an update is staged: a
+release newer than the staged one re-runs the updater quietly (phase stays `ready`, so the staged one
+still installs on quit or if the newer download fails), and **Restart to Update** first asks for the
+latest version (bounded at 5 s) and downloads a newer one before installing; nothing installs before a restart or the next
 quit, and it never restarts on its own (ADR `2026-10-17-desktop-updates-download-in-the-background`).
+On a plain quit, ShipIt verifies the new bundle for several seconds AFTER the app exits and cancels
+the update ("App Still Running Error") if the app is running again by then. So a macOS launch first
+asks `launchctl list app.opennetworth.desktop.ShipIt` (`src/main/update-handoff.ts`): a running
+installer whose `ShipItState.plist` targets THIS bundle means the launch only notifies **Installing
+Open Net Worth X…** (the staged bundle's version), spawns a detached shell that waits for that pid
+(bounded at 2 min) and reopens the bundle with `--onw-update-handoff`, and exits. A window is never
+shown for it, since a running process is exactly what cancels the install; the flag stops a second handoff.
+The install itself can take minutes on a busy machine (ShipIt verifies every file of the bundle), and the
+"Installing…" progress window dies with the process. So on macOS, once the book is closed and just before
+the process exits (Restart to Update AND a plain quit with an update staged), `announceInstall` posts the
+same **Installing Open Net Worth X…** notification ("Your book is closed safely"; wording in
+`installNotice`) and waits, bounded at 1 s, for the system's `show` event so the exit cannot drop it.
+It honours the Notifications preference, `Notification.isSupported()` and QA-inactive mode like every
+other notification. Windows (Squirrel.Windows relaunches directly) and Linux (an AppImage relaunches
+itself) have no such gap, so they post nothing.
 A MANUAL **Check for Updates…** still asks (**Download and Install** / **Skip This Version** /
 **Later**), confirms the download started, relabels the menu **Downloading Update…** and ends in
 the Restart Now / Later dialog. Skip is stored as `skippedUpdateVersion` in the app-global desktop
@@ -399,7 +444,7 @@ only. `node qa/packaged-smoke-linux.mjs /abs/Open-Net-Worth.AppImage` (or an ins
   4 hours and, from a background check, downloads without asking (a manual check asks first). An
   AppImage in a writable location verifies `SHA256SUMS` against its minisign signature
   (`SHA256SUMS.minisig`, key built into the app), downloads the new AppImage, verifies its SHA-256
-  against `SHA256SUMS`, swaps it in place and offers **Restart to Update to Open Net Worth X.Y.Z**. A `.deb` install (or an
+  against `SHA256SUMS`, swaps it in place and offers **Restart to Update**. A `.deb` install (or an
   AppImage in a read-only folder, a release without a signature, or a build without an embedded key)
   offers **Open Download Page** instead of Download and Install; a signature that does not verify is
   an error and nothing is installed.
@@ -453,7 +498,7 @@ stages the installer for release when it is signed or the repository variable
 - **Updates.** Squirrel.Windows through the same `opennetworth.ai/update/<platform-arch>/<version>`
   feed as macOS (`src/main/updates.ts`), only when the app was installed by Setup.exe (a portable
   folder has no `Update.exe` and does not check). Behaviour matches macOS: background
-  download, **Restart to Update to Open Net Worth X.Y.Z**, install at next quit.
+  download, **Restart to Update**, install at next quit.
 - **Start at login** registers a login item that starts through `Update.exe`, so it survives updates
   (`src/main/login-item.ts`). Background mode uses a system-tray icon; closing the window with
   background mode off quits the app.

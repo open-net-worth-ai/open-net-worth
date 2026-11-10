@@ -39,9 +39,13 @@ READ_ONLY_TOOLS = frozenset(
         # no store, no network, and nothing under DATA_DIR — headless-safe by construction.
         "read_doc",
         "search_docs",
-        # Memory search (ai/tools/memory.py) — reads MemoryStore.active_facts(), scores in
+        # Memory search (ai/tools/memory.py) — reads MemoryStore.remembered_facts(), scores in
         # memory.recall_facts, writes nothing (unlike remember_fact/forget_fact).
         "recall_memory",
+        # Keyword search over session_messages text (ai/tools/conversations.py): one SELECT,
+        # visible conversations only, writes nothing. read_past_conversation pages one of them.
+        "search_past_conversations",
+        "read_past_conversation",
         # Was a read-SHAPED WRITER until 2026-08-23: `fetch_live` recorded every fetched
         # point into price_history, so asking what a price is appended to the portfolio's
         # own series. It now passes `record_history=False` — the series is accumulated by
@@ -88,6 +92,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_actions",
         "get_alert_channels",
         "get_alerts",
+        "get_investment_theses",
         # Composes services.asset_detail.read_asset_detail (called with
         # record_price_history=False, persist_exchange=False — see that function's own
         # docstring for the two write side effects those flags exist to opt out of) +
@@ -102,6 +107,12 @@ READ_ONLY_TOOLS = frozenset(
         # services.owned_assets.get_asset / list_assets only — no store write.
         "get_asset",
         "get_asset_context",
+        # The Analysis tab's compute_technicals / compute_fundamentals, never their
+        # ensure_*_narrative write half. Traced: market data caches in memory only
+        # (`_history_cache`, `_sector_cache`, `_SECTOR_CACHE`), and the only store access is
+        # reading the instrument and its AssetBriefStore row.
+        "get_asset_fundamentals",
+        "get_asset_technicals",
         "get_budget_month",
         # The pluggable-budget-engines Lucius surface (ai/tools/budget_engines.py, RFC
         # 2026-08-22-pluggable-budget-engines.md Decision F) — these three read the ENGINES
@@ -127,15 +138,34 @@ READ_ONLY_TOOLS = frozenset(
         # PLUS, since 2026-08-13 (RFC §B3), each provider's own first-class, single-
         # provider twin — same underlying providers_service.status([key]) read, no write.
         "get_connector_status",
+        # Reads the curated directory snapshot plus live connector/MCP-server state; returns
+        # booleans and our own catalog text, never an endpoint or credential.
+        "search_connector_directory",
         "simplefin_get_status",
         "plaid_get_status",
         "lunch_money_get_status",
         "lunch_flow_get_status",
         "ynab_get_status",
         "enable_banking_get_status",
+        "gocardless_get_status",
         "yodlee_get_status",
         "alpaca_get_status",
         "ibkr_get_status",
+        # Each bank provider's account list (ai/tools/connector_fetch.py) — traced:
+        # services.connector_fetch.provider_accounts is a PURE read by design (C-B2/S-F7: it
+        # never calls store.record_status or publishes a sync event, unlike fetch()).
+        "simplefin_list_accounts",
+        "plaid_list_accounts",
+        "lunch_money_list_accounts",
+        "lunch_flow_list_accounts",
+        "ynab_list_accounts",
+        # YNAB's plan reads (ai/tools/ynab.py): live GETs through services.aggregation.
+        # ynab_plan, which records no status and writes nothing, here or in YNAB.
+        "ynab_list_plans",
+        "ynab_get_plan",
+        "enable_banking_list_accounts",
+        "gocardless_list_accounts",
+        "yodlee_list_accounts",
         # The connector CONFIGURATION reads (ai/tools/connector_config.py). Traced:
         # get_connector_tools folds services.connectors.list_connectors() (pure store
         # reads + in-memory synthesis) with tool_permissions.get_all_permissions() (one
@@ -188,12 +218,14 @@ READ_ONLY_TOOLS = frozenset(
         "get_returns",
         "get_risk_signals",
         "get_screen_detail",
+        "read_screen",
         "show_guide",  # lights up a control in the open app; writes nothing
         "get_spending_breakdown",
         "get_spending_summary",
         "get_statement",
         "get_transactions",
         "get_uncategorized_summary",
+        "get_untold_news",
         "get_upcoming_vests",
         "get_uploads",
         "list_accounts",
@@ -243,10 +275,9 @@ READ_ONLY_TOOLS = frozenset(
         "preview_automation",
         "save_code_as_skill",
         # Federates providers_for_country() + per-bank list_institutions() (Enable Banking
-        # only, since GoCardless was removed) — pure reads. Used to carry mutates=("config",)
-        # because the GoCardless lookup minted/persisted an OAuth token; that provider is
-        # gone and Enable Banking's list_institutions signs a fresh JWT per call without
-        # writing anything, so the tag was retired with it (scope-down, 2026-08-13).
+        # only — GoCardless, restored 2026-11-02, is deliberately NOT federated: its bank list
+        # caches a token, and new signups are closed) — pure reads. Enable Banking's
+        # list_institutions signs a fresh JWT per call without writing anything.
         "search_institutions",
         "simulate_cashflow",
         "simulate_retirement",

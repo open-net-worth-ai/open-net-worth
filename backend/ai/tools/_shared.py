@@ -274,7 +274,17 @@ def _txn_data_from_ai(item: dict, default_date: str, *, derived_out: dict | None
         _pid = (item.get("payee_id") or "").strip() or payee_registry.resolve_payee_id(
             text, create=False
         )
-        if _pid and payee_registry.default_category_for(_pid):
+        if (
+            _pid
+            and payee_registry.default_category_for(_pid)
+            and not item.get("override_payee_default")
+        ):
+            if derived_out is not None:
+                from backend.services.categories import resolve_category_ref
+
+                _pinned = payee_registry.default_category_for(_pid)
+                if resolve_category_ref(category) != resolve_category_ref(_pinned):
+                    derived_out["category_dropped"] = category
             category = None
     amount = _unsigned_amount(item["amount"], "amount")
     # No silent currency default: an omitted 'currency' once stored a USD card charge
@@ -400,7 +410,7 @@ def _txn_data_from_ai(item: dict, default_date: str, *, derived_out: dict | None
                 "amount": _unsigned_amount(s.get("amount"), "splits[].amount")
                 if s.get("amount") is not None
                 else 0.0,
-                "note": (s.get("note") or ""),
+                "memo": (s.get("memo") or ""),
             }
             for s in raw_splits
             if isinstance(s, dict)

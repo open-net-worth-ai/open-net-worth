@@ -18,6 +18,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { DirectoryPreview } from './DirectoryPreview'
+
+// A prompt suggestion hands its text to Lucius's composer — stand the composer in.
+const composer = { setPendingText: vi.fn(), requestOpen: vi.fn() }
+vi.mock('../../../state/chatComposer', () => ({ useChatComposerOptional: () => composer }))
 import type { DirectoryRow } from './catalog'
 
 afterEach(cleanup)
@@ -34,7 +38,7 @@ function row(overrides: Partial<DirectoryRow> = {}): DirectoryRow {
     mcp: true,
     publisher: 'Firecrawl',
     verification: 'verified',
-    categories: ['Web'],
+    categories: ['Browsing'],
     tools: ['scrape', 'crawl'],
     popular: false,
     installed: false,
@@ -49,7 +53,7 @@ function nativeRow(overrides: Partial<DirectoryRow> = {}): Partial<DirectoryRow>
     name: 'Serper',
     mcp: false,
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Web search', 'Browsing'],
     publisher: 'Serper',
     verification: 'unverified',
     tools: ['web_search', 'fetch_page'],
@@ -57,11 +61,15 @@ function nativeRow(overrides: Partial<DirectoryRow> = {}): Partial<DirectoryRow>
   }
 }
 
-function preview(overrides: Partial<DirectoryRow> = {}, props: { prompts?: string[] } = {}) {
+function preview(
+  overrides: Partial<DirectoryRow> = {},
+  props: { prompts?: string[]; liveTools?: string[] } = {},
+) {
   return render(
     <DirectoryPreview
       d={row(overrides)}
       prompts={props.prompts}
+      liveTools={props.liveTools}
       onAdd={() => {}}
       onConfigure={() => {}}
     />,
@@ -207,7 +215,7 @@ describe('the boxed trust panel is gone from this page', () => {
     const { container } = preview({ verification: 'unverified' })
     expect(screen.queryByText('Unverified publisher')).toBeNull()
     expect(screen.queryByText('Verified publisher')).toBeNull()
-    expect(screen.queryByText('Unknown publisher')).toBeNull()
+    expect(screen.queryByText('Unverified publisher')).toBeNull()
     expect(container.textContent).not.toContain('third-party MCP server')
   })
 
@@ -282,14 +290,14 @@ describe('Details — the endpoint kept its place, in a footer rather than a pan
 describe('the chip rows survive the simplification', () => {
   it('counts tools, prompts and categories', () => {
     preview({}, { prompts: ['Scrape this page', 'Crawl the docs'] })
-    expect(screen.getByText('Tools').textContent).toContain('2')
+    expect(screen.getByText('Example tools').textContent).toContain('2')
     expect(screen.getByText('Prompt suggestions').textContent).toContain('2')
     expect(screen.getByText('Categories').textContent).toContain('1')
   })
 
   it('drops a row rather than rendering an empty one', () => {
     preview({ tools: [], categories: [] })
-    expect(screen.queryByText('Tools')).toBeNull()
+    expect(screen.queryByText('Example tools')).toBeNull()
     expect(screen.queryByText('Prompt suggestions')).toBeNull()
     expect(screen.queryByText('Categories')).toBeNull()
   })
@@ -306,7 +314,11 @@ describe('tool chips show the raw registry name, not a human label', () => {
     const { container } = preview(nativeRow())
     expect(chip(container, 'web_search')).toBeTruthy()
     expect(chip(container, 'fetch_page')).toBeTruthy()
-    expect(container.textContent).not.toContain('Web search')
+    // Scoped to the Tools row: the Categories row legitimately carries a "Web search" tag.
+    const tools = [...container.querySelectorAll('.cn-sublabel')].find((n) =>
+      n.textContent?.startsWith('Tools'),
+    )!.parentElement!
+    expect(tools.textContent).not.toContain('Web search')
   })
 
   it('renders a tool DISCOVERED on a server we have never seen, unchanged', () => {
@@ -330,7 +342,7 @@ describe('Categories describe the connector, never echo its lane', () => {
     const { container } = preview(nativeRow())
     expect(screen.getByText('Categories').textContent).toContain('2')
     expect([...container.querySelectorAll('.cn-tagchip')].map((n) => n.textContent)).toContain(
-      'Search',
+      'Web search',
     )
   })
 
@@ -399,5 +411,69 @@ describe('the header — a large tile, the title centred against it, one heavy a
     expect(container.querySelector('.cn-tile-logo')).toBeNull()
     expect(container.querySelector('.cn-tile svg')).toBeTruthy()
     expect(container.querySelector('.cn-tile')?.className).not.toContain('plate')
+  })
+})
+
+describe('which tool list the preview shows', () => {
+  // Scoped to the tools row: the Categories row carries chips of its own.
+  const toolChips = (c: HTMLElement) =>
+    [
+      ...[...c.querySelectorAll('.cn-sublabel')]
+        .find((n) => /tools/i.test(n.textContent ?? ''))!
+        .parentElement!.querySelectorAll('.cn-tagchip:not(.cn-chipmore)'),
+    ].map((n) => n.textContent)
+  const many = Array.from({ length: 37 }, (_, i) => `tool_${i + 1}`)
+
+  it('labels a third-party sample "Example tools", so 3 never reads as the whole set', () => {
+    preview()
+    expect(screen.getByText('Example tools')).toBeTruthy()
+    expect(screen.queryByText('Tools')).toBeNull()
+  })
+
+  it("calls a native connector's list plain Tools — we wrote it, it is the whole set", () => {
+    preview(nativeRow())
+    expect(screen.getByText('Tools')).toBeTruthy()
+  })
+
+  it('shows what the CONNECTED server advertised, with its real count', () => {
+    const { container } = preview({ installed: true }, { liveTools: ['a', 'b', 'c', 'd'] })
+    expect(screen.getByText('Tools').textContent).toContain('4')
+    expect(screen.getByText('from your connection')).toBeTruthy()
+    expect(toolChips(container)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('ignores a live list for an entry that is not installed', () => {
+    preview({}, { liveTools: ['a', 'b'] })
+    expect(screen.getByText('Example tools').textContent).toContain('2')
+  })
+
+  it('folds a long list to nine behind "Show all N", and opens it in place', () => {
+    const { container } = preview({ installed: true }, { liveTools: many })
+    expect(toolChips(container)).toHaveLength(9)
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 37' }))
+    expect(toolChips(container)).toHaveLength(37)
+    fireEvent.click(screen.getByRole('button', { name: 'Show less' }))
+    expect(toolChips(container)).toHaveLength(9)
+  })
+
+  it('never folds a short list', () => {
+    preview({ installed: true }, { liveTools: many.slice(0, 9) })
+    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull()
+  })
+})
+
+describe('a prompt suggestion is a button that hands the prompt to Lucius', () => {
+  it('fills the composer and opens Lucius — the same as on a connector’s own page', () => {
+    preview({}, { prompts: ['Show all accounts linked through Plaid'] })
+    const chip = screen.getByRole('button', { name: 'Show all accounts linked through Plaid' })
+    fireEvent.click(chip)
+    expect(composer.setPendingText).toHaveBeenCalledWith('Show all accounts linked through Plaid')
+    expect(composer.requestOpen).toHaveBeenCalled()
+  })
+
+  it('tool and category chips stay plain labels', () => {
+    preview({}, { prompts: ['Scrape this page'] })
+    expect(screen.queryByRole('button', { name: 'Scrape this page' })).toBeTruthy()
+    for (const c of document.querySelectorAll('span.cn-tagchip')) expect(c.tagName).toBe('SPAN')
   })
 })

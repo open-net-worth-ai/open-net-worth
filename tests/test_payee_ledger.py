@@ -22,7 +22,7 @@ def _arrange_create(data, **kw):
     pre-write duplicate guard (ADR 2026-08-01) so those fixtures still build."""
     from backend.services import ledger as _l
 
-    return _l.create_transaction(data, force=True, **kw)
+    return _l.create_transaction(data, allow_duplicate=True, **kw)
 
 
 @pytest.fixture
@@ -238,7 +238,9 @@ def test_bulk_import_fills_category_from_payee_default(env):
     # force=True for the same reason _arrange_create uses it: the bulk row is DELIBERATELY the
     # same merchant as the row above (that repetition IS the test), so the pre-write duplicate
     # guard would refuse it. The subject here is payee-default category fill, not dedup.
-    created, _ = svc.bulk_create_transactions([_expense("Green Smoothie Bar")], force=True)
+    created, _ = svc.bulk_create_transactions(
+        [_expense("Green Smoothie Bar")], allow_duplicate=True
+    )
     assert created[0]["category"] == "cat_13095ba70000"
 
 
@@ -329,7 +331,7 @@ def test_bulk_create_transactions_dead_payee_default_does_not_fail_the_batch(env
             _expense("Doomed Merchant 2", payee_id=doomed["id"]),
             _expense("Some New Shop 2"),
         ],
-        force=True,
+        allow_duplicate=True,
     )
     assert skipped == []
     assert len(created) == 2

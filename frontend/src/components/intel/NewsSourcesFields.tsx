@@ -1,6 +1,6 @@
 import type { ClipboardEvent, KeyboardEvent } from 'react'
 import { FormField, TextField } from '../ui'
-import { X } from '../../ui/icons'
+import { X, Plus } from '../../ui/icons'
 
 const MAX_FEEDS = 5
 
@@ -88,7 +88,7 @@ export function CustomFeedsField({ urls, onChange, error, invalidUrl }: CustomFe
         ))}
         {urls.length < MAX_FEEDS ? (
           <button type="button" className="intel-pa-add" onClick={addRow}>
-            + Add feed URL
+            <Plus size={12} aria-hidden="true" /> Add feed URL
           </button>
         ) : (
           <p className="ui-field__help">Maximum 5 feeds.</p>

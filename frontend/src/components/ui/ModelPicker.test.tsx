@@ -791,3 +791,39 @@ describe('ModelPicker (custom model id)', () => {
     expect(screen.getByText(/No model matches/)).toBeTruthy()
   })
 })
+
+describe('pulling the phone sheet down', () => {
+  async function pull(dy: number) {
+    const sheet = document.querySelector('.mp-sheet') as HTMLElement
+    const handle = sheet.querySelector('.mp-sheet-handle-wrap') as HTMLElement
+    Object.defineProperty(sheet, 'offsetHeight', { value: 400, configurable: true })
+    fireEvent.pointerDown(handle, { clientY: 200, pointerId: 1 })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    })
+    fireEvent.pointerMove(handle, { clientY: 200 + dy, pointerId: 1 })
+    fireEvent.pointerUp(handle, { clientY: 200 + dy, pointerId: 1 })
+  }
+
+  function openSheet() {
+    render(<ModelPicker models={[]} value="" label="Model" onChange={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Model' }))
+    expect(document.querySelector('.mp-sheet')).toBeTruthy()
+  }
+
+  it('closes it, like every other sheet', async () => {
+    mockMobile(true)
+    openSheet()
+    await pull(240)
+    expect(document.querySelector('.mp-sheet')).toBeNull()
+    mockMobile(false)
+  })
+
+  it('leaves it open on a short pull', async () => {
+    mockMobile(true)
+    openSheet()
+    await pull(12)
+    expect(document.querySelector('.mp-sheet')).toBeTruthy()
+    mockMobile(false)
+  })
+})

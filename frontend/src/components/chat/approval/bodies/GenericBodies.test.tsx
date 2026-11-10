@@ -123,12 +123,9 @@ describe('tool_permission · text edits', () => {
     const { container } = mount(fixture('tool_permission · agent prompt'))
     expect(factRows(container)).toEqual(['Agent idtransaction-trade-logger'])
     expect(screen.getByText('changes › prompt')).toBeTruthy()
-    expect(container.querySelector('.ac-diff-removed')?.textContent).toContain(
-      'Use one external reference.',
-    )
-    expect(container.querySelector('.ac-diff-added')?.textContent).toContain(
-      'Use every matching external reference.',
-    )
+    expect(container.querySelector('.ac-diff-edited')?.textContent).toContain('external reference.')
+    expect(container.querySelector('.ac-diff-word-removed')?.textContent).toBe('one')
+    expect(container.querySelector('.ac-diff-word-added')?.textContent).toBe('every matching')
     expect(container.querySelector('.ac-diff-context')?.textContent).toContain(
       'Keep the raw bank note.',
     )
@@ -159,10 +156,10 @@ describe('update_automations field diff', () => {
     expect(rows).toContain('PausedNo → Yes')
 
     expect(screen.getByText('Prompt')).toBeTruthy()
-    expect(container.querySelector('.ac-diff-removed')?.textContent).toContain(
-      'flag stale balances',
+    expect(container.querySelector('.ac-diff-edited')?.textContent).toContain('flag stale balances')
+    expect(container.querySelector('.ac-diff-word-added')?.textContent).toContain(
+      'unmatched transfers',
     )
-    expect(container.querySelector('.ac-diff-added')?.textContent).toContain('unmatched transfers')
 
     const toggles = screen.getAllByRole('button', { name: /Show \d+ unchanged lines?/ })
     fireEvent.click(toggles[0]!)
@@ -171,6 +168,65 @@ describe('update_automations field diff', () => {
     const raw = screen.getByText('Raw arguments').closest('details') as HTMLDetailsElement
     expect(raw.open).toBe(false)
     expect(raw.textContent).toContain('auto_123')
+  })
+
+  function withPrompt(old: string, next: string): ProposedChange {
+    const change = structuredClone(fixture('tool_permission · update_automations field diff'))
+    const preview = change.display!.preview as unknown as {
+      data: { items: { changes: Record<string, unknown> }[] }
+    }
+    preview.data.items[0]!.changes = { prompt: { old, new: next } }
+    return change
+  }
+
+  const words = (container: HTMLElement, op: 'added' | 'removed') =>
+    [...container.querySelectorAll(`.ac-diff-word-${op}`)].map((m) => m.textContent)
+
+  it('shows a one-line edit once, marking only the deleted phrase', () => {
+    const { container } = mount(
+      withPrompt(
+        'When a deposit arrives, set its category to Rent, set taxable=false, and append a memo.',
+        'When a deposit arrives, set its category to Rent and append a memo.',
+      ),
+    )
+    expect(container.querySelectorAll('.ac-diff-edited')).toHaveLength(1)
+    expect(container.querySelector('.ac-diff-removed, .ac-diff-added')).toBeNull()
+    expect(words(container, 'removed')).toEqual([', set taxable=false,'])
+    expect(words(container, 'added')).toEqual([])
+    expect(container.querySelector('.ac-diff-edited')?.textContent).toBe(
+      '±When a deposit arrives, set its category to Rent, set taxable=false, and append a memo.',
+    )
+  })
+
+  it('marks an appended phrase on the edited line of a multi-line prompt', () => {
+    const { container } = mount(fixture('tool_permission · update_automations field diff'))
+    expect(words(container, 'added')).toEqual(['and unmatched transfers'])
+    expect(words(container, 'removed')).toEqual([])
+  })
+
+  it('shows a swapped figure as a deletion beside an insertion, never one run of digits', () => {
+    const { container } = mount(
+      withPrompt('{\n  "min": 550,\n  "max": 700\n}', '{\n  "min": 600,\n  "max": 700\n}'),
+    )
+    const edited = container.querySelector('.ac-diff-edited')!
+    expect(edited.textContent).toContain('"min": 550600,')
+    expect(words(container, 'removed')).toEqual(['550'])
+    expect(words(container, 'added')).toEqual(['600'])
+    const del = edited.querySelector('.ac-diff-word-removed')!
+    expect(del.nextElementSibling?.className).toContain('ac-diff-word-added')
+  })
+
+  it('keeps a rewritten line as a removed line and an added line, unmarked', () => {
+    const { container } = mount(
+      withPrompt(
+        'Sweep idle cash above the buffer into savings every week.\nKeep a log.',
+        'Every Friday, email me the uncleared card charges from that week.\nKeep a log.',
+      ),
+    )
+    expect(container.querySelector('.ac-diff-edited')).toBeNull()
+    expect(container.querySelector('.ac-diff-word')).toBeNull()
+    expect(container.querySelector('.ac-diff-removed')?.textContent).toContain('Sweep idle cash')
+    expect(container.querySelector('.ac-diff-added')?.textContent).toContain('Every Friday')
   })
 
   it('says the values match, and still offers the raw arguments', () => {

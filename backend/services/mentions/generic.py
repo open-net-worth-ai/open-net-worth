@@ -17,8 +17,13 @@ from backend.services.mentions._common import (
     _row,
     _type_synonym_match,
 )
+from backend.services.mentions._corpus import corpus
 from backend.services.mentions.descriptor import EntityDescriptor
 from backend.services.mentions.types import SearchQuery
+
+# The one query a generic ``rows`` is called with on the search path — it is the type's whole
+# corpus, memoised across keystrokes (``_corpus``) and filtered here.
+_WHOLE_CORPUS = SearchQuery(q="", types=None, surfaces=None, limit=_ROW_CAP, cursor=None)
 
 
 def _sublabel(d: EntityDescriptor, row: dict) -> str:
@@ -52,7 +57,7 @@ def make_search(d: EntityDescriptor) -> Callable[[SearchQuery], list[dict]]:
         hint = _type_synonym_match(d.type, q) if q else None
         fields = d.search_fields or (d.label_field,)
         out: list[dict] = []
-        source = d.rows(query) if d.rows else []
+        source = corpus(d.rows, _WHOLE_CORPUS) if d.rows else []
         for row in source:
             if q and not hint and not _matches(q, *(str(row.get(f) or "") for f in fields)):
                 continue

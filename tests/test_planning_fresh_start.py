@@ -153,7 +153,7 @@ def env(monkeypatch, db_isolated):
 
 def _identity_holds(p: dict) -> None:
     """Assert the dialog's ledger adds up exactly as the always-present rows read on screen:
-    ``after = cash_now − baseline − held_in_envelopes − held_outside_envelopes
+    ``after = cash_now + card_credit − baseline − held_in_envelopes − held_outside_envelopes
     − card_spend_not_covered``, to the cent — the SAME identity the RTA popover renders, no
     residual term, ever. The subtracted terms are SIGNED sums, not "≥ 0" quantities:
     ``held_in_envelopes`` is routinely NEGATIVE at the hypothetical floor (a budgeted spend
@@ -167,6 +167,7 @@ def _identity_holds(p: dict) -> None:
     lhs = p["ready_to_assign_after"]
     rhs = round(
         p["cash_now"]
+        + p["card_credit"]
         - p["baseline"]
         - p["held_in_envelopes"]
         - p["held_outside_envelopes"]
@@ -862,6 +863,7 @@ def test_get_fresh_start_preview(client):
         "month",
         "ready_to_assign_after",
         "cash_now",
+        "card_credit",
         "held_in_envelopes",
         "held_outside_envelopes",
         "card_spend_not_covered",

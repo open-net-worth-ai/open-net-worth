@@ -7,6 +7,7 @@
 // action entry ("+ Add action") was removed (owner directive) — Lucius is the only way in.
 import { useState } from 'react'
 import type { Commitment, CommitmentAction } from '../../../types/commitments'
+import { useMaskText } from '../../../utils/amountMask'
 import { fBase, fCurrency, toBase } from '../../../utils/format'
 import { daysUntil, fmtDate, fmtDay } from '../../../utils/commitments'
 import { BellIcon, CheckIcon, FilterIcon, Spark, XIcon } from './icons'
@@ -17,6 +18,7 @@ import { useNarrow } from './useNarrow'
 import { entityRefProps } from '../../../utils/mentionable'
 import { buildCtxFields } from '../../../lucius/ctxFields'
 import { filterByDescriptor } from '../../../lucius/entityRegistry'
+import { ArrowRight } from '../../../ui/icons'
 
 // ── a synthetic checklist item derived from a not-yet-promoted funding draw (a loan draw-
 //    down, an asset sale, a windfall receipt) — never persisted on its own; checking it off or
@@ -119,6 +121,7 @@ interface ActionsProps {
 }
 
 export function Actions({ commitment: c, fx, m }: ActionsProps) {
+  const maskText = useMaskText()
   const narrow = useNarrow()
   const [showAllActs, setShowAllActs] = useState(false)
   const [fStatus, setFStatus] = useState('all')
@@ -188,7 +191,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                 )
               }
             >
-              Manage with Lucius →
+              Manage with Lucius <ArrowRight size={13} aria-hidden="true" />
             </button>
             <button
               className={
@@ -241,7 +244,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                 )
               }
             >
-              Manage with Lucius →
+              Manage with Lucius <ArrowRight size={13} aria-hidden="true" />
             </button>
           </span>
         )}
@@ -344,7 +347,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                       a.id,
                       a.label,
                       `${a.label} ${c.name} ${a.note ?? ''}`,
-                      `${c.name} • ${a.due_date}`,
+                      `${c.name} • ${fmtDate(a.due_date)}`,
                     ),
                     'data-ctx': '',
                     'data-ctx-type': 'commitment_action',
@@ -429,7 +432,8 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                         iconLeft={<Spark size={15} />}
                         onClick={() => m.onAskLucius(missPrompt(a, fundBase))}
                       >
-                        Plan the fix with Lucius →
+                        Plan the fix with Lucius
+                        <ArrowRight size={14} aria-hidden="true" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => setMissed(a, false)}>
                         Undo
@@ -468,7 +472,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                       <button
                         className="c2-need-icon-btn miss"
                         aria-label="Not happening"
-                        title={buildDidntHint(a as CommitmentAction, fundBase)}
+                        title={maskText(buildDidntHint(a as CommitmentAction, fundBase))}
                         onClick={() => setMissed(a, true)}
                       >
                         <XIcon />

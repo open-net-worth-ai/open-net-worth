@@ -58,6 +58,12 @@ export interface CatalogEntry extends Omit<
    */
   sub?: string
   desc?: string
+  /**
+   * A feature flag this NATIVE connector ships behind (`core/feature_flags.py`). The backend is
+   * the one seam that reads it: off, `list_connectors()` omits the connector, so the directory
+   * lists the card only when its live counterpart exists, and Lucius's directory search skips it.
+   */
+  flag?: string
   /** The vendor. `null` for a server the user points us at themselves. */
   publisher: string | null
   verification: VerificationState
@@ -86,6 +92,12 @@ export interface CatalogEntry extends Omit<
    */
   privacyUrl?: string
   /**
+   * The outside service a NATIVE connector runs on, when it is not ours (Voice calls on LiveKit):
+   * its name in the description links there, where the account, billing and limits live
+   * (owner, 2026-11-04).
+   */
+  service?: { name: string; url: string }
+  /**
    * The generic add-flow launcher. It has nothing to preview — no endpoint, no tools, no
    * publisher — so a click anywhere on it goes straight to the add form (spec §6).
    */
@@ -105,6 +117,13 @@ export interface CatalogProvenance {
   /** What the entry is FOR. Same inheritance, same reason — an installed server should not
    *  lose the topical tags its own catalog card carries. */
   categories: ConnectorCategory[]
+  /** Which lane the entry is listed in. Same inheritance: an installed server stays in the
+   *  section its directory card sits in. */
+  families: ConnectorFamily[]
+  /** The entry's subtitle and description. Same inheritance: a listed server's page reads
+   *  what its directory card read, not the generic text a hand-added server falls back to. */
+  sub?: string
+  desc?: string
 }
 
 /** A resolved directory row: the wire-facing `DirectoryEntry` plus the provenance the preview
@@ -118,6 +137,9 @@ export interface DirectoryRow extends DirectoryEntry {
   supportUrl?: string
   privacyUrl?: string
   generic?: boolean
+  /** The live connector behind an installed row when its id differs from the row's — an MCP
+   *  server matched to this catalog entry by endpoint (`mcp:api-ibkr-com` for `mcp-ibkr`). */
+  installedId?: string
 }
 
 /**
@@ -134,6 +156,11 @@ export type DirectorySort = 'popular' | 'az'
  *
  * Deliberately ABSENT, and why:
  *  - Webhook — its backend works (`webhook`), but it is intentionally not an addable card (§8).
+ *  - Alpaca (data source) — retired 2026-10-29 for Alpaca's own MCP server (`mcp-alpaca`), which
+ *    trades too; same treatment as IBKR Flex below.
+ *  - IBKR Flex — retired 2026-10-29 for IBKR's own hosted MCP server (`mcp-ibkr`), which reads
+ *    live where Flex is a day-late report. Backend kept (`disabled=True`); its entry lives in
+ *    `RETIRED_CATALOG` below, unshown. ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server.
  *  - Yodlee — its backend works fully (`yodlee`), same as any other data source here. Hidden
  *    2026-08-14 (ADR 2026-08-14-hide-yodlee-enterprise-only-pricing): Yodlee requires an
  *    enterprise sales contract with no public self-serve tier — real reported minimums are
@@ -167,6 +194,48 @@ export type DirectorySort = 'popular' | 'az'
  *     copy is pinned the same way, just on the backend side — see
  *     `tests/test_connectors_service.py`.
  */
+/** Entries withdrawn from the directory but kept, so a revert is one move back into
+ *  `CATALOG`. Never rendered or searched. */
+export const RETIRED_CATALOG: CatalogEntry[] = [
+  {
+    id: 'alpaca',
+    name: 'Alpaca',
+    families: ['Data source'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--crypto)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["alpaca"]`.
+    publisher: 'Alpaca Securities',
+    verification: 'unverified',
+    homepageUrl: 'https://docs.alpaca.markets/us/docs/trading-api',
+    supportUrl: 'https://alpaca.markets/support',
+    // A PDF, and deliberately: alpaca.markets/privacy and /privacy-policy both answer 200
+    // with a rendered "page not found", which a status check alone would have shipped. This
+    // is the target Alpaca's own footer links to.
+    privacyUrl: 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf',
+    mcp: false,
+    popular: false,
+    tools: ['get_connector_status', 'connector_sync'],
+  },
+  {
+    id: 'ibkr',
+    name: 'IBKR Flex',
+    families: ['Data source'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--ibkr)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["ibkr"]`.
+    publisher: 'Interactive Brokers',
+    verification: 'unverified',
+    homepageUrl: 'https://www.interactivebrokers.com/docs/web-api/flex-web-service/introduction',
+    supportUrl: 'https://www.interactivebrokers.com/en/support/customer-service.php',
+    privacyUrl: 'https://www.interactivebrokers.com/en/accounts/legalDocuments/privacy.php',
+    mcp: false,
+    popular: false,
+    tools: ['get_connector_status', 'connector_sync'],
+  },
+]
+
 export const CATALOG: CatalogEntry[] = [
   // ── Channels ───────────────────────────────────────────────────────────────
   {
@@ -188,6 +257,26 @@ export const CATALOG: CatalogEntry[] = [
     // No support link: support for this connector is us, and sending someone with a connector
     // problem to telegram.org/support would be the wrong desk.
     mcp: false,
+    popular: true,
+    tools: [],
+  },
+  {
+    // Voice calls with Lucius — listed only while the `voice_calls` flag is on.
+    id: 'voice',
+    flag: 'voice_calls',
+    name: 'Voice calls',
+    families: ['Channel'],
+    categories: ['Voice'],
+    icon: 'voice',
+    hue: 'var(--cta)',
+    // sub/desc: read live from `services/connector_copy.py` SHORT/LONG["voice"].
+    publisher: 'Open Net Worth',
+    verification: 'unverified',
+    homepageUrl: 'https://opennetworth.ai',
+    // The call's audio and the front voice's side of the conversation cross LiveKit.
+    privacyUrl: 'https://livekit.io/legal/privacy-policy',
+    service: { name: 'LiveKit', url: 'https://cloud.livekit.io' },
+    mcp: false,
     popular: false,
     tools: [],
   },
@@ -208,7 +297,7 @@ export const CATALOG: CatalogEntry[] = [
     // server. There is no vendor service in the middle whose policy would govern it.
     homepageUrl: 'https://opennetworth.ai',
     mcp: false,
-    popular: false,
+    popular: true,
     tools: ['email_search_messages', 'email_get_messages', 'email_send_message'],
   },
   {
@@ -296,41 +385,24 @@ export const CATALOG: CatalogEntry[] = [
     tools: ['get_connector_status', 'connector_sync'],
   },
   {
-    id: 'ibkr',
-    name: 'IBKR Flex',
+    // Behind the `actual_budget_sync` flag. No Lucius tools: it is driven from the Data sync tab.
+    id: 'actual_budget',
+    flag: 'actual_budget_sync',
+    name: 'Actual Budget',
     families: ['Data source'],
-    categories: ['Brokerage'],
-    icon: 'investments',
-    hue: 'var(--ibkr)',
-    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["ibkr"]`.
-    publisher: 'Interactive Brokers',
+    categories: ['Banking'],
+    icon: 'accounts',
+    hue: 'var(--accent)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["actual_budget"]`.
+    publisher: 'Actual Budget',
     verification: 'unverified',
-    homepageUrl: 'https://www.interactivebrokers.com/docs/web-api/flex-web-service/introduction',
-    supportUrl: 'https://www.interactivebrokers.com/en/support/customer-service.php',
-    privacyUrl: 'https://www.interactivebrokers.com/en/accounts/legalDocuments/privacy.php',
+    homepageUrl: 'https://actualbudget.org',
+    repoUrl: 'https://github.com/actualbudget/actual',
+    supportUrl: 'https://github.com/actualbudget/actual/issues',
+    // No privacy link: the server is the person's own, so no vendor sees the data.
     mcp: false,
     popular: false,
-    tools: ['get_connector_status', 'connector_sync'],
-  },
-  {
-    id: 'alpaca',
-    name: 'Alpaca',
-    families: ['Data source'],
-    categories: ['Brokerage'],
-    icon: 'investments',
-    hue: 'var(--crypto)',
-    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["alpaca"]`.
-    publisher: 'Alpaca Securities',
-    verification: 'unverified',
-    homepageUrl: 'https://docs.alpaca.markets/us/docs/trading-api',
-    supportUrl: 'https://alpaca.markets/support',
-    // A PDF, and deliberately: alpaca.markets/privacy and /privacy-policy both answer 200
-    // with a rendered "page not found", which a status check alone would have shipped. This
-    // is the target Alpaca's own footer links to.
-    privacyUrl: 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf',
-    mcp: false,
-    popular: false,
-    tools: ['get_connector_status', 'connector_sync'],
+    tools: [],
   },
   {
     id: 'enable_banking',
@@ -345,6 +417,24 @@ export const CATALOG: CatalogEntry[] = [
     homepageUrl: 'https://enablebanking.com/docs/api/reference/',
     // No support link: enablebanking.com/contact-us is a meeting-booking form, not a desk.
     privacyUrl: 'https://enablebanking.com/privacy/',
+    mcp: false,
+    popular: false,
+    tools: ['get_connector_status', 'connector_sync'],
+  },
+  {
+    id: 'gocardless',
+    name: 'GoCardless',
+    families: ['Data source'],
+    categories: ['Banking'],
+    icon: 'accounts',
+    hue: 'var(--recv)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["gocardless"]`. For an EXISTING Bank
+    // Account Data account only — GoCardless closed new signups in 2025.
+    publisher: 'GoCardless',
+    verification: 'unverified',
+    homepageUrl: 'https://docs.gocardless.com/bank-account-data/overview',
+    supportUrl: 'https://support.gocardless.com',
+    privacyUrl: 'https://gocardless.com/privacy/',
     mcp: false,
     popular: false,
     tools: ['get_connector_status', 'connector_sync'],
@@ -390,7 +480,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:duckduckgo',
     name: 'DuckDuckGo',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:duckduckgo"]`.
@@ -412,7 +502,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:tavily',
     name: 'Tavily',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:tavily"]`.
@@ -429,7 +519,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:perplexity',
     name: 'Perplexity (Sonar)',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:perplexity"]`.
@@ -447,7 +537,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:serper',
     name: 'Serper',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:serper"]`.
@@ -464,7 +554,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:google_pse',
     name: 'Google Programmable Search',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:google_pse"]`.
@@ -481,7 +571,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:firecrawl',
     name: 'Firecrawl',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Web search', 'Browsing'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:firecrawl"]`.
@@ -529,7 +619,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'mcp-playwright',
     name: 'Playwright MCP',
     families: ['MCP'],
-    categories: ['Web'],
+    categories: ['Browsing'],
     icon: 'cpu',
     hue: 'var(--apt)',
     sub: 'Real browser rendering for Lucius in chat',
@@ -539,7 +629,7 @@ export const CATALOG: CatalogEntry[] = [
     repoUrl: 'https://github.com/microsoft/playwright-mcp',
     supportUrl: 'https://github.com/microsoft/playwright-mcp/issues',
     mcp: true,
-    popular: true,
+    popular: false,
     tools: [
       'browser_navigate',
       'browser_snapshot',
@@ -553,7 +643,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'mcp-firecrawl',
     name: 'Firecrawl',
     families: ['MCP'],
-    categories: ['Web', 'Search'],
+    categories: ['Browsing', 'Web search'],
     icon: 'search',
     hue: 'var(--apt)',
     sub: 'Crawl + scrape sites into clean markdown',
@@ -682,6 +772,314 @@ export const CATALOG: CatalogEntry[] = [
     mcp: true,
     popular: false,
     tools: [],
+  },
+  {
+    id: 'mcp-monarch',
+    name: 'Monarch',
+    families: ['Data source'],
+    categories: ['Banking'],
+    icon: 'accounts',
+    hue: 'var(--apt)',
+    sub: 'Reads and edits your Monarch transactions and budgets',
+    desc: 'Connect Monarch’s own hosted server to let Lucius work with your Monarch data: transactions, accounts, balances, categories, budgets and net worth. If you allow writing, it can also create and edit transactions, tags and rules, and Monarch can’t undo those changes. Sign-in happens in the browser over OAuth, and Monarch’s consent page lets you leave Write unticked for read-only access. Accounts Monarch gets through Finicity aren’t available to it yet, which particularly affects Fidelity. Monarch sets a weekly usage limit, higher on Plus than on Core.',
+    publisher: 'Monarch',
+    verification: 'verified',
+    // help.monarch.com publishes this endpoint, but it refuses non-browser clients, so it is
+    // the link left out here.
+    homepageUrl: 'https://www.monarch.com',
+    privacyUrl: 'https://www.monarch.com/privacy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-ibkr',
+    name: 'Interactive Brokers',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--ibkr)',
+    sub: 'Trades stocks, options & futures; live positions and P&L',
+    desc: 'Connect Interactive Brokers’ own hosted server to let Lucius work with your IBKR account directly. It exposes account balances, positions, trades, orders and performance; quotes, price history, option chains and contract search; screeners, watchlists, price alerts and IBKR’s company research. It can also act: it previews, submits, modifies and cancels orders, and edits watchlists, alerts and saved screeners. Useful for reconciling IBKR positions against what is recorded here, checking an allocation or a day’s move, researching a holding, or drafting an order you review before it goes. Sign-in happens on IBKR’s own login screen over OAuth, for one account at a time; you can revoke it in Client Portal under Settings › Manage Third-Party Consents.',
+    publisher: 'Interactive Brokers',
+    verification: 'verified',
+    // IBKR's own pages publish this exact endpoint for "any MCP client": the AI-integrations
+    // page, the connector v1.1.5 release notes (ibkrguides.com) and the 2026-07-28 press release.
+    homepageUrl: 'https://www.interactivebrokers.com/en/trading/ai-integrations.php',
+    supportUrl: 'https://www.interactivebrokers.com/en/support/customer-service.php',
+    privacyUrl: 'https://www.interactivebrokers.com/en/accounts/legalDocuments/privacy.php',
+    mcp: true,
+    popular: true,
+    tools: [
+      'get_account_positions',
+      'get_account_balances',
+      'get_account_trades',
+      'get_price_snapshot',
+      'get_option_data',
+      'preview_order',
+      'submit_order',
+    ],
+  },
+  {
+    id: 'mcp-robinhood',
+    name: 'Robinhood',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades US stocks in an agent account; reads every account',
+    desc: 'Connect Robinhood’s own hosted Trading server to let Lucius see your Robinhood investing. It can read every Robinhood account you hold — account numbers, positions, balances and order history included — but it can only place trades inside a separate Agentic account that Robinhood opens when you connect, using only the money you move into it. Robinhood describes it as a beta that trades US equities for now. Robinhood sends a push notification for each trade. Useful for reconciling Robinhood positions against what is recorded here, reviewing allocation and order history, or trying an idea with a small, ring-fenced balance. Sign-in happens on Robinhood’s own screen over OAuth.',
+    publisher: 'Robinhood',
+    verification: 'verified',
+    // Robinhood's Help Center publishes this endpoint ("Onboarding an external agent"), and its
+    // 2026-05-27 newsroom post announces the Trading MCP server.
+    homepageUrl: 'https://robinhood.com/us/en/support/articles/agentic-trading-overview/',
+    supportUrl: 'https://robinhood.com/us/en/support/',
+    privacyUrl: 'https://robinhood.com/us/en/support/articles/privacy-policy/',
+    mcp: true,
+    popular: true,
+    tools: [],
+  },
+  {
+    id: 'mcp-moomoo',
+    name: 'moomoo',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades and researches: quotes, options, live positions',
+    desc: 'Connect moomoo’s own hosted server to let Lucius work with your moomoo account through moomoo OpenAPI. moomoo describes it as real-time quotes, derivatives screening, fundamentals and technicals, portfolio management and trade execution, so it can act on your account. Unlike moomoo’s older API route it needs no OpenD gateway running on this machine. Useful for checking moomoo positions against what is recorded here, researching a holding, or screening options. Sign-in happens on moomoo’s own consent page over OAuth.',
+    publisher: 'moomoo',
+    verification: 'verified',
+    // moomoo's OpenAPI docs (open.moomoo.com/mcp-docs) publish this endpoint and its OAuth flow.
+    homepageUrl: 'https://open.moomoo.com/mcp-docs/overview',
+    supportUrl: 'https://www.moomoo.com/us/support',
+    privacyUrl: 'https://www.moomoo.com/privacy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-alpaca',
+    name: 'Alpaca MCP',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades stocks, options & crypto; paper trading by default',
+    desc: 'Connect Alpaca’s own MCP server, run on this machine, to let Lucius trade at Alpaca — unlike the read-only Alpaca data source, which only imports positions. It reads your account, positions, orders and market data, and places, changes and cancels stock, option and crypto orders. It starts on paper trading: add ALPACA_PAPER_TRADE=false to the environment variables for real money. Needs uv on this machine, and an Alpaca API key pair pasted into the environment variables.',
+    publisher: 'Alpaca',
+    verification: 'verified',
+    // alpacahq/alpaca-mcp-server is Alpaca's own org; the PyPI package links back to it.
+    repoUrl: 'https://github.com/alpacahq/alpaca-mcp-server',
+    supportUrl: 'https://github.com/alpacahq/alpaca-mcp-server/issues',
+    privacyUrl: 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf',
+    mcp: true,
+    popular: false,
+    tools: ['place_stock_order', 'place_option_order', 'place_crypto_order'],
+  },
+  {
+    id: 'mcp-coinbase',
+    name: 'Coinbase',
+    families: ['MCP'],
+    categories: ['Brokerage', 'Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades crypto on Coinbase; balances, orders, fills, fees',
+    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it — pick ECDSA as its signature algorithm, since Advanced Trade refuses Ed25519 keys.',
+    publisher: 'Coinbase',
+    verification: 'verified',
+    // @coinbase/coinbase-cli is published by Coinbase's own npm accounts. Help-centre and
+    // privacy pages refuse non-browser clients, so they are the links left out here.
+    homepageUrl: 'https://docs.cdp.coinbase.com/coinbase-cli/overview',
+    mcp: true,
+    popular: false,
+    tools: ['coinbase_orders_create', 'coinbase_orders_preview', 'coinbase_balance'],
+  },
+  {
+    id: 'mcp-okx',
+    name: 'OKX',
+    families: ['MCP'],
+    categories: ['Brokerage', 'Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades spot, perpetuals & options on OKX; demo by default',
+    desc: 'Connect OKX’s own Agent Trade Kit server, run on this machine, to let Lucius trade on OKX. It reads balances, positions, orders, fills and bills, and places, amends and cancels spot, perpetual-swap and option orders, including algo orders and grid bots. It starts in OKX’s demo (simulated) trading: remove --demo from the arguments for real money, or add --read-only to allow no orders at all. Needs Node.js 18 or later, and an OKX API key, secret and passphrase.',
+    publisher: 'OKX',
+    verification: 'verified',
+    // okx/agent-trade-kit is OKX's own org; the @okx_ai npm package is maintained from OKG.
+    repoUrl: 'https://github.com/okx/agent-trade-kit',
+    supportUrl: 'https://github.com/okx/agent-trade-kit/issues',
+    privacyUrl: 'https://www.okx.com/help/privacy-policy-statement',
+    mcp: true,
+    popular: false,
+    tools: ['spot_place_order', 'swap_place_order', 'account_get_balance'],
+  },
+  {
+    id: 'mcp-kraken',
+    name: 'Kraken',
+    families: ['MCP'],
+    categories: ['Brokerage', 'Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Crypto market data, balances, paper trading; live opt-in',
+    desc: 'Connect Kraken’s own MCP server — part of the Kraken CLI, run on this machine — to let Lucius work with your Kraken account. As set up here it reads market data, your balances, orders, trades and ledgers, and paper-trades with no real money. Live spot orders are opt-in: add trade to the -s list in the arguments (futures for futures); keep funding out unless you want deposits and withdrawals offered. Install the Kraken CLI first (macOS or Linux), and paste a Kraken API key and secret — create the key with only the permissions you want allowed.',
+    publisher: 'Kraken',
+    verification: 'verified',
+    // krakenfx/kraken-cli is Kraken's own org; v0.5.1 moved the server to its own `kraken-mcp`
+    // binary (`kraken mcp` in older docs now only prints a pointer to it).
+    repoUrl: 'https://github.com/krakenfx/kraken-cli',
+    homepageUrl: 'https://docs.kraken.com/home/mcp',
+    supportUrl: 'https://github.com/krakenfx/kraken-cli/issues',
+    privacyUrl: 'https://www.kraken.com/legal/privacy',
+    mcp: true,
+    popular: false,
+    tools: ['kraken_balance', 'kraken_paper_buy', 'kraken_trades_history'],
+  },
+  {
+    id: 'mcp-webull',
+    name: 'Webull',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Accounts, positions, quotes; orders you confirm in Webull',
+    desc: 'Connect Webull’s own hosted server (Webull Cloud MCP) to let Lucius work with your Webull account. It reads your accounts, balances, positions, orders and market data, and can stage stock, option, futures and crypto orders — which Webull holds as instructions until you confirm each one in the Webull app. You choose which accounts and which capability groups to grant on Webull’s own consent page, signed in over OAuth with your Webull trading password. Market data needs a Webull subscription.',
+    publisher: 'Webull',
+    verification: 'verified',
+    // developer.webull.com documents this endpoint (AI-friendly Resources → MCP); its 401
+    // carries no WWW-Authenticate, so sign-in rests on the well-known metadata fallback.
+    homepageUrl: 'https://developer.webull.com/apis/docs/AI-friendly-Resources/mcp/',
+    repoUrl: 'https://github.com/webull-inc/webull-openapi-mcp',
+    supportUrl: 'https://github.com/webull-inc/webull-openapi-mcp/issues',
+    privacyUrl: 'https://www.webull.com/privacy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-longbridge',
+    name: 'Longbridge',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades stocks and options; US, HK, SG and China quotes',
+    desc: 'Connect Longbridge’s own hosted server to let Lucius work with your Longbridge account (Singapore, Hong Kong or US). It reads quotes for US, Hong Kong, Singapore and China A-share listings, options, fundamentals, your account and portfolio, and places, changes and cancels orders, plus price alerts and recurring investment plans, so it can act on your account with real money. Which markets you can trade depends on your Longbridge account and region. Sign-in happens on Longbridge’s own consent page over OAuth. Customers in mainland China use https://mcp.longbridge.cn instead.',
+    publisher: 'Longbridge',
+    verification: 'verified',
+    // open.longbridge.com/docs/mcp publishes this endpoint; the server is longbridge/
+    // longbridge-mcp, also in the MCP Registry as com.longbridge/mcp.
+    homepageUrl: 'https://open.longbridge.com/docs/mcp',
+    repoUrl: 'https://github.com/longbridge/longbridge-mcp',
+    supportUrl: 'https://github.com/longbridge/longbridge-mcp/issues',
+    privacyUrl: 'https://longbridge.com/sg/en/support/topics/Other/privacy-policy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-tiger',
+    name: 'Tiger Brokers',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Reads quotes, positions, assets & orders; no trading yet',
+    desc: 'Connect Tiger Brokers’ own hosted server to let Lucius read your Tiger account — quotes, positions, assets, orders and transactions — for checking holdings against what is recorded here. Tiger lists trading through this server as coming soon, so today it cannot place orders. For individual accounts in the markets Tiger serves (US, Hong Kong, Singapore, Australia, New Zealand, the UK and more). Needs Tiger OpenAPI switched on in Tiger’s Developer Center; quotes are 15 minutes delayed unless you buy real-time quotes for the API. Sign-in happens on Tiger’s own consent page over OAuth.',
+    publisher: 'Tiger Brokers',
+    verification: 'verified',
+    // docs.itigerup.com/docs/remote-mcp publishes this endpoint. Tiger's local `tigermcp`
+    // package is left out: it crashes under mcp 2.x as documented (2026-10-31).
+    homepageUrl: 'https://docs.itigerup.com/docs/remote-mcp',
+    privacyUrl: 'https://www.itiger.com/agreement/sgpolicy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-zerodha',
+    name: 'Zerodha Kite',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Indian holdings, positions, margins & quotes; GTT orders',
+    desc: 'Connect Zerodha’s own hosted Kite MCP server to let Lucius read your Zerodha account — holdings, positions, margins, orders, mutual funds, live quotes and price history on NSE, BSE and MCX. Zerodha’s hosted server places no regular orders; it does let you set, change and delete GTT (good-till-triggered) orders. It is free. Connecting needs no key: once it is added, ask Lucius to log in to Kite, open the link it gives you, and sign in on Zerodha’s own page with your 2FA.',
+    publisher: 'Zerodha',
+    verification: 'verified',
+    // Zerodha's support article "Connect Zerodha with an AI assistant" publishes this address;
+    // the server is zerodha/kite-mcp-server. No transport auth — login is its `login` tool.
+    homepageUrl:
+      'https://support.zerodha.com/category/trading-and-markets/general-kite/others-kite/articles/connect-zerodha-ai-assistant',
+    repoUrl: 'https://github.com/zerodha/kite-mcp-server',
+    supportUrl: 'https://github.com/zerodha/kite-mcp-server/issues',
+    privacyUrl: 'https://zerodha.com/privacy-policy/',
+    mcp: true,
+    popular: false,
+    tools: ['get_holdings', 'get_positions', 'place_gtt_order'],
+  },
+  {
+    id: 'mcp-upstox',
+    name: 'Upstox',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Indian holdings, positions, funds, orders & SIPs; read-only',
+    desc: 'Connect Upstox’s own hosted server to let Lucius read your Upstox account — profile, funds and margin, holdings, positions, orders and trades, mutual fund holdings and SIPs, and IPO applications. It is read-only by design: it cannot place, change or cancel anything. Sign-in happens on Upstox’s own page over OAuth.',
+    publisher: 'Upstox',
+    verification: 'verified',
+    // upstox.com's developer announcement (plugin marketplace launch, 2026-07-07) publishes
+    // this endpoint; the server is upstox/mcp-server-upstox-api.
+    homepageUrl:
+      'https://upstox.com/developer/api-documentation/announcements/plugin-marketplace-launch/',
+    repoUrl: 'https://github.com/upstox/mcp-server-upstox-api',
+    supportUrl: 'https://github.com/upstox/mcp-server-upstox-api/issues',
+    privacyUrl: 'https://upstox.com/terms-of-use-and-privacy-policy/',
+    mcp: true,
+    popular: false,
+    tools: ['get-holdings', 'get-positions', 'get-funds-margin'],
+  },
+  {
+    id: 'mcp-public',
+    name: 'Public.com',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades US stocks, options & crypto; live money only',
+    desc: 'Connect Public.com’s own MCP server, run on this machine, to let Lucius trade at Public.com. It reads your portfolio, quotes and tax lots, estimates an order’s cost before it is sent, and places, replaces and cancels stock, ETF, option (including multi-leg), crypto and event-contract orders. Public.com offers no paper or read-only mode, so every order is real money. Needs uv on this machine, and a Public.com API secret from Settings → API pasted into the environment variables.',
+    publisher: 'Public.com',
+    verification: 'verified',
+    // PyPI publicdotcom-mcp-server is released by PublicDotCom/publicdotcom-mcp-server through a
+    // PyPI trusted publisher. Public's hosted server is left out: CIMD-only sign-in, no DCR.
+    homepageUrl: 'https://public.com/api/docs',
+    repoUrl: 'https://github.com/PublicDotCom/publicdotcom-mcp-server',
+    supportUrl: 'https://github.com/PublicDotCom/publicdotcom-mcp-server/issues',
+    mcp: true,
+    popular: false,
+    tools: ['get_portfolio', 'place_order', 'cancel_order'],
+  },
+  {
+    id: 'mcp-bybit',
+    name: 'Bybit',
+    families: ['MCP'],
+    categories: ['Brokerage', 'Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades crypto spot, perps & options; live unless testnet',
+    desc: 'Connect Bybit’s own MCP server, run on this machine, to let Lucius work with your Bybit account. It reads market data, balances, positions, orders and history, and places, amends and cancels spot, perpetual and option orders, sets leverage and places Earn orders — close to 400 tools in all. It connects to Bybit’s live exchange unless you add BYBIT_TESTNET=true to the environment variables, and it has no read-only switch of its own: create the API key with only the permissions you want allowed (read-only, if Lucius should not trade). Needs Node.js 20.6 or later, and a Bybit API key and secret.',
+    publisher: 'Bybit',
+    verification: 'verified',
+    // bybit-exchange/trading-mcp is Bybit's GitHub-verified org; the npm package's maintainers
+    // are @bybit.com accounts; announced in Bybit's 2026-04-22 press release.
+    repoUrl: 'https://github.com/bybit-exchange/trading-mcp',
+    supportUrl: 'https://github.com/bybit-exchange/trading-mcp/issues',
+    privacyUrl: 'https://www.bybit.com/en/privacy-policy',
+    mcp: true,
+    popular: false,
+    tools: ['createOrder', 'amendOrder', 'cancelOrder'],
   },
   {
     id: 'mcp-expensify',
@@ -845,7 +1243,7 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-firecrawl': {
     transport: 'local',
     command: 'npx',
-    args: '-y firecrawl-mcp',
+    args: '-y firecrawl-mcp@latest',
     env: 'FIRECRAWL_API_KEY=',
   },
   // Stripe documents OAuth first but explicitly supports a restricted API key as an
@@ -858,6 +1256,65 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
     env: 'XERO_CLIENT_ID=\nXERO_CLIENT_SECRET=',
   },
   'mcp-mercury': { transport: 'remote', url: 'https://mcp.mercury.com/mcp', auth: 'oauth' },
+  'mcp-monarch': { transport: 'remote', url: 'https://api.monarch.com/mcp', auth: 'oauth' },
+  // The address IBKR publishes for "any MCP client" (connector v1.1.5 release notes) — the same
+  // OAuth server behind its Claude/ChatGPT/Grok directory listings.
+  'mcp-ibkr': { transport: 'remote', url: 'https://api.ibkr.com/v1/api/mcp-public', auth: 'oauth' },
+  'mcp-robinhood': {
+    transport: 'remote',
+    url: 'https://agent.robinhood.com/mcp/trading',
+    auth: 'oauth',
+  },
+  'mcp-moomoo': { transport: 'remote', url: 'https://mcp.moomoo.com/mcp', auth: 'oauth' },
+  // The three below run on this machine. Each env block is the vendor's own variable NAMES
+  // (verified in its code, 2026-10-29) — never a value, a preset must not ship one. The
+  // no-real-money default lives elsewhere: Alpaca's own default is paper, OKX's is `--demo`.
+  'mcp-alpaca': {
+    transport: 'local',
+    command: 'uvx',
+    args: 'alpaca-mcp-server@latest',
+    env: 'ALPACA_API_KEY=\nALPACA_SECRET_KEY=',
+  },
+  'mcp-coinbase': {
+    transport: 'local',
+    command: 'npx',
+    args: '-y @coinbase/coinbase-cli@latest mcp',
+    // COINBASE_ENV names the built-in `live` environment. Without it every call fails with
+    // "no environment configured" — the keys alone are not enough (verified 2026-10-31).
+    env: 'COINBASE_ENV=live\nCOINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
+  },
+  // Needs the Kraken CLI installed (its own installer or release binary — no npm/PyPI
+  // package). No live-order or funding services by default: market, read-only account, paper.
+  'mcp-kraken': {
+    transport: 'local',
+    command: 'kraken-mcp',
+    args: '-s market,account,paper',
+    env: 'KRAKEN_API_KEY=\nKRAKEN_API_SECRET=',
+  },
+  'mcp-webull': { transport: 'remote', url: 'https://api.webull.com/mcp', auth: 'oauth' },
+  'mcp-longbridge': { transport: 'remote', url: 'https://mcp.longbridge.com', auth: 'oauth' },
+  'mcp-tiger': { transport: 'remote', url: 'https://mcp.tigerfintech.com/mcp', auth: 'oauth' },
+  // Answers anonymously; the user logs in to Kite through the server's own `login` tool.
+  'mcp-zerodha': { transport: 'remote', url: 'https://mcp.kite.trade/mcp', auth: 'none' },
+  'mcp-upstox': { transport: 'remote', url: 'https://mcp.upstox.com/mcp', auth: 'oauth' },
+  'mcp-public': {
+    transport: 'local',
+    command: 'uvx',
+    args: 'publicdotcom-mcp-server@latest',
+    env: 'PUBLIC_COM_SECRET=',
+  },
+  'mcp-bybit': {
+    transport: 'local',
+    command: 'npx',
+    args: '-y bybit-official-trading-server@latest',
+    env: 'BYBIT_API_KEY=\nBYBIT_API_SECRET=',
+  },
+  'mcp-okx': {
+    transport: 'local',
+    command: 'npx',
+    args: '-y @okx_ai/okx-trade-mcp@latest --demo',
+    env: 'OKX_API_KEY=\nOKX_SECRET_KEY=\nOKX_PASSPHRASE=',
+  },
   // Trailing slash is deliberate: the bare `/mcp` 308-redirects here, and the trailing form is
   // what Expensify's own help-centre config block publishes. Presetting the redirect would work
   // but adds a hop for no reason.
@@ -875,7 +1332,7 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-fred': {
     transport: 'local',
     command: 'npx',
-    args: '-y fred-mcp-server',
+    args: '-y fred-mcp-server@latest',
     env: 'FRED_API_KEY=',
   },
 }
@@ -919,14 +1376,23 @@ export function filterDirectory(
   family: DirectoryFamilyFilter,
   query: string,
   sort: DirectorySort,
+  category: ConnectorCategory | 'all' = 'all',
 ): DirectoryRow[] {
   const q = query.trim().toLowerCase()
   return entries
     .filter((d) => family === 'all' || d.families.includes(FAMILY_OF_FILTER[family]))
-    .filter((d) => !q || matchesSearch(`${d.name} ${d.sub}`, q))
-    .sort((a, b) =>
-      sort === 'az' ? a.name.localeCompare(b.name) : (b.popular ? 1 : 0) - (a.popular ? 1 : 0),
-    )
+    .filter((d) => category === 'all' || d.categories.includes(category))
+    .filter((d) => !q || matchesSearch(`${d.name} ${d.sub} ${d.categories.join(' ')}`, q))
+    .sort((a, b) => (sort === 'az' ? byName(a, b) : byPopular(a, b)))
+}
+
+const byName = (a: DirectoryRow, b: DirectoryRow) => a.name.localeCompare(b.name)
+
+/** "Popular": the popular picks, then everything else — each group A–Z. Whether you have it
+ *  already does not count (owner, 2026-11-02): a sort by popularity sorts by popularity. */
+function byPopular(a: DirectoryRow, b: DirectoryRow): number {
+  const rank = (d: DirectoryRow) => (d.popular ? 0 : 1)
+  return rank(a) - rank(b) || byName(a, b)
 }
 
 /** Popular tiles show ONLY on the unfiltered, unsearched view (spec §6). */
@@ -970,8 +1436,19 @@ export function skipsPreview(entry: DirectoryRow): boolean {
  * and the only part a user cannot rename. A server pointed at a different endpoint therefore
  * inherits nothing, which is the safe direction: it falls back to `unknown`.
  */
+/** How two endpoints are compared: whitespace collapsed and a package's version tag dropped
+ *  (`pkg@latest`, `@scope/pkg@1.2.3` → the bare name), so a server saved before the catalog
+ *  started launching `@latest` still matches its card. Twin: `connector_directory._endpoint_key`. */
+export function endpointKey(endpoint: string | undefined): string {
+  return (endpoint ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.replace(/^(@?[^@\s]+)@[^@\s/]+$/, '$1'))
+    .join(' ')
+}
+
 export function catalogProvenanceFor(endpoint: string | undefined): CatalogProvenance | null {
-  const needle = endpoint?.trim()
+  const needle = endpointKey(endpoint)
   if (!needle) return null
   for (const entry of CATALOG) {
     if (!entry.mcp) continue
@@ -981,7 +1458,7 @@ export function catalogProvenanceFor(endpoint: string | undefined): CatalogProve
       preset.transport === 'remote'
         ? preset.url
         : [preset.command, preset.args].filter(Boolean).join(' ')
-    if (known && known.trim() === needle) {
+    if (known && endpointKey(known) === needle) {
       return {
         publisher: entry.publisher,
         verification: entry.verification,
@@ -989,6 +1466,9 @@ export function catalogProvenanceFor(endpoint: string | undefined): CatalogProve
         homepageUrl: entry.homepageUrl,
         logo: connectorLogo(entry.id),
         categories: entry.categories,
+        families: entry.families,
+        sub: entry.sub,
+        desc: entry.desc,
       }
     }
   }

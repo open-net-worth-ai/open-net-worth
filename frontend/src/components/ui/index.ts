@@ -102,6 +102,10 @@ export { List } from './List'
 export type { ListProps } from './List'
 export type { StackProps, StackAlign } from './Stack'
 
+export { SwipeActions } from './SwipeActions'
+export { useSwipeRows } from './useSwipeRows'
+export type { SwipeAction } from './SwipeActions'
+
 export { Cluster } from './Cluster'
 export type { ClusterProps, ClusterAlign, ClusterJustify } from './Cluster'
 
@@ -113,6 +117,8 @@ export type { TextProps, TextSize, TextTone, TextWeight, TextElement } from './T
 
 export { Money } from './Money'
 export type { MoneyProps } from './Money'
+
+export { MaskedText } from './MaskedText'
 
 export { Switch } from './Switch'
 export type { SwitchProps } from './Switch'

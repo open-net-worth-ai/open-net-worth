@@ -508,7 +508,7 @@ section makes the two concepts distinct and both real, for every connector famil
 - THEN the publisher and the ENDPOINT are the ones the probe reported — the server's own
   `initialize` self-report and the backend's verbatim rendering of the config — not a value
   re-derived from the form.
-- AND a server that volunteers no publisher shows the **Unknown publisher** badge with an empty
+- AND a server that volunteers no publisher shows the **Unverified publisher** badge (the `unknown` state; same words as `unverified`, its note differs) with an empty
   name slot and the "we can't vouch for it" note — never the literal string "Unknown publisher"
   rendered as the publisher's NAME, which would flip the panel to the known-publisher note.
 - AND a CURATED catalog entry keeps its **Verified**/**Unverified** badge through the review step:
@@ -518,7 +518,7 @@ section makes the two concepts distinct and both real, for every connector famil
 ### CNR-TRUST-THREE-STATE
 - GIVEN a curated official entry / a known-but-community entry / a user-added custom server
 - WHEN I read each publisher badge
-- THEN they read **Verified publisher** / **Unverified publisher** / **Unknown publisher**
+- THEN they read **Verified publisher** / **Unverified publisher** (for both `unverified` and `unknown`)
   respectively — three distinct states, not a boolean.
 
 ### CNR-TRUST-NO-FALSE-AUTHOR

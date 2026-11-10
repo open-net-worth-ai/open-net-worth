@@ -25,6 +25,7 @@ import { eqLuciusParse, eqGenSchedule, countParsedFields } from './scheduleGen'
 import type { Frequency, GeneratedTranche } from './scheduleGen'
 import { ACCOUNTS_KEY, fetchJson } from '../../../hooks/serverState'
 import { fetchCachedQuery } from '../../../state/queryCache'
+import { X, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
 
 interface Props {
   onClose: () => void
@@ -492,14 +493,20 @@ export function AddGrantModal({ onClose, onDone }: Props) {
                       onClick={() => removeTranche(t._key)}
                       aria-label="Remove tranche"
                     >
-                      ✕
+                      <X size={14} aria-hidden="true" />
                     </Button>
                   )}
                 </Cluster>
               ))}
             </Stack>
-            <Button variant="ghost" size="sm" onClick={addTranche} className="equity-tranches__add">
-              + Add tranche row
+            <Button
+              variant="ghost"
+              size="sm"
+              iconLeft={<Plus size={14} aria-hidden="true" />}
+              onClick={addTranche}
+              className="equity-tranches__add"
+            >
+              Add tranche row
             </Button>
           </div>
         )}
@@ -513,7 +520,7 @@ export function AddGrantModal({ onClose, onDone }: Props) {
             aria-expanded={advancedOpen}
           >
             <span className="equity-add-advanced__chevron" aria-hidden>
-              {advancedOpen ? '▾' : '▸'}
+              {advancedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </span>
             Advanced
           </button>

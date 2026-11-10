@@ -11,7 +11,7 @@
 // RouterShell and LuciusDock host this tab, and every "Ask Lucius" affordance routes to
 // the real composer prefill.
 
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { authFetch } from '../../../api/client'
 import { invalidateQueryCache } from '../../../state/queryCache'
@@ -20,20 +20,25 @@ import { ErrorState, TabSkeleton } from '../../ui'
 import './connectors.css'
 import { Icons } from './icons'
 import { Btn, Tabs, useToast } from './primitives'
-import { ConnectorList } from './ConnectorList'
+import { ConnectorList, statusCounts } from './ConnectorList'
 import { ConnectorDetail } from './ConnectorDetail'
 import { ConnectorConfig, hasConfigForm } from './ConnectorConfig'
 import { DirectoryModal } from './DirectoryModal'
 import { filterDirectory, skipsPreview } from './catalog'
-import { resolveDirectory } from './directoryRows'
+import { resolveDirectory, setupTargetFor, suggestionsBySection } from './directoryRows'
 import { InstitutionPickerModal } from './InstitutionPickerModal'
 import { McpEditModal } from './McpEditModal'
 import { deleteMcpServer } from './mcpApi'
 import { signInWithOAuth } from './oauthSignIn'
 import { savePermissions } from './permissions'
-import { mcpAuthType, toEntry, toMcpEditTarget } from './adapter'
+import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
+import { mcpAuthType, mcpNeedsSignIn, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
-import { useRegisterScreenFacts } from '../../../lucius/useScreenContract'
+import {
+  useRegisterScreenCommands,
+  useRegisterScreenFacts,
+} from '../../../lucius/useScreenContract'
+import { CONNECTORS_OPEN_SETUP_SPEC } from '../../../lucius/screenCommands'
 import {
   FAMILY_SECTIONS,
   STATUS_FILTERS,
@@ -62,12 +67,22 @@ export function ConnectorsTab(): JSX.Element {
         : [],
     [connectors, tab, query],
   )
+  // The unsearched, unfiltered list also offers up to three popular connectors per section
+  // that aren't added yet — the Connectors twin of the Assets screen's "Add more".
+  const sectionSuggestions = useMemo(
+    () => (query.trim() || statusFilter !== 'all' ? undefined : suggestionsBySection(connectors)),
+    [connectors, query, statusFilter],
+  )
+  const counts = useMemo(() => statusCounts(entries, { query, tab }), [entries, query, tab])
   const [detailId, setDetailId] = useState<string | null>(null)
   /** The MCP server whose connection is being edited — the add flow, reopened pre-filled. */
   const [editMcpId, setEditMcpId] = useState<string | null>(null)
   /** `null` = the directory is closed; otherwise the family it opened pre-filtered to. */
   const [directoryFamily, setDirectoryFamily] = useState<FamilyTab | null>(null)
   const [directoryPreviewId, setDirectoryPreviewId] = useState<string | null>(null)
+  /** The not-yet-installed MCP entry whose add form the directory opens ON. */
+  const [directoryAddId, setDirectoryAddId] = useState<string | null>(null)
+  const [directoryAutoConnect, setDirectoryAutoConnect] = useState(false)
   const [bankPickerOpen, setBankPickerOpen] = useState(false)
   /** The MCP server a Reconnect click is currently signing in for — an OAuth reconnect is a
    *  popup + poll, not an instant call, so this both guards against a rapid double-click
@@ -108,6 +123,7 @@ export function ConnectorsTab(): JSX.Element {
   const openDirectory = (family: FamilyTab) => {
     setDetailId(null)
     setDirectoryPreviewId(null)
+    setDirectoryAddId(null)
     setDirectoryFamily(family)
   }
 
@@ -116,6 +132,7 @@ export function ConnectorsTab(): JSX.Element {
   const openLandingPage = (connectorId: string) => {
     setDetailId(null)
     setDirectoryPreviewId(connectorId)
+    setDirectoryAddId(null)
     setDirectoryFamily('all')
   }
 
@@ -130,6 +147,7 @@ export function ConnectorsTab(): JSX.Element {
    *  plain focus and lands exactly where it always did. */
   function openConnector(connectorId: string, opts?: FocusConnectorOptions) {
     setDirectoryFamily(null)
+    setDirectoryAddId(null)
     setBankPickerOpen(false)
     setRoutedCountry(opts?.country)
     setConfigureOnOpen(opts?.configure === true)
@@ -156,39 +174,72 @@ export function ConnectorsTab(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
 
+  // Lucius's `connectors.open_setup`: UI state only. It opens the same form a card's `+` (or an
+  // installed row's settings) does; the user enters credentials and clicks Connect themselves.
+  // A command that lands before the list has loaded waits in a ref for it.
+  const pendingSetup = useRef<{ id: string; connect: boolean } | null>(null)
+  function applySetup({ id, connect }: { id: string; connect: boolean }) {
+    const target = setupTargetFor(connectors, id)
+    if (target.kind === 'unknown') {
+      toast("Lucius suggested a connector that isn't in the directory.")
+      return
+    }
+    if (target.kind === 'add') {
+      setDetailId(null)
+      setDirectoryPreviewId(null)
+      setDirectoryAddId(target.id)
+      // Set only by Lucius's card on the user's own Connect click (never by the model — the
+      // backend refuses any argument but id): go straight on to the sign-in.
+      setDirectoryAutoConnect(connect)
+      setDirectoryFamily('all')
+    } else {
+      openConnector(target.id, { configure: target.kind === 'form' })
+    }
+  }
+  const applySetupRef = useRef(applySetup)
+  useEffect(() => {
+    applySetupRef.current = applySetup
+  })
+  useRegisterScreenCommands([
+    {
+      spec: CONNECTORS_OPEN_SETUP_SPEC,
+      handler: (args) => {
+        const request = {
+          id: typeof args.id === 'string' ? args.id.trim() : '',
+          connect: args.connect === true,
+        }
+        if (initialLoading) pendingSetup.current = request
+        else applySetupRef.current(request)
+      },
+    },
+  ])
+  useEffect(() => {
+    const request = pendingSetup.current
+    if (initialLoading || !request) return
+    pendingSetup.current = null
+    applySetupRef.current(request)
+  }, [initialLoading])
+
   async function reload() {
     invalidateQueryCache(CONNECTORS_KEY)
     await refresh()
   }
 
   async function patchEnabled(entry: ConnectorDetailEntry, enabled: boolean) {
-    const res = await authFetch(`/api/connectors/${encodeURIComponent(entry.id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled }),
-    })
-    if (!res.ok) {
-      toast(`Couldn't ${enabled ? 'connect' : 'disconnect'} ${entry.name}`)
+    const result = await setConnectorEnabled(entry, enabled)
+    if (!result.ok) {
+      toast(result.error)
       return
     }
-    // Telegram only: whether the live bot actually picked up the change (best-effort —
-    // never a hard failure, see `reload_best_effort`). Every other connector's response
-    // carries no `reloaded` field at all, so this is a no-op for them.
-    const body = (await res.json().catch(() => null)) as { reloaded?: boolean } | null
     await reload()
-    if (body?.reloaded === false) {
-      toast(
-        `${entry.name} ${enabled ? 'connected' : 'disconnected'} in settings, but the live ` +
-          `bot didn't confirm the change — it may still be running the old configuration. ` +
-          `Try again, or restart the app.`,
-      )
-      return
-    }
-    toast(`${entry.name} ${enabled ? 'connected' : 'disconnected'}`)
+    toast(result.message)
   }
 
-  /** An OAuth MCP server reconnects with a fresh sign-in (RFC `2026-08-14-mcp-oauth` §4.7's
-   *  "Recovery is one button"); any other MCP server reconnects by re-running
-   *  `initialize` + `tools/list`; a native connector re-arms by being switched back on —
+  /** An MCP server reconnects by re-running `initialize` + `tools/list`; only a sign-in the server
+   *  knows is dead opens the sign-in window (RFC `2026-08-14-mcp-oauth` §4.7's "Recovery is one
+   *  button"). A DNS failure used to send the user to link the account again, with nothing wrong
+   *  with the link. A retry that discovers a dead sign-in says so and the next click opens the
+   *  window: opened after a fetch, a popup blocker would refuse it. A native connector re-arms by being switched back on —
    *  UNLESS it's already on, which is every case this button actually shows for (`attention`
    *  — and so this row action — is only ever true for `error`/`auth_error`, and both require
    *  `enabled` already true, see `services/connectors.py::_status`). Re-PATCHing the same
@@ -211,7 +262,7 @@ export function ConnectorsTab(): JSX.Element {
     const wire = connectors.find((c) => c.id === entry.id)
     setReconnectingId(entry.id)
     try {
-      if (wire && mcpAuthType(wire) === 'oauth') {
+      if (wire && mcpNeedsSignIn(wire)) {
         // Registration is reused; only the user's consent is re-obtained (§4.5's "a background
         // path never re-registers" — this is the one human-initiated `begin` that may).
         const outcome = await signInWithOAuth({ server_id: serverId })
@@ -226,8 +277,13 @@ export function ConnectorsTab(): JSX.Element {
       const res = await authFetch(`/api/mcp-clients/${encodeURIComponent(serverId)}/test`, {
         method: 'POST',
       })
+      // The route answers 200 for a failed read too: the result's status is the answer.
+      const status = res.ok ? ((await res.json()) as { last_status?: string }).last_status : null
       await reload()
-      toast(res.ok ? `${entry.name} reconnected` : `Couldn't reach ${entry.name}`)
+      if (status === 'ok') toast(`${entry.name} reconnected`)
+      else if (status === 'auth_error' && wire && mcpAuthType(wire) === 'oauth')
+        toast(`${entry.name} needs you to sign in again. Select Reconnect to do it.`)
+      else toast(`Couldn't reach ${entry.name}`)
     } finally {
       setReconnectingId((id) => (id === entry.id ? null : id))
     }
@@ -247,29 +303,6 @@ export function ConnectorsTab(): JSX.Element {
     }
     toast(result.error)
     return false
-  }
-
-  /** `DELETE /api/connectors/{id}` — the native-connector half of removal. Mirrors
-   *  `deleteMcpServer`'s result shape so `removeConnector` below can treat both paths
-   *  identically. For Telegram, the backend REFUSES (502) rather than clearing
-   *  credentials if it couldn't confirm the live bot actually stopped first — surfacing
-   *  that real detail here (not a generic "Couldn't remove") is the point: a silent
-   *  generic failure would hide exactly the fail-open risk the backend ordering fix
-   *  exists to prevent. */
-  async function removeNativeConnector(
-    entry: ConnectorDetailEntry,
-  ): Promise<{ ok: true } | { ok: false; error: string }> {
-    const res = await authFetch(`/api/connectors/${encodeURIComponent(entry.id)}`, {
-      method: 'DELETE',
-    })
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { detail?: unknown } | null
-      const detail = body?.detail
-      const message =
-        typeof detail === 'string' && detail ? detail : `Couldn't remove ${entry.name}`
-      return { ok: false, error: message }
-    }
-    return { ok: true }
   }
 
   /** Remove a connector for real (spec §3's kebab, now offered — with a confirmation —
@@ -307,10 +340,25 @@ export function ConnectorsTab(): JSX.Element {
     return facts
   })
 
+  // The same soft shadow Browse & add shows: only once the list has slid under the pinned
+  // header, never at rest. Measured, not scrollTop — the page's scroll box is an ancestor.
+  const mastheadRef = useRef<HTMLElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const head = mastheadRef.current
+    const content = head?.nextElementSibling
+    if (!head || !content) return
+    const onScroll = () =>
+      setScrolled(content.getBoundingClientRect().top < head.getBoundingClientRect().bottom - 1)
+    onScroll()
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [])
+
   return (
     <div className="cn-page" data-ctx-region="content" data-ctx-title="Connectors">
       {/* Static chrome — up during the first load too, so only the list is a skeleton. */}
-      <header className="rd-masthead">
+      <header ref={mastheadRef} className={'rd-masthead' + (scrolled ? ' scrolled' : '')}>
         <div className="rd-masthead-head">
           <div className="rd-masthead-title">Connectors</div>
           <div className="rd-masthead-sub">
@@ -330,8 +378,11 @@ export function ConnectorsTab(): JSX.Element {
                 aria-label="Search connectors"
               />
             </span>
-            <Btn variant="primary" onClick={() => openDirectory('all')}>
-              <Icons.plus /> Browse &amp; add
+            <Btn variant="primary" onClick={() => openDirectory('all')} aria-label="Browse & add">
+              <Icons.plus />
+              {/* A phone keeps search and this button on ONE line, so the label shortens there. */}
+              <span className="cn-label-wide">Browse &amp; add</span>
+              <span className="cn-label-narrow">Add</span>
             </Btn>
           </div>
           <div className="rd-masthead-subrow">
@@ -343,7 +394,7 @@ export function ConnectorsTab(): JSX.Element {
                 ...FAMILY_SECTIONS.map((s) => ({ key: s.key, label: s.title })),
               ]}
             />
-            <div className="rd-seg">
+            <div className="rd-seg cn-statusseg">
               {STATUS_FILTERS.map(([k, label]) => (
                 <button
                   key={k}
@@ -352,6 +403,15 @@ export function ConnectorsTab(): JSX.Element {
                   onClick={() => setStatusFilter(k)}
                 >
                   {label}
+                  {initialLoading || error ? null : (
+                    <span
+                      className={
+                        'cn-seg-count' + (k === 'attention' && counts[k] > 0 ? ' bad' : '')
+                      }
+                    >
+                      {counts[k]}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -373,6 +433,7 @@ export function ConnectorsTab(): JSX.Element {
             onBrowse={openDirectory}
             onAddBank={() => setBankPickerOpen(true)}
             suggestions={suggestions}
+            sectionSuggestions={sectionSuggestions}
             onSuggest={(d) => (skipsPreview(d) ? openDirectory('mcp') : openLandingPage(d.id))}
           />
         )}
@@ -455,9 +516,16 @@ export function ConnectorsTab(): JSX.Element {
         <DirectoryModal
           open
           connectors={connectors}
+          loading={initialLoading}
           family={directoryFamily}
           previewId={directoryPreviewId ?? undefined}
-          onClose={() => setDirectoryFamily(null)}
+          addId={directoryAddId ?? undefined}
+          autoConnect={directoryAutoConnect}
+          onClose={() => {
+            setDirectoryFamily(null)
+            setDirectoryAddId(null)
+            setDirectoryAutoConnect(false)
+          }}
           onFocusConnector={openConnector}
           onAdded={() => void reload()}
           toast={toast}

@@ -450,7 +450,8 @@ def test_preview_db_deltas(db_isolated):
     real cases through the actual turn/hook/preview path: an inserted row still
     present (restore would delete it -> delta -1), an updated row still present
     (restore only changes content -> delta 0), and a deleted row now absent
-    (restore would re-insert it -> delta +1)."""
+    (restore would re-insert it -> delta +1). Each case is its own conversation: a restore
+    also undoes the later turns of the SAME one, which would fold the cases together."""
     from sqlalchemy import insert
 
     from backend.ai import checkpoint as cp
@@ -462,7 +463,7 @@ def test_preview_db_deltas(db_isolated):
         return next(r for r in pv["changes"] if r["file"] == "db:books")
 
     # Case 1: insert, still present -> restore DELETEs it -> delta -1.
-    ctx1, tok1 = _turn()
+    ctx1, tok1 = _turn(session="s-preview-1")
     fire_db_write_hook("books", [("book_ins", None)])
     with eng.get_engine().begin() as c:
         c.execute(insert(t.books).values(id="book_ins", name="I", base_currency="", created_at=""))
@@ -481,7 +482,7 @@ def test_preview_db_deltas(db_isolated):
         c.execute(
             insert(t.books).values(id="book_upd", name="Before", base_currency="", created_at="")
         )
-    ctx2, tok2 = _turn()
+    ctx2, tok2 = _turn(session="s-preview-2")
     fire_db_write_hook(
         "books",
         [
@@ -505,7 +506,7 @@ def test_preview_db_deltas(db_isolated):
     # Case 3: delete a row -> restore would re-INSERT it -> delta +1.
     with eng.get_engine().begin() as c:
         c.execute(insert(t.books).values(id="book_del", name="D", base_currency="", created_at=""))
-    ctx3, tok3 = _turn()
+    ctx3, tok3 = _turn(session="s-preview-3")
     fire_db_write_hook(
         "books",
         [("book_del", {"id": "book_del", "name": "D", "base_currency": "", "created_at": ""})],
@@ -815,7 +816,7 @@ def test_replay_failure_after_staging_cleans_temps_and_leaves_dest_untouched(
         "never gets a real staged file to clean up"
     )
 
-    def _boom(_cp_id):
+    def _boom(_cp_id, **_kw):
         raise RuntimeError("simulated replay failure after staging")
 
     monkeypatch.setattr(cp, "_replay_write_log", _boom)

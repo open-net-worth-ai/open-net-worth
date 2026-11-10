@@ -127,6 +127,21 @@ def _clone_sqlite_head(golden_path: Path, sqlite_url: str) -> None:
     shutil.copyfile(golden_path, target)
 
 
+def point_engine_at(db_url: str, monkeypatch, golden_path: Path) -> None:
+    """Point the ``get_engine()`` singleton at ``db_url``, a clone of the golden head on SQLite.
+
+    The clone lands BEFORE the URL is published: a daemon thread left by an earlier test (the
+    tool-call telemetry flusher wakes every 2s) can rebuild the singleton the instant the old one
+    is disposed, and on a not-yet-copied path it opens an empty WAL database whose pooled
+    connection keeps that empty schema after the copy — ``no such table`` for the whole test."""
+    from backend.db import engine as eng
+
+    if db_url.startswith("sqlite:///"):
+        _clone_sqlite_head(golden_path, db_url)
+    monkeypatch.setenv("ONW_DATABASE_URL", db_url)
+    eng.dispose_engine()
+
+
 def patch_all_cutover_sources_missing(monkeypatch, tmp_path) -> None:
     """Point EVERY cutover source constant in ``versions_evidence_source`` at a file that
     does not exist, so a bare ``command.upgrade(cfg, "head")`` — unlike the real
@@ -179,11 +194,8 @@ def db_engine(db_url, monkeypatch, tmp_path, _sqlite_golden_head):
             c.execute(text("DROP SCHEMA public CASCADE"))
             c.execute(text("CREATE SCHEMA public"))
         scrub.dispose()
-    monkeypatch.setenv("ONW_DATABASE_URL", db_url)
-    eng.dispose_engine()
-    if db_url.startswith("sqlite:///"):
-        _clone_sqlite_head(_sqlite_golden_head, db_url)
-    else:
+    point_engine_at(db_url, monkeypatch, _sqlite_golden_head)
+    if not db_url.startswith("sqlite:///"):
         from alembic import command
 
         # MUST run before command.upgrade below — see patch_all_cutover_sources_missing's
@@ -248,12 +260,9 @@ def db_isolated(db_url, monkeypatch, _sqlite_golden_head):
             c.execute(text("DROP SCHEMA public CASCADE"))
             c.execute(text("CREATE SCHEMA public"))
         scrub.dispose()
-    monkeypatch.setenv("ONW_DATABASE_URL", db_url)
-    eng.dispose_engine()
     try:
-        if db_url.startswith("sqlite:///"):
-            _clone_sqlite_head(_sqlite_golden_head, db_url)
-        else:
+        point_engine_at(db_url, monkeypatch, _sqlite_golden_head)
+        if not db_url.startswith("sqlite:///"):
             from alembic import command
 
             command.upgrade(make_config(db_url), "head")

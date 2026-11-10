@@ -132,7 +132,7 @@
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--muted);
 }
@@ -210,9 +210,9 @@
   cursor: pointer;
 }
 .vault-filter.is-on {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 /* A tag chip in the filter row: "#" then its name, after a thin rule that ends the kinds. */
 .vault-filter-sep {
@@ -636,6 +636,25 @@
 .vault-table-frame--loading {
   background: var(--surface2);
 }
+.vault-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100%;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.vault-preview-spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: ui-spin 0.7s linear infinite;
+  flex: none;
+}
 .vault-grid {
   border-collapse: separate;
   border-spacing: 0;
@@ -670,6 +689,13 @@
   color: var(--muted);
   font-weight: 500;
   text-align: right;
+}
+/* The row a statement row came from, pointed at from the import review beside it. The sticky
+   row-number cell takes the same tint so the row reads as one band while scrolled sideways. */
+.vault-grid tr.vault-grid-row--on td,
+.vault-grid tr.vault-grid-row--on th {
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface2));
+  color: var(--ink);
 }
 .vault-grid thead th:first-child {
   left: 0;

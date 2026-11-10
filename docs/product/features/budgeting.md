@@ -59,7 +59,9 @@ You can skip targets, but they're what makes **Underfunded** and **Auto-assign**
 
 ### 2. Assign your money
 
-**Ready to Assign** at the top is cash in your Cash accounts that no envelope holds yet.
+**Ready to Assign** at the top is money in your budget that no envelope holds yet: cash in your
+Cash accounts, plus any credit sitting on a card (see **Credit cards** under
+[Day to day with Zero-Based](#day-to-day-with-zero-based)).
 
 1. Click an envelope's **Assigned** amount and type how much to put in it.
 2. Repeat until Ready to Assign reaches zero — or use **Auto-assign** → **Underfunded** to fill
@@ -129,6 +131,15 @@ Each Credit account gets its own payment envelope, named after the card, in the
 - Card spending never changes Ready to Assign by itself — card debt isn't cash you've spent yet.
 - Paying the card (a transfer from a Cash account) uses the payment envelope. Paying more than
   it holds turns it red, like any overspent envelope.
+- **A card in credit holds your money.** If you pay a card more than it owes, or a refund arrives
+  after you've paid the bill, the card's balance goes above zero. That credit stays in your
+  budget: Ready to Assign counts it, and the breakdown shows it as **Credit on your cards**.
+  The month you overpay, the red payment envelope lifts Ready to Assign by the same amount until
+  the month ends, then the two cancel.
+- **Spending on a card in credit uses the credit first.** The envelope you spend from goes down,
+  the payment envelope doesn't move, and Ready to Assign stays put. Only the part beyond the
+  credit becomes debt and moves into the payment envelope. A refund to a card in credit adds to
+  the credit.
 
 ## Start fresh
 
@@ -168,7 +179,14 @@ Or click **Let Lucius set it up** in the same window.
 (**On pace to spend** / **On pace to save** during the month, **You spent** / **You saved** for a
 finished one). The line names its basis underneath: a running month is measured against your
 **usual monthly income** (hover for how much of this month's has arrived), a closed month against
-the income that actually arrived. The **spending vs Sep by the 14th** chip says what it compares:
+the income that actually arrived. During the month, the pace is what each envelope has spent so
+far plus what the rest of the month usually adds, taken from your **typical** (median) month of the
+last three. One unusual month, like a trip or a one-off bill, doesn't count as usual. A payment
+you've already made this month isn't expected again on its usual date. For the **first 7 days** of
+a month there is no savings verdict, because the forecast is still mostly last months. The
+headline reads **Too early to call** and the line says **If November goes like recent months,
+you'd save…**, unless something has already happened, such as spending past your income or a
+group or envelope already over. The **spending vs Sep by the 14th** chip says what it compares:
 spending so far against last month by the same day. A group is called "over" in the headline only
 when it spent past its caps, or past its share with no caps to judge it by; one that spent
 exactly its caps (S$0.00 left) is not. The headline never says **On track** while an envelope is

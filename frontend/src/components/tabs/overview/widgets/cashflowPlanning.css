@@ -364,7 +364,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: none;
   border: 1px solid transparent;
   color: var(--faint);
@@ -399,7 +399,7 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: 4px 6px;
   white-space: nowrap;
 }
@@ -418,7 +418,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--faint);
 }
 
 /* A body portal at fixed VIEWPORT coordinates (cashflowPlanning.tsx `cellPos`), so the

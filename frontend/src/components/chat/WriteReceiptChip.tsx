@@ -33,6 +33,7 @@ import type {
   WriteReceiptGroup,
   WriteReceiptItem,
 } from '../../types/chat'
+import { Check, ChevronDown, ChevronRight } from '../../ui/icons'
 
 // Where a row of each type opens: the screen plus the search key that addresses the entity.
 //
@@ -195,11 +196,11 @@ export function WriteReceiptChip({ receipt }: { receipt: WriteReceipt }) {
           aria-expanded={open}
         >
           <span className="wr-chip__glyph" aria-hidden="true">
-            ✓
+            <Check size={12} />
           </span>
           <span className="wr-chip__counts">{headLabel(receipt)}</span>
           <span className="wr-chip__caret" aria-hidden="true">
-            {open ? '▾' : '▸'}
+            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </span>
         </button>
       </div>

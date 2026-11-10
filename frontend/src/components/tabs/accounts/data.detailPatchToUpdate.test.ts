@@ -12,7 +12,8 @@
 //      `_normalise_leg` keeps a bare amount, and an omitted field means "unchanged".
 
 import { describe, it, expect } from 'vitest'
-import { detailPatchToUpdate } from './data'
+import { detailPatchToUpdate, fromApiTxn, toApiTxnCreate } from './data'
+import type { ApiTxn } from './types'
 
 describe('detailPatchToUpdate — expense (from-leg)', () => {
   it('routes amount/currency to the from leg', () => {
@@ -211,17 +212,49 @@ describe('detailPatchToUpdate — fields untouched by the patch stay absent', ()
 })
 
 describe('detailPatchToUpdate — split allocation (P3-SP)', () => {
-  it('passes a splits array straight through to the update', () => {
+  it('passes every split line through to the update, its note on the wire as `memo`', () => {
     const splits = [
       { category: 'cat_food', amount: 30, note: '' },
-      { category: 'cat_home', amount: 20, note: '' },
+      { category: 'cat_home', amount: 20, note: 'Mop' },
     ]
     const u = detailPatchToUpdate({ splits })
-    expect(u.splits).toEqual(splits)
+    expect(u.splits).toEqual([
+      { category: 'cat_food', amount: 30, memo: '' },
+      { category: 'cat_home', amount: 20, memo: 'Mop' },
+    ])
   })
 
   it('passes an empty splits array (the explicit "unsplit" signal), distinct from omitting it', () => {
     expect(detailPatchToUpdate({ splits: [] }).splits).toEqual([])
     expect('splits' in detailPatchToUpdate({ description: 'x' })).toBe(false)
+  })
+})
+
+describe('split line memo — the wire field is `memo`', () => {
+  // The backend renamed a split line's `note` to `memo` (2026-08-02); the app kept reading and
+  // writing `note`, so a typed note was dropped on save and every save of a split wiped the
+  // line memos Lucius had written.
+  const line = { category: 'cat_a', amount: 30, note: 'Weekly shop' }
+
+  it('sends an edited split line note as `memo`', () => {
+    const u = detailPatchToUpdate({ kind: 'expense', splits: [line] })
+    expect(u.splits).toEqual([{ category: 'cat_a', amount: 30, memo: 'Weekly shop' }])
+  })
+
+  it('sends a created split line note as `memo`', () => {
+    expect(toApiTxnCreate({ kind: 'expense', splits: [line] }).splits).toEqual([
+      { category: 'cat_a', amount: 30, memo: 'Weekly shop' },
+    ])
+  })
+
+  it('reads a stored line memo back', () => {
+    const t = fromApiTxn({
+      id: 't1',
+      date: '2026-10-29',
+      kind: 'expense',
+      category: 'split',
+      splits: [{ category: 'cat_a', amount: 30, memo: 'Weekly shop' }],
+    } as ApiTxn)
+    expect(t.splits[0]!.note).toBe('Weekly shop')
   })
 })

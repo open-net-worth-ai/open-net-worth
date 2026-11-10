@@ -17,11 +17,24 @@ import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/re
 import { ImportModal } from './ImportModal'
 import type { Account } from './types'
 
+// The live progress channel reports the statement's id once the server has minted it —
+// `liveStatementId` is what the next poll of /preview-progress answers (null = not yet).
+const progress = vi.hoisted(() => ({ liveStatementId: 'stmt_live' as string | null }))
 vi.mock('../../../api/client', () => ({
-  authFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })),
+  authFetch: vi.fn(async (url: string) => ({
+    ok: true,
+    json: async () =>
+      url.includes('preview-progress')
+        ? { stages: [], elapsed_s: 1, done: false, statement_id: progress.liveStatementId }
+        : {},
+  })),
 }))
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+  progress.liveStatementId = 'stmt_live'
+})
 
 const acct = {
   id: 'a1',
@@ -132,7 +145,44 @@ describe('ImportModal — an accidental exit cannot end the import', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue in background' }))
 
-    await waitFor(() => expect(onContinueInBackground).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(onContinueInBackground).toHaveBeenCalledWith('stmt_live', 'mega.csv'),
+    )
+  })
+
+  // QA 2026-10-25: tapped in the first second of an upload, before the server had minted the
+  // statement's id, the read went untracked — no "Ready to review" could ever come for it.
+  it('tapped before the id exists, it waits for the id and hands THAT off', async () => {
+    progress.liveStatementId = null
+    const onPreview = vi.fn(() => new Promise(() => {}))
+    const onContinueInBackground = vi.fn()
+    render(
+      <ImportModal
+        open
+        accounts={[acct]}
+        defaultAccountId="a1"
+        onClose={vi.fn() as never}
+        onPreview={onPreview as never}
+        onContinueInBackground={onContinueInBackground}
+        onDecisionCommit={vi.fn() as never}
+      />,
+    )
+    const fileInput = document.body.querySelector('input[type="file"]') as HTMLInputElement
+    const file = new File([CSV], 'mega.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: async () => CSV })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+    fireEvent.click(await screen.findByRole('button', { name: /Read the statement/ }))
+    await screen.findByText(/Lucius is reading/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue in background' }))
+    expect(await screen.findByRole('button', { name: 'Continuing…' })).toBeTruthy()
+    expect(onContinueInBackground).not.toHaveBeenCalled()
+
+    progress.liveStatementId = 'stmt_minted'
+    await waitFor(
+      () => expect(onContinueInBackground).toHaveBeenCalledWith('stmt_minted', 'mega.csv'),
+      { timeout: 3000 },
+    )
   })
 
   it('Escape on the REVIEW still asks, with the row-decisions wording', async () => {

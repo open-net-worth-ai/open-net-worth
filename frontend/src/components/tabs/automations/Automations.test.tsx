@@ -18,7 +18,13 @@ vi.mock('../../../api/automations', async (load) => ({ ...(await load()), ...api
 
 const navigate = vi.fn()
 const route = vi.hoisted(() => ({
-  search: {} as { automation?: string; run?: string; template?: string },
+  search: {} as {
+    automation?: string
+    run?: string
+    template?: string
+    view?: string
+    sync?: string
+  },
 }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
@@ -26,6 +32,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 import { _resetBusForTests, dispatchScreenCommand } from '../../../lucius/bus'
+import { overrideFlagsForTests } from '../../../hooks/useFlag'
 import { Automations } from '../Automations'
 
 const transactionAutomation: Automation = {
@@ -508,5 +515,29 @@ describe('Automations', () => {
       delete (Element.prototype as { scrollTo?: unknown }).scrollTo
       windowScroll.mockRestore()
     }
+  })
+})
+
+// The Data sync view is behind the ynab_import_and_sync flag: off, the screen is main's.
+describe('Automations — the ynab_import_and_sync flag', () => {
+  let restoreFlags: () => void = () => {}
+  afterEach(() => restoreFlags())
+
+  it('off: no Data sync tab, and a sync deep link still opens the Lucius list', async () => {
+    restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: false })
+    route.search = { view: 'sync', sync: 'ynab' }
+    render(<Automations onOpenChat={vi.fn()} onOpenConversation={vi.fn()} />)
+
+    expect(await screen.findAllByRole('article')).toHaveLength(2)
+    expect(screen.queryByRole('tab', { name: /data sync/i })).toBeNull()
+    expect(screen.getByText(/^Run on a schedule or when something happens\./)).toBeTruthy()
+  })
+
+  it('on: Lucius and Data sync are two tabs', async () => {
+    restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: true })
+    render(<Automations onOpenChat={vi.fn()} onOpenConversation={vi.fn()} />)
+
+    expect(await screen.findByRole('tab', { name: /data sync/i })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /lucius/i })).toBeTruthy()
   })
 })

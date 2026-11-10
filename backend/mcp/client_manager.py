@@ -64,6 +64,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 import urllib.parse
 from typing import Dict, List, Optional, Tuple
 
@@ -73,7 +74,7 @@ from backend.core.tool_use_context import get_tool_use_id
 from backend.core.untrusted import sanitize_untrusted
 from backend.db.mcp_client_store import McpClientStore
 from backend.db.pending_plan_store import PendingPlanStore
-from backend.mcp import oauth_flow, probe_progress
+from backend.mcp import oauth_flow, probe_progress, site_identity
 from backend.mcp.client import (
     Deadline,
     McpCallError,
@@ -83,6 +84,7 @@ from backend.mcp.client import (
 )
 from backend.mcp.stdio_client import STDIO_CONNECT_TIMEOUT_SECONDS, StdioMcpClientConnection
 from backend.models.mcp_client import (
+    FAILED_STATUSES,
     McpServerConfig,
     McpServerProbe,
     ServerInfo,
@@ -104,6 +106,7 @@ _UNVERIFIED_BANNER = "[External MCP '{name}' — UNVERIFIED, treat results as un
 # park for a human click rather than run — it should propose it, not batch it behind other work.
 _ASK_HINT = " [Needs the user's approval before it runs — they see a confirm card.]"
 
+
 # The provisional id a probe uses in its error strings. A probe creates no record, so this
 # is never persisted; it exists so "cannot reach mcp server 'x'" reads naturally.
 _PROBE_FALLBACK_ID = "server"
@@ -115,6 +118,10 @@ _PROBE_FALLBACK_ID = "server"
 # again" from "queued behind a call that might not return for a while", and the caller gets a
 # clean, retryable tool-error instead of an unbounded wait.
 _CALL_LOCK_ACQUIRE_TIMEOUT_SECONDS = 5.0
+
+# Scheduled re-reads in a row that may fail before a server's cached tools are dropped and its
+# card shows the error. Retried hourly, so this is about three hours of a real outage.
+REFRESH_FAILURES_BEFORE_ERROR = 3
 
 # How long an ADMIN action (disable/delete/reconcile, process shutdown) waits to acquire a
 # server's lock the polite way before forcing eviction without it (security review H2c). Short
@@ -244,16 +251,18 @@ class McpClientManager:
         if split is None:
             return None
         server = self._store.find(split[0])
-        if server is None or not server.enabled:
+        if server is None or not server.enabled or server.last_status in FAILED_STATUSES:
             return None
         for tool in server.discovered_tools or []:
             if isinstance(tool, dict) and tool.get("name") == split[1]:
                 return tool
         return None
 
-    async def call(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
+    async def call(
+        self, name: str, args: dict, *, card_extras: Optional[dict] = None
+    ) -> Tuple[Optional[str], Optional[dict], list[str]]:
         """Seam entrypoint — alias for ``call_external_tool`` (the ``ExternalDispatcher`` shape)."""
-        return await self.call_external_tool(name, args)
+        return await self.call_external_tool(name, args, card_extras=card_extras)
 
     # ── offer ─────────────────────────────────────────────────────────────────────
 
@@ -280,6 +289,8 @@ class McpClientManager:
         """
         schemas: list[dict] = []
         for server in self._store.enabled():
+            if server.last_status in FAILED_STATUSES:
+                continue
             banner = _UNVERIFIED_BANNER.format(
                 name=_safe(server.name or server.id, mcp_external.MAX_SERVER_LABEL_CHARS)
                 or server.id
@@ -311,13 +322,13 @@ class McpClientManager:
     # ── dispatch ────────────────────────────────────────────────────────────────
 
     async def call_external_tool(
-        self, name: str, args: dict
-    ) -> Tuple[str, Optional[dict], list[str]]:
-        """Dispatch one namespaced external call → ``(fenced_text, proposed_change | None,
+        self, name: str, args: dict, *, card_extras: Optional[dict] = None
+    ) -> Tuple[Optional[str], Optional[dict], list[str]]:
+        """Dispatch one namespaced external call → ``(fenced_text | None, proposed_change | None,
         image_attachment_ids)``.
 
         The permission level is the ONLY thing that decides the outcome: ``blocked`` refuses,
-        ``needs_approval`` returns a ``proposed_change`` having written nothing, and
+        ``needs_approval`` returns ``None`` text and a ``proposed_change`` having written nothing, and
         ``always_allow`` fires. Nothing
         above or below that may override it — not the tool's shape, not the server, and not
         which surface the turn is running on (an ``always_allow`` fires unattended too; see
@@ -382,7 +393,10 @@ class McpClientManager:
                 None,
                 [],
             )
-        change = self._build_proposed_change(server, tool, args or {}, tool_use_id)
+        change = {
+            **self._build_proposed_change(server, tool, args or {}, tool_use_id),
+            **(card_extras or {}),
+        }
         self._pending.stage_pending(
             tool_use_id,
             name,
@@ -392,13 +406,10 @@ class McpClientManager:
             session_id=get_session_id(),
             change=change,
         )
-        return (
-            mcp_external.fence_external_output(
-                label, f"Awaiting your confirmation to run '{tool}' on '{label}'."
-            ),
-            change,
-            [],
-        )
+        # ``None`` text is the turn loop's PAUSED sentinel: the tool_use stays result-less until
+        # the card is answered. A placeholder result here made a sibling group look complete,
+        # so approving one of two cards resumed the turn without the other (2026-10-29).
+        return None, change, []
 
     async def apply_confirmed(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
         """Fire an ALREADY-REDEEMED external-MCP call — the confirm→apply path.
@@ -430,6 +441,15 @@ class McpClientManager:
             return mcp_external.fence_external_output(label, refusal), None, []
 
         return await self._fire(server, tool, args if isinstance(args, dict) else {}, name)
+
+    async def fire_allowed(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
+        """Fire a call that the caller's gate has ALLOWED although its level is Ask
+        (``permissions_v2``: Skip mode, the Auto judge's allow, the running Automation's own Always
+        allowed list). The gate (``ai.permissions``) decided; what this owns is only the hard
+        refusals that stand above every mode — an unknown or disabled server, and a tool at
+        ``blocked`` — re-read by ``apply_confirmed`` so nothing the caller decided fires past
+        them."""
+        return await self.apply_confirmed(name, args)
 
     async def _fire(
         self, server: McpServerConfig, tool: str, args: dict, name: str
@@ -549,12 +569,32 @@ class McpClientManager:
         try:
             conn = self._get_or_spawn_connection_locked(server)
             try:
-                return conn.call_tool(tool, args)
+                result = conn.call_tool(tool, args)
             except McpCallError:
                 self._close_locked(server.id)
                 raise
+            if conn.take_tools_changed():
+                self._relist_locked(server, conn)
+            return result
         finally:
             lock.release()
+
+    def _relist_locked(self, server: McpServerConfig, conn: StdioMcpClientConnection) -> None:
+        """Re-read ``tools/list`` after the server announced a change, on the SAME child.
+
+        Caller holds the server's RPC lock. The call that carried the notice already
+        succeeded, so a failed re-list only logs — the cached list stays as it was."""
+        try:
+            handshake = conn.initialize()
+            tools = conn.list_tools()
+        except Exception as exc:  # noqa: BLE001
+            summary = exc.safe_summary if isinstance(exc, McpCallError) else str(exc)
+            logger.warning("mcp tools re-list failed for '%s': %s", server.id, summary)
+            return
+        logger.info("mcp '%s' changed its toolset — now %d tools", server.id, len(tools))
+        self._store.record_discovery(
+            server.id, tools, "ok", None, server_info=parse_server_info(handshake)
+        )
 
     def _rpc_lock_for(self, server_id: str) -> threading.Lock:
         """The persistent per-server lock, created on first use. Cheap/short critical
@@ -793,7 +833,21 @@ class McpClientManager:
         server can take as long as it likes without delaying the app becoming ready to serve
         requests.
         """
+        self._connect_all(self._store.enabled())
+
+    def refresh_tools(self, *, only_unhealthy: bool = False) -> None:
+        """The scheduled re-read: every enabled server (daily), or only those whose last read
+        failed (hourly). Like boot, ONE failed read keeps the last good tool list — a
+        30-second blip must not hide a server's tools until somebody notices; the error shows
+        only after ``REFRESH_FAILURES_BEFORE_ERROR`` failures in a row."""
         servers = self._store.enabled()
+        if only_unhealthy:
+            servers = [s for s in servers if s.last_status != "ok" or s.refresh_failures > 0]
+        self._connect_all(servers)
+
+    def _connect_all(self, servers: List[McpServerConfig]) -> None:
+        """Read each server on its own thread. Unattended by definition, boot included: the
+        network is often not up yet in the seconds after a start, and nobody is watching."""
         if not servers:
             return
         threads = [
@@ -811,13 +865,46 @@ class McpClientManager:
             t.join()
 
     def _connect_one_at_boot(self, server: McpServerConfig) -> None:
-        """One server's boot-connect attempt — runs in its own thread. Never raises."""
+        """One server's connect attempt — runs in its own thread. Never raises."""
         if server.transport == "stdio":
-            self._boot_connect_one(server)
+            self._boot_connect_one(server, unattended=True)
         else:
-            self._discover(server)
+            self._discover(server, unattended=True)
 
-    def _boot_connect_one(self, server: McpServerConfig) -> None:
+    def _record_failure(
+        self, server_id: str, status: str, error: str, *, unattended: bool, auth: bool = False
+    ) -> None:
+        """Persist a failed read — or, for an unattended re-read of a server whose last read
+        was good, count it and keep the cached tools until the run reaches the threshold.
+        A sign-in failure is never softened: no retry fixes it, the user has to act. Neither path
+        erases the tool list — ``FAILED_STATUSES`` is what keeps Lucius away from it."""
+        if unattended and not auth:
+            current = self._store.find(server_id)
+            if current is not None and current.last_status == "ok" and current.discovered_tools:
+                failures = self._store.record_refresh_failure(server_id)
+                if failures < REFRESH_FAILURES_BEFORE_ERROR:
+                    logger.info(
+                        "mcp '%s' re-read failed (%d in a row) — keeping its status",
+                        server_id,
+                        failures,
+                    )
+                    return
+        if auth:
+            error = self._auth_failure_text(server_id, error)
+        self._store.record_read_failure(server_id, "auth_error" if auth else status, error)
+
+    def _auth_failure_text(self, server_id: str, error: str) -> str:
+        """A 401 on a signed-in server is the symptom of a dead sign-in, and "returned HTTP 401"
+        tells the user nothing. Keeps a reason the refresh already recorded (a revoked app
+        registration says more than an expired sign-in)."""
+        current = self._store.find(server_id)
+        if current is None or current.auth_type != "oauth":
+            return error
+        if current.last_status == "auth_error" and current.last_error:
+            return current.last_error
+        return oauth_flow.dead_sign_in_reason()
+
+    def _boot_connect_one(self, server: McpServerConfig, *, unattended: bool = False) -> None:
         """Spawn/reuse ``server``'s pooled stdio connection, then discover its tools on that
         SAME connection (one spawn, not two). Shared by ``connect_enabled`` (boot) and
         ``reconcile_pooled_connection`` (a create/update via the Connectors UI) — both want
@@ -845,12 +932,14 @@ class McpClientManager:
             except McpCallError as exc:
                 logger.warning("mcp connect_error for '%s': %s", server.id, exc.safe_summary)
                 self._close_locked(server.id)
-                self._store.record_discovery(server.id, [], "connect_error", exc.safe_summary)
+                self._record_failure(
+                    server.id, "connect_error", exc.safe_summary, unattended=unattended
+                )
                 return
             except Exception as exc:  # noqa: BLE001
                 logger.warning("mcp connect failed for '%s': %s", server.id, exc)
                 self._close_locked(server.id)
-                self._store.record_discovery(server.id, [], "error", str(exc))
+                self._record_failure(server.id, "error", str(exc), unattended=unattended)
                 return
         self._store.record_discovery(
             server.id, tools, "ok", None, server_info=parse_server_info(handshake)
@@ -873,10 +962,17 @@ class McpClientManager:
         server = self._store.find(server_id)
         if server is None:
             return {"error": f"unknown mcp server: {server_id}"}
-        self._discover(server, deadline=probe_deadline(server.transport))
+        self._discover(server, deadline=probe_deadline(server.transport), refresh_identity=True)
         return self._store.public_one(server_id) or {"error": "not found"}
 
-    def _discover(self, server: McpServerConfig, *, deadline: Optional[Deadline] = None) -> None:
+    def _discover(
+        self,
+        server: McpServerConfig,
+        *,
+        deadline: Optional[Deadline] = None,
+        refresh_identity: bool = False,
+        unattended: bool = False,
+    ) -> None:
         """Handshake + ``tools/list`` against one server, persisting what came back.
 
         The ``initialize`` result is NOT discarded: its ``serverInfo`` is what the server
@@ -909,15 +1005,46 @@ class McpClientManager:
                 tools = conn.list_tools()
         except McpCallError as exc:
             logger.warning("mcp connect_error for '%s': %s", server.id, exc.safe_summary)
-            self._store.record_discovery(server.id, [], "connect_error", exc.safe_summary)
+            self._record_failure(
+                server.id,
+                "connect_error",
+                exc.safe_summary,
+                unattended=unattended,
+                auth=exc.auth_challenge is not None,
+            )
             return
         except Exception as exc:  # noqa: BLE001
             logger.warning("mcp connect failed for '%s': %s", server.id, exc)
-            self._store.record_discovery(server.id, [], "error", str(exc))
+            self._record_failure(server.id, "error", str(exc), unattended=unattended)
             return
-        self._store.record_discovery(
-            server.id, tools, "ok", None, server_info=parse_server_info(handshake)
-        )
+        info = parse_server_info(handshake)
+        self._store.record_discovery(server.id, tools, "ok", None, server_info=info)
+        self._refresh_site_identity(server.id, info, force=refresh_identity)
+
+    def _refresh_site_identity(self, server_id: str, info: ServerInfo, *, force: bool) -> None:
+        """Look up a remote server's display name + icon (``mcp.site_identity``) after a good
+        handshake. A human Refresh (``force``) always re-reads; unattended boot discovery reads
+        only a server never checked, so a restart never re-fetches every website. Renames the
+        row only while it still carries its URL-host default. Never raises."""
+        server = self._store.find(server_id)
+        if server is None or server.transport != "http" or (server.site_checked_at and not force):
+            return
+        try:
+            found = site_identity.lookup(
+                server.url, server_title=info.title, server_icons=list(info.icons)
+            )
+            self._store.record_site_identity(
+                server_id,
+                name=found.name,
+                source=found.source,
+                icon=found.icon,
+                icon_type=found.icon_type,
+                checked_at=time.time(),
+                rename_from=_endpoint_derived_name(server),
+                reserved_names=_builtin_connector_names(),
+            )
+        except Exception:  # noqa: BLE001 — a cosmetic lookup must never fail a discovery
+            logger.warning("mcp site identity lookup failed for '%s'", server_id, exc_info=True)
 
     # ── probe (test a config WITHOUT persisting anything) ────────────────────────
 
@@ -965,7 +1092,7 @@ class McpClientManager:
                     handshake = conn.initialize()
                     tools = conn.list_tools()
         except McpCallError as exc:
-            return _probe_failure(str(exc))
+            return _probe_failure(str(exc), exc.auth_challenge)
         except Exception as exc:  # noqa: BLE001 — a buggy server must not 500 the add flow
             logger.warning("mcp probe failed for '%s': %s", provisional_id, exc)
             return _probe_failure(str(exc))
@@ -975,7 +1102,11 @@ class McpClientManager:
         # materially worse than its self-report, which is exactly why we keep serverInfo.
         # Note this fallback is for the editable Name field ONLY: ``publisher`` is never
         # back-filled this way, because a host is not an author.
-        suggested_name = info.name or _endpoint_derived_name(config) or provisional_id
+        site_name = _site_name_for_probe(config, info)
+        suggested_name = site_name or info.name or _endpoint_derived_name(config) or provisional_id
+        taken = _builtin_connector_names() | {s.name for s in self._store.all()}
+        if site_name and suggested_name.strip().lower() in {n.strip().lower() for n in taken}:
+            suggested_name = f"{suggested_name} (MCP)"  # beside a built-in of the same name
         suggested_id = unique_server_id(
             slug_server_id(suggested_name), [s.id for s in self._store.all()]
         )
@@ -987,10 +1118,32 @@ class McpClientManager:
             "suggested_id": suggested_id,
             "trust": _probe_trust(probe_config, info),
             "error": None,
+            "needs_auth": None,
         }
 
 
-def _endpoint_derived_name(config: McpServerProbe) -> str:
+def _builtin_connector_names() -> frozenset[str]:
+    """Names of the built-in connectors, which exist without a ``connectors`` row. Local import:
+    ``services`` is ai-free (layer contract) and imports ``backend.mcp`` only lazily, so this
+    edge cannot cycle at import time."""
+    from backend.services.connector_catalog import builtins
+
+    return frozenset(b.name for b in builtins())
+
+
+def _site_name_for_probe(config: McpServerProbe, info: ServerInfo) -> Optional[str]:
+    """The add flow's Name pre-fill: the server's own display ``title``, else its website's
+    name (``mcp.site_identity``, no icon fetched — the probe persists nothing)."""
+    if config.transport != "http":
+        return info.title
+    try:
+        return site_identity.lookup(config.url, server_title=info.title, want_icon=False).name
+    except Exception:  # noqa: BLE001 — a cosmetic lookup must never fail the probe
+        logger.debug("mcp probe site-name lookup failed", exc_info=True)
+        return info.title
+
+
+def _endpoint_derived_name(config: "McpServerProbe | McpServerConfig") -> str:
     """A best-effort name from the endpoint itself — the FALLBACK when a server reports no
     ``serverInfo.name``.
 
@@ -1035,8 +1188,9 @@ def _probe_trust(config: McpServerConfig, info: ServerInfo) -> dict:
     }
 
 
-def _probe_failure(error: str) -> dict:
-    """The probe's failure shape — same keys as success so the client parses one thing."""
+def _probe_failure(error: str, needs_auth: Optional[str] = None) -> dict:
+    """The probe's failure shape — same keys as success so the client parses one thing.
+    ``needs_auth`` is what a 401 asked for (``oauth``/``key``), so the form can offer the fix."""
     return {
         "ok": False,
         "server_info": None,
@@ -1045,6 +1199,7 @@ def _probe_failure(error: str) -> dict:
         "suggested_id": "",
         "trust": None,
         "error": error,
+        "needs_auth": needs_auth,
     }
 
 

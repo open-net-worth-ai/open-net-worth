@@ -131,7 +131,7 @@ def test_bulk_create_transactions_stamps_the_emitter(db_isolated):
     _seed_accounts()
     a, b = _stash("<m-1@x>"), _stash("<m-2@x>", "receipts@merchant.example")
 
-    created, _ = ledger.bulk_create_transactions([_txn(a), _txn(b)], force=True)
+    created, _ = ledger.bulk_create_transactions([_txn(a), _txn(b)], allow_duplicate=True)
 
     assert [_emitters(r) for r in created] == [[SENDER], ["receipts@merchant.example"]]
 

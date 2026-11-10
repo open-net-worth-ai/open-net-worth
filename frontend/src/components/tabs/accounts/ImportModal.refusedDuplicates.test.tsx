@@ -100,7 +100,7 @@ async function commitWith(commitResult: Record<string, unknown>) {
   await screen.findByText('Spotify')
 
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-  await screen.findByText('Booked.')
+  await screen.findByText(/^Imported /)
 }
 
 describe('Done screen — rows the ledger refused as duplicates', () => {
@@ -127,7 +127,7 @@ describe('Done screen — rows the ledger refused as duplicates', () => {
     // The row itself, not just a count — a bare number is not something the user can act on.
     expect(document.body.textContent).toContain('ANTHROPIC SAN FRANCISCO USA')
     expect(document.body.textContent).toContain('Grab* A-9IOHTB')
-    expect(document.body.textContent).toContain('2026-06-05')
+    expect(document.body.textContent).toContain('Jun 5, 2026')
   })
 
   it('says nothing when the ledger refused nothing', async () => {

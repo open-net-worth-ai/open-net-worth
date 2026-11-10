@@ -1189,6 +1189,18 @@ def test_parse_server_info_pure_cases():
     assert parse_server_info({"serverInfo": {"name": {"nested": 1}}}).name is None
 
 
+def test_parse_server_info_keeps_a_short_clean_description():
+    """``serverInfo.description`` is untrusted prose shown as a subtitle: whitespace
+    collapsed, capped, and a non-string is dropped."""
+    from backend.mcp.client import MAX_SERVER_INFO_CHARS, parse_server_info
+
+    info = parse_server_info({"serverInfo": {"description": "  Trades\n crypto  on Gemini "}})
+    assert info.description == "Trades crypto on Gemini"
+    long = parse_server_info({"serverInfo": {"description": "x" * 5000}}).description
+    assert long is not None and len(long) <= MAX_SERVER_INFO_CHARS
+    assert parse_server_info({"serverInfo": {"description": 42}}).description is None
+
+
 # ── provenance / vendor trust (§5) ─────────────────────────────────────────────
 
 
@@ -1409,8 +1421,9 @@ def test_http_transport_carries_tool_annotations(monkeypatch):
     assert mcp_external.describe_discovered_tool(tool)["read_only"] is True
 
 
-def test_failed_discovery_clears_stale_server_info(manager, monkeypatch):
-    """A server that stops answering must not keep advertising a name we can no longer verify."""
+def test_failed_discovery_keeps_the_server_info(manager, monkeypatch):
+    """A server that stops answering is still the same server: its name and publisher stay on the
+    page beside the error, as they already did for an expired sign-in."""
     mgr, s = manager
     s.create(_cfg())
     monkeypatch.setattr(
@@ -1422,11 +1435,11 @@ def test_failed_discovery_clears_stale_server_info(manager, monkeypatch):
     assert s.find("drive").server_info_instructions == "Use me."
 
     monkeypatch.setattr("backend.mcp.client._urlopen", _make_fake_urlopen({}, down=True))
-    mgr.connect_enabled()
+    mgr.test_connect("drive")
     fresh = s.find("drive")
     assert fresh.last_status == "connect_error"
-    assert fresh.server_info_name is None
-    assert fresh.server_info_instructions is None
+    assert fresh.server_info_name == "Drive"
+    assert fresh.server_info_instructions == "Use me."
 
 
 # ── probe: test a config WITHOUT persisting anything (§7 step 2) ───────────────
@@ -1993,6 +2006,21 @@ def test_accept_header_offers_both_json_and_event_stream(monkeypatch):
     assert headers["accept"] == "application/json, text/event-stream"
 
 
+def test_every_request_names_open_net_worth_not_python_urllib(monkeypatch):
+    """Cloudflare's error 1010 refuses urllib's default ``Python-urllib/x.y`` — Zerodha's
+    mcp.kite.trade and Upstox's mcp.upstox.com both 403'd the app until it named itself."""
+    from backend.mcp.client import McpClientConnection
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        "backend.mcp.client._urlopen",
+        _make_dual_accept_urlopen(captured, sse=False),
+    )
+    McpClientConnection(McpServerConfig(id="kite", url="https://mcp.kite.trade/mcp")).initialize()
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert headers["user-agent"].startswith("OpenNetWorth/")
+
+
 def test_accept_header_json_only_would_406_against_a_real_server(monkeypatch):
     """The other half of the pin: confirms the fake itself reproduces the bug (a lone
     ``application/json`` Accept 406s), so the passing test above is proven to test something
@@ -2478,7 +2506,7 @@ def test_a_level_nothing_recognises_proposes_rather_than_fires(manager, monkeypa
 
     text, proposed, _images = asyncio.run(mgr.call_external_tool("mcp__drive__search_files", {}))
     assert proposed is not None and proposed["type"] == "external_mcp_call"
-    assert "Awaiting your confirmation" in text
+    assert text is None  # paused: no result until the card is answered
     assert "call_args" not in captured  # nothing was sent to the server
 
 

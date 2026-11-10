@@ -46,9 +46,18 @@ export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'xs' | 'lg'
 }
 
-export function Btn({ variant = 'secondary', size, children, ...rest }: BtnProps): JSX.Element {
+export function Btn({
+  variant = 'secondary',
+  size,
+  className,
+  children,
+  ...rest
+}: BtnProps): JSX.Element {
   return (
-    <button className={`rd-btn ${variant}${size ? ' ' + size : ''}`} {...rest}>
+    <button
+      className={`rd-btn ${variant}${size ? ' ' + size : ''}${className ? ' ' + className : ''}`}
+      {...rest}
+    >
       {children}
     </button>
   )
@@ -89,19 +98,20 @@ export function Mono({ icon: iconKey, hue, logo, size }: MonoProps): JSX.Element
   // connector is not still suppressed by the previous one's failure.
   const [broken, setBroken] = useState<string | null>(null)
   const showLogo = !!logo && broken !== logo
+  // The call-to-action color is a solid fill, as on the Send and Call buttons, never a tint.
+  const tint =
+    hue === 'var(--cta)'
+      ? { color: 'var(--ink-on-cta)', background: hue, borderColor: 'transparent' }
+      : {
+          color: hue,
+          background: `color-mix(in srgb, ${hue} 14%, transparent)`,
+          borderColor: `color-mix(in srgb, ${hue} 30%, transparent)`,
+        }
 
   return (
     <span
       className={'cn-tile' + (size === 'lg' ? ' lg' : '') + (showLogo ? ' plate' : '')}
-      style={
-        showLogo
-          ? undefined
-          : {
-              color: hue,
-              background: `color-mix(in srgb, ${hue} 14%, transparent)`,
-              borderColor: `color-mix(in srgb, ${hue} 30%, transparent)`,
-            }
-      }
+      style={showLogo ? undefined : tint}
     >
       {showLogo ? (
         // `alt=""` on purpose: the connector's name is always beside the tile, so a screen
@@ -196,7 +206,16 @@ export function Tabs<T extends string>({
           role="tab"
           aria-selected={t.key === value}
           className={'rd-tab' + (t.key === value ? ' on' : '')}
-          onClick={() => onChange(t.key)}
+          onClick={(e) => {
+            // On a phone the row scrolls sideways: a tapped tab half off the edge slides into
+            // full view, revealing its neighbours. After the switch, on the next frame — run
+            // inline, the re-render the switch causes cancelled the smooth scroll mid-way.
+            const tab = e.currentTarget
+            onChange(t.key)
+            requestAnimationFrame(() =>
+              tab.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' }),
+            )
+          }}
         >
           {t.label}
           {t.count != null ? <span className="rd-tab-count">{t.count}</span> : null}
@@ -234,15 +253,19 @@ export function Empty({
   title,
   body,
   action,
+  children,
 }: {
   title: ReactNode
   body?: ReactNode
   action?: ReactNode
+  /** Content between the copy and the action — e.g. a few connectors to start with. */
+  children?: ReactNode
 }): JSX.Element {
   return (
     <div className="rd-empty">
       <div className="rd-empty-title">{title}</div>
       {body ? <div className="rd-empty-body">{body}</div> : null}
+      {children}
       {action}
     </div>
   )
@@ -301,8 +324,6 @@ export function Modal({
   const cardRef = useRef<HTMLDivElement>(null)
   const scrimRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
-  const headRef = useRef<HTMLDivElement>(null)
-  const footRef = useRef<HTMLDivElement>(null)
   // The measured element: an inner wrapper around `children`, NOT `.rd-modal-body` itself.
   // Once the body below gets its own explicit `height`, ITS scrollHeight would just echo that
   // height back — measuring a child that is never height-constrained is the only way to read
@@ -343,13 +364,16 @@ export function Modal({
     const bodyStyle = getComputedStyle(body)
     const paddingV = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom)
     const natural = content.scrollHeight + paddingV
-    const maxTotal = parseFloat(getComputedStyle(card).maxHeight)
-    const available = Number.isFinite(maxTotal)
-      ? Math.max(
-          0,
-          maxTotal - (headRef.current?.offsetHeight ?? 0) - (footRef.current?.offsetHeight ?? 0),
-        )
-      : Infinity
+    const cardStyle = getComputedStyle(card)
+    const maxTotal = parseFloat(cardStyle.maxHeight)
+    // Everything in the card but the body counts, the phone sheet's drag handle (a real child,
+    // hidden on desktop) and the card's border included. Not `card.offsetHeight - body.offsetHeight`:
+    // once the body is pinned, a card clipped at its max height would hand the pinned height back.
+    let chrome = parseFloat(cardStyle.borderTopWidth) + parseFloat(cardStyle.borderBottomWidth)
+    for (const el of Array.from(card.children)) {
+      if (el !== body) chrome += (el as HTMLElement).offsetHeight
+    }
+    const available = Number.isFinite(maxTotal) ? Math.max(0, maxTotal - chrome) : Infinity
     const next = Math.min(natural, available)
     setBodyHeight((prev) => {
       if (prev != null && prev !== next) body.style.overflowY = 'hidden'
@@ -436,7 +460,7 @@ export function Modal({
         <div className="ui-modal-handle-wrap">
           <span className="ui-modal-handle" />
         </div>
-        <div className="rd-modal-head" ref={headRef}>
+        <div className="rd-modal-head">
           <div className="rd-modal-title">{title}</div>
           <button className="rd-modal-x" onClick={onClose} aria-label="Close">
             <X size={18} strokeWidth={1.6} aria-hidden="true" />
@@ -449,11 +473,7 @@ export function Modal({
         >
           <div ref={contentRef}>{children}</div>
         </div>
-        {footer ? (
-          <div className="rd-modal-foot" ref={footRef}>
-            {footer}
-          </div>
-        ) : null}
+        {footer ? <div className="rd-modal-foot">{footer}</div> : null}
       </div>
     </div>
   )

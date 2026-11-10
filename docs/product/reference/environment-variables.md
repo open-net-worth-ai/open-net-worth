@@ -26,9 +26,11 @@ described below.
   repository folder and uncomment the lines you need. The file is read at startup. Restart the
   app after a change.
 - **`onw start` (installed with `uv tool`):** set the variable in your shell, e.g.
-  `PORT=8081 onw start`. If you use `onw autostart install`, the boot service carries over
+  `PORT=8081 onw start`. If you use `onw autostart on`, the boot service carries over
   `HOST`, `PORT`, `ONW_ROOT`, `DATA_DIR`, `CACHE_DIR` and `LOGS_DIR` from the shell you ran it
-  in — run it again after changing them.
+  in — run it again after changing them. It also carries where uv keeps your install
+  (`UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`, `UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`, `XDG_DATA_HOME`), so
+  `--auto-upgrade` can find it.
 - **Docker:** put `NAME=value` lines in a `.env` file next to `docker-compose.yml`, or pass them
   on the command line: `AUTH_PASSWORD=… docker compose up -d`.
 - **Desktop app:** it ignores `.env` and sets up its own server. The only variable meant for
@@ -45,6 +47,7 @@ described below.
 | `LOGS_DIR` | `<ONW_ROOT>/logs` | The app log. |
 | `BACKUPS_DIR` | `<ONW_ROOT>/backups` | Daily backups. |
 | `ONW_DATABASE_URL` | `sqlite:///<DATA_DIR>/onw.db` | Use Postgres instead of the built-in SQLite file, e.g. `postgresql+psycopg://user:pass@host/db`. See [SQL console and Postgres](../operations/sql-console-postgres.md). |
+| `ONW_SQL_CONSOLE_DATABASE_URL` | unset | Postgres only, rarely needed: a database login you made for Lucius's read-only SQL, instead of the one the app creates. The app still keeps its table permissions up to date. See [SQL console and Postgres](../operations/sql-console-postgres.md). |
 
 Two instances can't share one working folder — the second refuses to start (see
 [The backend won't start](../troubleshooting/backend-wont-start.md#another-copy-is-already-using-the-folder)).

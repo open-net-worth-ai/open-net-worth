@@ -113,7 +113,7 @@ After `make desktop-package`, run from `desktop/`:
 
 ```sh
 node qa/packaged-smoke.mjs \
-  "out/Open Net Worth-darwin-arm64/Open Net Worth.app/Contents/MacOS/open-net-worth"
+  "out/Open Net Worth-darwin-arm64/Open Net Worth.app/Contents/MacOS/Open Net Worth"
 ```
 
 This copies the app outside the checkout into a path containing spaces, then launches it

@@ -88,8 +88,15 @@ async function dismissActivityOffer() {
       .find((w) => !w.isClosed() && w.url().startsWith("data:text/html"));
     return Boolean(offer);
   });
-  await offer.keyboard.press("Escape");
+  await closesItsWindow(() => offer.keyboard.press("Escape"));
   await poll(async () => offer.isClosed());
+}
+// A dialog's Escape or Cancel destroys its window while handling the keydown/mousedown, so
+// Playwright's trailing keyup/mouseup can find the page already gone: the outcome, not a failure.
+async function closesItsWindow(action) {
+  await action().catch((error) => {
+    if (!/has been closed/.test(error?.message ?? "")) throw error;
+  });
 }
 async function menu(label) {
   await app.evaluate(({ Menu }, label) => {
@@ -228,15 +235,17 @@ try {
     serverA.origin,
   );
   assert.equal((await api(page, "/api/auth/status")).authenticated, true);
-  await form
-    .getByRole("button", { name: /Back|Cancel/, exact: true })
-    .first()
-    .click();
+  await closesItsWindow(() =>
+    form
+      .getByRole("button", { name: /Back|Cancel/, exact: true })
+      .first()
+      .click(),
+  );
   const afterBack = await active();
   if (afterBack !== page)
-    await afterBack
-      .getByRole("button", { name: "Cancel", exact: true })
-      .click();
+    await closesItsWindow(() =>
+      afterBack.getByRole("button", { name: "Cancel", exact: true }).click(),
+    );
   assert.equal((await api(page, "/api/auth/status")).authenticated, true);
   check(
     "Settings offers server switching; failed candidate and cancel preserve the active connection",
@@ -397,9 +406,11 @@ try {
   );
   await f.stop(serverA);
   await launch();
+  // Startup keeps the splash up for a server still starting (SERVER_STARTUP_PATIENCE_MS, 60s)
+  // before it says the server can't be reached.
   await page
     .getByText(/Can.t reach your server|Couldn.t reach your server/)
-    .waitFor({ timeout: 45000 });
+    .waitFor({ timeout: 90000 });
   await page.getByRole("button", { name: /Change connection/ }).waitFor();
   assert.equal(await exists(path.join(f.home, ".open-net-worth")), false);
   await page.screenshot({ path: "qa/artifacts/server-client-offline.png" });

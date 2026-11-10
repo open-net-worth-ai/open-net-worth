@@ -139,7 +139,7 @@ GATE_EXEMPT_READ_SHAPED: frozenset[str] = frozenset(
         "diff_statement",  # memoizes the diff onto the statement record
         "verify_statement_balance",  # memoizes onto the batch record
         "scan_intel",  # refreshes the intel feed (news signals) — a read from the user's seat
-        # The nine bank/broker fetch tools (RFC connectors-as-data-sources) — the same
+        # The bank/broker fetch tools (RFC connectors-as-data-sources) — the same
         # "reading your own inbox is a read" argument the incident above makes for email:
         # each stashes a raw-evidence snapshot per row + the connector's own
         # last_synced_at/last_status/last_error, books NOTHING itself, and would otherwise
@@ -153,9 +153,24 @@ GATE_EXEMPT_READ_SHAPED: frozenset[str] = frozenset(
         "lunch_flow_fetch_transactions",
         "ynab_fetch_transactions",
         "enable_banking_fetch_transactions",
+        "gocardless_fetch_transactions",
         "yodlee_fetch_transactions",
         "alpaca_fetch_positions",
         "ibkr_fetch_activity",
+        # Each bank's account list (2026-10-29) — a NARROWER read than the fetch above (accounts
+        # and balances only, no transactions) that writes nothing at all. Measured: the Sync
+        # Plaid automation calls it to resolve which accounts are linked, and an "ask" default
+        # parked every unattended run on an approval card.
+        "simplefin_list_accounts",
+        "plaid_list_accounts",
+        "lunch_money_list_accounts",
+        "lunch_flow_list_accounts",
+        "ynab_list_accounts",
+        "ynab_list_plans",
+        "ynab_get_plan",
+        "enable_banking_list_accounts",
+        "gocardless_list_accounts",
+        "yodlee_list_accounts",
     }
 )
 

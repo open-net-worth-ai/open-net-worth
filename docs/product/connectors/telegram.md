@@ -76,23 +76,29 @@ Talk to it like the in-app chat. Useful commands:
 
 | Command | What it does |
 |---|---|
+| `/model` | Show or switch the AI model |
+| `/effort` | Set response depth: `low`, `medium`, `high` or `max` |
+| `/approvals` | Choose how much Lucius asks before acting: `manual` or `auto`. Needs [Permissions v2](../lucius/permissions-v2.md) |
 | `/new` | Start a fresh conversation |
 | `/stop` | Stop the reply that's being written |
 | `/id` | Show this chat's ID |
-| `/model` | Show or switch the AI model |
 | `/status` | Model, response depth and today's AI cost |
 | `/cost` | Today's and the last 30 days' AI spend |
-| `/effort` | Set response depth: `low`, `medium`, `high` or `max` |
 | `/streaming`, `/suggestions`, `/toolstream` | Turn live-updating replies, follow-up suggestions, or "what I'm doing" progress on or off |
 | `/help` | Show the full list |
 
-You can also send photos (a receipt, a screenshot of a statement) and documents.
+You can also send photos (a receipt, a screenshot of a statement) and documents. If Telegram
+can't hand the file over, even after one retry, the bot tells you to send it again instead of
+going quiet.
 
 **Approving changes.** When Lucius wants to change something that needs your OK, the message
 comes with buttons — **✓ Once**, **✓ Always**, **✗ Deny** (or **✓ Apply** / **✗ Discard**). They
 work exactly like [confirm cards](../lucius/confirm-cards.md) in the app: the change that runs is
 exactly the one shown, whatever is typed in between. A card only responds to taps in the chat it
-was sent to.
+was sent to. When the [Auto judge](../lucius/permissions-v2.md) is what stopped the call, the
+message also says **Auto asked because:** and its reason. If that would make the message too long
+for Telegram, the card arrives without the reason. If the card can't be sent at all, the bot says
+so: nothing has run, and you can answer it in the app.
 
 **Getting alerts and reports here.** The ready-made report Automations — *Daily briefing*,
 *Weekly report*, *Monthly report* — send to Telegram when it's connected. See

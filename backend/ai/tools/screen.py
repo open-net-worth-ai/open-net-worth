@@ -38,7 +38,8 @@ class GetScreenDetailInput(ToolInput):
     description=(
         "Fetch the FULL content behind a handle the user is currently looking at on screen — a "
         "news article, a price/data series, or off-screen rows. The available handle ids are "
-        "listed in the on-screen context block under 'available on demand'. Call this INSTEAD of "
+        "listed in the on-screen context block under 'available on demand', on the user's message "
+        "or returned by read_screen. Call this INSTEAD of "
         "guessing what an article says or what a chart shows. Returns the content plus its source "
         "(cite the source/url in your answer)."
     ),
@@ -67,7 +68,8 @@ async def get_screen_detail(input_data: dict):
             {
                 "error": (
                     f"no on-screen handle '{handle_id}' — it may have scrolled off or the user "
-                    "changed screens. Answer from what's already in context."
+                    "changed screens. Call read_screen to look again, or answer from what's "
+                    "already in context."
                 )
             }
         ), None
@@ -331,6 +333,26 @@ def _validate_command_args(cmd: dict, args: dict) -> str | None:
     return None
 
 
+def _validate_command_semantics(name: str, args: dict) -> str | None:
+    """The one command whose argument is a closed set the backend owns: a connector id must be
+    one the directory returned, so a made-up id is refused here rather than opening nothing."""
+    if name != "connectors.open_setup":
+        return None
+    from backend.services import connector_directory
+
+    extra = set(args) - {"id"}
+    if extra:
+        # `connect` (go straight to the sign-in) is set by the card on the user's own click,
+        # never by the model — a model-sent one would start a sign-in nobody asked for.
+        return f"connectors.open_setup takes only 'id', not {sorted(extra)}"
+    connector_id = args.get("id")
+    if connector_id == connector_directory.CUSTOM_SETUP_ID:
+        return None
+    if connector_id not in connector_directory.entry_ids():
+        return connector_directory.unknown_id_message(str(connector_id))
+    return None
+
+
 class RunScreenCommandInput(ToolInput):
     """Schema-of-record for ``run_screen_command`` (see ``schema_from_model``)."""
 
@@ -347,7 +369,8 @@ class RunScreenCommandInput(ToolInput):
     description=(
         "Drive a review or staging action owned by the user's app screen. A command changes "
         "UI state only and never writes application data itself. The available commands and their "
-        "args are listed in the on-screen context block under 'this screen can be DRIVEN'. "
+        "args are listed in the on-screen context block under 'this screen can be DRIVEN', on the "
+        "user's message or returned by read_screen. "
         "Follow the command description: plan what-ifs are complete relative to the saved "
         "baseline, while review commands carry the complete validated draft. If the screen is not "
         "open, the call parks and the reply shows the user a navigation chip; say so. "
@@ -380,10 +403,11 @@ async def run_screen_command(input_data: dict):
     cmd = next((c for c in manifest if c.get("name") == name), None)
     if cmd is None:
         avail = ", ".join(sorted(c.get("name", "") for c in manifest)) or "none"
+        hint = "" if manifest else " Call read_screen to get what this screen offers."
         return json.dumps(
-            {"error": f"unknown screen command '{name}' — available this turn: {avail}"}
+            {"error": f"unknown screen command '{name}' — available this turn: {avail}.{hint}"}
         ), None
-    err = _validate_command_args(cmd, args)
+    err = _validate_command_args(cmd, args) or _validate_command_semantics(name, args)
     if err:
         return json.dumps({"error": err}), None
 
@@ -393,9 +417,21 @@ async def run_screen_command(input_data: dict):
     }
     if not cmd.get("live"):
         payload["open"] = {"route": cmd.get("route") or ""}
+    if name == "connectors.open_setup":
+        # The chat draws a card for this connector whether or not Connectors was open, at the
+        # point of this call — ABOVE the reply that follows. "The chip below" pointed the user
+        # the wrong way (owner test, 2026-10-31).
         payload["note"] = (
-            "screen not open — the reply shows a navigation chip; tell the user to tap "
-            "it to see the what-if applied"
+            "The chat now shows a card for this connector, placed above your reply. Call it "
+            "'the card' — not a chip, and not 'below'. Its button: Connect goes straight to the "
+            "provider's own sign-in for a sign-in connector; Set up opens the form otherwise. "
+            "Nothing is connected until the user finishes it themselves."
+            + ("" if not cmd.get("live") else " The form is already open on Connectors.")
+        )
+    elif not cmd.get("live"):
+        payload["note"] = (
+            "screen not open — the reply shows a navigation chip; tell the user to tap it to "
+            "see the what-if applied"
         )
     logger.info("run_screen_command: %s (%s)", name, payload["status"])
     return json.dumps(payload), None

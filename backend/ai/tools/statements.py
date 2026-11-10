@@ -179,28 +179,13 @@ async def rollback_import_batch(input_data: dict):
         if _batch_age_secs(batch) > _24H_SECS:
             resp["warning"] = "This batch was created by an earlier session/agent."
         return json.dumps(resp, ensure_ascii=False), None
-    txn_ids = [t["id"] for t in txns]
-    deleted, _ = svc.transactions.bulk_soft_delete(txn_ids)
-    svc.import_batches.set_status(batch_id, "rolled_back")
-    # Record the exact ids we soft-deleted so restore can un-delete only those rows,
-    # not any transactions the user may have explicitly deleted independently.
-    svc.import_batches.set_rolled_back_txn_ids(batch_id, list(deleted))
-    # UN-MERGE (RFC statement-import-unified D7): a decision-commit records pre-merge
-    # snapshots on the batch — restore each merged-into transaction to its exact prior
-    # state, so rollback reverses the WHOLE import, not just the created rows.
-    unmerged = 0
-    for snap in batch.get("merges") or []:
-        before = snap.get("before") or {}
-        if before.get("id"):
-            svc.transactions.upsert(dict(before))
-            unmerged += 1
-    logger.info(
-        "tool rollback_import_batch: batch=%s deleted=%d unmerged=%d",
-        batch_id,
-        len(deleted),
-        unmerged,
-    )
-    resp_ok: dict = {"ok": True, "batch": summary, "deleted": len(deleted)}
+    # The whole import, one implementation (services/import_undo): created rows soft-deleted,
+    # merged-into rows restored to their pre-import snapshots, the batch marked rolled_back.
+    from backend.services.import_undo import undo_import
+
+    undone = undo_import(batch_id)
+    unmerged = undone["unmerged"]
+    resp_ok: dict = {"ok": True, "batch": summary, "deleted": undone["deleted"]}
     if unmerged:
         resp_ok["unmerged"] = unmerged
         resp_ok["note"] = (

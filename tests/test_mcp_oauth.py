@@ -18,9 +18,11 @@ from __future__ import annotations
 import http.server
 import io
 import json
+import socket
 import socketserver
 import threading
 import urllib.error
+from email.message import Message
 
 import pytest
 
@@ -125,6 +127,23 @@ def test_discover_www_authenticate_reads_the_401_challenge(monkeypatch):
         challenge.resource_metadata_url
         == "https://mcp.example.test/.well-known/oauth-protected-resource"
     )
+
+
+def test_sign_in_requests_name_open_net_worth_not_python_urllib(monkeypatch):
+    """The sign-in discovery hits the same Cloudflare rule as the MCP client (error 1010 on
+    ``Python-urllib``), so it sends the same product User-Agent; a caller's header still wins."""
+    seen: list[dict] = []
+
+    class _Opener:
+        def open(self, request, timeout=None):
+            seen.append({k.lower(): v for k, v in request.header_items()})
+            raise _http_error(401)
+
+    monkeypatch.setattr(oauth, "_no_redirect_opener", lambda: _Opener())
+    with pytest.raises(urllib.error.HTTPError):
+        oauth._unguarded_urlopen("https://mcp.example.test/mcp", headers={"Accept": "x"})
+    assert seen[0]["user-agent"].startswith("OpenNetWorth/")
+    assert seen[0]["accept"] == "x"
 
 
 def test_discover_www_authenticate_raises_when_server_answers_200():
@@ -584,9 +603,70 @@ def test_fetch_refuses_a_non_public_url_when_the_mcp_server_is_public(monkeypatc
             raise net_guard.UnsafeUrlError("private")
         return u
 
+    def refuse_private_target(*a, **kw):
+        raise net_guard.UnsafeUrlError("Refusing to fetch a private address.")
+
     monkeypatch.setattr(net_guard, "assert_public_url", fail_assert_public_url)
+    monkeypatch.setattr(oauth, "pinned_urlopen", refuse_private_target)
     with pytest.raises(oauth.OAuthSecurityError):
         oauth._fetch("https://internal.example.test/authorize", "https://mcp.stripe.com/mcp")
+
+
+def _no_dns(*a, **kw):
+    raise socket.gaierror(8, "nodename nor servname provided")
+
+
+@pytest.mark.parametrize("failing_host", ["the MCP server", "the sign-in service"])
+def test_no_dns_is_a_network_problem_never_a_security_refusal(monkeypatch, failing_host):
+    if failing_host == "the MCP server":
+        monkeypatch.setattr(socket, "getaddrinfo", _no_dns)
+    else:
+        monkeypatch.setattr(net_guard, "assert_public_url", lambda u: u)
+
+        def no_dns_on_fetch(*a, **kw):
+            raise net_guard.UnresolvableHostError("The host could not be resolved.")
+
+        monkeypatch.setattr(oauth, "pinned_urlopen", no_dns_on_fetch)
+    with pytest.raises(oauth.OAuthUnreachableError):
+        oauth._fetch("https://auth.example.com/token", "https://mcp.example.com/mcp")
+
+
+_REFRESH_AS = oauth.AuthServerMetadata(
+    issuer="https://auth.example.com",
+    authorization_endpoint="https://auth.example.com/authorize",
+    token_endpoint="https://auth.example.com/token",
+)
+_REFRESH_CLIENT = oauth.ClientRegistration(client_id="c1")
+
+
+def _refresh_failing_with(monkeypatch, exc):
+    def post_form(*a, **kw):
+        raise exc
+
+    monkeypatch.setattr(oauth, "_post_form", post_form)
+    return lambda: oauth.refresh_token(
+        _REFRESH_AS, _REFRESH_CLIENT, "https://mcp.example.com/mcp", refresh_token="rt"
+    )
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        urllib.error.URLError("no route to host"),
+        TimeoutError("timed out"),
+        urllib.error.HTTPError("https://auth.example.com/token", 503, "down", Message(), None),
+        urllib.error.HTTPError("https://auth.example.com/token", 429, "slow", Message(), None),
+    ],
+)
+def test_a_refresh_the_service_could_not_answer_is_unreachable(monkeypatch, exc):
+    with pytest.raises(oauth.OAuthUnreachableError):
+        _refresh_failing_with(monkeypatch, exc)()
+
+
+def test_a_refresh_the_service_refused_is_still_a_token_error(monkeypatch):
+    refused = urllib.error.HTTPError("https://auth.example.com/token", 400, "no", Message(), None)
+    with pytest.raises(oauth.TokenExchangeError):
+        _refresh_failing_with(monkeypatch, refused)()
 
 
 def test_fetch_allows_the_same_host_as_a_private_mcp_server(monkeypatch):

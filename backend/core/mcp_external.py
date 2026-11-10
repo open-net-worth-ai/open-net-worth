@@ -220,17 +220,28 @@ class ExternalDispatcher(Protocol):
     ``schemas()`` returns the namespaced Anthropic tool schemas to UNION into the
     interactive offer (every advertised tool of each enabled server except the ones the
     permission config ``block``s). ``call(name, args)`` dispatches one namespaced external
-    call and returns ``(fenced_text, proposed_change | None, image_attachment_ids)``. The
+    call and returns ``(fenced_text | None, proposed_change | None, image_attachment_ids)``. The
     outcome is decided by ONE authority — that tool's level in ``services.tool_permissions``,
     with nothing above it (ADR ``2026-08-13-mcp-permission-config-is-the-single-authority``):
       * ``block`` → refuse; nothing is staged and nothing is sent;
       * ``ask`` (the DEFAULT for an unconfigured tool) → WRITE NOTHING, stage the call
         ``{server_id, tool, args}`` verbatim under the in-flight ``tool_use_id``
         (``core.tool_use_context.get_tool_use_id()``) in the SAME ``PendingPlanStore`` every
-        other gated tool uses, and return a ``proposed_change`` dict (type
-        ``external_mcp_call``) for the confirm card — no nonce, no minted token;
+        other gated tool uses, and return ``None`` text (the turn loop's paused sentinel — no
+        result yet) with a ``proposed_change`` dict (type ``external_mcp_call``) for the
+        confirm card — no nonce, no minted token;
       * ``allow`` → fire the real external ``tools/call`` and return the fenced text with
         ``None``.
+
+    ``fire_allowed(name, args)`` (``permissions_v2``) fires a call the caller's gate
+    (``ai.permissions``) has already allowed although the tool's level is Ask — Skip, the Auto
+    judge's allow, the running Automation's own Always allowed list. The mode and those lists are
+    decided in ``ai``; the manager re-checks only the hard refusals (unknown or disabled server, a
+    tool at ``blocked``).
+
+    Under ``permissions_v2`` the caller also passes ``call(..., card_extras=...)`` (the conversation /
+    Automation the card belongs to, merged into the staged card so its Always allow lands on that
+    Automation's own list). The flag-off caller does not.
 
     ``image_attachment_ids`` is the durable attachment id of any image content block the call
     returned (a screenshot, e.g.) — persisted (``mcp.client_manager._persist_result_images``)
@@ -272,7 +283,13 @@ class ExternalDispatcher(Protocol):
 
     async def call(
         self, name: str, args: dict
-    ) -> Tuple[str, Optional[dict], list[str]]: ...  # pragma: no cover - structural protocol
+    ) -> Tuple[Optional[str], Optional[dict], list[str]]:  # pragma: no cover - structural protocol
+        ...
+
+    async def fire_allowed(
+        self, name: str, args: dict
+    ) -> Tuple[str, Optional[dict], list[str]]:  # pragma: no cover - structural protocol
+        ...
 
     async def apply_confirmed(
         self, name: str, args: dict
@@ -283,7 +300,7 @@ class ExternalDispatcher(Protocol):
 # An async callable form is accepted too, but the manager registers the object. The 3rd tuple
 # element is the attachment id of any image the call captured (e.g. a screenshot) — empty when
 # none; see ``McpClientManager._persist_result_images``.
-ExternalCall = Callable[[str, dict], Awaitable[Tuple[str, Optional[dict], list[str]]]]
+ExternalCall = Callable[[str, dict], Awaitable[Tuple[Optional[str], Optional[dict], list[str]]]]
 
 _dispatcher: Optional[ExternalDispatcher] = None
 

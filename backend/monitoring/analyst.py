@@ -177,6 +177,7 @@ Design constraints:
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -191,7 +192,7 @@ from backend.ai.structured import complete_model
 from backend.core.urls import registrable_domain
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.db.pending_analysis_store import PendingAnalysisStore
-from backend.monitoring import push_retry, topic_analyst
+from backend.monitoring import delivery, delivery_decider, push_retry, topic_analyst
 from backend.monitoring.analyst_prompt import (
     clamped_recency_hours,
     collapse_to_distinct_stories,
@@ -204,6 +205,7 @@ from backend.monitoring.analyst_prompt import (
     source_dicts,
 )
 from backend.monitoring.text_sanitize import content_tokens, sanitize_untrusted_text, tokenize
+from backend.services import position_verdict, thesis_judgment
 from backend.services.intel_stories import apply_story_change
 from backend.services.watchlist import is_topic, read_watchlist
 
@@ -354,6 +356,8 @@ _TIMELINE_TITLES = {"new": "New development", "update": "Update"}
 # _build_prompts), but this is the belt-and-suspenders backstop so even a verbose model can't
 # ship a wall of text: a hard cap, truncated at a sentence boundary rather than mid-word.
 _ALERT_MAX_CHARS = 800
+# One action, with room for the thesis it cites (role, reason, breaks-if, price against each level).
+_ACTION_MAX_CHARS = 700
 
 
 def _analysis_model() -> str | None:
@@ -389,7 +393,9 @@ def _event_framing(row: dict, payload: dict, label: str, ticker: str) -> tuple[s
         event_line = f"{label} ({ticker}) — periodic check-in (no new trigger this tick)"
         question = (
             "  why: any DEVELOPMENT worth noting since your last note (if genuinely nothing "
-            "has changed, say so plainly — that is a valid, expected answer here)\n"
+            "has changed, say so plainly — that is a valid, expected answer here; it is about "
+            "the news only — your verdict and its actions still cover the position as it "
+            "stands)\n"
         )
         return event_line, question, "YOUR POSITION"
 
@@ -425,7 +431,7 @@ def _event_framing(row: dict, payload: dict, label: str, ticker: str) -> tuple[s
     return event_line, question, "YOUR POSITION"
 
 
-def _output_skeleton(include_key_issues: bool) -> str:
+def _output_skeleton(include_key_issues: bool, is_held: bool = True) -> str:
     """The exact JSON shape `_build_prompts` asks the model to return — the ONE definition
     shared by the system prompt's worked examples' trailing "Respond with valid JSON" line and
     the user prompt's own copy, so the two can never drift apart. `include_key_issues` (Problem
@@ -457,7 +463,18 @@ def _output_skeleton(include_key_issues: bool) -> str:
             ', "key_issues": [{"question": "<key bull/bear investment question>", "bullish": '
             '"<bull case, one sentence>", "bearish": "<bear case, one sentence>"}], '
             '"portfolio_narrative": "<2-3 sentences of REASONING ONLY on why this matters for '
-            'your position — never a number>"'
+            'your position — never a number>", '
+            + (
+                '"verdict": {"action": "hold|add|trim|sell", "why": "<one plain sentence>", '
+                '"stop": <price or null>, "trim": <price or null>, "actions": [<0-3 of '
+                '{"type": "order", "side": "buy|sell", "quantity": <shares>, "limit": <price or '
+                'null>} or {"type": "alert", "when": "below|above", "price": <price>}>]}'
+                if is_held
+                else '"verdict": {"action": "buy|wait", "why": "<one plain sentence>", '
+                '"entry": <price or null>, "actions": [<0-3 of {"type": "order", "side": '
+                '"buy", "quantity": <shares>, "limit": <price or null>} or {"type": "alert", '
+                '"when": "below|above", "price": <price>}>]}'
+            )
         )
     return base + "}"
 
@@ -549,7 +566,48 @@ def _key_issues_system_instruction(
     return (
         holding_line + "key_issues: 3-5 key bull/bear investment questions for this asset, "
         "grounded in the news below — each with a one-sentence bullish case and a one-sentence "
-        "bearish case. " + narrative_line + consensus_line + "\n"
+        "bearish case. " + narrative_line + _verdict_instruction(is_held) + consensus_line + "\n"
+    )
+
+
+def _verdict_instruction(is_held: bool) -> str:
+    """The ask for ``verdict`` — the take's ONE call and the actions behind it, each with its own
+    prices (``services.position_verdict``, which only checks them). The narrative stays
+    numbers-free; numbers live in the verdict's own fields."""
+    actions = (
+        "actions: 0-3 concrete things the user could do now, each with prices YOU choose — an "
+        'order {"type": "order", "side": "buy|sell", "quantity": <shares/units>, "limit": '
+        '<limit price, or null for market>} or a price alert {"type": "alert", "when": '
+        '"below|above", "price": <price>}. A trim can be staged (e.g. sell part at one price '
+        "and more at a higher one); an alert can sit at any price that matters, not only your "
+        "stop or trim. Trading is usually the wrong move: propose an order only when your call "
+        "itself is to trade. Protection is different: when you give a stop or trim and no alert "
+        "in YOUR PRICE ALERTS sits near it (or there are none at all), propose an alert there "
+        "so the user hears when your level is reached. Never propose an alert those already "
+        "cover. Actions are about the position as it stands, not only today's news — a quiet day "
+        "with nothing new still gets that alert when your level is unguarded. With nothing to "
+        "trade and nothing left unguarded, leave actions EMPTY. "
+    )
+    if is_held:
+        return (
+            "verdict: your ONE call on this position today — action is exactly one of hold, "
+            "add, trim, sell. why: one plain sentence (20 words max) naming what would change "
+            "the call. stop: the price below which you would sell; trim: the price above which "
+            "you would take some profit — real prices in the asset's own currency, or null "
+            "if you can't ground one. If YOUR THESIS is given, follow it: "
+            "sell only past its stop or once its breaks_if has happened. "
+            + actions
+            + "Orders follow the call: sells only for trim or sell, buys only for add, and the "
+            "sells together never exceed the position quantity above. "
+        )
+    return (
+        "verdict: your ONE call on this ticker today — action is exactly buy or wait. why: one "
+        "plain sentence (20 words max) naming what would change the call. entry: the price at "
+        "or below which buying makes sense, in the asset's own currency, or null if you can't "
+        "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. "
+        + actions
+        + "Orders are buys only, and only for buy: a starter position sized for this investor's "
+        "portfolio. "
     )
 
 
@@ -565,14 +623,14 @@ def _key_issues_user_instruction(
     if is_held:
         return (
             f"  key_issues / portfolio_narrative: this is a HELD position{consensus_ref} — fill "
-            "3-5 grounded bull/bear key_issues and a numbers-free portfolio_narrative (see the "
-            "system prompt for exactly what each means)\n"
+            "3-5 grounded bull/bear key_issues, a numbers-free portfolio_narrative and a verdict "
+            "(see the system prompt for exactly what each means)\n"
         )
     return (
         f"  key_issues / portfolio_narrative: this ticker is WATCHED but not held{consensus_ref} "
         "— fill 3-5 grounded bull/bear key_issues and a numbers-free portfolio_narrative framed "
-        "around thesis relevance for someone tracking it, not a position you hold (see the "
-        "system prompt for exactly what each means)\n"
+        "around thesis relevance for someone tracking it, not a position you hold, and a "
+        "buy/wait verdict (see the system prompt for exactly what each means)\n"
     )
 
 
@@ -745,7 +803,7 @@ def _build_prompts(
         "every field with REAL content about THIS position — never copy the example or the "
         "angle-bracket descriptions literally. `message` is what the user actually reads (markdown, "
         "phone-brief; a small table ONLY when sizing multiple positions; no header, no URLs): "
-        + _output_skeleton(want_key_issues)
+        + _output_skeleton(want_key_issues, is_held)
     )
 
     event_line, question, context_header = _event_framing(row, payload, label, ticker)
@@ -788,7 +846,7 @@ def _build_prompts(
         "id — leave both empty for an ordinary new/updated development, which is most calls\n"
         + _key_issues_user_instruction(want_key_issues, analyst_consensus_block, is_held)
         + "Respond with valid JSON only. Fill every field with REAL content — never copy the "
-        "angle-bracket descriptions literally: " + _output_skeleton(want_key_issues)
+        "angle-bracket descriptions literally: " + _output_skeleton(want_key_issues, is_held)
     )
 
     return user, system
@@ -1001,6 +1059,15 @@ class _AnalysisOutput(BaseModel):
         "dollar amount — those are composed separately from live data at render time). Leave "
         "EMPTY for every other call.",
     )
+    verdict: dict = Field(
+        default_factory=dict,
+        description="ONLY when explicitly asked (a HELD or WATCHED asset subject): the take's one "
+        'call — held: {"action": "hold|add|trim|sell", "why": str, "stop": number|null, '
+        '"trim": number|null, "actions": [...]}; watched: {"action": "buy|wait", "why": str, '
+        '"entry": number|null, "actions": [...]} — each action {"type": "order", "side", '
+        '"quantity", "limit"} or {"type": "alert", "when": "below|above", "price"}, 0-3, usually '
+        "none. Leave EMPTY for every other call.",
+    )
 
     @field_validator("key_issues", mode="before")
     @classmethod
@@ -1035,6 +1102,13 @@ class _AnalysisOutput(BaseModel):
                 }
             )
         return out
+
+    @field_validator("verdict", mode="before")
+    @classmethod
+    def _coerce_verdict(cls, value: object) -> object:
+        """A non-object verdict folds to {} — never fails the whole parse; its contents are
+        checked where it is stored (``position_verdict.normalize``)."""
+        return value if isinstance(value, dict) else {}
 
     @field_validator("portfolio_narrative", "analysis", mode="before")
     @classmethod
@@ -1376,7 +1450,7 @@ def _update_signal(
     mv = payload.get("mv")
 
     impact_note = (parsed.get("impact") or "")[:200]
-    actions = [str(a)[:200] for a in (parsed.get("actions") or [])[:1]]
+    actions = [str(a)[:_ACTION_MAX_CHARS] for a in (parsed.get("actions") or [])[:1]]
     source_url = _verified_source_url((parsed.get("source_url") or "").strip(), evidence)
 
     # Lead framing matches the trigger: news_spike/material_news have no price move, so don't
@@ -1554,6 +1628,11 @@ async def run_analysis_sweep() -> int:
     except Exception as exc:
         logger.warning("analyst: pending-push drain failed: %s", type(exc).__name__)
 
+    try:
+        await delivery_decider.run_tick()
+    except Exception as exc:
+        logger.warning("analyst: delivery decider tick failed: %s", type(exc).__name__)
+
     pa_store = PendingAnalysisStore()
     try:
         await asyncio.to_thread(_reclaim_stale_claims, pa_store)
@@ -1717,16 +1796,12 @@ async def _run_stale_facts_peers_precompute() -> None:
     candidate's refresh failing (network, LLM) must never stop the rest or raise into the sweep
     tick calling this."""
     from backend.monitoring import asset_brief
-    from backend.services.positions import hydrated as read_rows
 
     try:
-        held = [
-            r
-            for r in read_rows()
-            if (r.get("instrument_id") or "").strip() and float(r.get("quantity") or 0) > 0
-        ]
-        held_iids = {r["instrument_id"] for r in held}
-        candidates = held + _watched_not_held_candidates(held_iids)
+        # Off the loop: hydrating every position and reading the watchlist are synchronous
+        # DB/price reads, and this coroutine runs on the SHARED loop — every request and stream
+        # stalled behind it each tick (loop_watch, 2026-10-26).
+        candidates = await asyncio.to_thread(_facts_peers_candidates)
     except Exception as exc:
         logger.warning(
             "analyst: facts/peers precompute candidate gather failed: %s", type(exc).__name__
@@ -1741,7 +1816,7 @@ async def _run_stale_facts_peers_precompute() -> None:
         if not iid:
             continue
         try:
-            if not asset_brief.facts_peers_stale(iid):
+            if not await asyncio.to_thread(asset_brief.facts_peers_stale, iid):
                 continue
             await asset_brief.refresh_asset_brief(iid, force=False)
             refreshed += 1
@@ -1751,6 +1826,20 @@ async def _run_stale_facts_peers_precompute() -> None:
             )
     if refreshed:
         logger.info("analyst: refreshed %d stale facts/peers/news brief(s)", refreshed)
+
+
+def _facts_peers_candidates() -> list[dict]:
+    """Held instruments first (a real position claims a cap slot before a watch-only ticker),
+    then watched-not-held ones — synchronous, for ``asyncio.to_thread``."""
+    from backend.services.positions import hydrated as read_rows
+
+    held = [
+        r
+        for r in read_rows()
+        if (r.get("instrument_id") or "").strip() and float(r.get("quantity") or 0) > 0
+    ]
+    held_iids = {r["instrument_id"] for r in held}
+    return held + _watched_not_held_candidates(held_iids)
 
 
 def _key_issues_stale(brief: dict) -> bool:
@@ -1936,7 +2025,7 @@ def _enqueue_stale_briefs(pa_store: PendingAnalysisStore) -> int:
     return enqueued
 
 
-async def trigger_on_demand_brief_refresh(instrument_id: str) -> bool:
+async def trigger_on_demand_brief_refresh(instrument_id: str, *, force: bool = False) -> bool:
     """On-demand, RIGHT-NOW top-up for one RESOLVABLE instrument (a real ticker — held, watched,
     or just opened ad-hoc) whose key_issues have gone stale past `_KEY_ISSUES_FORCE_REFRESH_
     HOURS` — called by `api.intel_assets.get_asset_detail` via `asyncio.create_task` (fire-and-
@@ -2011,7 +2100,10 @@ async def trigger_on_demand_brief_refresh(instrument_id: str) -> bool:
         return False
 
     brief = AssetBriefStore().get(iid) or {}
-    if not _key_issues_force_stale(brief):
+    # `force` is the page's Refresh: the user asked for a new take now, so the 12h cooldown is
+    # skipped. The in-flight and failure guards below still hold — a second click mid-run is a
+    # no-op, never a second model call.
+    if not force and not _key_issues_force_stale(brief):
         return False
 
     pa_store = PendingAnalysisStore()
@@ -2136,7 +2228,7 @@ async def _freshen_rss(subject: str, ticker: str, label: str, asset_class: str) 
             }
         )
         if feeds:
-            await gather_rss(feeds)
+            await gather_rss(feeds, read_back=False)
     except Exception as exc:
         logger.debug("analyst: RSS freshen failed for %s: %s", ticker, type(exc).__name__)
 
@@ -2396,6 +2488,37 @@ async def _push_analysis(
         logger.warning("analyst: push failed for %s: %s", ticker, type(exc).__name__)
 
 
+async def _deliver_analysis(
+    label: str,
+    ticker: str,
+    parsed: dict,
+    evidence: list[dict] | None = None,
+    *,
+    story_id: str = "",
+    subject: str = "",
+    materiality: str = "",
+) -> None:
+    """The single call site for a push-worthy analysis: ``delivery.route`` runs ``_push_analysis``
+    unchanged with the ``intel_delivery_decider`` flag off, and hands Lucius the candidate with it on."""
+
+    def candidate() -> dict:
+        return delivery.analysis_candidate(
+            label,
+            ticker,
+            parsed,
+            sources=source_dicts(evidence or []),
+            story_id=story_id,
+            subject=subject,
+            materiality=materiality,
+            legacy_message=_format_analysis(
+                label, ticker, parsed, sources=_source_links(evidence or [])
+            ),
+        )
+
+    legacy = functools.partial(_push_analysis, label, ticker, parsed, evidence, story_id=story_id)
+    await delivery.route(candidate, legacy)
+
+
 def _create_news_spike_signal(
     row: dict, parsed: dict, evidence_watermark: str, evidence: list[dict] | None = None
 ) -> dict:
@@ -2412,7 +2535,7 @@ def _create_news_spike_signal(
     label = payload.get("label") or row.get("ticker") or "?"
     ticker = row.get("ticker") or "?"
     why = (parsed.get("why") or "")[:300]
-    actions = [str(a)[:200] for a in (parsed.get("actions") or [])[:1]]
+    actions = [str(a)[:_ACTION_MAX_CHARS] for a in (parsed.get("actions") or [])[:1]]
     now = datetime.now(timezone.utc).isoformat()
     subject = row.get("subject") or ""
     iid = subject[len("asset:") :] if subject.startswith("asset:") else ""
@@ -2489,6 +2612,33 @@ def _gather_position_context(
     except Exception as exc:
         logger.debug("analyst: position context failed for %s: %s", ticker, type(exc).__name__)
         return "(not currently held)", profile
+
+
+def _thesis_judgment(subject: str, ticker: str, payload: dict, *, held: bool) -> dict | None:
+    """The user's investment thesis for this asset, read at the event's price
+    (``services.thesis_judgment``; the last price on file when the event carries none) — None
+    for a topic or a ticker with no thesis, which leaves the analysis exactly as it was."""
+    iid = subject[len("asset:") :] if subject.startswith("asset:") else ""
+    if not iid or not _has_thesis(iid):
+        return None
+    return thesis_judgment.for_instrument(iid, payload.get("current"), ticker=ticker, held=held)
+
+
+def _has_thesis(instrument_id: str) -> bool:
+    try:
+        from backend.services import investment_theses
+
+        return bool(investment_theses.thesis_for(instrument_id))
+    except Exception:
+        return False
+
+
+def _with_thesis_line(parsed: dict, thesis: dict | None) -> dict:
+    """``parsed`` with the thesis cited in a line computed from the price, never the model's
+    words — the alert shows where the price sits even if the advice is wrong. No thesis: as is."""
+    if not thesis:
+        return parsed
+    return {**parsed, "thesis_line": thesis_judgment.cite_line(thesis)}
 
 
 def _is_held_instrument(instrument_id: str) -> bool:
@@ -2592,7 +2742,7 @@ async def _fetch_analyst_consensus_block(instrument_id: str) -> str:
 
 
 def _write_asset_brief_synthesis(
-    instrument_id: str, parsed: dict, evidence: list[dict], now: str
+    instrument_id: str, parsed: dict, evidence: list[dict], now: str, *, held: bool
 ) -> None:
     """Write this synthesis call's `key_issues`/`portfolio_narrative` onto the held-or-watched
     instrument's Asset Brief (Problem B point 1, Correction) — the Analyst pipeline's own
@@ -2632,6 +2782,7 @@ def _write_asset_brief_synthesis(
                 parsed.get("portfolio_narrative") or "",
                 source_dicts(evidence),
                 now,
+                verdict=_brief_verdict(instrument_id, parsed, held, now),
             )
         else:
             asset_brief.stamp_key_issues_checked(instrument_id, now)
@@ -2652,6 +2803,68 @@ def _write_asset_brief_synthesis(
             instrument_id,
             type(exc).__name__,
         )
+
+
+def _verdict_context(instrument_id: str, *, held: bool) -> str:
+    """What the take's call needs beyond the position block: the price of a watched ticker (a
+    holding's block already has it), the previous call with its levels — so a level moves
+    because something changed, not because the price did — and the user's price alerts on it,
+    so a level reuses one already set. "" on any failure — never blocks."""
+    try:
+        from backend.db.asset_brief_store import AssetBriefStore
+        from backend.db.instrument_store import InstrumentStore
+
+        inst = InstrumentStore().find_by_id(instrument_id) or {}
+        currency = inst.get("quote_currency") or ""
+        parts = []
+        price = None if held or not inst else thesis_judgment.local_price(inst)
+        if price:
+            parts.append(f"Current price: {currency} {price:g}".replace("  ", " "))
+        prior = (AssetBriefStore().get(instrument_id) or {}).get("position_verdict")
+        block = position_verdict.prior_block(prior, held=held, currency=currency)
+        if block:
+            parts.append(block)
+        ticker = (inst.get("price_source_id") or "").upper()
+        if ticker:
+            from backend.services.alerts import list_alerts
+
+            alerts = position_verdict.alerts_block(list_alerts(ticker), currency=currency)
+            if alerts:
+                parts.append(alerts)
+    except Exception as exc:
+        logger.debug(
+            "analyst: verdict context failed for %s: %s", instrument_id, type(exc).__name__
+        )
+        return ""
+    return "".join(f"\n\n{p}" for p in parts)
+
+
+def _brief_verdict(instrument_id: str, parsed: dict, held: bool, now: str) -> dict | None:
+    """The synthesis's verdict, checked against the last price on file (no network), stamped
+    with when it was made so the next take can be shown it."""
+    from backend.db.instrument_store import InstrumentStore
+
+    inst = InstrumentStore().find_by_id(instrument_id) or {}
+    price = thesis_judgment.local_price(inst) if inst else None
+    verdict = position_verdict.normalize(
+        parsed.get("verdict"), held=held, price=price, held_qty=_held_quantity(instrument_id)
+    )
+    return {**verdict, "at": now} if verdict else None
+
+
+def _held_quantity(instrument_id: str) -> float | None:
+    """Sellable units held (vested), the cap on a suggested sell — None when unreadable."""
+    try:
+        from backend.api.portfolio import read_rows
+
+        rows = [
+            r
+            for r in read_rows()
+            if r.get("instrument_id") == instrument_id and r.get("vesting_state") != "unvested"
+        ]
+        return sum(float(r.get("quantity") or 0) for r in rows) or None
+    except Exception:
+        return None
 
 
 def _load_all_evidence_rows_cached(cache: dict) -> list[dict]:
@@ -3080,12 +3293,19 @@ async def _process_linked_pair(
     )
     asset_iid = asset_subject[len("asset:") :] if asset_subject.startswith("asset:") else ""
     held_instrument_id = asset_iid if asset_iid and _is_held_instrument(asset_iid) else ""
+    thesis = _thesis_judgment(
+        asset_subject, asset_ticker, asset_payload, held=bool(held_instrument_id)
+    )
+    if thesis:
+        position_ctx = f"{position_ctx}\n\n{thesis_judgment.prompt_block(thesis, asset_label)}"
     # Correction (ADR .../cross-subject-fan-out-and-asset-brief-consolidation): key_issues is
     # requested for a watched-not-held asset too, not held-only — see `_process_row`'s own
     # identical held/watched resolution for the full reasoning.
     brief_instrument_id = held_instrument_id or (
         asset_iid if asset_iid and _is_watched_instrument(asset_iid) else ""
     )
+    if brief_instrument_id:
+        position_ctx += _verdict_context(brief_instrument_id, held=bool(held_instrument_id))
     analyst_block = (
         await _fetch_analyst_consensus_block(brief_instrument_id) if brief_instrument_id else ""
     )
@@ -3100,6 +3320,8 @@ async def _process_linked_pair(
         is_held=bool(held_instrument_id),
         want_key_issues=bool(brief_instrument_id),
     )
+    if thesis:
+        system_prompt += thesis_judgment.THESIS_RULE
     result = await complete_model(
         user_prompt,
         _AnalysisOutput,
@@ -3118,7 +3340,7 @@ async def _process_linked_pair(
         pa_store.mark_done(asset_row["id"])
         return 2
 
-    parsed = result.model_dump()
+    parsed = _with_thesis_line(result.model_dump(), thesis)
     if not _analysis_matches_subject(asset_row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", asset_subject)
         pa_store.mark_done(topic_row["id"])
@@ -3154,7 +3376,15 @@ async def _process_linked_pair(
     )
 
     if brief_instrument_id:
-        _write_asset_brief_synthesis(brief_instrument_id, parsed, evidence, read_time)
+        # Stamped when the take is WRITTEN, not when its evidence was read: "Analysis updated
+        # Xs ago" on the page means the take the user is now looking at, not the model call's start.
+        _write_asset_brief_synthesis(
+            brief_instrument_id,
+            parsed,
+            evidence,
+            datetime.now(timezone.utc).isoformat(),
+            held=bool(held_instrument_id),
+        )
 
     # A linked pair is, BY CONSTRUCTION, about the same instrument (that's the definition of
     # a pairing) — ONE group_key covers both sides' push-decision calls rather than resolving
@@ -3179,8 +3409,14 @@ async def _process_linked_pair(
     )
 
     if asset_push:
-        await _push_analysis(
-            asset_label, asset_ticker, parsed, evidence, story_id=_asset_updated.get("id") or ""
+        await _deliver_analysis(
+            asset_label,
+            asset_ticker,
+            parsed,
+            evidence,
+            story_id=_asset_updated.get("id") or "",
+            subject=asset_subject,
+            materiality=materiality,
         )
         if pair_group_key:
             _claims_svc.apply_claim_push(
@@ -3198,8 +3434,14 @@ async def _process_linked_pair(
             topic_subject,
         )
     elif topic_push:
-        await _push_analysis(
-            topic_label, "", parsed, evidence, story_id=_topic_updated.get("id") or ""
+        await _deliver_analysis(
+            topic_label,
+            "",
+            parsed,
+            evidence,
+            story_id=_topic_updated.get("id") or "",
+            subject=topic_subject,
+            materiality=materiality,
         )
         if pair_group_key:
             _claims_svc.apply_claim_push(
@@ -3386,10 +3628,16 @@ async def _process_row(
         pa_store.mark_done(row_id)
         return 0
 
+    thesis = None
     if is_topic:
         position_ctx, profile = topic_analyst.topic_context(payload)
     else:
         position_ctx, profile = _gather_position_context(subject, ticker, label, payload)
+        thesis = _thesis_judgment(subject, ticker, payload, held=bool(held_instrument_id))
+        if thesis:
+            position_ctx = f"{position_ctx}\n\n{thesis_judgment.prompt_block(thesis, label)}"
+        if brief_instrument_id:
+            position_ctx += _verdict_context(brief_instrument_id, held=bool(held_instrument_id))
 
     user_prompt, system_prompt = _build_prompts(
         row,
@@ -3402,6 +3650,8 @@ async def _process_row(
         is_held=bool(held_instrument_id),
         want_key_issues=bool(brief_instrument_id),
     )
+    if thesis:
+        system_prompt += thesis_judgment.THESIS_RULE
     result = await complete_model(
         user_prompt,
         _AnalysisOutput,
@@ -3431,7 +3681,7 @@ async def _process_row(
         _log_phase_timing()
         pa_store.mark_done(row_id)
         return 1
-    parsed = result.model_dump()
+    parsed = _with_thesis_line(result.model_dump(), thesis)
     if not _analysis_matches_subject(row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", subject)
         _log_phase_timing()
@@ -3453,7 +3703,15 @@ async def _process_row(
     )
 
     if brief_instrument_id:
-        _write_asset_brief_synthesis(brief_instrument_id, parsed, evidence, read_time)
+        # Stamped when the take is WRITTEN, not when its evidence was read: "Analysis updated
+        # Xs ago" on the page means the take the user is now looking at, not the model call's start.
+        _write_asset_brief_synthesis(
+            brief_instrument_id,
+            parsed,
+            evidence,
+            datetime.now(timezone.utc).isoformat(),
+            held=bool(held_instrument_id),
+        )
 
     # Owner override of RFC intel-signals-data-model §4's "NO-GO" —
     # docs/adr/2026-08-30-claims-registry-cross-subject-push-dedup.md.
@@ -3462,8 +3720,14 @@ async def _process_row(
         row, materiality, decision_relevant, entry_meta, group_key=group_key, evidence=evidence
     )
     if should_push:
-        await _push_analysis(
-            label, ticker, parsed, evidence, story_id=_updated_signal.get("id") or ""
+        await _deliver_analysis(
+            label,
+            ticker,
+            parsed,
+            evidence,
+            story_id=_updated_signal.get("id") or "",
+            subject=subject,
+            materiality=materiality,
         )
         if group_key:
             _claims_svc.apply_claim_push(
@@ -3609,6 +3873,9 @@ def _format_analysis(
             parts += ["", f"• {actions[0]}"]
         body = "\n".join(p for p in parts if p is not None)
     message = _truncate_at_sentence_boundary(f"{header}\n\n{body}".rstrip(), _ALERT_MAX_CHARS)
+    # The thesis citation rides AFTER the cap, like the sources: a long body can't cut it off.
+    if parsed.get("thesis_line") and "thesis" not in body.lower():
+        message += f"\n\n{parsed['thesis_line']}"
     if sources:
         message += "\n\nSources:\n" + "\n".join(f"• {s}" for s in sources)
     return message

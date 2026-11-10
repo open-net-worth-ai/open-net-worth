@@ -4,10 +4,15 @@ import { Button, CollapsibleSection, Stack, Text } from '../ui'
 import { TERMINAL_NOTICE } from './privateCloudCopy'
 
 export type CliHostPlatform = 'macos' | 'windows' | 'linux' | 'other'
+export type CliSignInState = 'signed_in' | 'not_signed_in' | 'unknown'
 export interface CliSubscriptionHelpProps {
   provider: 'claude_cli' | 'codex_cli'
   platform?: CliHostPlatform
   detected: boolean
+  /** What the CLI itself says about its login. Found is not signed in. */
+  signIn?: CliSignInState
+  /** The app runs in a container, so the sign-in has to go through `docker exec`. */
+  inContainer?: boolean
   onCheck: () => Promise<unknown>
   /** Private Cloud: the sign-in happens in the in-app Terminal on the server, not on this computer. */
   terminal?: { onOpen: () => void }
@@ -137,6 +142,37 @@ function InstallationSteps({
   )
 }
 
+// The browser sign-in returns to the container's own 127.0.0.1, which nothing outside can reach.
+const CONTAINER_LOGIN = {
+  claude_cli: 'docker exec -it open-net-worth claude auth login',
+  codex_cli: 'docker exec -it open-net-worth codex login --device-auth',
+} as const
+
+function SignInSteps({
+  provider,
+  inContainer,
+}: Pick<CliSubscriptionHelpProps, 'provider' | 'inContainer'>) {
+  const details = PROVIDERS[provider]
+  const command = inContainer ? CONTAINER_LOGIN[provider] : details.login
+  const signIn =
+    inContainer && provider === 'codex_cli'
+      ? 'It shows a link and a code: open the link on any device and enter the code.'
+      : details.signIn
+  return (
+    <Stack gap="--space-3">
+      <Text as="p" size="sm">
+        {inContainer
+          ? `${details.label} comes with the Open Net Worth container and runs inside it, so it can't use a sign-in from your computer or server. Run this on the machine hosting the container, with your own container name if you changed it.`
+          : 'Run this on the computer running Open Net Worth.'}
+      </Text>
+      <CopyCommand command={command} label={`Copy ${details.label} sign-in command`} />
+      <Text as="p" size="sm" tone="muted">
+        {signIn} This updates on its own once you&rsquo;re signed in.
+      </Text>
+    </Stack>
+  )
+}
+
 function TerminalSteps({
   provider,
   onOpen,
@@ -175,6 +211,8 @@ export function CliSubscriptionHelp({
   provider,
   platform,
   detected,
+  signIn,
+  inContainer,
   onCheck,
   terminal,
 }: CliSubscriptionHelpProps) {
@@ -205,27 +243,41 @@ export function CliSubscriptionHelp({
     }
   }, [open])
 
-  // Install-and-sign-in help is for a tool that isn't there yet. A tool already found needs no
-  // row; one found while the help is open (installed just now) keeps it open, since found is not
-  // signed in.
-  if (detected && !open) return null
+  // Help is for a tool that isn't there yet, or can't sign in yet. A found tool with no word
+  // against its login needs no row; one found while the help is open (installed just now) keeps
+  // it open, since found is not signed in.
+  const needsSignIn = detected && signIn === 'not_signed_in'
+  const justSignedIn = detected && signIn === 'signed_in'
+  if (detected && !open && !needsSignIn) return null
 
   return (
     <CollapsibleSection
       className="cli-subscription-help"
-      title={terminal ? 'Sign in from Terminal' : 'Install & sign in'}
+      title={terminal ? 'Sign in from Terminal' : needsSignIn ? 'Sign in' : 'Install & sign in'}
       open={open}
       onOpenChange={setOpen}
       actions={
         <span role="status">
           <Text size="sm" tone="muted">
-            {detected ? 'Detected' : 'Not installed'}
+            {!detected
+              ? 'Not installed'
+              : needsSignIn
+                ? 'Not signed in'
+                : justSignedIn
+                  ? 'Signed in'
+                  : 'Detected'}
           </Text>
         </span>
       }
     >
-      {terminal ? (
+      {justSignedIn ? (
+        <Text as="p" size="sm">
+          Signed in. Lucius can use it now.
+        </Text>
+      ) : terminal ? (
         <TerminalSteps provider={provider} onOpen={terminal.onOpen} />
+      ) : needsSignIn ? (
+        <SignInSteps provider={provider} inContainer={inContainer} />
       ) : (
         <Stack gap="--space-5">
           <Text as="p" size="sm" tone="muted">

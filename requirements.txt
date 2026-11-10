@@ -23,7 +23,23 @@ cryptography>=42.0.0
 websockets>=12.0
 jsonschema>=4.0.0    # AI tool-input validation at the dispatch boundary (ai/tools/registry.py)
 segno
+actualpy==0.22.4         # Actual Budget client (services/actual_sync/client.py, imported lazily)
 SQLAlchemy>=2.0.30      # storage engine (Core only — no ORM); spec 2026-08-05 D2
 alembic>=1.13.0          # versioned, ordered migrations; spec 2026-08-05 D3
 psycopg[binary]>=3.1.0   # Postgres dialect for hosted/CI; SQLite needs no driver
 trafilatura>=2.2.0       # local readability extraction for plain_get_fetch (ai/search/base.py)
+# Voice calls (the voice_calls flag is the only switch — owner, 2026-11-03). Installed everywhere
+# its native parts (LiveKit's WebRTC, onnxruntime for the voice-activity model) ship a build:
+# Apple Silicon on macOS 14+, Linux x86_64/aarch64, Windows x64. Elsewhere the app installs as
+# before and Connectors → Voice calls says calls aren't available on that computer. macOS 11–13
+# (Darwin 20–22) are left out by PLAIN TEXT (`not in platform_version`): their onnxruntime and
+# av builds are macOS 14+ only. Never a version compare such as `platform_release >= '23'`:
+# pip checks every clause on every OS, parsed Linux's kernel name ("6.12.5-linuxkit") as a
+# version, failed, and broke every Linux install — the 0.1.36 Docker image (2026-11-04).
+livekit-agents[silero]==1.8.11 ; (sys_platform == 'darwin' and platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version) or (sys_platform == 'linux' and platform_machine in 'x86_64 aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64')
+# Krisp on calls, on the worker's side so no phone or browser changes (the browser package needs a
+# looser page policy and was unproven on iPhone). They need LiveKit Cloud; which one a call uses
+# is the Noise cancelling setting (connectors/voice/noise.py).
+livekit-plugins-noise-cancellation==0.3.3 ; (sys_platform == 'darwin' and platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version) or (sys_platform == 'linux' and platform_machine in 'x86_64 aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64')
+livekit-plugins-krisp==0.4.11 ; (sys_platform == 'darwin' and platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version) or (sys_platform == 'linux' and platform_machine in 'x86_64 aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64')
+livekit-api==1.2.2 ; (sys_platform == 'darwin' and platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version) or (sys_platform == 'linux' and platform_machine in 'x86_64 aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64')

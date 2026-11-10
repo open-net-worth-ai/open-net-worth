@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
-import { ChevronDown } from '../../../../ui/icons'
+import { ChevronDown, Check } from '../../../../ui/icons'
 import { fDate } from '../../../../utils/format'
 import { Panel } from '../ds'
 import type { SectionProps } from '../ds'
@@ -270,7 +270,7 @@ export function AiUsageSection(props: SectionProps) {
                     }}
                   >
                     <span>{label}</span>
-                    {window === value ? <span aria-hidden="true">✓</span> : null}
+                    {window === value ? <Check size={12} aria-hidden="true" /> : null}
                   </button>
                 ))}
               </div>

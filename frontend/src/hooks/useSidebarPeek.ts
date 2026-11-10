@@ -8,6 +8,13 @@ const CLOSE_GRACE_MS = 250
 export function useSidebarPeek(enabled: boolean) {
   const [open, setOpen] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A rail re-docked by anything other than close() (e.g. a width-driven auto-expand) must not
+  // leave `open` latched: re-collapsing later would show the peek with no fresh hover.
+  const [wasEnabled, setWasEnabled] = useState(enabled)
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled)
+    if (!enabled) setOpen(false)
+  }
 
   const cancel = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)

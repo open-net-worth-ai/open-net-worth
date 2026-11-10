@@ -22,7 +22,7 @@ PRECOMMIT  := $(if $(wildcard $(VENV)/bin/pre-commit),$(VENV)/bin/pre-commit,pre
 IMPORTLINT := $(if $(wildcard $(VENV)/bin/lint-imports),$(VENV)/bin/lint-imports,lint-imports)
 
 .DEFAULT_GOAL := check
-.PHONY: release-commit check lint imports type test build format install install-hooks setup start bundle wheel seed dev serve demo demo-host demo-reset demo-rebuild demo-stop demo-layout-save demo-layout-restore qa qa-cu qa-cu-mock qa-clean qa-manual qa-manual-stop qa-fresh qa-fresh-stop qa-fresh-reset qa-ports-free ui-gate qa-e2e qa-e2e-crypto-market-data qa-e2e-setup qa-acceptance-check qa-data dedup-eval bug help db-upgrade db-revision db-check daemon-start daemon-stop daemon-status docs-site docs-site-embed docs-lint cli-smoke cli-smoke-update cli-smoke-install cli-smoke-uninstall
+.PHONY: release-commit check lint imports type test build format install install-hooks setup start bundle wheel seed dev serve demo demo-host demo-reset demo-rebuild demo-stop demo-layout-save demo-layout-restore qa qa-cu qa-cu-mock qa-clean qa-manual qa-manual-stop qa-fresh qa-fresh-stop qa-fresh-reset qa-ports-free ui-gate qa-e2e qa-e2e-crypto-market-data qa-e2e-setup qa-acceptance-check qa-data dedup-eval bug help db-upgrade db-revision db-check daemon-start daemon-stop daemon-status docs-site docs-site-embed docs-lint cli-smoke cli-smoke-update cli-smoke-install cli-smoke-uninstall actual-smoke memory-eval memory-eval-mock
 
 # QA needs a real key for any LLM-dependent spec: clone_data_for_qa deliberately strips
 # stored provider keys, so the cloned instance has none. Prefer an exported ANTHROPIC_API_KEY;
@@ -171,8 +171,9 @@ type:
 ## outside the gate until 2026-08-06, and a commit that broke 10 MobileTabBar
 ## tests landed on main under a green `make check` precisely because of that.
 ## `make type` only proves the types compile; nothing ran the 3200 unit tests.
+## The pytest half runs one worker per core (pytest-xdist, requirements-dev.txt).
 test:
-	$(PY) -m pytest -q -m "not integration"
+	$(PY) -m pytest -q -m "not integration" -n auto
 	cd frontend && npm run test
 
 ## build: frontend production build (vite build — exits, no dev server) + CSS class/token guards
@@ -248,11 +249,11 @@ start:
 ##            the non-Docker answer to Docker's `restart: unless-stopped`; Docker
 ##            already has that built in and needs no target here.
 autostart: setup
-	@$(VENV)/bin/onw autostart install
+	@$(VENV)/bin/onw autostart on
 
 ## autostart-stop: stop the boot service and stop it starting at boot again
 autostart-stop:
-	@$(VENV)/bin/onw autostart stop
+	@$(VENV)/bin/onw autostart off
 
 ## autostart-status: is the boot service currently installed/running
 autostart-status:
@@ -336,6 +337,12 @@ cli-smoke-install:
 
 cli-smoke-uninstall:
 	$(PY) scripts/cli_smoke.py uninstall
+
+## actual-smoke: OPT-IN live regression of the Actual Budget sync — a pinned server and the official
+##               client on a local port, made-up budgets, installed once into a cache folder. Needs
+##               Node 22+. Never part of `make check`. ARGS="-k tracking" narrows it.
+actual-smoke:
+	$(PY) scripts/actual_smoke.py $(if $(ARGS),-- $(ARGS))
 
 ## backup: on-demand full-data backup (also runs automatically once a day — see Settings → Data)
 backup:
@@ -709,6 +716,30 @@ tool-surface-eval:
 	  $(if $(TASKS),--tasks $(TASKS),) \
 	  $(if $(MODEL),--model $(MODEL),) \
 	  $(if $(OUT),--out $(OUT),)
+
+## memory-eval: OPT-IN live benchmark of the memory model — does THIS model do Lucius's memory well
+##              enough to ship? Drives the real extract / sort / import / tidy passes and two chat
+##              turns in a throwaway book (ONW_ROOT + ONW_QA_MODE), scores the resulting STATE,
+##              exits 1 on any safety miss or a quality score under the bar. SPENDS the chosen
+##              model's quota; never part of `make check`. See docs/ai/MEMORY_EVAL.md.
+##              Vars: MODEL (provider_key:model_id, default the Claude Code CLI's own), MODELS
+##              (comma list, side by side), REPEATS (3 before a PR), STAGES (e.g. extract,sort,import,tidy
+##              to skip the costly `use` stage), CASES, MIN_SCORE, JSON.
+##   make memory-eval REPEATS=3
+##   make memory-eval MODEL=codex_cli:gpt-5 STAGES=extract,sort,import,tidy
+memory-eval:
+	$(PY) -m backend.evals.memory \
+	  $(if $(MODELS),--models $(MODELS),$(if $(MODEL),--model $(MODEL),)) \
+	  --repeats $(or $(REPEATS),1) \
+	  $(if $(STAGES),--stages $(STAGES),) \
+	  $(if $(CASES),--cases $(CASES),) \
+	  $(if $(MIN_SCORE),--min-score $(MIN_SCORE),) \
+	  $(if $(JSON),--json $(JSON),)
+
+## memory-eval-mock: zero-cost proof the memory benchmark and its scorer work (no model calls, CI-safe).
+##                   PERSONA=sloppy must FAIL the gate (it proves the scorer discriminates).
+memory-eval-mock:
+	$(PY) -m backend.evals.memory --mock --persona $(or $(PERSONA),good) --repeats $(or $(REPEATS),1)
 
 ## No default path: "pre-merge" is a claim about git ancestry, not a filename you can
 ## assume — verify with `git merge-base --is-ancestor <candidate-commit> HEAD` before

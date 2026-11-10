@@ -371,7 +371,8 @@ try {
   server.kill("SIGTERM");
   server = null;
   await launch();
-  await page.getByRole("heading", { name: /reach your server/i }).waitFor({ timeout: 60000 });
+  // Past the 60s startup patience for a server still starting (SERVER_STARTUP_PATIENCE_MS).
+  await page.getByRole("heading", { name: /reach your server/i }).waitFor({ timeout: 90000 });
   assert.equal(await page.evaluate(() => document.documentElement.dataset.desktopChrome), "mac");
   await shot("server-recovery");
   check("server recovery page: marker set on the data: page");

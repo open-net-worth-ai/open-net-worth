@@ -63,7 +63,7 @@ def _create_expense(acct_id: str, source: str | None, ref: str) -> dict:
             "from_currency": "SGD",
             "source": "csv_import",
         },
-        force=True,
+        allow_duplicate=True,
     )
 
 

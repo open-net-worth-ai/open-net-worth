@@ -29,13 +29,18 @@ from backend.ai.tools.schema_from_model import ToolInput, schema_of
 
 
 class ChannelMessageInput(ToolInput):
-    message: str = Field(description="The message body (sent verbatim).")
+    message: str = Field(
+        description=(
+            "The message body (sent verbatim). It must make sense on its own — a channel "
+            "without a title slot shows the message alone."
+        )
+    )
     title: Optional[str] = Field(
         default=None,
         description=(
-            "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown as the notification's "
-            "title where the channel has one, and as the message's first line where it "
-            "does not."
+            "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown only where the channel "
+            "has a title slot (the in-app feed), never added to the message — so put any "
+            "fact the reader needs in the message too."
         ),
     )
 
@@ -49,6 +54,17 @@ class TelegramMessageInput(ChannelMessageInput):
             "artifact carries the detail."
         ),
     )
+
+
+def _send_result(delivered: dict[str, dict]) -> str:
+    """``ok`` means the message got there. A channel swallows its own send failures and reports
+    ``sent: 0``, so an unconditional ``ok: true`` let an unattended run read a lost message as a
+    success. A file the turn already sent has got there, so that skip still counts."""
+    reached = any(
+        result.get("sent") or result.get("skipped") == "already_sent_this_turn"
+        for result in delivered.values()
+    )
+    return json.dumps({"ok": bool(reached), "delivered": delivered}, ensure_ascii=False)
 
 
 async def _send_to_channel(channel: str, input_data: dict) -> tuple[str, None]:
@@ -67,14 +83,14 @@ async def _send_to_channel(channel: str, input_data: dict) -> tuple[str, None]:
             )
         except OpenNetWorthError as exc:
             return json.dumps({"error": exc.message or str(exc)}), None
-        return json.dumps({"ok": True, "delivered": delivered}, ensure_ascii=False), None
+        return _send_result(delivered), None
 
     delivered = await send_notification(
         input_data.get("message") or "",
         channels=[channel],
         title=input_data.get("title"),
     )
-    return json.dumps({"ok": True, "delivered": delivered}, ensure_ascii=False), None
+    return _send_result(delivered), None
 
 
 @tool(
@@ -87,6 +103,7 @@ async def _send_to_channel(channel: str, input_data: dict) -> tuple[str, None]:
     ),
     input_schema=schema_of(TelegramMessageInput, tool_name="telegram_send_message"),
     mutates=("notification_log",),
+    external_effect=True,
     connector="telegram",
 )
 async def telegram_send_message(input_data: dict):
@@ -102,6 +119,7 @@ async def telegram_send_message(input_data: dict):
     ),
     input_schema=schema_of(ChannelMessageInput, tool_name="webhook_send_message"),
     mutates=("notification_log",),
+    external_effect=True,
     connector="webhook",
 )
 async def webhook_send_message(input_data: dict):

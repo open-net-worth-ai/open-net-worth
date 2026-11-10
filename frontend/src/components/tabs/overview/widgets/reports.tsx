@@ -91,6 +91,7 @@ import {
 import { SeriesLegend, type LegendGroup } from './seriesLegend'
 import { fitMode } from '../grid'
 import { vizOf } from '../vizModel'
+import { ArrowRight } from '../../../../ui/icons'
 
 Chart.register(
   ArcElement,
@@ -732,7 +733,11 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def }) => {
             {trailing.months}-month average ({fMonth(`${trailing.from}-01`, 'short')} to{' '}
             {fMonth(`${trailing.to}-01`, 'short')}):{' '}
             <span className="money">{fBaseCompact(trailing.monthly)}</span> a month
-            {trailing.rate_pct != null ? `, ${Math.round(trailing.rate_pct)}%` : ''}
+            {trailing.rate_pct != null && (
+              <>
+                , <span className="money">{Math.round(trailing.rate_pct)}%</span>
+              </>
+            )}
           </Text>
         )}
         {caveat && (
@@ -818,7 +823,7 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
             className="ov-rep-link"
             onClick={() => onNavigate(def.source?.tab || 'accounts')}
           >
-            All transactions →
+            All transactions <ArrowRight size={12} aria-hidden="true" />
           </button>
         )
       }

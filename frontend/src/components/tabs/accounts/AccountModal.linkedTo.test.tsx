@@ -62,6 +62,7 @@ const plaidLink: ExternalId = {
   mask: '1234',
   linkedAt: '2026-08-01T00:00:00Z',
   providerLabel: 'Plaid',
+  status: 'connected',
 }
 
 function renderEdit(account: Account, onSave = vi.fn()) {

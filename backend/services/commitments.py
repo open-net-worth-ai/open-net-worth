@@ -358,6 +358,17 @@ def amortization_schedule(
 # ── Upcoming events/actions (cross-commitment, for Overview + reminders) ────────
 
 
+def _funding_keys(commitment: dict, base: str, rates: dict) -> set[tuple[str, float]]:
+    """(date, base amount) of every funding source on the commitment. A to-do carrying the same
+    pair is a reminder of that money COMING IN ("loan disbursed", "set aside $X"), never an
+    outflow of its own — the funding source is the one row that reports it."""
+    return {
+        (src["available_date"][:10], round(live_source_value(src, base, rates), 2))
+        for src in commitment.get("funding_plan", [])
+        if src.get("available_date")
+    }
+
+
 def upcoming_events(
     days: int = 60, base: str | None = None, rates: dict | None = None, include_overdue: bool = True
 ) -> list[dict]:
@@ -385,6 +396,7 @@ def upcoming_events(
         ccy = c.get("currency") or base
         name = c["name"]
         ckind = c.get("kind")
+        funded = _funding_keys(c, base, rates)
         for inst in c.get("installments", []):
             if _is_paid(inst):
                 continue
@@ -412,6 +424,13 @@ def upcoming_events(
             if d is None:
                 continue
             amt = a.get("amount")
+            amount_base = (
+                svc.to_base(float(amt), a.get("currency") or base, base, rates)
+                if amt not in (None, "")
+                else None
+            )
+            if amount_base is not None and (d.isoformat(), round(amount_base, 2)) in funded:
+                continue
             out.append(
                 {
                     "commitment_id": c["id"],
@@ -422,9 +441,7 @@ def upcoming_events(
                     "label": a.get("label", ""),
                     "category": a.get("category", ""),
                     "date": a.get("due_date")[:10],
-                    "amount_base": svc.to_base(float(amt), a.get("currency") or base, base, rates)
-                    if amt not in (None, "")
-                    else None,
+                    "amount_base": amount_base,
                     "status": a.get("status", "pending"),
                     "counterparty": a.get("counterparty", ""),
                 }
@@ -473,7 +490,8 @@ def due_summary(
       false) or a pending action (done and "not happening" actions are closed), whatever the
       commitment's kind. An auto-pay debit and a goal's set-aside are obligations too: they are
       cash leaving the household on a date, which is what a due-soon figure means. Funding
-      draws are money coming IN and are never an obligation.
+      draws are money coming IN and are never an obligation — nor is a to-do restating one
+      (same date and amount, `_funding_keys`).
     - **Overdue** — an obligation dated before today. An action with no amount counts in the
       number and adds nothing to the total.
     - **Due soon** — an obligation dated today through today + `days`, inclusive.

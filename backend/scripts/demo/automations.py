@@ -78,8 +78,8 @@ def _daily(time: str) -> dict:
     return {"kind": "schedule", "type": "daily", "time": time}
 
 
-def _interval(seconds: int) -> dict:
-    return {"kind": "schedule", "type": "interval", "seconds": seconds}
+def _weekly(day: str, time: str) -> dict:
+    return {"kind": "schedule", "type": "weekly", "day": day, "time": time}
 
 
 def AUTOMATIONS(categories: dict) -> list[dict]:
@@ -87,19 +87,12 @@ def AUTOMATIONS(categories: dict) -> list[dict]:
     return [
         # ── Event rules: the ledger keeping itself tidy ───────────────────────
         _rule("Coffee shops → Food & Dining", r"coffee|espresso|roasters", categories["food"]),
-        _rule("Rideshare & transit → Transport", r"hopp rides|cityline", categories["transport"]),
         _rule(
             "Streaming & apps → Subscriptions",
             r"nimbus|auralis|cloudshelf|forge ide",
             categories["subscriptions"],
         ),
         _rule("Vet & pet supplies → Pet Care", r"paws & claws|kibble", categories["pets"]),
-        _rule(
-            "Utilities → Home & Utilities",
-            r"lumen energy|cascade water|fiberline",
-            categories["home"],
-            status="paused",
-        ),
         # ── Scheduled routines: the app reaching out ──────────────────────────
         _routine(
             "Morning briefing",
@@ -115,22 +108,24 @@ def AUTOMATIONS(categories: dict) -> list[dict]:
             "Compare this week's spending to the same week last month, by envelope. Call out "
             "any envelope that is on track to overspend before month end, and say by how much. "
             "Do not repeat categories that are behaving.",
-            {"kind": "schedule", "type": "weekly", "day": "sun", "time": "18:00"},
+            _weekly("sun", "18:00"),
         ),
         _routine(
             "Vest reminder",
             "Warns before each RSU tranche vests.",
             "Check upcoming vests. If a tranche vests within 14 days, report the date, the "
             "units, and the indicative value at today's price. Say nothing if none are due.",
-            _daily("09:00"),
+            # It looks 14 days ahead, so a weekly run catches every tranche; daily repeated itself.
+            _weekly("mon", "09:00"),
         ),
         _routine(
             "Card payment due",
             "Reminds before the Sapphire Card statement is due.",
             "Check the credit card's statement balance and due date. If payment is due within "
-            "5 days and no payment transaction exists for this cycle, say what is owed and by "
+            "7 days and no payment transaction exists for this cycle, say what is owed and by "
             "when.",
-            _daily("08:00"),
+            # A 7-day window checked weekly never misses a due date.
+            _weekly("mon", "08:00"),
         ),
         _routine(
             "Unusual spending watch",
@@ -138,7 +133,9 @@ def AUTOMATIONS(categories: dict) -> list[dict]:
             "Look at transactions from the last 24 hours. Flag anything more than 3x the "
             "typical amount for its payee, any payee never seen before with an amount over "
             "$200, and any duplicate-looking pair. Report nothing if all of it looks ordinary.",
-            _interval(3600),
+            # It reads the last 24 hours, so hourly re-read the same day 24 times — each run a
+            # Lucius turn charged to the demo's token ceiling.
+            _daily("21:00"),
             permission_mode="manual",
         ),
         _routine(
@@ -147,7 +144,7 @@ def AUTOMATIONS(categories: dict) -> list[dict]:
             "Compare the current allocation to the target allocation on the profile. If any "
             "band is more than 5 percentage points from its target, say which, by how much, "
             "and roughly what trade would close the gap. Do not place any trade.",
-            {"kind": "schedule", "type": "weekly", "day": "mon", "time": "08:30"},
+            _weekly("mon", "08:30"),
             permission_mode="manual",
         ),
         _routine(
@@ -156,32 +153,28 @@ def AUTOMATIONS(categories: dict) -> list[dict]:
             "For every active commitment, check whether the funding sources dated before the "
             "next instalment cover it. Report any shortfall with the date it bites and the gap "
             "in base currency.",
-            {"kind": "schedule", "type": "weekly", "day": "wed", "time": "09:00"},
-        ),
-        _routine(
-            "Subscription creep",
-            "Catches price rises on recurring charges.",
-            "Compare each recurring subscription charge to what it cost three months ago. "
-            "Report any that went up, with the old and new amounts. Say nothing if none did.",
-            {"kind": "schedule", "type": "monthly", "day": 1, "time": "10:00"},
-            status="paused",
-        ),
-        _routine(
-            "Uncategorised sweep",
-            "Keeps the Uncategorized pile from growing.",
-            "Find transactions with no category from the last 7 days. For each, suggest a "
-            "category based on its payee and similar past rows, and apply it where you are "
-            "confident. List anything you were not confident about rather than guessing.",
-            _daily("22:00"),
-            status="paused",
-            effort="low",
+            _weekly("wed", "09:00"),
         ),
     ]
+
+
+def _delete_system_vest_reminder() -> None:
+    """Recording the grant provisions the app's own "Vest calendar reminder" (system_key
+    ``vest_reminder``), a second vest check beside the seeded "Vest reminder". Deleted, as the
+    owner tidied the demo's tab (2026-11-01); only recording ANOTHER grant provisions it again."""
+    from backend.db.automation_store import AutomationStore
+    from backend.services.automations.service import apply_automation_change
+
+    for row in AutomationStore().all():
+        if (row.get("provenance") or {}).get("system_key") == "vest_reminder":
+            apply_automation_change({"op": "delete", "id": row["id"]})
 
 
 def seed_automations(categories: dict) -> dict:
     """Create every automation. Returns counts by status."""
     from backend.services.automations.service import apply_automation_change
+
+    _delete_system_vest_reminder()
 
     created = {"active": 0, "paused": 0, "failed": 0}
     for spec in AUTOMATIONS(categories):

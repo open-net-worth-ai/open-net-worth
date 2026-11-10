@@ -14,6 +14,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 import backend.monitoring.price_monitor as pm
 
 
@@ -150,10 +152,9 @@ def test_news_context_caps_at_four_headlines(monkeypatch):
 
 
 def test_news_context_empty_without_instrument_id(monkeypatch):
-    """No iid → the news lookup and the evidence read (both instrument_id-keyed, RFC
-    intel-signals-data-model §2.4) are skipped, but the crash-watch lookup still tries the
-    ticker-keyed fallback id (mirrors ``build_signal``'s own fallback) — with no row there,
-    the result is empty."""
+    """No iid → the instrument-keyed news signal lookup is skipped, the crash-watch lookup tries
+    the ticker-keyed fallback id (mirrors ``build_signal``'s own fallback), and the evidence read
+    falls to the ticker's own tag — with nothing under any of them, the result is empty."""
     store_calls = []
     monkeypatch.setattr(
         pm.IntelStoriesStore,
@@ -166,8 +167,150 @@ def test_news_context_empty_without_instrument_id(monkeypatch):
     )
     result = asyncio.run(pm._news_context_for_alert("ONWAI.DE", ""))
     assert store_calls == ["crash-watch-onwai.de"]
-    assert evidence_calls == []
+    assert [c["subjects"] for c in evidence_calls] == [["ticker:ONWAI.DE"]]
     assert result == ""
+
+
+# ── an alert on a stock the user doesn't hold — owner report 2026-11-05: an alert said "I
+# couldn't check news" while the app already held articles on the exact risk the alert's note
+# asked about ──────────────────────────────────────────────────────────────────────────────
+
+
+def _fresh_iso():
+    return (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+
+
+def test_news_context_reads_ticker_tagged_news_without_an_instrument(monkeypatch):
+    monkeypatch.setattr(pm.IntelStoriesStore, "find_by_id", lambda self, id_val: None)
+    monkeypatch.setattr(
+        pm._evidence_svc,
+        "read_evidence",
+        lambda **kw: (
+            [_ev("Policy fears hit ACME power", _fresh_iso())]
+            if "ticker:ACME" in kw["subjects"]
+            else []
+        ),
+    )
+    assert "Policy fears hit ACME power" in asyncio.run(pm._news_context_for_alert("ACME", ""))
+
+
+def test_news_context_reads_both_the_instrument_and_ticker_tags(monkeypatch):
+    monkeypatch.setattr(pm.IntelStoriesStore, "find_by_id", lambda self, id_val: None)
+    calls = []
+    monkeypatch.setattr(pm._evidence_svc, "read_evidence", lambda **kw: calls.append(kw) or [])
+    asyncio.run(pm._news_context_for_alert("ACME", "m1"))
+    assert calls[0]["subjects"] == ["asset:m1", "ticker:ACME"]
+
+
+def test_news_context_finds_news_a_watched_tickers_own_feed_collected(db_isolated, monkeypatch):
+    """The whole path on a real store: a watchlist item with no instrument resolves its feed, the
+    article is recorded under that feed's subjects, and the alert's lookup finds it."""
+    from backend.services.evidence import record_evidence
+    from backend.services.feeds import resolve_holding_feeds
+
+    feed = resolve_holding_feeds({"value": "ACME", "label": "ACME Entry"})[0]
+    record_evidence(
+        [
+            {
+                "url": "https://example.com/acme-policy",
+                "title": "Policy fears hit ACME power",
+                "published_date": _fresh_iso(),
+            }
+        ],
+        subjects=feed["subjects"],
+    )
+    monkeypatch.setattr(pm.IntelStoriesStore, "find_by_id", lambda self, id_val: None)
+    assert "Policy fears hit ACME power" in asyncio.run(pm._news_context_for_alert("ACME", ""))
+
+
+def test_article_already_in_the_scan_pool_gains_the_ticker_tag_when_polled_again(
+    db_isolated, monkeypatch
+):
+    """Articles collected before tagging existed become reachable on the next poll, through the
+    real gather_rss, so a restart doesn't leave a stock's last day of news stranded."""
+    from backend.monitoring import collect
+    from backend.services.evidence import record_evidence
+    from backend.services.feeds import resolve_holding_feeds
+
+    hit = {
+        "url": "https://example.com/acme-review",
+        "title": "Regulator reviews ACME power",
+        "published_date": _fresh_iso(),
+    }
+    record_evidence([hit], subjects=["scan:intel"])
+    monkeypatch.setattr(pm.IntelStoriesStore, "find_by_id", lambda self, id_val: None)
+    assert asyncio.run(pm._news_context_for_alert("ACME", "")) == ""
+
+    monkeypatch.setattr(collect, "_fetch_feed", lambda url, max_age: [dict(hit)])
+    item = {"type": "ticker", "value": "ACME", "label": "ACME Corp", "instrument_id": None}
+    asyncio.run(collect.gather_rss(resolve_holding_feeds(item), max_age=5.0, read_back=False))
+
+    assert "Regulator reviews ACME power" in asyncio.run(pm._news_context_for_alert("ACME", ""))
+
+
+def _fire_unheld_alert(monkeypatch, condition_instrument_id):
+    """Runs one alert on a ticker with no position row; returns the _ai_signal kwargs."""
+    captured = {}
+
+    async def _fake_ai_signal(**kwargs):
+        captured.update(kwargs)
+        return {"id": kwargs["signal_id"], "type": "price_alert", "label": "x"}
+
+    async def _noop_freshen(*a, **kw):
+        return None
+
+    monkeypatch.setattr(pm, "_ai_signal", _fake_ai_signal)
+    monkeypatch.setattr(pm, "_instant_news_freshen", _noop_freshen)
+    monkeypatch.setattr(pm, "apply_story_change", lambda sig, **kw: None)
+    condition = {
+        "op": "<=",
+        "value": 235.0,
+        "note": "",
+        "label": "ACME Entry",
+        "instrument_id": condition_instrument_id,
+    }
+    asyncio.run(
+        pm._run_alert_lane(
+            alerts_map={"ACME": [condition]},
+            muted_tickers=set(),
+            current_prices={"ACME": 234.6},
+            rows_by_ticker={},
+            fx={},
+            all_rows=[],
+            profile={},
+            cache={},
+            current_prev_prices={},
+        )
+    )
+    return captured
+
+
+def test_unheld_alert_gets_the_news_signal_of_its_resolved_instrument(monkeypatch):
+    monkeypatch.setattr(
+        pm.IntelStoriesStore,
+        "find_by_id",
+        lambda self, id_val: (
+            {"current_summary": "ACME lost a licence."} if id_val == "news-m1" else None
+        ),
+    )
+    monkeypatch.setattr(pm._evidence_svc, "read_evidence", lambda **kw: [])
+    captured = _fire_unheld_alert(monkeypatch, "m1")
+    assert "ACME lost a licence." in captured["news_context"]
+
+
+def test_unheld_alert_gets_news_filed_under_its_resolved_instrument(monkeypatch):
+    monkeypatch.setattr(pm.IntelStoriesStore, "find_by_id", lambda self, id_val: None)
+    monkeypatch.setattr(
+        pm._evidence_svc,
+        "read_evidence",
+        lambda **kw: (
+            [_ev("ACME regulator opens review", _fresh_iso())]
+            if "asset:m1" in kw["subjects"]
+            else []
+        ),
+    )
+    captured = _fire_unheld_alert(monkeypatch, "m1")
+    assert "ACME regulator opens review" in captured["news_context"]
 
 
 def test_news_context_evidence_read_is_to_threaded(monkeypatch):
@@ -231,6 +374,16 @@ def test_build_alert_prompt_injects_news_context_and_instruction(monkeypatch):
     assert news_context in prompt
     assert "interpret the move IN LIGHT OF it" in prompt
     assert "technical momentum" in prompt
+    assert "No recent news" not in prompt
+
+
+def test_build_alert_prompt_without_news_forbids_claiming_a_failed_check(monkeypatch):
+    """The narrator has no tools, so nothing was ever tried: "I couldn't check" is false, and it
+    made a user debug an outage that never happened (owner report 2026-11-05)."""
+    monkeypatch.setattr(pm, "_active_goals_summary", lambda: "none set")
+    prompt = pm._build_alert_prompt(**_base_prompt_kwargs())
+    assert "No recent news on this asset is on hand" in prompt
+    assert "never say you tried, couldn't or failed to check" in prompt
 
 
 # ── golden fixture (review finding #1) — pins the exact base prompt wording so any future
@@ -246,6 +399,9 @@ _GOLDEN_NO_NEWS_CONTEXT_PROMPT = (
     "  Risk tolerance: conservative\n"
     "  Goals: none set\n"
     "  Notes: Long-term hold\n"
+    "\nNo recent news on this asset is on hand for this alert, and you cannot look anything up. "
+    "If the user's intent asks about news, say plainly that no recent news is on file; never "
+    "say you tried, couldn't or failed to check, and don't guess a cause.\n"
     "\nGenerate a SHORT intelligence signal for a mobile push notification — the user reads "
     "this on their phone lock screen, not a report. Hard limits, not suggestions:\n"
     "1. summary: ONE short sentence, 25 words max. What happened and why it matters — not "
@@ -325,6 +481,9 @@ def test_run_alert_lane_passes_news_context_through_to_ai_signal(monkeypatch):
     assert "Uber offered €41/share." in captured["news_context"]
 
 
+# Asserts the sender's own push before the price check returns, so it pins both flags off; the
+# flag-on paths are in tests/test_delivery_seam.py and tests/test_price_alert_run.py.
+@pytest.mark.flags(intel_delivery_decider=False, price_alert_lucius_run=False)
 def test_run_alert_lane_fires_and_pushes_even_when_news_context_helper_raises(monkeypatch):
     """Review finding #3: the news-context helper is best-effort and already swallows its own
     failures internally, but _run_alert_lane ALSO guards the call site (defense-in-depth) — a

@@ -32,6 +32,7 @@ def test_policy_is_strict_where_it_matters():
     assert _directive(policy, "script-src") == "script-src 'self'"
     assert _directive(policy, "img-src") == "img-src 'self' data: blob:"
     assert _directive(policy, "connect-src") == "connect-src 'self'"
+    assert _directive(policy, "frame-src") == "frame-src 'self' blob: https: onw-artifact:"
     assert _directive(policy, "object-src") == "object-src 'none'"
     assert _directive(policy, "base-uri") == "base-uri 'none'"
     assert _directive(policy, "frame-ancestors") == "frame-ancestors 'none'"
@@ -61,6 +62,7 @@ def _spa(tmp_path, monkeypatch=None, state=None):
     return TestClient(spa)
 
 
+@pytest.mark.flags(voice_calls=False)  # on, the policy also names the voice server
 def test_html_shell_carries_the_csp_including_the_spa_fallback(tmp_path):
     client = _spa(tmp_path)
     for path in ("/", "/accounts/some/deep/link"):

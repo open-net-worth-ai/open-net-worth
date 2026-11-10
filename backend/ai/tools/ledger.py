@@ -12,6 +12,7 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
+from backend.ai.permissions import engine
 from backend.ai.tools import _bounded as _b
 from backend.ai.tools import _confirm_gate as _gate
 from backend.ai.tools import _txn_schema
@@ -245,6 +246,28 @@ def _currency_conversion_warning(t: dict) -> dict | None:
     }
 
 
+def _category_dropped_warning(derived: dict | None, labelled: dict) -> dict | None:
+    """The category you passed was replaced by the payee's pinned default (ADR 0010).
+
+    Silent until now: the result showed only the final category, so a model that had chosen
+    one for a reason (a standing instruction) could not tell it had been overwritten."""
+    dropped = (derived or {}).get("category_dropped")
+    if not dropped:
+        return None
+    applied = labelled.get("category_label") or labelled.get("category")
+    return {
+        "type": "category_replaced_by_payee_default",
+        "requested": dropped,
+        "applied": applied,
+        "message": (
+            f"Your category {dropped!r} was NOT used: this payee's pinned default "
+            f"({applied!r}) was applied instead. If a standing user instruction requires "
+            f"{dropped!r}, fix it with update_transactions or re-book with "
+            "override_payee_default=true. Otherwise leave it."
+        ),
+    }
+
+
 def _derived_leg_warning(derived: dict | None) -> dict | None:
     """The destination leg of a cross-currency transfer was COMPUTED, not stated.
 
@@ -357,15 +380,6 @@ def _unverified_equal_amount_warning(txn: dict) -> dict | None:
     }
 
 
-def _names_the_tool_flag(message: str | None) -> str | None:
-    """The choke's duplicate refusal names the SERVICE kwarg (``force=true`` — also the REST
-    body flag); this tool's parameter is ``allow_duplicate``. Rewritten at the boundary so the
-    advice the model reads is advice it can act on (ADR 2026-09-02 follow-up)."""
-    if not message:
-        return message
-    return message.replace("force=true", "allow_duplicate=true")
-
-
 async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | None = None):
     """Book exactly ONE transaction — the single-row path of ``add_transactions``.
 
@@ -388,7 +402,7 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
             {"ok": False, "error": str(e), "results": [{"index": 0, "error": str(e)}]},
             ensure_ascii=False,
         ), None
-    force = bool(input_data.get("allow_duplicate", False))
+    allow_duplicate = bool(input_data.get("allow_duplicate", False))
     force_transfer_rate = bool(input_data.get("force_transfer_rate", False))
     # A duplicate transfer is the MATCH ENGINE's call (F14d: same route, same amount, near
     # date), reached through this tool's router — a lone row the engine matches is handed to
@@ -396,7 +410,7 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
     # used to sit here pre-dated F14d and, once the router existed, could only fire on rows the
     # engine had DELIBERATELY cleared (e.g. F03 vetoing two same-source writes as distinct):
     # it contradicted the engine and resolved the contradiction toward "re-call with
-    # force=true" — the one piece of advice that put nine duplicate rows in the ledger.
+    # allow_duplicate=true" — the one piece of advice that put nine duplicate rows in the ledger.
     # Confirm gate: on an interactive turn a single booking PREVIEWS first (resolved category
     # + WHY, resolved accounts, base amount) and commits only when re-called with the token
     # staged here. Placed after validation and the duplicate check so an unbookable draft
@@ -409,7 +423,7 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
         except (ValueError, OpenNetWorthError) as e:
             return _gate.preview_failed_result(str(e))
         if gated:
-            return _gate.stage("add_transactions", input_data, change)
+            return engine().stage("add_transactions", input_data, change)
         # Confirming: the args are the staged ones, but they are re-RESOLVED here, so verify
         # they still resolve to what the card promised before committing.
         if _gate.outcome_of(change) != promised:
@@ -424,7 +438,10 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
     write_meta: dict = {}
     try:
         new = svc.create_transaction(
-            data, force=force, force_transfer_rate=force_transfer_rate, meta_out=write_meta
+            data,
+            allow_duplicate=allow_duplicate,
+            force_transfer_rate=force_transfer_rate,
+            meta_out=write_meta,
         )
     except PreviouslyDeletedError as e:
         return json.dumps(_previously_deleted_single(e), ensure_ascii=False), None
@@ -436,13 +453,13 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
             {
                 "ok": False,
                 "refused_duplicates": 1,
-                "error": _names_the_tool_flag(str(e)),
+                "error": str(e),
                 "duplicate_of": e.context.get("existing_id"),
                 "existing": e.context.get("existing"),
                 "results": [
                     {
                         "index": 0,
-                        "error": _names_the_tool_flag(str(e)),
+                        "error": str(e),
                         "duplicate_of": e.context.get("existing_id"),
                     }
                 ],
@@ -496,6 +513,9 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
     derived_warning = _derived_leg_warning(derived_leg)
     if derived_warning:
         out.setdefault("warnings", []).append(derived_warning)
+    dropped_warning = _category_dropped_warning(derived_leg, labelled)
+    if dropped_warning:
+        out.setdefault("warnings", []).append(dropped_warning)
     equal_amount_warning = _unverified_equal_amount_warning(labelled)
     if equal_amount_warning:
         out.setdefault("warnings", []).append(equal_amount_warning)
@@ -1378,7 +1398,7 @@ async def _update_one(input_data: dict, *, gated: bool = False, promised: dict |
         if change.get("error"):
             return _gate.preview_failed_result(change["error"])
         if gated:
-            return _gate.stage("update_transactions", input_data, change)
+            return engine().stage("update_transactions", input_data, change)
         if _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("update_transactions")
 
@@ -1466,7 +1486,7 @@ async def _update_legacy_bulk(
         if change.get("errors"):
             return _bulk_update_preview_error_result(change)
         if gated:
-            return _gate.stage("update_transactions", input_data, change)
+            return engine().stage("update_transactions", input_data, change)
         if _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("update_transactions")
 
@@ -1532,7 +1552,7 @@ async def update_transactions(input_data: dict):
         input_data = _gate.staged_args(entry)
         promised = entry.get("outcome") or {}
     else:
-        gated = _gate.should_gate("update_transactions")
+        gated = engine().should_gate("update_transactions")
 
     legacy_ids = input_data.get("transaction_ids")
     if isinstance(legacy_ids, list) and legacy_ids:
@@ -1567,7 +1587,7 @@ async def update_transactions(input_data: dict):
         if promised is not None and _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("update_transactions")
         if gated and change.get("count", 0) > 0:
-            return _gate.stage("update_transactions", input_data, change)
+            return engine().stage("update_transactions", input_data, change)
 
     results: list[dict] = []
     updated_count = 0
@@ -1954,7 +1974,7 @@ async def add_transactions(input_data: dict):
         input_data = _gate.staged_args(entry)
         promised = entry.get("outcome") or {}
     else:
-        gated = _gate.should_gate("add_transactions")
+        gated = engine().should_gate("add_transactions")
 
     today_iso = user_today().isoformat()
     # Shape leniency, mirroring the handler-leniency convention: a legacy `add_transaction`
@@ -2019,9 +2039,15 @@ async def add_transactions(input_data: dict):
     # If any item fails normalisation the whole call is aborted — no partial batches.
     normalised = []
     errors = []
+    dropped_by_index: dict[int, str] = {}
     for i, item in enumerate(raw):
         try:
-            normalised.append(_txn_data_from_ai(item, default_date=today_iso))
+            _row_meta: dict = {}
+            normalised.append(
+                _txn_data_from_ai(item, default_date=today_iso, derived_out=_row_meta)
+            )
+            if _row_meta.get("category_dropped"):
+                dropped_by_index[i] = _row_meta["category_dropped"]
         except (ValueError, KeyError) as e:
             _desc = item.get("description") or ""
             logger.warning(
@@ -2072,14 +2098,14 @@ async def add_transactions(input_data: dict):
         except (ValueError, OpenNetWorthError) as e:
             return _gate.preview_failed_result(str(e))
         if gated:
-            return _gate.stage("add_transactions", input_data, change)
+            return engine().stage("add_transactions", input_data, change)
         if _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("add_transactions")
 
     # Phase 1.5 — duplicate pre-flight (RFC batch-aware-dedup, Phase 3): classify the WHOLE
     # batch against the ledger AND itself in one pass, BEFORE anything is booked, so a
     # near-certain duplicate is caught before insert instead of flagged after the fact.
-    # force=True skips this entirely — today's escape hatch, unchanged. A pasted/dictated
+    # allow_duplicate=True skips this entirely — today's escape hatch, unchanged. A pasted/dictated
     # batch claims no completeness (BatchContext(complete=False)), so books-close promotion
     # never fires here — only pair-level evidence (shared reference, exact wording) can band
     # strong.
@@ -2368,7 +2394,7 @@ async def add_transactions(input_data: dict):
                                 "`blocked_but_unmatched` had NO problem — it was not written only "
                                 "because this abort is all-or-nothing, and it will be created "
                                 "when you re-submit. Deciding later "
-                                "is fine — nothing is lost by aborting. Do NOT use force to get "
+                                "is fine — nothing is lost by aborting. Do NOT use allow_duplicate to get "
                                 "past this: it books every row blind, duplicates included."
                             ),
                         },
@@ -2474,7 +2500,7 @@ async def add_transactions(input_data: dict):
             svc.bulk_create_transactions(
                 to_create,
                 batch_id=batch_id,
-                force=allow_duplicate,
+                allow_duplicate=allow_duplicate,
                 meta_out=bulk_meta,
                 force_transfer_rate=force_transfer_rate,
                 resurrect_refs=resurrect_refs or None,
@@ -2632,7 +2658,7 @@ async def add_transactions(input_data: dict):
                 {
                     "index": i,
                     "status": "refused",
-                    "error": _names_the_tool_flag(r.get("_duplicate_reason")),
+                    "error": r.get("_duplicate_reason"),
                     "duplicate_of": r.get("_duplicate_of"),
                 }
             )
@@ -2807,9 +2833,18 @@ async def add_transactions(input_data: dict):
             accounts_now = svc.accounts.query_accounts()
             all_txns = svc.transactions.all()
             warnings: list[dict] = []
+            index_by_txn = {tid: i for i, tid in created_by_index.items()}
+            category_labels = labels.label_maps(categories=True).get("categories") or {}
             for txn in created:
                 for flag in tracking_start.flags_for_txn(txn, accounts_now, all_txns) or []:
                     warnings.append({"txn_id": txn.get("id"), **flag})
+                dropped = dropped_by_index.get(index_by_txn.get(txn.get("id")))
+                replaced = _category_dropped_warning(
+                    {"category_dropped": dropped} if dropped else None,
+                    {"category_label": category_labels.get(txn.get("category"))},
+                )
+                if replaced:
+                    warnings.append({"txn_id": txn.get("id"), **replaced})
                 equal_amount_warning = _unverified_equal_amount_warning(txn)
                 if equal_amount_warning:
                     warnings.append({"txn_id": txn.get("id"), **equal_amount_warning})

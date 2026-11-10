@@ -35,6 +35,7 @@ from backend.db.asset_brief_store import AssetBriefStore
 from backend.db.grant_store import GrantStore
 from backend.db.instrument_store import InstrumentStore
 from backend.db.price_history_store import PriceHistoryStore
+from backend.services import investment_theses, position_verdict
 from backend.services.evidence import read_evidence
 from backend.services.fx_cache import load_fx_cache
 from backend.services.income import income_summary
@@ -487,31 +488,43 @@ def analyst_consensus(instrument_id: str) -> dict:
     return {"currency": currency, "analyst": analyst, "ratings": ratings}
 
 
-def _lot_rows(position_id: str) -> list[dict]:
+def _lot_rows(position_id: str, with_predecessors: bool = False) -> list[dict]:
     """Same shape as GET /api/positions/{id}/lots (raw lot fields + effective_unit_cost/
     remaining_basis/term_to_date, open + closed) — delegates to lots_service so a merged
     multi-account read renders through the SAME LotsSection table columns as the
     single-account fetch, and the term/basis math never drifts from the shared
     implementation. The frontend filters to open lots itself (`openLots`), same as the
     single-account fetch path."""
-    return lots_for_position(position_id)
+    return lots_for_position(position_id, with_predecessors=with_predecessors)
 
 
-def _realized_rows(position_id: str, account_names: dict[str, str], base: str) -> list[dict]:
+def _realized_rows(
+    position_id: str, account_names: dict[str, str], base: str, with_predecessors: bool = False
+) -> list[dict]:
     """Realized disposals for ONE liquid position, tagged with account_name (looked up by the
     event's own account_id) — realized_pnl doesn't hydrate that label itself, and a merged
     multi-account read can no longer imply the account from a single position_id."""
-    events = realized_pnl(position_id=position_id, base=base).get("events") or []
+    events = (
+        realized_pnl(position_id=position_id, base=base, with_predecessors=with_predecessors).get(
+            "events"
+        )
+        or []
+    )
     return [
         {**ev, "account_name": account_names.get(ev.get("account_id") or "", "")} for ev in events
     ]
 
 
-def _income_rows(position_id: str, base: str) -> list[dict]:
+def _income_rows(position_id: str, base: str, with_predecessors: bool = False) -> list[dict]:
     """Dividend/interest/distribution income for ONE liquid position — already hydrated with
     account_name by income_summary's own label join (keyed off the event's own account_id)."""
     return (
-        income_summary(position_id=position_id, base=base, include_event_labels=True).get("events")
+        income_summary(
+            position_id=position_id,
+            base=base,
+            include_event_labels=True,
+            with_predecessors=with_predecessors,
+        ).get("events")
         or []
     )
 
@@ -761,7 +774,7 @@ def _position_block(inst: dict, rows: list[dict], fx: dict, base: str) -> dict |
     lots = [
         {**lot, "account_name": account_names.get(lot.get("account_id") or "", "")}
         for pid in position_ids
-        for lot in _lot_rows(pid)
+        for lot in _lot_rows(pid, with_predecessors=True)
     ]
 
     # Merged realized/income across every contributing LIQUID position — computed ONLY for the
@@ -770,12 +783,15 @@ def _position_block(inst: dict, rows: list[dict], fx: dict, base: str) -> dict |
     # single-position copy there instead (unchanged, and cheaper than computing this for data
     # nobody reads). `position_ids` here deliberately excludes the locked/unvested bucket's own
     # position — a disposal/dividend on the unvested grant must never bleed into the sellable
-    # holding's tables (mirrors LotsPanel's own position_id-not-instrument_id scoping).
+    # holding's tables (mirrors LotsPanel's own position_id-not-instrument_id scoping). Each
+    # live position brings its sold-out predecessors at its own account, as LotsPanel's does.
     realized: list[dict] = []
     income: list[dict] = []
     if position_id is None and len(position_ids) > 1:
-        realized = [ev for pid in position_ids for ev in _realized_rows(pid, account_names, base)]
-        income = [ev for pid in position_ids for ev in _income_rows(pid, base)]
+        realized = [
+            ev for pid in position_ids for ev in _realized_rows(pid, account_names, base, True)
+        ]
+        income = [ev for pid in position_ids for ev in _income_rows(pid, base, True)]
 
     return {
         "held": True,
@@ -1274,6 +1290,7 @@ def read_asset_detail(
     # Serialization backstop: any non-finite float (a flaky live quote, a stale NaN
     # change_pct persisted in an old peer entry) would otherwise 500 the endpoint at
     # json.dumps(allow_nan=False). Degrade it to null (unknown) rather than crash the view.
+    thesis = investment_theses.thesis_for(instrument_id)
     return json_safe(
         {
             "instrument_id": instrument_id,
@@ -1286,6 +1303,7 @@ def read_asset_detail(
             "crypto_facts": crypto_facts,
             "peers": peers,
             "watchlist": wl_block,
+            "thesis": thesis,
             "last_refreshed_at": synthesized_at,
             "has_ticker": has_ticker,
             "portfolio_impact": _compose_portfolio_impact(
@@ -1297,6 +1315,13 @@ def read_asset_detail(
             # answer when it's actually just-not-generated-yet; string-sniffing portfolio_impact
             # for this would be fragile, so it's a real boolean instead.
             "has_narrative": bool((brief.get("portfolio_narrative") or "").strip()),
+            "position_verdict": position_verdict.compose(
+                brief.get("position_verdict"),
+                thesis,
+                held=bool(pos_block and pos_block.get("held") and pos_block.get("qty")),
+                price=price_block.get("last"),
+                currency=price_block.get("currency") or "",
+            ),
             "freshness": freshness,
             # Real progress marker for an in-flight refresh ("searching" -> "analysing" ->
             # "ready", written by monitoring.asset_brief._do_refresh as each stage

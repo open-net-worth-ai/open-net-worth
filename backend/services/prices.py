@@ -396,6 +396,7 @@ def _fetch_one(symbol):
             if fallback_prev is not None and (price is None or fallback_prev != price):
                 prev = fallback_prev
         if price:
+            prev = _plausible_prev_close(price, prev)
             return (symbol, _round_price(price), _round_price(prev) if prev else None)
     except Exception:
         pass
@@ -403,6 +404,7 @@ def _fetch_one(symbol):
         h = yf.Ticker(symbol).history(period="2d")
         if len(h) >= 2:
             last, prior = _finite(h["Close"].iloc[-1]), _finite(h["Close"].iloc[-2])
+            prior = _plausible_prev_close(last, prior)
             if last is not None:
                 return (
                     symbol,
@@ -466,6 +468,22 @@ def _crypto_routing(tickers: list[str]) -> tuple[list[tuple[str, str]], list[str
 def _finite_positive(value: object) -> float | None:
     number = _finite(value)
     return number if number is not None and number > 0 else None
+
+
+# No listed stock moves 50x (or loses 98%) in one session; a prior close that far from the
+# price is a broken feed — JTKWY's 6e-19 read as +7.9e20%, and a pence/pounds mix-up is 100x.
+_MAX_PREV_CLOSE_RATIO = 50.0
+
+
+def _plausible_prev_close(price: float | None, prev: float | None) -> float | None:
+    """`prev`, or None when it is implausibly far from `price` (unknown, not a change)."""
+    if not price or not prev:
+        return prev
+    ratio = price / prev
+    if ratio > _MAX_PREV_CLOSE_RATIO or ratio < 1 / _MAX_PREV_CLOSE_RATIO:
+        _log.info("prices: implausible previous close %s for price %s — dropped", prev, price)
+        return None
+    return prev
 
 
 def _local_day(epoch: object, tz_name: str | None) -> str | None:
@@ -766,6 +784,7 @@ def _quote_to_price(q: dict) -> tuple[float | None, float | None]:
         return None, None
     if previous_raw is not None and prev is None:
         return None, None
+    prev = _plausible_prev_close(price, prev)
     return _round_price(price), (_round_price(prev) if prev is not None else None)
 
 
@@ -2385,7 +2404,10 @@ def fetch_quote_stats(symbol: str) -> dict:
     try:
         info = yf.Ticker(symbol).info
         raw = {
-            "prev_close": _first_positive(info, "previousClose", "regularMarketPreviousClose"),
+            "prev_close": _plausible_prev_close(
+                _first_positive(info, "regularMarketPrice", "currentPrice"),
+                _first_positive(info, "previousClose", "regularMarketPreviousClose"),
+            ),
             "open": _first_positive(info, "open", "regularMarketOpen"),
             "day_low": _first_positive(info, "dayLow", "regularMarketDayLow"),
             "day_high": _first_positive(info, "dayHigh", "regularMarketDayHigh"),

@@ -183,8 +183,8 @@ def create_category(label: str) -> dict:
 # ── Loans (a projection over the ledger's own accounts) ──────────────────────────────────
 
 
-def _ledger_snapshot(base: str) -> LedgerSnapshot:
-    return LedgerSnapshot(base, rates=load_fx_cache())
+def _ledger_snapshot(base: str, book: ledger_service.LedgerBook | None = None) -> LedgerSnapshot:
+    return LedgerSnapshot(base, rates=load_fx_cache(), book=book)
 
 
 def loans(rows: list[dict] | None = None, ledger: LedgerSnapshot | None = None) -> list[dict]:
@@ -301,14 +301,15 @@ def get_assets_page(include_archived: bool = False, base: str | None = None) -> 
     proceeds picker, the Cash card), ONE net-worth fold and one market projection."""
     started = time.perf_counter()
     base = (base or ledger_service.base_currency()).upper()
-    ledger = _ledger_snapshot(base)
+    book = ledger_service.read_book()
+    ledger = _ledger_snapshot(base, book)
     rows = OwnedAssetsStore().all()
     live = [a for a in rows if not a.get("archived")]
     loan_rows, cash_rows = loans(rows, ledger), cash_accounts(ledger)
     balanced = time.perf_counter()
-    net_worth = ledger_service.net_worth(base)
+    net_worth = ledger_service.net_worth(base, book=book)
     folded = time.perf_counter()
-    market = portfolio_analytics_service.market_book(base)
+    market = portfolio_analytics_service.market_book(base, book=book)
     priced = time.perf_counter()
     shown = rows if include_archived else live
     attachments = _live_attachments(shown)

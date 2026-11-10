@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { NewsCardGrid } from './NewsCardGrid'
 import type { NewsItem } from '../../types/assetDetail'
 
@@ -117,6 +117,27 @@ describe('NewsCardGrid', () => {
     )
     expect(imageCard.querySelector('.asd-news-thumb--placeholder')).toBeNull()
     const tile = plainCard.querySelector('.asd-news-thumb--placeholder')
+    expect(tile).not.toBeNull()
+    expect(tile?.querySelector('.asd-news-favicon')).not.toBeNull()
+  })
+
+  it('an image that fails to load falls back to the favicon tile, not an empty slot', () => {
+    // Owner-reproduced 2026-10-28: a broken og:image hid the whole picture slot, so on a phone
+    // that card's title jumped to the top while its neighbours kept a picture on top.
+    const broken = {
+      title: 'Broken picture',
+      source: 'Yahoo',
+      url: 'https://finance.yahoo.com/x',
+      published_at: '2026-10-28',
+      image: 'https://cdn.example.com/gone.jpg',
+    } as NewsItem
+    const { container } = render(<NewsCardGrid items={[broken]} />)
+    const img = container.querySelector('.asd-news-thumb img') as HTMLImageElement
+    fireEvent.error(img)
+    expect(
+      container.querySelector('.asd-news-thumb img[src="https://cdn.example.com/gone.jpg"]'),
+    ).toBeNull()
+    const tile = container.querySelector('.asd-news-thumb--placeholder')
     expect(tile).not.toBeNull()
     expect(tile?.querySelector('.asd-news-favicon')).not.toBeNull()
   })

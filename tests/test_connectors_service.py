@@ -36,13 +36,14 @@ def test_empty_state_has_builtin_transports_no_mcp():
     ids = {v.id for v in views}
     # Email + webhook + telegram + simplefin + plaid + lunch_money + lunch_flow + ynab +
     # enable_banking + yodlee + alpaca + ibkr + yahoo_finance + coingecko are always-present
-    # built-in transports; web search is ONE connector PER provider ("web_search:<id>", 6 of
-    # them: DuckDuckGo, Tavily, Perplexity, Serper, Google PSE, Firecrawl); no servers → no
-    # mcp connector.
+    # built-in transports, and voice while its flag is on (the default); web search is ONE
+    # connector PER provider ("web_search:<id>", 6 of them: DuckDuckGo, Tavily, Perplexity,
+    # Serper, Google PSE, Firecrawl); no servers → no mcp connector.
     web_search_ids = {i for i in ids if i.startswith("web_search:")}
     assert len(web_search_ids) == 6
     assert ids - web_search_ids == {
         "email",
+        "voice",
         "webhook",
         "telegram",
         "simplefin",
@@ -51,6 +52,7 @@ def test_empty_state_has_builtin_transports_no_mcp():
         "lunch_flow",
         "ynab",
         "enable_banking",
+        "gocardless",
         "yodlee",
         "alpaca",
         "ibkr",
@@ -81,6 +83,8 @@ def test_empty_state_has_builtin_transports_no_mcp():
         "has_secret": False,
         "has_access_token": False,
         "has_item_id": False,
+        "has_link_token": False,
+        "has_items": False,
     }
     eb = next(v for v in views if v.id == "enable_banking")
     assert eb.kind == "enable_banking"
@@ -149,6 +153,8 @@ def test_plaid_view_reflects_store_and_hides_secret():
         "has_secret": True,
         "has_access_token": True,
         "has_item_id": False,
+        "has_link_token": False,
+        "has_items": False,
     }
     assert pl.config["client_id"] == "cid"
     # No secret VALUE (secret / access token) leaks anywhere in the serialized view.
@@ -1038,13 +1044,40 @@ def test_native_views_carry_descriptions_and_known_tool_names():
         # .claude/rfcs/2026-08-10-connectors-architecture.md §B3) — never the generic
         # bulk `get_connector_status`/`connector_sync` pair, which has no single owning
         # connector and is therefore never listed on any one connector's detail page.
-        "simplefin": ["simplefin_get_status", "simplefin_fetch_transactions"],
-        "plaid": ["plaid_get_status", "plaid_fetch_transactions"],
-        "lunch_money": ["lunch_money_get_status", "lunch_money_fetch_transactions"],
-        "lunch_flow": ["lunch_flow_get_status", "lunch_flow_fetch_transactions"],
-        "ynab": ["ynab_get_status", "ynab_fetch_transactions"],
-        "enable_banking": ["enable_banking_get_status", "enable_banking_fetch_transactions"],
-        "yodlee": ["yodlee_get_status", "yodlee_fetch_transactions"],
+        "simplefin": [
+            "simplefin_get_status",
+            "simplefin_fetch_transactions",
+            "simplefin_list_accounts",
+        ],
+        "plaid": [
+            "plaid_get_status",
+            "plaid_fetch_transactions",
+            "plaid_list_accounts",
+            "plaid_reconnect_bank",
+        ],
+        "lunch_money": [
+            "lunch_money_get_status",
+            "lunch_money_fetch_transactions",
+            "lunch_money_list_accounts",
+        ],
+        "lunch_flow": [
+            "lunch_flow_get_status",
+            "lunch_flow_fetch_transactions",
+            "lunch_flow_list_accounts",
+        ],
+        "ynab": [
+            "ynab_get_status",
+            "ynab_fetch_transactions",
+            "ynab_list_accounts",
+            "ynab_list_plans",
+            "ynab_get_plan",
+        ],
+        "enable_banking": [
+            "enable_banking_get_status",
+            "enable_banking_fetch_transactions",
+            "enable_banking_list_accounts",
+        ],
+        "yodlee": ["yodlee_get_status", "yodlee_fetch_transactions", "yodlee_list_accounts"],
         "alpaca": ["alpaca_get_status", "alpaca_fetch_positions"],
         "ibkr": ["ibkr_get_status", "ibkr_fetch_activity"],
         # Each web-search provider card is its OWN id-scoped entry too (``_decorate``'s
@@ -1137,7 +1170,7 @@ def test_mcp_view_maps_discovered_tools_as_mcp_source_no_token_leak():
     assert [t.name for t in mcp.tools] == ["search_messages", "send_message"]
     assert all(t.source == "mcp" for t in mcp.tools)
     assert mcp.tools[0].description == "Search the inbox."
-    assert mcp.short_description and mcp.long_description
+    assert mcp.short_description
     assert "mcp-token" not in json.dumps(mcp.model_dump())
 
 
@@ -1151,10 +1184,11 @@ def test_mcp_view_undiscovered_has_empty_tools():
     assert svc.get_connector("mcp:srv").tools == []
 
 
-def test_mcp_view_uses_the_servers_own_instructions_when_present():
-    """A custom server's handshake ``instructions`` (captured by ``record_discovery``) becomes
-    its ``long_description`` in place of the generic fallback — so a self-describing server
-    doesn't show the same boilerplate every other custom server shares."""
+def test_mcp_view_uses_the_servers_own_description_not_its_instructions():
+    """A custom server's handshake ``serverInfo.description`` becomes its subtitle and
+    description in place of the generic fallback. Its ``instructions`` are guidance for an AI,
+    not a description — they stay in ``config.server_info_instructions`` for the detail page's
+    fold, and never become the card's text."""
     svc = _svc()
     from backend.db.mcp_client_store import McpClientStore
     from backend.models.mcp_client import McpServerConfig, ServerInfo
@@ -1165,25 +1199,58 @@ def test_mcp_view_uses_the_servers_own_instructions_when_present():
         "ibkr",
         [{"name": "get_positions", "description": "List positions."}],
         status="ok",
-        server_info=ServerInfo(instructions="Trade and query positions at Interactive Brokers."),
+        server_info=ServerInfo(
+            title="Interactive Brokers",
+            description="Trade and query positions at Interactive Brokers.",
+            instructions="Always call get_positions before placing an order.",
+        ),
     )
     view = svc.get_connector("mcp:ibkr")
-    assert view.long_description == "Trade and query positions at Interactive Brokers."
+    assert view.short_description == "Trade and query positions at Interactive Brokers."
+    assert view.long_description == ""  # the subtitle is the one line; no paragraph repeats it
+    assert view.config["server_info_instructions"] == (
+        "Always call get_positions before placing an order."
+    )
+    assert view.config["server_info_title"] == "Interactive Brokers"
 
 
-def test_mcp_view_falls_back_to_generic_description_with_no_permission_talk():
-    """No ``instructions`` reported → the generic ``mcp`` fallback, which must say nothing
-    about the permission ladder — that explanation lives beside the ladder control itself,
-    not duplicated into every custom server's description text."""
+def test_mcp_view_with_only_instructions_subtitles_with_their_first_sentence():
+    """No description → the instructions' first sentence is the subtitle; the detail page's
+    description stays generic, since the whole text is already in the fold."""
+    svc = _svc()
+    from backend.db.mcp_client_store import McpClientStore
+    from backend.models.mcp_client import McpServerConfig, ServerInfo
+
+    store = McpClientStore()
+    store.create(McpServerConfig(id="gem", url="https://mcp.example.com"))
+    text = "This server reaches the Example exchange.\nCall whats_new first. Prices are v1.2."
+    store.record_discovery("gem", [], status="ok", server_info=ServerInfo(instructions=text))
+    view = svc.get_connector("mcp:gem")
+    assert view.short_description == "This server reaches the Example exchange."
+    assert "whats_new" not in view.long_description
+    assert view.config["server_info_instructions"] == text
+
+
+def test_mcp_view_shortens_a_long_first_sentence_at_a_word():
+    from backend.services.connectors import _first_sentence
+
+    subtitle = _first_sentence("Tools for " + "trading and positions, " * 12 + "end.")
+    assert len(subtitle) <= 161 and subtitle.endswith("…")
+    assert not subtitle[:-1].endswith((" ", ","))
+
+
+def test_mcp_view_with_nothing_reported_has_a_generic_subtitle_and_no_paragraph():
+    """No description or instructions → the generic one-line subtitle and no paragraph: the
+    publisher panel and Tool permissions on the same page already say it is a third-party
+    server and what Lucius may call."""
     svc = _svc()
     from backend.db.mcp_client_store import McpClientStore
     from backend.models.mcp_client import McpServerConfig
 
     McpClientStore().create(McpServerConfig(id="srv", url="https://mcp.example.com"))
     view = svc.get_connector("mcp:srv")
-    assert view.long_description
-    for word in ("permission", "approve", "approval", "allow", "watching"):
-        assert word not in view.long_description.lower()
+    assert view.short_description
+    assert view.long_description == ""
 
 
 def test_mcp_status_is_the_shared_vocabulary_and_stdio_counts_as_configured():

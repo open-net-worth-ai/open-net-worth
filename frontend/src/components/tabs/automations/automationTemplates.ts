@@ -19,16 +19,18 @@ export type AutomationTemplate = AutomationDraft & { key: string }
  *  Shown first and always; the other lists exclude them. */
 export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
   {
-    key: 'mail_ledger',
-    name: 'Auto-log transactions from email',
+    key: 'mail_digest',
+    name: 'Email finance digest',
     description:
-      'Reads bank, card and trade confirmation mail and logs it — payees resolved, nothing ' +
-      'double-booked.',
+      'Logs bank, card and trade mail, then tells you what else needs you — a failed payment, ' +
+      'a bill due, a new login to a money account, a deposit maturing.',
     instructions:
-      'Check my email for bank, card and trade confirmations and log them, ' +
-      'using the Log transactions from email skill. Message me with what you logged, or if ' +
-      'anything went wrong.',
-    trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+      'Go through my email for anything about my money since the run before last, using the ' +
+      'Email finance digest skill. Log my bank, card and trade confirmations, then tell me what ' +
+      'else I should know. Leave out what the last run already told me, and tell me again ' +
+      "anything that didn't reach me. Send it on Telegram, or by webhook if that's what I use; " +
+      "if I have neither, show it here. If there's nothing worth saying, don't message me.",
+    trigger: { kind: 'schedule', type: 'rrule', rrule: 'FREQ=DAILY;BYHOUR=0,12;BYMINUTE=0' },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
   },
@@ -71,6 +73,20 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
 ]
 
 export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
+  {
+    key: 'mail_ledger',
+    name: 'Auto-log transactions from email',
+    description:
+      'Reads bank, card and trade confirmation mail and logs it — payees resolved, nothing ' +
+      'double-booked.',
+    instructions:
+      'Check my email for bank, card and trade confirmations and log them, ' +
+      'using the Log transactions from email skill. Message me with what you logged, or if ' +
+      'anything went wrong.',
+    trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+    execution: { kind: 'lucius' },
+    permission_mode: 'auto',
+  },
   {
     key: 'subscriptions',
     name: 'Subscription creep',
@@ -131,11 +147,11 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   },
 ]
 
-/** One template per OFFERED connector (Yodlee excluded — `disabled=True` server-side, hidden
- *  from the directory, no template). Display names are the exact provider labels from
+/** One template per OFFERED connector (Yodlee, Alpaca and IBKR Flex excluded — `disabled=True`
+ *  server-side, hidden from the directory; Alpaca's and IBKR Flex's kept in `RETIRED_SYNC_TEMPLATES`). Display names are the exact provider labels from
  *  `backend/services/aggregation/providers.py`, not the raw connector key. Email's template
- *  (`mail_ledger`) is in RECOMMENDED_TEMPLATES; its instructions live in the
- *  log-transactions-from-email starter skill, so a fix reaches every unedited copy. */
+ *  (`mail_digest`) is in RECOMMENDED_TEMPLATES; its instructions live in the
+ *  email-finance-digest starter skill, so a fix reaches every unedited copy. */
 export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
   {
     key: 'sync_simplefin',
@@ -143,8 +159,9 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     description: 'Fetch new SimpleFIN transactions and book them.',
     instructions:
       'Fetch new SimpleFIN transactions and book them. Use the linked account ' +
-      'for each one. If an account isn’t linked, ask me instead of guessing. Leave the ' +
-      'category empty unless it’s obvious. If the bank changed something already booked, ' +
+      'for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
       'bring it in line, but never override something I changed by hand. If the bank ' +
       'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
       'anything. Message me only when something was ' +
@@ -159,8 +176,9 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     description: 'Fetch new Plaid transactions and book them.',
     instructions:
       'Fetch new Plaid transactions and book them. Use the linked account ' +
-      'for each one. If an account isn’t linked, ask me instead of guessing. Leave the ' +
-      'category empty unless it’s obvious. If the bank changed something already booked, ' +
+      'for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
       'bring it in line, but never override something I changed by hand. If the bank ' +
       'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
       'anything. Message me only when something was ' +
@@ -175,8 +193,9 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     description: 'Fetch new Lunch Money transactions and book them.',
     instructions:
       'Fetch new Lunch Money transactions and book them. Use the linked account ' +
-      'for each one. If an account isn’t linked, ask me instead of guessing. Leave the ' +
-      'category empty unless it’s obvious. If the bank changed something already booked, ' +
+      'for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
       'bring it in line, but never override something I changed by hand. If the bank ' +
       'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
       'anything. Message me only when something was ' +
@@ -191,8 +210,9 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     description: 'Fetch new Lunch Flow transactions and book them.',
     instructions:
       'Fetch new Lunch Flow transactions and book them. Use the linked account ' +
-      'for each one. If an account isn’t linked, ask me instead of guessing. Leave the ' +
-      'category empty unless it’s obvious. If the bank changed something already booked, ' +
+      'for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
       'bring it in line, but never override something I changed by hand. If the bank ' +
       'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
       'anything. Message me only when something was ' +
@@ -204,11 +224,12 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
   {
     key: 'sync_ynab',
     name: 'Sync YNAB',
-    description: 'Fetch new YNAB transactions and book them.',
+    description: 'One way: Lucius fetches new YNAB transactions and books them here.',
     instructions:
       'Fetch new YNAB transactions and book them. Use the linked account ' +
-      'for each one. If an account isn’t linked, ask me instead of guessing. Leave the ' +
-      'category empty unless it’s obvious. If the bank changed something already booked, ' +
+      'for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
       'bring it in line, but never override something I changed by hand. If the bank ' +
       'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
       'anything. Message me only when something was ' +
@@ -223,8 +244,9 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     description: 'Fetch new Enable Banking transactions and book them.',
     instructions:
       'Fetch new Enable Banking transactions and book them. Use the linked ' +
-      'account for each one. If an account isn’t linked, ask me instead of guessing. Leave ' +
-      'the category empty unless it’s obvious. If the bank changed something already booked, ' +
+      'account for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
       'bring it in line, but never override something I changed by hand. If the bank ' +
       'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
       'anything. Message me only when something was ' +
@@ -233,6 +255,59 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
   },
+  {
+    key: 'sync_gocardless',
+    name: 'Sync GoCardless',
+    description: 'Fetch new GoCardless transactions and book them.',
+    instructions:
+      'Fetch new GoCardless transactions and book them. Use the linked ' +
+      'account for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
+      'bring it in line, but never override something I changed by hand. If the bank ' +
+      'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
+      'anything. Message me only when something was ' +
+      'booked or something went wrong.',
+    // Twice a day, not every 6h: banks may allow only 4 reads per account per day, and an
+    // on-demand fetch must still fit.
+    trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+    execution: { kind: 'lucius' },
+    permission_mode: 'auto',
+  },
+]
+
+export const ALL_TEMPLATES: AutomationTemplate[] = [
+  ...RECOMMENDED_TEMPLATES,
+  ...AUTOMATION_TEMPLATES,
+  ...CONNECTOR_SYNC_TEMPLATES,
+]
+
+/** The template that puts a connector to work — Email logs and digests the mailbox, a bank or
+ *  broker syncs. Null for a connector with nothing to automate (web search, Telegram…). */
+export function templateKeyForConnector(providerKind: string): string | null {
+  const key = providerKind === 'email' ? 'mail_digest' : `sync_${providerKind}`
+  return ALL_TEMPLATES.some((t) => t.key === key) ? key : null
+}
+
+/** Keyed, never positional — reordering the gallery must not move an icon onto another card. */
+export const TEMPLATE_ICONS: Record<string, LucideIcon> = {
+  'daily-briefing': Sunrise,
+  'weekly-report': CalendarRange,
+  'monthly-report': FileText,
+  subscriptions: BellRing,
+  pacing: Gauge,
+  floor: WalletCards,
+  'large-charge': BellRing,
+  'new-payee': ReceiptText,
+  drift: ChartNoAxesCombined,
+  mail_digest: Mail,
+  mail_ledger: Mail,
+  ...Object.fromEntries(CONNECTOR_SYNC_TEMPLATES.map((template) => [template.key, Link2])),
+}
+
+/** Sync templates for retired connectors — kept so a revert is one move back, never shown.
+ *  IBKR Flex: ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server. */
+export const RETIRED_SYNC_TEMPLATES: AutomationTemplate[] = [
   {
     key: 'sync_alpaca',
     name: 'Sync Alpaca',
@@ -261,31 +336,3 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     permission_mode: 'auto',
   },
 ]
-
-export const ALL_TEMPLATES: AutomationTemplate[] = [
-  ...RECOMMENDED_TEMPLATES,
-  ...AUTOMATION_TEMPLATES,
-  ...CONNECTOR_SYNC_TEMPLATES,
-]
-
-/** The template that puts a connector to work — Email logs from the mailbox, a bank or broker
- *  syncs. Null for a connector with nothing to automate (web search, Telegram…). */
-export function templateKeyForConnector(providerKind: string): string | null {
-  const key = providerKind === 'email' ? 'mail_ledger' : `sync_${providerKind}`
-  return ALL_TEMPLATES.some((t) => t.key === key) ? key : null
-}
-
-/** Keyed, never positional — reordering the gallery must not move an icon onto another card. */
-export const TEMPLATE_ICONS: Record<string, LucideIcon> = {
-  'daily-briefing': Sunrise,
-  'weekly-report': CalendarRange,
-  'monthly-report': FileText,
-  subscriptions: BellRing,
-  pacing: Gauge,
-  floor: WalletCards,
-  'large-charge': BellRing,
-  'new-payee': ReceiptText,
-  drift: ChartNoAxesCombined,
-  mail_ledger: Mail,
-  ...Object.fromEntries(CONNECTOR_SYNC_TEMPLATES.map((template) => [template.key, Link2])),
-}

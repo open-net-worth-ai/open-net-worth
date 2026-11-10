@@ -22,7 +22,7 @@ import math
 from calendar import monthrange
 from contextvars import ContextVar
 from datetime import date, datetime, timezone
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError
@@ -42,7 +42,7 @@ from backend.core.txn_sources import default_needs_review, ext_ref_pairs, primar
 from backend.core.user_time import user_today
 from backend.db import read_cache
 from backend.db.account_store import AccountStore
-from backend.db.engine import locked_unit_of_work, on_commit
+from backend.db.engine import locked_unit_of_work, on_commit, unit_of_work
 from backend.db.import_batch_store import ImportBatchStore
 from backend.db.merge_journal_store import MergeJournalStore
 from backend.db.statement_store import StatementStore
@@ -445,12 +445,113 @@ def cleared_account_balance(account: dict, txns: list[dict], opening_date: str |
     return round(bal, 2)
 
 
+class LedgerBook(NamedTuple):
+    """Every transaction (deleted rows included) and every account (archived included), read
+    from ONE snapshot. A request that folds the ledger several ways reads this once and hands
+    it down rather than reloading the whole book per fold. Read-only: every holder shares the
+    same dicts."""
+
+    txns: list[dict]
+    accounts: list[dict]
+
+    @property
+    def live_accounts(self) -> list[dict]:
+        return [a for a in self.accounts if not a.get("archived")]
+
+
+def read_book() -> LedgerBook:
+    """The transactions and accounts from one SQLite snapshot. An account create commits the
+    account and its opening together, but two separate read connections could straddle that
+    commit and falsely report a missing opening transaction; sqlite3's legacy transaction mode
+    does not BEGIN on a SELECT, so the explicit BEGIN is what pins the snapshot."""
+    with unit_of_work() as conn:
+        conn.exec_driver_sql("BEGIN")
+        return LedgerBook(transactions.all(conn=conn), accounts.all(conn=conn))
+
+
+def _fold_balances(
+    accts: list[dict],
+    txns: list[dict],
+    cutoffs: dict[str, str | None],
+    *,
+    cleared_only: bool = False,
+    as_of: str | None = None,
+) -> dict[str, float]:
+    """``{account_id: fold}`` in ONE pass over ``txns`` — the per-account ``account_balance`` /
+    ``cleared_account_balance`` / ``account_balance_as_of`` fold run for every account at once.
+
+    Equal to the per-account fold down to the last bit: each account's total accumulates the
+    same legs in the same order (a transaction's from-leg, then its to-leg, in ``txns`` order),
+    and each leg is judged against ITS account's own cutoff. The per-account form is O(accounts
+    × transactions); this is O(transactions)."""
+    totals = {a["id"]: 0.0 for a in accts}
+    for t in txns:
+        if t.get("deleted") or (cleared_only and not t.get("cleared")):
+            continue
+        leg_date = t.get("date")
+        if as_of is not None and leg_date is not None and leg_date > as_of:
+            continue
+        src = t.get("from_account_id")
+        if (
+            src in totals
+            and t.get("from_amount") is not None
+            and not is_before_tracking_start(leg_date, cutoffs[src])
+        ):
+            totals[src] -= float(t["from_amount"])
+        dst = t.get("to_account_id")
+        if (
+            dst in totals
+            and t.get("to_amount") is not None
+            and not is_before_tracking_start(leg_date, cutoffs[dst])
+        ):
+            totals[dst] += float(t["to_amount"])
+    return {acct_id: round(bal, 2) for acct_id, bal in totals.items()}
+
+
+def balances_by_account(
+    accts: list[dict],
+    txns: list[dict],
+    cutoffs: dict[str, str | None],
+    *,
+    as_of: str | None = None,
+) -> dict[str, float]:
+    """``{a["id"]: account_balance(a, txns, cutoffs[a["id"]])}`` for every account in
+    ``accts``, in one pass. The shape every caller that folds MANY accounts uses. With ``as_of``
+    it is ``account_balance_as_of`` instead: legs dated after that day are left out."""
+    return _fold_balances(accts, txns, cutoffs, as_of=as_of)
+
+
+def cleared_balances_by_account(
+    accts: list[dict], txns: list[dict], cutoffs: dict[str, str | None]
+) -> dict[str, float]:
+    """The ``cleared_account_balance`` twin of ``balances_by_account``."""
+    return _fold_balances(accts, txns, cutoffs, cleared_only=True)
+
+
 def balances(include_archived: bool = False) -> dict[str, float]:
     """Map account_id → native-currency balance, computed in one pass over txns."""
     txns = transactions.all()
     accts = accounts.query_accounts(include_archived=include_archived)
-    cutoffs = cutoffs_by_account(accts, txns)
-    return {a["id"]: account_balance(a, txns, cutoffs[a["id"]]) for a in accts}
+    return balances_by_account(accts, txns, cutoffs_by_account(accts, txns))
+
+
+def _hydrate_account(account: dict, row: dict | None, bal: float, cleared: float) -> dict:
+    base = base_currency()
+    cur = account.get("currency") or base
+    external_ids = account.get("external_ids") or []
+    return {
+        **account,
+        "initial_balance": _signed_opening(row),
+        "initial_balance_date": row.get("date") if row else None,
+        "balance": bal,
+        "balance_base": to_base(bal, cur, base),
+        "cleared_balance": cleared,
+        "cleared_balance_base": to_base(cleared, cur, base),
+        # DERIVED, never a stored second fact (RFC connectors-as-data-sources §D) — a linked
+        # account is one with at least one external_ids entry, full stop.
+        "connected": bool(external_ids),
+        "external_ids": _hydrated_external_ids(external_ids),
+    }
 
 
 def account_with_balance(
@@ -467,33 +568,43 @@ def account_with_balance(
     cutoff = row.get("date") if row else None
     bal = account_balance(account, txns, cutoff)
     cleared = cleared_account_balance(account, txns, cutoff)
-    base = base_currency()
-    cur = account.get("currency") or base
-    external_ids = account.get("external_ids") or []
-    return {
-        **account,
-        "initial_balance": _signed_opening(row),
-        "initial_balance_date": cutoff,
-        "balance": bal,
-        "balance_base": to_base(bal, cur, base),
-        "cleared_balance": cleared,
-        "cleared_balance_base": to_base(cleared, cur, base),
-        # DERIVED, never a stored second fact (RFC connectors-as-data-sources §D) — a linked
-        # account is one with at least one external_ids entry, full stop.
-        "connected": bool(external_ids),
-        "external_ids": _hydrated_external_ids(external_ids),
-    }
+    return _hydrate_account(account, row, bal, cleared)
+
+
+def accounts_with_balances(
+    accts: list[dict], txns: list[dict], *, idx: dict[str, dict] | None = None
+) -> list[dict]:
+    """``[account_with_balance(a, txns, idx=idx) for a in accts]`` with both balance folds run
+    ONCE over ``txns`` instead of twice per account."""
+    if idx is None:
+        idx = opening_index(txns, accts)
+    rows = [_opening_row(a, txns, idx=idx) for a in accts]
+    cutoffs = {a["id"]: row.get("date") if row else None for a, row in zip(accts, rows)}
+    bals = balances_by_account(accts, txns, cutoffs)
+    cleared = cleared_balances_by_account(accts, txns, cutoffs)
+    return [
+        _hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)
+    ]
 
 
 def _hydrated_external_ids(ids: list[dict]) -> list[dict]:
     """``external_ids``, each entry carrying its provider's display ``provider_label``
-    (UI spec: server-side labels, no frontend copy of the provider-name table)."""
-    from backend.services.accounts import provider_label
+    (UI spec: server-side labels, no frontend copy of the provider-name table) and its
+    connector's ``status`` — ``connected`` / ``paused`` / ``disconnected`` (removed), so a
+    link whose connector is gone never still reads as live. No links, no connector read."""
+    from backend.services.accounts import link_status, link_statuses, provider_label
 
+    entries = [entry for entry in ids if isinstance(entry, dict)]
+    if not entries:
+        return []
+    statuses = link_statuses()
     return [
-        {**entry, "provider_label": provider_label(entry.get("source"))}
-        for entry in ids
-        if isinstance(entry, dict)
+        {
+            **entry,
+            "provider_label": provider_label(entry.get("source")),
+            "status": link_status(entry.get("source"), statuses),
+        }
+        for entry in entries
     ]
 
 
@@ -603,8 +714,8 @@ def _unvested_value_base(base: str, rates: dict | None = None) -> float:
     return round(total, 2)
 
 
-@read_cache.cached(lambda base=None: base)
-def net_worth(base: str | None = None) -> dict:
+@read_cache.cached(lambda base=None, book=None: base, when=lambda *a, **kw: kw.get("book") is None)
+def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dict:
     """Add-everything fold: Σ account balances (assets + raw-negative liabilities)
     + Σ market values, all normalised to base currency. `unvested_base` (unvested
     equity) is reported alongside but deliberately excluded from `net_worth` itself.
@@ -638,8 +749,10 @@ def net_worth(base: str | None = None) -> dict:
     # profile row per call — profiled 2026-08-12 at 186 fx loads + 192 profile reads in a
     # single /api/net-worth/stats request, almost all from these conversion loops.
     rates = load_fx_cache()
-    txns = transactions.all()
-    accts = accounts.query_accounts()
+    if book is None:
+        txns, accts = transactions.all(), accounts.query_accounts()
+    else:
+        txns, accts = book.txns, book.live_accounts
     cutoffs = cutoffs_by_account(accts, txns)
 
     account_classes: dict[str, float] = {}
@@ -647,10 +760,9 @@ def net_worth(base: str | None = None) -> dict:
     liabilities_rows: list[dict] = []
     liability_total = 0.0  # stored raw-negative; summed as-is
     retirement_base = 0.0
+    native = balances_by_account(accts, txns, cutoffs)
     for a in accts:
-        bal_base = to_base(
-            account_balance(a, txns, cutoffs[a["id"]]), a.get("currency", base), base, rates=rates
-        )
+        bal_base = to_base(native[a["id"]], a.get("currency", base), base, rates=rates)
         kind, band = account_kind_and_band(a)
         if kind == "liability":
             liability_total += bal_base
@@ -702,7 +814,7 @@ def net_worth(base: str | None = None) -> dict:
     }
 
 
-def net_worth_bands(base: str | None = None) -> dict:
+def net_worth_bands(base: str | None = None, *, book: LedgerBook | None = None) -> dict:
     """TODAY's net worth decomposed into asset-class bands — the same
     {classes, liabilities, accounts, net_worth, unvested_base} shape ``net_worth_history``
     emits per month, for the current moment only.
@@ -721,8 +833,12 @@ def net_worth_bands(base: str | None = None) -> dict:
     today_iso = user_today().isoformat()
     store = PriceHistoryStore()
     market_since = store.earliest_date()
-    accts = accounts.query_accounts()
-    txns = [t for t in transactions.all() if not t.get("deleted")]
+    if book is None:
+        accts, all_txns = accounts.query_accounts(), transactions.all()
+    else:
+        accts, all_txns = book.live_accounts, book.txns
+    txns = [t for t in all_txns if not t.get("deleted")]
+    cutoffs = cutoffs_by_account(accts, txns)
     return _breakdown_as_of(
         today_iso,
         store.as_of_maps([today_iso])[today_iso],
@@ -731,7 +847,8 @@ def net_worth_bands(base: str | None = None) -> dict:
         txns,
         base,
         bool(market_since and today_iso >= market_since),
-        cutoffs_by_account(accts, txns),
+        cutoffs,
+        balances=balances_by_account(accts, txns, cutoffs, as_of=today_iso),
         option_mark_base=_compute_options_mark_base(base),
         manual_assets_base=owned_assets_valuation.values_by_band(base),
     )
@@ -1452,21 +1569,22 @@ def _apply_splits(row: dict, *, category_rows: list[dict] | None = None) -> dict
 
 def create_transaction(
     data: dict,
-    force: bool = False,
     *,
+    allow_duplicate: bool = False,
     force_transfer_rate: bool = False,
     _skip_payee_resolve: bool = False,
     meta_out: dict | None = None,
     conn: Connection | None = None,
     account_rows: list[dict] | None = None,
     resurrect: bool = False,
+    labels_as_given: bool = False,
 ) -> dict:
     """Normalise legs into account currencies, compute the base-currency reporting
     snapshot (skipped for transfers), and persist. Returns the stored transaction.
 
     ``resurrect`` is the ONLY way past a remembered deletion: the row's ref identity was deleted
     on purpose (``rejected_identities``), the caller has an explicit ``create`` decision for it,
-    and the record is forgotten in the same transaction that re-books it. ``force`` does not
+    and the record is forgotten in the same transaction that re-books it. ``allow_duplicate`` does not
     reach it — "skip duplicate detection" is about a second booking of a live event, not about
     overriding the user's delete (ADR 2026-09-02-a-deleted-identity-is-remembered).
 
@@ -1543,15 +1661,15 @@ def create_transaction(
     # arriving under a different id — which is the normal case for a book fed by statements,
     # connectors, scheduled agents and hand entry at once. "Created-then-flagged" only protects
     # a book whose queue is READ, and most of those paths have no reader.
-    # ``force`` is the documented escape hatch (add_transaction's own schema already promises
-    # "set to true to skip duplicate detection"); it is checked FIRST so a forced write never
+    # ``allow_duplicate`` is the documented escape hatch (add_transactions' own schema promises
+    # "set to true to skip duplicate detection"); it is checked FIRST so an allowed duplicate never
     # pays for the candidate scan.
     # ``_suppress_create_audit`` marks an INNER REBUILD (update_transaction, and the merge that
     # rides on it) rather than a new event. Such a rebuild is by construction identical to the
     # row it replaces, so the guard would match it against its own original and refuse — which
     # is exactly what broke two live statement merges ("merge failed for row=13/14", surfacing
     # to the user as an unexplained "2 left out"). A rebuild is not a second booking.
-    if not force and not _suppress_create_audit.get():
+    if not allow_duplicate and not _suppress_create_audit.get():
         dup = matching.blocking_duplicate(matching.check(data, profile=matching.FULL))
         if dup is not None and not _dedup_decided_different(dup, data):
             raise _duplicate_error(dup, data)
@@ -1569,6 +1687,8 @@ def create_transaction(
         skip_payee_resolve=_skip_payee_resolve,
         account_rows=account_rows,
         force_transfer_rate=force_transfer_rate,
+        automations=[] if labels_as_given else None,
+        labels_as_given=labels_as_given,
     )
     automation_matches = meta["automation_matches"]
     automation_hint = meta["automation_hint"]
@@ -1714,6 +1834,7 @@ def resolve_transaction_row(
     account_rows: list[dict] | None = None,
     base: str | None = None,
     force_transfer_rate: bool = False,
+    labels_as_given: bool = False,
 ) -> tuple[dict, dict]:
     """Run the full create-time RESOLUTION pipeline on ``data`` and return ``(row, meta)``
     WITHOUT persisting anything.
@@ -1750,7 +1871,7 @@ def resolve_transaction_row(
 
     ``force_transfer_rate`` bypasses ONLY ``_assert_transfer_amount_converted`` (the
     equal-amount guard) — never ``_assert_transfer_rate_plausible`` (the 10x magnitude guard),
-    which has no escape hatch by design. Same shape as ``create_transaction``'s ``force``,
+    which has no escape hatch by design. Same shape as ``create_transaction``'s ``allow_duplicate``,
     kept as a separate flag because the two refusals mean different things to a caller: a
     duplicate is "this event already exists", an implausible transfer amount is "these two
     numbers don't square with each other" — a caller confident about one is not thereby
@@ -1893,7 +2014,11 @@ def resolve_transaction_row(
                 # was learned from the long bank line — which the note still matches. Minting
                 # a fresh payee from the clean name is the LAST resort (it has no default
                 # category, so a silent mint books Uncategorized — seen live).
-                pid = payee_registry.resolve_payee_id(row.get("payee") or "", create=False)
+                # The NAME is matched by payee name first, then aliases: a payee picked by name in
+                # the import review ("Vietcombank") has no alias equal to its own name, so the
+                # alias-only lookup missed it and the note's alias ("INTEREST PAYMENT") booked a
+                # different payee — the user's pick silently lost (owner, 2026-10-26).
+                pid = payee_registry.resolve_payee_id_by_name(row.get("payee") or "", create=False)
                 if not pid:
                     pid = payee_registry.resolve_payee_id(
                         row.get("description") or "", create=False
@@ -1921,7 +2046,7 @@ def resolve_transaction_row(
     # a payee_id. Ordered AFTER the rules engine and BEFORE the None-when-absent path, so
     # precedence is: explicit > rule > payee (per-kind) > None.
     category_before_payee_default = row.get("category") or None
-    if kind != "adjustment":
+    if kind != "adjustment" and not labels_as_given:
         pid = row.get("payee_id")
         if pid and not row.get("category"):
             row["category"] = payee_registry.default_category_for(
@@ -1941,7 +2066,10 @@ def resolve_transaction_row(
         row["category"] = None
     else:
         cat = row.get("category") or None  # "" → None
-        if cat:
+        # The SPLIT sentinel is a code constant _apply_splits stamped over ≥2 validated lines —
+        # never looked up as a row: a book whose store never got the seeded ``split`` row (one
+        # not booted by the app) refused every split as "Unknown category 'split'".
+        if cat and not (cat == SPLIT and row.get("splits")):
             from backend.services import categories as categories_service
 
             resolved = categories_service.resolve_category_ref(cat, rows=category_rows)
@@ -2125,12 +2253,13 @@ def _promote_source_snapshots(stored: dict) -> None:
 def bulk_create_transactions(
     data_list: list[dict],
     batch_id: str | None = None,
-    force: bool = False,
     *,
+    allow_duplicate: bool = False,
     dedup_by_external_ref: bool = False,
     meta_out: dict | None = None,
     force_transfer_rate: bool = False,
     resurrect_refs: set[tuple[str | None, str]] | None = None,
+    labels_as_given: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     """Normalise and persist multiple transactions in a single file write.
 
@@ -2156,11 +2285,15 @@ def bulk_create_transactions(
     sync mutex) — never the primary dedup mechanism.
 
     A row whose ref identity the user DELETED (``rejected_identities``) is skipped on every
-    path, ``force`` included — a forced write skips duplicate detection, not the user's delete
+    path, ``allow_duplicate`` included — an allowed duplicate skips duplicate detection, not the user's delete
     — and returned in ``skipped`` with ``_previously_deleted: True``. ``resurrect_refs`` names
     the ``(source, ref)`` pairs an explicit ``create`` decision re-books; those rows pass and
     their records are forgotten in the write transaction (ADR
     2026-09-02-a-deleted-identity-is-remembered).
+
+    ``labels_as_given`` books each row's category exactly as sent — no Automation, no payee
+    default — for a migration copying another app's labels, where a blank category is a
+    decision (YNAB's Ready to Assign inflow), not a gap to fill.
     """
     from backend.core.audit_context import get_audit_scope as _get_audit_scope
     from backend.services import categories as categories_service
@@ -2236,7 +2369,7 @@ def bulk_create_transactions(
     # different row and slips the guard. Intra-batch pairs are deliberately NOT compared against
     # each other — a statement legitimately lists two identical charges, which is exactly what
     # the engine's own same-feed veto already encodes.
-    if not force and indexed:
+    if not allow_duplicate and indexed:
         from datetime import timedelta as _td
 
         from backend.services import matching as _matching
@@ -2307,7 +2440,8 @@ def bulk_create_transactions(
             data = {**data, "source": "agent"}
         row, resolution_meta = resolve_transaction_row(
             data,
-            automations=automation_set,
+            automations=[] if labels_as_given else automation_set,
+            labels_as_given=labels_as_given,
             category_rows=category_rows,
             rates=rates,
             account_rows=account_rows,
@@ -2385,6 +2519,33 @@ def bulk_create_transactions(
     # Moved out of the transaction above — see create_transaction's identical note.
     _publish_committed_transaction_events("create", created, balance_before=balance_before)
     return created, skipped
+
+
+# ── Hidden toggle ──────────────────────────────────────────────────────────────
+
+
+def set_transaction_hidden(txn_id: str, hidden: bool) -> dict | None:
+    """Hide/unhide one transaction from the register. Display-only: no balance, net-worth,
+    budget or report fold reads the flag, so there is no rebuild and no money event — just the
+    flag and ONE "update" audit event when it actually changes. Returns the updated row, or
+    None if it doesn't exist."""
+    existing = transactions.find_by_id(txn_id)
+    updated = transactions.set_hidden(txn_id, hidden)
+    if updated is None:
+        return None
+    prior = bool(existing.get("hidden")) if existing else None
+    if prior == bool(hidden):
+        return updated
+    from backend.services import audit as audit_service
+
+    audit_service.record_txn_event(
+        "update",
+        txn_id,
+        source=updated.get("source"),
+        before={"hidden": prior},
+        after={"hidden": bool(hidden)},
+    )
+    return updated
 
 
 # ── Cleared toggle ──────────────────────────────────────────────────────────────
@@ -2759,10 +2920,17 @@ def _fields_the_write_declined(requested: dict, before: dict, after: dict) -> li
 
 
 def update_transaction(
-    txn_id: str, changes: dict, *, preserve_base: bool = False, meta_out: dict | None = None
+    txn_id: str,
+    changes: dict,
+    *,
+    preserve_base: bool = False,
+    meta_out: dict | None = None,
+    labels_as_given: bool = False,
 ) -> dict | None:
     """Update one transaction in place by id and return the rebuilt row (or None if it
     doesn't exist). ``changes`` is a partial field map (already filtered of unset fields).
+    ``labels_as_given`` keeps the row's category exactly as it ends up here, blank included: no
+    Automation and no payee default fill it (``bulk_create_transactions``' argument of that name).
 
     This is the SINGLE per-txn edit choke point — it re-runs the create logic so legs +
     the base-currency snapshot stay consistent (and the spend-rules engine fires), then
@@ -2868,6 +3036,7 @@ def update_transaction(
             _skip_payee_resolve=True,
             meta_out=rebuild_meta,
             force_transfer_rate=not _leg_changed,
+            labels_as_given=labels_as_given,
         )
     # PLAN 3 TASK 4: the cleanup below (drop the appended dup, restamp the stable id, restore
     # the row in place) + the update audit event are now ONE transaction. The inner
@@ -3200,6 +3369,7 @@ _BULK_UPDATE_FIELDS = {
     "to_account_id",
     "description",  # bank/matching string (ADR 2026-07-17)
     "memo",  # personal, display-only
+    "hidden",  # register declutter, display-only
 }
 
 
@@ -3238,6 +3408,7 @@ def bulk_update_transactions(ids: list[str], changes: dict) -> dict:
       - ``tags`` (list[str]): ADD tags — additive UNION with the row's existing tags
         (never clobbers / drops existing tags).
       - ``cleared`` (bool): SET the cleared flag (via set_transaction_cleared).
+      - ``hidden`` (bool): SET the register-declutter flag (via set_transaction_hidden).
       - ``payee_id`` (str | None): LINK each row to the payee entity (must exist —
         validated up front so an unknown id fails the whole batch before any row is
         touched). Pass ``None`` to CLEAR the payee link. A transfer/adjustment row is
@@ -3267,6 +3438,7 @@ def bulk_update_transactions(ids: list[str], changes: dict) -> dict:
     set_category = changes.get("category")
     add_tags = changes.get("tags")
     set_cleared = changes.get("cleared")
+    set_hidden = changes.get("hidden")
     has_payee_change = "payee_id" in changes
     set_payee = changes.get("payee_id")  # None = clear the link
     has_review_change = "needs_review" in changes
@@ -3359,6 +3531,9 @@ def bulk_update_transactions(ids: list[str], changes: dict) -> dict:
         if set_cleared is not None:
             set_transaction_cleared(txn_id, bool(set_cleared))
             touched = True
+        if set_hidden is not None:
+            set_transaction_hidden(txn_id, bool(set_hidden))
+            touched = True
         if touched:
             updated.append(txn_id)
         elif txn_id not in (s["id"] for s in skipped):
@@ -3412,15 +3587,19 @@ def approve_transactions(ids: list[str]) -> dict:
 
 
 def mark_batch_reviewed(batch_id: str) -> dict:
-    """Approve every still-flagged, non-deleted transaction booked in this import batch via
-    ``approve_transactions``. A merged/linked row was never tagged with this ``batch_id`` (only a
-    newly CREATED row carries it) and an already-reviewed row is filtered out up front, so this
-    is always safe to re-run — it only ever narrows, never re-flags. Raises ``NotFoundError`` on
-    an unknown batch id. Returns ``{updated: int}``."""
-    if import_batches.find_by_id(batch_id) is None:
+    """Approve every still-flagged, non-deleted transaction this import booked OR linked, via
+    ``approve_transactions``. A linked entry never carries the ``batch_id`` (only a newly
+    CREATED row does) — it is found through the batch's merge snapshots, so the Booked screen's
+    "Mark all reviewed" clears what it counted. An already-reviewed row is filtered out up
+    front, so this is always safe to re-run — it only ever narrows, never re-flags. Raises
+    ``NotFoundError`` on an unknown batch id. Returns ``{updated: int}``."""
+    batch = import_batches.find_by_id(batch_id)
+    if batch is None:
         raise NotFoundError(f"Import batch {batch_id!r} not found")
     txns = transactions.query_by_batch(batch_id, include_deleted=False)
-    ids = [t["id"] for t in txns if t.get("needs_review")]
+    linked = (transactions.find_by_id(m.get("txn_id")) for m in batch.get("merges") or [])
+    txns += [t for t in linked if t and not t.get("deleted")]
+    ids = list(dict.fromkeys(t["id"] for t in txns if t.get("needs_review")))
     if not ids:
         return {"updated": 0}
     return {"updated": approve_transactions(ids)["count"]}
@@ -3948,6 +4127,7 @@ def reconcile(
     on_date: str | None = None,
     *,
     against: str = "cleared",
+    expected_balance: float | None = None,
 ) -> dict | None:
     """Assert the real-world native balance of an account (cleared/reconcile MVP). If it
     differs from the account's CLEARED balance, emit a single `adjustment` transaction
@@ -3957,7 +4137,11 @@ def reconcile(
 
     ``against`` selects the balance the asserted figure is diffed against — ``"cleared"``
     (the YNAB reconcile-to-cleared flow, the default) or ``"working"`` (the legacy
-    statement-driven true-up that diffs the full computed balance)."""
+    statement-driven true-up that diffs the full computed balance).
+
+    ``expected_balance`` is the figure the caller SHOWED the user. If the book has moved
+    since, the reconcile is refused with nothing written — otherwise a screen one write
+    behind books the gap as a phantom adjustment (owner report 2026-10-26)."""
     account = accounts.find_by_id(account_id)
     if account is None:
         return None
@@ -3970,6 +4154,13 @@ def reconcile(
         if against == "cleared"
         else account_balance(account, txns, cutoff)
     )
+    if expected_balance is not None and round(float(expected_balance) - current, 2) != 0:
+        shown = f"{current:,.2f}".removesuffix(".00")
+        raise ConflictError(
+            f"The balance changed since this was opened — it is now {shown} {currency}. "
+            "Check it again before reconciling.",
+            current_balance=current,
+        )
     delta = round(float(real_balance) - current, 2)
 
     txn = None

@@ -28,6 +28,8 @@ All HTTP is mocked with a fixture feed — there is no live-network call here.
 
 from __future__ import annotations
 
+import json as jsonlib
+
 import httpx
 import pytest
 
@@ -80,6 +82,44 @@ _TXNS = [
         "deleted": False,
     },
 ]
+
+
+class _StreamOf:
+    """Presents a ``httpx.get``-style fake response as the stream ``_safe_get`` now reads."""
+
+    headers: dict = {}
+
+    def __init__(self, resp):
+        self._resp = resp
+        self.status_code = resp.status_code
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        self._resp.raise_for_status()
+
+    def iter_bytes(self):
+        try:
+            yield jsonlib.dumps(self._resp.json()).encode()
+        except (ValueError, AssertionError):
+            yield self._resp.content
+
+
+@pytest.fixture(autouse=True)
+def stream_from_fake_get(monkeypatch):
+    """The tests below fake ``svc.httpx.get``; route the streaming call through whatever fake is
+    installed at call time so they keep exercising the same behaviour."""
+    monkeypatch.setattr(
+        svc.httpx,
+        "stream",
+        lambda method, url, params=None, headers=None, timeout=None: _StreamOf(
+            svc.httpx.get(url, params=params, headers=headers, timeout=timeout)
+        ),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -215,22 +255,32 @@ def test_fetch_window_applies_before_client_side(monkeypatch):
     assert dates == {"2026-08-01", "2026-08-02"}
 
 
-def test_fetch_window_accounts_only_skips_rows_and_uses_a_single_day_window(monkeypatch):
+def test_fetch_window_accounts_only_lists_the_plans_accounts_without_fetching_rows(monkeypatch):
+    """The accounts endpoint, not today's transactions: an account with nothing dated today
+    used to be missing, so most plans listed none. Closed accounts are left out."""
+    from backend.services.aggregation import ynab_plan
+
     store = _configured_store()
-    captured = {}
 
-    def _fetch(s, bid, *, since_date):
-        captured["since_date"] = since_date
-        return list(_TXNS)
+    def _no_fetch(*_a, **_k):
+        raise AssertionError("accounts_only must not fetch transactions")
 
-    monkeypatch.setattr(svc, "fetch_transactions", _fetch)
+    monkeypatch.setattr(svc, "fetch_transactions", _no_fetch)
+    monkeypatch.setattr(
+        ynab_plan,
+        "accounts",
+        lambda s, bid: [
+            {"id": "acct-checking", "name": "Checking", "closed": False, "balance": 12.5},
+            {"id": "acct-savings", "name": "Savings", "closed": False, "balance": 0.0},
+            {"id": "acct-old", "name": "Old", "closed": True, "balance": 0.0},
+        ],
+    )
     window = svc.fetch_window(store, "2026-08-01", "2026-08-31", None, accounts_only=True)
 
     assert window.rows == []
-    assert captured["since_date"] == "2026-08-31"  # since_date=before minimizes the fetch
-    assert {a["provider_account_id"] for a in window.accounts} == {
-        "acct-checking",
-        "acct-savings",
+    assert {a["provider_account_id"]: a["balance"] for a in window.accounts} == {
+        "acct-checking": 12.5,
+        "acct-savings": 0.0,
     }
 
 
@@ -861,3 +911,55 @@ class TestClassifyError:
 
     def test_generic_on_unknown_exception(self):
         assert svc.classify_error(RuntimeError("unexpected")) == "error"
+
+
+def test_safe_get_abandons_a_stream_that_passes_the_cap_without_reading_it_all(monkeypatch):
+    store = _token_only_store()
+    pulled = []
+
+    class _Endless:
+        status_code = 200
+        headers: dict = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_bytes(self):
+            for _ in range(1000):
+                pulled.append(1)
+                yield b"x" * 1024
+
+    monkeypatch.setattr(svc.httpx, "stream", lambda *a, **k: _Endless())
+    with pytest.raises(ExternalServiceError, match="too large"):
+        svc._safe_get(store, "/plans", {}, max_bytes=4096)
+    assert len(pulled) <= 6
+
+
+def test_safe_get_refuses_a_declared_oversize_body_before_reading_it(monkeypatch):
+    store = _token_only_store()
+
+    class _Declared:
+        status_code = 200
+        headers = {"content-length": "999999999"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_bytes(self):
+            raise AssertionError("must not read a body declared too large")
+
+    monkeypatch.setattr(svc.httpx, "stream", lambda *a, **k: _Declared())
+    with pytest.raises(ExternalServiceError, match="too large"):
+        svc._safe_get(store, "/plans", {})

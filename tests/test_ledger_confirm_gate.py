@@ -368,7 +368,7 @@ def test_preview_bulk_prices_base_off_the_SAME_rate_source_as_the_write(env, mon
     # row is INTENTIONALLY a near-twin of the one just booked (same account/date/amount, so the
     # pricing comparison is apples-to-apples) — the pre-write duplicate guard would otherwise
     # refuse it, correctly.
-    single = svc.create_transaction({**row, "description": "Pho lunch 2"}, force=True)
+    single = svc.create_transaction({**row, "description": "Pho lunch 2"}, allow_duplicate=True)
     assert single["base_amount"] == expected
 
 

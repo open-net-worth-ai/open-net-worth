@@ -43,6 +43,7 @@ export type IconKey =
   | 'plus'
   | 'search'
   | 'settings'
+  | 'voice'
   | 'warn'
 
 export type IconComponent = () => JSX.Element
@@ -100,8 +101,10 @@ export const Icons: Record<IconKey, IconComponent> = {
       <circle cx={12} cy={17.3} r={0.4} />
     </Svg>
   ),
+  // Two axis-aligned strokes at 13px on a 24-unit grid land ~0.9px wide on a half pixel, which
+  // antialiases into a blur — `crispEdges` snaps them to the pixel grid, same geometry.
   plus: () => (
-    <Svg width={13} height={13}>
+    <Svg width={13} height={13} shapeRendering="crispEdges">
       <line x1={12} y1={5} x2={12} y2={19} />
       <line x1={5} y1={12} x2={19} y2={12} />
     </Svg>
@@ -155,6 +158,15 @@ export const Icons: Record<IconKey, IconComponent> = {
   chat: () => (
     <Svg>
       <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4.2 3.2A.6.6 0 0 1 4 18.7V6a1 1 0 0 1 1-1z" />
+    </Svg>
+  ),
+  // The same four bars as the Call button, so the connector and the button read as one thing.
+  voice: () => (
+    <Svg strokeWidth={3}>
+      <path d="M4.5 10v4" />
+      <path d="M9.5 6v12" />
+      <path d="M14.5 3v18" />
+      <path d="M19.5 8v8" />
     </Svg>
   ),
 }

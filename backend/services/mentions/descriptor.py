@@ -45,9 +45,10 @@ class EntityDescriptor:
     ``order`` is the registry sort key that preserves today's exact REGISTRY dict
     sequence so tie-break picker order is stable after auto-collect (§3.2).
 
-    ``rows`` is QUERY-AWARE (``Callable[[SearchQuery], list[dict]]``) so a
-    transaction descriptor keeps its ``store.query_txns(q=...)`` pushdown instead of
-    regressing to a full ``.all()`` scan on every keystroke.
+    ``rows`` returns the type's WHOLE corpus and must not read the query it is passed: the
+    generic search memoises it per data version (``mentions._corpus``) and filters it, so
+    one load serves every keystroke. A type that needs a query pushdown (transactions'
+    ``store.query_txns(q=...)``) uses ``search_override`` instead.
 
     ``fields`` is the security allowlist: only declared keys are projected into
     model-bound output.  An empty ``fields`` dict produces an empty resolve payload,

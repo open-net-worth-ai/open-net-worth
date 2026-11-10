@@ -502,6 +502,57 @@ def test_refresh_does_not_revert_a_fresher_key_issues_written_mid_flight(
     assert brief["portfolio_narrative"] == "Fresh narrative."
 
 
+def test_refresh_keeps_a_take_rewrite_stamp_and_call_landed_during_its_search(
+    inst_path, store_path, monkeypatch
+):
+    """A Refresh starts the take rewrite beside this news/facts refresh (and the page's poll
+    can start a facts refresh beside a rewrite). The rewrite stamps `key_issues_refresh_stage`
+    and lands `position_verdict` while this refresh is awaiting its search — its mid-refresh
+    "analysing" save used to write its pre-search copy back, wiping the stamp, so the page
+    stopped showing the rewrite in progress and missed the new call until its next 60s poll."""
+    InstrumentStore().bulk_insert([_make_inst()])
+    from backend.db import asset_brief_store as _abs
+    from backend.db.asset_brief_store import AssetBriefStore
+
+    _abs.ASSET_BRIEF_JSON = store_path
+    monkeypatch.setattr("backend.services.prices.search_symbol", lambda q: {})
+    monkeypatch.setattr(
+        "backend.services.prices.fetch_live",
+        lambda *a, **k: {"prices": {}, "prev_prices": {}, "exchanges": {}},
+    )
+    AssetBriefStore().upsert_brief({"instrument_id": "inst-1", "portfolio_narrative": "Old."})
+    verdict = {"action": "hold", "why": "x", "held": True}
+    base = _stub_provider()
+
+    class _RewriteLandsDuringSearch:
+        async def search(self, query: str, max_results: int = 5) -> list:
+            current = AssetBriefStore().get("inst-1") or {}
+            AssetBriefStore().upsert_brief(
+                {**current, "key_issues_refresh_stage": "analysing", "position_verdict": verdict}
+            )
+            return await base.search(query, max_results)
+
+        async def fetch_page(self, url: str) -> str:
+            return await base.fetch_page(url)
+
+    stub = _RewriteLandsDuringSearch()
+    with patch("backend.monitoring.asset_brief.get_search_provider", return_value=stub):
+        with patch(
+            "backend.monitoring.asset_brief.complete_model",
+            AsyncMock(return_value=_to_model(_synthesis_json())),
+        ):
+            with patch(
+                "backend.services.profile.read_profile", return_value={"base_currency": "SGD"}
+            ):
+                with patch(_SC_PATH, return_value=_make_sc_mock(["perplexity"])):
+                    with patch(_BP_PATH, return_value=stub):
+                        asyncio.run(_mod.refresh_asset_brief("inst-1", force=True))
+
+    brief = AssetBriefStore().get("inst-1")
+    assert brief["key_issues_refresh_stage"] == "analysing"
+    assert brief["position_verdict"] == verdict
+
+
 def test_successful_refresh_populates_brief(inst_path, store_path, monkeypatch):
     """A successful refresh stores news + facts/peers — key_issues stays empty (no prior, and
     no longer this function's to synthesize; see

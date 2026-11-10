@@ -92,6 +92,8 @@ class ListAccountsInput(ToolInput):
         "settlement cash), retirement, receivables, credit, loans — with current balance in "
         "native currency. Credit/loan accounts are liabilities (negative balance). Look up an "
         "account's name/id/currency before adding a transaction.\n\n"
+        "`cleared_balance` counts only cleared rows (`balance` counts all) - compare a bank's "
+        "posted balance against it.\n\n"
         "FILTER RATHER THAN FETCH EVERYTHING: query='meridian' or ids=['Meridian Bank "
         "Savings'] for one account; kind='liability' or type='credit' for debts only. An "
         "unfiltered call returns everything — the most wasteful way to answer 'what is my "
@@ -205,6 +207,7 @@ def _project_account(a: dict, balance, txns: list[dict], idx: dict | None = None
     out["initial_balance"] = svc._signed_opening(row)
     out["initial_balance_date"] = row.get("date") if row else None
     out["balance"] = balance
+    out["cleared_balance"] = svc.cleared_account_balance(a, txns, out["initial_balance_date"])
     return out
 
 

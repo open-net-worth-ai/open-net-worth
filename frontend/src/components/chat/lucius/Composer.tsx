@@ -28,14 +28,17 @@ import { LuciusDragTip, LuciusScreenTip } from '../../intro/LuciusTours'
 import { captureAndSerialize } from '../../../lucius/screenContract'
 import { commandCatalogSnapshot } from '../../../lucius/screenCommands'
 import { useChatComposer } from '../../../state/chatComposer'
+import { FileDropMask } from './FileDropMask'
+import { useFileDropZone } from './useFileDropZone'
 import { useScreenSnapshot } from '../../../state/screenSnapshot'
 import type { MentionRow } from '../../../hooks/useMentionables'
 import { Paperclip, AtSign, ArrowUp } from '../../../ui/icons'
 import { isSafeCssColor } from '../../../utils/mentionable'
 import { byId } from '../../../lucius/objectFields'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
-import { toSendAttachments, useComposerAttachments } from './useComposerAttachments'
+import { ATTACH_ACCEPT, toSendAttachments, useComposerAttachments } from './useComposerAttachments'
 import type { AttachmentItem } from './useComposerAttachments'
+import { DictateButton } from './DictateButton'
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -106,12 +109,18 @@ export interface LuciusComposerProps {
   /** Rendered in the LEFT tool group, after attach/@//. For per-conversation
    *  settings that are not about the model. */
   leadingControls?: ReactNode
+  /** Shown in the Send slot while the box is empty and no turn is running — the voice-call
+   *  button (`voice_calls` flag): typing and calling are alternative ways in, so they share it. */
+  callAction?: ReactNode
   /** The Lucius home tab's landing layout puts the composer near the TOP of the page (an
    *  Active/Scheduled panel sits below it) rather than pinned at the bottom like the dock —
    *  so the @/skill Autocomplete popup should open DOWNWARD here instead of its usual upward
    *  anchor, which would otherwise collide with the greeting above. Default false keeps the
    *  dock/mobile's existing upward behavior untouched. */
   homeMode?: boolean
+  /** Handle file drags on the composer itself. The side panel turns this off and makes the
+   *  whole panel the drop target, feeding files in through the handle's `addFiles`. */
+  fileDrop?: boolean
   /** Release editor focus after a valid send so a phone's software keyboard closes.
    *  The mobile Lucius surface opts in; desktop composers keep focus for rapid follow-ups. */
   dismissKeyboardOnSend?: boolean
@@ -130,6 +139,8 @@ export interface LuciusComposerHandle {
    *  handoff when mention chips are being drained from the pending store concurrently. */
   setText(text: string): void
   isEmpty(): boolean
+  /** Attach files dropped somewhere other than the composer (the side panel's drop zone). */
+  addFiles(files: FileList): void
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -167,8 +178,10 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       imageReader = '',
       controls = null,
       leadingControls = null,
+      callAction = null,
       homeMode = false,
       dismissKeyboardOnSend = false,
+      fileDrop = true,
     },
     ref,
   ) {
@@ -184,7 +197,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     const [trigger, setTrigger] = useState<ComposerTrigger | null>(null)
     const [isEmpty, setIsEmpty] = useState(true)
     const att = useComposerAttachments()
-    const { attachments, clear: clearAttachments } = att
+    const { attachments, clear: clearAttachments, addFiles: addAttachmentFiles } = att
     const [attDetail, setAttDetail] = useState<AttachmentItem | null>(null)
     // Why a send did not go (or is waiting), said where the reader is looking. A refused send
     // used to do nothing at all: the text stayed in the box, no reason, and a second attempt
@@ -198,7 +211,6 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     // Send was pressed while a file was still uploading: it fires when the last upload lands
     // instead of being thrown away.
     const [sendWhenReady, setSendWhenReady] = useState(false)
-    const [dragOver, setDragOver] = useState(false)
     const [chipDetail, setChipDetail] = useState<MentionDetailData | null>(null)
 
     const {
@@ -208,6 +220,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       clearPendingMentions,
       setPendingSkills,
       pendingText,
+      pendingTextKeepsChips,
       clearPendingText,
     } = useChatComposer()
     const { enabled: screenEnabledGlobal, pinnedHandleIds } = useScreenSnapshot()
@@ -228,10 +241,11 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     // as pendingMentions so it lands in the VISIBLE surface only, mounted or not.
     useEffect(() => {
       if (!active || !pendingText || !mentionRef.current) return
-      mentionRef.current.setText(pendingText)
+      if (pendingTextKeepsChips) mentionRef.current.appendText(` ${pendingText}`)
+      else mentionRef.current.setText(pendingText)
       mentionRef.current.focus()
       clearPendingText()
-    }, [active, pendingText, clearPendingText])
+    }, [active, pendingText, pendingTextKeepsChips, clearPendingText])
 
     // ── Attachment helpers ────────────────────────────────────────────────────
 
@@ -239,6 +253,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       setNotice((n) => (n?.refused ? null : n))
       att.addFiles(files)
     }
+    const drop = useFileDropZone(addFiles, fileDrop)
 
     function removeAtt(id: string) {
       att.remove(id)
@@ -551,11 +566,16 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
         isEmpty() {
           return isEmpty && attachments.length === 0
         },
+        addFiles(files: FileList) {
+          setNotice((n) => (n?.refused ? null : n))
+          addAttachmentFiles(files)
+        },
       }),
       [
         isEmpty,
         attachments,
         clearAttachments,
+        addAttachmentFiles,
         respondingAgent,
         pendingSkills,
         setPendingSkills,
@@ -568,25 +588,17 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     return (
       <div
         ref={composeRootRef}
-        className={'lx-compose' + (dragOver ? ' dragfile' : '')}
+        className={'lx-compose' + (drop.over ? ' dragfile' : '')}
         onDrop={(e) => {
           // Always prevent default so entity-drags (non-file) don't inject their
           // text/label into the contenteditable — the chip is inserted imperatively
           // via the pendingMentions path (dragRightClick → addMention → insertChip).
           e.preventDefault()
-          if (e.dataTransfer?.files?.length) {
-            e.stopPropagation()
-            addFiles(e.dataTransfer.files)
-          }
-          setDragOver(false)
+          drop.handlers.onDrop(e)
         }}
-        onDragOver={(e) => {
-          if ([...(e.dataTransfer?.types ?? [])].includes('Files')) {
-            e.preventDefault()
-            setDragOver(true)
-          }
-        }}
-        onDragLeave={() => setDragOver(false)}
+        onDragEnter={drop.handlers.onDragEnter}
+        onDragOver={drop.handlers.onDragOver}
+        onDragLeave={drop.handlers.onDragLeave}
         onPaste={(e) => {
           const files = e.clipboardData?.files
           if (files?.length) {
@@ -595,21 +607,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
           }
         }}
       >
-        {dragOver && (
-          <div className="lx-dropmask">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M12 3v13M7 8l5-5 5 5" />
-            </svg>
-            Drop files to attach
-          </div>
-        )}
+        {drop.over && <FileDropMask />}
 
         {showScreenBar && !homeMode && (
           <>
@@ -760,7 +758,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,.pdf,.csv,.txt,.xlsx,.docx"
+          accept={ATTACH_ACCEPT}
           style={{ display: 'none' }}
           onChange={(e) => {
             addFiles(e.target.files)
@@ -861,6 +859,12 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
                 you can always cancel, you just cannot ALSO queue a second message while
                 multi-turn is off. With multi-turn on and something typed, Send still
                 queues into the running turn (acceptance C1/C2). */}
+            {/* Dictation sits left of Send / Call (owner, 2026-11-03). */}
+            <DictateButton
+              empty={isEmpty}
+              onText={(text, final) => mentionRef.current?.dictate(text, final)}
+              focusBox={() => mentionRef.current?.focus()}
+            />
             {busy && onStop && (sendBlocked || (isEmpty && attachments.length === 0)) ? (
               <button
                 className="lx-send lx-stop"
@@ -871,6 +875,8 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
               >
                 <span className="lx-stop-sq" />
               </button>
+            ) : callAction && !busy && isEmpty && attachments.length === 0 ? (
+              callAction
             ) : (
               <button
                 className="lx-send"

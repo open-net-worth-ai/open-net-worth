@@ -60,21 +60,23 @@ Ask Lucius something like:
 If it lists messages, you're connected. If it reports an error, the same error appears as
 **Last error** in the Email connector's settings (**⋯ → Edit configuration**) — see [Troubleshooting](#troubleshooting).
 
-## 4. Log transactions automatically (optional)
+## 4. Keep up with your email automatically (optional)
 
 On the Email connector's page, click **Automate** (or **Automate with a template** inside its
-settings). That opens the **Auto-log transactions from email** Automation as a draft — click
-**Create automation** to turn it on. Once on: every 12 hours, Lucius reads new bank, card and
-trade confirmation emails, logs them with the payee resolved, and messages you a summary of what
-it logged. Each run reads the mail since the last run that finished, so changing the schedule
-never skips any.
+settings). That opens the **Email finance digest** Automation as a draft — click **Create
+automation** to turn it on. Once on: every day at 12:00 AM and 12:00 PM, Lucius logs new bank, card
+and trade confirmation emails with the payee resolved, then sends you one short message with what he added
+and anything else that affects your money: a failed payment, a bill due, a new login to a money
+account, a deposit maturing. Each run reads the mail since the last run that finished, so changing the schedule
+never skips any. If nothing needs you, he doesn't message you.
 
 Running it twice over the same email never books it twice — each transaction remembers which
 email it came from. Details, and how to change the schedule or approval mode, are in
-[Automations](../lucius/automations.md#logging-transactions-from-your-email).
+[Automations](../lucius/automations.md#logging-transactions-from-your-email). For logging with no
+digest, use the **Auto-log transactions from email** template instead.
 
 You don't need the Automation to use email — you can always just ask: *"log the purchases from
-my card emails this week."*
+my card emails this week"* or *"anything important in my email?"*
 
 ## Limit what Lucius can see
 
@@ -140,7 +142,7 @@ day the filter was created onwards), and give it a date range: *"from the last 3
 
 ## Related pages
 
-- [Automations](../lucius/automations.md) — the auto-log template and scheduling
+- [Automations](../lucius/automations.md) — the email templates and scheduling
 - [Permissions](../lucius/permissions.md) — when Lucius asks before sending
 - [Telegram](telegram.md) — get Lucius's summaries on your phone
 - [Security and privacy](../operations/security-and-privacy.md) — where every credential lives

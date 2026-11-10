@@ -288,6 +288,23 @@ export function ensureAssistant(ownerId: string): void {
  * `thinking` is still accumulated alongside, as the message-level field older transcripts and
  * readers use.
  */
+/** How much of a bubble's text and thinking a live replay can send again. A replay covers the
+ * RUNNING turn only, and a card pauses a turn: everything before the last answered card belongs
+ * to the turn that ended there. Counting it skipped that many characters of the new answer
+ * (live report 2026-11-04, a reconnect during an approved Automation run: "t, so the
+ * notification did not reach you"). */
+function replayableChars(m: Message): { text: number; thinking: number } {
+  const blocks = m.blocks || []
+  const pause = blocks.findLastIndex((b) => b.type === 'change' && Boolean(b.change.status))
+  if (pause === -1) return { text: m.text.length, thinking: (m.thinking || '').length }
+  const sinceCard = { text: 0, thinking: 0 }
+  for (const block of blocks.slice(pause + 1)) {
+    if (block.type === 'text') sinceCard.text += block.content.length
+    if (block.type === 'thinking') sinceCard.thinking += block.content.length
+  }
+  return sinceCard
+}
+
 function appendThinking(m: Message, text: string): Message {
   const blocks = [...(m.blocks || [])]
   const last = blocks[blocks.length - 1]
@@ -677,8 +694,9 @@ export async function consumeEventStream(
   function armSkipFromReplay(owner: Message): void {
     if (skipArmed) return
     skipArmed = true
-    skipTextChars = owner.text.length
-    skipThinkingChars = (owner.thinking || '').length
+    const replayable = replayableChars(owner)
+    skipTextChars = replayable.text
+    skipThinkingChars = replayable.thinking
   }
 
   // A prior attach for this conversation may have left a bubble open without ever
@@ -747,7 +765,32 @@ export async function consumeEventStream(
           continue
         }
 
-        if (event.type === 'message_delivered') {
+        if (event.type === 'user_message') {
+          // The message that started this turn, announced for devices that did not send it
+          // (live report 2026-10-26: a phone's photo showed its reply on the desktop, never
+          // itself). The sender already holds it under this same id — or in its queue, when
+          // its send raced the end of a turn — so only a stranger to it adds a bubble.
+          const id: string | undefined = event.message_id
+          if (id) {
+            deliverQueuedMessage(ownerId, id)
+            if (!chatSessions.getSlice(ownerId).messages.some((m) => m.id === id)) {
+              closeOpenAssistant(ownerId)
+              // A NEW user message starts a new exchange, so the bubble before it was never
+              // this turn's: nothing of it is being replayed. Armed off that bubble (a voice
+              // call's small-talk reply carries no usage, so it looked interrupted), the skip
+              // ate the start of Lucius's next answer — exactly that reply's length (live
+              // call, 2026-11-03: "se twenty billion…").
+              skipTextChars = 0
+              skipThinkingChars = 0
+              addUserMessage(ownerId, {
+                id,
+                role: 'user',
+                text: event.text ?? '',
+                attachments: event.attachments ?? [],
+              })
+            }
+          }
+        } else if (event.type === 'message_delivered') {
           // Mid-turn injection (concurrent-conversations RFC): the server just spliced a
           // QUEUED message into the running turn (or, on the residue-fold-in path, into a
           // freshly spawned one) — move it out of `queuedMessages` and into the true
@@ -968,6 +1011,7 @@ export async function consumeEventStream(
             ...b,
             status: 'done' as const,
             result: event.result,
+            ...(event.autoApproval ? { autoApproval: event.autoApproval } : {}),
           }))
           // Lucius asked the app to light up one of its guides (show_guide). Each guide shows
           // once per person, so a replayed result asking again changes nothing on screen.
@@ -982,11 +1026,15 @@ export async function consumeEventStream(
               args: event.command.args ?? {},
             })
           }
-          if (event.status === 'parked') {
+          // A connector setup keeps its card even when Connectors was already open and the form
+          // opened at once: the card names the connector and carries Connect (owner, 2026-10-31:
+          // "where is that connect card gone?"). Every other command's chip is only for parked.
+          const setup = event.command?.name === 'connectors.open_setup'
+          if (event.status === 'parked' || setup) {
             appendBlock(ownerId, {
               type: 'screen_command',
               command: { name: event.command?.name ?? '', args: event.command?.args ?? {} },
-              open: event.open ?? {},
+              open: event.open ?? (setup ? { route: 'connectors' } : {}),
             })
           }
         } else if (event.type === 'write_receipt') {

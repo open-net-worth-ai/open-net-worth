@@ -11,8 +11,7 @@
 
 import { useEffect, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
-import { useShowBackgroundConversations } from '../../../hooks/useShowBackgroundConversations'
-import { ConversationMenu, shortWhen } from '../../chat/ConversationMenu'
+import { ConversationMenu, shortWhen, type ConversationKind } from '../../chat/ConversationMenu'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
 import { useLuciusChat } from '../../../state/luciusChat'
 import { FolderLock, Menu, SquarePen } from '../../../ui/icons'
@@ -54,6 +53,7 @@ export function LuciusMobile({
     renameConversation,
     statusFor,
     stopConversation,
+    messages,
   } = useLuciusChat()
 
   const [menuOpen, setMenuOpen] = useState(false)
@@ -71,9 +71,8 @@ export function LuciusMobile({
     return () => window.removeEventListener('lx-dock-open', showChat)
   }, [setDocumentsFlag])
   const [vaultArtifact, setVaultArtifact] = useState<ArtifactRef | null>(null)
-  const [browsingConvs, setBrowsingConvs] = useState<'chat' | 'automation' | null>(null)
-  const [showBackground] = useShowBackgroundConversations()
-  const groups = conversationGroups(conversations, showBackground)
+  const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
+  const groups = conversationGroups(conversations)
   // Same resolution as the docked panel's header (ChatPanel's `activeConversation`), so the
   // two surfaces never name different conversations. An unpersisted draft has no row, so the
   // empty greeting gets no title rather than a "New conversation" label that says nothing.
@@ -85,8 +84,13 @@ export function LuciusMobile({
   // home tab and the docked panel's own New button — a `persist: false` conversation (the
   // default now) never joins `conversations`, so "the active id isn't in the list" IS
   // "already on an empty/unpersisted draft."
+  //
+  // A conversation with messages on screen is never "empty", listed or not: a voice call from
+  // the fresh screen fills one the list hasn't caught up with, and New did nothing after the
+  // call (owner, 2026-11-04).
   const startFresh = () => {
-    const alreadyOnAnEmptyOne = !conversations.some((c) => c.id === activeId)
+    const alreadyOnAnEmptyOne =
+      !conversations.some((c) => c.id === activeId) && messages.length === 0
     if (alreadyOnAnEmptyOne) return
     createConversation()
   }

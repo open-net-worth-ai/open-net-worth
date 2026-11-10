@@ -6,8 +6,18 @@
 // except the directory itself.
 
 import { isInstalled, toEntry } from './adapter'
-import { CATALOG, catalogProvenanceFor, type CatalogEntry, type DirectoryRow } from './catalog'
+import {
+  CATALOG,
+  MCP_INSTALL_PRESETS,
+  catalogProvenanceFor,
+  endpointKey,
+  filterDirectory,
+  previewEndpoint,
+  type CatalogEntry,
+  type DirectoryRow,
+} from './catalog'
 import { connectorLogo } from './logos'
+import { FAMILY_SECTIONS, type FamilyTab } from './model'
 import type { Connector } from './types'
 
 const MCP_PREFIX = 'mcp:'
@@ -37,7 +47,27 @@ export function resolveDirectory(
   // them — so the card badge and the vendor-trust panel can't disagree with the catalog.
   // `logo` is looked up from the id rather than authored beside the entry, so a mark cannot be
   // attached to the wrong card by hand; an entry with none keeps its tinted category glyph.
-  const rows: DirectoryRow[] = catalog.map((entry) => {
+  // An installed MCP server whose endpoint IS a catalog entry's merges into that card (gear,
+  // not +) instead of listing a second card for the same server beside it.
+  const serverByEndpoint = new Map<string, Connector>()
+  for (const c of installed) {
+    const url = c.id.startsWith(MCP_PREFIX) ? endpointKey(toEntry(c).url) : undefined
+    if (url && !serverByEndpoint.has(url)) serverByEndpoint.set(url, c)
+  }
+  const merged = new Set<string>()
+
+  // A flagged native entry exists only when the backend returns it (its flag is on).
+  const visible = catalog.filter((entry) => !entry.flag || liveById.has(entry.id))
+  const rows: DirectoryRow[] = visible.map((entry) => {
+    const preset = entry.mcp ? MCP_INSTALL_PRESETS[entry.id] : undefined
+    const endpoint =
+      preset?.transport === 'remote'
+        ? preset.url
+        : preset
+          ? [preset.command, preset.args].filter(Boolean).join(' ')
+          : ''
+    const server = endpoint ? serverByEndpoint.get(endpointKey(endpoint)) : undefined
+    if (server) merged.add(server.id)
     const live = liveById.get(entry.id)
     // `sub`/`desc`/`tools`: for a NATIVE entry these read the SAME `short_description`/
     // `long_description`/`tools` the connector's own installed detail page renders (`toEntry`,
@@ -58,13 +88,14 @@ export function resolveDirectory(
       tools: liveText?.tools || entry.tools || [],
       logo: connectorLogo(entry.id),
       developer: entry.publisher ?? undefined,
-      installed: installedIds.has(entry.id),
+      installed: installedIds.has(entry.id) || !!server,
+      ...(server ? { installedId: server.id, url: toEntry(server).url } : {}),
     }
   })
 
   const known = new Set(catalog.map((e) => e.id))
   for (const c of installed) {
-    if (!c.id.startsWith(MCP_PREFIX) || known.has(c.id)) continue
+    if (!c.id.startsWith(MCP_PREFIX) || known.has(c.id) || merged.has(c.id)) continue
     // `toEntry` already folds in catalog provenance when the endpoint matches a catalog server,
     // so an installed Playwright MCP keeps its real verification here too.
     const e = toEntry(c)
@@ -92,4 +123,80 @@ export function resolveDirectory(
     })
   }
   return rows
+}
+
+/** How many not-yet-added connectors a list section suggests under its rows. */
+export const SECTION_SUGGESTION_COUNT = 3
+
+/** Who Suggested leads with, in order — curated, not just "popular": the connectors most worth
+ *  a new user's first click (owner's pick, 2026-10-29: Email, Telegram, Plaid, IBKR, Coinbase),
+ *  then backups so there are still three once some are added — each shows until it is set up.
+ *  Anything not listed only fills in after these. */
+export const SUGGESTION_PRIORITY: readonly string[] = [
+  'email',
+  'telegram',
+  'plaid',
+  'mcp-ibkr',
+  'mcp-coinbase',
+  'mcp-robinhood',
+  'simplefin',
+  'enable_banking',
+]
+
+/** Up to three entries to suggest for one family (or `all`): not added yet, never the generic
+ *  "Custom MCP server" slot (it has its own add link), `SUGGESTION_PRIORITY` first in its
+ *  order, then the rest in Sort: Popular order. An MCP catalog entry also counts as added when
+ *  an installed server answers at its endpoint. */
+export function pickSuggestions(rows: DirectoryRow[], family: FamilyTab): DirectoryRow[] {
+  const installedEndpoints = new Set(
+    rows.filter((d) => d.installed && d.mcp && d.url).map((d) => endpointKey(d.url)),
+  )
+  const added = (d: DirectoryRow) =>
+    d.installed || installedEndpoints.has(endpointKey(previewEndpoint(d)))
+  const rank = (d: DirectoryRow) => {
+    const i = SUGGESTION_PRIORITY.indexOf(d.id)
+    return i < 0 ? SUGGESTION_PRIORITY.length : i
+  }
+  return filterDirectory(rows, family, '', 'popular')
+    .filter((d) => !added(d) && !d.generic && (d.popular || rank(d) < SUGGESTION_PRIORITY.length))
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, SECTION_SUGGESTION_COUNT)
+}
+
+/** Per list section, and for the All tab as a whole (`pickSuggestions` for each). */
+export function suggestionsBySection(
+  connectors: Connector[],
+): Partial<Record<FamilyTab, DirectoryRow[]>> {
+  const rows = resolveDirectory(connectors)
+  return Object.fromEntries([
+    ['all', pickSuggestions(rows, 'all')],
+    ...FAMILY_SECTIONS.map((s) => [s.key, pickSuggestions(rows, s.key)]),
+  ])
+}
+
+/** Where a "set this connector up" request lands, decided from live state. An id the directory
+ *  does not have is `unknown` — never guessed at. Matches `installedId` too, so an MCP server
+ *  merged into its catalog card opens its own settings. */
+export type SetupTarget =
+  | { kind: 'unknown' }
+  | { kind: 'settings'; id: string }
+  | { kind: 'form'; id: string }
+  | { kind: 'add'; id: string }
+
+export function setupTargetFor(
+  connectors: Connector[],
+  id: string,
+  catalog: CatalogEntry[] = CATALOG,
+): SetupTarget {
+  // `custom` is the Add custom server form — any MCP server the directory doesn't list.
+  if (id === 'custom') {
+    const generic = catalog.find((e) => e.generic)
+    return generic ? { kind: 'add', id: generic.id } : { kind: 'unknown' }
+  }
+  const row = resolveDirectory(connectors, catalog).find(
+    (r) => !r.generic && (r.id === id || r.installedId === id),
+  )
+  if (!row) return { kind: 'unknown' }
+  if (row.installed) return { kind: 'settings', id: row.installedId ?? row.id }
+  return row.mcp ? { kind: 'add', id: row.id } : { kind: 'form', id: row.id }
 }

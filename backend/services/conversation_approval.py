@@ -13,6 +13,9 @@ Deliberately its own module rather than three more kwargs on
 them reachable from a turn, and this is a value only a human may write. A narrow surface is
 what makes "no tool writes it" checkable rather than merely intended — see
 ``tests/test_conversation_approval.py``, which sweeps every registered tool schema for it.
+
+Two human surfaces call it: the browser's REST route and a Telegram owner's ``/approvals`` (ADR
+``2026-11-05-a-telegram-owner-sets-and-gets-the-approval-mode``). Neither is reachable by a tool.
 """
 
 from __future__ import annotations

@@ -33,6 +33,12 @@ the vesting schedule, and vested-but-not-yet-delivered units from the vests wait
 To change how much you hold, record what happened — a buy, a sale, a transfer, or a correction
 to a lot — and the holding follows. Moving a holding to another account moves its lots with it.
 
+A holding's **Position** tab opens with a **Held at** table naming the account it's in — one row
+per account when you hold the same thing in more than one. Each row shows the quantity, market value, **Avg cost** per unit,
+**Cost basis** (what you paid in total for that account's units, fees included) and unrealized
+profit/loss. A per-unit cost under one unit of currency is shown at full precision, so a coin
+bought at $0.0000241 never reads as $0.00.
+
 ## Lots: what you actually paid
 
 Every purchase is a **lot**: an acquired date, a quantity, and a **cost basis** — what you paid,
@@ -102,6 +108,12 @@ the **Not a sale** option.
   holding periods shows its term as **Mixed**.
 - Click a sale under **Realized history** to edit it. The app undoes the old sale and records
   the new one in one step, so lots, gains and cash stay in agreement.
+- Sold everything and bought back later at the same account? The buy reopens the same holding,
+  however it's recorded — the **Add lot** form, Lucius, or adding the position again — so its
+  sales, dividends and sold lots stay with it. A holding split in two by a rebuy recorded
+  before this still shows its whole past: the earlier sold lots under **Acquisition lots**,
+  and the earlier sales and dividends under **Realized history**, **Realized P&L**,
+  **Dividends** and **Dividends received**.
 - An older lot whose purchase date was never known shows an empty **Acquired date** when you
   edit it. Saving a note or cost leaves the date unknown rather than setting it to today.
 

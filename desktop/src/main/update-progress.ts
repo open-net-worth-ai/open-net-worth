@@ -33,3 +33,10 @@ export function showUpdateProgress(version: string | null, relaunch: boolean): B
   void window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(updateProgressPage(version, relaunch, dark ? 'dark' : 'light'))}`);
   return window;
 }
+
+// quitAndInstall quits through app.quit(), which closes every window first: a window that cannot close
+// cancels that quit, and Squirrel gives up on an app still running and never relaunches it.
+export function handOverToInstaller(progress: Pick<BrowserWindow, 'isDestroyed' | 'setClosable'>, install: () => void): void {
+  if (!progress.isDestroyed()) progress.setClosable(true);
+  install();
+}

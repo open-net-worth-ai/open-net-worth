@@ -174,17 +174,18 @@ export function CommitmentDetail({
             headline number+date is the part worth reading at a glance; the reasoning is what
             tapping "Fix" is for. */}
         <span className="c2-ribbon-core">
-          This plan runs <b className="money">{fBase(c.coverage.shortfall_base)}</b> short of your
-          cash floor around{' '}
+          This plan&apos;s funding runs <b className="money">{fBase(c.coverage.shortfall_base)}</b>{' '}
+          short of its payments by{' '}
           <b>
             {c.coverage.earliest_shortfall_date ? fmtDate(c.coverage.earliest_shortfall_date) : ''}
           </b>
           {lateDraw && weeks != null
             ? `. ${lateFundingHint(lateDraw.label, lateDraw.available_date as string, weeks, lateDraw.type === 'asset_sale')}`
-            : '.'}
+            : '.'}{' '}
+          This counts only funding added to this plan, not your account balances.
         </span>
         <span className="c2-ribbon-lite">
-          <b className="money">{fBase(c.coverage.shortfall_base)}</b> short around{' '}
+          <b className="money">{fBase(c.coverage.shortfall_base)}</b> unfunded by{' '}
           <b>
             {c.coverage.earliest_shortfall_date ? fmtDate(c.coverage.earliest_shortfall_date) : ''}
           </b>
@@ -194,7 +195,7 @@ export function CommitmentDetail({
     )
     insightBtnLabel = 'Fix'
     insightBtnSuffix = ' with Lucius'
-    insightPrompt = `The "${c.name}" commitment runs ${fBase(c.coverage.shortfall_base)} short of the cash floor around ${c.coverage.earliest_shortfall_date ? fmtDate(c.coverage.earliest_shortfall_date) : 'an upcoming date'}${lateDraw && weeks != null ? `. The "${lateDraw.label}" funding does not arrive until about ${weeks} weeks after the payment` : ''}. Help me close this gap.`
+    insightPrompt = `The "${c.name}" commitment's funding runs ${fBase(c.coverage.shortfall_base)} short of its payments by ${c.coverage.earliest_shortfall_date ? fmtDate(c.coverage.earliest_shortfall_date) : 'an upcoming date'}${lateDraw && weeks != null ? `. The "${lateDraw.label}" funding does not arrive until about ${weeks} weeks after the payment` : ''}. This counts only the funding sources on this commitment, not my account balances. Help me close this gap.`
   } else if (loan && c.status === 'active') {
     insight = (
       <>
@@ -446,7 +447,7 @@ export function CommitmentDetail({
                   <span className={`c2-tag status-${c.status}`}>{c.status}</span>
                   {atRisk && c.coverage && (
                     <span className="c2-chip short">
-                      Short {fBase(c.coverage.shortfall_base)} by{' '}
+                      <span className="money">{fBase(c.coverage.shortfall_base)}</span> unfunded by{' '}
                       {c.coverage.earliest_shortfall_date
                         ? fmtDate(c.coverage.earliest_shortfall_date)
                         : ''}
@@ -596,7 +597,7 @@ export function CommitmentDetail({
                 <span className="k">{tracker ? 'Contributed' : 'Paid'}</span>
                 <span className={moneyClass('v')}>{fBase(paidBase(c, fx))}</span>
                 <span className="u">
-                  {fPct(paidPct(c))} of{' '}
+                  <span className="money">{fPct(paidPct(c))}</span> of{' '}
                   <span className="money">{fBase(nativeTotalBase(c, fx))}</span>
                 </span>
               </div>
@@ -619,7 +620,7 @@ export function CommitmentDetail({
                   <span className="k">Loan balance</span>
                   <span className={moneyClass('v')}>{fBase(loan.balance)}</span>
                   <span className="u">
-                    {loan.apr}% APR • {loan.monthsLeft} months left
+                    <span className="money">{loan.apr}%</span> APR • {loan.monthsLeft} months left
                   </span>
                 </div>
               )}
@@ -630,7 +631,13 @@ export function CommitmentDetail({
                     {fBase(funded)}
                   </span>
                   <span className="u">
-                    {fundGap ? `${fBase(remB - funded)} short of remaining` : 'covers remaining'}
+                    {fundGap ? (
+                      <>
+                        <span className="money">{fBase(remB - funded)}</span> short of remaining
+                      </>
+                    ) : (
+                      'covers remaining'
+                    )}
                   </span>
                 </div>
               )}

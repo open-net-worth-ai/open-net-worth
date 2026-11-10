@@ -264,6 +264,21 @@ class TestApi:
         assert gone.json()["action"] == "deleted"
         assert client.get("/api/vault").json()["items"] == []
 
+    def test_one_item_by_id_for_a_single_file_preview(self, client):
+        """The import review previews its statement beside the rows without listing every
+        document: one item by its Vault id, and a clean 404 for one that doesn't exist."""
+        from backend.db.statement_store import StatementStore
+
+        stmt = StatementStore().create(
+            "aug.csv", "text/csv", b"Date,Amount\n", {"kind": "text", "text": "x"}
+        )
+        got = client.get(f"/api/vault/items/statement-{stmt['id']}")
+        assert got.status_code == 200
+        item = got.json()["item"]
+        assert (item["kind"], item["filename"]) == ("statement", "aug.csv")
+        assert item["file_url"] == f"/api/statements/{stmt['id']}/file"
+        assert client.get("/api/vault/items/statement-nope").status_code == 404
+
     def test_rename(self, client):
         up = client.post(
             "/api/vault/files",

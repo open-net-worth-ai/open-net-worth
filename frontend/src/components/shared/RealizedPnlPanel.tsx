@@ -3,6 +3,7 @@ import type { RealizedPnl } from '../../types/portfolio'
 import { fBase, fDate, plClass } from '../../utils/format'
 import { authFetch } from '../../api/client'
 import { Panel, SummaryBar, Text, type StatTone } from '../ui'
+import { ChevronDown, ChevronRight } from '../../ui/icons'
 
 // Map a P&L sign → a SummaryBar tone (gain green / loss red), matching the sibling panels.
 function plTone(n: number): StatTone | undefined {
@@ -116,15 +117,23 @@ export function RealizedPnlPanel({ instrumentNames }: Props) {
                     style={{ cursor: 'pointer' }}
                   >
                     <td>
-                      <span className="realized-caret">{open ? '▾' : '▸'}</span>
+                      <span className="realized-caret">
+                        {open ? (
+                          <ChevronDown size="1em" aria-hidden="true" />
+                        ) : (
+                          <ChevronRight size="1em" aria-hidden="true" />
+                        )}
+                      </span>
                       {fDate(ev.disposed_at, 'short', 'always')}
                     </td>
-                    <td>
+                    <td className="not-money">
                       <strong>{instLabel(ev)}</strong>
                       {!ev.is_taxable && <span className="wrapper-badge">transfer</span>}
                     </td>
                     <td className="num">{ev.quantity.toLocaleString(undefined)}</td>
-                    <td className="muted">{ev.method === 'specific_id' ? 'Specific' : 'FIFO'}</td>
+                    <td className="muted not-money">
+                      {ev.method === 'specific_id' ? 'Specific' : 'FIFO'}
+                    </td>
                     <td className={`num ${gain == null ? 'muted' : plClass(gain)}`}>
                       {gain == null ? '—' : (gain >= 0 ? '+' : '') + fBase(gain)}
                     </td>
@@ -154,7 +163,7 @@ export function RealizedPnlPanel({ instrumentNames }: Props) {
                                   <td className="num">
                                     {c.unit_cost == null ? '—' : c.unit_cost.toLocaleString()}
                                   </td>
-                                  <td>
+                                  <td className="not-money">
                                     <span className={`term-badge term-${c.term}`}>{c.term}</span>
                                   </td>
                                   <td

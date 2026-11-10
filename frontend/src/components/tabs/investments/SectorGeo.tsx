@@ -206,9 +206,9 @@ export function SectorGeo({ d }: Props) {
         <div className="mk-flag">
           <span className="mk-stress-mark">▲</span>
           <span>
-            Technology is <b>{Math.round(tech!.pct)}%</b> of your book across multiple holdings — a
-            deeper concentration than any single ticker shows. A tech selloff would hit harder than
-            the asset-class mix suggests.
+            Technology is <b className="money">{Math.round(tech!.pct)}%</b> of your book across
+            multiple holdings — a deeper concentration than any single ticker shows. A tech selloff
+            would hit harder than the asset-class mix suggests.
           </span>
         </div>
       )}
@@ -216,8 +216,9 @@ export function SectorGeo({ d }: Props) {
         <div className="mk-flag">
           <span className="mk-stress-mark">▲</span>
           <span>
-            <b>{top!.k}</b> is <b>{Math.round(top!.pct)}%</b> of your book — limited geographic
-            diversification. International exposure would cushion a domestic drawdown.
+            <b>{top!.k}</b> is <b className="money">{Math.round(top!.pct)}%</b> of your book —
+            limited geographic diversification. International exposure would cushion a domestic
+            drawdown.
           </span>
         </div>
       )}
