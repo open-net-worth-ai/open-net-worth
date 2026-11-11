@@ -14,7 +14,21 @@ export const COPY = {
   noMovesInPeriod: 'No moves in this period.',
   tradeDetails: 'Trade details',
   tradeDetailsOf: (symbol: string) => `Every move in ${symbol}`,
-  allMovesTitle: 'All moves',
+  /** The overview chart's headline: what the figure beside it is the return OF. */
+  allMovesTitle: "Today's holdings",
+  latestTitle: 'Latest moves',
+  allMovesSection: 'All moves',
+  bySectorTitle: 'By sector',
+  bySizeTitle: 'By size',
+  allHoldingsTitle: (n: number) => `All holdings (${n})`,
+  topHoldingsTitle: (n: number, of: number) => `Top ${n} of ${of} holdings`,
+  returnTitle: 'Return',
+  /** A fund's dated trades: the filings it must make within 2 business days of each one. */
+  recentTrades: 'Recent trades, filed within 2 days',
+  /** A quarter's changes: from the quarterly report, which gives no trade days. */
+  boughtReported: (day: string) => `Bought, in quarterly report ${day}`,
+  soldReported: (day: string) => `Sold, in quarterly report ${day}`,
+  youOwn: 'You own',
   breadcrumbLabel: 'Breadcrumb',
   cancel: 'Cancel',
   save: 'Save',
@@ -60,7 +74,8 @@ export const COPY = {
   sectionsLabel: (name: string) => `${name} sections`,
   activityFilter: { all: 'All', buy: 'Bought', sell: 'Sold' },
   openLabel: (name: string) => `Open ${name}`,
-  oneYear: '1Y',
+  /** After a card's return: it is today's holdings over a year, not the fund's own record. */
+  oneYear: "today's holdings, 1Y",
   cardUnavailable: 'No figures yet',
   backToAll: 'Famous Portfolios',
   loadingPage: 'Loading the portfolio…',
@@ -75,6 +90,9 @@ export const COPY = {
   latestTrade: (day: string) => `Latest trade ${day}`,
   /** The snapshot every tab but Trading Activity is built on. */
   holdingsOn: (day: string) => `Holdings on ${day}`,
+  /** A fund's snapshot, named by the filing it comes from (hover: the day it describes). */
+  quarterlyFiled: (day: string) => `Quarterly report filed ${day}`,
+  holdingsAsOf: (day: string) => `Holdings as of ${day}`,
   disclosedOn: (day: string) => `Disclosed ${day}`,
   /** A quarter whose filing deadline passed with no holdings report from them. */
   notDisclosed: (quarter: string) => `${quarter} not disclosed`,
@@ -174,10 +192,10 @@ export const COPY = {
   perfPeriodLabel: 'Performance window',
   /** After the return figure, the window in words. */
   returnWhen: {
-    '1M': 'past month',
-    '6M': 'past 6 months',
-    '12M': 'past 12 months',
-    FILING: 'since filed',
+    '1M': "today's holdings, past month",
+    '6M': "today's holdings, past 6 months",
+    '12M': "today's holdings, past 12 months",
+    FILING: "today's holdings, since filed",
   },
   perfCaption: {
     '1M': 'These holdings over the past month',

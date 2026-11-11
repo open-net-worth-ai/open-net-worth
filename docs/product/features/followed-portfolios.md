@@ -57,9 +57,10 @@ Click a card to open it. **‹ Famous Portfolios** takes you back.
 
 Under the name are who runs it and two dates, each its own chip:
 
-- **Holdings on Jun 30, 2026** (an example): the day the holdings list describes. Holdings and
-  Overview are built on it. Point at it to see the day it was disclosed. A House member has no
-  such list, so this chip is not shown for one.
+- **Quarterly report filed Aug 14, 2026** (an example): the fund's latest quarterly report, which
+  lists everything it held at the quarter's end. Holdings and Overview are built on it; point at
+  it to see that day (**Holdings as of Jun 30, 2026**). An ARK ETF shows **Holdings on** its
+  latest day instead. A House member has no such list, so neither is shown for one.
 - **Latest trade Nov 3, 2026**: their newest dated trade, when it is newer than the holdings.
 - **Apr – Jun 2026 not disclosed** appears when a quarter's 45-day deadline has passed with no
   holdings report from the fund (some funds file only a notice that another manager reports for
@@ -70,9 +71,19 @@ files. A filled bell means you are watching; click it again to stop (it asks fir
 the source document (**SEC filing** or **House Clerk report**) and **Ask Lucius** are in the
 **⋯** menu.
 
+Every table on the page marks a stock you hold yourself with **You own**, so you can see at a
+glance where a famous portfolio touches yours.
+
 ### Trading Activity
 
-Everything they did, newest first, over the period you pick. The period starts on the whole range
+A fund's page opens on **Latest moves**, newest first: **Recent trades, filed within 2 days** (a
+fund that owns more than 10% of a company must file each trade in it within two business days,
+with the exact day, shares and price), then the three biggest purchases and the three biggest
+sales in its latest quarterly report (**Bought, in quarterly report Aug 14**). A quarterly report
+shows what changed since the one before, not the day or the price of each trade. Click
+one to show it under **All moves**, with its chart and **Copy trade**.
+
+Under them is everything they did, newest first, over the period you pick. The period starts on the whole range
 (for example **Jul 2024 – Now**); you can also pick the days since the last quarter (**Since
 Jun 30**) or any single quarter. Filter a fund's moves by **New**, **Increase**, **Decrease** and
 **Sold out**, or a member's by **Bought** and **Sold**. Each row shows the date, the change in
@@ -85,7 +96,8 @@ the first day anyone could act on it. Each quarter marks its biggest purchase an
 sale. Point at a marker to see what moved and why it sits on that day.
 
 Click a row to see that stock's price with every move the portfolio made in it, and a dashed line
-at its price on the day it was made public. **Trade details ›** lists every quarter and every
+at its price on the day it was made public. Click the ticker above that chart to open the stock's
+own page. **Trade details ›** lists every quarter and every
 dated trade in that stock. **Copy trade** hands that one trade to Lucius (see below).
 
 ### Holdings
@@ -96,8 +108,9 @@ added shares, red where they sold, grey where it did not move. Click a tile, eve
 for its name, to see its name, share and change above the table and list only its holdings;
 **Show all** (or the tile again) lists them all.
 
-The table lists every holding with its share of the portfolio, the shares held and its return
-over the past 12 months. Search it by ticker or name. A holding the filing names without a ticker
+The table lists the top 20 holdings (its title says so when there are more, for example **Top 20
+of 29 holdings**) with each one's share of the portfolio, the shares held and its return
+over the past 12 months. Click a row to open the stock's own page. Search it by ticker or name. A holding the filing names without a ticker
 we could match is a row of its own with **Set ticker**; on any fund holding, **Wrong ticker?** is
 in the row's menu. A correction is kept with a portfolio you watch, so setting one starts
 watching it.
@@ -111,6 +124,8 @@ filed**. The dashed line is your benchmark:
 
 - **Since filed** is what copying it on the day it was made public would have returned, before
   costs and dividends.
+- Every return on these screens, the cards' **1Y** included, is the return of the stocks they
+  hold today, at today's weights. It is not the fund's own track record.
 - **1M**, **6M** and **12M** apply today's holdings to the past. They are not the fund's own
   return, and they flatter a portfolio that recently bought its winners.
 
@@ -132,7 +147,8 @@ There are two ways.
 hold, suggests a size, and drafts the order for you to approve.
 
 **Copy the whole portfolio, every week.** Click **Copy with Lucius** at the top of the page
-(on a phone it is in the **⋯** menu). It opens a ready-made automation; you can also find it in **Automations** as **Copy a
+(on a phone it is in the **⋯** menu). The automation opens already naming the portfolio; you
+fill in the account and the amount. It opens a ready-made automation; you can also find it in **Automations** as **Copy a
 followed portfolio**.
 
 The automation is a set of instructions for Lucius that you edit before saving:

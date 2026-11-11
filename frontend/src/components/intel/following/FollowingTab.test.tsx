@@ -7,6 +7,12 @@ vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 const navigate = vi.hoisted(() => vi.fn())
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => false }))
+const openAsset = vi.hoisted(() => vi.fn())
+vi.mock('../../../state/assetNav', () => ({ useAssetNav: () => ({ openAsset }) }))
+// The owner's own book holds one of the fund's stocks.
+vi.mock('../usePortfolioTickerMaps', () => ({
+  usePortfolioTickerMaps: () => ({ heldSet: new Set(['BOLT']) }),
+}))
 // The chart engine draws on a canvas jsdom does not have: a stand-in shows the chart's name and
 // what its tooltip would say at the last point, so a test can read both.
 vi.mock('./ActivityChart', () => ({
@@ -73,6 +79,7 @@ beforeEach(() => {
   sessionStorage.clear()
   navigate.mockReset()
   onAskLucius.mockReset()
+  openAsset.mockReset()
 })
 afterEach(() => {
   cleanup()
@@ -111,9 +118,10 @@ describe('the header', () => {
     setup()
     await open('Acme Capital')
     expect(screen.getByText('Ada Acme')).toBeTruthy()
-    const snapshot = screen.getByText(COPY.holdingsOn(shortDate('2026-06-30')))
+    // Named by the filing it comes from; the day it describes is on hover.
+    const snapshot = screen.getByText(COPY.quarterlyFiled(shortDate('2026-08-14')))
     expect(snapshot.closest('[title]')?.getAttribute('title')).toBe(
-      COPY.disclosedOn(shortDate('2026-08-14')),
+      COPY.holdingsAsOf(shortDate('2026-06-30')),
     )
     expect(screen.getByText(COPY.latestTrade(shortDate('2026-10-02')))).toBeTruthy()
   })
@@ -123,7 +131,12 @@ describe('the header', () => {
     await open('Acme Capital')
     fireEvent.click(screen.getByRole('button', { name: COPY.copyCta }))
     await waitFor(() =>
-      expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/automations' })),
+      expect(navigate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: '/automations',
+          search: { template: 'copy-followed-portfolio', for: 'Acme Capital' },
+        }),
+      ),
     )
   })
 
@@ -184,7 +197,7 @@ describe('Trading Activity', () => {
   it('offers a member Bought and Sold, newest first', async () => {
     setup()
     await open('Pat Placeholder')
-    expect(screen.queryByText(/^Holdings on /)).toBeNull()
+    expect(screen.queryByText(/^Quarterly report filed /)).toBeNull()
     expect(screen.getByText(COPY.latestTrade(shortDate('2026-10-02')))).toBeTruthy()
     const bar = filters()
     expect(
@@ -195,6 +208,52 @@ describe('Trading Activity', () => {
     fireEvent.click(within(bar).getByRole('tab', { name: 'Sold' }))
     const table = screen.getAllByRole('table')[0]!
     expect(symbols(table)).toEqual(['OLDR'])
+  })
+})
+
+describe('Latest moves', () => {
+  it('leads with the newest trades, then the last report’s biggest buys and sales', async () => {
+    setup()
+    await open('Acme Capital')
+    const strip = screen.getByRole('region', { name: COPY.latestTitle })
+    const group = (title: string) =>
+      [...within(strip).getByText(title).parentElement!.querySelectorAll('.fol-move-chip b')].map(
+        (e) => e.textContent,
+      )
+    // Newest first, each named by when it became public, never by the quarter it covers.
+    const titles = [...strip.querySelectorAll('.fol-latest-title')].map((t) => t.textContent)
+    expect(titles).toEqual([
+      COPY.recentTrades,
+      COPY.boughtReported('Aug 14'),
+      COPY.soldReported('Aug 14'),
+    ])
+    expect(group(COPY.recentTrades)).toEqual(['BOLT'])
+    expect(group(COPY.boughtReported('Aug 14'))).toEqual(['BOLT', 'CRUX'])
+    expect(group(COPY.soldReported('Aug 14'))).toEqual(['OXYZ', 'ACME'])
+  })
+
+  it('shows a move in the table, picked, ready to copy', async () => {
+    setup()
+    await open('Acme Capital')
+    const strip = screen.getByRole('region', { name: COPY.latestTitle })
+    fireEvent.click(within(strip).getByRole('button', { name: /^Sold out OXYZ/ }))
+    const period = screen.getByRole('combobox', { name: COPY.periodLabel }) as HTMLSelectElement
+    expect(period.selectedOptions[0]!.textContent).toBe('Apr – Jun 2026')
+    expect(screen.getByRole('button', { name: /^Copy this trade:.*OXYZ/ })).toBeTruthy()
+  })
+
+  it('says which of their stocks you own', async () => {
+    setup()
+    await open('Acme Capital')
+    const table = screen.getByRole('table', { name: 'Apr 2026 – Now' })
+    const bolt = within(table)
+      .getAllByRole('row')
+      .find((r) => r.textContent?.startsWith('BOLT'))!
+    expect(within(bolt).getByText(COPY.youOwn)).toBeTruthy()
+    const acme = within(table)
+      .getAllByRole('row')
+      .find((r) => r.textContent?.startsWith('ACME'))!
+    expect(within(acme).queryByText(COPY.youOwn)).toBeNull()
   })
 })
 
@@ -219,6 +278,15 @@ describe('Holdings', () => {
     expect(within(picked).getByText('62.0%')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: COPY.showAll }))
     expect(symbols(table())).toHaveLength(5)
+  })
+
+  it('opens a holding’s stock page from its row', async () => {
+    setup()
+    await open('Acme Capital')
+    tab('Acme Capital', COPY.tabHoldings)
+    const table = screen.getByRole('table', { name: COPY.holdingsTitle })
+    fireEvent.click(within(table).getAllByRole('row')[1]!)
+    expect(openAsset).toHaveBeenCalledWith(expect.objectContaining({ ticker: 'ACME' }))
   })
 
   it('keeps a holding with no ticker as a row with the fix, and searches the list', async () => {

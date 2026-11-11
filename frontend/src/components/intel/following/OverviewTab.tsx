@@ -113,6 +113,7 @@ export function OverviewTab({ model, perf, onRetry }: Props) {
         />
       </div>
       <div className="fol-perf">
+        <h2 className="fol-sec-title">{COPY.returnTitle}</h2>
         {/* As Google Finance: one headline with its period in words after it, the benchmark
             on a small line under it (its dashed mark before the NAME, never before a number),
             and the periods as quiet tabs under the chart. */}

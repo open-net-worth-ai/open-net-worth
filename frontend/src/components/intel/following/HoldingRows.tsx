@@ -5,6 +5,8 @@ import type { FollowModel, PerfPeriod, PerfWindow } from '../../../api/followedP
 import { COPY } from './following.copy'
 import { companyName, nameClasses, signedPct, toneOf, tradeLine } from './following.format'
 import { SectorMap } from './SectorMap'
+import { NameCell } from './NameCell'
+import { useAssetNav } from '../../../state/assetNav'
 import { tilesOf, UNCHANGED } from './sectorTiles'
 import { SortTable, type Column } from './SortTable'
 import { TickerDialog } from './TickerDialog'
@@ -20,6 +22,8 @@ interface Props {
   onSetTicker?: (key: string, symbol: string) => Promise<void>
   /** Saving a ticker also starts watching (the portfolio is only open, not watched). */
   watchesToo?: boolean
+  /** The tickers in your own book, upper-cased: their rows say "You own". */
+  held: Set<string>
 }
 
 interface Row {
@@ -91,7 +95,9 @@ export function HoldingRows({
   sectors,
   onSetTicker,
   watchesToo,
+  held,
 }: Props) {
+  const { openAsset } = useAssetNav()
   const returns = win?.status === 'ok' ? win.holdings : {}
   const bySector = sectorsKnown(model, sectors)
   const sliceOf = (symbol: string) => (bySector ? (sectors[symbol] ?? OTHER_SECTOR) : symbol)
@@ -114,14 +120,7 @@ export function HoldingRows({
       left: true,
       sortValue: (r) => r.symbol ?? r.name,
       cell: (r) => (
-        <span className="mk-hcell">
-          {r.symbol ? (
-            <span className="mk-hsym">{r.symbol}</span>
-          ) : (
-            <span className="fol-noticker">{COPY.noTicker}</span>
-          )}
-          <span className="mk-hnm">{r.name}</span>
-        </span>
+        <NameCell symbol={r.symbol} name={r.name} held={!!r.symbol && held.has(r.symbol)} />
       ),
     },
     {
@@ -151,24 +150,33 @@ export function HoldingRows({
             action: true,
             className: () => 'fol-fix-cell',
             cell: (r: Row) =>
-              !r.code ? null : r.symbol ? (
-                <span className="fol-row-menu">
-                  <ActionMenu
-                    label={COPY.holdingActions(r.symbol)}
-                    items={[{ label: COPY.tickerFixAction, onSelect: () => setFixing(r) }]}
-                  />
-                </span>
-              ) : (
-                <Button size="sm" onClick={() => setFixing(r)}>
-                  {COPY.tickerSetAction}
-                </Button>
+              !r.code ? null : (
+                // The fix is its own action: it must not also open the row's stock.
+                <span onClick={(e) => e.stopPropagation()}>{fixCell(r)}</span>
               ),
           },
         ]
       : []),
   ]
+  function fixCell(r: Row) {
+    return r.symbol ? (
+      <span className="fol-row-menu">
+        <ActionMenu
+          label={COPY.holdingActions(r.symbol)}
+          items={[{ label: COPY.tickerFixAction, onSelect: () => setFixing(r) }]}
+        />
+      </span>
+    ) : (
+      <Button size="sm" onClick={() => setFixing(r)}>
+        {COPY.tickerSetAction}
+      </Button>
+    )
+  }
   return (
     <section className="fol-holdings" aria-label={COPY.holdingsTitle}>
+      {tiles.length > 1 && (
+        <h2 className="fol-sec-title">{bySector ? COPY.bySectorTitle : COPY.bySizeTitle}</h2>
+      )}
       {tiles.length > 1 && (
         <SectorMap
           tiles={tiles}
@@ -178,6 +186,12 @@ export function HoldingRows({
         />
       )}
       <div className="fol-sec">
+        <h2 className={`fol-sec-title${tiles.length > 1 ? ' is-next' : ''}`}>
+          {/* The list is the top holdings: never call a cut list "all". */}
+          {model.positions != null && model.positions > model.holdings.length
+            ? COPY.topHoldingsTitle(rows.length, model.positions)
+            : COPY.allHoldingsTitle(rows.length)}
+        </h2>
         {/* A plain row (kit TextField): Investments' .mk-toolbar is sticky and opaque on a phone
             and painted over whatever sat above it. */}
         <div className="fol-htools">
@@ -211,6 +225,8 @@ export function HoldingRows({
           rowKey={(r) => r.key}
           label={COPY.holdingsTitle}
           initialSort="weight"
+          // A row opens its stock, as a holding does everywhere else in the app.
+          onRowClick={(r) => r.symbol && openAsset({ ticker: r.symbol, label: r.name })}
         />
       </div>
       {fixing && onSetTicker && (

@@ -22,6 +22,7 @@ import {
 import { COPY, askPrompt } from './following.copy'
 import { shortDate } from './following.format'
 import { useIsMobile } from '../../../hooks/useIsMobile'
+import { usePortfolioTickerMaps } from '../usePortfolioTickerMaps'
 import { ActivityTab } from './ActivityTab'
 import { activitySections, hasActivity as anyActivity, missedQuarter } from './activityRows'
 import { HoldingRows } from './HoldingRows'
@@ -43,6 +44,8 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Props) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  // Your own book: every table marks the stocks you hold.
+  const { heldSet } = usePortfolioTickerMaps()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
   const [tab, setTab] = useState<Tab>('activity')
   const [busy, setBusy] = useState(false)
@@ -90,7 +93,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     if (!followId && !(await watch())) return
     void navigate({
       to: '/automations',
-      search: { template: 'copy-followed-portfolio' } as never,
+      search: { template: 'copy-followed-portfolio', for: follow.name } as never,
     } as never)
   }
   const menu = [
@@ -164,10 +167,14 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
               dated trade (Trading Activity runs past the snapshot). */}
           <div className="fol-facts">
             {follow.subtitle && <span className="fol-by">{follow.subtitle}</span>}
-            {model && follow.kind !== 'house_member' && (
-              <span title={COPY.disclosedOn(shortDate(model.filed_at))}>
-                <Tag tone="muted">{COPY.holdingsOn(shortDate(model.as_of))}</Tag>
+            {/* A fund's snapshot is named by the report it comes from; an ETF's is its day. */}
+            {model && follow.kind === 'fund_13f' && (
+              <span title={COPY.holdingsAsOf(shortDate(model.as_of))}>
+                <Tag tone="muted">{COPY.quarterlyFiled(shortDate(model.filed_at))}</Tag>
               </span>
+            )}
+            {model && follow.kind === 'etf_daily' && (
+              <Tag tone="muted">{COPY.holdingsOn(shortDate(model.as_of))}</Tag>
             )}
             {latestTrade && (
               <span title={COPY.disclosedOn(shortDate(latestTrade.filed_at))}>
@@ -216,7 +223,13 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
         ariaLabel={COPY.sectionsLabel(follow.name)}
       />
       {shownTab === 'activity' && (
-        <ActivityTab follow={follow} perf={performance} names={names} onAskLucius={onAskLucius} />
+        <ActivityTab
+          follow={follow}
+          perf={performance}
+          names={names}
+          held={heldSet}
+          onAskLucius={onAskLucius}
+        />
       )}
       {shownTab === 'holdings' && model && (
         <HoldingRows
@@ -226,6 +239,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
           names={names}
           sectors={sectors}
           watchesToo={!followId}
+          held={heldSet}
           onSetTicker={follow.kind === 'fund_13f' ? setTicker : undefined}
         />
       )}

@@ -22,6 +22,7 @@ const route = vi.hoisted(() => ({
     automation?: string
     run?: string
     template?: string
+    for?: string
     view?: string
     sync?: string
   },
@@ -467,6 +468,20 @@ describe('Automations', () => {
       template: undefined,
       automation: 'x',
     })
+  })
+
+  // Copy with Lucius on a followed portfolio: the template opens already naming it, so the
+  // owner is not asked again what they just clicked.
+  it("fills a template's [name] from ?for=, and clears both params", async () => {
+    route.search = { template: 'copy-followed-portfolio', for: 'Acme Capital' }
+    render(<Automations />)
+    await screen.findByRole('dialog', { hidden: true })
+    expect(screen.getByDisplayValue('Copy Acme Capital')).toBeTruthy()
+    expect(
+      screen.getByDisplayValue(/^Copy the followed portfolio Acme Capital in my broker account/),
+    ).toBeTruthy()
+    const call = navigate.mock.calls.find((c) => c[0]?.to === '/automations')!
+    expect(call[0].search({ template: 'x', for: 'y' })).toEqual({})
   })
 
   // CDS-UI-12: an unknown template key is a silent no-op — gallery renders, editor stays

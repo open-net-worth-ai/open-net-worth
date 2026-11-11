@@ -56,6 +56,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
     automation?: string
     run?: string
     template?: string
+    for?: string
     view?: string
     sync?: string
     report?: string
@@ -63,6 +64,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   const selectedAutomationId = typeof search.automation === 'string' ? search.automation : null
   const selectedRunId = typeof search.run === 'string' ? search.run : null
   const templateKey = typeof search.template === 'string' ? search.template : null
+  const templateFor = typeof search.for === 'string' ? search.for : null
   // Two views: Lucius's Automations, and data syncs (fixed rules, no AI): the two-way sync with a
   // budget app, whose page `?sync=<app>` opens (`report` = one of its runs). Each behind its own
   // flag: all off (or still loading), only the Lucius list, as before.
@@ -117,16 +119,29 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   useEffect(() => {
     if (!templateKey) return
     const template = ALL_TEMPLATES.find((t) => t.key === templateKey)
-    if (template) setEditor({ seed: template })
+    // Opened for something (Copy with Lucius on a portfolio): its name fills `[name]`, so the
+    // owner is not asked again what they just clicked.
+    if (template)
+      setEditor({
+        seed:
+          templateFor && template.instructions.includes('[name]')
+            ? {
+                ...template,
+                name: `Copy ${templateFor}`,
+                instructions: template.instructions.replace('[name]', templateFor),
+              }
+            : template,
+      })
     void navigate({
       to: '/automations',
       search: ((previous: Record<string, unknown>) => ({
         ...previous,
         template: undefined,
+        for: undefined,
       })) as never,
       replace: true,
     } as never)
-  }, [templateKey, navigate])
+  }, [templateKey, templateFor, navigate])
 
   useRegisterScreenCommands([
     {

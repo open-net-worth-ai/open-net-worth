@@ -1,6 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, SegmentedControl } from '../../ui'
 import { PickSelect } from './PickSelect'
+import { NameCell } from './NameCell'
+import { LatestMoves } from './LatestMoves'
+import { AssetLink } from '../AssetLink'
 import { ChevronRight } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { FilterSheet } from '../../tabs/investments/FilterSheet'
@@ -35,6 +38,8 @@ interface Props {
   follow: Follow
   perf: FollowPerformance | undefined
   names: Names
+  /** The tickers in your own book, upper-cased. */
+  held: Set<string>
   onAskLucius?: (text: string) => void
 }
 
@@ -56,7 +61,11 @@ function Spotlight({
     <div className="fol-spot">
       <div className="fol-spot-head">
         <div className="fol-spot-title">
-          <b>{row.symbol}</b>
+          {/* The stock's own page, as a ticker opens everywhere else in the app. */}
+          <AssetLink ticker={row.symbol} label={row.name} className="fol-spot-open">
+            <b>{row.symbol}</b>
+            <ChevronRight size={14} aria-hidden="true" />
+          </AssetLink>
           {since.price != null && <span className="fol-spot-price">${since.price.toFixed(2)}</span>}
           {since.stock == null ? (
             <span className="fol-spot-sub">{COPY.noPriceSince}</span>
@@ -99,18 +108,13 @@ function Spotlight({
   )
 }
 
-const nameColumn: Column<ActivityRow> = {
+const nameColumn = (held: Set<string>): Column<ActivityRow> => ({
   key: 'name',
   label: COPY.colStock,
   left: true,
   sortValue: (r) => r.name,
-  cell: (r) => (
-    <span className="mk-hcell">
-      <span className="mk-hsym">{r.symbol}</span>
-      <span className="mk-hnm">{r.name}</span>
-    </span>
-  ),
-}
+  cell: (r) => <NameCell symbol={r.symbol} name={r.name} held={held.has(r.symbol)} />,
+})
 /** The change, with a bar for its size against the period's largest move. */
 const amountColumn = (max: number): Column<ActivityRow> => ({
   key: 'amount',
@@ -146,13 +150,19 @@ const dateColumn = (label: string): Column<ActivityRow> => ({
 })
 
 /** A dated trade shows when and at what price; a filing's change shows how much moved. */
-function columns(set: FilterSet, member: boolean, max: number): Column<ActivityRow>[] {
+function columns(
+  set: FilterSet,
+  member: boolean,
+  max: number,
+  held: Set<string>,
+): Column<ActivityRow>[] {
   const amountColumnFor = amountColumn(max)
+  const nameCol = nameColumn(held)
   if (set === 'changes' || set === 'all')
-    return [nameColumn, dateColumn(COPY.colDate), amountColumnFor, sharesColumn]
+    return [nameCol, dateColumn(COPY.colDate), amountColumnFor, sharesColumn]
   if (member)
     return [
-      nameColumn,
+      nameCol,
       dateColumn(COPY.colTraded),
       {
         key: 'filed',
@@ -165,7 +175,7 @@ function columns(set: FilterSet, member: boolean, max: number): Column<ActivityR
       amountColumnFor,
     ]
   return [
-    nameColumn,
+    nameCol,
     dateColumn(COPY.colDate),
     amountColumnFor,
     sharesColumn,
@@ -187,6 +197,7 @@ function Table({
   label,
   picked,
   onPick,
+  held,
   period,
 }: {
   set: FilterSet
@@ -195,6 +206,7 @@ function Table({
   label: string
   picked: string | undefined
   onPick: (r: ActivityRow) => void
+  held: Set<string>
   period: ReactNode
 }) {
   const [filter, setFilter] = useState<ActivityFilter>('all')
@@ -246,7 +258,7 @@ function Table({
       <div ref={box} style={filter === 'all' ? undefined : { minHeight: fullHeight }}>
         <SortTable
           rows={shown}
-          columns={columns(set, member, Math.max(0, ...rows.map((r) => r.magnitude)))}
+          columns={columns(set, member, Math.max(0, ...rows.map((r) => r.magnitude)), held)}
           rowKey={(r) => r.key}
           label={label}
           onRowClick={onPick}
@@ -259,7 +271,7 @@ function Table({
 
 /** What they did: one move in focus with its chart (every move when none is picked), then
  *  the chosen period's moves as one table — a quarter's changes, or the dated trades since. */
-export function ActivityTab({ follow, perf, names, onAskLucius }: Props) {
+export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
   const member = follow.kind === 'house_member'
   const spans = useMemo(() => periods(follow), [follow])
   const [periodKey, setPeriodKey] = useState<string | null>(null)
@@ -278,6 +290,21 @@ export function ActivityTab({ follow, perf, names, onAskLucius }: Props) {
   const shown = year?.status === 'ok' ? spanReturn(year.series, span) : null
   return (
     <div className="fol-sec">
+      {follow.kind === 'fund_13f' && (
+        <LatestMoves
+          follow={follow}
+          names={names}
+          held={held}
+          onOpen={(periodKey, rowKey) => {
+            setPeriodKey(periodKey)
+            setPickedKey(rowKey)
+          }}
+        />
+      )}
+      {/* The chart follows the table's period, so the two are one titled block. */}
+      <h2 className={`fol-sec-title${follow.kind === 'fund_13f' ? ' is-next' : ''}`}>
+        {COPY.allMovesSection}
+      </h2>
       {picked ? (
         <Spotlight row={picked} follow={follow} benchmark={benchmark} onAskLucius={onAskLucius} />
       ) : (
@@ -307,6 +334,7 @@ export function ActivityTab({ follow, perf, names, onAskLucius }: Props) {
           label={period.label}
           picked={picked?.key}
           onPick={pick}
+          held={held}
           period={
             spans.length > 1 ? (
               <PickSelect
