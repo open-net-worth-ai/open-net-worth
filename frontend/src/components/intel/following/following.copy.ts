@@ -2,7 +2,7 @@ const PAST_WINDOW = (window: string) =>
   `Price return of the holdings in the newest filing, at their filed weights, over ${window}. It is not the fund's own return: it applies today's holdings to the past, so recent winners flatter it.`
 
 export const COPY = {
-  listTitle: 'Following',
+  listTitle: 'Portfolios you follow',
   follow: 'Follow a portfolio',
   followShort: 'Follow',
   loadingList: 'Loading followed portfolios…',
@@ -34,7 +34,6 @@ export const COPY = {
   estimated: 'Estimated',
   estimatedSubtitle:
     'Estimated from disclosed trades over the last 36 months. Members report ranges, not exact amounts.',
-  back: 'Following',
   refresh: 'Refresh',
   unfollow: 'Unfollow',
   unfollowTitle: (name: string) => `Unfollow ${name}?`,
@@ -54,6 +53,11 @@ export const COPY = {
   notCounted: 'Option or other asset, not counted in the weights',
   showAllTrades: (n: number) => `Show all ${n} trades`,
   refreshing: 'Checking for a newer filing…',
+  viewFiling: 'View filing at the SEC',
+  viewReport: 'View report at the House Clerk',
+  checked: (ago: string) => `Checked ${ago}`,
+  checkedTitle: (when: string) =>
+    `Last checked for a newer filing ${when}. Checked automatically twice a day.`,
   moreActions: (name: string) => `More actions for ${name}`,
   changeBasis:
     'Share changes are between the two quarter-ends. A 13F gives no trade dates or trade prices, so dollar figures use the quarter-end price and are approximate.',
@@ -66,7 +70,7 @@ export const COPY = {
   copyTitle: 'Copy trading',
   copyPitch:
     'Lucius buys and sells in your broker account to match this portfolio, every week. You set the amount and your rules, and you can have it ask before every order.',
-  askLucius: 'Ask Lucius about this portfolio',
+  askLucius: 'Ask Lucius',
   copyTrade: 'Copy trade',
   copyTradeLabel: (what: string) => `Copy this trade: ${what}`,
   askLabel: (name: string) => `Ask Lucius about ${name}`,

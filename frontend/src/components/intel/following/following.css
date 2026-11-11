@@ -227,6 +227,12 @@
   color: var(--muted);
 }
 
+.fol-copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .fol-spark {
   color: var(--lucius);
 }
@@ -564,4 +570,18 @@
 
 .fol-gallery-head > .fol-by {
   margin: 0 0 var(--space-2);
+}
+
+.fol-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 2px;
+}
+
+.fol-link:hover {
+  color: var(--ink);
 }

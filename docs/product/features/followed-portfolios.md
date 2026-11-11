@@ -16,7 +16,7 @@ previous filing, and when it was filed. This screen is information. It does not 
 accounts and it does not trade.
 
 This feature is off by default. Turn it on in **Settings → Developer → Experimental →
-Followed portfolios**. It then appears as the **Following** tab in **Intel**.
+Followed portfolios**. It then appears as the **Famous investors** tab in **Intel**.
 
 > This is not investment advice. The filings behind it are weeks or months old by law.
 
@@ -40,7 +40,7 @@ Limits you should know:
 
 ## Follow a portfolio
 
-1. Open **Intel → Following**. The first time, it shows well-known portfolios to pick from.
+1. Open **Intel → Famous investors**. The first time, it shows well-known portfolios to pick from.
 2. Click **Follow** on one, or search by fund or member name.
 3. Fetching the filing takes a few seconds. Later, add more with **Follow a portfolio**.
 
@@ -62,8 +62,12 @@ shows:
   reported, and how the stock has moved since. Members do not report share counts or prices.
 - **Holdings.** The top 20 by weight, each with its own return over the window you chose.
 
-Filings are checked twice a day. A new one updates the portfolio and adds a story to **Intel**.
-Use **Refresh** in the **⋯** menu on the card to check now; **Unfollow** is in the same menu. If
+Under the name, **View filing at the SEC** (or **View report at the House Clerk**) opens the
+source document, and **Checked …** says when the app last looked for a newer one. Each of a
+member's trades links to the report it came from.
+
+Filings are checked automatically twice a day while the app is running. A new one updates the
+portfolio and adds a story to **Intel**. Use **Refresh** in the **⋯** menu on the card to check now; **Unfollow** is in the same menu. If
 a check fails, the last portfolio stays and the screen says what went wrong. A fund whose latest
 filing is more than about two quarters old, or a member with no report for a year, is marked
 out of date.

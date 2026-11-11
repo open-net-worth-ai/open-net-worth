@@ -26,7 +26,7 @@ export const TOPICS_TAB_LABEL = 'Topics & macro'
 
 /** Famous portfolios you follow (flag `followed_portfolios`): a screen of its own, not a story
  *  feed, so no story is ever partitioned onto it. Intel appends it after the feed tabs. */
-export const FOLLOWING_TAB: IntelTab = { key: 'following', label: 'Following' }
+export const FOLLOWING_TAB: IntelTab = { key: 'following', label: 'Famous investors' }
 
 export const listTabKey = (id: string): IntelTabKey => `list:${id}`
 

@@ -217,6 +217,34 @@ def test_refresh_all_survives_one_failing_follow(source, monkeypatch):
     assert b
 
 
+def test_a_follow_links_to_its_filing_at_the_source(source):
+    fund = {
+        "kind": "fund_13f",
+        "source_ref": "777",
+        "current": {"filing_id": "0000000000-26-000002"},
+    }
+    assert (
+        service.source_url(fund)
+        == "https://www.sec.gov/Archives/edgar/data/777/000000000026000002/"
+    )
+    member = {
+        "kind": "house_member",
+        "source_ref": "example|pat",
+        "id": "fol_x",
+        "name": "Pat Example",
+        "current": {"filing_id": "20000002"},
+        "reports": {"20000002": {"year": 2026}},
+        "activity": [
+            {"doc_id": "20000002", "date": "2026-01-05"},
+            {"doc_id": "../x", "date": "2026-01-06"},
+        ],
+    }
+    url = "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2026/20000002.pdf"
+    assert service.source_url(member) == url
+    assert [t["report_url"] for t in service.view(member)["activity"]] == [url, None]
+    assert service.source_url({"kind": "fund_13f", "source_ref": "x", "current": {}}) is None
+
+
 def test_unfollow_deletes(source):
     fid = _follow()["id"]
     _apply(op="unfollow", id=fid)
@@ -284,6 +312,7 @@ def test_rest_round_trip(client):
         "status",
         "error",
         "last_checked_at",
+        "source_url",
         "model",
         "activity",
     }

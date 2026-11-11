@@ -1,4 +1,4 @@
-# Acceptance — Following (followed portfolios)
+# Acceptance — Famous investors (followed portfolios)
 
 Component: `frontend/src/components/intel/following/FollowingTab.tsx`, a flag-gated
 (`followed_portfolios`) tab of Intel. The screen shows how a portfolio's holdings have done and
@@ -8,12 +8,12 @@ automation template. Every control on the screen has an entry.
 ### FOLLOWING-TAB-FLAG-ON
 - GIVEN the `followed_portfolios` flag is on
 - WHEN I open Intel
-- THEN a "Following" tab appears after "Topics & macro", and opening it shows the screen at full width with no watchlist sidebar
+- THEN a "Famous investors" tab appears after "Topics & macro", and opening it shows the screen at full width with no watchlist sidebar
 
 ### FOLLOWING-TAB-FLAG-OFF
 - GIVEN the flag is off
 - WHEN I open Intel and then `/intel?sub=following`
-- THEN no "Following" tab exists and My holdings is shown
+- THEN no "Famous investors" tab exists and My holdings is shown
 
 ### FOLLOWING-GALLERY-FOLLOW
 - GIVEN I follow nothing
@@ -34,6 +34,11 @@ automation template. Every control on the screen has an entry.
 - GIVEN I follow two portfolios
 - WHEN I click the second one in the row at the top
 - THEN it is selected and everything below is the second portfolio's; each entry shows its past-year figure once loaded
+
+### FOLLOWING-SOURCE
+- GIVEN a portfolio is open
+- WHEN I read the line under the name
+- THEN "View filing at the SEC" (a fund) or "View report at the House Clerk" (a member) opens the source document in a new tab, and "Checked {time} ago" says when the app last looked, with the full time and "Checked automatically twice a day" on hover; each of a member's trades links its "filed" date to that report
 
 ### FOLLOWING-PERFORMANCE
 - GIVEN a portfolio is open

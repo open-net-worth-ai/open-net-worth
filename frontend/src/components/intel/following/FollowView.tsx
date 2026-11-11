@@ -1,6 +1,8 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ActionMenu, Badge, Button, ConfirmDialog, EmptyState } from '../../ui'
+import { ExternalLink } from '../../../ui/icons'
+import { fDateTime, timeAgo } from '../../../utils/format'
 import { Spark } from '../../../lucius/identity'
 import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import {
@@ -27,13 +29,39 @@ interface Props {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-/** One line under the name: who, and how old the data is. Never a claim that it is current. */
-function metaLine(follow: Follow): string {
+/** Under the name: who it is, how old the filing is, where to read it, when we last looked.
+ *  Never a claim that the data is current. */
+function MetaLine({ follow }: { follow: Follow }) {
   const model = follow.model
-  if (!model) return follow.subtitle
+  if (!model) return <>{follow.subtitle}</>
   const member = follow.kind === 'house_member'
   const filed = `${member ? 'Last report' : 'Filed'} ${shortDate(model.filed_at)}, ${ageText(model.age_days)}`
-  return `${follow.subtitle} · ${filed}${member ? '' : ` · Holdings as of ${shortDate(model.as_of)}`}`
+  return (
+    <>
+      {follow.subtitle} · {filed}
+      {!member && ` · Holdings as of ${shortDate(model.as_of)}`}
+      {follow.source_url && (
+        <>
+          {' · '}
+          <a
+            className="fol-link"
+            href={follow.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {member ? COPY.viewReport : COPY.viewFiling}
+            <ExternalLink size={11} aria-hidden="true" />
+          </a>
+        </>
+      )}
+      {follow.last_checked_at && (
+        <span title={COPY.checkedTitle(fDateTime(follow.last_checked_at))}>
+          {' · '}
+          {COPY.checked(timeAgo(follow.last_checked_at))}
+        </span>
+      )}
+    </>
+  )
 }
 
 function Notes({ follow, error }: { follow: Follow; error: string | null }) {
@@ -64,31 +92,33 @@ function CopyPanel({ follow, onAskLucius }: Pick<Props, 'follow' | 'onAskLucius'
     <aside className="fol-copy" aria-label={COPY.copyTitle}>
       <h3 className="fol-copy-title">{COPY.copyTitle}</h3>
       <p className="fol-copy-pitch">{COPY.copyPitch}</p>
-      <Button
-        variant="primary"
-        fullWidth
-        onClick={() =>
-          void navigate({
-            to: '/automations',
-            search: { template: 'copy-followed-portfolio' } as never,
-          } as never)
-        }
-      >
-        {COPY.copyCta}
-      </Button>
-      {onAskLucius && (
+      <div className="fol-copy-actions">
         <Button
-          fullWidth
-          iconLeft={<Spark className="fol-spark" size={15} filled ariaHidden />}
-          aria-label={COPY.askLabel(follow.name)}
-          onClick={() => {
-            sendNextPrefill()
-            onAskLucius(askPrompt(follow.name))
-          }}
+          variant="primary"
+          size="sm"
+          onClick={() =>
+            void navigate({
+              to: '/automations',
+              search: { template: 'copy-followed-portfolio' } as never,
+            } as never)
+          }
         >
-          {COPY.askLucius}
+          {COPY.copyCta}
         </Button>
-      )}
+        {onAskLucius && (
+          <Button
+            size="sm"
+            iconLeft={<Spark className="fol-spark" size={14} filled ariaHidden />}
+            aria-label={COPY.askLabel(follow.name)}
+            onClick={() => {
+              sendNextPrefill()
+              onAskLucius(askPrompt(follow.name))
+            }}
+          >
+            {COPY.askLucius}
+          </Button>
+        )}
+      </div>
       <p className="fol-foot">{COPY.notAdvice}</p>
     </aside>
   )
@@ -136,7 +166,9 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
               {follow.status === 'stale' && <Badge tone="warn">{COPY.outOfDate}</Badge>}
               {follow.status === 'error' && <Badge tone="neg">{COPY.couldNotUpdate}</Badge>}
             </h2>
-            <div className="fol-by">{refreshing ? COPY.refreshing : metaLine(follow)}</div>
+            <div className="fol-by">
+              {refreshing ? COPY.refreshing : <MetaLine follow={follow} />}
+            </div>
           </div>
           <ActionMenu
             label={COPY.moreActions(follow.name)}

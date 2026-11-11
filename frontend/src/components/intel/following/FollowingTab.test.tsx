@@ -116,6 +116,17 @@ describe('the hero leads with performance and the copy action', () => {
     ).toBeTruthy()
   })
 
+  it('links to the filing at its source and says when it was last checked', async () => {
+    setup([fund({ source_url: 'https://www.sec.gov/Archives/edgar/data/1/000000000026000002/' })])
+    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
+    const link = within(hero).getByRole('link', { name: COPY.viewFiling }) as HTMLAnchorElement
+    expect(link.href).toBe('https://www.sec.gov/Archives/edgar/data/1/000000000026000002/')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toBe('noopener noreferrer')
+    const checked = within(hero).getByText(/^· Checked /)
+    expect(checked.getAttribute('title')).toContain('Checked automatically twice a day')
+  })
+
   it('switches the window, and the holdings column follows it', async () => {
     setup([fund()])
     const hero = await screen.findByRole('region', { name: 'Acme Capital' })
@@ -158,6 +169,7 @@ describe('the hero leads with performance and the copy action', () => {
     expect(within(hero).getByText(COPY.copyPitch)).toBeTruthy()
     const cta = within(hero).getByRole('button', { name: COPY.copyCta })
     expect(cta.className).toContain('btn-primary')
+    expect(cta.className).toContain('ui-btn--sm')
     fireEvent.click(cta)
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -167,12 +179,12 @@ describe('the hero leads with performance and the copy action', () => {
     )
   })
 
-  it('asks Lucius about the portfolio from a full-size button under the main one', async () => {
+  it('asks Lucius about the portfolio from the button beside the main one', async () => {
     setup()
     await screen.findByRole('heading', { name: 'Acme Capital' })
     const ask = screen.getByRole('button', { name: COPY.askLabel('Acme Capital') })
     expect(ask.textContent).toContain(COPY.askLucius)
-    expect(ask.className).toContain('ui-btn--full')
+    expect(ask.className).toContain('ui-btn--sm')
     fireEvent.click(ask)
     expect(onAskLucius).toHaveBeenCalledWith(askPrompt('Acme Capital'))
   })

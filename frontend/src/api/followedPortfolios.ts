@@ -60,6 +60,8 @@ export interface FollowActivity {
   amount_high: number
   asset_type: string
   counted: boolean
+  /** The Clerk's PDF this trade was disclosed in. */
+  report_url?: string | null
 }
 
 export interface Follow {
@@ -71,6 +73,8 @@ export interface Follow {
   status: FollowStatus
   error: string | null
   last_checked_at: string | null
+  /** The newest filing at its source (SEC EDGAR, or the House Clerk's PDF). */
+  source_url?: string | null
   model: FollowModel | null
   activity: FollowActivity[]
 }

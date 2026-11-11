@@ -62,7 +62,7 @@ The public sources shape the feature more than the code does:
   `get_followed_portfolios`, reads positions and cash from the broker's own MCP tools, judges
   each trade, and places it with the broker's order tools. Whether it asks first is that tool's
   permission, as for every other tool.
-- **It lives in Intel.** The Following tab sits beside the watchlists and Topics & macro: all
+- **It lives in Intel.** The Famous investors tab sits beside the watchlists and Topics & macro: all
   three are things the owner watches, and a new filing already lands in Intel as a story.
   Investments stays what the owner holds.
 - **Behind the `followed_portfolios` flag**, default off: routes 404, the tools refuse, the

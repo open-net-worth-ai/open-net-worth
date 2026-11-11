@@ -39,7 +39,14 @@ function Row({ a, since, who, onAskLucius }: RowProps) {
       <div className="fol-move-what">
         <div className="fol-num">{amountRange(a)}</div>
         <div className="fol-sub">
-          {shortDate(a.date)} · filed {shortDate(a.filed_at)}
+          {shortDate(a.date)} ·{' '}
+          {a.report_url ? (
+            <a className="fol-link" href={a.report_url} target="_blank" rel="noopener noreferrer">
+              filed {shortDate(a.filed_at)}
+            </a>
+          ) : (
+            `filed ${shortDate(a.filed_at)}`
+          )}
         </div>
       </div>
       <span className={`fol-num ${toneOf(since)}`} title={COPY.sinceTradeTitle}>

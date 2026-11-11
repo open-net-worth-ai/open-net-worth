@@ -208,10 +208,10 @@ const tabButton = (c: HTMLElement, label: string) =>
   )!
 
 describe('Intel tabs', () => {
-  it('offers Following only while its flag is on, after Topics & macro', async () => {
+  it('offers Famous investors only while its flag is on, after Topics & macro', async () => {
     const off = mount()
     await within(off.container).findByTestId('holdings-brief')
-    expect(tabButton(off.container, 'Following')).toBeUndefined()
+    expect(tabButton(off.container, 'Famous investors')).toBeUndefined()
     cleanup()
     overrideFlagsForTests({ followed_portfolios: true })
     const base = mockAuthFetch.getMockImplementation()!
@@ -221,7 +221,7 @@ describe('Intel tabs', () => {
     const on = mount({ subTabRequest: 'following' })
     expect(await within(on.container).findByText('Pick a portfolio to follow')).toBeTruthy()
     const labels = [...on.container.querySelectorAll('[role="tab"]')].map((b) => b.textContent)
-    expect(labels.at(-1)).toBe('Following')
+    expect(labels.at(-1)).toBe('Famous investors')
     expect(on.container.querySelector('.intel-layout')).toBeNull()
   })
 

@@ -55,6 +55,25 @@ def _source(kind: str):
     return _SOURCES[kind]
 
 
+def _report_url(row: dict, doc_id) -> str | None:
+    """The Clerk's own PDF for one trade report. Built from stored digits only."""
+    report = (row.get("reports") or {}).get(str(doc_id)) or {}
+    if not str(doc_id).isdigit() or not str(report.get("year", "")).isdigit():
+        return None
+    return f"https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/{report['year']}/{doc_id}.pdf"
+
+
+def source_url(row: dict) -> str | None:
+    """Where the newest filing can be read at its source, so every figure can be checked."""
+    filing_id = str((row.get("current") or {}).get("filing_id") or "")
+    if row.get("kind") == "house_member":
+        return _report_url(row, filing_id)
+    cik, accession = str(row.get("source_ref") or ""), filing_id.replace("-", "")
+    if not cik.isdigit() or not accession.isdigit():
+        return None
+    return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession}/"
+
+
 def view(row: dict, top_n: int = DEFAULT_TOP_N) -> dict:
     """The follow as every surface reads it — the model derived, the caches left out."""
     model = build_model(row, user_today(), top_n)
@@ -67,8 +86,15 @@ def view(row: dict, top_n: int = DEFAULT_TOP_N) -> dict:
         "status": status_of(row, model),
         "error": row.get("last_error"),
         "last_checked_at": row.get("last_checked_at"),
+        "source_url": source_url(row),
         "model": model,
-        "activity": [{k: t.get(k) for k in _ACTIVITY_FIELDS} for t in row.get("activity") or []],
+        "activity": [
+            {
+                **{k: t.get(k) for k in _ACTIVITY_FIELDS},
+                "report_url": _report_url(row, t.get("doc_id")),
+            }
+            for t in row.get("activity") or []
+        ],
     }
 
 
