@@ -22,6 +22,8 @@ SEC = "SEC EDGAR"
 # Two years of quarter-to-quarter changes (nine filings), for the period picker and the chart's
 # markers. The two newest are also the model's.
 HISTORY_QUARTERS = 9
+# A card (two quarters) matches its largest holdings only; the page matches every one.
+CARD_LOOKUPS = 25
 _INFO_TABLE_MAX_BYTES = 16 * 1024 * 1024
 _ACCESSION = re.compile(r"\d{10}-\d{2}-\d{6}")
 _NAME_MAX = 120
@@ -60,6 +62,8 @@ FEATURED = (
     ("1541617", "Altimeter Capital", "Brad Gerstner"),
     ("1747057", "D1 Capital Partners", "Dan Sundheim"),
     ("1798849", "Durable Capital Partners", "Henry Ellenbogen"),
+    # A company, not a fund: NVIDIA reports its own stakes in other companies each quarter.
+    ("1045810", "NVIDIA", "Its stakes in other companies"),
 )
 
 
@@ -77,15 +81,62 @@ def featured() -> list[dict]:
     ]
 
 
+_TICKERS_IN_NAME = re.compile(r"\s*\([A-Z0-9.,\s-]+\)\s*$")
+# Of the names that start with what was typed, this many are checked for a 13F (one SEC request
+# each, so a search stays a second or two).
+_NAME_CANDIDATES = 8
+
+
+def starts_a_word(query: str, name: str) -> bool:
+    """ "nv" finds "NVIDIA" and "KBC Group NV", never "Investment": a word must start with it."""
+    q = query.strip().lower()
+    return any(w.startswith(q) for w in re.split(r"[^a-z0-9]+", name.lower()) if w)
+
+
+def _by_name(query: str, limit: int) -> list[dict]:
+    """Filers whose name starts with ``query`` (SEC's own name search, as its search box
+    suggests them) that have a 13F on file. Most names it knows file none: each is checked."""
+    url = "https://efts.sec.gov/LATEST/search-index?keysTyped=" + quote(query.strip())
+    hits = (fetch_json(url, what=SEC).get("hits") or {}).get("hits") or []
+    out: list[dict] = []
+    for hit in hits[:_NAME_CANDIDATES]:
+        cik = str(hit.get("_id") or "").lstrip("0")
+        entity = str((hit.get("_source") or {}).get("entity") or "")
+        if not cik.isdigit() or not entity:
+            continue
+        try:
+            _, filings = _recent_filings(cik, 1)
+        except ExternalServiceError:
+            continue
+        if filings:
+            out.append(
+                {
+                    "kind": "fund_13f",
+                    "source_ref": cik,
+                    "name": _name(_TICKERS_IN_NAME.sub("", entity)),
+                    "subtitle": "",
+                }
+            )
+        if len(out) >= limit:
+            break
+    return out
+
+
 def search(query: str, limit: int = 10) -> list[dict]:
-    """13F filers whose filings match ``query`` (EDGAR full-text search, newest first)."""
+    """13F filers for ``query``: names that start with it first (NVIDIA for "nv"), then filers
+    whose filings mention it as a word (EDGAR full-text search, newest first)."""
+    seen: dict[str, dict] = {}
+    try:
+        for hit in _by_name(query, limit):
+            seen.setdefault(hit["source_ref"], hit)
+    except ExternalServiceError:
+        pass  # the full-text search below still answers
     url = (
         "https://efts.sec.gov/LATEST/search-index?q="
         + quote(f'"{query.strip()}"')
         + "&forms=13F-HR"
     )
     hits = (fetch_json(url, what=SEC).get("hits") or {}).get("hits") or []
-    seen: dict[str, dict] = {}
     for hit in hits:
         for display in (hit.get("_source") or {}).get("display_names") or []:
             match = _CIK_IN_NAME.match(str(display))
@@ -93,7 +144,7 @@ def search(query: str, limit: int = 10) -> list[dict]:
                 continue
             cik = match["cik"].lstrip("0")
             name = _name(match["name"])
-            if cik and name and cik not in seen and query.strip().lower() in name.lower():
+            if cik and name and cik not in seen and starts_a_word(query, name):
                 seen[cik] = {
                     "kind": "fund_13f",
                     "source_ref": cik,
@@ -241,7 +292,7 @@ def quarter_history(snaps: list[dict]) -> list[dict]:
     return out
 
 
-def resolve_tickers(snaps: list[dict], known: dict) -> dict[str, str]:
+def resolve_tickers(snaps: list[dict], known: dict, limit: int | None = None) -> dict[str, str]:
     """The ``cusip_map`` for ``snaps``: every code still without a ticker is asked about again
     (a CINS was once asked as a CUSIP and cached as "none"), then matched by issuer name
     against SEC's own list. The owner's corrections are applied by the caller, never here."""
@@ -254,6 +305,10 @@ def resolve_tickers(snaps: list[dict], known: dict) -> dict[str, str]:
         for p in sorted(s["positions"], key=lambda p: -float(p.get("value") or 0))
     }
     pending = [k for k in dict.fromkeys(names) if not cusip_map.get(k)]
+    # A card shows only the top holdings: it asks about the largest ``limit`` codes, so a new
+    # card waits seconds on the shared lookup pace, not minutes. The page asks about them all.
+    if limit is not None:
+        pending = pending[:limit]
     for key, ticker in (figi.tickers_for(pending) if pending else {}).items():
         if ticker or key not in cusip_map:
             cusip_map[key] = ticker
@@ -314,7 +369,7 @@ def fetch(cik: str, known: dict | None = None, quarters: int = HISTORY_QUARTERS)
         return _retry_lookups(known)
     # Every position the filing lists: nothing is cut (the page shows them all).
     snaps = [_snapshot(cik, f) for f in filings]
-    cusip_map = resolve_tickers(snaps, known)
+    cusip_map = resolve_tickers(snaps, known, CARD_LOOKUPS if quarters <= 2 else None)
     overrides = known.get("ticker_overrides") or {}
     snaps = [{**stamp(s, cusip_map, overrides), "unread_reports": 0} for s in snaps]
     history = quarter_history(snaps)

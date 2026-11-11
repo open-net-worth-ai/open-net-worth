@@ -48,9 +48,10 @@ Limits you should know:
 ## Open a portfolio
 
 Open **Intel → Famous Portfolios**. It starts with a hand-picked list: 28 well-known funds that
-still file their quarterly report, 5 House members whose reports can be read and who traded in
-the last six months, and ARK's 6 ETFs. Search finds any other fund that files a quarterly
-holdings report, and any House member with a trade report this year or last.
+still file their quarterly report, NVIDIA (which reports its own stakes in other companies), 5
+House members whose reports can be read and who traded in the last six months, and ARK's 6 ETFs.
+Search by the start of a name (**nv** finds NVIDIA) for any other company or fund that files a
+quarterly holdings report, and any House member with a trade report this year or last.
 
 Every portfolio in the directory is a card with its past
 year against your benchmark, its two newest moves, and the date of the newest of them. Filter

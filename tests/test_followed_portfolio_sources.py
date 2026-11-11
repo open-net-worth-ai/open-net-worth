@@ -1112,3 +1112,55 @@ def test_a_code_is_matched_to_a_share_never_to_a_derivative_or_a_bond():
     assert pick(securityType="Equity WRT", securityType2="Warrant", marketSector="Equity") == ""
     assert pick(securityType="Right", marketSector="Equity") == ""
     assert pick(securityType="Corp", securityType2="Corp", marketSector="Corp") == ""
+
+
+def test_search_finds_a_filer_by_the_start_of_its_name_and_keeps_only_13f_filers(monkeypatch):
+    """ "nv" finds NVIDIA (SEC's name search, as its search box suggests), keeping only names
+    with a 13F on file; the full-text search adds whole-word matches, never fragments."""
+    from backend.services.followed_portfolios import edgar_13f
+
+    def fake_fetch(url, what):
+        if "keysTyped=" in url:
+            return {
+                "hits": {
+                    "hits": [
+                        {"_id": "0000000001", "_source": {"entity": "ACME VIDEO CORP (ACMV)"}},
+                        {"_id": "0000000002", "_source": {"entity": "ACME HOMES INC (AHM)"}},
+                    ]
+                }
+            }
+        return {
+            "hits": {
+                "hits": [
+                    {"_source": {"display_names": ["Acme Group NV (CIK 0000000003)"]}},
+                    {"_source": {"display_names": ["Invesco Acme Advisers (CIK 0000000004)"]}},
+                ]
+            }
+        }
+
+    monkeypatch.setattr(edgar_13f, "fetch_json", fake_fetch)
+    monkeypatch.setattr(
+        edgar_13f,
+        "_recent_filings",
+        lambda cik, n: ("", [{"as_of": "2026-06-30"}] if cik == "1" else []),
+    )
+    found = [(r["source_ref"], r["name"]) for r in edgar_13f.search("nv")]
+    assert found == [("1", "Acme Video Corp"), ("3", "Acme Group NV")]
+    assert edgar_13f.starts_a_word("nv", "Acme Group NV")
+    assert not edgar_13f.starts_a_word("nv", "Invesco Acme Advisers")
+
+
+def test_a_card_asks_the_lookup_about_its_largest_holdings_only(monkeypatch):
+    """A card shows the top holdings: it waits on the shared lookup pace for those, not for
+    every code a filing lists. The page (no limit) asks about them all."""
+    from backend.services.followed_portfolios import edgar_13f
+
+    asked: list[str] = []
+    monkeypatch.setattr(edgar_13f.figi, "tickers_for", lambda keys: asked.extend(keys) or {})
+    monkeypatch.setattr(edgar_13f.sec_tickers, "tickers_for_names", lambda names: {})
+    snaps = [{"positions": [{"key": f"K{i}", "value": 100 - i} for i in range(40)]}]
+    edgar_13f.resolve_tickers(snaps, {}, limit=3)
+    assert asked == ["K0", "K1", "K2"]
+    asked.clear()
+    edgar_13f.resolve_tickers(snaps, {})
+    assert len(asked) == 40

@@ -290,7 +290,8 @@ def directory(query: str = "") -> dict:
         by_key = {
             (r["kind"], r["source_ref"]): {**r, "featured": True}
             for r in featured
-            if query.lower() in f"{r['name']} {r['subtitle']}".lower()
+            # A word must start with what was typed: "nv" is NVIDIA, never "Investment".
+            if edgar_13f.starts_a_word(query, f"{r['name']} {r['subtitle']}")
         }
         for source in (edgar_13f, house_ptr, etf_daily):
             try:
