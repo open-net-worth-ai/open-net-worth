@@ -31,33 +31,31 @@
 }
 
 /* ── Discover ── */
+/* Investments' toolbar: the search fills the row, the dropdown beside it at Investments'
+   34px; the filter pills on their own row under it. */
 .fol-discover-bar {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  flex-wrap: nowrap;
   min-width: 0;
 }
 
-/* Side by side at the kit's 40px; the search takes what is left (all of the row on a phone). */
-.fol-discover-bar > .fol-sort {
-  flex: 0 0 auto;
-}
-
-.fol-discover-bar > .fol-find {
-  flex: 0 1 260px;
-  min-width: 0;
-}
-
-.fol-seg-n {
-  margin-left: var(--space-1);
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
-
-/* In the compact row the search takes all the room the Filter button leaves. */
-.fol-discover-bar > .fol-find:first-child {
+.fol-discover-bar > .mk-search-wrap {
   flex: 1 1 auto;
+}
+
+.fol-discover-bar > .mk-toolsel,
+.fol-toolbar > .mk-toolsel {
+  flex: none;
+  height: 34px;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.mk-search-wrap > .mk-search {
+  height: 34px;
+  box-sizing: border-box;
 }
 
 .fol-cards {
@@ -261,6 +259,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+  /* The picked move's line carries 34px buttons; the overview's does not. One height for both,
+     so picking a row never shifts the page. */
+  min-height: 34px;
 }
 
 .fol-spot-title {
@@ -356,8 +357,8 @@
   transition: opacity 0.12s ease;
 }
 
-/* One row at every width, kit controls at the kit's 40px: wide, the filter LEFT and the
-   period RIGHT; on a phone [period (fills) | Filter]. */
+/* One row at every width: the filter pills (scrolling on a phone) and the period dropdown at
+   the row's end. */
 .fol-toolbar {
   display: flex;
   flex-wrap: nowrap;
@@ -366,35 +367,9 @@
   min-width: 0;
 }
 
-.fol-toolbar > .fol-period {
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
-.fol-toolbar .ui-segmented,
-.fol-discover-bar .ui-segmented {
-  flex-wrap: nowrap;
-  min-height: 40px;
-  box-sizing: border-box;
-  align-items: stretch;
-}
-
-.fol-toolbar .mk-filter-btn,
-.fol-discover-bar .mk-filter-btn {
-  height: 40px;
-  width: 40px;
-  box-sizing: border-box;
-}
-
-/* In the compact row the period takes all the room the Filter button leaves. */
-.fol-toolbar > .fol-period:first-child {
+.fol-toolbar > .fol-chips {
   flex: 1 1 auto;
   min-width: 0;
-  margin-left: 0;
-}
-
-.fol-toolbar > .fol-period:first-child > .ui-select {
-  width: 100%;
 }
 
 .fol-tc {
@@ -691,13 +666,12 @@ div.fol-row-main {
   display: flex;
 }
 
-.fol-htools > .ui-input {
-  flex: 0 1 280px;
-  min-width: 0;
+.fol-htools > .mk-search-wrap {
+  flex: 0 1 320px;
 }
 
 @media (max-width: 639.98px) {
-  .fol-htools > .ui-input {
+  .fol-htools > .mk-search-wrap {
     flex: 1 1 auto;
   }
 }
@@ -851,21 +825,6 @@ div.fol-row-main {
   }
 }
 
-/* Kit controls side by side share the kit's 40px (Select and TextField came out at 38/36 in
-   these rows). */
-.fol-discover-bar > .ui-select,
-.fol-discover-bar > .ui-input,
-.fol-toolbar > .ui-select,
-.fol-htools > .ui-input {
-  height: 40px;
-  box-sizing: border-box;
-}
-
-.fol-discover-bar .ui-segmented__seg,
-.fol-toolbar .ui-segmented__seg {
-  white-space: nowrap;
-}
-
 /* The header's actions share one height. */
 .fol-cta > .ui-btn,
 .fol-icons .fol-watch,
@@ -897,32 +856,6 @@ div.fol-row-main {
 
 .fol-line--bench {
   border-top: 1px dashed var(--faint);
-}
-
-/* The kit Select with the app's chevron: the browser's own arrow is turned off. */
-.fol-pick {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.fol-pick > .ui-select {
-  appearance: none;
-  -webkit-appearance: none;
-  height: 40px;
-  box-sizing: border-box;
-  width: auto;
-  padding-right: calc(var(--space-5) + 18px);
-  font-size: var(--text-base);
-  font-weight: 500;
-}
-
-.fol-pick-chev {
-  position: absolute;
-  right: var(--space-4);
-  color: var(--faint);
-  pointer-events: none;
 }
 
 /* Overview's return: the figure with its window in words, the benchmark under it. */
@@ -990,8 +923,7 @@ div.fol-row-main {
    phone). No boxes: a group is its title and its rows. */
 .fol-latest {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: var(--space-4) var(--space-8);
+  gap: var(--space-3);
 }
 
 .fol-latest > .fol-sec-title {
@@ -1014,11 +946,25 @@ div.fol-row-main {
   margin-top: var(--space-6);
 }
 
+/* Each group one aligned row: its label in a fixed column, its chips beside it. On a phone the
+   label sits above its chips. */
 .fol-latest-group {
   display: grid;
-  align-content: start;
-  gap: var(--space-1);
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-5);
   min-width: 0;
+}
+
+.fol-latest-group > .fol-latest-title {
+  margin: 0;
+}
+
+@media (max-width: 639.98px) {
+  .fol-latest-group {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
 }
 
 .fol-latest-title {
@@ -1146,4 +1092,104 @@ div.fol-row-main {
     width: 96px;
     height: 96px;
   }
+}
+
+/* On a phone the period takes its own line above the pills, as Investments stacks its search
+   above its pills: no pill hides behind the dropdown. */
+@media (max-width: 639.98px) {
+  .fol-toolbar {
+    flex-wrap: wrap;
+  }
+  .fol-toolbar > .mk-toolsel {
+    order: -1;
+    flex: 1 1 100%;
+  }
+}
+
+/* A block title with its control at the row's end (All moves and its period). */
+.fol-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.fol-sec-head.is-next {
+  margin-top: var(--space-6);
+}
+
+.fol-sec > .fol-sec-head {
+  margin-bottom: calc(var(--space-2) - var(--space-5));
+}
+
+/* A ticker that opens its stock inside a row that does something else on click. */
+.fol-sym-link .asset-link {
+  padding: 0;
+}
+
+@media (hover: hover) {
+  .fol-sym-link .asset-link:hover .mk-hsym {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+/* The ticker fix: the stocks that match, as rows to pick from. */
+.fol-ticker-results {
+  display: grid;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fol-ticker-result {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.fol-ticker-result .mk-hnm {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fol-ticker-result.is-on {
+  background: var(--selected);
+}
+
+.fol-ticker-result:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .fol-ticker-result:hover {
+    background: var(--hover);
+  }
+}
+
+.fol-ticker-exch {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+
+.fol-ticker-none {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
 }

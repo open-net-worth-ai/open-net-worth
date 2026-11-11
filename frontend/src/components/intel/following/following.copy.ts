@@ -15,7 +15,7 @@ export const COPY = {
   tradeDetails: 'Trade details',
   tradeDetailsOf: (symbol: string) => `Every move in ${symbol}`,
   /** The overview chart's headline: what the figure beside it is the return OF. */
-  allMovesTitle: "Today's holdings",
+  allMovesTitle: "today's holdings, this period",
   latestTitle: 'Latest moves',
   latestInfoLabel: 'What these moves are',
   latestInfoTrades:
@@ -26,7 +26,6 @@ export const COPY = {
   bySectorTitle: 'By sector',
   bySizeTitle: 'By size',
   allHoldingsTitle: (n: number) => `All holdings (${n})`,
-  topHoldingsTitle: (n: number, of: number) => `Top ${n} of ${of} holdings`,
   returnTitle: 'Return',
   /** A fund's dated trades: the filings it must make within 2 business days of each one. */
   recentTrades: 'Recent trades, filed within 2 days',
@@ -48,10 +47,14 @@ export const COPY = {
   tickerSetTitle: 'Set the ticker',
   tickerFixTitle: 'Correct the ticker',
   tickerLabel: 'Ticker',
-  tickerPlaceholder: 'e.g. ACME',
+  tickerPlaceholder: 'Search a company or type a ticker',
+  tickerSearchLabel: 'Search for the stock',
+  tickerResultsLabel: 'Matching stocks',
+  tickerNoResults: 'No stock matches. Type the ticker if you know it.',
+  tickerUse: (symbol: string) => `Use ${symbol}`,
   tickerFiledAs: (name: string) => `The filing lists this holding as ${name}.`,
   tickerHelp:
-    'We could not match it to a stock, so it is left out of the weights and of anything copied. We check the ticker has a price before saving.',
+    'We could not match it to a stock, so it is left out of anything copied. Pick it above; we check it has a price before saving.',
   tickerClearHelp: 'Leave it empty to go back to the ticker we looked up.',
   tickerWatchesToo: 'Saving also starts watching this portfolio, which is where the fix is kept.',
   about: (f: { kind: FollowKind; name: string; subtitle: string }) =>

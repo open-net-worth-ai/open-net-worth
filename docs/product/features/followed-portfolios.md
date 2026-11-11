@@ -113,10 +113,10 @@ added shares, red where they sold, grey where it did not move. Click a tile, eve
 for its name, to see its name, share and change above the table and list only its holdings;
 **Show all** (or the tile again) lists them all.
 
-The table lists the top 20 holdings (its title says so when there are more, for example **Top 20
-of 29 holdings**) with each one's share of the portfolio, the shares held and its return
-over the past 12 months. Click a row to open the stock's own page. Search it by ticker or name. A holding the filing names without a ticker
-we could match is a row of its own with **Set ticker**; on any fund holding, **Wrong ticker?** is
+The table lists every holding in the report, each as its share of the whole portfolio, with the
+shares held and its return over the past 12 months. Click a row to open the stock's own page. Search it by ticker or name. A holding the filing names without a ticker
+we could match is a row of its own with **Set ticker**, which searches for the company the filing
+names and lets you pick it; on any fund holding, **Wrong ticker?** is
 in the row's menu. A correction is kept with a portfolio you watch, so setting one starts
 watching it.
 

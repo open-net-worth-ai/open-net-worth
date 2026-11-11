@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Button, Modal, TextField } from '../../ui'
+import { useMarketSearch } from '../../tabs/automations/TickerPicker'
 import { COPY } from './following.copy'
+import { companyName } from './following.format'
 
 interface Props {
   /** The holding as the filing names it, e.g. "ACME LTD". */
@@ -12,17 +14,27 @@ interface Props {
   onClose: () => void
 }
 
-/** Set or correct the ticker for one holding of a filing. The server checks it has a price
- *  before saving, so a typo is refused with a reason rather than copied into an order. */
+/** What to search first: the company as a person would type it ("Asml Hldg Nv" → "Asml"). */
+function firstQuery(filedName: string): string {
+  return companyName(filedName).split(/\s+/)[0] ?? ''
+}
+
+/** Set or correct the ticker for one holding of a filing: search the market (the command
+ *  palette's search) and pick, or type it. The server checks it has a price before saving, so
+ *  a typo is refused with a reason rather than copied into an order. */
 export function TickerDialog({ filedName, current, watchesToo, onSave, onClose }: Props) {
-  const [symbol, setSymbol] = useState(current ?? '')
+  const [query, setQuery] = useState(current ?? firstQuery(filedName))
+  const [picked, setPicked] = useState<string | null>(current)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const search = useMarketSearch(query, true)
+  const results = search.results.filter((r) => r.asset_class !== 'crypto')
+  const symbol = (picked ?? query).trim().toUpperCase()
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
-      await onSave(symbol.trim().toUpperCase())
+      await onSave(symbol)
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -44,10 +56,10 @@ export function TickerDialog({ filedName, current, watchesToo, onSave, onClose }
             size="sm"
             variant="primary"
             loading={saving}
-            disabled={!symbol.trim() && !current}
+            disabled={!symbol && !current}
             onClick={() => void save()}
           >
-            {COPY.save}
+            {picked ? COPY.tickerUse(picked) : COPY.save}
           </Button>
         </div>
       }
@@ -61,17 +73,42 @@ export function TickerDialog({ filedName, current, watchesToo, onSave, onClose }
       >
         <p className="fol-ticker-filed">{COPY.tickerFiledAs(filedName)}</p>
         <TextField
-          aria-label={COPY.tickerLabel}
+          aria-label={COPY.tickerSearchLabel}
           placeholder={COPY.tickerPlaceholder}
-          value={symbol}
-          maxLength={12}
+          value={query}
           type="search"
           autoComplete="off"
-          autoCapitalize="characters"
-          enterKeyHint="done"
+          enterKeyHint="search"
           data-autofocus
-          onChange={(e) => setSymbol(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setPicked(null)
+          }}
         />
+        {/* The stocks that match, to pick from: ticker, company, where it trades. */}
+        <ul
+          className="fol-ticker-results"
+          aria-label={COPY.tickerResultsLabel}
+          aria-busy={search.loading}
+        >
+          {results.map((r) => (
+            <li key={`${r.symbol}-${r.exchange}`}>
+              <button
+                type="button"
+                className={`fol-ticker-result${picked === r.symbol ? ' is-on' : ''}`}
+                aria-pressed={picked === r.symbol}
+                onClick={() => setPicked(r.symbol)}
+              >
+                <span className="mk-hsym">{r.symbol}</span>
+                <span className="mk-hnm">{r.name}</span>
+                <span className="fol-ticker-exch">{r.exchange}</span>
+              </button>
+            </li>
+          ))}
+          {!search.loading && query.trim() && results.length === 0 && (
+            <li className="fol-ticker-none">{COPY.tickerNoResults}</li>
+          )}
+        </ul>
         <p className="fol-ticker-help">
           {current ? COPY.tickerClearHelp : COPY.tickerHelp}
           {watchesToo && ` ${COPY.tickerWatchesToo}`}

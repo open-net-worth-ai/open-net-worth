@@ -24,7 +24,6 @@ SOURCE = "ARK Invest"
 _BASE = "https://assets.ark-funds.com/fund-documents/funds-etf-csv"
 _CSV_MAX_BYTES = 2 * 1024 * 1024
 _NAME_MAX = 120
-MAX_POSITIONS = 200
 _SUBTITLE = "Cathie Wood"
 
 # ticker -> (name, file stem); each file checked reachable on 2026-11-11.
@@ -115,7 +114,7 @@ def parse_csv(text: str) -> dict:
         "filed_at": day,
         "total_value": sum(p["value"] for p in positions),
         "unread_reports": 0,
-        "positions": positions[:MAX_POSITIONS],
+        "positions": positions,
     }
 
 

@@ -16,6 +16,9 @@ interface Mark {
   date: string
   symbol: string
   up: boolean
+  /** Named on the chart: a report's biggest buy or sale. A dated trade is an arrow only (Latest
+   *  moves above names it; so does the tooltip). */
+  named: boolean
   /** Why this day: a dated trade, or the day a quarter's change was disclosed. */
   why: string
 }
@@ -33,19 +36,40 @@ export function PortfolioActivityChart({
   /** Zooms to this span (the chosen period); the whole history when absent. */
   range?: { from: string; to: string }
 }) {
-  const series = useMemo(() => evenSpacing(win.series), [win.series])
+  // A chosen period is drawn on its own: it starts at 0% on its first day (each point the return
+  // since then), so the axis and the headline above it are the same figure. Zooming the whole
+  // history kept the return since its start (+150% where the headline said +82%).
+  const series = useMemo(() => {
+    if (!range) return evenSpacing(win.series)
+    const all = win.series
+    const base = [...all].reverse().find((p) => p.date <= range.from) ?? all[0]
+    const inside = all.filter((p) => p.date > (base?.date ?? '') && p.date <= range.to)
+    if (!base) return []
+    const since = (v: number, b: number) => (1 + v) / (1 + b) - 1
+    return evenSpacing(
+      [base, ...inside].map((p) => ({
+        ...p,
+        portfolio: since(p.portfolio, base.portfolio),
+        benchmark:
+          p.benchmark == null || base.benchmark == null ? null : since(p.benchmark, base.benchmark),
+      })),
+    )
+  }, [win.series, range?.from, range?.to])
   const points = useMemo(() => series.map((p) => ({ date: p.date, value: p.portfolio })), [series])
   const moves = useMemo(() => allMoves(follow), [follow])
   const quarterly = useMemo(() => biggestPerQuarter(follow), [follow])
   const marks = useMemo(() => {
     const dates = series.map((p) => p.date)
-    const snap = (d: string) => [...dates].reverse().find((x) => x <= d) ?? null
+    const last = dates[dates.length - 1] ?? ''
+    // A move after the chart's last day (or before its first) is not on it.
+    const snap = (d: string) =>
+      d > last && range ? null : ([...dates].reverse().find((x) => x <= d) ?? null)
     const out: Mark[] = []
     for (const q of quarterly) {
       const d = snap(q.date)
       if (!d) continue
       for (const m of q.top)
-        out.push({ date: d, ...m, why: `${q.during}, disclosed ${shortDate(q.date)}` })
+        out.push({ date: d, ...m, named: true, why: `${q.during}, disclosed ${shortDate(q.date)}` })
     }
     const placed: { d: string; key: string }[] = []
     for (const m of moves) {
@@ -54,7 +78,13 @@ export function PortfolioActivityChart({
       const key = `${m.symbol}${m.up}`
       if (!d || placed.some((p) => p.key === key && days(p.d, d) <= SAME_ORDER_DAYS)) continue
       placed.push({ d, key })
-      out.push({ date: d, symbol: m.symbol, up: m.up, why: `traded ${shortDate(m.date)}` })
+      out.push({
+        date: d,
+        symbol: m.symbol,
+        up: m.up,
+        named: false,
+        why: `traded ${shortDate(m.date)}`,
+      })
     }
     return out
   }, [moves, quarterly, series])
@@ -70,7 +100,7 @@ export function PortfolioActivityChart({
             position: m.up ? 'belowBar' : 'aboveBar',
             shape: m.up ? 'arrowUp' : 'arrowDown',
             color: m.up ? c.good : c.bad,
-            text: `${m.up ? 'B' : 'S'} ${m.symbol}`,
+            text: m.named ? `${m.up ? 'B' : 'S'} ${m.symbol}` : '',
           }),
         )
         .sort((a, b) => Number(a.time) - Number(b.time)),
@@ -107,7 +137,6 @@ export function PortfolioActivityChart({
       points={points}
       markers={markers}
       percent
-      range={range}
       tip={tip}
       label={`${follow.name}: its holdings over the period, with each move marked`}
     />

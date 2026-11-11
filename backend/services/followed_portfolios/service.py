@@ -54,6 +54,7 @@ _SNAPSHOT_FIELDS = (
     "form4_owner_checked",
     "history",
     "history_quarters",
+    "all_positions",
 )
 _ACTIVITY_FIELDS = (
     "date",
@@ -131,7 +132,7 @@ def source_url(row: dict) -> str | None:
     return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession}/"
 
 
-def view(row: dict, top_n: int = DEFAULT_TOP_N) -> dict:
+def view(row: dict, top_n: int | None = DEFAULT_TOP_N) -> dict:
     """The follow as every surface reads it — the model derived, the caches left out."""
     today = user_today()
     model = build_model(row, today, top_n)
@@ -228,7 +229,8 @@ def preview_page(kind: str, ref: str) -> dict:
     """Everything a portfolio's page shows, before following it (read-only, cached)."""
     row = preview.preview_row(kind, ref, full=True)
     followed = FollowedPortfolioStore().find_by_source(row["kind"], row["source_ref"])
-    shown = view(row)
+    # The page lists every holding the filing has, each as its share of the whole portfolio.
+    shown = view(row, None)
     names = company_names(shown, fetch_missing=False)
     sectors = company_sectors(shown, fetch_missing=False)
     if _missing_names(shown, names) or _missing_names(shown, sectors):

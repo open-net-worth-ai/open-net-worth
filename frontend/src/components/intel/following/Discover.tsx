@@ -1,9 +1,6 @@
 import { useState } from 'react'
-import { useNarrow } from './useNarrow'
-import { ErrorState, SegmentedControl, TextField } from '../../ui'
-import { PickSelect } from './PickSelect'
-import { useIsMobile } from '../../../hooks/useIsMobile'
-import { FilterSheet } from '../../tabs/investments/FilterSheet'
+import { ErrorState } from '../../ui'
+import { FilterChips, SearchBox, ToolSelect } from './Controls'
 import type { DirectoryEntry } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { PortfolioCard } from './PortfolioCard'
@@ -40,9 +37,6 @@ function bySort(sort: Sort) {
   }
 }
 
-// Filter + sort + search fit side by side from here.
-const WIDE_BAR_PX = 820
-
 const keyOf = (e: PortfolioRef) => `${e.kind}:${e.source_ref}`
 
 /** Famous portfolios, as cards to browse. Search sits in place; there is no dialog. */
@@ -50,11 +44,6 @@ export function Discover({ watched, onOpen }: Props) {
   const [filter, setFilter] = useState<Filter>('All')
   const [typed, setTyped] = useState('')
   const [sort, setSort] = useState<Sort>('featured')
-  const isMobile = useIsMobile()
-  // The compact row ([search | Filter]) whenever the bar itself is too narrow for the filter,
-  // the sort and the search side by side, not only on a phone.
-  const [barRef, narrow] = useNarrow<HTMLDivElement>(WIDE_BAR_PX)
-  const compact = isMobile || narrow
   const directory = useDirectory(typed)
   const searching = directory.q.length >= 2
   const listed = directory.data ?? []
@@ -76,12 +65,11 @@ export function Discover({ watched, onOpen }: Props) {
         ? (a, b) => Number(watchedKeys.has(keyOf(b))) - Number(watchedKeys.has(keyOf(a)))
         : bySort(sort),
     )
+  // Every filter, always: one with no match while searching shows 0 rather than vanishing.
   const filters: Filter[] = [
     'All',
     ...(watched.length ? (['Watching'] as Filter[]) : []),
-    ...(Object.keys(TYPES) as Filter[]).filter((t) =>
-      all.some((e) => e.kind === TYPES[t as keyof typeof TYPES]),
-    ),
+    ...(Object.keys(TYPES) as Filter[]),
   ]
 
   const countOf = (f: Filter) =>
@@ -90,75 +78,33 @@ export function Discover({ watched, onOpen }: Props) {
       : f === 'Watching'
         ? watched.length
         : all.filter((e) => e.kind === TYPES[f]).length
-  const search = (
-    <TextField
-      className="fol-find"
-      type="search"
-      aria-label={COPY.searchLabel}
-      placeholder={COPY.gallerySearch}
-      value={typed}
-      onChange={(e) => setTyped(e.target.value)}
-    />
-  )
   return (
     <section className="fol-sec" aria-label={COPY.discoverTitle}>
-      {/* One row, the controls together. Wide: filters, sort, search side by side at one
-          height. Phone (Investments' pattern): [search (fills) | Filter], the filter and the
-          sort in its sheet. */}
-      <div ref={barRef} className="fol-discover-bar">
-        {compact ? (
-          <>
-            {search}
-            <FilterSheet
-              presentation={isMobile ? 'sheet' : 'popover'}
-              title={COPY.filterTitle}
-              active={filter !== 'All' || sort !== 'featured'}
-              groups={[
-                {
-                  title: COPY.showLabel,
-                  options: filters.map((f) => ({ id: f, label: f, count: countOf(f) })),
-                  value: filter,
-                  onChange: (id) => setFilter(id as Filter),
-                },
-                {
-                  title: COPY.sortTitle,
-                  options: SORTS.map((o) => ({ id: o.value, label: o.label })),
-                  value: sort,
-                  onChange: (id) => {
-                    if (isSort(id)) setSort(id)
-                  },
-                },
-              ]}
-            />
-          </>
-        ) : (
-          <>
-            <SegmentedControl
-              options={filters.map((f) => ({
-                value: f,
-                label: (
-                  <>
-                    {f} <span className="fol-seg-n">{countOf(f)}</span>
-                  </>
-                ),
-              }))}
-              value={filter}
-              onChange={setFilter}
-              ariaLabel={COPY.filterLabel}
-            />
-            <PickSelect
-              className="fol-sort"
-              aria-label={COPY.sortLabel}
-              value={sort}
-              options={SORTS.map((o) => ({ value: o.value, label: o.label }))}
-              onChange={(e) => {
-                if (isSort(e.target.value)) setSort(e.target.value)
-              }}
-            />
-            {search}
-          </>
-        )}
+      {/* Investments' toolbar: the search first, filling the row, the sort beside it; the
+          filters as pills under them. Nothing left of the search ever changes, so it never
+          moves while you type. */}
+      <div className="fol-discover-bar">
+        <SearchBox
+          value={typed}
+          onChange={setTyped}
+          label={COPY.searchLabel}
+          placeholder={COPY.gallerySearch}
+        />
+        <ToolSelect
+          label={COPY.sortLabel}
+          value={sort}
+          onChange={(v) => {
+            if (isSort(v)) setSort(v)
+          }}
+          options={SORTS.map((o) => ({ value: o.value, label: o.label }))}
+        />
       </div>
+      <FilterChips
+        label={COPY.filterLabel}
+        value={filter}
+        onChange={setFilter}
+        options={filters.map((f) => ({ value: f, label: f, count: countOf(f) }))}
+      />
       {!directory.data && directory.error != null && (
         <ErrorState
           title={COPY.searchErrorTitle}

@@ -1,12 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Button, SegmentedControl } from '../../ui'
-import { PickSelect } from './PickSelect'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '../../ui'
+import { FilterChips, ToolSelect } from './Controls'
 import { NameCell } from './NameCell'
 import { LatestMoves } from './LatestMoves'
 import { AssetLink } from '../AssetLink'
 import { ChevronRight } from '../../../ui/icons'
-import { useIsMobile } from '../../../hooks/useIsMobile'
-import { FilterSheet } from '../../tabs/investments/FilterSheet'
 import type { Follow, FollowPerformance } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { shortDate, signedPct, toneOf } from './following.format'
@@ -29,10 +27,6 @@ import { TradeDetails } from './TradeDetails'
 import { PortfolioActivityChart } from './PortfolioActivityChart'
 import { useSinceFiled } from './useFollowing'
 import { spanReturn } from './spanReturn'
-import { useNarrow } from './useNarrow'
-
-// The filter (five options) and the period fit side by side from here.
-const WIDE_TOOLBAR_PX = 640
 
 interface Props {
   follow: Follow
@@ -113,7 +107,7 @@ const nameColumn = (held: Set<string>): Column<ActivityRow> => ({
   label: COPY.colStock,
   left: true,
   sortValue: (r) => r.name,
-  cell: (r) => <NameCell symbol={r.symbol} name={r.name} held={held.has(r.symbol)} />,
+  cell: (r) => <NameCell symbol={r.symbol} name={r.name} held={held.has(r.symbol)} linkTicker />,
 })
 /** The change, with a bar for its size against the period's largest move. */
 const amountColumn = (max: number): Column<ActivityRow> => ({
@@ -198,7 +192,6 @@ function Table({
   picked,
   onPick,
   held,
-  period,
 }: {
   set: FilterSet
   rows: ActivityRow[]
@@ -207,14 +200,8 @@ function Table({
   picked: string | undefined
   onPick: (r: ActivityRow) => void
   held: Set<string>
-  period: ReactNode
 }) {
   const [filter, setFilter] = useState<ActivityFilter>('all')
-  const isMobile = useIsMobile()
-  // [period (fills) | Filter sheet] whenever the row is too narrow for the filter and the
-  // period side by side (a tablet, a pane beside Lucius), as on a phone.
-  const [barRef, narrow] = useNarrow<HTMLDivElement>(WIDE_TOOLBAR_PX)
-  const compact = isMobile || narrow
   const options = filtersFor(set, rows)
   const shown = rows.filter((r) => matches(set, r, filter))
   // A filter that shortens the table must not shorten the page: the browser would pull the
@@ -226,34 +213,22 @@ function Table({
   }, [filter, rows.length])
   return (
     <div className="fol-sec">
-      {/* One row at every width, kit controls at one height. Wide: the filter LEFT, the
-          period RIGHT. Phone (Investments' pattern): [period (fills) | Filter sheet]. */}
-      <div ref={barRef} className="fol-toolbar">
-        {options.length > 2 && !compact && (
-          <SegmentedControl
-            options={options.map((o) => ({ value: o.value as ActivityFilter, label: o.label }))}
+      {/* Investments' filter pills, each with its count (they scroll on a phone). The period is
+          with the block's title above the chart. */}
+      {options.length > 2 && (
+        <div className="fol-toolbar">
+          <FilterChips
+            label={COPY.filterLabel}
             value={filter}
-            onChange={setFilter}
-            ariaLabel={COPY.filterLabel}
+            onChange={(v) => setFilter(v as ActivityFilter)}
+            options={options.map((o) => ({
+              value: o.value,
+              label: o.label,
+              count: rows.filter((r) => matches(set, r, o.value as ActivityFilter)).length,
+            }))}
           />
-        )}
-        {period}
-        {options.length > 2 && compact && (
-          <FilterSheet
-            presentation={isMobile ? 'sheet' : 'popover'}
-            title={COPY.filterTitle}
-            active={filter !== 'all'}
-            groups={[
-              {
-                title: COPY.filterLabel,
-                options: options.map((o) => ({ id: o.value, label: o.label })),
-                value: filter,
-                onChange: (id) => setFilter(id as ActivityFilter),
-              },
-            ]}
-          />
-        )}
-      </div>
+        </div>
+      )}
       {rows.length === 0 && <p className="fol-empty">{COPY.noMovesInPeriod}</p>}
       <div ref={box} style={filter === 'all' ? undefined : { minHeight: fullHeight }}>
         <SortTable
@@ -302,20 +277,33 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
         />
       )}
       {/* The chart follows the table's period, so the two are one titled block. */}
-      <h2 className={`fol-sec-title${follow.kind === 'fund_13f' ? ' is-next' : ''}`}>
-        {COPY.allMovesSection}
-      </h2>
+      <div className={`fol-sec-head${follow.kind === 'fund_13f' ? ' is-next' : ''}`}>
+        <h2 className="fol-sec-title">{COPY.allMovesSection}</h2>
+        {/* The period sets the chart AND the table, so it sits with the block's title. */}
+        {period && spans.length > 1 && (
+          <ToolSelect
+            label={COPY.periodLabel}
+            value={period.key}
+            options={spans.map((p) => ({ value: p.key, label: p.label }))}
+            onChange={(v) => {
+              setPeriodKey(v)
+              setPickedKey(null)
+            }}
+          />
+        )}
+      </div>
       {picked ? (
         <Spotlight row={picked} follow={follow} benchmark={benchmark} onAskLucius={onAskLucius} />
       ) : (
         year?.status === 'ok' && (
           <div className="fol-spot">
             <div className="fol-spot-head">
+              {/* One quiet line, as Overview reads: the figure, what it is, the benchmark. */}
               <div className="fol-spot-title">
-                <b>{COPY.allMovesTitle}</b>
                 <span className={`fol-spot-move ${toneOf(shown?.portfolio)}`}>
                   {signedPct(shown?.portfolio)}
                 </span>
+                <span className="fol-spot-sub">{COPY.allMovesTitle}</span>
                 <span className="fol-spot-sub">
                   {benchmark} {signedPct(shown?.benchmark)}
                 </span>
@@ -335,20 +323,6 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
           picked={picked?.key}
           onPick={pick}
           held={held}
-          period={
-            spans.length > 1 ? (
-              <PickSelect
-                className="fol-period"
-                aria-label={COPY.periodLabel}
-                value={period.key}
-                options={spans.map((p) => ({ value: p.key, label: p.label }))}
-                onChange={(e) => {
-                  setPeriodKey(e.target.value)
-                  setPickedKey(null)
-                }}
-              />
-            ) : null
-          }
         />
       )}
     </div>

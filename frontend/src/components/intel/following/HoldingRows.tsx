@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { fCompact, fPct } from '../../../utils/format'
-import { ActionMenu, Button, TextField } from '../../ui'
+import { ActionMenu, Button } from '../../ui'
+import { SearchBox } from './Controls'
 import type { FollowModel, PerfPeriod, PerfWindow } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { companyName, nameClasses, signedPct, toneOf, tradeLine } from './following.format'
@@ -187,20 +188,17 @@ export function HoldingRows({
       )}
       <div className="fol-sec">
         <h2 className={`fol-sec-title${tiles.length > 1 ? ' is-next' : ''}`}>
-          {/* The list is the top holdings: never call a cut list "all". */}
-          {model.positions != null && model.positions > model.holdings.length
-            ? COPY.topHoldingsTitle(rows.length, model.positions)
-            : COPY.allHoldingsTitle(rows.length)}
+          {/* Every holding the filing lists, a holding with no ticker included. */}
+          {COPY.allHoldingsTitle(rows.length)}
         </h2>
-        {/* A plain row (kit TextField): Investments' .mk-toolbar is sticky and opaque on a phone
-            and painted over whatever sat above it. */}
+        {/* Investments' search (its sticky .mk-toolbar row is not used: it painted over the
+            row above it on a phone). */}
         <div className="fol-htools">
-          <TextField
-            type="search"
-            aria-label={COPY.holdingsSearch}
-            placeholder={`${COPY.holdingsSearch}…`}
+          <SearchBox
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={setQuery}
+            label={COPY.holdingsSearch}
+            placeholder={`${COPY.holdingsSearch}…`}
           />
         </div>
         {/* A picked tile, however small, is named here with its share and change. */}

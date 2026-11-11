@@ -131,6 +131,7 @@ def preview_row(kind: str, ref: str, *, full: bool = False) -> dict:
                     "reports",
                     "history",
                     "history_quarters",
+                    "all_positions",
                 )
             },
             "last_checked_at": datetime.now(timezone.utc).isoformat(),

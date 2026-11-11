@@ -27,9 +27,25 @@ _loaded_at = [0.0]
 _lock = threading.Lock()
 
 
+# A filing abbreviates what SEC's list spells out ("Asml Hldg Nv" is "ASML HOLDING N.V.").
+_ABBREVIATIONS = {
+    "hldg": "holding", "hldgs": "holdings", "hlds": "holdings", "grp": "group",
+    "intl": "international", "tech": "technologies", "techs": "technologies",
+    "svcs": "services", "svc": "services", "sys": "systems", "mfg": "manufacturing",
+    "pharm": "pharmaceuticals", "pharma": "pharmaceuticals", "ind": "industries",
+    "inds": "industries", "bk": "bank", "fin": "financial", "finl": "financial",
+}  # fmt: skip
+# Words that only say what kind of company it is: "ASML Holding" and "ASML" are one issuer.
+_KIND_WORDS = {"holding", "holdings", "group"}
+
+
 def name_key(name: str) -> str:
-    words = re.sub(r"[^a-z0-9 ]+", " ", str(name or "").lower().replace("&", " and ")).split()
-    return " ".join(w for w in words if w not in _SUFFIXES)
+    text = str(name or "").lower().replace("&", " and ")
+    # "N.V." and "S.A." are one word, never two letters left over after the dots go.
+    text = re.sub(r"\b([a-z])\.(?=[a-z]\.)", r"\1", text)
+    words = re.sub(r"[^a-z0-9 ]+", " ", text).split()
+    words = [_ABBREVIATIONS.get(w, w) for w in words]
+    return " ".join(w for w in words if w not in _SUFFIXES and w not in _KIND_WORDS)
 
 
 def build_index(data: dict) -> dict[str, str]:

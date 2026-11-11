@@ -20,13 +20,22 @@ logger = logging.getLogger(__name__)
 _URL = "https://api.openfigi.com/v3/mapping"
 _BATCH = 10
 MAX_BATCHES = 12
-_EQUITY_TYPES = {"Common Stock", "ETP", "ADR", "REIT", "MLP", "Closed-End Fund", "Tracking Stk"}
+# A 13F lists options and convertibles beside shares, and an option carries its stock's code: a
+# ticker must only ever name a share, or it is priced, weighted and copied as one. The rule is
+# "equity, but not a derivative of it": the source's own sector says equity (a bond or note is
+# not), and options, warrants and rights are turned away by type. Any share type is in, however
+# the source names it ("Common Stock", "ADR", "NY Reg Shrs" for ASML's US listing, "GDR", …).
+_NOT_A_SHARE = ("option", "warrant", "wrt", "right", "future")
 
 
 def _pick(matches: list[dict]) -> str:
     for match in matches:
         ticker = str(match.get("ticker") or "").strip().upper()
-        if ticker and match.get("securityType") in _EQUITY_TYPES:
+        kind = f"{match.get('securityType') or ''} {match.get('securityType2') or ''}".lower()
+        is_share = match.get("marketSector") == "Equity" and not any(
+            w in kind for w in _NOT_A_SHARE
+        )
+        if ticker and is_share:
             # FIGI writes a share class as BRK/B; quote sources and brokers use BRK-B.
             symbol = normalize_symbol(ticker.replace("/", "-"))
             if symbol:

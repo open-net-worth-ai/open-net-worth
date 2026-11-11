@@ -136,6 +136,7 @@ def test_fetch_retries_a_ticker_lookup_that_never_answered(monkeypatch):
         "cusip_map": {"000000202": ""},
         "history": [{"as_of": "2026-06-30", "filed_at": "2026-08-14", "qty": {}, "value": {}}],
         "history_quarters": 9,
+        "all_positions": True,
     }
     monkeypatch.setattr(figi, "tickers_for", lambda cusips: {})
     assert edgar_13f.fetch("12345", known) == {"unchanged": True}
@@ -197,6 +198,7 @@ def test_a_holding_the_code_lookup_missed_is_matched_by_its_exact_name(monkeypat
         "ticker_overrides": {"000000202": "BOLT"},
         "history": [{"as_of": "2026-06-30", "filed_at": "2026-08-14", "qty": {}, "value": {}}],
         "history_quarters": 9,
+        "all_positions": True,
     }
     out = edgar_13f.fetch("12345", known)
     # The name match fills the gap; the owner's own correction wins over any lookup.
@@ -230,7 +232,10 @@ def test_figi_remembers_answers_and_only_asks_for_new_cusips(monkeypatch):
     def fake(url, **kw):
         jobs = json.loads(kw["data"])
         asked.append([j["idValue"] for j in jobs])
-        return [{"data": [{"ticker": "ACME", "securityType": "Common Stock"}]} for _ in jobs]
+        return [
+            {"data": [{"ticker": "ACME", "securityType": "Common Stock", "marketSector": "Equity"}]}
+            for _ in jobs
+        ]
 
     monkeypatch.setattr(figi, "fetch_json", fake)
     assert figi.tickers_for(["000000101"]) == {"000000101": "ACME"}
@@ -246,9 +251,13 @@ def test_figi_picks_a_us_equity_and_rewrites_share_classes(monkeypatch):
         jobs = json.loads(kw["data"])
         assert [j["idValue"] for j in jobs] == ["000000101", "000000202", "000000303"]
         return [
-            {"data": [{"ticker": "ACME/B", "securityType": "Common Stock"}]},
+            {
+                "data": [
+                    {"ticker": "ACME/B", "securityType": "Common Stock", "marketSector": "Equity"}
+                ]
+            },
             {"warning": "No identifier found."},
-            {"data": [{"ticker": "ACME 5 2030", "securityType": "Corp"}]},
+            {"data": [{"ticker": "ACME 5 2030", "securityType": "Corp", "marketSector": "Corp"}]},
         ]
 
     monkeypatch.setattr(figi, "fetch_json", fake)
@@ -1015,3 +1024,91 @@ def test_the_featured_funds_are_unique_and_well_formed():
     names = [name for _, name, _ in edgar_13f.FEATURED]
     assert len(names) == len(set(names))
     assert all(who for _, _, who in edgar_13f.FEATURED)
+
+
+def test_a_filings_abbreviated_issuer_matches_secs_spelled_out_name():
+    """ "Asml Hldg Nv" in a 13F is "ASML HOLDING N.V." in SEC's list: abbreviations are
+    spelled out, a dotted N.V. is one word, and "Holding" only says what kind of company."""
+    from backend.services.followed_portfolios.sec_tickers import name_key
+
+    assert name_key("Asml Hldg Nv") == name_key("ASML HOLDING N.V.") == "asml"
+    assert name_key("Acme Semiconductor Mfg Co Ltd") == name_key(
+        "ACME SEMICONDUCTOR MANUFACTURING CO LTD"
+    )
+    assert name_key("Acme Intl Grp") == name_key("ACME INTERNATIONAL GROUP INC")
+
+
+def test_a_portfolios_page_lists_every_holding_as_its_share_of_the_whole():
+    """No cap on the page: every position the filing lists, each weighed against the whole
+    filing (a holding with no ticker included), so the table adds up to 100%."""
+    from datetime import date
+
+    from backend.services.followed_portfolios.model import build_model
+
+    positions = [
+        {"key": f"K{i:02d}", "symbol": f"S{i:02d}", "name": f"Co {i}", "qty": 1, "value": 100 - i}
+        for i in range(30)
+    ] + [{"key": "XNONE", "symbol": None, "name": "Mystery", "qty": 1, "value": 50}]
+    follow = {
+        "kind": "fund_13f",
+        "current": {"as_of": "2026-06-30", "filed_at": "2026-08-14", "positions": positions},
+    }
+    whole = sum(p["value"] for p in positions)
+    page = build_model(follow, date(2026, 11, 12), None)
+    assert len(page["holdings"]) == 30
+    assert [u["key"] for u in page["unmatched"]] == ["XNONE"]
+    shares = sum(h["weight"] for h in page["holdings"]) + sum(
+        u["weight"] for u in page["unmatched"]
+    )
+    assert shares == pytest.approx(1.0)
+    assert page["holdings"][0]["weight"] == pytest.approx(100 / whole)
+    # A card or a copy still trades toward the top N, summing to 1 among them.
+    card = build_model(follow, date(2026, 11, 12))
+    assert len(card["holdings"]) == 20
+    assert sum(h["weight"] for h in card["holdings"]) == pytest.approx(1.0)
+
+
+def test_ticker_lookups_go_largest_first(monkeypatch):
+    """The lookup service allows so many codes a refresh: the newest quarter's largest
+    holdings are asked about first, so the weight resolves on the first visit."""
+    from backend.services.followed_portfolios import edgar_13f
+
+    asked: list[str] = []
+    monkeypatch.setattr(edgar_13f.figi, "tickers_for", lambda keys: asked.extend(keys) or {})
+    monkeypatch.setattr(edgar_13f.sec_tickers, "tickers_for_names", lambda names: {})
+    snaps = [
+        {"positions": [{"key": "SMALL", "value": 1}, {"key": "BIG", "value": 9}]},
+        {"positions": [{"key": "OLDBIG", "value": 99}]},
+    ]
+    edgar_13f.resolve_tickers(snaps, {})
+    assert asked == ["BIG", "SMALL", "OLDBIG"]
+
+
+def test_a_new_york_registry_share_is_a_stock_a_13f_can_hold():
+    """ASML's US listing is typed "NY Reg Shrs", not "Common Stock" or "ADR": it is matched."""
+    from backend.services.followed_portfolios import figi
+
+    reply = [
+        {
+            "ticker": "ASML",
+            "securityType": "NY Reg Shrs",
+            "securityType2": "Depositary Receipt",
+            "marketSector": "Equity",
+        }
+    ]
+    assert figi._pick(reply) == "ASML"
+
+
+def test_a_code_is_matched_to_a_share_never_to_a_derivative_or_a_bond():
+    """One filing code can come back as several instruments: only a share gets the ticker."""
+    from backend.services.followed_portfolios import figi
+
+    def pick(**match):
+        return figi._pick([{"ticker": "ACME", **match}])
+
+    assert pick(securityType="Common Stock", marketSector="Equity") == "ACME"
+    assert pick(securityType="GDR", securityType2="Depositary Receipt", marketSector="Equity")
+    assert pick(securityType="Equity Option", securityType2="Option", marketSector="Equity") == ""
+    assert pick(securityType="Equity WRT", securityType2="Warrant", marketSector="Equity") == ""
+    assert pick(securityType="Right", marketSector="Equity") == ""
+    assert pick(securityType="Corp", securityType2="Corp", marketSector="Corp") == ""

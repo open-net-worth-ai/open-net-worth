@@ -55,7 +55,12 @@ export function useOpenPortfolio() {
         replace: true,
       } as never)
     write(open ? portfolioParam(open) : undefined)
-    return () => write(undefined)
+    // Leaving for another Intel tab takes the param off; leaving Intel itself (a stock's page
+    // opened from a row) must not write anything: the address is that page's by now, and a
+    // replace here swapped it for Intel's, so the stock page never stayed and Back broke.
+    return () => {
+      if (window.location.pathname.startsWith('/intel')) write(undefined)
+    }
   }, [open, navigate])
 
   return { open, setOpen }

@@ -16,11 +16,9 @@ from backend.core.safe_xml import has_dtd
 from backend.core.untrusted import sanitize_untrusted
 from backend.services.followed_portfolios import figi, sec_tickers
 from backend.services.followed_portfolios.http import fetch_bytes, fetch_json
-from backend.services.followed_portfolios.model import MAX_TOP_N
 
 SEC = "SEC EDGAR"
 # Positions kept per snapshot: the largest top N plus what a change needs to see.
-MAX_POSITIONS = MAX_TOP_N + 10
 # Two years of quarter-to-quarter changes (nine filings), for the period picker and the chart's
 # markers. The two newest are also the model's.
 HISTORY_QUARTERS = 9
@@ -248,7 +246,13 @@ def resolve_tickers(snaps: list[dict], known: dict) -> dict[str, str]:
     (a CINS was once asked as a CUSIP and cached as "none"), then matched by issuer name
     against SEC's own list. The owner's corrections are applied by the caller, never here."""
     cusip_map = dict(known.get("cusip_map") or {})
-    names = {p["key"]: p.get("name") or "" for s in snaps for p in s["positions"]}
+    # Largest first, newest quarter first: the lookup service allows so many codes a refresh,
+    # so the holdings that carry the weight resolve on the first visit and the rest follow.
+    names = {
+        p["key"]: p.get("name") or ""
+        for s in snaps
+        for p in sorted(s["positions"], key=lambda p: -float(p.get("value") or 0))
+    }
     pending = [k for k in dict.fromkeys(names) if not cusip_map.get(k)]
     for key, ticker in (figi.tickers_for(pending) if pending else {}).items():
         if ticker or key not in cusip_map:
@@ -300,14 +304,16 @@ def fetch(cik: str, known: dict | None = None, quarters: int = HISTORY_QUARTERS)
     known = known or {}
     stored = known.get("current") or {}
     # A row stored before history and share classes were kept reads its filings once more.
-    complete = (known.get("history_quarters") or 0) >= quarters and all(
-        "share_class" in p for p in stored.get("positions") or []
+    # Rows stored before every position was kept (they were cut at 60) read it all once more.
+    complete = (
+        (known.get("history_quarters") or 0) >= quarters
+        and bool(known.get("all_positions"))
+        and all("share_class" in p for p in stored.get("positions") or [])
     )
     if stored.get("filing_id") == filings[0]["filing_id"] and complete:
         return _retry_lookups(known)
+    # Every position the filing lists: nothing is cut (the page shows them all).
     snaps = [_snapshot(cik, f) for f in filings]
-    for snap in snaps:
-        snap["positions"] = snap["positions"][:MAX_POSITIONS]
     cusip_map = resolve_tickers(snaps, known)
     overrides = known.get("ticker_overrides") or {}
     snaps = [{**stamp(s, cusip_map, overrides), "unread_reports": 0} for s in snaps]
@@ -320,5 +326,7 @@ def fetch(cik: str, known: dict | None = None, quarters: int = HISTORY_QUARTERS)
         "history": history,
         # How many quarters were asked for: a stored row read with fewer is read again.
         "history_quarters": quarters,
+        # Every position the filing lists was kept (rows before this were cut at 60).
+        "all_positions": True,
         "cusip_map": cusip_map,
     }

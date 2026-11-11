@@ -45,9 +45,15 @@ def _merged(snapshot: dict | None) -> dict[str, dict]:
     return out
 
 
-def _top_weights(merged: dict[str, dict], top_n: int) -> dict[str, float]:
-    top = sorted(merged.values(), key=lambda p: (-p["value"], p["symbol"]))[:top_n]
-    total = sum(p["value"] for p in top)
+def _top_weights(
+    merged: dict[str, dict], top_n: int | None, whole: float | None = None
+) -> dict[str, float]:
+    """Each holding's weight: within the top ``top_n`` (summing to 1, what a copy trades
+    toward), or with ``top_n`` None every holding as its share of ``whole`` (the filing's
+    total, unmatched holdings included), what a reader means by "% of the portfolio"."""
+    ranked = sorted(merged.values(), key=lambda p: (-p["value"], p["symbol"]))
+    top = ranked if top_n is None else ranked[:top_n]
+    total = whole if top_n is None and whole else sum(p["value"] for p in top)
     return {p["symbol"]: p["value"] / total for p in top} if total > 0 else {}
 
 
@@ -72,11 +78,12 @@ def _age_days(filed_at: str | None, today: date) -> int | None:
         return None
 
 
-def _unmatched(positions: list[dict], total: float, top_n: int) -> list[dict]:
-    """Positions with no ticker that are large enough to have made the top N."""
+def _unmatched(positions: list[dict], total: float, top_n: int | None) -> list[dict]:
+    """Positions with no ticker that are large enough to have made the top N (every one when
+    ``top_n`` is None)."""
     out, matched = [], 0
     for pos in sorted(positions, key=lambda p: -float(p.get("value") or 0)):
-        if matched >= top_n or total <= 0:
+        if total <= 0 or (top_n is not None and matched >= top_n):
             break
         if pos.get("symbol"):
             matched += 1
@@ -123,20 +130,24 @@ def _last_trades(follow: dict) -> dict[str, dict]:
     return out
 
 
-def build_model(follow: dict, today: date, top_n: int = DEFAULT_TOP_N) -> dict | None:
+def build_model(follow: dict, today: date, top_n: int | None = DEFAULT_TOP_N) -> dict | None:
     """``{as_of, prev_as_of, filed_at, age_days, estimated, holdings, exited, unmatched,
     unread_reports}`` for a follow, or None when it has no snapshot yet. A fund holding carries
     its share counts and move (``_fund_detail``); a member holding its ``last_trade``."""
     current = follow.get("current")
     if not current:
         return None
-    top_n = max(1, min(int(top_n or DEFAULT_TOP_N), MAX_TOP_N))
+    # None = every holding (a portfolio's page); a number = the top N (cards, Lucius, a copy).
+    if top_n is not None:
+        top_n = max(1, min(int(top_n), MAX_TOP_N))
     previous = follow.get("previous")
     now, before = _merged(current), _merged(previous)
     fund = follow.get("kind") in ("fund_13f", "etf_daily")
     last_trades = {} if fund else _last_trades(follow)
-    weights = _top_weights(now, top_n)
-    prev_weights = _top_weights(before, top_n)
+    whole = sum(float(p.get("value") or 0) for p in current.get("positions") or [])
+    prev_whole = sum(float(p.get("value") or 0) for p in (previous or {}).get("positions") or [])
+    weights = _top_weights(now, top_n, whole)
+    prev_weights = _top_weights(before, top_n, prev_whole)
     holdings = [
         {
             "symbol": symbol,
