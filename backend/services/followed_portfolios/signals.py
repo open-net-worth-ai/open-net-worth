@@ -1,4 +1,4 @@
-"""What a follow tells the rest of the app: one Intel story per new filing."""
+"""What a follow tells the rest of the app: one Intel story per new filing (a daily ETF: per day with a change)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,12 @@ from backend.services.intel_stories import apply_story_change
 logger = logging.getLogger(__name__)
 
 _KEY_PREFIX = "followed_portfolio"
+_NO_CHANGE = "no change in the top holdings"
+_WHAT = {
+    "fund_13f": "filed a new 13F",
+    "house_member": "disclosed new trades",
+    "etf_daily": "changed its holdings",
+}
 
 
 def _counts(model: dict) -> str:
@@ -21,7 +27,7 @@ def _counts(model: dict) -> str:
     parts = [f"{by_change[k]} {k}" for k in ("new", "increased", "reduced") if by_change.get(k)]
     if model["exited"]:
         parts.append(f"{len(model['exited'])} exited")
-    return ", ".join(parts) or "no change in the top holdings"
+    return ", ".join(parts) or _NO_CHANGE
 
 
 def emit_new_filing_story(follow: dict, model: dict) -> bool:
@@ -32,9 +38,13 @@ def emit_new_filing_story(follow: dict, model: dict) -> bool:
         if any(s.get("synthetic_key") == key for s in IntelStoriesStore().all()):
             return False
         now = datetime.now(timezone.utc).isoformat()
-        fund = follow["kind"] == "fund_13f"
-        what = "filed a new 13F" if fund else "disclosed new trades"
-        basis = "" if fund else " Weights are estimated from disclosed trade ranges."
+        kind = follow["kind"]
+        if kind == "etf_daily" and _counts(model) == _NO_CHANGE:
+            return False  # a day with no move is not news; one story per day at most
+        what = _WHAT[kind]
+        basis = (
+            " Weights are estimated from disclosed trade ranges." if kind == "house_member" else ""
+        )
         apply_story_change(
             {
                 "id": str(uuid.uuid4()),

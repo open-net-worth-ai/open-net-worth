@@ -1,4 +1,4 @@
-import { Button } from '../../ui'
+import { Sparkles } from '../../../ui/icons'
 import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import { COPY, copyTradePrompt } from './following.copy'
 
@@ -15,15 +15,19 @@ interface Props {
 export function CopyTradeButton({ who, what, onAskLucius }: Props) {
   if (!onAskLucius) return null
   return (
-    <Button
-      size="sm"
+    // Lucius does this (sizes it, drafts the order): it wears Lucius's own action style, as
+    // "Build with Lucius" does on a stock's page.
+    <button
+      type="button"
+      className="asd-thesis-lucius"
       aria-label={COPY.copyTradeLabel(what)}
       onClick={() => {
         sendNextPrefill()
         onAskLucius(copyTradePrompt(who, what))
       }}
     >
+      <Sparkles size={13} aria-hidden="true" />
       {COPY.copyTrade}
-    </Button>
+    </button>
   )
 }

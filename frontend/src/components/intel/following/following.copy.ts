@@ -1,7 +1,89 @@
+import type { FollowKind } from '../../../api/followedPortfolios'
 const PAST_WINDOW = (window: string) =>
   `Price return of the holdings in the newest filing, at their filed weights, over ${window}. It is not the fund's own return: it applies today's holdings to the past, so recent winners flatter it.`
 
 export const COPY = {
+  discoverTitle: 'Famous Portfolios',
+  filterLabel: 'Filter',
+  filterTitle: 'Filter moves',
+  holdingsSearch: 'Search holdings',
+  noHoldingMatch: (q: string) => `No holding matches "${q}".`,
+  periodLabel: 'Period',
+  noMovesInPeriod: 'No moves in this period.',
+  tradeDetails: 'Trade details',
+  tradeDetailsOf: (symbol: string) => `Every move in ${symbol}`,
+  allMovesTitle: 'All moves',
+  breadcrumbLabel: 'Breadcrumb',
+  cancel: 'Cancel',
+  save: 'Save',
+  tradesTitle: 'Trades',
+  form4Title: 'Exact trades since the filing',
+  changesTitle: (kind: FollowKind) =>
+    kind === 'etf_daily' ? 'Changes since the previous day' : 'Changes last quarter',
+  noTicker: 'No ticker',
+  holdingActions: (symbol: string) => `Actions for ${symbol}`,
+  tickerSetAction: 'Set ticker',
+  tickerFixAction: 'Wrong ticker?',
+  tickerSetTitle: 'Set the ticker',
+  tickerFixTitle: 'Correct the ticker',
+  tickerLabel: 'Ticker',
+  tickerPlaceholder: 'e.g. ACME',
+  tickerFiledAs: (name: string) => `The filing lists this holding as ${name}.`,
+  tickerHelp:
+    'We could not match it to a stock, so it is left out of the weights and of anything copied. We check the ticker has a price before saving.',
+  tickerClearHelp: 'Leave it empty to go back to the ticker we looked up.',
+  tickerWatchesToo: 'Saving also starts watching this portfolio, which is where the fix is kept.',
+  about: (f: { kind: FollowKind; name: string; subtitle: string }) =>
+    f.kind === 'house_member'
+      ? `${f.name}'s stock trades, from the disclosures House members must file within 45 days of a trade.`
+      : f.kind === 'etf_daily'
+        ? `${f.name}'s holdings, from the list ARK publishes every trading day.`
+        : `${f.name}'s US stock holdings${f.subtitle ? `, run by ${f.subtitle}` : ''}, as it reports them to the SEC each quarter, within 45 days of the quarter's end.`,
+  colStock: 'Name',
+  colChange: 'Change (USD)',
+  colShares: 'Shares',
+  colTraded: 'Traded',
+  colFiled: 'Filed',
+  colDate: 'Date',
+  colAvgPrice: 'Avg price',
+  kpiValue: 'Holdings value',
+  kpiCount: 'Stocks held',
+  kpiReturn: '1Y return',
+  kpiSincePrevious: (change: string) => `${change} since the previous filing`,
+  colWeight: '% Portfolio',
+  colSharesHeld: 'Shares held',
+  colLastTrade: 'Last trade',
+  sortLabel: 'Sort portfolios',
+  noPriceSince: 'No price since it was filed',
+  sectionsLabel: (name: string) => `${name} sections`,
+  activityFilter: { all: 'All', buy: 'Bought', sell: 'Sold' },
+  openLabel: (name: string) => `Open ${name}`,
+  oneYear: '1Y',
+  cardUnavailable: 'No figures yet',
+  backToAll: 'Famous Portfolios',
+  loadingPage: 'Loading the portfolio…',
+  pageErrorBody: "The filing didn't load. Try again.",
+  /** The date line names the source too: what was published, and when. */
+  updated: (kind: FollowKind, day: string) =>
+    kind === 'house_member'
+      ? `Disclosure filed ${day}`
+      : kind === 'etf_daily'
+        ? `Daily holdings ${day}`
+        : `Holdings disclosed ${day}`,
+  positionsAge: (age: string) => `positions ${age.replace(/ ago$/, '')} old`,
+  watch: 'Watch',
+  watching: 'Watching',
+  watchLabel: 'Watch: get an Intel story when they file',
+  unwatchLabel: 'Stop watching',
+  unwatch: 'Stop watching',
+  tabActivity: 'Trading Activity',
+  tabTrades: 'Trades',
+  tabHoldings: 'Holdings',
+  tabOverview: 'Overview',
+  /** Since the day it became public: the first day a copier could have acted. */
+  sinceFiled: (_source: string, day: string) => `since it became public on ${day}`,
+  sinceFiledCol: 'Since filed',
+
   listTitle: 'Portfolios you follow',
   follow: 'Follow a portfolio',
   followShort: 'Follow',
@@ -9,7 +91,7 @@ export const COPY = {
   listErrorTitle: "Couldn't load your followed portfolios",
   listErrorBody: "We couldn't reach the server. Check your connection and try again.",
   dialogIntro: 'Pick a fund or a House member. We read their public filings.',
-  searchLabel: 'Search',
+  searchLabel: 'Search funds and House members',
   searchPlaceholder: 'Fund or member name',
   featured: 'Featured',
   results: (q: string) => `Results for “${q}”`,
@@ -36,8 +118,9 @@ export const COPY = {
     'Estimated from disclosed trades over the last 36 months. Members report ranges, not exact amounts.',
   refresh: 'Refresh',
   unfollow: 'Unfollow',
-  unfollowTitle: (name: string) => `Unfollow ${name}?`,
-  unfollowBody: 'This removes it from your list. Your accounts and holdings are not touched.',
+  unfollowTitle: (name: string) => `Stop watching ${name}?`,
+  unfollowBody:
+    'You will no longer get a story when they file. Your accounts and any copy automation are not touched.',
   staleFund: (age: string) =>
     `This is the latest filing we have, and it is ${age.replace(/ ago$/, '')} old. Copying it may not reflect what they hold today.`,
   staleMember: 'No trades were filed in the last 36 months.',
@@ -62,13 +145,12 @@ export const COPY = {
     `Last checked for a newer filing on ${when}. The app checks automatically twice a day while it is running, and whenever you choose Refresh in the menu. A new filing also appears as a story in Intel. The chart uses daily prices, which update separately through the day.`,
   moreActions: (name: string) => `More actions for ${name}`,
   changeBasis:
-    'Share changes are between the two quarter-ends. A 13F gives no trade dates or trade prices, so dollar figures use the quarter-end price and are approximate.',
-  tradesTitle: 'Recent trades',
+    'Share changes are between two quarter-ends. The report gives no trade dates or prices, so dollar figures use the quarter-end price and are approximate.',
   noTrades: 'No trades filed in the last 36 months.',
   unreadReports: (n: number) => `${n} reports could not be read and are left out.`,
   unmatched: (n: number) =>
     `${n} ${n === 1 ? 'holding has' : 'holdings have'} no ticker we could match and are left out:`,
-  copyCta: 'Start copy trading',
+  copyCta: 'Copy this portfolio',
   copyPitch:
     'Lucius buys and sells in your broker account to match this portfolio, every week. You set the amount and your rules, and you can have it ask before every order.',
   askLucius: 'Ask Lucius',
@@ -102,7 +184,7 @@ export const COPY = {
   sinceTradeTitle: "The stock's price change since the trade date.",
   galleryTitle: 'Pick a portfolio to follow',
   gallerySub: 'From public filings, so weeks or months old.',
-  gallerySearch: 'Search any fund or US House member',
+  gallerySearch: 'Search funds, members…',
   notAdvice: 'Not financial advice. Filings are public, delayed and can be incomplete.',
 }
 

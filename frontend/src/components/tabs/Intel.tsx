@@ -155,7 +155,7 @@ function IntelFeed({
   const followingOn = followingFlag === true
   const setTab = nav.setTab
   useEffect(() => {
-    if (tab === 'following' && followingFlag === false) setTab('holdings')
+    if (tab === 'portfolios' && followingFlag === false) setTab('holdings')
   }, [tab, followingFlag, setTab])
   // The sidebar card shows the tab's list: My holdings on Holdings, the list on a list tab (none
   // on Topics & macro — topics are in no list; its lead card lists and adds them).
@@ -288,14 +288,14 @@ function IntelFeed({
         </div>
 
         {/* Topics & macro is one column: topics are in no list, so there's no list pane. */}
-        {tab === 'following' && followingOn && (
+        {tab === 'portfolios' && followingOn && (
           <div role="tabpanel" aria-labelledby="ui-page-tab-following">
             <FollowingTab onAskLucius={onChatSuggest} />
           </div>
         )}
         {/* A flag switched off while this tab was remembered shows nothing here: the effect
             above is already sending the visit back to My holdings. */}
-        {tab !== 'following' && (
+        {tab !== 'portfolios' && (
           <div className={`intel-layout${tab === 'macro' ? ' intel-layout--solo' : ''}`}>
             <div className="intel-feed">
               <div

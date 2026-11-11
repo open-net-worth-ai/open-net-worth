@@ -211,22 +211,32 @@ describe('Intel tabs', () => {
   it('offers Famous portfolios only while its flag is on, after Topics & macro', async () => {
     const off = mount()
     await within(off.container).findByTestId('holdings-brief')
-    expect(tabButton(off.container, 'Famous portfolios')).toBeUndefined()
+    expect(tabButton(off.container, 'Famous Portfolios')).toBeUndefined()
     cleanup()
     overrideFlagsForTests({ followed_portfolios: true })
     const base = mockAuthFetch.getMockImplementation()!
     mockAuthFetch.mockImplementation((url: string) =>
-      url === '/api/followed-portfolios' ? ok({ follows: [] }) : base(url),
+      url === '/api/followed-portfolios'
+        ? ok({ follows: [] })
+        : url.startsWith('/api/followed-portfolios/directory')
+          ? ok({ results: [] })
+          : base(url),
     )
-    const on = mount({ subTabRequest: 'following' })
-    expect(await within(on.container).findByText('Pick a portfolio to follow')).toBeTruthy()
-    const labels = [...on.container.querySelectorAll('[role="tab"]')].map((b) => b.textContent)
-    expect(labels.at(-1)).toBe('Famous portfolios')
+    const on = mount({ subTabRequest: 'portfolios' })
+    expect(
+      await within(on.container).findByRole('searchbox', {
+        name: 'Search funds and House members',
+      }),
+    ).toBeTruthy()
+    const labels = [...on.container.querySelectorAll('.ui-page-tabs [role="tab"]')].map(
+      (b) => b.textContent,
+    )
+    expect(labels.at(-1)).toBe('Famous Portfolios')
     expect(on.container.querySelector('.intel-layout')).toBeNull()
   })
 
   it('sends a visit that remembered Following back to My holdings once the flag is off', async () => {
-    sessionStorage.setItem('intel-subtab', 'following')
+    sessionStorage.setItem('intel-subtab', 'portfolios')
     const { container } = mount()
     await within(container).findByTestId('holdings-brief')
     expect(tabButton(container, 'My holdings').getAttribute('aria-selected')).toBe('true')

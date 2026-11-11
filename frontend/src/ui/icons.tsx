@@ -147,6 +147,8 @@ export {
   // ── Income tab: upcoming-payment date confidence ──
   CalendarCheck,
   CalendarClock,
+  // ── Famous portfolios: the activity period picker ──
+  CalendarDays,
   // ── Vault (Lucius tab) ──
   FolderLock,
   FolderMinus,

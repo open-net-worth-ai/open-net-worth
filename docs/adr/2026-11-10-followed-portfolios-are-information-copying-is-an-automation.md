@@ -95,3 +95,19 @@ The public sources shape the feature more than the code does:
 - Branch: `feat/followed-portfolios`.
 - Why recorded: new table, new outbound hosts, and a deliberate refusal to compute trades in
   the app after building and reviewing exactly that.
+
+## Amendment 2026-11-11 — daily ETF holdings, Form 4 trades and one delay figure
+
+- **A third kind, `etf_daily`.** ARK publishes each ETF's whole portfolio daily as CSV. The
+  ETFs are a fixed table (`etf_daily.ETFS`, ref = fund ticker) and the URL is built from it,
+  never from user text. A refresh keeps the last stored day as `previous`, so the model's change
+  flags are day-over-day moves; the same day again is `unchanged`. Intel gets one story per day
+  with a change ("... changed its holdings"), none for a quiet day. Not estimated; stale after 7 days.
+- **Exact trades for funds from Form 4.** A holder of over 10% of a company files Form 4 within
+  2 business days. `form4.py` reads a fund's Form 4 filings from the last year (open-market P and
+  S only), stores them as `activity` (`source: "form4"`) and the accessions already read as
+  `form4_seen`, so a refresh fetches only new filings (at most 20 per call). A Form 4 failure is
+  logged and never fails the 13F follow or refresh. These trades raise no Intel story.
+- **One delay figure.** `view()` returns `delay_days` (today minus the newest information: 13F
+  quarter-end or Form 4 trade for a fund, newest counted trade for a member, file date for an ETF)
+  and `delay_basis` (`quarterly`, `trades`, `daily`) so every surface words it the same way.

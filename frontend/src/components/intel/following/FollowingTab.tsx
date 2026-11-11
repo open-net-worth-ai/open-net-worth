@@ -1,27 +1,20 @@
 import './following.css'
 
-import { useState } from 'react'
-import { Button, ErrorState, TabSkeleton } from '../../ui'
-import { Plus } from '../../../ui/icons'
-import { useIsMobile } from '../../../hooks/useIsMobile'
+import { ErrorState, TabSkeleton } from '../../ui'
 import { COPY } from './following.copy'
-import { FollowChip } from './FollowChip'
-import { FollowDialog } from './FollowDialog'
-import { Gallery } from './Gallery'
-import { FollowView } from './FollowView'
+import { Discover } from './Discover'
+import { PortfolioPage } from './PortfolioPage'
 import { useFollowList } from './useFollowing'
+import { useOpenPortfolio } from './useOpenPortfolio'
 
 interface Props {
   onAskLucius?: (text: string) => void
 }
 
+/** Intel › Famous portfolios: browse the cards, open one, copy it. */
 export function FollowingTab({ onAskLucius }: Props) {
   const list = useFollowList()
-  const isMobile = useIsMobile()
-  const [pickedId, setPickedId] = useState<string | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const follows = list.data?.follows ?? []
-  const selected = follows.find((f) => f.id === pickedId) ?? follows[0]
+  const { open, setOpen } = useOpenPortfolio()
 
   if (list.initialLoading)
     return <TabSkeleton variant="holdings" label={COPY.loadingList} header={false} />
@@ -33,58 +26,24 @@ export function FollowingTab({ onAskLucius }: Props) {
         onRetry={() => void list.refresh()}
       />
     )
-
-  const dialog = dialogOpen && (
-    <FollowDialog
-      onClose={() => setDialogOpen(false)}
-      onFollowed={(follow) => {
-        setPickedId(follow.id)
-        setDialogOpen(false)
-        void list.refresh()
-      }}
-    />
-  )
-  const followButton = (
-    <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setDialogOpen(true)}>
-      {isMobile && selected ? COPY.followShort : COPY.follow}
-    </Button>
-  )
-
-  if (!selected)
+  if (open)
     return (
-      <div className="fol-page">
-        <Gallery
-          onFollowed={(follow) => {
-            setPickedId(follow.id)
-            void list.refresh()
-          }}
-        />
-      </div>
-    )
-
-  return (
-    <div className="fol-page">
-      <div className="fol-bar">
-        <div className="mk-chips fol-chips" role="tablist" aria-label={COPY.listTitle}>
-          {follows.map((f) => (
-            <FollowChip
-              key={f.id}
-              follow={f}
-              selected={f.id === selected.id}
-              onSelect={() => setPickedId(f.id)}
-            />
-          ))}
-        </div>
-        {followButton}
-      </div>
-      <FollowView
-        key={selected.id}
-        follow={selected}
+      <PortfolioPage
+        portfolio={open}
+        onBack={() => setOpen(null)}
         onChanged={list.refresh}
-        onUnfollowed={() => setPickedId(null)}
         onAskLucius={onAskLucius}
       />
-      {dialog}
+    )
+  const watched = list.data.follows.map((f) => ({
+    kind: f.kind,
+    source_ref: f.source_ref,
+    name: f.name,
+    subtitle: f.subtitle,
+  }))
+  return (
+    <div className="fol-page">
+      <Discover watched={watched} onOpen={setOpen} />
     </div>
   )
 }

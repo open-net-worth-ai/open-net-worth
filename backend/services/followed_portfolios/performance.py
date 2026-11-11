@@ -22,7 +22,7 @@ from backend.services import prices
 from backend.services.followed_portfolios.model import build_model, normalize_symbol
 from backend.services.risk_metrics import BENCHMARK_ROSTER, preferred_benchmark
 
-PERIODS = ("1M", "6M", "12M", "FILING")
+PERIODS = ("1M", "6M", "12M", "FILING", "ALL")
 _FALLBACK_BENCHMARK = "SPY"
 _CACHE_SECONDS = 30 * 60
 _cache: dict[tuple, tuple[float, dict]] = {}
@@ -78,8 +78,9 @@ def _window(
 
 
 def _trade_returns(activity: list[dict], closes: dict[str, dict[str, float]]) -> dict[str, float]:
-    """``{"<date>|<symbol>": return since that trade date}`` for a member's counted trades the
-    price history reaches back to."""
+    """``{"<date>|<symbol>": return since the trade became public}`` for counted trades the price
+    history reaches back to. Measured from the FILING date, not the trade date: that is the
+    first day a copier could have bought, so it is what copying would have returned."""
     out: dict[str, float] = {}
     for trade in activity:
         symbol = normalize_symbol(trade.get("symbol"))
@@ -87,8 +88,10 @@ def _trade_returns(activity: list[dict], closes: dict[str, dict[str, float]]) ->
         if not trade.get("counted") or not series:
             continue
         days = sorted(series)
-        at = [d for d in days if d <= trade["date"]]
-        if at and days[0] <= trade["date"]:
+        public = trade.get("filed_at") or trade["date"]
+        at = [d for d in days if d <= public]
+        # A stock with no price after the filing (delisted, renamed) has no return, not 0%.
+        if at and days[0] <= public and days[-1] > at[-1]:
             out[f"{trade['date']}|{symbol}"] = series[days[-1]] / series[at[-1]] - 1
     return out
 
@@ -101,9 +104,12 @@ def build_performance(
     filed_at: str,
     today: date,
     activity: list[dict] | None = None,
+    all_from: str | None = None,
 ) -> dict:
-    """Every window in one answer, so the screen switches between them without a fetch."""
+    """Every window in one answer, so the screen switches between them without a fetch.
+    ``ALL`` starts where the portfolio's own history does (its oldest quarter on record)."""
     starts = {
+        "ALL": all_from or (today - timedelta(days=731)).isoformat(),
         "1M": (today - timedelta(days=30)).isoformat(),
         "6M": (today - timedelta(days=183)).isoformat(),
         "12M": (today - timedelta(days=366)).isoformat(),
@@ -115,12 +121,18 @@ def build_performance(
     }
 
 
-def _closes(symbol: str) -> dict[str, float]:
-    return {
-        p["date"]: float(p["price"])
-        for p in prices.fetch_history(symbol, "1Y")
-        if p.get("date") and p.get("price")
-    }
+def closes(symbol: str) -> dict[str, float]:
+    """``{day: close}``: weekly for the years the history reaches back, daily for the last one
+    (a month's window still has every day; a two-year one is not 500 points)."""
+    out: dict[str, float] = {}
+    for timeframe in ("5Y", "1Y"):
+        for p in prices.fetch_history(symbol, timeframe):
+            if p.get("date") and p.get("price"):
+                out[p["date"]] = float(p["price"])
+    return dict(sorted(out.items()))
+
+
+_closes = closes
 
 
 def performance_for(follow: dict) -> dict:
@@ -153,6 +165,7 @@ def performance_for(follow: dict) -> dict:
             filed_at=str(model["filed_at"]),
             today=today,
             activity=follow.get("activity") or [],
+            all_from=(follow.get("history") or [{}])[-1].get("as_of"),
         ),
     }
     _cache[cache_key] = (time.monotonic(), out)

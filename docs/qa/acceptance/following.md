@@ -12,7 +12,7 @@ automation template. Every control on the screen has an entry.
 
 ### FOLLOWING-TAB-FLAG-OFF
 - GIVEN the flag is off
-- WHEN I open Intel and then `/intel?sub=following`
+- WHEN I open Intel and then `/intel?sub=portfolios`
 - THEN no "Famous portfolios" tab exists and My holdings is shown
 
 ### FOLLOWING-GALLERY-FOLLOW

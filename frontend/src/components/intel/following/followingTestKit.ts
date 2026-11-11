@@ -55,7 +55,7 @@ export function fund(over: Partial<Follow> = {}): Follow {
       exited: [
         { symbol: 'OXYZ', name: 'Oxyz Energy', prev_shares: 3_200_000, prev_value: 96_000_000 },
       ],
-      unmatched: [{ name: 'Mystery Trust', weight: 0.041 }],
+      unmatched: [{ key: 'X00000001', name: 'Mystery Trust', weight: 0.041 }],
       unread_reports: 0,
     },
     activity: [],

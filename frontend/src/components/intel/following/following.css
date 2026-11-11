@@ -1,38 +1,20 @@
-/* Intel › Famous portfolios.
-
-   Built from the app's own parts: kit Buttons, Badge, ActionMenu, StatInfo, TextField, Modal;
-   the Investments filter chip (.mk-chip), segmented control (.mk-seg), performance chart
-   (PerfChart, .mk-chart) and legend (.mk-legend). What is defined here is only the layout of
-   this screen's rows, and every size, space, radius and colour is a design token
-   (index.tokens.generated.css). Grid tracks and bar heights are the only raw lengths. */
+/* Intel › Famous portfolios. Built from the app's parts (kit Buttons, Badge, ActionMenu,
+   StatInfo, TextField, the .mk-chip filter chip, .mk-seg, PerfChart, .mk-legend). Every size,
+   space, radius and colour is a design token; grid tracks and chart geometry are the only raw
+   lengths. Words are labels only: numbers, colour and shape carry the meaning. */
 
 .fol-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-7);
+  gap: var(--space-6);
   min-width: 0;
 }
 
-.fol-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-width: 0;
+/* The page's own gap spaces the tab bar; its kit margin on top of that doubled it. */
+.fol-page > .ui-page-tabs {
+  margin-bottom: 0;
 }
 
-/* The one departure from .mk-chip, asked for by the owner: the selected portfolio is ink. */
-.fol-chips .mk-chip.is-on {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--surface);
-}
-
-.fol-chips .mk-chip.is-on .mk-chip-n {
-  color: var(--surface);
-}
-
-/* Scoped: bare tone names must never reach the rest of the app. */
 .fol-page .up {
   color: var(--good);
 }
@@ -45,53 +27,226 @@
   color: var(--faint);
 }
 
-.fol-mono {
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: var(--space-9);
-  height: var(--space-9);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--lucius) 14%, var(--surface));
-  color: var(--lucius);
-  font-size: var(--text-xs);
-  font-weight: 700;
-}
-
-/* ── the card: who it is, the actions, how it has done (Intel's card surface) ── */
-.fol-hero {
-  container-type: inline-size;
-  display: grid;
-  gap: var(--space-6);
-  padding: var(--space-6);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
-}
-
-.fol-hero-top {
+/* ── Discover ── */
+.fol-discover-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
   flex-wrap: wrap;
-  gap: var(--space-4);
 }
 
-.fol-hero-top > .fol-id {
-  flex: 1 1 260px;
+.fol-discover-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
-.fol-hero-top > .fol-actions {
+.fol-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 240px;
+  min-width: 180px;
+}
+.fol-search svg {
+  position: absolute;
+  left: 10px;
+  color: var(--faint);
+  pointer-events: none;
+}
+.fol-search input {
+  width: 100%;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 10px 0 30px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+.fol-search input:focus {
+  border-color: var(--accent);
+}
+.fol-search input::placeholder {
+  color: var(--fg-3);
+}
+
+.fol-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(440px, 100%), 1fr));
+  gap: var(--space-5);
+}
+
+.fol-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  padding: var(--space-7) var(--space-8);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fol-card:hover {
+  border-color: var(--line-strong);
+}
+
+.fol-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.fol-card-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fol-card-name {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.fol-card-vs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.fol-card-who,
+.fol-card-updated,
+.fol-card-vs {
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+
+.fol-card-ret {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fol-card-period {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.fol-card-moves {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.fol-card-move {
+  display: grid;
+  grid-template-columns: 64px 72px 1fr;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.fol-card-move b {
+  color: var(--ink);
+}
+
+.fol-card-detail {
+  color: var(--muted);
+}
+
+.fol-card-skel {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.fol-card-ring {
   flex: none;
+  align-self: center;
 }
 
-.fol-name {
+.fol-donut-n {
+  font-size: var(--text-md);
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.fol-donut-l {
+  font-size: var(--text-2xs);
+  fill: var(--faint);
+}
+
+/* ── portfolio page ── */
+
+/* Name on the left; the call to action, then the icon actions, on the right — one row on a
+   wide screen. On a narrow one the icons stay beside the name and the call to action moves
+   under it, left-aligned at its own size. */
+.fol-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'id cta icons';
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-4);
+}
+
+.fol-head > .fol-id {
+  grid-area: id;
+  min-width: 0;
+}
+
+.fol-head > .fol-cta {
+  grid-area: cta;
+}
+
+.fol-head > .fol-icons {
+  grid-area: icons;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.fol-watch.is-on {
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .fol-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id icons'
+      'cta cta';
+    align-items: start;
+  }
+  .fol-head > .fol-cta {
+    justify-self: start;
+  }
+}
+
+.fol-title {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3);
   margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
+  font-size: var(--text-2xl);
+  font-weight: 700;
   color: var(--ink);
 }
 
@@ -99,35 +254,10 @@
   margin: var(--space-0) 0 0;
   font-size: var(--text-sm);
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.fol-legend-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-6);
-}
-
-.fol-legend-row > .mk-legend {
-  margin-top: 0;
-}
-
-.fol-source {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  font-size: var(--text-xs);
-  color: var(--faint);
-}
-
-.fol-source > span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
+.fol-stale {
+  color: var(--warn);
 }
 
 .fol-actions {
@@ -136,14 +266,86 @@
   gap: var(--space-3);
 }
 
-.fol-spark {
-  color: var(--lucius);
+.fol-sec {
+  display: grid;
+  /* minmax(0, …): a chart canvas must not hold its track open when the page narrows. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  min-width: 0;
 }
 
+/* The move in focus: its figures in one line, the chart under them. */
+.fol-spot {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-7);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+}
+
+.fol-spot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.fol-spot-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.fol-spot-title b {
+  font-size: var(--text-md);
+  color: var(--ink);
+}
+
+.fol-spot-price {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fol-spot-move {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fol-spot-sub {
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+
+.fol-id {
+  display: grid;
+  min-width: 0;
+}
+
+.fol-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fol-foot {
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+
+.fol-foot {
+  margin: 0;
+}
+
+/* ── performance (PerformanceBlock) ── */
 .fol-perf {
   display: grid;
   gap: var(--space-4);
-  min-width: 0;
+  padding: var(--space-6) var(--space-7);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
 }
 
 .fol-perf-top {
@@ -162,8 +364,8 @@
 }
 
 .fol-perf-num {
-  font-size: var(--text-display-md);
-  font-weight: 700;
+  font-size: var(--text-xl);
+  font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -171,7 +373,6 @@
 .fol-perf-vs {
   font-size: var(--text-sm);
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .fol-perf-vs b {
@@ -187,218 +388,15 @@
   color: var(--faint);
 }
 
-/* ── sections under the card ── */
-.fol-cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr));
-  gap: var(--space-7) var(--space-9);
-  align-items: start;
-}
-
-.fol-sec {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.fol-sec-head {
+.fol-legend-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: var(--space-3);
 }
 
-.fol-sec-title {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.fol-sec-sub {
-  font-size: var(--text-xs);
-  color: var(--faint);
-}
-
-.fol-id {
-  min-width: 0;
-}
-
-.fol-sym {
-  font-size: var(--text-base);
-  font-weight: 700;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fol-sub {
-  font-size: var(--text-xs);
-  color: var(--faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fol-num {
-  text-align: right;
-  font-size: var(--text-base);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.fol-num:not(.up, .down, .flat) {
-  color: var(--ink);
-}
-
-.fol-moves,
-.fol-holds,
-.fol-trades,
-.fol-gallery {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* Rows share one shape; only the tracks differ. No boxes, no rules: a hover tint marks the row. */
-.fol-move,
-.fol-hold,
-.fol-trade {
-  display: grid;
-  align-items: center;
-  gap: var(--space-5);
-  padding: var(--space-3);
-  margin-inline: calc(-1 * var(--space-3));
-  border-radius: var(--radius-lg);
-}
-
-.fol-move:hover,
-.fol-hold:not(.fol-head):hover,
-.fol-trade:hover {
-  background: var(--bg-2);
-}
-
-.fol-move {
-  grid-template-columns: 8px minmax(0, 1fr) minmax(120px, 170px) 92px;
-}
-
-.fol-hold {
-  grid-template-columns: 22px minmax(0, 1fr) 64px minmax(60px, 140px) 72px;
-}
-
-.fol-trade {
-  grid-template-columns: 8px minmax(0, 1fr) minmax(140px, 190px) 60px 92px;
-}
-
-.fol-move-what {
-  min-width: 0;
-  text-align: right;
-}
-
-.fol-head {
-  padding-block: 0;
-}
-
-.fol-head > span {
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--fg-3);
-  text-align: right;
-}
-
-.fol-head > span:nth-child(2) {
-  text-align: left;
-}
-
-.fol-rank {
-  font-size: var(--text-xs);
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.fol-track {
-  height: 4px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-2);
-  overflow: hidden;
-}
-
-.fol-fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--muted);
-}
-
-.fol-dot {
-  width: var(--space-3);
-  height: var(--space-3);
-  border-radius: var(--radius-pill);
-  background: currentColor;
-}
-
-.fol-dim {
-  opacity: 0.55;
-}
-
-/* A row's own action: there when you point at the row or tab to it, always on a touch screen. */
-.fol-act {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (hover: hover) {
-  .fol-act > .ui-btn {
-    opacity: 0;
-  }
-  li:hover > .fol-act > .ui-btn,
-  .fol-act > .ui-btn:focus-visible {
-    opacity: 1;
-  }
-}
-
-/* ── gallery ── */
-.fol-gallery-head {
-  display: grid;
-  gap: var(--space-2);
-  max-width: 460px;
-}
-
-.fol-gallery-head > .fol-by {
-  margin: 0 0 var(--space-2);
-}
-
-.fol-gallery {
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: var(--space-3);
-}
-
-.fol-tile {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  border-radius: var(--radius-xl);
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-
-.fol-tile > .fol-id {
-  flex: 1;
-}
-
-/* ── notes, links, the follow dialog ── */
-.fol-foot {
-  margin: 0;
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  color: var(--faint);
+.fol-legend-row > .mk-legend {
+  margin-top: 0;
 }
 
 .fol-note {
@@ -409,118 +407,400 @@
   color: var(--muted);
 }
 
-.fol-note--warn {
-  color: var(--warn);
-}
-
 .fol-note--bad {
   color: var(--bad);
 }
 
-.fol-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0);
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--line-strong);
-  text-underline-offset: 2px;
-}
-
-.fol-link:hover {
-  color: var(--ink);
-}
-
-.fol-results {
-  display: grid;
-  margin: 0 calc(-1 * var(--space-3));
-  padding: 0;
-  list-style: none;
-}
-
-.fol-result {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
-}
-
-.fol-result:hover {
-  background: var(--bg-2);
-}
-
-.fol-result-line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.fol-result-line > .fol-id {
-  flex: 1;
-}
-
-.fol-followed {
-  padding-inline: var(--space-3);
-}
-
-/* The small-caps group label the app uses over list sections (Featured / Results for …). */
-.fol-head-label {
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--fg-3);
+/* A row's own action shows on hover or focus; always on a touch screen. */
+@media (hover: hover) {
+  .fol-spot-head > .ui-btn {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 640px) {
-  .fol-hero {
-    padding: var(--space-5);
+  .fol-card {
+    padding: var(--space-6);
   }
-  .fol-perf-num {
-    font-size: var(--text-display-sm);
+  .fol-card-ring svg {
+    width: 120px;
+    height: 120px;
   }
-  .fol-move {
-    grid-template-columns: 8px minmax(0, 1fr) auto auto;
+
+  .fol-mix {
+    justify-content: center;
   }
-  .fol-move-what > .fol-sub {
+  .fol-watch-label {
     display: none;
   }
-  .fol-hold {
-    grid-template-columns: 18px minmax(0, 1fr) 56px 64px;
+  .fol-spot {
+    padding: var(--space-4);
   }
-  .fol-hold > .fol-track,
-  .fol-head > span:nth-child(4) {
-    display: none;
+  .fol-spot-head {
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
-  .fol-trade {
-    grid-template-columns: 8px minmax(0, 1fr) 56px auto;
+}
+
+.fol-donut {
+  display: block;
+  flex: none;
+}
+
+.fol-donut circle {
+  transition: opacity 0.12s ease;
+}
+
+/* One row: wide, the filter LEFT and the period RIGHT; on a phone [period (fills) | Filter]. */
+.fol-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.fol-toolbar > .fol-period {
+  flex: none;
+  margin-left: auto;
+}
+
+.fol-toolbar .ui-segmented {
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 640px) {
+  .fol-toolbar > .fol-period {
+    flex: 1 1 auto;
+    margin-left: 0;
   }
-  .fol-trade > .fol-move-what {
+  .fol-toolbar > .fol-period .intel-sort-select {
+    width: 100%;
+  }
+}
+
+.fol-tc {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-xs);
+}
+
+.fol-by--row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+/* The holdings ring with its legend: every colour named, "Others" included. */
+.fol-mix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-5) var(--space-4);
+}
+
+.fol-legend {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 200px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.fol-legend li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fol-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+/* ── tables: the app's .mk-tbl (Investments), sized to sit inside a page ── */
+.fol-tbl.mk-tbl {
+  min-width: 0;
+  table-layout: auto;
+}
+
+.fol-tbl.mk-tbl td.up {
+  color: var(--good);
+}
+
+.fol-tbl.mk-tbl td.down {
+  color: var(--bad);
+}
+
+/* A sortable header is a button, so it is reachable by keyboard; it looks like the header. */
+.fol-th {
+  all: unset;
+  cursor: pointer;
+}
+
+.fol-th:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.fol-tbl.mk-tbl tbody tr.is-on {
+  background: var(--selected);
+}
+
+.fol-tbl.mk-tbl tbody tr.drill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.fol-tbl.mk-tbl td.fol-fix-cell {
+  width: 1%;
+  padding-block: 4px;
+}
+
+.fol-noticker {
+  color: var(--warn);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.fol-h {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.fol-about {
+  margin: 0;
+  max-width: 72ch;
+  font-size: var(--text-base);
+  color: var(--muted);
+}
+
+/* Holdings, top to bottom (as Moomoo's): the ring with its legend beside it, unboxed; the
+   search; the table. */
+.fol-holdings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.fol-holdings > .fol-mix {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0;
+}
+
+.fol-holdings .fol-legend {
+  flex: 0 1 360px;
+}
+
+.fol-ticker-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fol-ticker-filed,
+.fol-ticker-help {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.fol-ticker-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--bad);
+}
+
+@media (max-width: 760px) {
+  .fol-tbl .fol-wide {
     display: none;
   }
 }
 
-/* Narrow card (a phone, or a desktop with the chat open): the name and the menu keep the top
-   row, the line under the name may wrap, and the two buttons take a row of their own. */
-@container (max-width: 620px) {
-  .fol-hero-top > .fol-id {
-    flex-basis: 0;
+@media (max-width: 640px) {
+  .fol-holdings > .fol-mix {
+    gap: var(--space-5);
   }
-  .fol-hero-top > .fol-menu {
-    order: 2;
+}
+
+.fol-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .fol-back:hover {
+    color: var(--ink);
   }
-  .fol-hero-top > .fol-actions {
-    order: 3;
-    flex-basis: 100%;
+}
+
+/* A table on a phone: one card per row. */
+.fol-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.fol-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.fol-row:last-child {
+  border-bottom: 0;
+}
+
+.fol-row.is-on {
+  background: var(--selected);
+}
+
+.fol-row-main {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+div.fol-row-main {
+  cursor: default;
+}
+
+.fol-row-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.fol-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.fol-row-head {
+  min-width: 0;
+}
+
+.fol-row-primary {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.fol-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-5);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.fol-row-label {
+  margin-right: var(--space-2);
+  color: var(--faint);
+}
+
+.fol-row-action {
+  flex: none;
+  padding-right: var(--space-3);
+}
+
+.fol-row-primary.up,
+.fol-row-meta .up {
+  color: var(--good);
+}
+
+.fol-row-primary.down,
+.fol-row-meta .down {
+  color: var(--bad);
+}
+
+.fol-spot-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fol-tc-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.fol-tbl-box {
+  min-width: 0;
+}
+
+/* The period picker sits beside the filter, so it takes the filter's box exactly: the same
+   track (.ui-segmented's background, border, radius) and the same inner height. */
+.fol-toolbar .intel-sort {
+  height: 37px;
+  box-sizing: border-box;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.fol-toolbar .intel-sort-select {
+  height: 100%;
+  border-radius: var(--radius-md);
+}
+
+.fol-empty {
+  margin: 0;
+  padding: var(--space-5) 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* The search runs the table's full width. */
+.fol-holdings .fol-search {
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+
+/* A row's menu shows on the row being pointed at (always on a touch screen). */
+@media (hover: hover) {
+  .fol-tbl.mk-tbl .fol-row-menu {
+    opacity: 0;
+    transition: opacity 0.12s ease;
   }
-  .fol-hero-top > .fol-actions > .ui-btn {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-  .fol-by {
-    white-space: normal;
-  }
-  .fol-perf-top {
-    flex-direction: column;
+  .fol-tbl.mk-tbl tr:hover .fol-row-menu,
+  .fol-tbl.mk-tbl tr:focus-within .fol-row-menu {
+    opacity: 1;
   }
 }

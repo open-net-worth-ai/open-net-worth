@@ -24,13 +24,20 @@ Followed portfolios**. It then appears as the **Famous portfolios** tab in **Int
 
 | Kind | Source | How fresh |
 |---|---|---|
-| A fund (for example Berkshire Hathaway) | Its quarterly 13F filing at the SEC | Filed up to 45 days after each quarter ends |
+| A fund (for example Berkshire Hathaway) | Its quarterly 13F filing at the SEC, plus its Form 4 trades | The 13F is filed up to 45 days after each quarter ends. A Form 4 is filed within 2 business days of a trade |
 | A US House member | Their trade reports at the House Clerk | Filed up to 45 days after each trade |
+| An ARK ETF (for example ARK Innovation) | The fund's own daily holdings file | Daily: each trading day's full holdings |
 
 Limits you should know:
 
 - A 13F lists US-listed stocks the fund holds long. It leaves out short positions, most
   non-US holdings, bonds and cash.
+- A fund that owns more than 10% of a company must file a Form 4 within 2 business days of each
+  open-market purchase or sale, with the exact date, shares and price. These are shown as the
+  fund's recent trades. Only a fund's largest stakes appear this way, so most of its book still
+  moves only when the next 13F arrives.
+- An ARK ETF publishes its whole portfolio every day, so its changes are day over day moves, not
+  quarterly ones. Only the ARK ETFs listed in the directory can be followed.
 - A House report lists trades, not holdings, and gives each amount as a range. The portfolio
   shown for a member is **estimated**: purchases add the middle of the range, sales take it
   away, over the last three years. The screen labels these weights as estimated.
@@ -58,16 +65,21 @@ shows:
   last two filings, with the approximate dollar value and the share change. A 13F gives share counts at two
   quarter-ends and nothing else: no trade dates and no trade prices, so the dollar figures use
   the quarter-end price.
-- **Recent trades** (a House member). Each disclosed trade with its date, the dollar range
+- **Recent trades** (a fund's Form 4 trades, or a House member). A fund's trades show the exact
+  date, shares and price, and link to the SEC filing. Each disclosed trade with its date, the dollar range
   reported, and how the stock has moved since. Members do not report share counts or prices.
 - **Holdings.** The top 20 by weight, each with its own return over the window you chose.
 
-The line under the name says how old the data is: for a fund, the date its positions are from
-and how many days ago that was (they date from the quarter-end, up to 45 days before the
-filing); for a member, their last report. Under the chart, **SEC filing** (or **House Clerk
+The line under the name says how old the newest information is, as one number of days: for a
+fund, the newer of its 13F quarter-end and its latest Form 4 trade; for a member, their newest
+trade; for an ARK ETF, the date of its holdings file. A 13F's positions date from the
+quarter-end, up to 45 days before the filing. Under the chart, **SEC filing** (or **House Clerk
 report**) opens the source document, and **Checked …** says when the app last looked for a
 newer one. Each of a
 member's trades links to the report it came from.
+
+An ARK ETF's page shows what changed since the previous day it was read. A day with no change
+adds no story to Intel.
 
 Filings are checked automatically twice a day while the app is running (the first check is a
 few minutes after it starts). A new one updates the portfolio and adds a story to **Intel**.

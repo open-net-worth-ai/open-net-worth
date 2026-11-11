@@ -1,20 +1,21 @@
 import { useState, type ReactNode } from 'react'
-import { ErrorState, Skeleton, StatInfo } from '../../ui'
+import { ErrorState, Skeleton } from '../../ui'
 import { PerfChart } from '../../tabs/investments/PerformanceTab'
-import type { Follow, PerfPeriod } from '../../../api/followedPortfolios'
+import type { FollowPerformance, PerfPeriod } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { shortDate, signedPct, toneOf } from './following.format'
-import { usePerformance } from './useFollowing'
 
 const PERIODS: { key: PerfPeriod; label: string }[] = [
   { key: '1M', label: '1M' },
   { key: '6M', label: '6M' },
   { key: '12M', label: '12M' },
-  { key: 'FILING', label: 'Since filing' },
+  { key: 'FILING', label: 'Since filed' },
 ]
 
 interface Props {
-  follow: Follow
+  perf: FollowPerformance | undefined
+  loading: boolean
+  onRetry: () => void
   period: PerfPeriod
   onPeriod: (p: PerfPeriod) => void
   /** Sits at the right of the legend row (the source link and the last check). */
@@ -35,18 +36,15 @@ function Headline({ value, bench, benchmark }: HeadlineProps) {
       <span className={`fol-perf-num ${toneOf(value)}`}>{signedPct(value)}</span>
       <span className="fol-perf-vs">
         {benchmark} {signedPct(bench)}
-        <b className={toneOf(ahead)}>
-          {' '}
-          {signedPct(ahead, 'pts')} {ahead >= 0 ? 'ahead' : 'behind'}
-        </b>
       </span>
+      <span className={`fol-perf-vs ${toneOf(ahead)}`}>{signedPct(ahead, 'pts')}</span>
     </div>
   )
 }
 
 /** The reason to copy a portfolio, or not: how its current holdings have done. */
-export function PerformanceBlock({ follow, period, onPeriod, foot }: Props) {
-  const perf = usePerformance(follow.id)
+export function PerformanceBlock({ perf: data, loading, onRetry, period, onPeriod, foot }: Props) {
+  const perf = { data, initialLoading: loading, refresh: onRetry }
   const [at, setAt] = useState<number | null>(null)
   const win = perf.data?.periods[period]
   // The headline is the window's end unless the pointer is on the chart: then it is that day,
@@ -76,14 +74,7 @@ export function PerformanceBlock({ follow, period, onPeriod, foot }: Props) {
           ) : (
             <div className="fol-perf-num flat">—</div>
           )}
-          <div className="fol-perf-cap">
-            {point
-              ? COPY.perfOn(shortDate(point.date))
-              : win?.end
-                ? `${COPY.perfCaption[period]}, to ${shortDate(win.end)}`
-                : COPY.perfCaption[period]}
-            <StatInfo text={COPY.perfInfo[period]} />
-          </div>
+          {point && <div className="fol-perf-cap">{shortDate(point.date)}</div>}
         </div>
         <div className="mk-seg" role="radiogroup" aria-label={COPY.perfPeriodLabel}>
           {PERIODS.map((p) => (

@@ -13,7 +13,7 @@ import type { Watchlist, WatchlistItem } from './WatchlistsSection'
 // is per story, so a story on two tabs is marked read on both at once — the tab badges just no
 // longer add up.
 
-export type IntelTabKey = 'holdings' | 'macro' | 'following' | `list:${string}`
+export type IntelTabKey = 'holdings' | 'macro' | 'portfolios' | `list:${string}`
 
 export interface IntelTab {
   key: IntelTabKey
@@ -26,7 +26,7 @@ export const TOPICS_TAB_LABEL = 'Topics & macro'
 
 /** Famous portfolios you follow (flag `followed_portfolios`): a screen of its own, not a story
  *  feed, so no story is ever partitioned onto it. Intel appends it after the feed tabs. */
-export const FOLLOWING_TAB: IntelTab = { key: 'following', label: 'Famous portfolios' }
+export const FOLLOWING_TAB: IntelTab = { key: 'portfolios', label: 'Famous Portfolios' }
 
 export const listTabKey = (id: string): IntelTabKey => `list:${id}`
 
@@ -59,7 +59,7 @@ export function resolveTabKey(
   watchlists: Watchlist[],
   lastList?: string | null,
 ): IntelTabKey | null {
-  if (raw === 'holdings' || raw === 'macro' || raw === 'following') return raw
+  if (raw === 'holdings' || raw === 'macro' || raw === 'portfolios') return raw
   const own = ownLists(watchlists)
   if (raw === 'watching') {
     const list = own.find((w) => w.id === lastList) ?? own[0]

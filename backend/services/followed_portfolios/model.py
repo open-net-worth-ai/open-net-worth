@@ -13,7 +13,7 @@ from datetime import date
 # A 13F older than two quarters, or a member with no report for a year, reads as out of date.
 DEFAULT_TOP_N = 20
 MAX_TOP_N = 50
-STALE_DAYS = {"fund_13f": 200, "house_member": 365}
+STALE_DAYS = {"fund_13f": 200, "house_member": 365, "etf_daily": 7}
 _CHANGE_TOLERANCE = 0.01
 _SYMBOL = re.compile(r"[A-Z0-9][A-Z0-9\-]{0,11}")
 
@@ -33,8 +33,13 @@ def _merged(snapshot: dict | None) -> dict[str, dict]:
         if not symbol or float(pos.get("value") or 0) <= 0:
             continue
         slot = out.setdefault(
-            symbol, {"symbol": symbol, "name": pos.get("name") or symbol, "value": 0.0, "qty": 0.0}
+            symbol,
+            {"symbol": symbol, "name": pos.get("name") or symbol, "value": 0.0, "qty": 0.0},
         )
+        slot.setdefault("keys", [])
+        slot.setdefault("share_class", pos.get("share_class"))
+        if pos.get("key"):
+            slot["keys"].append(str(pos["key"]))
         slot["value"] += float(pos["value"])
         slot["qty"] += float(pos.get("qty") or 0)
     return out
@@ -78,6 +83,7 @@ def _unmatched(positions: list[dict], total: float, top_n: int) -> list[dict]:
         else:
             out.append(
                 {
+                    "key": pos.get("key") or "",
                     "name": pos.get("name") or pos.get("key") or "",
                     "weight": float(pos["value"]) / total,
                 }
@@ -127,7 +133,7 @@ def build_model(follow: dict, today: date, top_n: int = DEFAULT_TOP_N) -> dict |
     top_n = max(1, min(int(top_n or DEFAULT_TOP_N), MAX_TOP_N))
     previous = follow.get("previous")
     now, before = _merged(current), _merged(previous)
-    fund = follow.get("kind") == "fund_13f"
+    fund = follow.get("kind") in ("fund_13f", "etf_daily")
     last_trades = {} if fund else _last_trades(follow)
     weights = _top_weights(now, top_n)
     prev_weights = _top_weights(before, top_n)
@@ -138,6 +144,9 @@ def build_model(follow: dict, today: date, top_n: int = DEFAULT_TOP_N) -> dict |
             "weight": weight,
             "prev_weight": prev_weights.get(symbol),
             "change": _change(symbol, now[symbol], before, previous is not None),
+            # The filing codes behind it, so the owner can correct a wrong ticker.
+            "keys": now[symbol].get("keys") or [],
+            "share_class": now[symbol].get("share_class"),
             **(
                 _fund_detail(now[symbol], before.get(symbol), previous is not None)
                 if fund
@@ -173,7 +182,19 @@ def build_model(follow: dict, today: date, top_n: int = DEFAULT_TOP_N) -> dict |
         "exited": exited,
         "unmatched": unmatched,
         "unread_reports": int(current.get("unread_reports") or 0),
+        # What the filing reports in total (a member's reports have no totals): the headline
+        # figures, current and previous, so a change can be shown beside each.
+        "total_value": _total(current) if fund else None,
+        "prev_total_value": _total(previous) if fund and previous else None,
+        "positions": len(now),
+        "prev_positions": len(before) if previous else None,
     }
+
+
+def _total(snapshot: dict) -> float:
+    return float(snapshot.get("total_value") or 0) or sum(
+        float(p.get("value") or 0) for p in snapshot.get("positions") or []
+    )
 
 
 def is_stale(follow: dict, model: dict | None) -> bool:

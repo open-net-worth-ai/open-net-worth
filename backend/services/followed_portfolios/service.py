@@ -8,7 +8,8 @@ and the row is re-read inside it, so a concurrent unfollow or settings change is
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+import threading
+from datetime import date, datetime, timezone
 
 from backend.core.errors import (
     ConflictError,
@@ -22,14 +23,38 @@ from backend.core.user_time import user_today
 from backend.db.engine import locked_unit_of_work
 from backend.db.followed_portfolio_store import KINDS, MAX_FOLLOWS, FollowedPortfolioStore
 from backend.db.tables import followed_portfolios
-from backend.services.followed_portfolios import edgar_13f, house_ptr, performance, preview, signals
+from backend.services.followed_portfolios import (
+    corrections,
+    edgar_13f,
+    etf_daily,
+    form4,
+    house_ptr,
+    performance,
+    preview,
+    signals,
+)
 from backend.services.followed_portfolios.model import DEFAULT_TOP_N, build_model, status_of
 
 logger = logging.getLogger(__name__)
 
-_SOURCES = {"fund_13f": edgar_13f, "house_member": house_ptr}
-_NORMALIZE = {"fund_13f": edgar_13f.normalize_cik, "house_member": house_ptr.normalize_ref}
-_SNAPSHOT_FIELDS = ("current", "previous", "activity", "reports", "cusip_map")
+_SOURCES = {"fund_13f": edgar_13f, "house_member": house_ptr, "etf_daily": etf_daily}
+_NORMALIZE = {
+    "fund_13f": edgar_13f.normalize_cik,
+    "house_member": house_ptr.normalize_ref,
+    "etf_daily": etf_daily.normalize_ref,
+}
+_DELAY_BASIS = {"fund_13f": "quarterly", "house_member": "trades", "etf_daily": "daily"}
+_SNAPSHOT_FIELDS = (
+    "current",
+    "previous",
+    "activity",
+    "reports",
+    "cusip_map",
+    "form4_seen",
+    "form4_owner_checked",
+    "history",
+    "history_quarters",
+)
 _ACTIVITY_FIELDS = (
     "date",
     "filed_at",
@@ -40,6 +65,10 @@ _ACTIVITY_FIELDS = (
     "amount_high",
     "asset_type",
     "counted",
+    "shares",
+    "price",
+    "value",
+    "source",
 )
 _SOURCE_FAILED = "The source could not be read."
 _UNREADABLE = "The newest filing could not be read. Showing the last one that could."
@@ -63,6 +92,34 @@ def _report_url(row: dict, doc_id) -> str | None:
     return f"https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/{report['year']}/{doc_id}.pdf"
 
 
+def _form4_url(row: dict, accession) -> str | None:
+    """The filing index of one Form 4. Built from stored digits only."""
+    cik, digits = str(row.get("source_ref") or ""), str(accession or "").replace("-", "")
+    if not cik.isdigit() or not digits.isdigit():
+        return None
+    return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{digits}/"
+
+
+def _trade_url(row: dict, trade: dict) -> str | None:
+    if trade.get("source") == "form4":
+        return _form4_url(row, trade.get("accession"))
+    return _report_url(row, trade.get("doc_id"))
+
+
+def delay_days(row: dict, today) -> int | None:
+    """How old the newest information is: a 13F quarter-end or Form 4 trade for a fund, the
+    newest counted trade for a member, the file date for a daily ETF. None when it has none."""
+    days = [] if row.get("kind") == "house_member" else [(row.get("current") or {}).get("as_of")]
+    days += [t.get("date") for t in row.get("activity") or [] if t.get("counted")]
+    known = []
+    for day in days:
+        try:
+            known.append(date.fromisoformat(str(day)))
+        except ValueError:
+            continue
+    return max(0, (today - max(known)).days) if known else None
+
+
 def source_url(row: dict) -> str | None:
     """Where the newest filing can be read at its source, so every figure can be checked."""
     filing_id = str((row.get("current") or {}).get("filing_id") or "")
@@ -76,7 +133,8 @@ def source_url(row: dict) -> str | None:
 
 def view(row: dict, top_n: int = DEFAULT_TOP_N) -> dict:
     """The follow as every surface reads it — the model derived, the caches left out."""
-    model = build_model(row, user_today(), top_n)
+    today = user_today()
+    model = build_model(row, today, top_n)
     return {
         "id": row["id"],
         "kind": row["kind"],
@@ -87,11 +145,15 @@ def view(row: dict, top_n: int = DEFAULT_TOP_N) -> dict:
         "error": row.get("last_error"),
         "last_checked_at": row.get("last_checked_at"),
         "source_url": source_url(row),
+        "delay_days": delay_days(row, today),
+        "delay_basis": _DELAY_BASIS[row["kind"]],
         "model": model,
+        # A year of 13F quarters (share counts by symbol), for the chart's quarter markers.
+        "history": row.get("history") or [],
         "activity": [
             {
                 **{k: t.get(k) for k in _ACTIVITY_FIELDS},
-                "report_url": _report_url(row, t.get("doc_id")),
+                "report_url": _trade_url(row, t),
             }
             for t in row.get("activity") or []
         ],
@@ -129,19 +191,85 @@ def preview_summary(kind: str, ref: str) -> dict:
     return {**preview.summary(row), "follow_id": followed["id"] if followed else None}
 
 
+def company_names(follow_view: dict, *, fetch_missing: bool = True) -> dict[str, str]:
+    """Plain company names for every symbol the page shows. A filing spells issuers its own way
+    ("BANK OF AMER CORP"); the page uses the name the rest of the app knows the stock by."""
+    from backend.services import prices
+
+    model = follow_view.get("model") or {}
+    symbols = [h["symbol"] for h in model.get("holdings") or []]
+    symbols += [x["symbol"] for x in model.get("exited") or []]
+    symbols += [t["symbol"] for t in follow_view.get("activity") or [] if t.get("symbol")]
+    for quarter in follow_view.get("history") or []:
+        symbols += list(quarter.get("qty") or {})
+    try:
+        return prices.company_names(symbols, fetch_missing=fetch_missing)
+    except Exception:  # names are a nicety; the filing's own spelling is the fallback
+        return {}
+
+
+def company_sectors(follow_view: dict, *, fetch_missing: bool = True) -> dict[str, str]:
+    """The sector of each holding, for the Holdings ring (as the Investments allocation groups)."""
+    from backend.services import prices
+
+    held = [h["symbol"] for h in (follow_view.get("model") or {}).get("holdings") or []]
+    try:
+        return prices.company_sectors(held, fetch_missing=fetch_missing)
+    except Exception:  # a sector is a grouping nicety; the ring falls back to the stocks
+        return {}
+
+
+def _lookups(follow_view: dict) -> None:
+    company_names(follow_view)
+    company_sectors(follow_view)
+
+
 def preview_page(kind: str, ref: str) -> dict:
     """Everything a portfolio's page shows, before following it (read-only, cached)."""
-    row = preview.preview_row(kind, ref)
+    row = preview.preview_row(kind, ref, full=True)
     followed = FollowedPortfolioStore().find_by_source(row["kind"], row["source_ref"])
+    shown = view(row)
+    names = company_names(shown, fetch_missing=False)
+    sectors = company_sectors(shown, fetch_missing=False)
+    if _missing_names(shown, names) or _missing_names(shown, sectors):
+        # Looking names up can take seconds; the page opens now with the filing's own spelling
+        # and has them on the next visit (the scheduler warms the featured ones ahead of time).
+        threading.Thread(target=_lookups, args=(shown,), daemon=True).start()
     return {
-        "follow": view(row),
+        "follow": shown,
+        "names": names,
+        "sectors": sectors,
         "follow_id": followed["id"] if followed else None,
         "performance": performance.performance_for(row),
     }
 
 
+def _missing_names(follow_view: dict, names: dict) -> bool:
+    held = (follow_view.get("model") or {}).get("holdings") or []
+    return any(h["symbol"] not in names for h in held)
+
+
 def warm_featured() -> int:
-    return preview.warm(edgar_13f.featured() + house_ptr.featured())
+    """Price every featured card and look up its company names ahead of a visit."""
+    done = preview.warm(_featured_all())
+    for entry in _featured_all():
+        try:
+            _lookups(view(preview.preview_row(entry["kind"], entry["source_ref"])))
+        except Exception:  # a source that is down must not stop the rest
+            continue
+    return done
+
+
+def price_history(symbol: str) -> dict:
+    """The stock's closes for the trade chart, as far back as the portfolio history goes (weekly
+    before the last year, daily within it; cached by the price service)."""
+    from backend.services.followed_portfolios.model import normalize_symbol
+
+    clean = normalize_symbol(symbol)
+    if not clean:
+        raise ValidationError("That is not a ticker.")
+    points = [{"date": d, "price": round(c, 4)} for d, c in performance.closes(clean).items()]
+    return {"symbol": clean, "points": points}
 
 
 def follow_performance(follow_id: str) -> dict:
@@ -153,7 +281,7 @@ def directory(query: str = "") -> dict:
     """Featured portfolios for an empty query, else both sources searched by name. A source
     that is down contributes nothing rather than failing the other."""
     query = " ".join(str(query or "").split())[:80]
-    featured = edgar_13f.featured() + house_ptr.featured()
+    featured = _featured_all()
     if len(query) < 2:
         results = [{**r, "featured": True} for r in featured]
     else:
@@ -162,7 +290,7 @@ def directory(query: str = "") -> dict:
             for r in featured
             if query.lower() in f"{r['name']} {r['subtitle']}".lower()
         }
-        for source in (edgar_13f, house_ptr):
+        for source in (edgar_13f, house_ptr, etf_daily):
             try:
                 found = source.search(query)
             except ExternalServiceError:
@@ -172,12 +300,23 @@ def directory(query: str = "") -> dict:
         results = list(by_key.values())
     followed = {(r["kind"], r["source_ref"]) for r in FollowedPortfolioStore().all()}
     return {
-        "results": [{**r, "followed": (r["kind"], r["source_ref"]) in followed} for r in results]
+        "results": [
+            {
+                **r,
+                "followed": (r["kind"], r["source_ref"]) in followed,
+                **preview.cached_figures(r["kind"], r["source_ref"]),
+            }
+            for r in results
+        ]
     }
 
 
+def _featured_all() -> list[dict]:
+    return edgar_13f.featured() + house_ptr.featured() + etf_daily.featured()
+
+
 def _featured_name(kind: str, source_ref: str) -> dict:
-    for r in edgar_13f.featured() + house_ptr.featured():
+    for r in _featured_all():
         if r["kind"] == kind and r["source_ref"] == source_ref:
             return {"name": r["name"], "subtitle": r["subtitle"]}
     return {}
@@ -185,6 +324,9 @@ def _featured_name(kind: str, source_ref: str) -> dict:
 
 def _has_positions(snapshot: dict | None) -> bool:
     return any(p.get("symbol") for p in (snapshot or {}).get("positions") or [])
+
+
+_DEFAULT_SUBTITLE = {"fund_13f": "", "house_member": "Representative", "etf_daily": ""}
 
 
 def _follow(change: dict) -> dict:
@@ -199,13 +341,15 @@ def _follow(change: dict) -> dict:
     fetched = source.fetch(source_ref)
     if not _has_positions(fetched.get("current")):
         raise ValidationError("That portfolio has no holdings that could be read.")
+    if kind == "fund_13f":
+        fetched = {**fetched, **form4.refresh_activity(source_ref)}
     now = _now()
     row = {
         "id": new_id("fol"),
         "kind": kind,
         "source_ref": source_ref,
         "name": fetched.get("name") or source_ref,
-        "subtitle": fetched.get("subtitle") or ("13F filer" if kind == "fund_13f" else "House"),
+        "subtitle": fetched.get("subtitle") or _DEFAULT_SUBTITLE[kind],
         **_featured_name(kind, source_ref),
         **{k: fetched.get(k) for k in _SNAPSHOT_FIELDS if k in fetched},
         "last_checked_at": now,
@@ -236,6 +380,8 @@ def _refresh(change: dict) -> tuple[dict, bool]:
     new_filing = False
     try:
         fetched = _source(before["kind"]).fetch(before["source_ref"], before)
+        if before["kind"] == "fund_13f":
+            patch.update(form4.refresh_activity(before["source_ref"], before))
         if fetched.get("unchanged"):
             pass
         elif not _has_positions(fetched.get("current")):
@@ -255,12 +401,26 @@ def _refresh(change: dict) -> tuple[dict, bool]:
         return store.update_by_id(row["id"], patch, conn=conn), new_filing
 
 
+def _set_ticker(change: dict) -> dict:
+    symbol = str(change.get("symbol") or "")
+    if symbol.strip() and not price_history(symbol)["points"]:
+        raise ValidationError(f"No price found for {symbol.strip().upper()}: check the ticker.")
+    with locked_unit_of_work(followed_portfolios) as conn:
+        row = _row(change.get("id"), conn=conn)
+        patch = corrections.ticker_patch(row, str(change.get("key") or ""), symbol)
+        return FollowedPortfolioStore().update_by_id(
+            row["id"], {**patch, "updated_at": _now()}, conn=conn
+        )
+
+
 def apply_followed_portfolio_change(change: dict) -> dict:
     """The one writer. ``op``:
 
     * ``follow`` — ``kind``, ``source_ref``: fetch the newest filing and store the follow.
     * ``refresh`` — ``id``: re-read the source; a new filing raises one Intel story.
     * ``unfollow`` — ``id``.
+    * ``set_ticker`` — ``id``, ``key`` (the filing's CUSIP), ``symbol`` ("" clears it): the
+      owner's correction, checked against a real price first (``corrections``).
 
     Returns ``{"follow": view, "new_filing": bool}``."""
     op = change.get("op")
@@ -273,6 +433,8 @@ def apply_followed_portfolio_change(change: dict) -> dict:
             signals.emit_new_filing_story(row, build_model(row, user_today()))
     elif op == "unfollow":
         row = _unfollow(change)
+    elif op == "set_ticker":
+        row = _set_ticker(change)
     else:
         raise ValidationError(f"Unknown followed-portfolio change '{op}'.")
     return {"follow": view(row), "new_filing": new_filing}

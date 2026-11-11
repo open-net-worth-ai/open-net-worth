@@ -9,7 +9,15 @@ from datetime import date
 import pytest
 
 from backend.core.errors import ExternalServiceError, ValidationError
-from backend.services.followed_portfolios import edgar_13f, figi, house_ptr, performance
+from backend.services.followed_portfolios import (
+    edgar_13f,
+    etf_daily,
+    figi,
+    form4,
+    house_ptr,
+    performance,
+    sec_tickers,
+)
 from backend.services.followed_portfolios.model import build_model, normalize_symbol, status_of
 
 TODAY = date(2026, 11, 10)
@@ -38,8 +46,8 @@ def test_info_table_merges_one_cusip_and_sorts_by_value():
         _info_row("ACME CORP", "000000101", 200, 20),
     )
     assert edgar_13f.parse_info_table(xml) == [
-        {"key": "000000202", "name": "Bolt Inc", "value": 900.0, "qty": 9.0},
-        {"key": "000000101", "name": "Acme Corp", "value": 500.0, "qty": 50.0},
+        {"key": "000000202", "name": "Bolt Inc", "share_class": None, "value": 900.0, "qty": 9.0},
+        {"key": "000000101", "name": "Acme Corp", "share_class": None, "value": 500.0, "qty": 50.0},
     ]
 
 
@@ -78,7 +86,9 @@ def test_fetch_reads_two_quarters_and_maps_tickers(monkeypatch):
         filings[0]["filing_id"]: _info_table(_info_row("ACME CORP", "000000101", 600, 60)),
         filings[1]["filing_id"]: _info_table(_info_row("BOLT INC", "000000202", 400, 40)),
     }
-    monkeypatch.setattr(edgar_13f, "_recent_filings", lambda cik: ("Acme Capital Lp", filings))
+    monkeypatch.setattr(
+        edgar_13f, "_recent_filings", lambda cik, count=5: ("Acme Capital Lp", filings)
+    )
     monkeypatch.setattr(edgar_13f, "_info_table_url", lambda cik, accession: accession)
     monkeypatch.setattr(edgar_13f, "fetch_bytes", lambda url, **kw: tables[url].encode())
     asked = []
@@ -94,13 +104,17 @@ def test_fetch_reads_two_quarters_and_maps_tickers(monkeypatch):
     assert out["previous"]["positions"][0]["symbol"] is None
     assert asked == [["000000101", "000000202"]]
     asked.clear()
-    again = edgar_13f.fetch("12345", {"current": out["current"], "cusip_map": out["cusip_map"]})
-    assert again == {"unchanged": True} and asked == []
+    known = {**out, "current": out["current"]}
+    again = edgar_13f.fetch("12345", known)
+    # Same filing: nothing is downloaded; only the code that found no ticker is asked again.
+    assert again == {"unchanged": True} and asked == [["000000202"]]
 
 
 def test_fetch_retries_a_ticker_lookup_that_never_answered(monkeypatch):
     filing = {"filing_id": "0000000000-26-000002", "as_of": "2026-06-30", "filed_at": "2026-08-14"}
-    monkeypatch.setattr(edgar_13f, "_recent_filings", lambda cik: ("ACME CAPITAL LP", [filing]))
+    monkeypatch.setattr(
+        edgar_13f, "_recent_filings", lambda cik, count=5: ("ACME CAPITAL LP", [filing])
+    )
     current = {
         **filing,
         "positions": [
@@ -108,7 +122,21 @@ def test_fetch_retries_a_ticker_lookup_that_never_answered(monkeypatch):
             {"key": "000000202", "symbol": None, "name": "BOLT INC", "value": 400.0, "qty": 40.0},
         ],
     }
-    known = {"current": current, "previous": None, "cusip_map": {"000000202": ""}}
+    for p in current["positions"]:
+        p["share_class"] = None
+    current = {
+        **current,
+        "positions": [
+            *current["positions"],
+        ],
+    }
+    known = {
+        "current": current,
+        "previous": None,
+        "cusip_map": {"000000202": ""},
+        "history": [{"as_of": "2026-06-30", "filed_at": "2026-08-14", "qty": {}, "value": {}}],
+        "history_quarters": 9,
+    }
     monkeypatch.setattr(figi, "tickers_for", lambda cusips: {})
     assert edgar_13f.fetch("12345", known) == {"unchanged": True}
     asked = []
@@ -119,12 +147,75 @@ def test_fetch_retries_a_ticker_lookup_that_never_answered(monkeypatch):
 
     monkeypatch.setattr(figi, "tickers_for", answer)
     out = edgar_13f.fetch("12345", known)
-    assert asked == [["000000101"]]
+    assert asked == [["000000101", "000000202"]]
     assert [p["symbol"] for p in out["current"]["positions"]] == ["ACME", None]
     assert out["current"]["filing_id"] == filing["filing_id"] and out["previous"] is None
 
 
 # ── ticker lookup ───────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _no_sec_name_list(monkeypatch):
+    monkeypatch.setattr(sec_tickers, "tickers_for_names", lambda names: {})
+
+
+def test_a_foreign_issuer_is_asked_about_as_a_cins():
+    assert figi.id_type("H1467J104") == "ID_CINS"
+    assert figi.id_type("037833100") == "ID_CUSIP"
+
+
+def test_a_holding_the_code_lookup_missed_is_matched_by_its_exact_name(monkeypatch):
+    filing = {"filing_id": "0000000000-26-000002", "as_of": "2026-06-30", "filed_at": "2026-08-14"}
+    monkeypatch.setattr(
+        edgar_13f, "_recent_filings", lambda cik, count=5: ("ACME CAPITAL LP", [filing])
+    )
+    current = {
+        **filing,
+        "positions": [
+            {"key": "H00000101", "symbol": None, "name": "ACME LIMITED", "value": 6.0, "qty": 1.0},
+            {"key": "000000202", "symbol": None, "name": "BOLT INC", "value": 4.0, "qty": 1.0},
+        ],
+    }
+    for p in current["positions"]:
+        p["share_class"] = None
+    current = {
+        **current,
+        "positions": [
+            *current["positions"],
+        ],
+    }
+    monkeypatch.setattr(figi, "tickers_for", lambda cusips: {c: "" for c in cusips})
+    monkeypatch.setattr(
+        sec_tickers,
+        "tickers_for_names",
+        lambda names: {k: "ACME" for k, n in names.items() if n == "ACME LIMITED"},
+    )
+    known = {
+        "current": current,
+        "cusip_map": {},
+        "ticker_overrides": {"000000202": "BOLT"},
+        "history": [{"as_of": "2026-06-30", "filed_at": "2026-08-14", "qty": {}, "value": {}}],
+        "history_quarters": 9,
+    }
+    out = edgar_13f.fetch("12345", known)
+    # The name match fills the gap; the owner's own correction wins over any lookup.
+    assert [p["symbol"] for p in out["current"]["positions"]] == ["ACME", "BOLT"]
+
+
+def test_the_sec_name_index_drops_suffixes_and_refuses_a_shared_name():
+    index = sec_tickers.build_index(
+        {
+            "0": {"cik_str": 1, "ticker": "ACME", "title": "Acme Ltd"},
+            "1": {"cik_str": 2, "ticker": "BOLT", "title": "Bolt Corp"},
+            "2": {"cik_str": 3, "ticker": "BOLX", "title": "Bolt Inc."},
+            "3": {"cik_str": 4, "ticker": "CRUX-A", "title": "Crux Holdings"},
+            "4": {"cik_str": 4, "ticker": "CRUX-B", "title": "Crux Holdings"},
+        }
+    )
+    assert index[sec_tickers.name_key("ACME LIMITED")] == "ACME"
+    assert sec_tickers.name_key("Bolt Corp") not in index
+    assert index[sec_tickers.name_key("Crux Holdings")] == "CRUX-A"
 
 
 @pytest.fixture(autouse=True)
@@ -315,7 +406,7 @@ def test_member_fetch_builds_estimate_and_skips_known_reports(monkeypatch):
     monkeypatch.setattr(house_ptr, "_pdf_text", lambda body: texts[body.decode()])
     out = house_ptr.fetch("Example|Pat")
     assert sorted(fetched) == ["20000001", "20000002"]
-    assert out["subtitle"] == "House · ZZ01"
+    assert out["subtitle"] == "Representative, ZZ01"
     assert [p["symbol"] for p in out["current"]["positions"]] == ["ACME", "BOLT"]
     assert [p["symbol"] for p in out["previous"]["positions"]] == ["ACME"]
     assert out["current"]["filing_id"] == "20000002"
@@ -383,7 +474,9 @@ def test_model_weights_sum_to_one_and_flag_changes():
     assert by["BOLT"]["change_value"] == pytest.approx(-300.0)
     assert (by["COG"]["prev_shares"], by["COG"]["shares_change_pct"]) == (0.0, None)
     assert by["ACME"]["shares_change"] == 0.0
-    assert model["unmatched"] == [{"name": "MYSTERY CO", "weight": pytest.approx(400 / 1500)}]
+    assert model["unmatched"] == [
+        {"key": "MYSTERY CO", "name": "MYSTERY CO", "weight": pytest.approx(400 / 1500)}
+    ]
     assert model["age_days"] == 88 and model["estimated"] is False
 
 
@@ -603,7 +696,7 @@ def test_performance_weights_each_holdings_price_return_against_the_benchmark():
     assert filing["benchmark_return"] == pytest.approx(0.05)
     assert filing["holdings"] == {"ACME": pytest.approx(0.30), "BOLT": pytest.approx(-0.20)}
     assert filing["series"][0] == {"date": days[0], "portfolio": 0.0, "benchmark": 0.0}
-    assert set(out["periods"]) == {"1M", "6M", "12M", "FILING"}
+    assert set(out["periods"]) == {"1M", "6M", "12M", "FILING", "ALL"}
 
 
 def test_performance_leaves_out_a_holding_with_no_price_and_reweights_the_rest():
@@ -651,6 +744,19 @@ def test_performance_is_unavailable_without_two_benchmark_days_or_any_priced_hol
     assert nothing["periods"]["FILING"]["status"] == "unavailable"
 
 
+def test_a_trade_is_measured_from_the_day_it_became_public():
+    days = _days(date(2026, 8, 14), 3)
+    out = performance.build_performance(
+        weights={"ACME": 1.0},
+        closes={"ACME": dict(zip(days, [100, 110, 150]))},
+        bench=dict(zip(days, [1, 1, 1])),
+        filed_at="2026-08-14",
+        today=date(2026, 8, 16),
+        activity=[{"date": days[0], "filed_at": days[1], "symbol": "ACME", "counted": True}],
+    )
+    assert out["trade_returns"] == {f"{days[0]}|ACME": pytest.approx(150 / 110 - 1)}
+
+
 def test_a_members_counted_trade_gets_its_return_since_the_trade_date():
     days = _days(date(2026, 8, 14), 3)
     out = performance.build_performance(
@@ -664,6 +770,215 @@ def test_a_members_counted_trade_gets_its_return_since_the_trade_date():
             {"date": days[1], "symbol": "ACME", "counted": False},
             {"date": "2020-01-01", "symbol": "ACME", "counted": True},
             {"date": days[0], "symbol": "NOPE", "counted": True},
+            # Filed on the last day with a price: no price after it, so no return (not 0%).
+            {"date": days[0], "filed_at": days[2], "symbol": "ACME", "counted": True},
         ],
     )
     assert out["trade_returns"] == {f"{days[1]}|ACME": pytest.approx(150 / 110 - 1)}
+
+
+# ── ARK daily holdings CSV ──────────────────────────────────────────────────────────
+
+_CSV_HEAD = "date,fund,company,ticker,cusip,shares,market value ($),weight (%)\n"
+
+
+def _csv(day, *rows):
+    return _CSV_HEAD + "".join(
+        f'{day},ARKK,{name},{sym},{cusip},"{sh}","${val}",1.00%\n'
+        for name, sym, cusip, sh, val in rows
+    )
+
+
+def test_ark_csv_skips_cash_and_footer_and_reads_formatted_numbers():
+    text = _csv("11/11/2026", ("TESLA INC", "TSLA", "88160R101", "1,809,170", "687,086,582.60"))
+    text += '11/11/2026,ARKK,Cash,,,"0","$5.00",0.00%\n'
+    text += '"The principal risks of investing..."\n'
+    snap = etf_daily.parse_csv(text)
+    assert snap["as_of"] == snap["filing_id"] == snap["filed_at"] == "2026-11-11"
+    [pos] = snap["positions"]
+    assert (pos["symbol"], pos["qty"], pos["value"], pos["name"]) == (
+        "TSLA",
+        1809170.0,
+        687086582.60,
+        "Tesla Inc",
+    )
+    assert snap["total_value"] == pos["value"]
+
+
+def test_ark_csv_with_nothing_readable_is_an_error():
+    with pytest.raises(ExternalServiceError):
+        etf_daily.parse_csv(_CSV_HEAD)
+
+
+def test_ark_fetch_is_unchanged_the_same_day_and_moves_day_over_day(monkeypatch):
+    days = {
+        "monday": _csv("11/09/2026", ("ACME CORP", "ACME", "000000101", "100", "1000")),
+        "tuesday": _csv("11/10/2026", ("ACME CORP", "ACME", "000000101", "150", "1500")),
+    }
+    served = ["monday"]
+    urls = []
+
+    def fake(url, **kw):
+        urls.append(url)
+        return days[served[0]].encode()
+
+    monkeypatch.setattr(etf_daily, "fetch_bytes", fake)
+    first = etf_daily.fetch("arkk")
+    assert first["previous"] is None and first["name"] == "ARK Innovation ETF"
+    assert urls[0].endswith("/ARK_INNOVATION_ETF_ARKK_HOLDINGS.csv")
+    assert etf_daily.fetch("ARKK", {"current": first["current"]}) == {"unchanged": True}
+    served[0] = "tuesday"
+    second = etf_daily.fetch("ARKK", {"current": first["current"]})
+    assert second["previous"] == first["current"]
+    row = {"kind": "etf_daily", **second}
+    model = build_model(row, date(2026, 11, 11))
+    assert model["estimated"] is False
+    assert [(h["symbol"], h["change"]) for h in model["holdings"]] == [("ACME", "increased")]
+    assert status_of(row, model) == "ok"
+    assert status_of(row, build_model(row, date(2026, 11, 25))) == "stale"
+
+
+def test_ark_ref_is_an_allowlist_and_the_urls_encode_the_ampersand(monkeypatch):
+    with pytest.raises(ValidationError):
+        etf_daily.normalize_ref("QQQ")
+    with pytest.raises(ValidationError):
+        etf_daily.fetch("../ARKK")
+    assert [r["source_ref"] for r in etf_daily.search("fintech")] == ["ARKF"]
+    assert etf_daily.search("zzz") == []
+    urls = []
+    monkeypatch.setattr(
+        etf_daily,
+        "fetch_bytes",
+        lambda url, **kw: (
+            urls.append(url) or _csv("11/11/2026", ("A", "A", "1", "1", "1")).encode()
+        ),
+    )
+    etf_daily.fetch("ARKF")
+    assert "%26" in urls[0] and "&" not in urls[0]
+
+
+# ── Form 4 ──────────────────────────────────────────────────────────────────────────
+
+
+def _owner_xml(*txns, symbol="ACME", owner="1067983"):
+    body = "".join(
+        f"<nonDerivativeTransaction><transactionDate><value>{d}</value></transactionDate>"
+        f"<transactionCoding><transactionCode>{c}</transactionCode></transactionCoding>"
+        f"<transactionAmounts><transactionShares><value>{s}</value></transactionShares>"
+        f"<transactionPricePerShare><value>{p}</value></transactionPricePerShare>"
+        "</transactionAmounts></nonDerivativeTransaction>"
+        for d, c, s, p in txns
+    )
+    return (
+        "<ownershipDocument><issuer><issuerName>ACME CORP</issuerName>"
+        f"<issuerTradingSymbol>{symbol}</issuerTradingSymbol></issuer>"
+        f"<reportingOwner><reportingOwnerId><rptOwnerCik>{owner}</rptOwnerCik>"
+        "</reportingOwnerId></reportingOwner>"
+        f"<nonDerivativeTable>{body}</nonDerivativeTable></ownershipDocument>"
+    )
+
+
+def test_form4_keeps_open_market_buys_and_sells_only():
+    xml = _owner_xml(
+        ("2026-11-03", "P", "100", "10"),
+        ("2026-11-04", "S", "50", "12.5"),
+        ("2026-11-04", "A", "999", "0"),
+        ("2026-11-05", "M", "10", "1"),
+    )
+    rows = form4.parse_ownership(xml, filed_at="2026-11-06", accession="0000000000-26-000010")
+    assert [(r["side"], r["shares"], r["price"], r["value"]) for r in rows] == [
+        ("buy", 100.0, 10.0, 1000.0),
+        ("sell", 50.0, 12.5, 625.0),
+    ]
+    assert rows[0]["symbol"] == "ACME" and rows[0]["name"] == "Acme Corp"
+    assert rows[0]["source"] == "form4" and rows[0]["counted"] is True
+    assert rows[0]["amount_low"] == rows[0]["amount_high"] == 1000.0
+
+
+def test_form4_drops_a_form_the_fund_did_not_file_as_owner():
+    # EDGAR lists a listed fund's filings AS ISSUER too: its own insiders' trades are not its.
+    xml = _owner_xml(("2026-11-03", "P", "45", "510"), owner="1999999")
+    kw = {"filed_at": "2026-11-06", "accession": "0000000000-26-000010"}
+    assert form4.parse_ownership(xml, owner_cik="1067983", **kw) == []
+    assert (
+        len(form4.parse_ownership(xml.replace("1999999", "0001067983"), owner_cik="1067983", **kw))
+        == 1
+    )
+
+
+def test_form4_drops_rows_with_no_valid_symbol_or_figures_and_refuses_a_doctype():
+    accession = "0000000000-26-000010"
+    for xml in (
+        _owner_xml(("2026-11-03", "P", "100", "10"), symbol="A B;C"),
+        _owner_xml(("2026-11-03", "P", "abc", "10")),
+        _owner_xml(("not a date", "P", "100", "10")),
+        _owner_xml(("2026-11-03", "P", "100", "")),
+    ):
+        assert form4.parse_ownership(xml, filed_at="2026-11-06", accession=accession) == []
+    with pytest.raises(ExternalServiceError):
+        form4.parse_ownership(
+            '<!DOCTYPE x [<!ENTITY a "b">]>' + _owner_xml(), filed_at="2026-11-06", accession="x"
+        )
+
+
+def test_form4_scan_skips_bad_accessions_and_filenames_and_known_filings(monkeypatch):
+    today = date.today()
+    recent_day = today.isoformat()
+    recent = {
+        "form": ["4", "4", "4", "4", "13F-HR", "4"],
+        "accessionNumber": [
+            "0000000000-26-000001",
+            "not-an-accession",
+            "0000000000-26-000003",
+            "0000000000-26-000004",
+            "0000000000-26-000005",
+            "0000000000-26-000006",
+        ],
+        "filingDate": [recent_day, recent_day, recent_day, recent_day, recent_day, "2001-01-01"],
+        "primaryDocument": [
+            "x/ok.xml",
+            "x/ok.xml",
+            "../evil.xml",
+            "x/known.xml",
+            "x/ok.xml",
+            "old.xml",
+        ],
+    }
+    monkeypatch.setattr(form4, "fetch_json", lambda url, **k: {"filings": {"recent": recent}})
+    got = []
+
+    def fake_bytes(url, **k):
+        got.append(url)
+        return _owner_xml((recent_day, "P", "1", "2")).encode()
+
+    monkeypatch.setattr(form4, "fetch_bytes", fake_bytes)
+    trades, fetched = form4.scan("1067983", {"0000000000-26-000004"})
+    assert fetched == ["0000000000-26-000001"] and len(trades) == 1
+    assert got == ["https://www.sec.gov/Archives/edgar/data/1067983/000000000026000001/ok.xml"]
+    assert form4.recent_trades("1067983", set(), limit=1) == trades
+
+
+def test_company_names_reads_the_cache_and_fetches_only_what_is_missing(monkeypatch):
+    from backend.services import prices
+
+    monkeypatch.setattr(prices, "_NAMES_CACHE", {"ACME": "Acme Corp Common Stock"})
+    asked = []
+
+    def fake_fetch(symbol):
+        asked.append(symbol)
+        prices._NAMES_CACHE[symbol] = "Bolt Industries Inc"
+        return symbol, "Bolt Industries Inc", ""
+
+    monkeypatch.setattr(prices, "_fetch_name", fake_fetch)
+    monkeypatch.setattr(prices, "save_names_cache", lambda names: None)
+    assert prices.company_names(["ACME", "BOLT"]) == {"ACME": "Acme Corp"}
+    assert asked == []
+    got = prices.company_names(["ACME", "BOLT", "ACME"], fetch_missing=True)
+    assert got == {"ACME": "Acme Corp", "BOLT": "Bolt Industries Inc"}
+    assert asked == ["BOLT"]
+
+
+def test_a_13f_line_names_its_share_class():
+    assert edgar_13f.share_class("CAP STK CL C") == "C"
+    assert edgar_13f.share_class("CL A") == "A"
+    assert edgar_13f.share_class("COM") is None

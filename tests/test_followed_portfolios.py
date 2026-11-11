@@ -47,7 +47,7 @@ class FakeSource:
         self.filings = [_snap("f1", "2026-10-01", ("ACME", 600, 60), ("BOLT", 400, 40))]
         self.error: Exception | None = None
 
-    def fetch(self, ref, known=None):
+    def fetch(self, ref, known=None, *_):
         if self.error:
             raise self.error
         current = self.filings[-1]
@@ -78,10 +78,22 @@ def source(db_isolated, monkeypatch):
     fake = FakeSource()
     monkeypatch.setitem(service._SOURCES, "fund_13f", fake)
     monkeypatch.setitem(service._SOURCES, "house_member", fake)
+    monkeypatch.setitem(service._SOURCES, "etf_daily", fake)
+    monkeypatch.setattr(service.form4, "fetch_json", lambda *a, **k: {})
     monkeypatch.setitem(service.preview._SOURCES, "fund_13f", fake)
     monkeypatch.setitem(service.preview._SOURCES, "house_member", fake)
     monkeypatch.setattr(service.house_ptr, "search", lambda q: [])
     monkeypatch.setattr(service.edgar_13f, "search", fake.search)
+    monkeypatch.setattr(
+        "backend.services.prices.company_names",
+        lambda symbols, fetch_missing=False: {s: f"{s.title()} Incorporated" for s in symbols},
+    )
+    monkeypatch.setattr(
+        "backend.services.prices.company_sectors",
+        lambda symbols, fetch_missing=False: {s: "Technology" for s in symbols},
+    )
+    monkeypatch.setattr(service.preview, "_cache", {})
+    monkeypatch.setattr(service.preview, "_summaries", {})
     return fake
 
 
@@ -176,6 +188,9 @@ def test_refresh_new_filing_updates_the_model_and_raises_exactly_one_story(sourc
     assert changes == {"ACME": "increased", "COG": "new"}
     exited = out["follow"]["model"]["exited"]
     assert [(x["symbol"], x["prev_shares"]) for x in exited] == [("BOLT", 40.0)]
+    m = out["follow"]["model"]
+    assert (m["total_value"], m["prev_total_value"]) == (1000.0, 1000.0)
+    assert (m["positions"], m["prev_positions"]) == (2, 2)
     stories = IntelStoriesStore().all()
     assert len(stories) == 1
     assert stories[0]["label"] == "Acme Capital filed a new 13F"
@@ -256,7 +271,7 @@ def test_preview_reads_an_unfollowed_portfolio_once_and_follows_reuse_the_stored
     fetched = []
     real = source.fetch
 
-    def counting(ref, known=None):
+    def counting(ref, known=None, *_):
         fetched.append(ref)
         return real(ref, known)
 
@@ -283,12 +298,74 @@ def test_preview_reads_an_unfollowed_portfolio_once_and_follows_reuse_the_stored
     assert len(card["spark"]) == preview._SPARK_POINTS and card["holdings_count"] == 2
     assert card["top"][0]["symbol"] == "ACME"
     page = service.preview_page("fund_13f", "777")
+    assert page["names"]["ACME"] == "Acme Incorporated"
+    assert page["sectors"]["ACME"] == "Technology"
     assert page["follow"]["model"]["holdings"] and page["follow_id"] is None
-    assert fetched == ["777"]
+    # The card read two quarters; the page reads the year once (then both come from cache).
+    assert fetched == ["777", "777"]
+    service.preview_page("fund_13f", "777")
+    assert fetched == ["777", "777"]
     assert FollowedPortfolioStore().all() == []
     fid = _follow()["id"]
     assert service.preview_summary("fund_13f", "777")["follow_id"] == fid
-    assert fetched == ["777", "777"]
+    assert fetched == ["777", "777", "777"]
+    # A priced card's figures ride on the directory, so the whole list can sort without fetching.
+    listed = service.directory("acme")["results"][0]
+    assert (listed["return_12m"], listed["latest_at"]) == (0.12, card["latest_at"])
+    assert card["latest_at"]
+
+
+def test_price_history_cleans_the_symbol_and_refuses_free_text(client, monkeypatch):
+    asked = []
+
+    def fake(symbol, timeframe):
+        asked.append((symbol, timeframe))
+        return [{"date": "2026-01-02", "price": 10.123456}, {"date": "2026-01-05", "price": None}]
+
+    monkeypatch.setattr("backend.services.prices.fetch_history", fake)
+    got = client.get("/api/followed-portfolios/price-history", params={"symbol": "brk.b"}).json()
+    assert got == {"symbol": "BRK-B", "points": [{"date": "2026-01-02", "price": 10.1235}]}
+    assert asked == [("BRK-B", "5Y"), ("BRK-B", "1Y")]
+    bad = client.get("/api/followed-portfolios/price-history", params={"symbol": "A; B"})
+    assert bad.status_code == 422
+
+
+def test_card_moves(source):
+    from backend.services.followed_portfolios import preview
+
+    row = {"kind": "fund_13f", "source_ref": "1067983"}
+    model = {
+        "holdings": [
+            {
+                "symbol": "ACME",
+                "change": "increased",
+                "change_value": 5.0,
+                "shares_change_pct": 0.5,
+            },
+            {
+                "symbol": "BOLT",
+                "change": "reduced",
+                "change_value": -9.0,
+                "shares_change_pct": -0.2,
+            },
+            {"symbol": "COG", "change": "unchanged", "change_value": 0},
+        ]
+    }
+    assert [(m["symbol"], m["verb"], m["up"]) for m in preview.latest_moves(row, model)] == [
+        ("BOLT", "Trimmed", False),
+        ("ACME", "Added", True),
+    ]
+    member = {
+        "kind": "house_member",
+        "source_ref": "x|y",
+        "activity": [
+            {"symbol": None, "counted": False, "side": "buy", "date": "2026-10-03"},
+            {"symbol": "ACME", "counted": True, "side": "sell", "date": "2026-10-02"},
+        ],
+    }
+    assert preview.latest_moves(member, None) == [
+        {"symbol": "ACME", "verb": "Sold", "detail": "2026-10-02", "up": False}
+    ]
 
 
 def test_preview_route_and_its_demo_lock(client, monkeypatch):
@@ -375,7 +452,10 @@ def test_rest_round_trip(client):
         "error",
         "last_checked_at",
         "source_url",
+        "delay_days",
+        "delay_basis",
         "model",
+        "history",
         "activity",
     }
     assert client.post(f"/api/followed-portfolios/{fid}/refresh").json()["new_filing"] is False
@@ -461,3 +541,158 @@ def test_tools_are_write_classified():
 
     assert is_write_tool("set_followed_portfolios")
     assert not is_write_tool("get_followed_portfolios")
+
+
+# ── ARK ETFs, Form 4 trades and the delay figure ───────────────────────────────────
+
+
+def _form4_world(monkeypatch, filings, xml_by_name):
+    """Serve a submissions list and Form 4 XML; returns the list of documents fetched."""
+    fetched = []
+    recent = {
+        "form": ["4"] * len(filings),
+        "accessionNumber": [f[0] for f in filings],
+        "filingDate": [f[1] for f in filings],
+        "primaryDocument": [f"xslF345X06/{f[2]}" for f in filings],
+    }
+    monkeypatch.setattr(
+        service.form4, "fetch_json", lambda url, **k: {"filings": {"recent": recent}}
+    )
+
+    def fake_bytes(url, **k):
+        fetched.append(url.rsplit("/", 1)[-1])
+        return xml_by_name[url.rsplit("/", 1)[-1]].encode()
+
+    monkeypatch.setattr(service.form4, "fetch_bytes", fake_bytes)
+    return fetched
+
+
+def _ownership(day="2026-11-05", code="P", shares="1000", price="10.5"):
+    return (
+        "<ownershipDocument><issuer><issuerName>ACME CORP</issuerName>"
+        "<issuerTradingSymbol>ACME</issuerTradingSymbol></issuer>"
+        "<reportingOwner><reportingOwnerId><rptOwnerCik>0000000777</rptOwnerCik>"
+        "</reportingOwnerId></reportingOwner><nonDerivativeTable>"
+        f"<nonDerivativeTransaction><transactionDate><value>{day}</value></transactionDate>"
+        f"<transactionCoding><transactionCode>{code}</transactionCode></transactionCoding>"
+        f"<transactionAmounts><transactionShares><value>{shares}</value></transactionShares>"
+        f"<transactionPricePerShare><value>{price}</value></transactionPricePerShare>"
+        "</transactionAmounts></nonDerivativeTransaction></nonDerivativeTable></ownershipDocument>"
+    )
+
+
+def test_a_fund_follow_stores_its_form4_trades_and_reads_only_new_filings_later(
+    source, monkeypatch
+):
+    fetched = _form4_world(
+        monkeypatch,
+        [("0000000000-26-000010", "2026-11-06", "a.xml")],
+        {"a.xml": _ownership(), "b.xml": _ownership(day="2026-11-09", code="S")},
+    )
+    follow = _follow()
+    assert fetched == ["a.xml"]
+    [trade] = follow["activity"]
+    assert (trade["side"], trade["shares"], trade["price"], trade["source"]) == (
+        "buy",
+        1000.0,
+        10.5,
+        "form4",
+    )
+    assert trade["report_url"] == "https://www.sec.gov/Archives/edgar/data/777/000000000026000010/"
+    _form4_world(
+        monkeypatch,
+        [
+            ("0000000000-26-000011", "2026-11-10", "b.xml"),
+            ("0000000000-26-000010", "2026-11-06", "a.xml"),
+        ],
+        {"b.xml": _ownership(day="2026-11-09", code="S")},
+    )
+    out = _apply(op="refresh", id=follow["id"])
+    assert out["new_filing"] is False
+    assert [t["side"] for t in out["follow"]["activity"]] == ["sell", "buy"]
+    assert len(IntelStoriesStore().all()) == 0
+
+
+def test_a_form4_failure_does_not_fail_the_follow_or_the_refresh(source, monkeypatch):
+    def boom(*a, **k):
+        raise ExternalServiceError("down")
+
+    monkeypatch.setattr(service.form4, "fetch_json", boom)
+    fid = _follow()["id"]
+    out = _apply(op="refresh", id=fid)["follow"]
+    assert out["status"] == "ok" and out["activity"] == []
+
+
+def test_delay_days_per_kind(source):
+    from datetime import date
+
+    today = date(2026, 11, 10)
+    fund = {
+        "kind": "fund_13f",
+        "current": {"as_of": "2026-09-30"},
+        "activity": [{"date": "2026-11-05", "counted": True}],
+    }
+    assert service.delay_days(fund, today) == 5
+    assert service.delay_days({**fund, "activity": []}, today) == 41
+    member = {
+        "kind": "house_member",
+        "current": {"as_of": "2026-10-30"},
+        "activity": [
+            {"date": "2026-10-01", "counted": True},
+            {"date": "2026-11-08", "counted": False},
+        ],
+    }
+    assert service.delay_days(member, today) == 40
+    assert service.delay_days({"kind": "house_member", "activity": []}, today) is None
+    etf = {"kind": "etf_daily", "current": {"as_of": "2026-11-09"}}
+    assert service.delay_days(etf, today) == 1
+    assert service.view({**etf, "id": "x", "source_ref": "ARKK", "name": "ARK"})["delay_basis"] == (
+        "daily"
+    )
+
+
+def test_the_api_follows_an_etf_and_refuses_one_off_the_list(client, source):
+    made = client.post("/api/followed-portfolios", json={"kind": "etf_daily", "source_ref": "arkk"})
+    assert made.status_code == 200 and made.json()["follow"]["kind"] == "etf_daily"
+    assert made.json()["follow"]["source_ref"] == "ARKK"
+    assert made.json()["follow"]["name"] == "ARK Innovation ETF"
+    bad = client.post("/api/followed-portfolios", json={"kind": "etf_daily", "source_ref": "QQQ"})
+    assert bad.status_code == 422 or bad.status_code == 400
+
+
+def test_an_etf_story_names_the_holdings_change_and_a_quiet_day_raises_none(source):
+    fid = _follow()["id"]
+    row = FollowedPortfolioStore().find_by_id(fid)
+    row = {**row, "kind": "etf_daily", "name": "ARK Innovation ETF"}
+    quiet = {"holdings": [{"change": "unchanged"}], "exited": [], "filed_at": "x", "as_of": "x"}
+    assert signals.emit_new_filing_story(row, quiet) is False
+    busy = {**quiet, "holdings": [{"change": "new"}]}
+    assert signals.emit_new_filing_story(row, busy) is True
+    assert IntelStoriesStore().all()[0]["label"] == "ARK Innovation ETF changed its holdings"
+
+
+def test_the_owner_corrects_a_ticker_and_it_survives_a_refresh(source, client, monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "price_history",
+        lambda symbol: {"symbol": symbol.upper(), "points": [] if symbol == "NOPE" else [1, 2]},
+    )
+    fid = _follow()["id"]
+    row = FollowedPortfolioStore().find_by_id(fid)
+    key = row["current"]["positions"][1]["key"]
+    got = client.post(f"/api/followed-portfolios/{fid}/ticker", json={"key": key, "symbol": "crux"})
+    assert got.status_code == 200
+    holdings = {h["symbol"] for h in got.json()["follow"]["model"]["holdings"]}
+    assert "CRUX" in holdings and "BOLT" not in holdings
+    # A refresh of the same filing keeps the owner's ticker, whatever the lookup says.
+    assert "CRUX" in {
+        h["symbol"] for h in _apply(op="refresh", id=fid)["follow"]["model"]["holdings"]
+    }
+    bad = client.post(f"/api/followed-portfolios/{fid}/ticker", json={"key": key, "symbol": "NOPE"})
+    assert bad.status_code == 422 and "No price found for NOPE" in bad.json()["detail"]
+    missing = client.post(f"/api/followed-portfolios/{fid}/ticker", json={"key": "X", "symbol": ""})
+    assert missing.status_code == 422
+    # Clearing hands the holding back to the lookup (this fake source has none for it).
+    cleared = _apply(op="set_ticker", id=fid, key=key, symbol="")
+    assert "CRUX" not in {h["symbol"] for h in cleared["follow"]["model"]["holdings"]}
+    assert FollowedPortfolioStore().find_by_id(fid)["ticker_overrides"] == {}

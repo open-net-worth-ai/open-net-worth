@@ -4,6 +4,7 @@ GET    /api/followed-portfolios/directory       — ?q=: well-known portfolios, 
 POST   /api/followed-portfolios                 — follow one ({kind, source_ref}); fetches its filing
 DELETE /api/followed-portfolios/{id}            — unfollow
 POST   /api/followed-portfolios/{id}/refresh    — re-read the source now
+GET    /api/followed-portfolios/price-history   — ?symbol=: a year of closes for the trade chart
 GET    /api/followed-portfolios/preview         — ?kind=&ref=&full=: a portfolio before following
                                                   it, as a card (default) or its whole page
 GET    /api/followed-portfolios/{id}/performance — its current holdings' price return against
@@ -18,7 +19,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.services.feature_flags import enabled as flag_enabled
@@ -34,8 +35,13 @@ router = APIRouter(dependencies=[Depends(_require_flag)])
 
 
 class FollowBody(BaseModel):
-    kind: Literal["fund_13f", "house_member"]
+    kind: Literal["fund_13f", "house_member", "etf_daily"]
     source_ref: str
+
+
+class TickerBody(BaseModel):
+    key: str = Field(..., min_length=1, max_length=12)
+    symbol: str = Field("", max_length=12)
 
 
 def _run(fn, *args, **kwargs):
@@ -55,9 +61,14 @@ def followed_portfolio_directory(q: str = Query("", max_length=80)):
     return _run(service.directory, q)
 
 
+@router.get("/api/followed-portfolios/price-history")
+def followed_portfolio_price_history(symbol: str = Query(..., min_length=1, max_length=12)):
+    return _run(service.price_history, symbol)
+
+
 @router.get("/api/followed-portfolios/preview")
 def followed_portfolio_preview(
-    kind: Literal["fund_13f", "house_member"],
+    kind: Literal["fund_13f", "house_member", "etf_daily"],
     ref: str = Query(..., min_length=1, max_length=80),
     full: bool = False,
 ):
@@ -80,6 +91,14 @@ def unfollow_portfolio(follow_id: str):
 @router.post("/api/followed-portfolios/{follow_id}/refresh")
 def refresh_followed_portfolio(follow_id: str):
     return _run(service.apply_followed_portfolio_change, {"op": "refresh", "id": follow_id})
+
+
+@router.post("/api/followed-portfolios/{follow_id}/ticker")
+def set_followed_portfolio_ticker(follow_id: str, body: TickerBody):
+    return _run(
+        service.apply_followed_portfolio_change,
+        {"op": "set_ticker", "id": follow_id, "key": body.key, "symbol": body.symbol},
+    )
 
 
 @router.get("/api/followed-portfolios/{follow_id}/performance")

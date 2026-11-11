@@ -127,7 +127,12 @@ def _window_start(today: date) -> str:
 
 def featured() -> list[dict]:
     return [
-        {"kind": "house_member", "source_ref": ref, "name": name, "subtitle": f"House · {dst}"}
+        {
+            "kind": "house_member",
+            "source_ref": ref,
+            "name": name,
+            "subtitle": f"Representative, {dst}",
+        }
         for ref, name, dst in FEATURED
     ]
 
@@ -149,7 +154,9 @@ def search(query: str, limit: int = 10) -> list[dict]:
                 "kind": "house_member",
                 "source_ref": row["ref"],
                 "name": row["name"],
-                "subtitle": f"House · {row['district']}" if row["district"] else "House",
+                "subtitle": f"Representative, {row['district']}"
+                if row["district"]
+                else "Representative",
             }
     return sorted(found.values(), key=lambda r: r["name"])[:limit]
 
@@ -325,7 +332,9 @@ def fetch(ref: str, known: dict | None = None) -> dict:
     )
     return {
         "name": metas[0]["name"],
-        "subtitle": f"House · {metas[0]['district']}" if metas[0]["district"] else "House",
+        "subtitle": (
+            f"Representative, {metas[0]['district']}" if metas[0]["district"] else "Representative"
+        ),
         "current": _snapshot(reports, window_start),
         "previous": _snapshot(reports[1:], window_start),
         "activity": activity[:MAX_ACTIVITY],

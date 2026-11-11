@@ -49,6 +49,12 @@ def _wait_turn() -> None:
         _last_call[0] = time.monotonic()
 
 
+def id_type(cusip: str) -> str:
+    """A code that starts with a letter is a CINS — the CUSIP of a company incorporated abroad
+    (a Swiss insurer files as ``H1467J104``). Asked about as a CUSIP, the lookup finds nothing."""
+    return "ID_CINS" if cusip[:1].isalpha() else "ID_CUSIP"
+
+
 def tickers_for(cusips: list[str]) -> dict[str, str]:
     """``{cusip: ticker or ""}`` for each CUSIP asked about ("" = looked up, no US equity).
     A CUSIP is left OUT when its lookup did not happen (cap reached or the service failed), so
@@ -58,7 +64,7 @@ def tickers_for(cusips: list[str]) -> dict[str, str]:
     for start in range(0, min(len(todo), _BATCH * MAX_BATCHES), _BATCH):
         batch = todo[start : start + _BATCH]
         _wait_turn()
-        jobs = [{"idType": "ID_CUSIP", "idValue": c, "exchCode": "US"} for c in batch]
+        jobs = [{"idType": id_type(c), "idValue": c, "exchCode": "US"} for c in batch]
         try:
             replies = fetch_json(
                 _URL,

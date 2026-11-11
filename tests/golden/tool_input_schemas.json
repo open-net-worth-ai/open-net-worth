@@ -10854,7 +10854,8 @@
               "description": "The kind of portfolio.",
               "enum": [
                 "fund_13f",
-                "house_member"
+                "house_member",
+                "etf_daily"
               ],
               "type": "string"
             },

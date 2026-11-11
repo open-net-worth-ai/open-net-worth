@@ -7,20 +7,72 @@ A followed portfolio previews from its stored row. Anything else is fetched once
 
 from __future__ import annotations
 
+import json
+import logging
 import threading
 import time
 from datetime import datetime, timezone
 
+from backend.core.paths import CACHE_DIR
 from backend.core.user_time import user_today
 from backend.db.followed_portfolio_store import KINDS, FollowedPortfolioStore
-from backend.services.followed_portfolios import edgar_13f, house_ptr, performance
+from backend.services.followed_portfolios import edgar_13f, etf_daily, form4, house_ptr, performance
 from backend.services.followed_portfolios.model import build_model
 
 _TTL_SECONDS = 12 * 3600
 _SPARK_POINTS = 48
-_SOURCES = {"fund_13f": edgar_13f, "house_member": house_ptr}
-_NORMALIZE = {"fund_13f": edgar_13f.normalize_cik, "house_member": house_ptr.normalize_ref}
+_SOURCES = {"fund_13f": edgar_13f, "house_member": house_ptr, "etf_daily": etf_daily}
+_NORMALIZE = {
+    "fund_13f": edgar_13f.normalize_cik,
+    "house_member": house_ptr.normalize_ref,
+    "etf_daily": etf_daily.normalize_ref,
+}
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_summaries: dict[tuple[str, str], tuple[float, str, dict]] = {}
+logger = logging.getLogger(__name__)
+# Previews outlive a restart: a cold Discover page would otherwise refetch and reprice every
+# filing. It is a cache of public data, safe to delete; wall-clock stamps, not monotonic ones.
+_DISK = CACHE_DIR / "followed_portfolio_previews.json"
+_disk_lock = threading.Lock()
+
+
+def _load_disk() -> None:
+    try:
+        data = json.loads(_DISK.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    now_wall, now_mono = time.time(), time.monotonic()
+    for item in data.get("rows") or []:
+        age = now_wall - float(item.get("at") or 0)
+        if age < _TTL_SECONDS and isinstance(item.get("row"), dict):
+            key = (item["row"]["kind"], item["row"]["source_ref"])
+            _cache.setdefault(key, (now_mono - age, item["row"]))
+    for item in data.get("summaries") or []:
+        age = now_wall - float(item.get("at") or 0)
+        if age < _TTL_SECONDS and isinstance(item.get("summary"), dict):
+            key = (item["summary"]["kind"], item["summary"]["source_ref"])
+            _summaries.setdefault(key, (now_mono - age, str(item.get("day")), item["summary"]))
+
+
+def _save_disk() -> None:
+    now_wall, now_mono = time.time(), time.monotonic()
+    data = {
+        "rows": [{"at": now_wall - (now_mono - t), "row": row} for t, row in _cache.values()],
+        "summaries": [
+            {"at": now_wall - (now_mono - t), "day": day, "summary": s}
+            for t, day, s in _summaries.values()
+        ],
+    }
+    with _disk_lock:
+        try:
+            tmp = _DISK.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            tmp.replace(_DISK)
+        except OSError:
+            logger.warning("followed portfolios: preview cache not saved", exc_info=True)
+
+
+_load_disk()
 _locks: dict[tuple[str, str], threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -31,13 +83,13 @@ def _lock(key: tuple[str, str]) -> threading.Lock:
 
 
 def _featured(kind: str, ref: str) -> dict:
-    for r in edgar_13f.featured() + house_ptr.featured():
+    for r in edgar_13f.featured() + house_ptr.featured() + etf_daily.featured():
         if r["kind"] == kind and r["source_ref"] == ref:
             return {"name": r["name"], "subtitle": r["subtitle"]}
     return {}
 
 
-def preview_row(kind: str, ref: str) -> dict:
+def preview_row(kind: str, ref: str, *, full: bool = False) -> dict:
     """The follow-shaped row for (kind, ref): the stored one when followed, else a cached fetch.
     Raises what the source raises when it cannot be read."""
     if kind not in KINDS:
@@ -51,9 +103,18 @@ def preview_row(kind: str, ref: str) -> dict:
     key = (kind, ref)
     with _lock(key):
         hit = _cache.get(key)
-        if hit and time.monotonic() - hit[0] < _TTL_SECONDS:
+        fresh = hit and time.monotonic() - hit[0] < _TTL_SECONDS
+        # A card reads two quarters (fast, and Discover has 19 of them); the page, opened one at
+        # a time, reads the year of quarters its stock history needs.
+        if fresh and (not full or hit[1].get("full_history") or kind != "fund_13f"):
             return hit[1]
-        fetched = _SOURCES[kind].fetch(ref)
+        fetched = (
+            _SOURCES[kind].fetch(ref, None, edgar_13f.HISTORY_QUARTERS if full else 2)
+            if kind == "fund_13f"
+            else _SOURCES[kind].fetch(ref)
+        )
+        if kind == "fund_13f":
+            fetched = {**fetched, **form4.refresh_activity(ref)}
         row = {
             "id": f"preview_{kind}_{ref}".replace("|", "_").replace(" ", "_"),
             "kind": kind,
@@ -61,11 +122,23 @@ def preview_row(kind: str, ref: str) -> dict:
             "name": fetched.get("name") or ref,
             "subtitle": fetched.get("subtitle") or "",
             **_featured(kind, ref),
-            **{k: fetched.get(k) for k in ("current", "previous", "activity", "reports")},
+            **{
+                k: fetched.get(k)
+                for k in (
+                    "current",
+                    "previous",
+                    "activity",
+                    "reports",
+                    "history",
+                    "history_quarters",
+                )
+            },
             "last_checked_at": datetime.now(timezone.utc).isoformat(),
             "last_error": None,
+            "full_history": full,
         }
         _cache[key] = (time.monotonic(), row)
+        _save_disk()
         return row
 
 
@@ -76,9 +149,72 @@ def _downsample(series: list[dict], points: int) -> list[float]:
     return [series[round(i * step)]["portfolio"] for i in range(points)]
 
 
+_VERB = {"new": "New", "increased": "Added", "reduced": "Trimmed"}
+
+
+def latest_moves(row: dict, model: dict | None, n: int = 2) -> list[dict]:
+    """The biggest moves a card shows: a member's newest trades, else the largest changes."""
+    if row["kind"] == "house_member":
+        trades = [t for t in row.get("activity") or [] if t.get("counted") and t.get("symbol")]
+        return [
+            {
+                "symbol": t["symbol"],
+                "verb": "Bought" if t["side"] == "buy" else "Sold",
+                "detail": t["date"],
+                "up": t["side"] == "buy",
+            }
+            for t in trades[:n]
+        ]
+    changed = [
+        h
+        for h in (model or {}).get("holdings") or []
+        if h["change"] != "unchanged" and h.get("change_value")
+    ]
+    changed.sort(key=lambda h: -abs(h["change_value"]))
+    return [
+        {
+            "symbol": h["symbol"],
+            "verb": _VERB[h["change"]],
+            "detail": h.get("shares_change_pct"),
+            "up": h["change_value"] > 0,
+        }
+        for h in changed[:n]
+    ]
+
+
+def latest_at(row: dict, model: dict | None) -> str | None:
+    """The newest day anything about this portfolio became public: its filing or a trade's."""
+    days = [str(t.get("filed_at")) for t in row.get("activity") or [] if t.get("filed_at")]
+    if (model or {}).get("filed_at"):
+        days.append(str(model["filed_at"]))
+    return max(days) if days else None
+
+
+def cached_figures(kind: str, ref: str) -> dict:
+    """What a sort needs from a card, if it was already priced — never fetches (the directory
+    lists every portfolio at once). ``{}`` when nothing is cached yet."""
+    hit = _summaries.get((kind, ref))
+    if not hit or time.monotonic() - hit[0] >= _TTL_SECONDS:
+        return {}
+    return {"return_12m": hit[2].get("return_12m"), "latest_at": hit[2].get("latest_at")}
+
+
 def summary(row: dict) -> dict:
-    """What a Discover card needs: the past year against the benchmark, a line to draw, and what
-    is inside, in a few numbers."""
+    """A card's figures, cached with the row (they change only with prices and filings)."""
+    key = (row["kind"], row["source_ref"])
+    today = user_today().isoformat()
+    hit = _summaries.get(key)
+    stamp = f"{today}|{(row.get('current') or {}).get('filing_id')}"
+    if hit and hit[1] == stamp and time.monotonic() - hit[0] < _TTL_SECONDS:
+        return hit[2]
+    out = _summary(row)
+    if out.get("return_12m") is not None:
+        _summaries[key] = (time.monotonic(), stamp, out)
+        _save_disk()
+    return out
+
+
+def _summary(row: dict) -> dict:
     model = build_model(row, user_today())
     perf = performance.performance_for(row)
     year = (perf.get("periods") or {}).get("12M") or {}
@@ -96,11 +232,14 @@ def summary(row: dict) -> dict:
         if row["kind"] == "fund_13f"
         else None,
         "as_of": (model or {}).get("as_of"),
+        "latest_at": latest_at(row, model),
         "filed_at": (model or {}).get("filed_at"),
         "benchmark": perf.get("benchmark"),
         "return_12m": year.get("return") if ok else None,
         "benchmark_12m": year.get("benchmark_return") if ok else None,
         "spark": _downsample(year.get("series") or [], _SPARK_POINTS) if ok else [],
+        "moves": latest_moves(row, model),
+        "weights": [{"symbol": h["symbol"], "weight": h["weight"]} for h in holdings[:6]],
     }
 
 
