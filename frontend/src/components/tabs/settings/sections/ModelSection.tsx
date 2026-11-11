@@ -290,9 +290,7 @@ function ProviderRow({
     if (checking !== undefined)
       return (
         <span title="Asking the provider for its model list to confirm the address and key work. A slow provider can take up to 15 seconds.">
-          <Badge tone="neutral">
-            {checking ? `Contacting ${checking}…` : 'Contacting provider…'}
-          </Badge>
+          <Badge>{checking ? `Contacting ${checking}…` : 'Contacting provider…'}</Badge>
         </span>
       )
     // Binary presence does not prove the CLI's saved login can answer a turn, so the CLI's own

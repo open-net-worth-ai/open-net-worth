@@ -89,6 +89,7 @@ function makeBook(over: Partial<DerivedBook> = {}): DerivedBook {
     alloc: [],
     thresholdPp: 5,
     topName: null,
+    untracked: null,
     loading: false,
     ...over,
   }
