@@ -92,9 +92,9 @@ dated trade in that stock. **Copy trade** hands that one trade to Lucius (see be
 
 A map of what they hold: one tile per sector (or per stock, when sectors are unknown), sized by its
 share of the portfolio. Its colour is what they did with it last quarter: green where they
-added shares, red where they sold, grey where it did not move. Under the map, every sector is
-listed as a chip with its share and its change, so a tile too small for its name is still named.
-Click a tile or a chip to list only its holdings; click it again to list them all.
+added shares, red where they sold, grey where it did not move. Click a tile, even one too small
+for its name, to see its name, share and change above the table and list only its holdings;
+**Show all** (or the tile again) lists them all.
 
 The table lists every holding with its share of the portfolio, the shares held and its return
 over the past 12 months. Search it by ticker or name. A holding the filing names without a ticker
@@ -106,7 +106,8 @@ watching it.
 
 The holdings' total value and the number of stocks, each with its change since the previous
 report when there is one. Then the price return of these holdings against your benchmark, with
-dates along the bottom, over **1M**, **6M**, **12M** or **Since filed**:
+dates along the bottom. The periods are under the chart: **1M**, **6M**, **12M** or **Since
+filed**. The dashed line is your benchmark:
 
 - **Since filed** is what copying it on the day it was made public would have returned, before
   costs and dividends.
