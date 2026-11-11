@@ -29,7 +29,7 @@ Lot schema:
     fees          : float     acquisition fees in cost_currency (amortized into basis)
     kind          : "buy" | "drp" (dividend reinvestment) | "transfer_in" | "grant" |
                     "opening" (migration synthetic)
-    txn_id        : str|None   optional link to the cash leg in transactions.json
+    txn_id        : str|None   the purchase cash row; a real column + FK → transactions.id
     idempotency_key : str|None client dedupe key (broker order id, email id…) — a
                               re-acquire with the same key is a no-op
     note          : str
@@ -42,6 +42,7 @@ Checkpoint-covered (real user data).
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import Connection
 from sqlalchemy import update as sa_update
@@ -58,8 +59,28 @@ def _now() -> str:
 
 
 class LotStore(BookPayloadTableStore):
+    """``txn_id`` is a real FK column and the authority for the link; the payload keeps a copy
+    for raw JSON readers, which an ON DELETE SET NULL can leave stale, so every read takes the
+    column."""
+
     def __init__(self, engine=None):
         super().__init__(lots, id_field="id", engine=engine)
+
+    def _insert_row(self, seq: int, id_val: Any, item: dict) -> dict:
+        return {**super()._insert_row(seq, id_val, item), "txn_id": item.get("txn_id")}
+
+    def _payload_values(self, item: dict) -> dict:
+        return {"payload": item, "txn_id": item.get("txn_id")}
+
+    def _row_item(self, row: Any) -> dict:
+        return {**row.payload, "txn_id": row.txn_id}
+
+    def _row(self, conn, id_val: str) -> dict | None:
+        row = super()._row(conn, id_val)
+        return _with_column_link(row) if row else None
+
+    def _rows_map(self, conn, ids: list[str]) -> dict[str, dict]:
+        return {k: _with_column_link(r) for k, r in super()._rows_map(conn, ids).items()}
 
     # ── Domain queries ────────────────────────────────────────────────────────
 
@@ -180,6 +201,10 @@ class LotStore(BookPayloadTableStore):
                 )
                 touched.append(merged)
         return touched
+
+
+def _with_column_link(row: dict) -> dict:
+    return {**row, "payload": {**row["payload"], "txn_id": row["txn_id"]}}
 
 
 def _fifo_sorted(items: list[dict]) -> list[dict]:

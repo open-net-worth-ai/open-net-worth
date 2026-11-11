@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, waitFor, within } from '@testing-library/react'
+import { act, render, cleanup, waitFor, within } from '@testing-library/react'
 import { fDate } from '../../utils/format'
+import { emitDataChanged } from '../../lucius/bus'
 import { PositionSubtab } from './PositionSubtab'
 import type { AssetPosition } from '../../types/assetDetail'
 
@@ -259,6 +260,20 @@ describe('PositionSubtab', () => {
       ).toBe(true),
     )
     expect(await findByText('2 disposals')).toBeTruthy()
+  })
+
+  // A lot correction re-states a sale's gain; the strip showed the old gain until a reload
+  // (UAT DS-LOT-SOLD). Any write now refetches it.
+  it('refetches realized P&L after a write', async () => {
+    const realizedCalls = () =>
+      mockAuthFetch.mock.calls.filter(([u]) => (u ?? '').startsWith('/api/realized-pnl')).length
+    render(<PositionSubtab position={POSITION} symbol="AAPL" instrumentId="inst-1" income={null} />)
+    await waitFor(() => expect(realizedCalls()).toBeGreaterThan(0))
+    const before = realizedCalls()
+
+    act(() => emitDataChanged(['lots']))
+
+    await waitFor(() => expect(realizedCalls()).toBeGreaterThan(before))
   })
 
   it('reuses LotsPanel for the acquisition/realized/dividends tables', async () => {

@@ -342,7 +342,9 @@ class DisposeAssetInput(ToolInput):
     description=(
         "Sell or otherwise dispose of an owned asset. THIS POSTS A REAL LEDGER TRANSACTION "
         "for the proceeds into the given cash account (skipped when proceeds=0), then "
-        "archives the asset — it stops counting toward net worth but its history is kept. This is not reversible the way an ordinary transaction edit is."
+        "archives the asset — it stops counting toward net worth but its history is kept. "
+        "This is not reversible the way an ordinary transaction edit is. A sale whose proceeds "
+        "row was deleted can be disposed again."
     ),
     input_schema=schema_of(DisposeAssetInput, tool_name="dispose_asset"),
     mutates=("assets", "ledger"),

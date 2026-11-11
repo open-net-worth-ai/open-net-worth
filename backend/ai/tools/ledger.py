@@ -25,7 +25,7 @@ from backend.core.errors import (
     PreviouslyDeletedError,
 )
 from backend.core.user_time import user_today
-from backend.services import labels, ledger_preview, review_approval
+from backend.services import labels, ledger_preview, review_approval, transaction_links
 
 logger = logging.getLogger(__name__)
 
@@ -1666,6 +1666,47 @@ async def update_transactions(input_data: dict):
     return json.dumps(result_body, ensure_ascii=False), None
 
 
+def _released_links_result(released: Optional[list[dict]]) -> dict:
+    if not released:
+        return {}
+    return {
+        "released_links": released,
+        "note": "Deleting these rows changed other records. Tell the user what each `effect` says.",
+    }
+
+
+class _DeleteTransactionsPreview:
+    """The card names what a delete would change, so the user sees it before confirming. A row
+    nothing points at keeps the plain card: None falls back to the literal arguments."""
+
+    def build(self, args: dict) -> Optional[dict]:
+        ids = args.get("transaction_ids") or [args.get("transaction_id")]
+        links = transaction_links.linked_to([tid for tid in ids if tid])
+        if not links:
+            return None
+        rows = [(tid, svc.transactions.find_by_id(tid) or {}) for tid in ids if tid]
+        items = [
+            {
+                "id": tid,
+                "name": f"{row.get('date', '')} {row.get('description', tid)}".strip(),
+                "changes": {"transaction": {"old": "In the ledger", "new": "Deleted"}},
+            }
+            for tid, row in rows
+        ]
+        items += [
+            {
+                "id": link["id"],
+                "name": link["label"],
+                "changes": {link["what"]: {"old": link["before"], "new": link["after"]}},
+            }
+            for link in links
+        ]
+        return {"kind": "field_diff", "data": {"items": items}, "raw_arguments": args}
+
+    def validate(self, preview: dict) -> Optional[str]:
+        return None
+
+
 class DeleteTransactionsInput(ToolInput):
     """Schema-of-record for ``delete_transactions`` (see ``schema_from_model``)."""
 
@@ -1684,6 +1725,7 @@ class DeleteTransactionsInput(ToolInput):
     ),
     input_schema=schema_of(DeleteTransactionsInput, tool_name="delete_transactions"),
     mutates=("ledger",),
+    preview_adapter=_DeleteTransactionsPreview(),
 )
 async def delete_transactions(input_data: dict):
     ids = [
@@ -1705,7 +1747,13 @@ async def delete_transactions(input_data: dict):
     if not_found:
         logger.warning("tool delete_transactions: not_found=%s", not_found)
     return json.dumps(
-        {"ok": True, "deleted": len(deleted), "deleted_ids": deleted, "not_found": not_found}
+        {
+            "ok": True,
+            "deleted": len(deleted),
+            "deleted_ids": deleted,
+            "not_found": not_found,
+            **_released_links_result(result.get("released_links")),
+        }
     ), None
 
 
@@ -1821,11 +1869,14 @@ async def delete_transactions_where(input_data: dict):
     # resolves a caller-supplied category label to its stored opaque id, REFUSING an
     # unknown/ambiguous one rather than silently deleting nothing.
     try:
-        deleted = svc.delete_transactions_where(**filters)
+        meta: dict = {}
+        deleted = svc.delete_transactions_where(**filters, meta_out=meta)
     except OpenNetWorthError as exc:
         return json.dumps({"ok": False, "error": exc.message or str(exc)}), None
     logger.info("tool delete_transactions_where: deleted=%d filters=%s", deleted, filters)
-    return json.dumps({"ok": True, "deleted": deleted}), None
+    return json.dumps(
+        {"ok": True, "deleted": deleted, **_released_links_result(meta.get("released_links"))}
+    ), None
 
 
 def _resolve_live_txn(existing_id: str | None) -> dict | None:

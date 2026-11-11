@@ -99,6 +99,10 @@ for a goal), **Funding** and **Actions & events**.
    — it has to be a transaction that exists there; a deleted or made-up one is refused.
    An overdue installment also offers **Reschedule**.
 
+If you delete a transaction linked to an installment, the installment goes back to unpaid, and you
+can link another payment or mark it paid again. Funding linked to a deleted transaction goes back
+to planned. Merging the transaction with a duplicate keeps it paid, linked to the row that's left.
+
 **Change the funding** — in **Funding**, click **Edit** on a funding source to change its amount
 or note. A source can be an account, an envelope in your budget, or income.
 

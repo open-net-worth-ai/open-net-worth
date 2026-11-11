@@ -95,8 +95,18 @@ the **Not a sale** option.
   never disappears. The header counts both, for example *1 open · 5 closed*. A sold lot has no
   unrealized gain; its gain is under **Realized history**.
 - Click any lot to correct its date, quantity, cost, fees or kind — including a lot you've sold
-  from. If you deducted its cost from an account, that purchase is corrected to match; changing
-  only the note leaves it alone.
+  from. If you deducted its cost from an account, that transaction is corrected to match and keeps
+  its category, status, history and any description you wrote; changing only the note leaves it
+  alone.
+- Removing a lot, or switching its **Deduct from** to **Don't deduct from an account**, removes
+  its purchase transaction, and anything that transaction paid, such as an installment, goes back
+  to unpaid. The form says so before you save. A sale's **Don't add to an account** does the same
+  to its deposit and anything that deposit funded.
+- If you delete the cash transaction behind a lot, the lot stays and keeps its cost, but it no
+  longer has a linked purchase. Correcting that lot later doesn't change or add any cash. To book
+  the purchase again, pick an account under **Deduct from**.
+- A sale works the same way: delete its cash deposit and the sale and its gain stay on record.
+  Editing the sale doesn't add the cash back unless you choose a different account.
 - Correcting a sold lot keeps every sale exactly as recorded (which lots it used, how many,
   the price and the cash). Only that lot's lines on the sale follow: a new date updates their
   holding period, and a new cost or fees updates the sale's gain. A sold lot can't be made

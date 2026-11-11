@@ -769,7 +769,14 @@ profile = Table(
 # (cost_basis, unit_cost, strike, proceeds, realized_gain, fmv) — exact via JSON round-trip, no
 # promoted decimal-Text column this wave (see money_io._money_text's payload rule).
 positions = book_payload_table("positions")
-lots = book_payload_table("lots")
+# The one exception to the loose coupling above: a lot's purchase cash row is a real FK. SET NULL
+# only fires on a true removal; a soft delete is an UPDATE, so the delete chokes clear the link
+# themselves (ADR 2026-11-06-a-lots-cash-link-is-a-real-foreign-key).
+lots = book_payload_table(
+    "lots",
+    Column("txn_id", Text, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True),
+    Index("ix_lots_txn_id", "txn_id"),
+)
 grants = book_payload_table("grants")
 vest_events = book_payload_table("vest_events")
 option_contracts = book_payload_table("option_contracts")

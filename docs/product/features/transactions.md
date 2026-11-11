@@ -44,7 +44,9 @@ or just by telling Lucius: *"I paid $42.80 for dinner at Nando's on my Visa yest
    amount **Remaining**.
    A saved split shows its biggest category and a count (**Rent +5**) in the register — tap it
    to list the lines — and every line, with its amount, in the drawer's **Category** row.
-4. To remove it, click **Delete**.
+4. To remove it, click **Delete**. If something depends on the transaction, such as a lot, a sale
+   or a paid installment, the confirmation says what will change. That record stays and you can
+   still edit it.
 
 The drawer always lists **Memo** and **Tags**, showing a dash when they are empty; add either with
 **Edit transaction**. It also shows the transaction's **Activity** (every change made to it, and by
@@ -130,7 +132,8 @@ can add, edit or re-flag a transaction, but can never clear the flag.
   IBKR) — set automatically when the trade is recorded against an account with an institution,
   and editable in the drawer like any other payee. A buy or sale recorded against a holding
   writes what it traded as the description — for example **Sold 60 KSTL @ 150.00 USD · fees
-  1.25 USD** — and leaves the memo free for your own note.
+  1.25 USD** — and leaves the memo free for your own note. Correcting the trade later updates
+  that description to match; a description you or a broker's email wrote is kept as it is.
 - A **balance adjustment** (created when you reconcile) never has a category and is left out of
   spending reports.
 - The **Starting Balance** can't be deleted, uncleared, freely edited or merged — change the

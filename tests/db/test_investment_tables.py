@@ -22,7 +22,8 @@ def test_book_investment_tables_are_book_scoped_single_pk():
     for name in BOOK_INVESTMENT_TABLES:
         table = t.metadata.tables[name]
         assert [c.name for c in table.primary_key.columns] == ["id"]  # write_log single-col PK
-        assert {c.name for c in table.c} == {"book_id", "seq", "id", "payload"}
+        promoted = {"txn_id"} if name == "lots" else set()  # the one real FK column
+        assert {c.name for c in table.c} == {"book_id", "seq", "id", "payload", *promoted}
         assert "book_id" in [fk.parent.name for fk in table.foreign_keys]  # FK -> books.id
 
 

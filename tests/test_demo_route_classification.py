@@ -221,6 +221,7 @@ REVIEWED_SAFE = frozenset(
     PATCH /api/transactions/bulk
     POST /api/transactions/bulk
     POST /api/transactions/bulk-delete
+    POST /api/transactions/delete-preview
     POST /api/transactions/bulk-update
     DELETE /api/transactions/{txn_id}
     PUT /api/transactions/{txn_id}

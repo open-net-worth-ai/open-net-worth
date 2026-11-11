@@ -34,7 +34,7 @@ from backend.core.user_time import user_today
 from backend.models.transaction import TxnKind
 from backend.services import audit as audit_svc
 from backend.services import categories as cat_svc
-from backend.services import connector_snapshots, email_snapshots, payee_registry
+from backend.services import connector_snapshots, email_snapshots, payee_registry, transaction_links
 from backend.services import institutions as institution_svc
 from backend.services import ledger as svc
 from backend.services.budgets import EXPENSE_CATEGORIES  # noqa: F401  (re-export for importers)
@@ -357,6 +357,10 @@ class BulkTxnUpdateFlat(BaseModel):
 
 
 class BulkTxnDelete(BaseModel):
+    ids: List[str]
+
+
+class TxnDeletePreview(BaseModel):
     ids: List[str]
 
 
@@ -1634,6 +1638,13 @@ def bulk_update_transactions_flat(body: BulkTxnUpdateFlat):
         len(result["skipped"]),
     )
     return result
+
+
+@router.post("/api/transactions/delete-preview")
+def preview_transaction_delete(body: TxnDeletePreview):
+    """What deleting these rows would change on the records that point at them. Writes nothing:
+    the register's confirm dialog shows it before the user decides."""
+    return {"links": transaction_links.linked_to(body.ids)}
 
 
 @router.post("/api/transactions/bulk-delete")

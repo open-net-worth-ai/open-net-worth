@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useDataVersion } from '../../hooks/useDataVersion'
 import { Panel } from '../ui'
 import { authFetch } from '../../api/client'
 import { LotsPanel } from '../shared/LotsPanel'
@@ -77,6 +78,14 @@ export function PositionSubtab({
     null,
   )
   const positionId = position.position_id
+  // A lot correction re-states a sale's gain, so the strip refetches after any write: one made
+  // in the lots table below, or one Lucius made (UAT DS-LOT-SOLD showed the old gain until reload).
+  const dataV = useDataVersion('*')
+  const [lotsV, setLotsV] = useState(0)
+  const lotsChanged = () => {
+    setLotsV((v) => v + 1)
+    onChanged?.()
+  }
 
   useEffect(() => {
     // A holding merged across accounts has no single position_id to fetch by — its realized
@@ -97,7 +106,7 @@ export function PositionSubtab({
     return () => {
       alive = false
     }
-  }, [positionId])
+  }, [positionId, dataV, lotsV])
 
   // Multi-account holding: sum the pre-merged events synchronously (same "known gains only"
   // rule LotsPanel's own realized-history total line uses) instead of a second network round
@@ -230,7 +239,7 @@ export function PositionSubtab({
           base={position.market_value_base}
           costBase={costBaseTotal}
           writeTargets={writeTargetsOf(position)}
-          onChanged={onChanged}
+          onChanged={lotsChanged}
         />
       ) : position.per_account.length > 1 ? (
         // Multi-account holding: no single position_id to fetch by, so LotsPanel renders the

@@ -40,6 +40,7 @@ import {
   txnIsInflow,
   selectionTotal,
 } from './data'
+import { previewDeleteEffects } from './transactionApi'
 import { buildTxnView } from './txnView'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
 import type { Account, Txn, Category, TransactionUpdate, ApiAccount, ApiTxn } from './types'
@@ -1503,10 +1504,12 @@ export function AccountsTab({
   const bulkExport = () => {
     exportCsv(selList)
   }
-  const bulkDelete = () =>
+  const bulkDelete = () => {
+    const title = 'Delete transactions'
+    const body = `${selectedIds.size} transaction(s) will be deleted from the register.`
     setConfirm({
-      title: 'Delete transactions',
-      body: `${selectedIds.size} transaction(s) will be deleted from the register.`,
+      title,
+      body,
       confirmLabel: 'Delete ' + selectedIds.size,
       danger: true,
       onConfirm: () => {
@@ -1517,6 +1520,11 @@ export function AccountsTab({
         setConfirm(null)
       },
     })
+    void previewDeleteEffects(ids()).then((effects) => {
+      if (effects.length === 0) return
+      setConfirm((c) => (c?.title === title ? { ...c, body: [body, ...effects].join(' ') } : c))
+    })
+  }
   const dupCreate = (t: Txn) => ({
     date: t.date,
     kind: t.kind,

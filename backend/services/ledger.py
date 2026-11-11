@@ -47,7 +47,6 @@ from backend.db.import_batch_store import ImportBatchStore
 from backend.db.merge_journal_store import MergeJournalStore
 from backend.db.statement_store import StatementStore
 from backend.db.tables import accounts as accounts_table
-from backend.db.tables import commitments as commitments_table
 from backend.db.tables import merge_journal as merge_journal_table
 from backend.db.tables import rejected_identities as rejected_identities_table
 from backend.db.tables import transactions as transactions_table
@@ -55,6 +54,7 @@ from backend.db.tables import txn_audit as txn_audit_table
 from backend.db.transaction_store import TransactionStore
 from backend.models.account import ACCOUNT_BAND, UNTRACKED_HOLDINGS_BAND, band_of, kind_of
 from backend.models.transaction import SPLIT
+from backend.services import transaction_links
 from backend.services.review_approval import acting_as_automation, refuse_automation_approval
 
 # asset_classes that live in data.csv as genuine market-valued positions.
@@ -214,7 +214,7 @@ def _suppress_inner_create_audit():
 
 
 @contextlib.contextmanager
-def _txn_unit_of_work(conn: Connection | None):
+def _txn_unit_of_work(conn: Connection | None, *also_lock):
     """The composing half of the ledger choke's conn= contract (Task 4, storage plan 4b
     — extending Plan 3's own money-core chokes to accept a FOREIGN conn, which they did
     not yet support): reuse a caller's own open transaction when given — the caller MUST
@@ -227,12 +227,13 @@ def _txn_unit_of_work(conn: Connection | None):
     The standalone set also holds ``rejected_identities``: the delete choke remembers a deleted
     row's refs in the same transaction that deletes it, and a resurrecting create forgets them
     in the same transaction that books it. A composed caller (trade undo, vest) holds only the
-    two ledger locks — and passes ``reject_identities=False``, so it never writes that table."""
+    two ledger locks — and passes ``reject_identities=False``, so it never writes that table.
+    ``also_lock`` adds tables one standalone write also touches (a delete's linked records)."""
     if conn is not None:
         yield conn
         return
     with locked_unit_of_work(
-        transactions_table, txn_audit_table, rejected_identities_table
+        transactions_table, txn_audit_table, rejected_identities_table, *also_lock
     ) as owned:
         yield owned
 
@@ -2953,6 +2954,7 @@ def update_transaction(
     preserve_base: bool = False,
     meta_out: dict | None = None,
     labels_as_given: bool = False,
+    conn: Connection | None = None,
 ) -> dict | None:
     """Update one transaction in place by id and return the rebuilt row (or None if it
     doesn't exist). ``changes`` is a partial field map (already filtered of unset fields).
@@ -2980,13 +2982,22 @@ def update_transaction(
     ``meta_out``, when given, is FILLED with ``declined_fields`` — every patched field whose
     stored value did not move (see ``_fields_the_write_declined``). A caller that does not pass
     it cannot tell a partly-applied patch from a fully-applied one, which is how an
-    append-only ``external_refs`` no-op reported success for years."""
+    append-only ``external_refs`` no-op reported success for years.
+
+    ``conn`` composes the edit into a caller's open transaction, so a lot or sale correction and
+    its cash row commit together. The caller holds the ``transactions`` and ``txn_audit`` locks;
+    everything that opens its own transaction waits for the outer commit."""
+    composed = conn is not None
     requested_fields = dict(changes)
-    existing = transactions.find_by_id(txn_id)
+    existing = (
+        transactions.find_by_id(txn_id, conn=conn) if composed else transactions.find_by_id(txn_id)
+    )
     if existing is None:
         return None
     refuse_automation_approval(txn_id, existing, changes)
     if _is_opening_txn(existing):
+        if composed:
+            raise ConflictError("a Starting Balance row can't change as part of another record")
         balance_before = _capture_automation_balance_snapshot()
         rebuilt = _apply_opening_txn_edit(existing, changes)
         if rebuilt is not None:
@@ -3064,15 +3075,22 @@ def update_transaction(
             meta_out=rebuild_meta,
             force_transfer_rate=not _leg_changed,
             labels_as_given=labels_as_given,
+            conn=conn,
         )
     # PLAN 3 TASK 4: the cleanup below (drop the appended dup, restamp the stable id, restore
     # the row in place) + the update audit event are now ONE transaction. The inner
     # create_transaction call above stays OUTSIDE it — it already committed its own money-core
     # write via its OWN locked_unit_of_work by the time it returns, so this is a SEQUENCE of
     # two independent transactions, never a nested one (locked_unit_of_work's per-table locks
-    # are non-reentrant; nesting would self-deadlock).
-    with locked_unit_of_work(transactions_table, txn_audit_table) as conn:
-        transactions.delete(rebuilt["id"], conn=conn)  # remove the appended dup
+    # are non-reentrant; nesting would self-deadlock). Composed, both steps ride the caller's.
+    with (
+        contextlib.nullcontext(conn)
+        if composed
+        else locked_unit_of_work(transactions_table, txn_audit_table)
+    ) as conn:
+        same_row = rebuilt["id"] == txn_id
+        if not same_row:
+            transactions.delete(rebuilt["id"], conn=conn)  # remove the appended dup
         rebuilt["id"] = txn_id
         # Re-attach the original provenance list so the dedup keys are preserved on the stored row.
         if original_external_refs:
@@ -3102,7 +3120,11 @@ def update_transaction(
             rebuilt["fx_rate"] = (
                 existing.get("fx_rate") if _leg_resolved_unchanged else rebuilt.get("fx_rate")
             )
-        transactions.upsert(rebuilt, conn=conn)  # replace original in place
+        if same_row:
+            # Never delete + re-insert: a true removal fires lots.txn_id's ON DELETE SET NULL.
+            transactions.replace_at_end(rebuilt, conn=conn)
+        else:
+            transactions.upsert(rebuilt, conn=conn)  # replace original in place
         # Provenance (transaction-provenance RFC): record the edit with a sparse before/after
         # field diff. Skip the no-op case (an edit that changed no meaningful field).
         from backend.services import audit as audit_service
@@ -3127,10 +3149,13 @@ def update_transaction(
     # be atomic with the ledger write (best-effort, exception-guarded).
     from backend.services.automations.transaction_events import record_committed_matches
 
-    record_committed_matches(
-        rebuild_meta.get("automation_matches") or [],
-        transaction_id=txn_id,
-        context="transaction_pre_commit",
+    _after_outer_commit(
+        composed,
+        lambda: record_committed_matches(
+            rebuild_meta.get("automation_matches") or [],
+            transaction_id=txn_id,
+            context="transaction_pre_commit",
+        ),
     )
     # Snapshot promote — MOVED out of the transaction above (storage plan 4e task 1 finding,
     # the identical class of bug the automation-match fix just above closed): both snapshot
@@ -3146,7 +3171,8 @@ def update_transaction(
     # harmless (promote is idempotent) but pointless work on every unrelated edit that merely
     # re-asserts its own refs.
     if "external_refs" in changes:
-        _promote_pairs(ext_ref_pairs(rebuilt) - ext_ref_pairs(existing))
+        new_pairs = ext_ref_pairs(rebuilt) - ext_ref_pairs(existing)
+        _after_outer_commit(composed, lambda: _promote_pairs(new_pairs))
     # Learn-from-corrections (P2-SP2): the single recorder. If this edit changed the category
     # of an expense/income txn, log a correction signal so the detector can later PROPOSE a
     # categorization rule. Best-effort — never blocks the edit. Moved out of the transaction
@@ -3160,10 +3186,12 @@ def update_transaction(
     # meant to be atomic with the ledger write anyway (checkpoint-excluded, best-effort).
     from backend.services import corrections as corrections_service
 
-    corrections_service.record_correction(existing, rebuilt)
+    _after_outer_commit(composed, lambda: corrections_service.record_correction(existing, rebuilt))
     # Moved out of the transaction above — see create_transaction's identical note.
     if after_diff is not None:
-        _publish_committed_transaction_events("update", [rebuilt], balance_before=balance_before)
+        _publish_transaction_events_after_commit(
+            composed, "update", [rebuilt], balance_before=balance_before
+        )
     if meta_out is not None:
         meta_out["declined_fields"] = _fields_the_write_declined(
             requested_fields, existing, rebuilt
@@ -3633,7 +3661,10 @@ def mark_batch_reviewed(batch_id: str) -> dict:
 
 
 def bulk_delete_transactions(
-    ids: list[str], *, conn: Connection | None = None, reject_identities: bool = True
+    ids: list[str],
+    *,
+    conn: Connection | None = None,
+    reject_identities: bool = True,
 ) -> dict:
     """Soft-delete many transactions by id, looping the per-txn soft-delete (so each write
     is checkpoint-captured). Returns ``{deleted: [ids], not_found: [ids], count: int,
@@ -3645,6 +3676,12 @@ def bulk_delete_transactions(
     same source event is refused at the create chokes rather than re-booked. ``reject_identities
     =False`` is for a caller undoing its OWN booking (a trade undo reversing a linked cash leg)
     — reversing is not rejecting. Batch rollback never reaches this choke at all.
+
+    Everything that pointed at a deleted row is released (``services.transaction_links``), in
+    this transaction, and returned as ``released_links`` (absent when nothing was). A soft delete
+    is an UPDATE, so no foreign key can do it. That holds for a trade undo too: its own record
+    isn't the only thing that can point at its cash. A composed caller must also hold
+    ``transaction_links.LOCK_TABLES``.
 
     Refuses OUTRIGHT (ConflictError) — before deleting anything — when ANY requested id is
     a Starting Balance transaction (ledger-tracking-start Phase 2): change the account's
@@ -3674,7 +3711,7 @@ def bulk_delete_transactions(
     # STORAGE PLAN 4B TASK 4: `_txn_unit_of_work` composes into a caller's conn when given.
     # `composed` is captured BEFORE that rebinding — see _publish_transaction_events_after_commit.
     composed = conn is not None
-    with _txn_unit_of_work(conn) as conn:
+    with _txn_unit_of_work(conn, *transaction_links.LOCK_TABLES) as conn:
         for txn_id in ids:
             row = transactions.soft_delete(txn_id, conn=conn)
             if row is None:
@@ -3691,6 +3728,7 @@ def bulk_delete_transactions(
             from backend.services import rejected_identities as _rejected
 
             rejected = _rejected.remember_deleted(deleted_rows, conn=conn)
+        released = transaction_links.release(deleted, conn=conn)
     # Same composed-conn handling as create_transaction's own publish call above — see
     # _publish_transaction_events_after_commit for why the composed case must defer.
     _publish_transaction_events_after_commit(
@@ -3701,6 +3739,7 @@ def bulk_delete_transactions(
         "not_found": not_found,
         "count": len(deleted),
         "rejected": len(rejected),
+        **({"released_links": released} if released else {}),
     }
 
 
@@ -3972,7 +4011,12 @@ def merge_transactions(
     # PLAN 3 TASK 4: the journal record, the canonical+absorbed patch, and both merge audit
     # events are now ONE transaction (the "4-store sequence becomes one BEGIN…COMMIT" promise
     # for the merge choke specifically — merge_journal + transactions + txn_audit).
-    with locked_unit_of_work(transactions_table, txn_audit_table, merge_journal_table) as conn:
+    with locked_unit_of_work(
+        transactions_table, txn_audit_table, merge_journal_table, *transaction_links.LOCK_TABLES
+    ) as conn:
+        journal_entry["moved_links"] = transaction_links.move(
+            {absorbed_id: canonical_id}, conn=conn
+        )
         merge_journal.record(journal_entry, conn=conn)
 
         # 4+5) Commit the canonical patch AND the absorbed tombstone in ONE atomic write so a crash
@@ -4119,11 +4163,14 @@ def unmerge_transactions(absorbed_id: str) -> dict | None:
     # The pop/re-record-on-refusal sequence ABOVE stays unwrapped/independent, exactly as
     # before — it is its own explicit compensating write (pop, then explicitly re-record on
     # a validation failure), not part of the "happy path" this choke's promise covers.
-    with locked_unit_of_work(transactions_table, txn_audit_table) as conn:
+    with locked_unit_of_work(
+        transactions_table, txn_audit_table, *transaction_links.LOCK_TABLES
+    ) as conn:
         transactions.upsert(
             canonical_before, conn=conn
         )  # restore canonical legs/external_refs/merged_from
         transactions.upsert(absorbed_before, conn=conn)  # un-tombstone the absorbed row
+        transaction_links.move_back(entry.get("moved_links") or [], conn=conn)
 
         # F23(c) — emit symmetric pair of unmerge events.
         from backend.services import audit as audit_service
@@ -5206,6 +5253,7 @@ def delete_transactions_where(
     kind: str | None = None,
     category: str | None = None,
     batch_id: str | None = None,
+    meta_out: dict | None = None,
 ) -> int:
     """Bulk soft-delete transactions matching filters — service twin of the AI
     ``delete_transactions_where`` tool and ``DELETE /api/transactions``. THE choke point:
@@ -5228,7 +5276,8 @@ def delete_transactions_where(
       asserting ``bulk_delete_where`` has exactly one caller.
     - The deleted rows' ref identities are remembered (``rejected_identities``) in the same
       transaction, as in ``bulk_delete_transactions`` — EXCEPT under a ``batch_id`` filter,
-      which is a rollback of an import, and rolling back is not rejecting."""
+      which is a rollback of an import, and rolling back is not rejecting. Links to the deleted
+      rows are released under the same rule, and reported in ``meta_out["released_links"]``."""
     filters = _resolve_bulk_delete_filters(
         date_from=date_from,
         date_to=date_to,
@@ -5240,12 +5289,17 @@ def delete_transactions_where(
     protected = opening_txn_ids()
     selected = transactions.select_where(**filters, protected_ids=protected)
     balance_before = _capture_automation_balance_snapshot()
-    with locked_unit_of_work(transactions_table, rejected_identities_table) as conn:
+    with locked_unit_of_work(
+        transactions_table, rejected_identities_table, *transaction_links.LOCK_TABLES
+    ) as conn:
         deleted = transactions.bulk_delete_where(**filters, protected_ids=protected, conn=conn)
         if deleted and batch_id is None:
             from backend.services import rejected_identities as _rejected
 
             _rejected.remember_deleted(selected, conn=conn)
+            released = transaction_links.release([row["id"] for row in selected], conn=conn)
+            if meta_out is not None:
+                meta_out["released_links"] = released
     if deleted:
         _publish_committed_transaction_events("delete", selected, balance_before=balance_before)
     return deleted
@@ -5810,7 +5864,10 @@ def _cascade_delete_account_transactions(
         _rejected.remember_deleted(deleted_rows, conn=conn)
 
     swept_ids = {row["id"] for row in deleted_rows}
-    for row in transactions.query_txns(account_id=account_id, include_deleted=True):
+    doomed = transactions.query_txns(account_id=account_id, include_deleted=True)
+    # Explicit, not left to ON DELETE SET NULL: this write is checkpointed, the FK's is not.
+    transaction_links.release([row["id"] for row in doomed], conn=conn)
+    for row in doomed:
         if row["id"] not in swept_ids:
             audit_service.record_txn_event(
                 "delete", row["id"], source=row.get("source"), before=row, after=None, conn=conn
@@ -5898,7 +5955,7 @@ def delete_account(account_id: str, *, force: bool = False) -> bool:
         accounts_table,
         txn_audit_table,
         rejected_identities_table,
-        commitments_table,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
         deleted_rows = _cascade_delete_account_transactions(account_id, refs, conn=conn)
         _unlink_account_from_commitments(account_id, conn=conn)

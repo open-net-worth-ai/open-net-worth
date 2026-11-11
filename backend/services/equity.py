@@ -48,7 +48,7 @@ from backend.db.tables import transactions as txns_tbl
 from backend.db.tables import txn_audit as txn_audit_tbl
 from backend.db.tables import vest_events as vest_events_tbl
 from backend.db.vest_event_store import VestEventStore
-from backend.services import equity_release, position_figures
+from backend.services import equity_release, position_figures, transaction_links
 
 _VALID_TAX_EVENTS = {"at_vest", "deferred"}
 _VALID_STATUSES = {"active", "fully_vested", "cancelled", "forfeited"}
@@ -685,7 +685,13 @@ def _vest_undo(change: dict) -> dict:
     # is locked for the same reason _vest_apply locks it (bulk_delete_transactions,
     # composed via conn=, writes `transactions` AND `txn_audit` as one unit).
     with locked_unit_of_work(
-        grants_tbl, lots_tbl, positions_tbl, txns_tbl, vest_events_tbl, txn_audit_tbl
+        grants_tbl,
+        lots_tbl,
+        positions_tbl,
+        txns_tbl,
+        vest_events_tbl,
+        txn_audit_tbl,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
         # Step 1: return the shares — a delivered vest deletes its lot (which refuses if
         # partially consumed) through the conn=-accepting core instead of re-entering

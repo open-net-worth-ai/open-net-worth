@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, cleanup, waitFor, fireEvent } from '@testing-library/react'
 import { fDate } from '../../utils/format'
+import { emitDataChanged } from '../../lucius/bus'
 import { LotsPanel } from './LotsPanel'
 import type { Lot, RealizedEvent, IncomeEvent } from '../../types/portfolio'
 
@@ -43,6 +44,26 @@ beforeEach(() => {
   })
 })
 afterEach(cleanup)
+
+// An undone sale or a corrected lot from Lucius left the tables showing the old rows until a
+// reload (UAT DS-SALE-UNDO): any write refetches them.
+describe('LotsPanel — refreshes after a write from anywhere', () => {
+  it('refetches lots and realized history when data changes', async () => {
+    const calls = (part: string) =>
+      mockAuthFetch.mock.calls.filter(([u]) => (u ?? '').includes(part)).length
+    render(
+      <LotsPanel positionId="pos-1" symbol="AAPL" costCcy="USD" base={20000} costBase={18520} />,
+    )
+    await waitFor(() => expect(calls('/lots')).toBeGreaterThan(0))
+    const lotsBefore = calls('/lots')
+    const realizedBefore = calls('/api/realized-pnl')
+
+    act(() => emitDataChanged(['lots']))
+
+    await waitFor(() => expect(calls('/lots')).toBeGreaterThan(lotsBefore))
+    expect(calls('/api/realized-pnl')).toBeGreaterThan(realizedBefore)
+  })
+})
 
 describe('LotsPanel — Lucius entity wiring', () => {
   it('renders each open lot row as a draggable lot mention entity', async () => {
