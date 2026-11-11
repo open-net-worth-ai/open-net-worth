@@ -369,12 +369,11 @@ def remove_position(position_id: str) -> bool:
                 )
             if remaining >= original > 0:
                 unsold.append(lot)
-        txn_ids = [lot["txn_id"] for lot in unsold if lot.get("txn_id")]
-        if txn_ids:
-            from backend.services import ledger as ledger_service
-
-            ledger_service.bulk_delete_transactions(txn_ids, conn=conn, reject_identities=False)
         for lot in unsold:
+            # One lot at a time: a row two of these lots share shrinks for the first and goes
+            # with the second, and a transfer the user made of one stays.
+            if lot.get("txn_id"):
+                lots_service.release_lot_cash(lot, lot["txn_id"], conn=conn)
             result = lots_service._delete_lot_core(lot["id"], conn=conn)
             if result.get("error"):
                 raise ValidationError(f"could not remove lot {lot['id']}: {result['error']}")

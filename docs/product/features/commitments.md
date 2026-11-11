@@ -68,7 +68,9 @@ With no floor set, the warning fires only when cash is projected to go below zer
 - **Needs your attention** lists payments overdue, payments that look paid, and actions coming
   due soon. Its **overdue** count and total are the same ones the Dashboard and the daily
   briefing quote: unpaid or not-done items dated before today, funding that hasn't arrived
-  excluded. **Mark paid** works straight from here.
+  excluded. **Mark paid** works straight from here. A payment that looks paid is offered for one
+  installment only, the one it is closest to by date and amount, so two installments of the same
+  amount never both claim the same payment.
 - Funding you have marked as arrived (or linked to the transaction that brought it in) counts as
   received: it no longer shows as late or as coming in on **Next 30 days**, in the daily briefing,
   or in the funding outlook, so the money is not counted twice.

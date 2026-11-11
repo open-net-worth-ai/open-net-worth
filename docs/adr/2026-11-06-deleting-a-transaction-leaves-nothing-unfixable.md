@@ -90,6 +90,14 @@ correction still saves, so the correction and that row can disagree until the us
 The description is rewritten only while it is still the app's own trade text: one the user or a
 broker's email wrote stays when the figures change (found in hand UAT, 2026-11-10).
 
+The same holds when a record lets go of its cash: "no account" on a lot, sale or dividend,
+removing a lot or a position, undoing a sale, or deleting a dividend from its table
+(`services/lots._release_cash_row`, `services/income_corrections`). Only a row that is still that
+record's own cash is deleted. A row the user turned into a transfer stays, because it is a real
+movement, and a row another record shares shrinks by this record's part. Before, each of these
+deleted the row outright, so a transfer the user made, or another lot's purchase, went with it
+(found in hand UAT, 2026-11-11).
+
 The amount on a reconciled row can now change, where before it was replaced. Nothing refuses that,
 and the row stays marked reconciled. No linked row in the owner's book is reconciled.
 

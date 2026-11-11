@@ -71,6 +71,14 @@ in**, same cost). Activity shows a move as one **Transfer** row, not a sale.
    reinvested** to add a new lot instead of cash.
 4. Click **Record**.
 
+To correct or delete one, open the holding's **Position** tab and click the payment under
+**Dividends**. You can change its date, type, gross amount, tax withheld, note and the account it
+was paid into. Its cash transaction is corrected to match and keeps its category and cleared
+status. **Don't add to an account** removes that transaction; the form says so before you save.
+**Delete** removes the payment and its cash transaction. A cash transaction you turned into a
+transfer in the ledger stays either way. A reinvested dividend has no cash: deleting it leaves
+its shares as a lot, which you correct or remove under **Acquisition lots**.
+
 ## The summary at the top
 
 | Figure | What it is |

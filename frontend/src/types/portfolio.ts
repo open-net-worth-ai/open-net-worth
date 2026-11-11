@@ -224,6 +224,7 @@ export interface IncomeEvent {
   currency: string
   is_drp: boolean
   txn_id: string | null
+  note?: string | null
   /** Null when the event's currency has no FX rate; the native net is in `native_net_amount`. */
   base_amount: number | null
   /** False when the event's currency has no FX rate to the base currency. */

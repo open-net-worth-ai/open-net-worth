@@ -49,6 +49,26 @@ class IncomeEventCreate(ONBaseModel):
         return v.upper() if isinstance(v, str) and v else (v or None)
 
 
+class IncomeEventUpdate(ONBaseModel):
+    """Correct-income input (the REST ``PATCH /api/income/{id}`` body). Only the fields sent
+    change; ``account_id: null`` takes the cash off a cash dividend."""
+
+    paid_at: Optional[str] = None
+    income_kind: Optional[IncomeKind] = None
+    quantity: Optional[float] = None
+    amount_per_unit: Optional[float] = None
+    gross_amount: Optional[float] = None
+    tax_withheld: Optional[float] = None
+    currency: Optional[str] = None
+    account_id: Optional[str] = None
+    note: Optional[str] = None
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _upper(cls, v):
+        return v.upper() if isinstance(v, str) and v else (v or None)
+
+
 class IncomeEvent(ONBaseModel):
     """The stored income event (superset incl. timestamps)."""
 

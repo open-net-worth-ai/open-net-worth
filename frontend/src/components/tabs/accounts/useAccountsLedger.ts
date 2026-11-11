@@ -16,7 +16,12 @@ import {
 } from '../../../state/queryCache'
 import { getBaseCurrency } from '../../../utils/format'
 import { emitDataChanged } from '../../../lucius/bus'
-import { PORTFOLIO_KEY as SHARED_PORTFOLIO_KEY, useNetWorth } from '../../../hooks/serverState'
+import {
+  NET_WORTH_KEY,
+  NETWORTH_STATS_KEY,
+  PORTFOLIO_KEY as SHARED_PORTFOLIO_KEY,
+  useNetWorth,
+} from '../../../hooks/serverState'
 import { accountClearedValue, accountValue, fromApiAccount, fromApiTxn } from './data'
 import { retiredEnvelopeNotice } from './retiredPaymentEnvelope'
 import type { RetiredPaymentEnvelope } from './retiredPaymentEnvelope'
@@ -344,6 +349,9 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
   // tabs, Lucius). Kept in a ref so the mutation callbacks stay stable.
   const onMutateRef = useRef(onMutate)
   onMutateRef.current = onMutate
+  // Net worth is in the list because a REST write is never broadcast: the sidebar's figure kept
+  // the deleted account's balance until a reload (UAT, 2026-11-10). A data_changed emit would
+  // also do it, but it reloads this whole tab (RouterShell's coreDataV), on every edit.
   const fireMutate = () => {
     invalidateQueryCache(
       (key) =>
@@ -351,6 +359,8 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         key === CATEGORIES_KEY ||
         key === PAYEES_KEY ||
         key === PORTFOLIO_KEY ||
+        key === NET_WORTH_KEY ||
+        key === NETWORTH_STATS_KEY ||
         key.startsWith('/api/transactions?'),
     )
     onMutateRef.current?.()
