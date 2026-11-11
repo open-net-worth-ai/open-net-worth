@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 import urllib.error
+from urllib.parse import urlsplit
 
 from backend.core.errors import ExternalServiceError
 from backend.core.pinned_http import pinned_urlopen
@@ -19,6 +22,26 @@ logger = logging.getLogger(__name__)
 USER_AGENT = "OpenNetWorth/1.0 (contact: opennetworth-app@proton.me)"
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024
 TIMEOUT_SECONDS = 20
+# SEC's fair-use policy allows at most 10 requests a second from one client; a first visit to
+# Discover asks for every featured fund at once (each reads ~20 SEC files), so every SEC
+# request, from any thread, waits its turn. Under the cap, never at it.
+SEC_MIN_INTERVAL_SECONDS = 0.125
+_sec_lock = threading.Lock()
+_sec_next = 0.0
+
+
+def _wait_for_sec(url: str) -> None:
+    """Space requests to SEC hosts at least ``SEC_MIN_INTERVAL_SECONDS`` apart."""
+    global _sec_next
+    host = (urlsplit(url).hostname or "").lower()
+    if not (host == "sec.gov" or host.endswith(".sec.gov")):
+        return
+    with _sec_lock:
+        now = time.monotonic()
+        wait = _sec_next - now
+        _sec_next = max(now, _sec_next) + SEC_MIN_INTERVAL_SECONDS
+    if wait > 0:
+        time.sleep(wait)
 
 
 def fetch_bytes(
@@ -31,6 +54,7 @@ def fetch_bytes(
 ) -> bytes:
     """GET (or POST ``data``) ``url`` and return the body. ``what`` names the source in the
     error a person reads. A body over ``max_bytes`` is refused, never cut."""
+    _wait_for_sec(url)
     headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "identity"}
     if content_type:
         headers["Content-Type"] = content_type

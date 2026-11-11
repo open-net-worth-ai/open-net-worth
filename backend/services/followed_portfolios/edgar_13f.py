@@ -44,6 +44,24 @@ FEATURED = (
     ("1029160", "Soros Fund Management", "George Soros's firm"),
     ("921669", "Icahn Capital", "Carl Icahn"),
     ("1709323", "Himalaya Capital", "Li Lu"),
+    # Added 2026-11-12: each filer's own name is the fund's, and each filed a 13F for
+    # 2026-06-30 or later (checked against EDGAR that day).
+    ("949509", "Oaktree Capital", "Howard Marks"),
+    ("1037389", "Renaissance Technologies", "Jim Simons's firm"),
+    ("1423053", "Citadel Advisors", "Ken Griffin"),
+    ("1791786", "Elliott Investment Management", "Paul Singer"),
+    ("1135730", "Coatue Management", "Philippe Laffont"),
+    ("1103804", "Viking Global Investors", "Andreas Halvorsen"),
+    ("1061165", "Lone Pine Capital", "Stephen Mandel"),
+    ("1096343", "Markel Group", "Tom Gayner"),
+    ("1056831", "Fairholme Capital", "Bruce Berkowitz"),
+    ("1166559", "Gates Foundation Trust", "The Gates Foundation's endowment"),
+    ("1112520", "Akre Capital Management", "Chuck Akre"),
+    ("1345471", "Trian Fund Management", "Nelson Peltz"),
+    ("1517137", "Starboard Value", "Jeff Smith"),
+    ("1541617", "Altimeter Capital", "Brad Gerstner"),
+    ("1747057", "D1 Capital Partners", "Dan Sundheim"),
+    ("1798849", "Durable Capital Partners", "Henry Ellenbogen"),
 )
 
 

@@ -38,7 +38,15 @@ _FETCH_BUDGET_SECONDS = 120
 _INDEX_TTL_SECONDS = 6 * 3600
 _index_cache: dict[int, tuple[float, list[dict]]] = {}
 
-FEATURED = (("pelosi|nancy", "Nancy Pelosi", "CA11"),)
+# Members whose reports the app can read, with a counted trade in the last six months and at
+# least five estimated holdings (checked against the Clerk's reports on 2026-11-12).
+FEATURED = (
+    ("pelosi|nancy", "Nancy Pelosi", "CA11"),
+    ("gottheimer|josh", "Josh Gottheimer", "NJ05"),
+    ("moskowitz|jared", "Jared Moskowitz", "FL23"),
+    ("hern|kevin", "Kevin Hern", "OK01"),
+    ("wasserman schultz|debbie", "Debbie Wasserman Schultz", "FL25"),
+)
 
 _ROW = re.compile(
     r"(?:\((?P<sym>[A-Z][A-Z0-9.\-]{0,6})\)\s*)?\[(?P<type>[A-Z]{2})\]\s+"

@@ -982,3 +982,36 @@ def test_a_13f_line_names_its_share_class():
     assert edgar_13f.share_class("CAP STK CL C") == "C"
     assert edgar_13f.share_class("CL A") == "A"
     assert edgar_13f.share_class("COM") is None
+
+
+def test_sec_requests_are_spaced_under_the_fair_use_cap(monkeypatch):
+    """SEC allows at most 10 requests a second; a first Discover visit asks for every featured
+    fund at once, so every SEC request waits its turn. Other hosts are not delayed."""
+    from backend.services.followed_portfolios import http
+
+    clock = {"now": 100.0}
+    slept: list[float] = []
+    monkeypatch.setattr(http.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(http.time, "sleep", lambda s: slept.append(s))
+    monkeypatch.setattr(http, "_sec_next", 0.0)
+
+    for _ in range(3):
+        http._wait_for_sec("https://data.sec.gov/submissions/CIK0000000001.json")
+    assert slept == [pytest.approx(http.SEC_MIN_INTERVAL_SECONDS), pytest.approx(0.25)]
+
+    slept.clear()
+    http._wait_for_sec("https://disclosures-clerk.house.gov/public_disc/x.zip")
+    http._wait_for_sec("https://notsec.gov.example.com/x")
+    assert slept == []
+
+
+def test_the_featured_funds_are_unique_and_well_formed():
+    """Each featured fund is one SEC filer, named once, with who runs it."""
+    from backend.services.followed_portfolios import edgar_13f
+
+    ciks = [cik for cik, _, _ in edgar_13f.FEATURED]
+    assert len(ciks) == len(set(ciks))
+    assert all(edgar_13f.normalize_cik(cik) == cik for cik in ciks)
+    names = [name for _, name, _ in edgar_13f.FEATURED]
+    assert len(names) == len(set(names))
+    assert all(who for _, _, who in edgar_13f.FEATURED)

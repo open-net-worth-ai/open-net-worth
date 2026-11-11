@@ -1135,3 +1135,15 @@ div.fol-row-main {
 .fol-info-line + .fol-info-line {
   margin-top: var(--space-2);
 }
+
+/* The card's period label stays one line: on a narrow phone the ring gives it the room. */
+.fol-card-period {
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .fol-card-ring svg {
+    width: 96px;
+    height: 96px;
+  }
+}
