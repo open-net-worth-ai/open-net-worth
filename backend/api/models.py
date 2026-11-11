@@ -55,7 +55,7 @@ from backend.ai.models.codex_cli_catalog import model_ids as _codex_model_ids
 from backend.core.config import get_settings
 from backend.core.errors import ConfigurationError, ProviderDisabledError
 from backend.core.io import atomic_write_text
-from backend.core.net_guard import UnsafeUrlError
+from backend.core.net_guard import UnresolvableHostError, UnsafeUrlError
 from backend.db import app_config_store
 from backend.db.model_config_store import PROVIDER_CATALOG, PROVIDER_HINTS, ModelConfigStore
 from backend.models.model_config import VALID_PROVIDERS, ModelConfigUpdate
@@ -422,6 +422,14 @@ def _validate_credentials(
                 return "invalid", [], _explain_failure(label, probe.status_code, probe.text)
 
         return "valid", ids, ""
+    except UnresolvableHostError:
+        # A subclass of UnsafeUrlError, so it must come first: a name DNS can't answer is a
+        # typo or a network problem, and "not allowed" sent owners hunting for a policy.
+        return (
+            "unreachable",
+            [],
+            (f"Could not find {label}'s address. Check the URL and your network connection."),
+        )
     except UnsafeUrlError:
         return "unreachable", [], f"The address for {label} is not allowed."
     except httpx.TimeoutException:
