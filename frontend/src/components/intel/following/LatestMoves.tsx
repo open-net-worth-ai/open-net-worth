@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { Follow } from '../../../api/followedPortfolios'
+import { InfoPopover } from '../../ui'
 import { COPY } from './following.copy'
 import { shortDate } from './following.format'
 import type { Names } from './activityRows'
@@ -18,9 +19,21 @@ export function LatestMoves({ follow, names, held, onOpen }: Props) {
   const groups = useMemo(() => latestGroups(follow, names), [follow, names])
   if (!groups.length) return null
   return (
-    <section className="fol-latest" aria-labelledby="fol-latest-head">
-      <h2 id="fol-latest-head" className="fol-sec-title">
+    <section className="fol-latest" aria-label={COPY.latestTitle}>
+      <h2 className="fol-sec-title">
         {COPY.latestTitle}
+        {/* What the two kinds of move are, in the reader's terms: when you learn of it, and
+            what it tells you. */}
+        <InfoPopover
+          width={300}
+          label={COPY.latestInfoLabel}
+          text={
+            <>
+              <span className="fol-info-line">{COPY.latestInfoTrades}</span>
+              <span className="fol-info-line">{COPY.latestInfoReport}</span>
+            </>
+          }
+        />
       </h2>
       {groups.map((g) => (
         <div key={g.key} className="fol-latest-group">

@@ -1000,6 +1000,9 @@ div.fol-row-main {
 
 /* One title style for every block of the page: Latest moves, All moves, By sector, … */
 .fol-sec-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: var(--text-base);
   font-weight: 600;
@@ -1122,4 +1125,13 @@ div.fol-row-main {
 
 .fol-perf > .fol-sec-title {
   margin-bottom: calc(var(--space-2) - var(--space-4));
+}
+
+/* An info bubble's lines, each its own paragraph. */
+.fol-info-line {
+  display: block;
+}
+
+.fol-info-line + .fol-info-line {
+  margin-top: var(--space-2);
 }

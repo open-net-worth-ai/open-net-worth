@@ -17,6 +17,11 @@ export const COPY = {
   /** The overview chart's headline: what the figure beside it is the return OF. */
   allMovesTitle: "Today's holdings",
   latestTitle: 'Latest moves',
+  latestInfoLabel: 'What these moves are',
+  latestInfoTrades:
+    'Recent trades: a fund that owns more than 10% of a company must file each trade in it within 2 business days. Exact day, shares and price, but only for its biggest stakes.',
+  latestInfoReport:
+    'Quarterly report: everything it held at the quarter’s end, compared with the report before. It shows what it bought or sold, not the day or the price, and is filed up to 45 days after the quarter ends.',
   allMovesSection: 'All moves',
   bySectorTitle: 'By sector',
   bySizeTitle: 'By size',
