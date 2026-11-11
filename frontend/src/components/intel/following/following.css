@@ -8,6 +8,10 @@
   flex-direction: column;
   gap: var(--space-6);
   min-width: 0;
+  /* Every narrow layout below follows the width THIS page has (a pane beside Lucius is narrow
+     on a wide screen), never the screen's. */
+  container-type: inline-size;
+  container-name: fol-page;
 }
 
 /* The page's own gap spaces the tab bar; its kit margin on top of that doubled it. It sits
@@ -208,7 +212,7 @@
 }
 
 /* A phone keeps the name, its one quiet line and the icons; Copy moves into the ⋯ menu. */
-@media (max-width: 639.98px) {
+@container fol-page (width < 640px) {
   .fol-head {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: 'id icons';
@@ -333,7 +337,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container fol-page (width < 640px) {
   .fol-card {
     padding: var(--space-6);
   }
@@ -342,9 +346,9 @@
     height: 120px;
   }
 
-  .fol-spot-head {
-    flex-wrap: wrap;
-    gap: var(--space-2);
+  /* No room for words: Trade details keeps its arrow and its tooltip. */
+  .fol-spot-actions .fol-btn-label {
+    display: none;
   }
 }
 
@@ -453,7 +457,7 @@
   color: var(--bad);
 }
 
-@media (max-width: 760px) {
+@container fol-page (width < 760px) {
   .fol-tbl .fol-wide {
     display: none;
   }
@@ -670,7 +674,7 @@ div.fol-row-main {
   flex: 0 1 320px;
 }
 
-@media (max-width: 639.98px) {
+@container fol-page (width < 640px) {
   .fol-htools > .mk-search-wrap {
     flex: 1 1 auto;
   }
@@ -810,13 +814,13 @@ div.fol-row-main {
   }
 }
 
-@container (max-width: 34px) or (max-height: 20px) {
+@container (max-width: 34px) or (max-height: 14px) {
   .fol-map-name {
     display: none;
   }
 }
 
-@media (max-width: 639.98px) {
+@container fol-page (width < 640px) {
   .fol-map {
     height: 168px;
   }
@@ -859,43 +863,6 @@ div.fol-row-main {
 }
 
 /* Overview's return: the figure with its window in words, the benchmark under it. */
-.fol-ret {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.fol-ret-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-}
-
-.fol-ret-when {
-  font-size: var(--text-sm);
-  color: var(--muted);
-}
-
-.fol-ret-bench {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* The periods under the chart as quiet tabs: no track, small type, the chosen one raised. */
-.fol-periods .ui-segmented {
-  background: none;
-  border: 0;
-  padding: 0;
-  gap: var(--space-1);
-}
-
-.fol-periods .ui-segmented__seg {
-  padding: var(--space-1) var(--space-4);
-  font-size: var(--text-sm);
-}
 
 /* The picked tile, named above the list it narrowed. */
 .fol-picked {
@@ -923,7 +890,8 @@ div.fol-row-main {
    phone). No boxes: a group is its title and its rows. */
 .fol-latest {
   display: grid;
-  gap: var(--space-3);
+  /* Room between the groups: each reads as its own line, not one block of chips. */
+  gap: var(--space-5);
 }
 
 .fol-latest > .fol-sec-title {
@@ -960,10 +928,10 @@ div.fol-row-main {
   margin: 0;
 }
 
-@media (max-width: 639.98px) {
+@container fol-page (width < 640px) {
   .fol-latest-group {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--space-2);
+    row-gap: var(--space-3);
   }
 }
 
@@ -991,11 +959,12 @@ div.fol-row-main {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  /* Investments' filter pill's own metrics: 28px, 0 11px, 12.5px. */
   height: 28px;
-  padding: 0 var(--space-4);
+  padding: 0 11px;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  font-size: var(--text-sm);
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   cursor: pointer;
@@ -1006,14 +975,18 @@ div.fol-row-main {
   color: var(--ink);
 }
 
+/* Neutral, as Investments' pill: only the amount says up or down. Nine tinted chips were the
+   loudest thing on the page. */
+.fol-move-chip {
+  border-color: var(--line);
+}
+
 .fol-move-chip.up {
   color: var(--good);
-  background: color-mix(in srgb, var(--good) 14%, transparent);
 }
 
 .fol-move-chip.down {
   color: var(--bad);
-  background: color-mix(in srgb, var(--bad) 14%, transparent);
 }
 
 .fol-move-chip.is-own {
@@ -1023,6 +996,10 @@ div.fol-row-main {
 .fol-move-when {
   font-size: var(--text-xs);
   color: var(--muted);
+}
+
+.fol-move-chip.is-own {
+  border-color: var(--accent);
 }
 
 .fol-move-chip:focus-visible {
@@ -1050,12 +1027,10 @@ div.fol-row-main {
   white-space: nowrap;
 }
 
-/* The picked stock's ticker opens its page. */
+/* The picked stock's ticker: a real button to its page. */
 .fol-spot-open {
-  display: inline-flex;
-  align-items: center;
+  font-weight: 600;
   gap: var(--space-1);
-  color: var(--ink);
 }
 
 .fol-latest + .fol-spot,
@@ -1087,7 +1062,7 @@ div.fol-row-main {
   white-space: nowrap;
 }
 
-@media (max-width: 420px) {
+@container fol-page (width < 420px) {
   .fol-card-ring svg {
     width: 96px;
     height: 96px;
@@ -1096,7 +1071,7 @@ div.fol-row-main {
 
 /* On a phone the period takes its own line above the pills, as Investments stacks its search
    above its pills: no pill hides behind the dropdown. */
-@media (max-width: 639.98px) {
+@container fol-page (width < 640px) {
   .fol-toolbar {
     flex-wrap: wrap;
   }
@@ -1123,15 +1098,50 @@ div.fol-row-main {
   margin-bottom: calc(var(--space-2) - var(--space-5));
 }
 
-/* A ticker that opens its stock inside a row that does something else on click. */
-.fol-sym-link .asset-link {
+/* The open-the-stock icon beside a name: shown on the row being pointed at (or focused), always
+   on a touch screen and on a phone's cards. */
+/* A stock's name cell: its pieces on one centre line, so the icon sits level with the name. */
+.fol-name {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.fol-open-inline {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-1);
+  line-height: 0;
+}
+
+.fol-open-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
+  line-height: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
 }
 
 @media (hover: hover) {
-  .fol-sym-link .asset-link:hover .mk-hsym {
-    text-decoration: underline;
-    text-underline-offset: 2px;
+  .fol-tbl.mk-tbl .fol-open-inline {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .fol-tbl.mk-tbl tr:hover .fol-open-inline,
+  .fol-tbl.mk-tbl .fol-open-inline:focus-within {
+    opacity: 1;
+  }
+  .fol-open-btn:hover {
+    color: var(--ink);
+    background: var(--hover);
   }
 }
 
@@ -1192,4 +1202,203 @@ div.fol-row-main {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
   color: var(--muted);
+}
+
+/* The period, as the stock page does it: its timeframe chips with room, its compact dropdown
+   without. Decided by the width the section HAS (a pane beside Lucius is narrow on a wide
+   screen), never the screen's. */
+.fol-act {
+  container-type: inline-size;
+  container-name: fol-act;
+}
+
+.fol-tf {
+  display: flex;
+  align-items: center;
+  flex: none;
+  min-width: 0;
+}
+
+.fol-tf .asd-tf-tabs {
+  display: block;
+}
+
+.fol-tf > .fol-tf-menu {
+  display: none;
+  height: 34px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+@container fol-act (width < 720px) {
+  .fol-tf .asd-tf-tabs {
+    display: none;
+  }
+  .fol-tf > .fol-tf-menu {
+    display: block;
+  }
+}
+
+/* A major block is a raised card, as Investments' and the stock page's are: the surface, one
+   line, a large radius. Small things inside stay unboxed (no box inside a box). */
+.fol-panel {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-6) var(--space-7);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+}
+
+.fol-latest {
+  padding: var(--space-6) var(--space-7);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+}
+
+/* The figures share the card's width in equal columns, never bunched at its start. */
+.fol-figs.fol-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.fol-figs + .fol-perf {
+  margin-top: 0;
+}
+
+@container fol-page (width < 640px) {
+  .fol-panel,
+  .fol-latest {
+    padding: var(--space-5);
+  }
+}
+
+.fol-line--mine {
+  border-top: 2px solid var(--warn);
+}
+
+/* The return block's period control sits under the chart, at its start. */
+
+/* The return block's figures, side by side on one row (they wrap only when the pane is too
+   narrow for them). */
+.fol-ret3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-3) var(--space-8);
+}
+
+/* With no stock picked the figures are the head's only content: they take its full width. */
+.fol-spot-head > .fol-ret3 {
+  flex: 1;
+  min-width: 0;
+}
+
+.fol-ret3-item {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.fol-ret3-l {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.fol-ret3-v {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fol-line--main {
+  border-top: 2px solid var(--accent);
+}
+
+/* A phone card's right side: the main figure, and under it the second, small, unlabelled (as
+   Investments' cards read). */
+.fol-row-figs {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  flex: none;
+}
+
+.fol-row-secondary {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.fol-row-secondary.up {
+  color: var(--good);
+}
+
+.fol-row-secondary.down {
+  color: var(--bad);
+}
+
+.fol-row-top {
+  align-items: center;
+}
+
+/* The picked move's two actions: one height, side by side. */
+.fol-spot-actions .ui-btn {
+  height: 32px;
+  box-sizing: border-box;
+}
+
+/* On a phone's cards the whole card opens the stock: no small icon to aim at. */
+.fol-rows .fol-open-inline {
+  display: none;
+}
+
+/* The picked stock's line: its button, then the price and the move large, SPY beside them. */
+.fol-spot-open.ui-btn {
+  height: 32px;
+  box-sizing: border-box;
+}
+
+.fol-spot-title {
+  align-items: center;
+}
+
+/* The picked stock's line never wraps: its title gives way first. */
+.fol-spot-head {
+  flex-wrap: nowrap;
+}
+
+.fol-spot-title {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.fol-spot-actions {
+  flex: none;
+}
+
+.fol-spot-title .fol-spot-price {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.fol-spot-bench {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.fol-spot-bench.up {
+  color: var(--good);
+}
+
+.fol-spot-bench.down {
+  color: var(--bad);
 }

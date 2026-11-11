@@ -46,21 +46,28 @@ def _window(
     closes: dict[str, dict[str, float]],
     bench: dict[str, float],
     start: str,
+    listed: tuple[str, ...] = (),
 ) -> dict:
+    """The portfolio's path over the window from ``weights``; each holding's own return for every
+    weighted symbol AND every ``listed`` one (the page lists every holding, the line weighs the
+    top ones), so no listed row is left without its return."""
     dates = [d for d in sorted(bench) if d >= start]
     if len(dates) < 2:
         return {"status": "unavailable", "series": [], "holdings": {}, "missing": sorted(weights)}
     paths: dict[str, list[float]] = {}
-    for symbol in weights:
+    for symbol in dict.fromkeys([*weights, *listed]):
         filled = _filled(closes.get(symbol) or {}, dates)
         if filled[0] and all(filled):
             paths[symbol] = [p / filled[0] - 1 for p in filled]  # type: ignore[operator]
-    covered = sum(weights[s] for s in paths)
+    covered = sum(weights[s] for s in paths if s in weights)
     if covered <= 0:
         return {"status": "unavailable", "series": [], "holdings": {}, "missing": sorted(weights)}
     base = bench[dates[0]]
     bench_path = [p / base - 1 for p in _filled(bench, dates)]  # type: ignore[operator]
-    portfolio = [sum(weights[s] * paths[s][i] for s in paths) / covered for i in range(len(dates))]
+    portfolio = [
+        sum(weights[s] * paths[s][i] for s in paths if s in weights) / covered
+        for i in range(len(dates))
+    ]
     return {
         "status": "ok",
         "start": dates[0],
@@ -122,6 +129,7 @@ def build_performance(
     today: date,
     activity: list[dict] | None = None,
     all_from: str | None = None,
+    listed: tuple[str, ...] = (),
 ) -> dict:
     """Every window in one answer, so the screen switches between them without a fetch.
     ``ALL`` starts where the portfolio's own history does (its oldest quarter on record)."""
@@ -133,7 +141,7 @@ def build_performance(
         "FILING": filed_at,
     }
     return {
-        "periods": {key: _window(weights, closes, bench, starts[key]) for key in PERIODS},
+        "periods": {key: _window(weights, closes, bench, starts[key], listed) for key in PERIODS},
         "trade_returns": _trade_returns(activity or [], closes),
     }
 
@@ -167,7 +175,10 @@ def performance_for(follow: dict) -> dict:
     if hit and time.monotonic() - hit[0] < _CACHE_SECONDS:
         return hit[1]
     traded = {normalize_symbol(t.get("symbol")) for t in follow.get("activity") or []}
-    symbols = sorted((set(weights) | traded) - {""})
+    # Every holding the page lists gets its own return, not only the top ones the line weighs.
+    every = build_model(follow, today, None) or {}
+    listed = tuple(h["symbol"] for h in every.get("holdings") or [])
+    symbols = sorted((set(weights) | traded | set(listed)) - {""})
     with ThreadPoolExecutor(max_workers=6) as pool:
         fetched = dict(zip([benchmark, *symbols], pool.map(_closes, [benchmark, *symbols])))
     bench = fetched.pop(benchmark)
@@ -183,6 +194,7 @@ def performance_for(follow: dict) -> dict:
             today=today,
             activity=follow.get("activity") or [],
             all_from=_history_start(follow),
+            listed=listed,
         ),
     }
     _cache[cache_key] = (time.monotonic(), out)

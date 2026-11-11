@@ -1,7 +1,13 @@
 import type { Follow } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { shortDate } from './following.format'
-import { periodRows, periods, type ActivityRow, type Names } from './activityRows'
+import {
+  oneMovePerCompany,
+  periodRows,
+  periods,
+  type ActivityRow,
+  type Names,
+} from './activityRows'
 
 const TOP = 3
 
@@ -25,10 +31,11 @@ export function latestGroups(follow: Follow, names: Names): Group[] {
       key: 'since',
       title: COPY.recentTrades,
       periodKey: since.key,
-      rows: periodRows(follow, names, since).slice(0, TOP),
+      rows: oneMovePerCompany(periodRows(follow, names, since)).slice(0, TOP),
     })
   if (quarter) {
-    const rows = periodRows(follow, names, quarter)
+    // One company is one move: GOOGL and GOOG bought together are one chip, not two of three.
+    const rows = oneMovePerCompany(periodRows(follow, names, quarter))
     const top = (up: boolean) =>
       rows
         .filter((r) => r.up === up)

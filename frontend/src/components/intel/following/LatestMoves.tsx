@@ -47,7 +47,6 @@ export function LatestMoves({ follow, names, held, onOpen }: Props) {
                     type="button"
                     className={`fol-move-chip ${r.up ? 'up' : 'down'}${own ? ' is-own' : ''}`}
                     aria-label={`${r.verb} ${r.symbol}, ${r.amountText}${r.dateText ? `, ${r.dateText}` : ''}${own ? `, ${COPY.youOwn.toLowerCase()}` : ''}`}
-                    title={own ? `${r.name}. ${COPY.youOwn}` : r.name}
                     onClick={() => onOpen(g.periodKey, r.key)}
                   >
                     <b>{r.symbol}</b>

@@ -21,6 +21,7 @@ const LABEL_GAP_PX = 60
 const EDGE_PX = 28
 // The value labels sit inside the plot's left edge: a marker's words there would sit under them.
 const AXIS_PX = 64
+const NARROW_PX = 560
 const compact = (n: number) =>
   new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
 
@@ -42,6 +43,8 @@ interface Props {
   bars?: { date: string; value: number; up: boolean }[]
   /** A second, dashed line to compare against (the benchmark), on the same scale. */
   compare?: { date: string; value: number }[]
+  /** A third, solid line: the owner's own portfolio over the same days. */
+  mine?: { date: string; value: number }[]
   /** Show only this span (the line keeps its full history behind it). */
   range?: { from: string; to: string }
   /** What the hover tooltip says for a day; it floats over the plot, so the layout never moves. */
@@ -65,6 +68,7 @@ export function ActivityChart({
   percent,
   bars,
   compare,
+  mine,
   range,
   tip,
   label,
@@ -153,6 +157,17 @@ export function ActivityChart({
       })
       bench.setData(compare.map((p) => ({ time: toTime(p.date) as Time, value: p.value })))
     }
+    if (mine?.length) {
+      const own = chart.addSeries(LineSeries, {
+        color: v('--warn', '#d4a72c'),
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        priceScaleId: 'right',
+      })
+      own.setData(mine.map((p) => ({ time: toTime(p.date) as Time, value: p.value })))
+    }
     if (refLine)
       line.createPriceLine({
         price: refLine.value,
@@ -172,6 +187,8 @@ export function ActivityChart({
         all.map((m) => {
           const x = chart.timeScale().timeToCoordinate(m.time)
           if (x == null || !m.text) return m
+          // A narrow chart shows arrows only (the tooltip names each move): its labels piled up.
+          if (el.clientWidth < NARROW_PX) return { ...m, text: '' }
           if (x < AXIS_PX || x > el.clientWidth - EDGE_PX) return { ...m, text: '' }
           if (kept.some((k) => k.pos === m.position && Math.abs(k.x - x) < LABEL_GAP_PX))
             return { ...m, text: '' }
@@ -254,7 +271,7 @@ export function ActivityChart({
       chart.timeScale().unsubscribeSizeChange(resized)
       chart.remove()
     }
-  }, [points, markers, refLine, percent, bars, compare, range?.from, range?.to, themeName])
+  }, [points, markers, refLine, percent, bars, compare, mine, range?.from, range?.to, themeName])
 
   if (points.length < 2) return null
   return (

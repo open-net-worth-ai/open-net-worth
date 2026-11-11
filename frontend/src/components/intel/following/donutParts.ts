@@ -1,6 +1,6 @@
 /** The ring's segments — the top holdings, then everything else as one "Others" slice — shared
  *  by the ring and its legend so a colour always means the same holding in both. */
-const PALETTE = [
+export const PALETTE = [
   'var(--lucius)',
   'var(--good)',
   'var(--warn)',

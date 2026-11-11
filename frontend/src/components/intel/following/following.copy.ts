@@ -28,11 +28,24 @@ export const COPY = {
   allHoldingsTitle: (n: number) => `All holdings (${n})`,
   returnTitle: 'Return',
   /** A fund's dated trades: the filings it must make within 2 business days of each one. */
-  recentTrades: 'Recent trades, filed within 2 days',
+  recentTrades: 'Recent trades',
   /** A quarter's changes: from the quarterly report, which gives no trade days. */
-  boughtReported: (day: string) => `Bought, in quarterly report ${day}`,
-  soldReported: (day: string) => `Sold, in quarterly report ${day}`,
+  boughtReported: (day: string) => `Bought in the ${day} report`,
+  soldReported: (day: string) => `Sold in the ${day} report`,
   youOwn: 'You own',
+  openStock: (symbol: string) => `Open ${symbol}`,
+  /** A range in words, after a figure: "+12.3% past year". */
+  rangeWords: (range: string) =>
+    ({
+      '1W': 'past week',
+      '1M': 'past month',
+      '3M': 'past 3 months',
+      '6M': 'past 6 months',
+      YTD: 'this year',
+      '1Y': 'past year',
+      '2Y': 'past 2 years',
+      '3Y': 'past 3 years',
+    })[range] ?? 'since the start',
   breadcrumbLabel: 'Breadcrumb',
   cancel: 'Cancel',
   save: 'Save',
@@ -198,13 +211,38 @@ export const COPY = {
   perfLine: 'These holdings',
   perfOn: (day: string) => `These holdings from the start of the window to ${day}`,
   perfPeriodLabel: 'Performance window',
-  /** After the return figure, the window in words. */
-  returnWhen: {
-    '1M': "today's holdings, past month",
-    '6M': "today's holdings, past 6 months",
-    '12M': "today's holdings, past 12 months",
-    FILING: "today's holdings, since filed",
-  },
+  /** After the return figure, the range in words. */
+  returnWhen: (range: string) =>
+    `today's holdings, ${
+      {
+        '1W': 'past week',
+        '1M': 'past month',
+        '3M': 'past 3 months',
+        '6M': 'past 6 months',
+        YTD: 'this year',
+        '1Y': 'past year',
+        '2Y': 'past 2 years',
+        '3Y': 'past 3 years',
+      }[range] ?? 'all time'
+    }`,
+  yourPortfolio: 'Your portfolio',
+  holdingsShort: 'Holdings',
+  perfLineToday: "Today's holdings",
+  /** The return block's title, with its range in words. */
+  returnTitleFor: (range: string) =>
+    `Return, ${
+      {
+        '1W': 'past week',
+        '1M': 'past month',
+        '3M': 'past 3 months',
+        '6M': 'past 6 months',
+        YTD: 'this year',
+        '1Y': 'past year',
+        '2Y': 'past 2 years',
+        '3Y': 'past 3 years',
+      }[range] ?? 'all time'
+    }`,
+  perfChartLabel: "Today's holdings, your portfolio and the benchmark over the chosen range",
   perfCaption: {
     '1M': 'These holdings over the past month',
     '6M': 'These holdings over the past 6 months',

@@ -1,10 +1,13 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Button } from '../../ui'
+import { Button, SegmentedControl } from '../../ui'
+import { useAssetNav } from '../../../state/assetNav'
 import { FilterChips, ToolSelect } from './Controls'
 import { NameCell } from './NameCell'
 import { LatestMoves } from './LatestMoves'
-import { AssetLink } from '../AssetLink'
-import { ChevronRight } from '../../../ui/icons'
+
+const SHOW_LATEST = false
+import { ArrowUpRight, ChevronRight } from '../../../ui/icons'
+import { Tooltip } from '../../ui/Tooltip'
 import type { Follow, FollowPerformance } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { shortDate, signedPct, toneOf } from './following.format'
@@ -12,7 +15,7 @@ import { CopyTradeButton } from './CopyTradeButton'
 import {
   exactTrades,
   periodRows,
-  periods,
+  rangePeriods,
   filtersFor,
   matches,
   type ActivityFilter,
@@ -42,54 +45,69 @@ function Spotlight({
   follow,
   benchmark,
   onAskLucius,
+  from,
+  rangeWords,
 }: {
   row: ActivityRow
   follow: Follow
   benchmark: string
   onAskLucius?: (t: string) => void
+  /** The chosen period's first day: the stock's move is measured from it, as the chart is. */
+  from: string
+  rangeWords: string
 }) {
-  const since = useSinceFiled(row.symbol, benchmark, row.filedAt)
+  const since = useSinceFiled(row.symbol, benchmark, from)
   const trades = useMemo(() => exactTrades(follow, row.symbol), [follow, row.symbol])
   const [details, setDetails] = useState(false)
+  const { openAsset } = useAssetNav()
   return (
     <div className="fol-spot">
+      {/* One row that never wraps: the stock's own page, its price, and the two actions. */}
       <div className="fol-spot-head">
         <div className="fol-spot-title">
-          {/* The stock's own page, as a ticker opens everywhere else in the app. */}
-          <AssetLink ticker={row.symbol} label={row.name} className="fol-spot-open">
-            <b>{row.symbol}</b>
-            <ChevronRight size={14} aria-hidden="true" />
-          </AssetLink>
+          <Tooltip label={COPY.openStock(row.symbol)}>
+            <Button
+              size="sm"
+              className="fol-spot-open"
+              aria-label={COPY.openStock(row.symbol)}
+              onClick={() => openAsset({ ticker: row.symbol, label: row.name })}
+            >
+              {row.symbol}
+              <ArrowUpRight size={14} aria-hidden="true" />
+            </Button>
+          </Tooltip>
           {since.price != null && <span className="fol-spot-price">${since.price.toFixed(2)}</span>}
-          {since.stock == null ? (
-            <span className="fol-spot-sub">{COPY.noPriceSince}</span>
-          ) : (
-            <>
-              <span className={`fol-spot-move ${toneOf(since.stock)}`}>
-                {signedPct(since.stock)}
-              </span>
-              <span className="fol-spot-sub">
-                {COPY.sinceFiled(row.source, shortDate(row.filedAt))}
-              </span>
-              <span className="fol-spot-sub">
-                {benchmark} {signedPct(since.bench)}
-              </span>
-            </>
-          )}
         </div>
         <div className="fol-spot-actions">
-          <Button size="sm" onClick={() => setDetails(true)}>
-            {COPY.tradeDetails}
-            <ChevronRight size={14} aria-hidden="true" />
-          </Button>
+          <Tooltip label={COPY.tradeDetails}>
+            <Button size="sm" aria-label={COPY.tradeDetails} onClick={() => setDetails(true)}>
+              <span className="fol-btn-label">{COPY.tradeDetails}</span>
+              <ChevronRight size={14} aria-hidden="true" />
+            </Button>
+          </Tooltip>
           <CopyTradeButton
             who={follow.name}
-            what={`${row.verb.toLowerCase()} ${row.symbol} (${row.name}), ${row.amountText}, ${row.detail}, made public ${shortDate(row.filedAt)}${since.stock != null ? `, ${signedPct(since.stock)} since then` : ''}`}
+            what={`${row.verb.toLowerCase()} ${row.symbol} (${row.name}), ${row.amountText}, ${row.detail}, made public ${shortDate(row.filedAt)}${since.stock != null ? `, ${signedPct(since.stock)} ${rangeWords}` : ''}`}
             onAskLucius={onAskLucius}
           />
         </div>
       </div>
-      <TradeChart row={row} trades={trades} from={historyStart(follow)} />
+      {/* The period's two figures, laid out exactly as with no stock picked. */}
+      {since.stock == null ? (
+        <span className="fol-spot-sub">{COPY.noPriceSince}</span>
+      ) : (
+        <div className="fol-ret3">
+          <div className="fol-ret3-item">
+            <span className="fol-ret3-l">{row.symbol}</span>
+            <span className={`fol-ret3-v ${toneOf(since.stock)}`}>{signedPct(since.stock)}</span>
+          </div>
+          <div className="fol-ret3-item">
+            <span className="fol-ret3-l">{benchmark}</span>
+            <span className={`fol-ret3-v ${toneOf(since.bench)}`}>{signedPct(since.bench)}</span>
+          </div>
+        </div>
+      )}
+      <TradeChart row={row} trades={trades} from={from} />
       {details && (
         <TradeDetails
           row={row}
@@ -131,6 +149,7 @@ const amountColumn = (max: number): Column<ActivityRow> => ({
 const sharesColumn: Column<ActivityRow> = {
   key: 'shares',
   label: COPY.colShares,
+  wide: true,
   sortValue: (r) => r.shares,
   className: (r) => (r.up ? 'up' : 'down'),
   cell: (r) => r.sharesText,
@@ -138,6 +157,7 @@ const sharesColumn: Column<ActivityRow> = {
 const dateColumn = (label: string): Column<ActivityRow> => ({
   key: 'date',
   label,
+  secondary: true,
   sortValue: (r) => r.tradedAt,
   className: () => 'muted',
   cell: (r) => r.dateText ?? '—',
@@ -202,7 +222,7 @@ function Table({
   held: Set<string>
 }) {
   const [filter, setFilter] = useState<ActivityFilter>('all')
-  const options = filtersFor(set, rows)
+  const options = filtersFor(set)
   const shown = rows.filter((r) => matches(set, r, filter))
   // A filter that shortens the table must not shorten the page: the browser would pull the
   // scroll up under the reader. The table keeps the height it has with every row shown.
@@ -215,7 +235,7 @@ function Table({
     <div className="fol-sec">
       {/* Investments' filter pills, each with its count (they scroll on a phone). The period is
           with the block's title above the chart. */}
-      {options.length > 2 && (
+      {options.length > 0 && (
         <div className="fol-toolbar">
           <FilterChips
             label={COPY.filterLabel}
@@ -248,71 +268,121 @@ function Table({
  *  the chosen period's moves as one table — a quarter's changes, or the dated trades since. */
 export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
   const member = follow.kind === 'house_member'
-  const spans = useMemo(() => periods(follow), [follow])
+  const spans = useMemo(() => rangePeriods(follow), [follow])
   const [periodKey, setPeriodKey] = useState<string | null>(null)
-  const period = spans.find((p) => p.key === periodKey) ?? spans[0]
+  // All by default; the ranges (1 week … 3 years) narrow it.
+  const period =
+    spans.find((p) => p.key === periodKey) ?? spans.find((p) => p.key === 'ALL') ?? spans[0]
   const rows = period ? periodRows(follow, names, period) : []
   const [pickedKey, setPickedKey] = useState<string | null>(null)
   // Nothing is picked until the reader picks: the chart then shows every move. Picking the
   // same row again goes back to that overview.
   const picked = rows.find((r) => r.key === pickedKey)
   const benchmark = perf?.benchmark ?? 'SPY'
-  const pick = (r: ActivityRow) => setPickedKey((k) => (k === r.key ? null : r.key))
+  const panelRef = useRef<HTMLDivElement>(null)
+  // Picking a move shows it in the card above the table: on a phone that card is usually off
+  // screen by then, so it is brought into view.
+  const pick = (r: ActivityRow) => {
+    const opening = pickedKey !== r.key
+    setPickedKey(opening ? r.key : null)
+    const panel = panelRef.current
+    if (opening && panel && panel.getBoundingClientRect().top < 0)
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   // The overview runs over the whole history and zooms to the chosen period; its headline is
   // the return over exactly the span on screen.
   const year = perf?.periods.ALL?.status === 'ok' ? perf.periods.ALL : perf?.periods['12M']
-  const span = period && period.key !== 'all' ? { from: period.from, to: period.to } : undefined
+  const span = period && period.key !== 'ALL' ? { from: period.from, to: period.to } : undefined
   const shown = year?.status === 'ok' ? spanReturn(year.series, span) : null
   return (
-    <div className="fol-sec">
-      {follow.kind === 'fund_13f' && (
+    <div className="fol-sec fol-act">
+      {/* Latest moves is off for now (owner, 2026-11-12): flip SHOW_LATEST to bring it back. */}
+      {SHOW_LATEST && follow.kind === 'fund_13f' && (
         <LatestMoves
           follow={follow}
           names={names}
           held={held}
-          onOpen={(periodKey, rowKey) => {
-            setPeriodKey(periodKey)
+          onOpen={(_, rowKey) => {
+            // All holds every move under the same key: show it there, picked.
+            setPeriodKey('ALL')
             setPickedKey(rowKey)
           }}
         />
       )}
-      {/* The chart follows the table's period, so the two are one titled block. */}
-      <div className={`fol-sec-head${follow.kind === 'fund_13f' ? ' is-next' : ''}`}>
-        <h2 className="fol-sec-title">{COPY.allMovesSection}</h2>
-        {/* The period sets the chart AND the table, so it sits with the block's title. */}
-        {period && spans.length > 1 && (
-          <ToolSelect
-            label={COPY.periodLabel}
-            value={period.key}
-            options={spans.map((p) => ({ value: p.key, label: p.label }))}
-            onChange={(v) => {
-              setPeriodKey(v)
-              setPickedKey(null)
-            }}
+      {/* All moves: its title, period, return and chart are one raised card. */}
+      <div className="fol-panel" ref={panelRef}>
+        {/* The chart follows the table's period, so the two are one titled block. */}
+        <div className="fol-sec-head">
+          <h2 className="fol-sec-title">{COPY.allMovesSection}</h2>
+          {/* The period sets the chart AND the table, so it sits with the block's title: the stock
+              page's own timeframe chips with room, its compact dropdown without (as it does). */}
+          {period && spans.length > 1 && (
+            <div className="fol-tf">
+              <div className="asd-tf-tabs">
+                <SegmentedControl
+                  ariaLabel={COPY.periodLabel}
+                  options={spans.map((p) => ({ value: p.key, label: p.label }))}
+                  value={period.key}
+                  onChange={(v) => {
+                    setPeriodKey(v)
+                    setPickedKey(null)
+                  }}
+                />
+              </div>
+              <ToolSelect
+                className="fol-tf-menu"
+                label={COPY.periodLabel}
+                value={period.key}
+                options={spans.map((p) => ({ value: p.key, label: p.label }))}
+                onChange={(v) => {
+                  setPeriodKey(v)
+                  setPickedKey(null)
+                }}
+              />
+            </div>
+          )}
+        </div>
+        {picked ? (
+          <Spotlight
+            row={picked}
+            follow={follow}
+            benchmark={benchmark}
+            onAskLucius={onAskLucius}
+            from={span?.from ?? historyStart(follow)}
+            rangeWords={COPY.rangeWords(period?.key ?? 'ALL')}
           />
+        ) : (
+          year?.status === 'ok' && (
+            <div className="fol-spot">
+              <div className="fol-spot-head">
+                {/* The two figures large, each under its short name and line style (as the
+                    Overview's return): the period chips above already say which period. */}
+                <div className="fol-ret3">
+                  <div className="fol-ret3-item">
+                    <span className="fol-ret3-l">
+                      <i className="fol-line fol-line--main" aria-hidden="true" />
+                      {COPY.holdingsShort}
+                    </span>
+                    <span className={`fol-ret3-v ${toneOf(shown?.portfolio)}`}>
+                      {signedPct(shown?.portfolio)}
+                    </span>
+                  </div>
+                  <div className="fol-ret3-item">
+                    <span className="fol-ret3-l">
+                      <i className="fol-line fol-line--bench" aria-hidden="true" />
+                      {benchmark}
+                    </span>
+                    <span className={`fol-ret3-v ${toneOf(shown?.benchmark)}`}>
+                      {signedPct(shown?.benchmark)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <PortfolioActivityChart follow={follow} win={year} range={span} />
+            </div>
+          )
         )}
       </div>
-      {picked ? (
-        <Spotlight row={picked} follow={follow} benchmark={benchmark} onAskLucius={onAskLucius} />
-      ) : (
-        year?.status === 'ok' && (
-          <div className="fol-spot">
-            <div className="fol-spot-head">
-              {/* One quiet line, as Overview reads: the figure, what it is, the benchmark. */}
-              <div className="fol-spot-title">
-                <span className={`fol-spot-move ${toneOf(shown?.portfolio)}`}>
-                  {signedPct(shown?.portfolio)}
-                </span>
-                <span className="fol-spot-sub">{COPY.allMovesTitle}</span>
-                <span className="fol-spot-sub">
-                  {benchmark} {signedPct(shown?.benchmark)}
-                </span>
-              </div>
-            </div>
-            <PortfolioActivityChart follow={follow} win={year} range={span} />
-          </div>
-        )
-      )}
       {period && (
         <Table
           key={period.key}

@@ -87,3 +87,22 @@ describe('the return over part of a series', () => {
     expect(r!.benchmark).toBeNull()
   })
 })
+
+describe('the address of an open portfolio', () => {
+  it('is written without escaped characters, and old links still open', async () => {
+    const { portfolioParam, parsePortfolioParam } = await import('./useOpenPortfolio')
+    expect(portfolioParam({ kind: 'fund_13f', source_ref: '1067983' })).toBe('fund-1067983')
+    expect(portfolioParam({ kind: 'house_member', source_ref: 'wasserman schultz|debbie' })).toBe(
+      'member-wasserman_schultz~debbie',
+    )
+    expect(parsePortfolioParam('member-wasserman_schultz~debbie')).toMatchObject({
+      kind: 'house_member',
+      source_ref: 'wasserman schultz|debbie',
+    })
+    expect(parsePortfolioParam('fund_13f:1067983')).toMatchObject({
+      kind: 'fund_13f',
+      source_ref: '1067983',
+    })
+    expect(parsePortfolioParam('nonsense')).toBeNull()
+  })
+})

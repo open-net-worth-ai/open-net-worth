@@ -1,4 +1,4 @@
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useState } from 'react'
 import {
   ActionMenu,
@@ -12,6 +12,7 @@ import {
 } from '../../ui'
 import { Bell, ChevronLeft } from '../../../ui/icons'
 import { Spark } from '../../../lucius/identity'
+import { Tooltip } from '../../ui/Tooltip'
 import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import {
   followPortfolio,
@@ -47,7 +48,18 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // Your own book: every table marks the stocks you hold.
   const { heldSet } = usePortfolioTickerMaps()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
-  const [tab, setTab] = useState<Tab>('activity')
+  // The open tab lives in the address (?tab=), so a reload, Back and a shared link keep it.
+  const search = useSearch({ strict: false }) as { tab?: string }
+  const tab: Tab = search.tab === 'holdings' || search.tab === 'overview' ? search.tab : 'activity'
+  const setTab = (next: Tab) =>
+    void navigate({
+      to: '/intel',
+      search: ((prev: Record<string, unknown>) => ({
+        ...prev,
+        tab: next === 'activity' ? undefined : next,
+      })) as never,
+      replace: true,
+    } as never)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -169,17 +181,23 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
             {follow.subtitle && <span className="fol-by">{follow.subtitle}</span>}
             {/* A fund's snapshot is named by the report it comes from; an ETF's is its day. */}
             {model && follow.kind === 'fund_13f' && (
-              <span title={COPY.holdingsAsOf(shortDate(model.as_of))}>
-                <Tag tone="muted">{COPY.quarterlyFiled(shortDate(model.filed_at))}</Tag>
-              </span>
+              <Tooltip label={COPY.holdingsAsOf(shortDate(model.as_of))}>
+                <span tabIndex={0}>
+                  <Tag tone="muted">{COPY.quarterlyFiled(shortDate(model.filed_at))}</Tag>
+                </span>
+              </Tooltip>
             )}
             {model && follow.kind === 'etf_daily' && (
               <Tag tone="muted">{COPY.holdingsOn(shortDate(model.as_of))}</Tag>
             )}
-            {latestTrade && (
-              <span title={COPY.disclosedOn(shortDate(latestTrade.filed_at))}>
-                <Tag tone="muted">{COPY.latestTrade(shortDate(latestTrade.date))}</Tag>
-              </span>
+            {/* A fund's newest trade is right below, in Latest moves: only a member (who has no
+                such strip) carries it up here. */}
+            {latestTrade && follow.kind === 'house_member' && (
+              <Tooltip label={COPY.disclosedOn(shortDate(latestTrade.filed_at))}>
+                <span tabIndex={0}>
+                  <Tag tone="muted">{COPY.latestTrade(shortDate(latestTrade.date))}</Tag>
+                </span>
+              </Tooltip>
             )}
             {missed && <Badge tone="warn">{COPY.notDisclosed(missed)}</Badge>}
           </div>
@@ -187,32 +205,34 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
         {/* Icon actions stay level with the name at every width; the call to action sits
             with them on a wide screen and moves under the name on a narrow one. */}
         <div className="fol-icons">
-          <Button
-            size="sm"
-            variant="ghost"
-            loading={busy}
-            className={followId ? 'fol-watch is-on' : 'fol-watch'}
-            aria-label={followId ? COPY.unwatchLabel : COPY.watchLabel}
-            aria-pressed={!!followId}
-            title={followId ? COPY.unwatchLabel : COPY.watchLabel}
-            iconLeft={<Bell size={15} fill={followId ? 'currentColor' : 'none'} />}
-            onClick={() => (followId ? setConfirming(true) : void watch())}
-          />
+          <Tooltip label={followId ? COPY.unwatchLabel : COPY.watchLabel}>
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={busy}
+              className={followId ? 'fol-watch is-on' : 'fol-watch'}
+              aria-label={followId ? COPY.unwatchLabel : COPY.watchLabel}
+              aria-pressed={!!followId}
+              iconLeft={<Bell size={15} fill={followId ? 'currentColor' : 'none'} />}
+              onClick={() => (followId ? setConfirming(true) : void watch())}
+            />
+          </Tooltip>
           <ActionMenu label={COPY.moreActions(follow.name)} title={follow.name} items={menu} />
         </div>
         {/* Lucius does the copying (an automation that trades your broker account to match), so
             it is the app's Lucius action: the primary button in Lucius's colour with its Spark. */}
         <div className="fol-cta">
-          <Button
-            size="sm"
-            variant="primary"
-            className="fi-lucius"
-            iconLeft={<Spark size={15} ariaHidden />}
-            title={COPY.copyPitch}
-            onClick={() => void copyPortfolio()}
-          >
-            {COPY.copyCta}
-          </Button>
+          <Tooltip label={COPY.copyPitch}>
+            <Button
+              size="sm"
+              variant="primary"
+              className="fi-lucius"
+              iconLeft={<Spark size={15} ariaHidden />}
+              onClick={() => void copyPortfolio()}
+            >
+              {COPY.copyCta}
+            </Button>
+          </Tooltip>
         </div>
       </header>
       {error && <div className="fol-note fol-note--bad">{error}</div>}

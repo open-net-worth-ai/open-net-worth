@@ -13,6 +13,8 @@ export interface Column<R> {
   wide?: boolean
   /** On a phone, the figure on the card's right; the others sit on the line beneath. */
   primary?: boolean
+  /** On a phone, small under the main figure on the card's right, with no label. */
+  secondary?: boolean
   /** An action cell (a menu, a button): on a phone it goes at the card's end. */
   action?: boolean
 }
@@ -25,6 +27,9 @@ interface Props<R> {
   /** The column the table opens sorted by, highest first (the rows' own order when absent). */
   initialSort?: string
   onRowClick?: (row: R) => void
+  /** A card's tap on a phone, when it should differ from the row's click (it opens the stock:
+   *  the chart a row's click drives is a long scroll away on a phone). */
+  onCardClick?: (row: R) => void
   selectedKey?: string | null
 }
 
@@ -44,6 +49,7 @@ export function SortTable<R>({
   label,
   initialSort,
   onRowClick,
+  onCardClick,
   selectedKey,
 }: Props<R>) {
   // Cards or a table by the width the table actually has, not the screen's: a tablet, or a
@@ -76,7 +82,11 @@ export function SortTable<R>({
   return (
     <div ref={boxRef} className="fol-tbl-box">
       {narrow ? (
-        <CardList rows={sorted} {...{ columns, rowKey, label, onRowClick, selectedKey }} />
+        <CardList
+          rows={sorted}
+          onRowClick={onCardClick ?? onRowClick}
+          {...{ columns, rowKey, label, selectedKey }}
+        />
       ) : (
         <div className="mk-tbl-wrap">
           <div className="mk-tbl-scroll">
@@ -158,11 +168,14 @@ function CardList<R>({
   label,
   onRowClick,
   selectedKey,
-}: Omit<Props<R>, 'initialSort'>) {
+}: Omit<Props<R>, 'initialSort' | 'onCardClick'>) {
   const head = columns.find((c) => c.left) ?? columns[0]!
   const primary = columns.find((c) => c.primary)
   const action = columns.find((c) => c.action)
-  const rest = columns.filter((c) => c !== head && c !== primary && c !== action && !c.wide)
+  const secondary = columns.find((c) => c.secondary)
+  const rest = columns.filter(
+    (c) => c !== head && c !== primary && c !== secondary && c !== action && !c.wide,
+  )
   return (
     <ul className="fol-rows" aria-label={label}>
       {rows.map((r) => {
@@ -172,8 +185,15 @@ function CardList<R>({
             <span className="fol-row-top">
               <span className="fol-row-head">{head.cell(r)}</span>
               {primary && (
-                <span className={`fol-row-primary ${primary.className?.(r) ?? ''}`}>
-                  {primary.cell(r)}
+                <span className="fol-row-figs">
+                  <span className={`fol-row-primary ${primary.className?.(r) ?? ''}`}>
+                    {primary.cell(r)}
+                  </span>
+                  {secondary && (
+                    <span className={`fol-row-secondary ${secondary.className?.(r) ?? ''}`}>
+                      {secondary.cell(r)}
+                    </span>
+                  )}
                 </span>
               )}
             </span>

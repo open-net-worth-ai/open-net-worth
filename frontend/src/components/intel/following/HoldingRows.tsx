@@ -127,18 +127,21 @@ export function HoldingRows({
     {
       key: 'weight',
       label: COPY.colWeight,
+      primary: true,
       sortValue: (r) => r.weight,
       cell: (r) => pct(r.weight),
     },
     {
       key: 'shares',
       label: member ? COPY.colLastTrade : COPY.colSharesHeld,
+      wide: true,
       className: () => 'muted',
       cell: (r) => r.shares,
     },
     {
       key: 'ret',
       label: COPY.perfColumn[period],
+      secondary: true,
       sortValue: (r) => r.ret,
       className: (r) => toneOf(r.ret),
       cell: (r) => signedPct(r.ret),
@@ -176,18 +179,18 @@ export function HoldingRows({
   return (
     <section className="fol-holdings" aria-label={COPY.holdingsTitle}>
       {tiles.length > 1 && (
-        <h2 className="fol-sec-title">{bySector ? COPY.bySectorTitle : COPY.bySizeTitle}</h2>
-      )}
-      {tiles.length > 1 && (
-        <SectorMap
-          tiles={tiles}
-          picked={tile}
-          onPick={setTile}
-          label={bySector ? COPY.mapBySector : COPY.mapByStock}
-        />
+        <div className="fol-panel">
+          <h2 className="fol-sec-title">{bySector ? COPY.bySectorTitle : COPY.bySizeTitle}</h2>
+          <SectorMap
+            tiles={tiles}
+            picked={tile}
+            onPick={setTile}
+            label={bySector ? COPY.mapBySector : COPY.mapByStock}
+          />
+        </div>
       )}
       <div className="fol-sec">
-        <h2 className={`fol-sec-title${tiles.length > 1 ? ' is-next' : ''}`}>
+        <h2 className="fol-sec-title">
           {/* Every holding the filing lists, a holding with no ticker included. */}
           {COPY.allHoldingsTitle(rows.length)}
         </h2>

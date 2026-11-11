@@ -4,8 +4,49 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { ReactNode } from 'react'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
+// A small stand-in for the router: the open portfolio lives in the address (?portfolio=), so
+// navigating changes what useSearch returns, and opening one adds a history entry Back undoes.
+const router = vi.hoisted(() => {
+  let search: Record<string, unknown> = {}
+  const back: Record<string, unknown>[] = []
+  const subs = new Set<() => void>()
+  const emit = () => subs.forEach((f) => f())
+  return {
+    get: () => search,
+    subscribe: (f: () => void) => (subs.add(f), () => void subs.delete(f)),
+    go(next: Record<string, unknown>, replace: boolean) {
+      if (!replace) back.push(search)
+      search = next
+      emit()
+    },
+    back() {
+      search = back.pop() ?? {}
+      emit()
+    },
+    reset() {
+      search = {}
+      back.length = 0
+    },
+  }
+})
 const navigate = vi.hoisted(() => vi.fn())
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
+vi.mock('@tanstack/react-router', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    useNavigate: () => navigate,
+    useSearch: () => useSyncExternalStore(router.subscribe, router.get),
+  }
+})
+function followRoutes() {
+  navigate.mockImplementation((o: { to: string; search?: unknown; replace?: boolean }) => {
+    if (o.to !== '/intel') return
+    const next =
+      typeof o.search === 'function'
+        ? (o.search as (p: Record<string, unknown>) => Record<string, unknown>)(router.get())
+        : (o.search as Record<string, unknown>)
+    router.go(next, !!o.replace)
+  })
+}
 vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => false }))
 const openAsset = vi.hoisted(() => vi.fn())
 vi.mock('../../../state/assetNav', () => ({ useAssetNav: () => ({ openAsset }) }))
@@ -78,12 +119,16 @@ beforeEach(() => {
   clearQueryCache()
   sessionStorage.clear()
   navigate.mockReset()
+  router.reset()
+  followRoutes()
+  vi.spyOn(window.history, 'back').mockImplementation(() => router.back())
   onAskLucius.mockReset()
   openAsset.mockReset()
 })
 afterEach(() => {
   cleanup()
   mockFetch.mockReset()
+  vi.restoreAllMocks()
 })
 
 describe('Discover', () => {
@@ -163,20 +208,48 @@ describe('Trading Activity', () => {
     setup()
     await open('Acme Capital')
     const period = screen.getByRole('combobox', { name: COPY.periodLabel }) as HTMLSelectElement
-    expect(period.selectedOptions[0]!.textContent).toBe('Apr 2026 – Now')
-    const table = screen.getByRole('table', { name: 'Apr 2026 – Now' })
+    expect([...period.options].map((o) => o.textContent)).toEqual([
+      '1W',
+      '1M',
+      '3M',
+      '6M',
+      'YTD',
+      '1Y',
+      '2Y',
+      '3Y',
+      'All',
+    ])
+    expect(period.selectedOptions[0]!.textContent).toBe('All')
+    const table = screen.getByRole('table', { name: 'All' })
     expect(symbols(table).sort()).toEqual(['ACME', 'BOLT', 'BOLT', 'CRUX', 'OXYZ'])
     fireEvent.click(within(filters()).getByRole('tab', { name: /^Sold out/ }))
-    expect(symbols(screen.getByRole('table', { name: 'Apr 2026 – Now' }))).toEqual(['OXYZ'])
+    expect(symbols(screen.getByRole('table', { name: 'All' }))).toEqual(['OXYZ'])
   })
 
-  it('shows the dated trades after the last report when that period is picked', async () => {
+  it('keeps the moves whose day is in the range: a trade by its day, a report by its disclosure', async () => {
+    // Today is Oct 20: 1M (from Sep 20) holds BOLT's Oct 2 trade, not the report disclosed
+    // Aug 14; 3M (from Jul 20) holds both.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T12:00:00Z'))
     setup()
     await open('Acme Capital')
-    fireEvent.change(screen.getByRole('combobox', { name: COPY.periodLabel }), {
-      target: { value: 'since' },
-    })
-    expect(symbols(screen.getByRole('table', { name: 'Since Jun 30' }))).toEqual(['BOLT'])
+    const pick = (label: string) =>
+      fireEvent.click(
+        within(screen.getByRole('tablist', { name: COPY.periodLabel })).getByRole('tab', {
+          name: label,
+        }),
+      )
+    pick('1M')
+    expect(symbols(screen.getByRole('table', { name: '1M' }))).toEqual(['BOLT'])
+    pick('3M')
+    expect(symbols(screen.getByRole('table', { name: '3M' })).sort()).toEqual([
+      'ACME',
+      'BOLT',
+      'BOLT',
+      'CRUX',
+      'OXYZ',
+    ])
+    vi.useRealTimers()
   })
 
   it('charts the portfolio over the chosen period with its moves on it', async () => {
@@ -188,11 +261,11 @@ describe('Trading Activity', () => {
   it('copies one picked move through Lucius, the trade spelled out', async () => {
     setup()
     await open('Acme Capital')
-    fireEvent.change(screen.getByRole('combobox', { name: COPY.periodLabel }), {
-      target: { value: 'since' },
-    })
-    const table = screen.getByRole('table', { name: 'Since Jun 30' })
-    fireEvent.click(within(table).getAllByRole('row')[1]!)
+    const table = screen.getByRole('table', { name: 'All' })
+    const bolt = within(table)
+      .getAllByRole('row')
+      .find((r) => r.textContent?.includes('Oct 2'))!
+    fireEvent.click(bolt)
     expect(screen.getByRole('button', { name: new RegExp(COPY.tradeDetails) })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /^Copy this trade:/ }))
     expect(onAskLucius).toHaveBeenCalledWith(expect.stringContaining('BOLT'))
@@ -241,15 +314,15 @@ describe('Latest moves', () => {
     await open('Acme Capital')
     const strip = screen.getByRole('region', { name: COPY.latestTitle })
     fireEvent.click(within(strip).getByRole('button', { name: /^Sold out OXYZ/ }))
-    const period = screen.getByRole('combobox', { name: COPY.periodLabel }) as HTMLSelectElement
-    expect(period.selectedOptions[0]!.textContent).toBe('Apr – Jun 2026')
+    const period = screen.getByRole('tablist', { name: COPY.periodLabel })
+    expect(within(period).getByRole('tab', { selected: true }).textContent).toBe('All')
     expect(screen.getByRole('button', { name: /^Copy this trade:.*OXYZ/ })).toBeTruthy()
   })
 
   it('says which of their stocks you own', async () => {
     setup()
     await open('Acme Capital')
-    const table = screen.getByRole('table', { name: 'Apr 2026 – Now' })
+    const table = screen.getByRole('table', { name: 'All' })
     const bolt = within(table)
       .getAllByRole('row')
       .find((r) => r.textContent?.startsWith('BOLT'))!

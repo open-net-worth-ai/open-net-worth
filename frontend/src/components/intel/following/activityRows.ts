@@ -306,10 +306,10 @@ export const FILTERS = {
 export type FilterSet = keyof typeof FILTERS
 export type ActivityFilter = (typeof FILTERS)[FilterSet][number]['value']
 
-export function filtersFor(set: FilterSet, rows: ActivityRow[]) {
-  return FILTERS[set].filter((f) =>
-    rows.some((r) => (f.groups as readonly string[]).includes(r.group)),
-  )
+/** Every filter of the set, always: one with no moves shows 0, it never disappears (a member who
+ *  sold nothing still has "Sold"). */
+export function filtersFor(set: FilterSet) {
+  return [...FILTERS[set]]
 }
 
 export function matches(set: FilterSet, row: ActivityRow, filter: ActivityFilter): boolean {
@@ -496,16 +496,62 @@ function withHoldingWords(follow: Follow, rows: ActivityRow[]): ActivityRow[] {
   })
 }
 
-/** The rows ``period`` shows. */
+/** Each stock's share class as the filing names it ("A", "C"), where it names one. */
+function classesOf(follow: Follow): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const h of follow.model?.holdings ?? []) if (h.share_class) out[h.symbol] = h.share_class
+  return out
+}
+
+/** The rows ``period`` shows. Two tickers of one company (GOOGL and GOOG) are told apart by
+ *  their class: "Alphabet Inc. Class A" and "Alphabet Inc. Class C". */
 export function periodRows(follow: Follow, names: Names, period: Period): ActivityRow[] {
-  return withHoldingWords(follow, rowsIn(follow, names, period))
+  const classes = classesOf(follow)
+  const rows = withHoldingWords(follow, rowsIn(follow, names, period)).map((r) => ({
+    ...r,
+    shareClass: r.shareClass ?? classes[r.symbol] ?? null,
+  }))
+  // Named by symbol pairs, not row counts: a company is "two classes" when two of its tickers
+  // appear, however many rows each has.
+  const tickersOf = new Map<string, Set<string>>()
+  for (const r of rows) tickersOf.set(r.name, (tickersOf.get(r.name) ?? new Set()).add(r.symbol))
+  return rows.map((r) =>
+    (tickersOf.get(r.name)?.size ?? 0) > 1 && r.shareClass
+      ? { ...r, name: `${r.name} Class ${r.shareClass}` }
+      : r,
+  )
+}
+
+/** One company's share classes as one move (GOOGL and GOOG bought together are one buy of
+ *  Alphabet): their dollars and shares summed, their tickers joined, the first row's key kept. */
+export function oneMovePerCompany(rows: ActivityRow[]): ActivityRow[] {
+  const byCompany = new Map<string, ActivityRow>()
+  for (const r of rows) {
+    const company = `${r.name.replace(/ Class [A-Z]$/, '')}|${r.up}`
+    const seen = byCompany.get(company)
+    if (!seen) {
+      byCompany.set(company, { ...r, name: r.name.replace(/ Class [A-Z]$/, '') })
+      continue
+    }
+    const amount = seen.amount != null && r.amount != null ? seen.amount + r.amount : null
+    byCompany.set(company, {
+      ...seen,
+      symbol: `${seen.symbol} + ${r.symbol}`,
+      amount,
+      magnitude: seen.magnitude + r.magnitude,
+      amountText: amount == null ? seen.amountText : signed(amount, usd(amount)),
+      shares: seen.shares != null && r.shares != null ? seen.shares + r.shares : null,
+    })
+  }
+  return [...byCompany.values()]
 }
 
 function rowsIn(follow: Follow, names: Names, period: Period): ActivityRow[] {
   if (follow.kind === 'etf_daily') return quarterRows(follow, names)
   if (period.shows === 'all') {
     // Every quarter's changes and every dated trade since the last quarter; a quarter's row
-    // says which quarter when it has no exact days.
+    // says which quarter when it has no exact days. A range keeps the moves whose day is in it:
+    // a trade's day, or the day a quarter's change was disclosed (when anyone could act on it).
     return periods(follow)
       .filter((p) => p.shows !== 'all')
       .flatMap((p) =>
@@ -515,6 +561,7 @@ function rowsIn(follow: Follow, names: Names, period: Period): ActivityRow[] {
           tradedAt: r.tradedAt ?? p.to,
         })),
       )
+      .filter((r) => dayOf(r) > period.from && dayOf(r) <= period.to)
       .sort((a, b) => (b.tradedAt ?? '').localeCompare(a.tradedAt ?? ''))
   }
   if (period.shows === 'trades')
@@ -522,6 +569,57 @@ function rowsIn(follow: Follow, names: Names, period: Period): ActivityRow[] {
       (r) => (r.tradedAt ?? '') > period.from && (r.tradedAt ?? '') <= period.to,
     )
   return changesBetween(follow, names, period)
+}
+
+/** The day a move counts on: its trade day, or for a quarter's change (no trade day) the day it
+ *  was disclosed. */
+const dayOf = (r: ActivityRow) => (r.source === '13F' ? r.filedAt : (r.tradedAt ?? r.filedAt))
+
+export const RANGES: { key: string; label: string; start: (today: Date) => Date }[] = [
+  { key: '1W', label: '1W', start: (t) => shift(t, { days: -7 }) },
+  { key: '1M', label: '1M', start: (t) => shift(t, { months: -1 }) },
+  { key: '3M', label: '3M', start: (t) => shift(t, { months: -3 }) },
+  { key: '6M', label: '6M', start: (t) => shift(t, { months: -6 }) },
+  { key: 'YTD', label: 'YTD', start: (t) => new Date(Date.UTC(t.getUTCFullYear(), 0, 0)) },
+  { key: '1Y', label: '1Y', start: (t) => shift(t, { months: -12 }) },
+  { key: '2Y', label: '2Y', start: (t) => shift(t, { months: -24 }) },
+  { key: '3Y', label: '3Y', start: (t) => shift(t, { months: -36 }) },
+]
+
+function shift(t: Date, by: { days?: number; months?: number }): Date {
+  const d = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()))
+  if (by.days) d.setUTCDate(d.getUTCDate() + by.days)
+  if (by.months) d.setUTCMonth(d.getUTCMonth() + by.months)
+  return d
+}
+
+const iso = (d: Date) => d.toISOString().slice(0, 10)
+
+/** The first day of a range ('1W' … '3Y'); undefined for All. */
+export function rangeFrom(key: string, today: Date = new Date()): string | undefined {
+  const r = RANGES.find((x) => x.key === key)
+  return r ? iso(r.start(today)) : undefined
+}
+
+/** The periods the picker offers: 1W, 1M, 3M, 6M, YTD, 1Y, 2Y, 3Y and All (the default), each
+ *  the last that long up to today; one longer than the history on record shows all there is.
+ *  An ETF keeps its one day. */
+export function rangePeriods(follow: Follow, today: Date = new Date()): Period[] {
+  const spans = periods(follow)
+  const all = spans.find((p) => p.key === 'all')
+  if (follow.kind === 'etf_daily' || !all) return spans
+  const shows = follow.kind === 'house_member' ? 'trades' : 'all'
+  const ranges = RANGES.map(
+    (r) =>
+      ({
+        key: r.key,
+        label: r.label,
+        from: iso(r.start(today)),
+        to: '9999-12-31',
+        shows,
+      }) as Period,
+  )
+  return [...ranges, { ...all, key: 'ALL', label: 'All', shows }]
 }
 
 const FILING_DEADLINE_DAYS = 45
