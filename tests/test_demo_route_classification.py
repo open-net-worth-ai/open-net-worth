@@ -119,6 +119,7 @@ REVIEWED_SAFE = frozenset(
     POST /api/inbox/signals/{signal_id}/dismiss
     POST /api/income
     DELETE /api/income/{event_id}
+    PATCH /api/income/{event_id}
     DELETE /api/institutions/{institution_id}
     PATCH /api/institutions/{institution_id}
     POST /api/instruments/enrich-classification

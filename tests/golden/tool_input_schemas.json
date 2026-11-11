@@ -10481,6 +10481,10 @@
             },
             "note": {
               "type": "string"
+            },
+            "funding_account_id": {
+              "type": "string",
+              "description": "Account that paid (id or exact name): moves the lot's purchase cash there, or debits it there if the lot has none. To take the cash off a lot, delete its purchase transaction."
             }
           },
           "required": [
