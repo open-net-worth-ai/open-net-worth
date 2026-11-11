@@ -19,6 +19,8 @@ const BARS_HEIGHT = 80
 const LABEL_GAP_PX = 60
 // A label is centred on its arrow: this close to an edge it would be cut off.
 const EDGE_PX = 28
+// The value labels sit inside the plot's left edge: a marker's words there would sit under them.
+const AXIS_PX = 64
 const compact = (n: number) =>
   new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
 
@@ -170,7 +172,7 @@ export function ActivityChart({
         all.map((m) => {
           const x = chart.timeScale().timeToCoordinate(m.time)
           if (x == null || !m.text) return m
-          if (x < EDGE_PX || x > el.clientWidth - EDGE_PX) return { ...m, text: '' }
+          if (x < AXIS_PX || x > el.clientWidth - EDGE_PX) return { ...m, text: '' }
           if (kept.some((k) => k.pos === m.position && Math.abs(k.x - x) < LABEL_GAP_PX))
             return { ...m, text: '' }
           kept.push({ x, pos: m.position })

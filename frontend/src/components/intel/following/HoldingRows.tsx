@@ -5,7 +5,7 @@ import type { FollowModel, PerfPeriod, PerfWindow } from '../../../api/followedP
 import { COPY } from './following.copy'
 import { companyName, nameClasses, signedPct, toneOf, tradeLine } from './following.format'
 import { SectorMap } from './SectorMap'
-import { tilesOf } from './sectorTiles'
+import { tilesOf, UNCHANGED } from './sectorTiles'
 import { SortTable, type Column } from './SortTable'
 import { TickerDialog } from './TickerDialog'
 import type { Names } from './activityRows'
@@ -100,6 +100,7 @@ export function HoldingRows({
   const [fixing, setFixing] = useState<Row | null>(null)
   const [query, setQuery] = useState('')
   const [tile, setTile] = useState<string | null>(null)
+  const pickedTile = tiles.find((t) => t.key === tile) ?? null
   const q = query.trim().toLowerCase()
   const shown = rows.filter(
     (r) =>
@@ -174,7 +175,6 @@ export function HoldingRows({
           picked={tile}
           onPick={setTile}
           label={bySector ? COPY.mapBySector : COPY.mapByStock}
-          keysLabel={bySector ? COPY.keysBySector : COPY.keysByStock}
         />
       )}
       <div className="fol-sec">
@@ -189,6 +189,21 @@ export function HoldingRows({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        {/* A picked tile, however small, is named here with its share and change. */}
+        {pickedTile && (
+          <div className="fol-picked">
+            <span className="fol-picked-name">{pickedTile.label}</span>
+            <span className="fol-picked-fig">{(pickedTile.weight * 100).toFixed(1)}%</span>
+            {pickedTile.change != null && Math.abs(pickedTile.change) >= UNCHANGED && (
+              <span className={pickedTile.change > 0 ? 'up' : 'down'}>
+                {signedPct(pickedTile.change)}
+              </span>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setTile(null)}>
+              {COPY.showAll}
+            </Button>
+          </div>
+        )}
         {shown.length === 0 && <p className="fol-empty">{COPY.noHoldingMatch(query.trim())}</p>}
         <SortTable
           rows={shown}

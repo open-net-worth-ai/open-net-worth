@@ -141,8 +141,7 @@ export const COPY = {
   holdingsTitle: 'Holdings',
   mapBySector: 'Holdings by sector. Tap a sector to list only its holdings.',
   mapByStock: 'Holdings by size. Tap one to find it in the list.',
-  keysBySector: 'Sectors and their shares',
-  keysByStock: 'Holdings and their shares',
+  showAll: 'Show all',
   notCounted: 'Option or other asset, not counted in the weights',
   showAllTrades: (n: number) => `Show all ${n} trades`,
   refreshing: 'Checking for a newer filing…',
@@ -173,6 +172,13 @@ export const COPY = {
   perfLine: 'These holdings',
   perfOn: (day: string) => `These holdings from the start of the window to ${day}`,
   perfPeriodLabel: 'Performance window',
+  /** After the return figure, the window in words. */
+  returnWhen: {
+    '1M': 'past month',
+    '6M': 'past 6 months',
+    '12M': 'past 12 months',
+    FILING: 'since filed',
+  },
   perfCaption: {
     '1M': 'These holdings over the past month',
     '6M': 'These holdings over the past 6 months',

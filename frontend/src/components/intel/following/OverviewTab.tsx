@@ -113,23 +113,20 @@ export function OverviewTab({ model, perf, onRetry }: Props) {
         />
       </div>
       <div className="fol-perf">
-        <div className="fol-perf-top">
-          <div className="fol-perf-head">
-            <span className="fol-key fol-key--main" aria-hidden="true" />
-            <span className={`fol-perf-num ${toneOf(win?.return)}`}>
+        {/* As Google Finance: one headline with its period in words after it, the benchmark
+            on a small line under it (its dashed mark before the NAME, never before a number),
+            and the periods as quiet tabs under the chart. */}
+        <div className="fol-ret">
+          <span className="fol-ret-row">
+            <span className={`fol-fig-v ${toneOf(win?.return)}`}>
               {ok ? signedPct(win?.return) : '—'}
             </span>
-            <span className="fol-key fol-key--bench" aria-hidden="true" />
-            <span className="fol-perf-vs">
-              {perf.benchmark} {ok ? signedPct(win?.benchmark_return) : '—'}
-            </span>
-          </div>
-          <SegmentedControl
-            options={PERIODS}
-            value={period}
-            onChange={setPeriod}
-            ariaLabel={COPY.perfPeriodLabel}
-          />
+            <span className="fol-ret-when">{COPY.returnWhen[period]}</span>
+          </span>
+          <span className="fol-ret-bench">
+            <i className="fol-line fol-line--bench" aria-hidden="true" />
+            {perf.benchmark} {ok ? signedPct(win?.benchmark_return) : '—'}
+          </span>
         </div>
         {ok ? (
           <ActivityChart
@@ -140,7 +137,16 @@ export function OverviewTab({ model, perf, onRetry }: Props) {
             tip={tip}
             label={COPY.perfCaption[period]}
           />
-        ) : win ? (
+        ) : null}
+        <div className="fol-periods">
+          <SegmentedControl
+            options={PERIODS}
+            value={period}
+            onChange={setPeriod}
+            ariaLabel={COPY.perfPeriodLabel}
+          />
+        </div>
+        {ok ? null : win ? (
           <p className="fol-foot">{COPY.perfUnavailable}</p>
         ) : (
           <ErrorState title={COPY.perfErrorTitle} message={COPY.perfErrorBody} onRetry={onRetry} />

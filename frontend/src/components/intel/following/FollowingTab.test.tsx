@@ -199,21 +199,25 @@ describe('Trading Activity', () => {
 })
 
 describe('Holdings', () => {
-  it('lists every sector with its share, and a sector narrows the table to it', async () => {
+  it('maps every sector by its share, and a tile names itself and narrows the table', async () => {
     setup()
     await open('Acme Capital')
     tab('Acme Capital', COPY.tabHoldings)
-    const keys = screen.getByRole('group', { name: COPY.keysBySector })
-    const names = within(keys)
-      .getAllByRole('button')
-      .map((b) => b.querySelector('.fol-key-name')?.textContent)
-    expect(names).toEqual(['Technology', 'Industrials', 'Energy'])
-    expect(within(keys).getByRole('button', { name: /^Technology\s*62\.0%/ })).toBeTruthy()
+    const map = screen.getByRole('group', { name: COPY.mapBySector })
+    const tiles = within(map).getAllByRole('button')
+    expect(tiles.map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Technology, 62.0%, −33.1% this quarter',
+      'Industrials, 30.0%, +100.0% this quarter',
+      'Energy, 4.0%',
+    ])
 
     const table = () => screen.getByRole('table', { name: COPY.holdingsTitle })
-    fireEvent.click(within(keys).getByRole('button', { name: /Technology/ }))
+    fireEvent.click(tiles[0]!)
     expect(symbols(table())).toEqual(['ACME', 'CRUX'])
-    fireEvent.click(within(keys).getByRole('button', { name: /Technology/ }))
+    const picked = document.querySelector('.fol-picked') as HTMLElement
+    expect(within(picked).getByText('Technology')).toBeTruthy()
+    expect(within(picked).getByText('62.0%')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: COPY.showAll }))
     expect(symbols(table())).toHaveLength(5)
   })
 

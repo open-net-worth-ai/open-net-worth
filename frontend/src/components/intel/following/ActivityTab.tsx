@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Button, SegmentedControl, Select } from '../../ui'
+import { Button, SegmentedControl } from '../../ui'
+import { PickSelect } from './PickSelect'
 import { ChevronRight } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { FilterSheet } from '../../tabs/investments/FilterSheet'
@@ -308,7 +309,7 @@ export function ActivityTab({ follow, perf, names, onAskLucius }: Props) {
           onPick={pick}
           period={
             spans.length > 1 ? (
-              <Select
+              <PickSelect
                 className="fol-period"
                 aria-label={COPY.periodLabel}
                 value={period.key}

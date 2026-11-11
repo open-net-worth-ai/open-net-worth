@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNarrow } from './useNarrow'
-import { ErrorState, SegmentedControl, Select, TextField } from '../../ui'
+import { ErrorState, SegmentedControl, TextField } from '../../ui'
+import { PickSelect } from './PickSelect'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { FilterSheet } from '../../tabs/investments/FilterSheet'
 import type { DirectoryEntry } from '../../../api/followedPortfolios'
@@ -145,7 +146,7 @@ export function Discover({ watched, onOpen }: Props) {
               onChange={setFilter}
               ariaLabel={COPY.filterLabel}
             />
-            <Select
+            <PickSelect
               className="fol-sort"
               aria-label={COPY.sortLabel}
               value={sort}
