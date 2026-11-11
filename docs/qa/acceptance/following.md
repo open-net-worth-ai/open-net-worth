@@ -38,7 +38,7 @@ automation template. Every control on the screen has an entry.
 ### FOLLOWING-SOURCE
 - GIVEN a portfolio is open
 - WHEN I read the line under the name
-- THEN "View filing at the SEC" (a fund) or "View report at the House Clerk" (a member) opens the source document in a new tab, and "Checked {time} ago" says when the app last looked, with the full time and "Checked automatically twice a day" on hover; each of a member's trades links its "filed" date to that report
+- THEN "View filing at the SEC" (a fund) or "View report at the House Clerk" (a member) opens the source document in a new tab, and "Checked {time} ago" says when the app last looked, and the info button beside it gives the full time, says filings are checked automatically twice a day and on Refresh, and that chart prices update separately; each of a member's trades links its "filed" date to that report
 
 ### FOLLOWING-PERFORMANCE
 - GIVEN a portfolio is open

@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import { ActionMenu, Badge, Button, ConfirmDialog, EmptyState } from '../../ui'
+import { ActionMenu, Badge, Button, ConfirmDialog, EmptyState, StatInfo } from '../../ui'
 import { ExternalLink } from '../../../ui/icons'
 import { fDateTime, timeAgo } from '../../../utils/format'
 import { Spark } from '../../../lucius/identity'
@@ -55,10 +55,11 @@ function MetaLine({ follow }: { follow: Follow }) {
         </>
       )}
       {follow.last_checked_at && (
-        <span title={COPY.checkedTitle(fDateTime(follow.last_checked_at))}>
+        <>
           {' · '}
           {COPY.checked(timeAgo(follow.last_checked_at))}
-        </span>
+          <StatInfo text={COPY.checkedInfo(fDateTime(follow.last_checked_at))} />
+        </>
       )}
     </>
   )

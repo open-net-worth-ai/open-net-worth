@@ -123,8 +123,9 @@ describe('the hero leads with performance and the copy action', () => {
     expect(link.href).toBe('https://www.sec.gov/Archives/edgar/data/1/000000000026000002/')
     expect(link.target).toBe('_blank')
     expect(link.rel).toBe('noopener noreferrer')
-    const checked = within(hero).getByText(/^· Checked /)
-    expect(checked.getAttribute('title')).toContain('Checked automatically twice a day')
+    expect(within(hero).getByText(/Checked /)).toBeTruthy()
+    expect(COPY.checkedInfo('Nov 9')).toContain('automatically twice a day')
+    expect(COPY.checkedInfo('Nov 9')).toContain('daily prices')
   })
 
   it('switches the window, and the holdings column follows it', async () => {

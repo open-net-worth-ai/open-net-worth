@@ -66,8 +66,10 @@ Under the name, **View filing at the SEC** (or **View report at the House Clerk*
 source document, and **Checked …** says when the app last looked for a newer one. Each of a
 member's trades links to the report it came from.
 
-Filings are checked automatically twice a day while the app is running. A new one updates the
-portfolio and adds a story to **Intel**. Use **Refresh** in the **⋯** menu on the card to check now; **Unfollow** is in the same menu. If
+Filings are checked automatically twice a day while the app is running (the first check is a
+few minutes after it starts). A new one updates the portfolio and adds a story to **Intel**.
+The chart's prices are separate: they are daily prices that update through the day, whether or
+not there is a new filing. The **ⓘ** beside **Checked** says the same on the screen. Use **Refresh** in the **⋯** menu on the card to check now; **Unfollow** is in the same menu. If
 a check fails, the last portfolio stays and the screen says what went wrong. A fund whose latest
 filing is more than about two quarters old, or a member with no report for a year, is marked
 out of date.

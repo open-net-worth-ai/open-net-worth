@@ -56,8 +56,8 @@ export const COPY = {
   viewFiling: 'View filing at the SEC',
   viewReport: 'View report at the House Clerk',
   checked: (ago: string) => `Checked ${ago}`,
-  checkedTitle: (when: string) =>
-    `Last checked for a newer filing ${when}. Checked automatically twice a day.`,
+  checkedInfo: (when: string) =>
+    `Last checked for a newer filing on ${when}. The app checks automatically twice a day while it is running, and whenever you choose Refresh in the menu. A new filing also appears as a story in Intel. The chart uses daily prices, which update separately through the day.`,
   moreActions: (name: string) => `More actions for ${name}`,
   changeBasis:
     'Share changes are between the two quarter-ends. A 13F gives no trade dates or trade prices, so dollar figures use the quarter-end price and are approximate.',
