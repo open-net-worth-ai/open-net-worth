@@ -15,8 +15,19 @@ vi.mock('@tanstack/react-router', async (load) => ({
   useNavigate: () => navigate,
 }))
 
+const restApi = vi.hoisted(() => ({ notes: '' }))
+vi.mock('./restApi', async (load) => {
+  const real = await load<typeof import('./restApi')>()
+  return {
+    ...real,
+    cachedRestApi: () => undefined,
+    getRestApi: async () => ({ notes: restApi.notes }),
+  }
+})
+
 afterEach(() => {
   cleanup()
+  restApi.notes = ''
   navigate.mockReset()
 })
 
@@ -308,6 +319,30 @@ describe('a caller that already said "set this up" lands ON the form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     expect(screen.getByText('Client ID')).toBeTruthy()
     expect(onSetEnabled).not.toHaveBeenCalled()
+  })
+})
+
+describe('instructions for Lucius', () => {
+  it('shows a REST API’s instructions folded, like an MCP server’s', async () => {
+    restApi.notes = 'Call list_accounts first.\nAmounts are in cents.'
+    renderDetail(
+      entry({ id: 'rest:acme_bank', kind: 'rest', name: 'Acme Bank', families: ['API'] }),
+    )
+    const fold = await screen.findByText('Instructions for Lucius')
+    expect(fold.closest('details')?.textContent).toContain('Amounts are in cents.')
+  })
+
+  it('shows nothing for a REST API with no instructions', async () => {
+    const { container } = renderDetail(
+      entry({ id: 'rest:acme_bank', kind: 'rest', name: 'Acme Bank', families: ['API'] }),
+    )
+    await Promise.resolve()
+    expect(container.querySelector('.cn-fold')).toBeNull()
+  })
+
+  it('keeps an MCP server’s handshake instructions under their own title', () => {
+    renderDetail(entry({ mcp: true, instructions: 'Use search first.' }))
+    expect(screen.getByText('The server’s instructions for AI')).toBeTruthy()
   })
 })
 

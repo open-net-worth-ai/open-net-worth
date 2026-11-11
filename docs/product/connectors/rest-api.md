@@ -59,7 +59,7 @@ No document? Skip the box and fill the form in by hand.
 | **Authentication** | How the API recognises you: none, a bearer token, an API key in a header, an API key in the URL, or a username and password. |
 | **Extra headers** | Optional. Sent with every request — an API version header, for example. |
 | **Endpoints** | What can be called: a method, a path such as `/accounts/{account_id}/transactions`, a description Lucius reads to decide when to call it, and its parameters. The list is split into **Read-only tools** (GET) and **Write & delete tools** (POST, PUT, PATCH, DELETE), with a permission switch on each row and one on each group to set them all, so an API can be saved already permissioned. HEAD and OPTIONS aren't offered, and are skipped when a document lists them: they return no data for Lucius to read. |
-| **Instructions for Lucius** | Given to Lucius in every conversation while the API is on, like an MCP server's own instructions. Say what the endpoints don't: which one to use for what, what to call first, how paging and dates work, units and signs, and which of your accounts the data is for. Up to 8,000 characters. |
+| **Instructions for Lucius** | Given to Lucius in every conversation while the API is on, like an MCP server's own instructions. Say what the endpoints don't: which one to use for what, what to call first, how paging and dates work, units and signs, and which of your accounts the data is for. Up to 8,000 characters. The API's connector page shows them, folded, under the description. |
 
 To change an API later, open its connector and choose **Edit configuration**. A saved key shows
 as dots; leave it blank to keep it, or type a new one to replace it.

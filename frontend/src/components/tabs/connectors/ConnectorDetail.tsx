@@ -41,7 +41,7 @@ import { useConnectorSaveHost } from './formSave'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
-import { prefetchRestApi, restSlugOf, restToolLabel } from './restApi'
+import { cachedRestApi, getRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
   stampGroup,
@@ -151,10 +151,24 @@ export function ConnectorDetail({
   useEffect(() => setPerms(entry.perms), [entry.id, entry.perms])
   // A REST API's settings take a request to read: start it now, so Edit configuration opens on
   // the whole form rather than a "Loading…" line it then replaces.
+  // The same read gives the page the API's Instructions for Lucius — a secret field, so not in
+  // the status feed MCP's handshake instructions arrive in.
+  const restSlug = restSlugOf(entry.id)
+  const [restNotes, setRestNotes] = useState<string>('')
   useEffect(() => {
-    const slug = restSlugOf(entry.id)
-    if (slug) prefetchRestApi(slug)
-  }, [entry.id])
+    if (!restSlug) return
+    let live = true
+    getRestApi(restSlug)
+      .then((api) => live && setRestNotes(api.notes))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [restSlug])
+  // A save refreshes the cache, so the page shows the new text without another read.
+  const instructions = restSlug
+    ? (cachedRestApi(restSlug)?.notes ?? restNotes).trim()
+    : entry.instructions
 
   /**
    * Show the new level immediately — then ROLL IT BACK if the write did not land.
@@ -571,10 +585,12 @@ export function ConnectorDetail({
             </div>
           ) : null}
 
-          {entry.instructions ? (
+          {instructions ? (
             <details className="cn-fold">
-              <summary>The server&rsquo;s instructions for AI</summary>
-              <p>{entry.instructions}</p>
+              <summary>
+                {restSlug ? 'Instructions for Lucius' : 'The server\u2019s instructions for AI'}
+              </summary>
+              <p>{instructions}</p>
             </details>
           ) : null}
 
