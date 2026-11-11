@@ -109,6 +109,23 @@ def test_provider_validation_refuses_a_metadata_endpoint(selfhost):
     assert "not allowed" in error
 
 
+def test_provider_validation_reports_dns_failure_as_not_found_not_refused(selfhost, monkeypatch):
+    """A host the machine cannot resolve is a network/typo problem, not a refusal — telling
+    the owner the address "is not allowed" sent them looking for a policy that wasn't there."""
+    from backend.api import models
+
+    def _no_dns(*_a, **_k):
+        raise socket.gaierror("Name or service not known")
+
+    monkeypatch.setattr(socket, "getaddrinfo", _no_dns)
+    status, ids, error = models._validate_credentials(
+        "custom", "openai_compatible", "https://api.example.invalid/v1", "k"
+    )
+    assert status == "unreachable" and ids == []
+    assert "not allowed" not in error
+    assert "Could not find" in error
+
+
 def test_webhook_send_goes_through_the_pinned_owner_fetch(monkeypatch):
     from backend.connectors.webhook import channel
 

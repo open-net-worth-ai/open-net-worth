@@ -141,6 +141,20 @@ VALID_TASKS: frozenset[str] = frozenset(
     }
 )
 
+# The current Claude model ids, most-recommended first — the ONE list every Claude picker,
+# setup hint and fallback reads. Claude publishes no list a CLI user can read, so this is
+# hand-kept: a test fails when an id here has no pinned price (pricing._ANTHROPIC_PRICING).
+# It drifted twice when it lived in six places (2026-10-04, 2026-11-11: Haiku stayed on 4.5,
+# the Claude Code hints a generation behind). Updated 2026-11-11 from the Claude API's model table.
+CURRENT_CLAUDE_MODELS: tuple[str, ...] = (
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+    "claude-fable-5-1",
+)
+# Claude Code's own names for "the current model of this tier" — never go stale.
+CLAUDE_CLI_ALIASES: tuple[str, ...] = ("sonnet", "opus", "haiku")
+
 # Well-known OpenAI-compatible base URLs, surfaced as UI hints (NOT defaults — the
 # user must pick one). These are the common local / aggregator endpoints.
 PROVIDER_HINTS: dict = {
@@ -148,7 +162,7 @@ PROVIDER_HINTS: dict = {
         "label": "Anthropic",
         "needs_base_url": False,
         "base_url_hints": [],
-        "model_hints": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
+        "model_hints": list(CURRENT_CLAUDE_MODELS),
     },
     "openai_compatible": {
         "label": "OpenAI-compatible (OpenAI, Ollama, LM Studio, OpenRouter, vLLM)",
@@ -171,7 +185,7 @@ PROVIDER_HINTS: dict = {
         "label": "Codex CLI (uses your ChatGPT subscription)",
         "needs_base_url": False,
         "base_url_hints": [],
-        "model_hints": ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
+        "model_hints": ["gpt-6-luna", "gpt-5.6-terra", "gpt-5.6-luna"],
     },
     "antigravity_cli": {
         "label": "Antigravity CLI (uses your Google Antigravity account)",
@@ -216,14 +230,7 @@ PROVIDER_CATALOG: list = [
         "needs_api_key": True,
         "editable_base_url": False,
         # Current ids, most-recommended FIRST — the first entry is what first run prefills.
-        # Refreshed 2026-10-04 (was 2026-08-24, and already a generation behind): Opus 5.5 /
-        # Sonnet 5.5 / Fable 5.1 exist; ids checked against LiteLLM's public price list.
-        "model_hints": [
-            "claude-opus-5-5",
-            "claude-sonnet-5-5",
-            "claude-haiku-4-5",
-            "claude-fable-5-1",
-        ],
+        "model_hints": list(CURRENT_CLAUDE_MODELS),
     },
     {
         # The locally-installed Claude Code headless CLI (`claude -p`). Spends the
@@ -242,15 +249,7 @@ PROVIDER_CATALOG: list = [
         "cli_binary": "claude",
         # CLI aliases resolve to the current model of that tier — deliberately preferred
         # over pinned ids so a self-hoster tracks the CLI's own defaults.
-        "model_hints": [
-            "sonnet",
-            "opus",
-            "haiku",
-            "claude-opus-4-8",
-            "claude-sonnet-5",
-            "claude-haiku-4-5",
-            "claude-fable-5",
-        ],
+        "model_hints": [*CLAUDE_CLI_ALIASES, *CURRENT_CLAUDE_MODELS],
     },
     {
         "key": "openai",
@@ -286,7 +285,7 @@ PROVIDER_CATALOG: list = [
         "cli_binary": "codex",
         # Seeds only — replaced by the CLI's OWN catalog ($CODEX_HOME/models_cache.json)
         # as soon as it is readable; see ai/models/codex_cli_catalog.py.
-        "model_hints": ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
+        "model_hints": ["gpt-6-luna", "gpt-5.6-terra", "gpt-5.6-luna"],
     },
     {
         # The locally-installed Antigravity CLI (`agy -p`). Spends the user's

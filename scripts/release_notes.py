@@ -3,6 +3,8 @@
 Reads one Conventional Commit subject per line on stdin and prints Markdown sections: `feat` is
 New, `fix` is Fixes, `style`/`copy`/`perf` are Polish. Everything else (docs, ci, test, refactor,
 chore, build, merges, reverts) is internal and left out. Prints nothing when no subject qualifies.
+A subject with no type at all (a PR squashed under its plain title) is left out too, and named on
+stderr: it may be a user-facing change that the notes would otherwise drop without a trace.
 
 With `--highlights`, Claude reads those sections and a `## Highlights` section of 1-6 plain bullets
 for users goes on top: what they can now do, then the fixes they would notice. It is best effort —
@@ -81,6 +83,7 @@ _HIGHLIGHTS_FORMAT = {
     },
 }
 _SUBJECT = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?!?:\s*(?P<text>.+)$")
+_INTERNAL_UNTYPED = re.compile(r"^(Merge |Revert \")")
 
 
 def _line(scope: str | None, text: str) -> str:
@@ -106,6 +109,15 @@ def render(subjects: list[str]) -> str:
             bucket.append(line)
     parts = [f"## {title}\n\n" + "\n".join(lines) for title, lines in buckets.items() if lines]
     return "\n\n".join(parts)
+
+
+def untyped(subjects: list[str]) -> list[str]:
+    """Subjects with no Conventional Commit type, merges and reverts aside."""
+    found = []
+    for subject in (s.strip() for s in subjects):
+        if subject and not _SUBJECT.match(subject) and not _INTERNAL_UNTYPED.match(subject):
+            found.append(subject)
+    return found
 
 
 def parse_highlights(text: str) -> list[str] | None:
@@ -166,7 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--highlights", action="store_true", help="add Claude's Highlights")
     parser.add_argument("--model", default=MODEL)
     args = parser.parse_args(argv)
-    notes = render(sys.stdin.read().splitlines())
+    subjects = sys.stdin.read().splitlines()
+    for subject in untyped(subjects):
+        _warn(f"left out, no feat:/fix: type: {subject}")
+    notes = render(subjects)
     if notes and args.highlights:
         notes = with_highlights(notes, args.model)
     if notes:
