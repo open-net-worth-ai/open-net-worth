@@ -50,6 +50,8 @@ interface PerfChartProps {
   mainLabel?: string
   /** Read each point's own date in the tooltip, for a window `period` cannot describe. */
   exactDates?: boolean
+  /** Told which point the pointer is on (null when it leaves), so a headline can follow it. */
+  onHover?: (index: number | null) => void
 }
 
 export function PerfChart({
@@ -59,8 +61,13 @@ export function PerfChart({
   period,
   mainLabel,
   exactDates,
+  onHover,
 }: PerfChartProps) {
-  const [hi, setHi] = useState<number | null>(null)
+  const [hi, setHiState] = useState<number | null>(null)
+  const setHi = (index: number | null) => {
+    setHiState(index)
+    onHover?.(index)
+  }
 
   const port = series.map((p) => p.portfolio)
   const bench = hasBenchmark ? series.map((p) => p.benchmark ?? 0) : null

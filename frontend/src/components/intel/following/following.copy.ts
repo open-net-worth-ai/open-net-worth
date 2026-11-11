@@ -77,6 +77,7 @@ export const COPY = {
   noMoves: 'No change in the holdings shown since the previous filing.',
   showAllMoves: (n: number) => `Show all ${n} moves`,
   perfLine: 'These holdings',
+  perfOn: (day: string) => `These holdings from the start of the window to ${day}`,
   perfPeriodLabel: 'Performance window',
   perfCaption: {
     '1M': 'These holdings over the past month',

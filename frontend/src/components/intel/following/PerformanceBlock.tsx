@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { ErrorState, Skeleton, StatInfo } from '../../ui'
 import { PerfChart } from '../../tabs/investments/PerformanceTab'
-import type { Follow, PerfPeriod, PerfWindow } from '../../../api/followedPortfolios'
+import type { Follow, PerfPeriod } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
-import { signedPct, toneOf } from './following.format'
+import { shortDate, signedPct, toneOf } from './following.format'
 import { usePerformance } from './useFollowing'
 
 const PERIODS: { key: PerfPeriod; label: string }[] = [
@@ -19,13 +19,20 @@ interface Props {
   onPeriod: (p: PerfPeriod) => void
 }
 
-function Headline({ win, benchmark }: { win: PerfWindow; benchmark: string }) {
-  const ahead = (win.return ?? 0) - (win.benchmark_return ?? 0)
+interface HeadlineProps {
+  /** The window's own figures, or one day's when the pointer is on the chart. */
+  value: number | undefined
+  bench: number | null | undefined
+  benchmark: string
+}
+
+function Headline({ value, bench, benchmark }: HeadlineProps) {
+  const ahead = (value ?? 0) - (bench ?? 0)
   return (
     <div className="fol-perf-head">
-      <span className={`fol-perf-num ${toneOf(win.return)}`}>{signedPct(win.return)}</span>
+      <span className={`fol-perf-num ${toneOf(value)}`}>{signedPct(value)}</span>
       <span className="fol-perf-vs">
-        {benchmark} {signedPct(win.benchmark_return)}
+        {benchmark} {signedPct(bench)}
         <b className={toneOf(ahead)}>
           {' '}
           {signedPct(ahead, 'pts')} {ahead >= 0 ? 'ahead' : 'behind'}
@@ -38,8 +45,11 @@ function Headline({ win, benchmark }: { win: PerfWindow; benchmark: string }) {
 /** The reason to copy a portfolio, or not: how its current holdings have done. */
 export function PerformanceBlock({ follow, period, onPeriod }: Props) {
   const perf = usePerformance(follow.id)
-  const [hovered, setHovered] = useState(false)
+  const [at, setAt] = useState<number | null>(null)
   const win = perf.data?.periods[period]
+  // The headline is the window's end unless the pointer is on the chart: then it is that day,
+  // so the big figure and the tooltip can never seem to disagree.
+  const point = at !== null ? win?.series[at] : undefined
   const benchmark = perf.data?.benchmark ?? ''
 
   if (perf.initialLoading) return <Skeleton height={248} />
@@ -52,21 +62,24 @@ export function PerformanceBlock({ follow, period, onPeriod }: Props) {
       />
     )
   return (
-    <div
-      className="fol-perf"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      data-hovered={hovered || undefined}
-    >
+    <div className="fol-perf">
       <div className="fol-perf-top">
         <div>
           {win?.status === 'ok' ? (
-            <Headline win={win} benchmark={benchmark} />
+            <Headline
+              value={point ? point.portfolio : win.return}
+              bench={point ? point.benchmark : win.benchmark_return}
+              benchmark={benchmark}
+            />
           ) : (
             <div className="fol-perf-num flat">—</div>
           )}
           <div className="fol-perf-cap">
-            {COPY.perfCaption[period]}
+            {point
+              ? COPY.perfOn(shortDate(point.date))
+              : win?.end
+                ? `${COPY.perfCaption[period]}, to ${shortDate(win.end)}`
+                : COPY.perfCaption[period]}
             <StatInfo text={COPY.perfInfo[period]} />
           </div>
         </div>
@@ -94,6 +107,7 @@ export function PerformanceBlock({ follow, period, onPeriod }: Props) {
             mainLabel={COPY.perfLine}
             period="1Y"
             exactDates
+            onHover={setAt}
           />
           <div className="mk-legend">
             <span>

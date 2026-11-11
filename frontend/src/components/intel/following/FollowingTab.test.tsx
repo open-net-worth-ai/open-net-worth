@@ -110,7 +110,7 @@ describe('the hero leads with performance and the copy action', () => {
     expect(await within(hero).findByText('+16.3%')).toBeTruthy()
     expect(within(hero).getByText(/SPY \+10\.8%/)).toBeTruthy()
     expect(within(hero).getByText(/\+5\.5 pts ahead/)).toBeTruthy()
-    expect(within(hero).getByText(COPY.perfCaption['12M'])).toBeTruthy()
+    expect(within(hero).getByText(new RegExp(COPY.perfCaption['12M']))).toBeTruthy()
     expect(
       within(hero).getByText(new RegExp(`Filed ${shortDate('2026-08-14')}, 88 days ago`)),
     ).toBeTruthy()
@@ -134,6 +134,20 @@ describe('the hero leads with performance and the copy action', () => {
     expect(COPY.checkedInfo('Nov 9')).toContain('daily prices')
   })
 
+  it('follows the pointer: the headline shows the hovered day, then returns to the end', async () => {
+    setup([fund()])
+    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
+    await within(hero).findByText('+16.3%')
+    expect(within(hero).getByText(new RegExp(`to ${shortDate('2026-11-10')}`))).toBeTruthy()
+    const chart = hero.querySelector('.mk-chart-wrap') as HTMLElement
+    chart.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect
+    fireEvent.mouseMove(chart, { clientX: 50 })
+    expect(within(hero).getByText(COPY.perfOn(shortDate('2026-05-10')))).toBeTruthy()
+    expect(hero.querySelector('.fol-perf-num')!.textContent).toBe('+8.2%')
+    fireEvent.mouseLeave(chart)
+    expect(hero.querySelector('.fol-perf-num')!.textContent).toBe('+16.3%')
+  })
+
   it('switches the window, and the holdings column follows it', async () => {
     setup([fund()])
     const hero = await screen.findByRole('region', { name: 'Acme Capital' })
@@ -150,7 +164,7 @@ describe('the hero leads with performance and the copy action', () => {
     fireEvent.click(within(hero).getByRole('radio', { name: 'Since filing' }))
     expect(within(hero).getByText('−1.2%')).toBeTruthy()
     expect(within(hero).getByText(/\+2\.3 pts ahead/)).toBeTruthy()
-    expect(within(hero).getByText(COPY.perfCaption.FILING)).toBeTruthy()
+    expect(within(hero).getByText(new RegExp(COPY.perfCaption.FILING))).toBeTruthy()
     expect(within(region(COPY.holdingsTitle)).getByText('−2.0%')).toBeTruthy()
     expect(within(region(COPY.holdingsTitle)).getByText('Since filing')).toBeTruthy()
   })
@@ -167,7 +181,9 @@ describe('the hero leads with performance and the copy action', () => {
     expect(await screen.findByText(COPY.perfErrorTitle)).toBeTruthy()
     server.performance = undefined
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await within(region('Acme Capital')).findByText(COPY.perfCaption['12M'])).toBeTruthy()
+    expect(
+      await within(region('Acme Capital')).findByText(new RegExp(COPY.perfCaption['12M'])),
+    ).toBeTruthy()
   })
 
   it('makes copying the one primary action and sends it to the automation template', async () => {
