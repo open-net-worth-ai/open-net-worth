@@ -47,6 +47,24 @@ def test_internal_commits_are_left_out():
     assert notes == "## Fixes\n\n- An unscoped fix"
 
 
+def test_an_untyped_subject_is_left_out_but_named_on_stderr(monkeypatch, capsys):
+    subjects = (
+        "Value investment accounts by brokerage total (#93)\n"
+        "chore(flags): rename a flag (#98)\n"
+        "Merge pull request #12 from x/y\n"
+        'Revert "feat(ui): something"\n'
+        "feat(connectors): a generic REST connector (#100)\n"
+    )
+    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(subjects))
+    assert rn.main([]) == 0
+    out = capsys.readouterr()
+    assert out.out.strip() == "## New\n\n- **Connectors:** A generic REST connector (#100)"
+    assert out.err == (
+        "release_notes: left out, no feat:/fix: type: "
+        "Value investment accounts by brokerage total (#93)\n"
+    )
+
+
 def test_nothing_user_facing_renders_empty():
     assert rn.render(["docs: tidy", "test: cover a branch", ""]) == ""
 
