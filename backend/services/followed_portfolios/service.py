@@ -22,7 +22,7 @@ from backend.core.user_time import user_today
 from backend.db.engine import locked_unit_of_work
 from backend.db.followed_portfolio_store import KINDS, MAX_FOLLOWS, FollowedPortfolioStore
 from backend.db.tables import followed_portfolios
-from backend.services.followed_portfolios import edgar_13f, house_ptr, performance, signals
+from backend.services.followed_portfolios import edgar_13f, house_ptr, performance, preview, signals
 from backend.services.followed_portfolios.model import DEFAULT_TOP_N, build_model, status_of
 
 logger = logging.getLogger(__name__)
@@ -120,6 +120,28 @@ def resolve(ref: str) -> dict:
         names = ", ".join(sorted(r["name"] for r in rows)) or "none yet"
         raise NotFoundError(f"No followed portfolio '{wanted}'. Followed: {names}.")
     return hits[0]
+
+
+def preview_summary(kind: str, ref: str) -> dict:
+    """A Discover card's figures for any portfolio, followed or not (read-only, cached)."""
+    row = preview.preview_row(kind, ref)
+    followed = FollowedPortfolioStore().find_by_source(row["kind"], row["source_ref"])
+    return {**preview.summary(row), "follow_id": followed["id"] if followed else None}
+
+
+def preview_page(kind: str, ref: str) -> dict:
+    """Everything a portfolio's page shows, before following it (read-only, cached)."""
+    row = preview.preview_row(kind, ref)
+    followed = FollowedPortfolioStore().find_by_source(row["kind"], row["source_ref"])
+    return {
+        "follow": view(row),
+        "follow_id": followed["id"] if followed else None,
+        "performance": performance.performance_for(row),
+    }
+
+
+def warm_featured() -> int:
+    return preview.warm(edgar_13f.featured() + house_ptr.featured())
 
 
 def follow_performance(follow_id: str) -> dict:

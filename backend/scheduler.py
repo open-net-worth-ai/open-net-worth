@@ -581,8 +581,9 @@ async def _run_followed_portfolios() -> None:
         if not enabled("followed_portfolios"):
             return
         result = await asyncio.to_thread(service.refresh_all)
-        if result["checked"]:
-            logger.info("scheduler: followed_portfolios — %s", result)
+        warmed = await asyncio.to_thread(service.warm_featured)
+        if result["checked"] or warmed:
+            logger.info("scheduler: followed_portfolios — %s, %d previews warm", result, warmed)
     except Exception as exc:
         logger.exception("scheduler: followed_portfolios error: %s", exc)
 
@@ -687,7 +688,8 @@ def start() -> None:
     if outward:
         _scheduler.add_job(
             _run_followed_portfolios,
-            trigger=IntervalTrigger(hours=12, start_date=datetime.now() + timedelta(minutes=10)),
+            # Soon after start: it also warms the Discover cards, which a first visit waits on.
+            trigger=IntervalTrigger(hours=12, start_date=datetime.now() + timedelta(minutes=1)),
             id="followed_portfolios",
             replace_existing=True,
             misfire_grace_time=3600,

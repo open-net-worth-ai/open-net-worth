@@ -78,6 +78,8 @@ def source(db_isolated, monkeypatch):
     fake = FakeSource()
     monkeypatch.setitem(service._SOURCES, "fund_13f", fake)
     monkeypatch.setitem(service._SOURCES, "house_member", fake)
+    monkeypatch.setitem(service.preview._SOURCES, "fund_13f", fake)
+    monkeypatch.setitem(service.preview._SOURCES, "house_member", fake)
     monkeypatch.setattr(service.house_ptr, "search", lambda q: [])
     monkeypatch.setattr(service.edgar_13f, "search", fake.search)
     return fake
@@ -243,6 +245,66 @@ def test_a_follow_links_to_its_filing_at_the_source(source):
     assert service.source_url(member) == url
     assert [t["report_url"] for t in service.view(member)["activity"]] == [url, None]
     assert service.source_url({"kind": "fund_13f", "source_ref": "x", "current": {}}) is None
+
+
+def test_preview_reads_an_unfollowed_portfolio_once_and_follows_reuse_the_stored_row(
+    source, monkeypatch
+):
+    from backend.services.followed_portfolios import preview
+
+    preview._cache.clear()
+    fetched = []
+    real = source.fetch
+
+    def counting(ref, known=None):
+        fetched.append(ref)
+        return real(ref, known)
+
+    monkeypatch.setattr(source, "fetch", counting)
+    monkeypatch.setattr(
+        service.performance,
+        "performance_for",
+        lambda row: {
+            "benchmark": "SPY",
+            "periods": {
+                "12M": {
+                    "status": "ok",
+                    "return": 0.12,
+                    "benchmark_return": 0.08,
+                    "series": [{"portfolio": i / 100} for i in range(100)],
+                }
+            },
+            "trade_returns": {},
+        },
+    )
+    card = service.preview_summary("fund_13f", "777")
+    assert card["follow_id"] is None and card["name"] == "Acme Capital"
+    assert (card["return_12m"], card["benchmark_12m"]) == (0.12, 0.08)
+    assert len(card["spark"]) == preview._SPARK_POINTS and card["holdings_count"] == 2
+    assert card["top"][0]["symbol"] == "ACME"
+    page = service.preview_page("fund_13f", "777")
+    assert page["follow"]["model"]["holdings"] and page["follow_id"] is None
+    assert fetched == ["777"]
+    assert FollowedPortfolioStore().all() == []
+    fid = _follow()["id"]
+    assert service.preview_summary("fund_13f", "777")["follow_id"] == fid
+    assert fetched == ["777", "777"]
+
+
+def test_preview_route_and_its_demo_lock(client, monkeypatch):
+    from backend.api.demo_lockdown import is_demo_locked
+
+    monkeypatch.setattr(service, "preview_summary", lambda kind, ref: {"name": ref})
+    monkeypatch.setattr(service, "preview_page", lambda kind, ref: {"page": ref})
+    got = client.get("/api/followed-portfolios/preview", params={"kind": "fund_13f", "ref": "7"})
+    assert got.json() == {"name": "7"}
+    full = client.get(
+        "/api/followed-portfolios/preview", params={"kind": "fund_13f", "ref": "7", "full": True}
+    )
+    assert full.json() == {"page": "7"}
+    bad = client.get("/api/followed-portfolios/preview", params={"kind": "senator", "ref": "7"})
+    assert bad.status_code == 422
+    assert is_demo_locked("GET", "/api/followed-portfolios/preview")
 
 
 def test_unfollow_deletes(source):

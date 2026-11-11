@@ -4,6 +4,8 @@ GET    /api/followed-portfolios/directory       — ?q=: well-known portfolios, 
 POST   /api/followed-portfolios                 — follow one ({kind, source_ref}); fetches its filing
 DELETE /api/followed-portfolios/{id}            — unfollow
 POST   /api/followed-portfolios/{id}/refresh    — re-read the source now
+GET    /api/followed-portfolios/preview         — ?kind=&ref=&full=: a portfolio before following
+                                                  it, as a card (default) or its whole page
 GET    /api/followed-portfolios/{id}/performance — its current holdings' price return against
                                                   the benchmark, by window (not the fund's own return)
 
@@ -51,6 +53,15 @@ def list_followed_portfolios():
 @router.get("/api/followed-portfolios/directory")
 def followed_portfolio_directory(q: str = Query("", max_length=80)):
     return _run(service.directory, q)
+
+
+@router.get("/api/followed-portfolios/preview")
+def followed_portfolio_preview(
+    kind: Literal["fund_13f", "house_member"],
+    ref: str = Query(..., min_length=1, max_length=80),
+    full: bool = False,
+):
+    return _run(service.preview_page if full else service.preview_summary, kind, ref)
 
 
 @router.post("/api/followed-portfolios")

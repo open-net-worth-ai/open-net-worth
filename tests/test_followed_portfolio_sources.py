@@ -127,6 +127,29 @@ def test_fetch_retries_a_ticker_lookup_that_never_answered(monkeypatch):
 # ── ticker lookup ───────────────────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _figi_fresh(monkeypatch):
+    figi._known.clear()
+    monkeypatch.setattr(figi, "_MIN_GAP_SECONDS", 0)
+
+
+def test_figi_remembers_answers_and_only_asks_for_new_cusips(monkeypatch):
+    asked = []
+
+    def fake(url, **kw):
+        jobs = json.loads(kw["data"])
+        asked.append([j["idValue"] for j in jobs])
+        return [{"data": [{"ticker": "ACME", "securityType": "Common Stock"}]} for _ in jobs]
+
+    monkeypatch.setattr(figi, "fetch_json", fake)
+    assert figi.tickers_for(["000000101"]) == {"000000101": "ACME"}
+    assert figi.tickers_for(["000000101", "000000202"]) == {
+        "000000101": "ACME",
+        "000000202": "ACME",
+    }
+    assert asked == [["000000101"], ["000000202"]]
+
+
 def test_figi_picks_a_us_equity_and_rewrites_share_classes(monkeypatch):
     def fake(url, **kw):
         jobs = json.loads(kw["data"])
