@@ -1,7 +1,7 @@
 import { fPct } from '../../../utils/format'
 import type { FollowModel, PerfPeriod, PerfWindow } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
-import { signedPct, toneOf, tradeLine } from './following.format'
+import { sharesText, sharesTitle, signedPct, toneOf, tradeLine } from './following.format'
 
 interface Props {
   model: FollowModel
@@ -35,7 +35,9 @@ export function HoldingRows({ model, period, win }: Props) {
             <span className="fol-rank">{i + 1}</span>
             <div className="fol-id">
               <div className="fol-sym">{h.symbol}</div>
-              <div className="fol-sub">{h.last_trade ? tradeLine(h.last_trade) : h.name}</div>
+              <div className="fol-sub" title={sharesTitle(h, model)}>
+                {h.last_trade ? tradeLine(h.last_trade) : `${h.name}${sharesText(h)}`}
+              </div>
             </div>
             <span className="fol-num">{pct(h.weight)}</span>
             <span className="fol-track" aria-hidden="true">

@@ -145,3 +145,13 @@ export function holdingsAge(asOf: string, now: Date = new Date()): string {
   const days = Math.floor((now.getTime() - then.getTime()) / 86_400_000)
   return days > 0 ? ` (${days} days old)` : ''
 }
+
+/** " · 280M shares" for a fund holding; nothing for a member, who reports no share counts. */
+export const sharesText = (h: ModelHolding): string =>
+  h.shares ? ` · ${fCompact(h.shares)} shares` : ''
+
+/** The position's size in dollars at the quarter-end price the filing implies. */
+export function sharesTitle(h: ModelHolding, model: FollowModel): string | undefined {
+  if (!h.shares || !h.price) return undefined
+  return `${fCompact(h.shares)} shares, about ${usd(h.shares * h.price)} at the ${shortDate(model.as_of)} price of ${fCompactAmount(h.price, 'USD')}.`
+}

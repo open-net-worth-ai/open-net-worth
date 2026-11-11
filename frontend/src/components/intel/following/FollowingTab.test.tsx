@@ -248,6 +248,13 @@ describe('what a fund did and what it holds', () => {
     expect(rows).toHaveLength(4)
     expect(rows[0]!.textContent).toContain('ACME')
     expect(rows[0]!.textContent).toContain('22.40%')
+    expect(rows[0]!.textContent).toContain('Acme Corp · 1M shares')
+    expect(
+      within(rows[0]!)
+        .getByText(/1M shares/)
+        .getAttribute('title'),
+    ).toContain('about $30M')
+    expect(rows[3]!.textContent).not.toContain('shares')
     expect(
       within(holdings).getByText(new RegExp(`${COPY.unmatched(1)} Mystery Trust \\(4\\.10%\\)`)),
     ).toBeTruthy()
