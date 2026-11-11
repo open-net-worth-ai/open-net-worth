@@ -137,3 +137,11 @@ export function moveRows(model: FollowModel): MoveRow[] {
   }
   return rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
 }
+
+/** " (134 days old)": a 13F's positions date from the quarter-end, well before it was filed. */
+export function holdingsAge(asOf: string, now: Date = new Date()): string {
+  const then = new Date(`${asOf}T00:00:00`)
+  if (Number.isNaN(then.getTime())) return ''
+  const days = Math.floor((now.getTime() - then.getTime()) / 86_400_000)
+  return days > 0 ? ` (${days} days old)` : ''
+}

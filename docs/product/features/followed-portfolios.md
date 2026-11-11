@@ -62,7 +62,9 @@ shows:
   reported, and how the stock has moved since. Members do not report share counts or prices.
 - **Holdings.** The top 20 by weight, each with its own return over the window you chose.
 
-Under the name, **View filing at the SEC** (or **View report at the House Clerk**) opens the
+The line under the name says how old the data is: for a fund, when it was filed and how many
+days old the positions themselves are (they date from the quarter-end, up to 45 days before
+the filing). **View filing at the SEC** (or **View report at the House Clerk**) opens the
 source document, and **Checked …** says when the app last looked for a newer one. Each of a
 member's trades links to the report it came from.
 
@@ -82,8 +84,8 @@ There are two ways.
 **Copy trade**. Lucius gets that one trade, checks your broker account and what you already
 hold, suggests a size, and drafts the order for you to approve.
 
-**Copy the whole portfolio, every week.** Click **Start copy trading**, the main button beside
-the chart. It opens a ready-made automation; you can also find it in **Automations** as **Copy a
+**Copy the whole portfolio, every week.** Click **Start copy trading**, the main button at the
+top of the card. It opens a ready-made automation; you can also find it in **Automations** as **Copy a
 followed portfolio**.
 
 The automation is a set of instructions for Lucius that you edit before saving:

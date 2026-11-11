@@ -62,12 +62,12 @@ automation template. Every control on the screen has an entry.
 
 ### FOLLOWING-COPY-CTA
 - GIVEN a portfolio is open
-- WHEN I click "Start copy trading", the primary button in the "Copy trading" panel beside the chart
+- WHEN I click "Start copy trading", the primary button in the card's header (hovering it says what it does)
 - THEN Automations opens with the "Copy a followed portfolio" template ready to edit; nothing is saved or placed
 
 ### FOLLOWING-ASK-LUCIUS
 - GIVEN a portfolio is open
-- WHEN I click "Ask Lucius about this portfolio", the full-width button under it
+- WHEN I click "Ask Lucius", the button beside it
 - THEN the chat opens with "What does {name} hold, what changed in the latest filing, and how does it compare with my own portfolio?"
 
 ### FOLLOWING-COPY-TRADE

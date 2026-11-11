@@ -1,6 +1,5 @@
 import type { Follow } from '../../../api/followedPortfolios'
 import { signedPct, toneOf } from './following.format'
-import { Monogram } from './Monogram'
 import { usePerformance } from './useFollowing'
 
 interface Props {
@@ -9,7 +8,8 @@ interface Props {
   onSelect: () => void
 }
 
-/** One followed portfolio in the switcher: its mark, its name, and the past 12 months at a glance. */
+/** One followed portfolio in the switcher: the app's filter chip (`.mk-chip`), with the past
+ *  12 months where a list chip shows its count. */
 export function FollowChip({ follow, selected, onSelect }: Props) {
   const perf = usePerformance(follow.id)
   const year = perf.data?.periods['12M']
@@ -19,13 +19,12 @@ export function FollowChip({ follow, selected, onSelect }: Props) {
       type="button"
       role="tab"
       aria-selected={selected}
-      className={`fol-pick${selected ? ' is-on' : ''}`}
+      className={`mk-chip${selected ? ' is-on' : ''}`}
       onClick={onSelect}
     >
-      <Monogram name={follow.name} size="sm" />
-      <span className="fol-pick-name">{follow.name}</span>
+      {follow.name}
       {value !== undefined && (
-        <span className={`fol-pick-ret ${toneOf(value)}`}>{signedPct(value)}</span>
+        <span className={`mk-chip-n ${toneOf(value)}`}>{signedPct(value)}</span>
       )}
     </button>
   )

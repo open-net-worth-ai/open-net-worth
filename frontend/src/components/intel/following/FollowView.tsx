@@ -12,7 +12,7 @@ import {
   type PerfPeriod,
 } from '../../../api/followedPortfolios'
 import { COPY, askPrompt } from './following.copy'
-import { ageText, shortDate } from './following.format'
+import { ageText, holdingsAge, shortDate } from './following.format'
 import { HoldingRows } from './HoldingRows'
 import { Monogram } from './Monogram'
 import { MovesChart } from './MovesChart'
@@ -39,7 +39,7 @@ function MetaLine({ follow }: { follow: Follow }) {
   return (
     <>
       {follow.subtitle} · {filed}
-      {!member && ` · Holdings as of ${shortDate(model.as_of)}`}
+      {!member && ` · Holdings as of ${shortDate(model.as_of)}${holdingsAge(model.as_of)}`}
       {follow.source_url && (
         <>
           {' · '}
@@ -86,42 +86,38 @@ function Notes({ follow, error }: { follow: Follow; error: string | null }) {
   )
 }
 
-/** The reason this screen exists: copying the portfolio. One primary action, said plainly. */
-function CopyPanel({ follow, onAskLucius }: Pick<Props, 'follow' | 'onAskLucius'>) {
+/** The header's actions: the app's standard small buttons, the primary one last before the menu. */
+function HeroActions({ follow, onAskLucius }: Pick<Props, 'follow' | 'onAskLucius'>) {
   const navigate = useNavigate()
   return (
-    <aside className="fol-copy" aria-label={COPY.copyTitle}>
-      <h3 className="fol-copy-title">{COPY.copyTitle}</h3>
-      <p className="fol-copy-pitch">{COPY.copyPitch}</p>
-      <div className="fol-copy-actions">
+    <>
+      {onAskLucius && (
         <Button
-          variant="primary"
           size="sm"
-          onClick={() =>
-            void navigate({
-              to: '/automations',
-              search: { template: 'copy-followed-portfolio' } as never,
-            } as never)
-          }
+          iconLeft={<Spark className="fol-spark" size={14} filled ariaHidden />}
+          aria-label={COPY.askLabel(follow.name)}
+          onClick={() => {
+            sendNextPrefill()
+            onAskLucius(askPrompt(follow.name))
+          }}
         >
-          {COPY.copyCta}
+          {COPY.askLucius}
         </Button>
-        {onAskLucius && (
-          <Button
-            size="sm"
-            iconLeft={<Spark className="fol-spark" size={14} filled ariaHidden />}
-            aria-label={COPY.askLabel(follow.name)}
-            onClick={() => {
-              sendNextPrefill()
-              onAskLucius(askPrompt(follow.name))
-            }}
-          >
-            {COPY.askLucius}
-          </Button>
-        )}
-      </div>
-      <p className="fol-foot">{COPY.notAdvice}</p>
-    </aside>
+      )}
+      <Button
+        variant="primary"
+        size="sm"
+        title={COPY.copyPitch}
+        onClick={() =>
+          void navigate({
+            to: '/automations',
+            search: { template: 'copy-followed-portfolio' } as never,
+          } as never)
+        }
+      >
+        {COPY.copyCta}
+      </Button>
+    </>
   )
 }
 
@@ -171,21 +167,19 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
               {refreshing ? COPY.refreshing : <MetaLine follow={follow} />}
             </div>
           </div>
-          <ActionMenu
-            label={COPY.moreActions(follow.name)}
-            title={follow.name}
-            items={[
-              { label: COPY.refresh, onSelect: () => void refresh(), disabled: refreshing },
-              { label: COPY.unfollow, onSelect: () => setConfirming(true), tone: 'danger' },
-            ]}
-          />
-        </div>
-        {hasModel && (
-          <div className="fol-hero-body">
-            <PerformanceBlock follow={follow} period={period} onPeriod={setPeriod} />
-            <CopyPanel follow={follow} onAskLucius={onAskLucius} />
+          <div className="fol-actions">
+            {hasModel && <HeroActions follow={follow} onAskLucius={onAskLucius} />}
+            <ActionMenu
+              label={COPY.moreActions(follow.name)}
+              title={follow.name}
+              items={[
+                { label: COPY.refresh, onSelect: () => void refresh(), disabled: refreshing },
+                { label: COPY.unfollow, onSelect: () => setConfirming(true), tone: 'danger' },
+              ]}
+            />
           </div>
-        )}
+        </div>
+        {hasModel && <PerformanceBlock follow={follow} period={period} onPeriod={setPeriod} />}
       </section>
       <Notes follow={follow} error={actionError} />
       {!hasModel &&
@@ -218,7 +212,12 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
           <HoldingRows model={model} period={period} win={perf.data?.periods[period]} />
         </div>
       )}
-      {model?.estimated && <p className="fol-foot">{COPY.estimatedSubtitle}</p>}
+      {hasModel && (
+        <p className="fol-foot">
+          {model.estimated && `${COPY.estimatedSubtitle} `}
+          {COPY.copyPitch} {COPY.notAdvice}
+        </p>
+      )}
       <ConfirmDialog
         data={
           confirming

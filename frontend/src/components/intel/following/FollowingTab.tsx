@@ -65,7 +65,7 @@ export function FollowingTab({ onAskLucius }: Props) {
   return (
     <div className="fol-page">
       <div className="fol-bar">
-        <div className="fol-chips" role="tablist" aria-label={COPY.listTitle}>
+        <div className="mk-chips fol-chips" role="tablist" aria-label={COPY.listTitle}>
           {follows.map((f) => (
             <FollowChip
               key={f.id}

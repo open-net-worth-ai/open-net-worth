@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fPct } from '../../../utils/format'
-import { ageText, changeDetail, changeSummary, exitedDetail } from './following.format'
+import { ageText, changeDetail, changeSummary, exitedDetail, holdingsAge } from './following.format'
 
 describe('ageText', () => {
   it.each([
@@ -118,5 +118,13 @@ describe('exitedDetail', () => {
       }),
     ).toBe(' (all 3.2M shares, about $96M)')
     expect(exitedDetail({ symbol: 'OXYZ', name: 'Oxyz Energy' })).toBe('')
+  })
+})
+
+describe('holdingsAge', () => {
+  it('counts days from the quarter-end the positions date from', () => {
+    expect(holdingsAge('2026-06-30', new Date('2026-11-11T12:00:00'))).toBe(' (134 days old)')
+    expect(holdingsAge('2026-11-11', new Date('2026-11-11T12:00:00'))).toBe('')
+    expect(holdingsAge('nonsense')).toBe('')
   })
 })

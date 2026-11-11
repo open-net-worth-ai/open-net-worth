@@ -67,7 +67,6 @@ export const COPY = {
   unmatched: (n: number) =>
     `${n} ${n === 1 ? 'holding has' : 'holdings have'} no ticker we could match and are left out:`,
   copyCta: 'Start copy trading',
-  copyTitle: 'Copy trading',
   copyPitch:
     'Lucius buys and sells in your broker account to match this portfolio, every week. You set the amount and your rules, and you can have it ask before every order.',
   askLucius: 'Ask Lucius',

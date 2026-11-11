@@ -116,6 +116,12 @@ describe('the hero leads with performance and the copy action', () => {
     ).toBeTruthy()
   })
 
+  it('says how old the positions themselves are, not only the filing', async () => {
+    setup([fund()])
+    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
+    expect(within(hero).getByText(/Holdings as of .*2026 \(\d+ days old\)/)).toBeTruthy()
+  })
+
   it('links to the filing at its source and says when it was last checked', async () => {
     setup([fund({ source_url: 'https://www.sec.gov/Archives/edgar/data/1/000000000026000002/' })])
     const hero = await screen.findByRole('region', { name: 'Acme Capital' })
@@ -167,9 +173,10 @@ describe('the hero leads with performance and the copy action', () => {
   it('makes copying the one primary action and sends it to the automation template', async () => {
     setup([fund()])
     const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    expect(within(hero).getByText(COPY.copyPitch)).toBeTruthy()
     const cta = within(hero).getByRole('button', { name: COPY.copyCta })
     expect(cta.className).toContain('btn-primary')
+    expect(cta.getAttribute('title')).toBe(COPY.copyPitch)
+    expect(within(hero).getAllByRole('button', { name: /copy trading/i })).toHaveLength(1)
     expect(cta.className).toContain('ui-btn--sm')
     fireEvent.click(cta)
     expect(navigate).toHaveBeenCalledWith(
@@ -207,6 +214,7 @@ describe('switcher', () => {
     setup()
     const tab = await screen.findByRole('tab', { name: /Pat Placeholder/ })
     await waitFor(() => expect(tab.textContent).toContain('+16.3%'))
+    expect(tab.className).toContain('mk-chip')
     fireEvent.click(tab)
     expect(await screen.findByRole('heading', { name: /Pat Placeholder/ })).toBeTruthy()
     expect(tab.getAttribute('aria-selected')).toBe('true')
@@ -251,7 +259,7 @@ describe('a House member', () => {
     setup([member()])
     expect(await screen.findByRole('heading', { name: /Pat Placeholder/ })).toBeTruthy()
     expect(screen.getAllByText(COPY.estimated).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText(COPY.estimatedSubtitle)).toBeTruthy()
+    expect(screen.getByText(new RegExp(COPY.estimatedSubtitle))).toBeTruthy()
     expect(screen.getByText(COPY.unreadReports(2))).toBeTruthy()
     const rows = within(region(COPY.tradesTitle)).getAllByRole('listitem')
     expect(rows[0]!.textContent).toContain('Muni Bond 2030')
