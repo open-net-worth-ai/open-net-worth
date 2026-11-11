@@ -16,7 +16,7 @@ previous filing, and when it was filed. This screen is information. It does not 
 accounts and it does not trade.
 
 This feature is off by default. Turn it on in **Settings → Developer → Experimental →
-Followed portfolios**. It then appears as the **Famous investors** tab in **Intel**.
+Followed portfolios**. It then appears as the **Famous portfolios** tab in **Intel**.
 
 > This is not investment advice. The filings behind it are weeks or months old by law.
 
@@ -40,7 +40,7 @@ Limits you should know:
 
 ## Follow a portfolio
 
-1. Open **Intel → Famous investors**. The first time, it shows well-known portfolios to pick from.
+1. Open **Intel → Famous portfolios**. The first time, it shows well-known portfolios to pick from.
 2. Click **Follow** on one, or search by fund or member name.
 3. Fetching the filing takes a few seconds. Later, add more with **Follow a portfolio**.
 

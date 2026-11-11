@@ -1,4 +1,4 @@
-# Acceptance — Famous investors (followed portfolios)
+# Acceptance — Famous portfolios (followed portfolios)
 
 Component: `frontend/src/components/intel/following/FollowingTab.tsx`, a flag-gated
 (`followed_portfolios`) tab of Intel. The screen shows how a portfolio's holdings have done and
@@ -8,12 +8,12 @@ automation template. Every control on the screen has an entry.
 ### FOLLOWING-TAB-FLAG-ON
 - GIVEN the `followed_portfolios` flag is on
 - WHEN I open Intel
-- THEN a "Famous investors" tab appears after "Topics & macro", and opening it shows the screen at full width with no watchlist sidebar
+- THEN a "Famous portfolios" tab appears after "Topics & macro", and opening it shows the screen at full width with no watchlist sidebar
 
 ### FOLLOWING-TAB-FLAG-OFF
 - GIVEN the flag is off
 - WHEN I open Intel and then `/intel?sub=following`
-- THEN no "Famous investors" tab exists and My holdings is shown
+- THEN no "Famous portfolios" tab exists and My holdings is shown
 
 ### FOLLOWING-GALLERY-FOLLOW
 - GIVEN I follow nothing
