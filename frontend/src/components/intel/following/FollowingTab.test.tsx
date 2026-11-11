@@ -91,9 +91,13 @@ describe('Discover', () => {
     setup()
     await screen.findByRole('button', { name: COPY.openLabel('Borealis Partners') })
     const bar = filters()
-    for (const name of ['All 3', 'Watching 1', 'Funds 2', 'Politicians 1'])
-      expect(within(bar).getByRole('tab', { name })).toBeTruthy()
-    fireEvent.click(within(bar).getByRole('tab', { name: 'Politicians 1' }))
+    // Every filter, each with its count; one with nothing in it shows 0, never disappears.
+    expect(
+      within(bar)
+        .getAllByRole('tab')
+        .map((t) => t.textContent),
+    ).toEqual(['All 3', 'Watching 1', 'Funds 2', 'Politicians 1', 'ETFs 0'])
+    fireEvent.click(within(bar).getByRole('tab', { name: /^Politicians/ }))
     expect(screen.queryByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeNull()
     expect(screen.getByRole('button', { name: COPY.openLabel('Pat Placeholder') })).toBeTruthy()
   })
@@ -162,7 +166,7 @@ describe('Trading Activity', () => {
     expect(period.selectedOptions[0]!.textContent).toBe('Apr 2026 – Now')
     const table = screen.getByRole('table', { name: 'Apr 2026 – Now' })
     expect(symbols(table).sort()).toEqual(['ACME', 'BOLT', 'BOLT', 'CRUX', 'OXYZ'])
-    fireEvent.click(within(filters()).getByRole('tab', { name: 'Sold out' }))
+    fireEvent.click(within(filters()).getByRole('tab', { name: /^Sold out/ }))
     expect(symbols(screen.getByRole('table', { name: 'Apr 2026 – Now' }))).toEqual(['OXYZ'])
   })
 
@@ -204,8 +208,8 @@ describe('Trading Activity', () => {
       within(bar)
         .getAllByRole('tab')
         .map((t) => t.textContent),
-    ).toEqual(['All', 'Bought', 'Sold'])
-    fireEvent.click(within(bar).getByRole('tab', { name: 'Sold' }))
+    ).toEqual(['All 2', 'Bought 1', 'Sold 1'])
+    fireEvent.click(within(bar).getByRole('tab', { name: /^Sold/ }))
     const table = screen.getAllByRole('table')[0]!
     expect(symbols(table)).toEqual(['OLDR'])
   })
