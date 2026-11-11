@@ -43,6 +43,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import time
 from typing import AsyncGenerator, Optional
 
@@ -304,9 +305,11 @@ class AppServerClient:
                     timeout=_INITIALIZE_TIMEOUT_SECONDS,
                 )
             except (asyncio.TimeoutError, ExternalServiceError) as exc:
+                exit_note = await _exit_summary(self._proc)
                 await self._reap()
                 raise ExternalServiceError(
                     f"Codex app-server did not complete its handshake: {exc}"
+                    + exit_note
                     + await self._stderr_summary()
                 ) from exc
             self._notify("initialized")
@@ -582,6 +585,46 @@ class AppServerClient:
         finally:
             await events.aclose()
             live.close()
+
+
+_SIGNAL_HINTS = {
+    "SIGKILL": "usually the system ran out of memory, or a container limit stopped it",
+    "SIGSEGV": "Codex crashed; a different Codex version may not",
+    "SIGILL": "this Codex build may not support this processor",
+}
+
+
+def describe_exit(returncode: Optional[int]) -> str:
+    """How a child ended, in words an operator can act on. A signal is the usual silent death:
+    nothing reaches stderr, so without this a crash, a memory kill and a missing file all read
+    as the same "not running" (2026-11-11, a Docker install no fresh container reproduced).
+    A shell-style code above 128 is read as that signal too: the npm launcher passes it on."""
+    if returncode is None:
+        return "was still running but never answered"
+    signum = -returncode if returncode < 0 else returncode - 128 if returncode > 128 else 0
+    if not signum:
+        return f"exited with code {returncode}"
+    try:
+        name = signal.Signals(signum).name
+    except ValueError:
+        name = f"signal {signum}"
+    detail = [f"exit code {returncode}"] if returncode > 0 else []
+    if name in _SIGNAL_HINTS:
+        detail.append(_SIGNAL_HINTS[name])
+    return f"was stopped by {name}" + (f" ({'; '.join(detail)})" if detail else "")
+
+
+async def _exit_summary(proc: Optional[asyncio.subprocess.Process]) -> str:
+    """``. Codex <how it ended>`` for a child that failed its start, or "" with no child."""
+    if proc is None:
+        return ""
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=_STDERR_SETTLE_SECONDS)
+    except asyncio.TimeoutError:
+        pass
+    note = describe_exit(proc.returncode)
+    log.warning("codex_app_server: failed start — Codex %s", note)
+    return f". Codex {note}"
 
 
 def _turn_id(response) -> str:
