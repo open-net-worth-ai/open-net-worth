@@ -132,6 +132,8 @@ export function StepLucius({
   const [hostPlatform, setHostPlatform] = useState<CliHostPlatform>()
   const [signIn, setSignIn] = useState<Record<string, CliSignInState>>({})
   const [inContainer, setInContainer] = useState(false)
+  // Which card's sign-in steps to open, and a counter so a second press re-opens them.
+  const [signInPrompt, setSignInPrompt] = useState<{ key: string; n: number }>({ key: '', n: 0 })
   // Two stages on ONE page: choose a provider, then configure it. `picked` is the gate —
   // null means "still choosing". Kept inline rather than split into a screen because the
   // decision and its consequences belong together, and going back must cost one click.
@@ -336,7 +338,12 @@ export function StepLucius({
       // Wrapped: an unreachable provider must not abort the advance. The catalogue's hints
       // are a working fallback, and this step has no skip — being stranded here is worse than
       // a slightly stale list.
-      let data: { key_status?: string; models?: string[]; error?: string } | null = null
+      let data: {
+        key_status?: string
+        models?: string[]
+        error?: string
+        sign_in?: CliSignInState
+      } | null = null
       try {
         const verdict = await authFetch(`/api/model-config/providers/${key}/validate`, {
           method: 'POST',
@@ -359,6 +366,15 @@ export function StepLucius({
       // by which point nobody connects the two.
       if (data?.key_status !== 'valid') {
         setError(data?.error || `Could not reach ${entry.label}.`)
+        return
+      }
+      // A CLI that runs but has no sign-in passes the check above (it only proves the binary),
+      // and used to finish setup only for Lucius's first message to fail. Stay, and open the
+      // sign-in steps on this card — opening them IS the answer; a second "not signed in"
+      // line beside the card's own status only made the card busier.
+      if (data?.sign_in === 'not_signed_in') {
+        setSignIn((states) => ({ ...states, [key]: 'not_signed_in' }))
+        setSignInPrompt((prompt) => ({ key, n: prompt.n + 1 }))
         return
       }
       const cliDefault = cliDefaults[key]
@@ -533,7 +549,10 @@ export function StepLucius({
                         // equal choices, so none is styled as the recommended one.
                         variant="primary"
                         loading={busyKey === d.key}
-                        disabled={busy && busyKey !== d.key}
+                        // Signed out, Use this could only answer "sign in first": the steps
+                        // below are the one thing to do. "unknown" stays usable — a status
+                        // check that failed must never lock anyone out.
+                        disabled={(busy && busyKey !== d.key) || signIn[d.key] === 'not_signed_in'}
                         onClick={() => {
                           choose(d.key)
                           void saveProvider(d.key)
@@ -551,6 +570,8 @@ export function StepLucius({
                       signIn={signIn[d.key]}
                       inContainer={inContainer}
                       onCheck={checkClis}
+                      openRequest={signInPrompt.key === d.key ? signInPrompt.n : 0}
+                      openWhenSignedOut
                     />
                   )}
                 </div>

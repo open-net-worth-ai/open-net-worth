@@ -503,11 +503,14 @@ function ProviderModal({
         key_status?: string
         sign_in?: CliSignInState
         error?: string
+        warning?: string
         detail?: string
       } | null
       const ms = Math.round(performance.now() - started)
       // Signed out is a step to take, not a failure to report; the sign-in steps are right here.
       if (body?.sign_in === 'not_signed_in') toast(body.error || 'Not signed in.')
+      // Works, but the model list is our short built-in one (the CLI's own was unreadable).
+      else if (body?.key_status === 'valid' && body.warning) toast(body.warning)
       else if (body?.key_status === 'valid') toast(`Tested ok — ${ms}ms`)
       // `detail` is what a 4xx carries (e.g. the provider is switched off). Without it this
       // asserted "unreachable" for ANY failure — including our own server erroring — and so

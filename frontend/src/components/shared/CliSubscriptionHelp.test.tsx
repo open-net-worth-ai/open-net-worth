@@ -220,9 +220,7 @@ it.each([
   )
   fireEvent.click(screen.getByRole('button', { name: /^Sign in/ }))
   expect(screen.getByText(command)).toBeTruthy()
-  expect(
-    screen.getByText(new RegExp(`${label} comes with the Open Net Worth container`)),
-  ).toBeTruthy()
+  expect(screen.getByText(new RegExp(`${label} runs inside the container`))).toBeTruthy()
 })
 
 it.each(['signed_in', 'unknown', undefined] as const)(

@@ -58,6 +58,11 @@ its models under **Default model** to make Lucius use it.
 Other install methods are in the official [Claude Code setup](https://code.claude.com/docs/en/setup)
 and [Codex](https://developers.openai.com/codex/cli) instructions.
 
+**Codex model list.** The picker shows Codex's own list of models. The app asks Codex to fetch
+it when the list is missing or more than a day old, and every time you click **Test connection**,
+so a model OpenAI adds shows up on its own. If Codex can't fetch it (not signed in, or no
+internet), the picker shows a short built-in list instead, and **Test connection** says so.
+
 **Google Antigravity:** if Google's Antigravity CLI (`agy`) is installed and signed in on that
 computer, it's offered as **Antigravity CLI** the same way.
 
@@ -95,7 +100,13 @@ docker exec -it open-net-worth claude auth login
 ```
 
 Follow the link it prints, on any device. The row changes to **Signed in** by itself, and Lucius
-uses the sign-in on your next message.
+uses the sign-in on your next message. Click **Use this** before signing in and setup stays on this
+step, opens these sign-in steps and says what's missing — it won't finish with a Codex or Claude
+Code that can't answer.
+
+Once Codex is signed in, the picker fetches Codex's list of models by itself and keeps it in the
+app's data volume. A model that needs a newer Codex release arrives when you
+[update the image](../operations/upgrading.md#update-for-your-install).
 
 With the current `docker-compose.yml`, the sign-in stays in its own Docker volume
 (`open-net-worth-codex`, `open-net-worth-claude`), so updates keep it. With an older file or a
@@ -219,6 +230,10 @@ automations and memory.
   [Subscription under Docker](#subscription-under-docker). The row in **Settings → AI** gives the
   exact command. If the row says **Signed in** but Lucius still refuses, the sign-in has expired:
   run the same command again.
+- **Codex offers only a few, older models** — Codex couldn't fetch its model list, so the picker
+  shows a short built-in one. Check that Codex is signed in (under Docker, see
+  [Subscription under Docker](#subscription-under-docker)) and that the computer running Open Net
+  Worth can reach the internet, then click **Test connection** in **Settings → AI**.
 - **"Choose a default model on another provider first"** — you tried to switch off the provider
   Lucius uses by default. Pick another **Default model** first.
 
