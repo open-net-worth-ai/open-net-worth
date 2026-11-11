@@ -19,7 +19,7 @@ export interface Segment {
 
 export function donutParts(
   weights: { symbol: string; weight: number }[],
-  count: number,
+  _count: number,
   top = TOP_SEGMENTS,
 ): Segment[] {
   const parts = weights.slice(0, top)

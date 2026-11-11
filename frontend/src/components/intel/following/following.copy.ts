@@ -5,7 +5,9 @@ const PAST_WINDOW = (window: string) =>
 export const COPY = {
   discoverTitle: 'Famous Portfolios',
   filterLabel: 'Filter',
-  filterTitle: 'Filter moves',
+  filterTitle: 'Filter',
+  showLabel: 'Show',
+  sortTitle: 'Sort by',
   holdingsSearch: 'Search holdings',
   noHoldingMatch: (q: string) => `No holding matches "${q}".`,
   periodLabel: 'Period',
@@ -69,15 +71,19 @@ export const COPY = {
       ? `Disclosure filed ${day}`
       : kind === 'etf_daily'
         ? `Daily holdings ${day}`
-        : `Holdings disclosed ${day}`,
-  positionsAge: (age: string) => `positions ${age.replace(/ ago$/, '')} old`,
+        : `Disclosed ${day}`,
+  latestTrade: (day: string) => `Latest trade ${day}`,
+  /** The snapshot every tab but Trading Activity is built on. */
+  holdingsOn: (day: string) => `Holdings on ${day}`,
+  disclosedOn: (day: string) => `Disclosed ${day}`,
+  /** A quarter whose filing deadline passed with no holdings report from them. */
+  notDisclosed: (quarter: string) => `${quarter} not disclosed`,
   watch: 'Watch',
   watching: 'Watching',
   watchLabel: 'Watch: get an Intel story when they file',
   unwatchLabel: 'Stop watching',
   unwatch: 'Stop watching',
   tabActivity: 'Trading Activity',
-  tabTrades: 'Trades',
   tabHoldings: 'Holdings',
   tabOverview: 'Overview',
   /** Since the day it became public: the first day a copier could have acted. */
@@ -133,6 +139,10 @@ export const COPY = {
   nothingYetBody:
     "We haven't found a filing for this portfolio. Try Refresh, or check back after its next report.",
   holdingsTitle: 'Holdings',
+  mapBySector: 'Holdings by sector. Tap a sector to list only its holdings.',
+  mapByStock: 'Holdings by size. Tap one to find it in the list.',
+  keysBySector: 'Sectors and their shares',
+  keysByStock: 'Holdings and their shares',
   notCounted: 'Option or other asset, not counted in the weights',
   showAllTrades: (n: number) => `Show all ${n} trades`,
   refreshing: 'Checking for a newer filing…',
@@ -150,7 +160,7 @@ export const COPY = {
   unreadReports: (n: number) => `${n} reports could not be read and are left out.`,
   unmatched: (n: number) =>
     `${n} ${n === 1 ? 'holding has' : 'holdings have'} no ticker we could match and are left out:`,
-  copyCta: 'Copy this portfolio',
+  copyCta: 'Copy with Lucius',
   copyPitch:
     'Lucius buys and sells in your broker account to match this portfolio, every week. You set the amount and your rules, and you can have it ask before every order.',
   askLucius: 'Ask Lucius',

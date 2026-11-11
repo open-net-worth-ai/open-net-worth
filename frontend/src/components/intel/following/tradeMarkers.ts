@@ -27,11 +27,11 @@ export function tradeMarkers(
     if (!d || placed.some((m) => m.up === t.up && days(m.d, d) <= SAME_WEEK_DAYS)) continue
     placed.push({ d, up: t.up })
     seen.add(`${d}${t.up}`)
-    // A 13F change has no trade day: a square at the quarter's end says "during this quarter".
+    // A quarter's change sits on the day it was disclosed (its trade day is unknown).
     out.push({
       time: toTime(d) as Time,
       position: t.up ? 'belowBar' : 'aboveBar',
-      shape: t.quarter ? 'square' : t.up ? 'arrowUp' : 'arrowDown',
+      shape: t.up ? 'arrowUp' : 'arrowDown',
       color: t.up ? color.buy : color.sell,
       text: t.up ? 'B' : 'S',
     })

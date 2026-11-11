@@ -1,52 +1,76 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 const navigate = vi.hoisted(() => vi.fn())
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => false }))
+// The chart engine draws on a canvas jsdom does not have: a stand-in shows the chart's name and
+// what its tooltip would say at the last point, so a test can read both.
+vi.mock('./ActivityChart', () => ({
+  CHART_HEIGHT: 200,
+  ActivityChart: (p: {
+    label: string
+    points: { date: string }[]
+    tip?: (date: string) => ReactNode
+  }) => (
+    <div role="img" aria-label={p.label}>
+      {p.tip?.(p.points[p.points.length - 1]!.date)}
+    </div>
+  ),
+}))
 
 import { authFetch } from '../../../api/client'
 import { clearQueryCache } from '../../../state/queryCache'
 import { FollowingTab } from './FollowingTab'
-import { COPY, askPrompt } from './following.copy'
+import { COPY } from './following.copy'
 import { shortDate } from './following.format'
-import {
-  DIRECTORY,
-  fund,
-  installServer,
-  json,
-  member,
-  performance,
-  type Server,
-} from './followingTestKit'
+import { DIRECTORY, fund, installServer, member, type Server } from './followingTestKit'
 
 const mockFetch = authFetch as ReturnType<typeof vi.fn>
-
-let server: Server
 const onAskLucius = vi.fn()
-function setup(follows = [fund(), member()], extra: Partial<Server> = {}) {
-  server = { follows, directory: DIRECTORY, ...extra }
+let server: Server
+
+// Every box is wide: the tables are tables and the toolbars their wide form.
+const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+beforeAll(() =>
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+    configurable: true,
+    get: () => 1200,
+  }),
+)
+afterAll(() => {
+  if (width) Object.defineProperty(HTMLElement.prototype, 'clientWidth', width)
+})
+
+function setup(watched: string[] = ['fol_fund']) {
+  server = { portfolios: [fund(), member()], watched: new Set(watched), directory: DIRECTORY }
   installServer(mockFetch, server)
   return render(<FollowingTab onAskLucius={onAskLucius} />)
 }
 
-/** Refresh and Unfollow live in the hero's "More actions" menu. */
-async function pick(item: string) {
-  fireEvent.click(screen.getByRole('button', { name: /^More actions for/ }))
-  fireEvent.click(await screen.findByRole('menuitem', { name: item }))
+async function open(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: COPY.openLabel(name) }))
+  return screen.findByRole('heading', { name: new RegExp(name) })
 }
 
-const calls = (method: string, part: string) =>
-  mockFetch.mock.calls.filter(
-    ([url, init]) =>
-      String(url).includes(part) && ((init as RequestInit)?.method ?? 'GET') === method,
-  )
-const region = (name: string) => screen.getByRole('region', { name })
+const sections = (name: string) => screen.getByRole('tablist', { name: COPY.sectionsLabel(name) })
+const tab = (name: string, label: string) =>
+  fireEvent.click(within(sections(name)).getByRole('tab', { name: label }))
+const filters = () => screen.getByRole('tablist', { name: COPY.filterLabel })
+const symbols = (table: HTMLElement) =>
+  within(table)
+    .getAllByRole('row')
+    .slice(1)
+    .map((r) => r.querySelector('.mk-hsym')?.textContent ?? r.textContent)
+const calls = (method: string) =>
+  mockFetch.mock.calls.filter(([, init]) => ((init as RequestInit)?.method ?? 'GET') === method)
 
 beforeEach(() => {
   clearQueryCache()
+  sessionStorage.clear()
   navigate.mockReset()
   onAskLucius.mockReset()
 })
@@ -55,378 +79,169 @@ afterEach(() => {
   mockFetch.mockReset()
 })
 
-describe('nothing followed yet', () => {
-  it('is a gallery of portfolios to pick, and following one opens it', async () => {
-    setup([])
-    const gallery = await screen.findByRole('region', { name: COPY.galleryTitle })
-    const tile = (await within(gallery).findByText('Borealis Partners')).closest('li')!
-    fireEvent.click(within(tile).getByRole('button', { name: COPY.followAction }))
-    await waitFor(() => expect(calls('POST', '/api/followed-portfolios')).toHaveLength(1))
-    expect(await screen.findByRole('heading', { name: 'Borealis Partners' })).toBeTruthy()
+describe('Discover', () => {
+  it('lists every portfolio, with a count on every filter', async () => {
+    setup()
+    await screen.findByRole('button', { name: COPY.openLabel('Borealis Partners') })
+    const bar = filters()
+    for (const name of ['All 3', 'Watching 1', 'Funds 2', 'Politicians 1'])
+      expect(within(bar).getByRole('tab', { name })).toBeTruthy()
+    fireEvent.click(within(bar).getByRole('tab', { name: 'Politicians 1' }))
+    expect(screen.queryByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeNull()
+    expect(screen.getByRole('button', { name: COPY.openLabel('Pat Placeholder') })).toBeTruthy()
   })
 
-  it('shows why a follow failed and keeps the gallery', async () => {
-    setup([])
-    server.followResult = { status: 502, body: { detail: 'SEC refused the request' } }
-    const tile = (await screen.findByText('Borealis Partners')).closest('li')!
-    fireEvent.click(within(tile).getByRole('button', { name: COPY.followAction }))
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe(
-      COPY.followFailed('Borealis Partners', 'SEC refused the request'),
-    )
-    expect(screen.getByText('Acme Capital')).toBeTruthy()
+  it('searches in place and says when nothing matches', async () => {
+    setup()
+    const search = await screen.findByRole('searchbox', { name: COPY.searchLabel })
+    fireEvent.change(search, { target: { value: 'zzz' } })
+    expect(await screen.findByText(COPY.noMatch('zzz'))).toBeTruthy()
   })
 
-  it('searches right in the gallery and says when nothing matches', async () => {
-    setup([])
-    const gallery = await screen.findByRole('region', { name: COPY.galleryTitle })
-    await within(gallery).findByText('Acme Capital')
-    const box = within(gallery).getByRole('searchbox', { name: COPY.searchLabel })
-    fireEvent.change(box, { target: { value: 'bore' } })
-    await waitFor(() => expect(within(gallery).queryByText('Acme Capital')).toBeNull())
-    expect(within(gallery).getByText('Borealis Partners')).toBeTruthy()
-    fireEvent.change(box, { target: { value: 'zzzz' } })
-    expect(await within(gallery).findByText(COPY.noMatch('zzzz'))).toBeTruthy()
-    expect(screen.queryByRole('dialog')).toBeNull()
-  })
-
-  it('shows an error that Retry recovers from', async () => {
-    setup([fund()])
-    server.failList = true
-    clearQueryCache()
-    cleanup()
-    render(<FollowingTab />)
-    expect(await screen.findByText(COPY.listErrorTitle)).toBeTruthy()
-    server.failList = false
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByRole('heading', { name: 'Acme Capital' })).toBeTruthy()
+  it('opens a portfolio, and the back button returns to the list', async () => {
+    setup()
+    await open('Acme Capital')
+    fireEvent.click(screen.getByRole('button', { name: COPY.backToAll }))
+    expect(await screen.findByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeTruthy()
   })
 })
 
-describe('the hero leads with performance and the copy action', () => {
-  it('shows the past 12 months against the benchmark, who it is and how old the filing is', async () => {
+describe('the header', () => {
+  it('names who it is and the two facts every tab rests on, as separate chips', async () => {
     setup()
-    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    expect(await within(hero).findByText('+16.3%')).toBeTruthy()
-    expect(within(hero).getByText(/SPY \+10\.8%/)).toBeTruthy()
-    expect(within(hero).getByText(/\+5\.5 pts ahead/)).toBeTruthy()
-    expect(within(hero).getByText(new RegExp(COPY.perfCaption['12M']))).toBeTruthy()
+    await open('Acme Capital')
+    expect(screen.getByText('Ada Acme')).toBeTruthy()
+    const snapshot = screen.getByText(COPY.holdingsOn(shortDate('2026-06-30')))
+    expect(snapshot.closest('[title]')?.getAttribute('title')).toBe(
+      COPY.disclosedOn(shortDate('2026-08-14')),
+    )
+    expect(screen.getByText(COPY.latestTrade(shortDate('2026-10-02')))).toBeTruthy()
+  })
+
+  it('copies the portfolio with Lucius through the automation template', async () => {
+    setup()
+    await open('Acme Capital')
+    fireEvent.click(screen.getByRole('button', { name: COPY.copyCta }))
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/automations' })),
+    )
+  })
+
+  it('watches with the bell, and stops only after the confirmation', async () => {
+    setup([])
+    await open('Acme Capital')
+    fireEvent.click(screen.getByRole('button', { name: COPY.watchLabel }))
+    await screen.findByRole('button', { name: COPY.unwatchLabel })
+    expect(calls('POST')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: COPY.unwatchLabel }))
+    const dialog = await screen.findByRole('dialog')
+    expect(calls('DELETE')).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: COPY.unwatch }))
+    await waitFor(() => expect(calls('DELETE')).toHaveLength(1))
+  })
+})
+
+describe('Trading Activity', () => {
+  it('opens on the whole range with every move, and a filter narrows it', async () => {
+    setup()
+    await open('Acme Capital')
+    const period = screen.getByRole('combobox', { name: COPY.periodLabel }) as HTMLSelectElement
+    expect(period.selectedOptions[0]!.textContent).toBe('Apr 2026 – Now')
+    const table = screen.getByRole('table', { name: 'Apr 2026 – Now' })
+    expect(symbols(table).sort()).toEqual(['ACME', 'BOLT', 'BOLT', 'CRUX', 'OXYZ'])
+    fireEvent.click(within(filters()).getByRole('tab', { name: 'Sold out' }))
+    expect(symbols(screen.getByRole('table', { name: 'Apr 2026 – Now' }))).toEqual(['OXYZ'])
+  })
+
+  it('shows the dated trades after the last report when that period is picked', async () => {
+    setup()
+    await open('Acme Capital')
+    fireEvent.change(screen.getByRole('combobox', { name: COPY.periodLabel }), {
+      target: { value: 'since' },
+    })
+    expect(symbols(screen.getByRole('table', { name: 'Since Jun 30' }))).toEqual(['BOLT'])
+  })
+
+  it('charts the portfolio over the chosen period with its moves on it', async () => {
+    setup()
+    await open('Acme Capital')
+    expect(screen.getByRole('img', { name: /each move marked/ })).toBeTruthy()
+  })
+
+  it('copies one picked move through Lucius, the trade spelled out', async () => {
+    setup()
+    await open('Acme Capital')
+    fireEvent.change(screen.getByRole('combobox', { name: COPY.periodLabel }), {
+      target: { value: 'since' },
+    })
+    const table = screen.getByRole('table', { name: 'Since Jun 30' })
+    fireEvent.click(within(table).getAllByRole('row')[1]!)
+    expect(screen.getByRole('button', { name: new RegExp(COPY.tradeDetails) })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^Copy this trade:/ }))
+    expect(onAskLucius).toHaveBeenCalledWith(expect.stringContaining('BOLT'))
+  })
+
+  it('offers a member Bought and Sold, newest first', async () => {
+    setup()
+    await open('Pat Placeholder')
+    expect(screen.queryByText(/^Holdings on /)).toBeNull()
+    expect(screen.getByText(COPY.latestTrade(shortDate('2026-10-02')))).toBeTruthy()
+    const bar = filters()
     expect(
-      within(hero).getByText(new RegExp(`Ada Acme · Positions as of ${shortDate('2026-06-30')}`)),
-    ).toBeTruthy()
+      within(bar)
+        .getAllByRole('tab')
+        .map((t) => t.textContent),
+    ).toEqual(['All', 'Bought', 'Sold'])
+    fireEvent.click(within(bar).getByRole('tab', { name: 'Sold' }))
+    const table = screen.getAllByRole('table')[0]!
+    expect(symbols(table)).toEqual(['OLDR'])
+  })
+})
+
+describe('Holdings', () => {
+  it('lists every sector with its share, and a sector narrows the table to it', async () => {
+    setup()
+    await open('Acme Capital')
+    tab('Acme Capital', COPY.tabHoldings)
+    const keys = screen.getByRole('group', { name: COPY.keysBySector })
+    const names = within(keys)
+      .getAllByRole('button')
+      .map((b) => b.querySelector('.fol-key-name')?.textContent)
+    expect(names).toEqual(['Technology', 'Industrials', 'Energy'])
+    expect(within(keys).getByRole('button', { name: /^Technology\s*62\.0%/ })).toBeTruthy()
+
+    const table = () => screen.getByRole('table', { name: COPY.holdingsTitle })
+    fireEvent.click(within(keys).getByRole('button', { name: /Technology/ }))
+    expect(symbols(table())).toEqual(['ACME', 'CRUX'])
+    fireEvent.click(within(keys).getByRole('button', { name: /Technology/ }))
+    expect(symbols(table())).toHaveLength(5)
   })
 
-  it('says how old the positions themselves are, not only the filing', async () => {
-    setup([fund()])
-    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    expect(within(hero).getByText(/Positions as of .*2026, \d+ days old/)).toBeTruthy()
+  it('keeps a holding with no ticker as a row with the fix, and searches the list', async () => {
+    setup()
+    await open('Acme Capital')
+    tab('Acme Capital', COPY.tabHoldings)
+    expect(screen.getByRole('button', { name: COPY.tickerSetAction })).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox', { name: COPY.holdingsSearch }), {
+      target: { value: 'zzz' },
+    })
+    expect(screen.getByText(COPY.noHoldingMatch('zzz'))).toBeTruthy()
   })
+})
 
-  it('links to the filing at its source and says when it was last checked', async () => {
-    setup([fund({ source_url: 'https://www.sec.gov/Archives/edgar/data/1/000000000026000002/' })])
-    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    const link = within(hero).getByRole('link', { name: COPY.viewFiling }) as HTMLAnchorElement
-    expect(link.href).toBe('https://www.sec.gov/Archives/edgar/data/1/000000000026000002/')
-    expect(link.target).toBe('_blank')
-    expect(link.rel).toBe('noopener noreferrer')
-    expect(within(hero).getByText(/Checked /)).toBeTruthy()
-    expect(COPY.checkedInfo('Nov 9')).toContain('automatically twice a day')
-    expect(COPY.checkedInfo('Nov 9')).toContain('daily prices')
-  })
-
-  it('follows the pointer: the headline shows the hovered day, then returns to the end', async () => {
-    setup([fund()])
-    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    await within(hero).findByText('+16.3%')
-    expect(within(hero).getByText(new RegExp(`to ${shortDate('2026-11-10')}`))).toBeTruthy()
-    const chart = hero.querySelector('.mk-chart-wrap') as HTMLElement
-    chart.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect
-    fireEvent.mouseMove(chart, { clientX: 50 })
-    expect(within(hero).getByText(COPY.perfOn(shortDate('2026-05-10')))).toBeTruthy()
-    expect(hero.querySelector('.fol-perf-num')!.textContent).toBe('+8.2%')
-    fireEvent.mouseLeave(chart)
-    expect(hero.querySelector('.fol-perf-num')!.textContent).toBe('+16.3%')
-  })
-
-  it('switches the window, and the holdings column follows it', async () => {
-    setup([fund()])
-    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    await within(hero).findByText('+16.3%')
-    expect(within(region(COPY.holdingsTitle)).getByText('+29.4%')).toBeTruthy()
-    expect(
-      within(hero)
-        .getAllByRole('radio')
-        .map((r) => r.textContent),
-    ).toEqual(['1M', '6M', '12M', 'Since filing'])
-    fireEvent.click(within(hero).getByRole('radio', { name: '6M' }))
-    expect(within(hero).getByText('+8.1%')).toBeTruthy()
-    expect(within(region(COPY.holdingsTitle)).getByText('6 months')).toBeTruthy()
-    fireEvent.click(within(hero).getByRole('radio', { name: 'Since filing' }))
-    expect(within(hero).getByText('−1.2%')).toBeTruthy()
-    expect(within(hero).getByText(/\+2\.3 pts ahead/)).toBeTruthy()
-    expect(within(hero).getByText(new RegExp(COPY.perfCaption.FILING))).toBeTruthy()
-    expect(within(region(COPY.holdingsTitle)).getByText('−2.0%')).toBeTruthy()
-    expect(within(region(COPY.holdingsTitle)).getByText('Since filing')).toBeTruthy()
-  })
-
-  it('says so when prices are missing, and still shows the rest', async () => {
-    setup([fund()], { performance: performance({ periods: {} }) })
-    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    expect(await within(hero).findByText(COPY.perfUnavailable)).toBeTruthy()
-    expect(within(region(COPY.holdingsTitle)).getByText(/Acme Corp/)).toBeTruthy()
-  })
-
-  it('offers a retry when performance cannot be loaded', async () => {
-    setup([fund()], { performance: null })
-    expect(await screen.findByText(COPY.perfErrorTitle)).toBeTruthy()
-    server.performance = undefined
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(
-      await within(region('Acme Capital')).findByText(new RegExp(COPY.perfCaption['12M'])),
-    ).toBeTruthy()
-  })
-
-  it('makes copying the one primary action and sends it to the automation template', async () => {
-    setup([fund()])
-    const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    const cta = within(hero).getByRole('button', { name: COPY.copyCta })
-    expect(cta.className).toContain('btn-primary')
-    expect(cta.getAttribute('title')).toBe(COPY.copyPitch)
-    expect(within(hero).getAllByRole('button', { name: /copy trading/i })).toHaveLength(1)
-    expect(cta.className).toContain('ui-btn--sm')
-    fireEvent.click(cta)
-    expect(navigate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: '/automations',
-        search: { template: 'copy-followed-portfolio' },
+describe('Overview', () => {
+  it('shows the two figures and the return against the benchmark for the chosen window', async () => {
+    setup()
+    await open('Acme Capital')
+    tab('Acme Capital', COPY.tabOverview)
+    expect(screen.getByText(COPY.kpiValue)).toBeTruthy()
+    expect(screen.getByText(/^\+\$100(\.0)?M$/)).toBeTruthy()
+    expect(screen.getByText('SPY +10.8%')).toBeTruthy()
+    fireEvent.click(
+      within(screen.getByRole('tablist', { name: COPY.perfPeriodLabel })).getByRole('tab', {
+        name: '6M',
       }),
     )
-  })
-
-  it('asks Lucius about the portfolio from the button beside the main one', async () => {
-    setup()
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    const ask = screen.getByRole('button', { name: COPY.askLabel('Acme Capital') })
-    expect(ask.textContent).toContain(COPY.askLucius)
-    expect(ask.className).toContain('ui-btn--sm')
-    fireEvent.click(ask)
-    expect(onAskLucius).toHaveBeenCalledWith(askPrompt('Acme Capital'))
-  })
-
-  it('copies one fund move through Lucius, with the trade spelled out', async () => {
-    setup([fund()])
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    const row = within(region(COPY.movesTitle)).getAllByRole('listitem')[1]!
-    fireEvent.click(within(row).getByRole('button', { name: /^Copy this trade: sold ACME/ }))
-    const sent = onAskLucius.mock.calls[0]![0] as string
-    expect(sent).toContain("I want to copy this trade from Acme Capital's latest 13F: sold ACME")
-    expect(sent).toContain('−500K shares')
-    expect(sent).toContain('for me to approve')
-  })
-})
-
-describe('switcher', () => {
-  it('shows each follow with its past 12 months and switches when another is picked', async () => {
-    setup()
-    const tab = await screen.findByRole('tab', { name: /Pat Placeholder/ })
-    await waitFor(() => expect(tab.textContent).toContain('+16.3%'))
-    expect(tab.className).toContain('mk-chip')
-    fireEvent.click(tab)
-    expect(await screen.findByRole('heading', { name: /Pat Placeholder/ })).toBeTruthy()
-    expect(tab.getAttribute('aria-selected')).toBe('true')
-  })
-})
-
-describe('what a fund did and what it holds', () => {
-  it('lists the moves biggest first with size, share change and the period', async () => {
-    setup([fund()])
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    const moves = region(COPY.movesTitle)
-    expect(
-      within(moves).getByText(`${shortDate('2026-03-31')} to ${shortDate('2026-06-30')}`),
-    ).toBeTruthy()
-    const rows = within(moves).getAllByRole('listitem')
-    expect(rows.map((r) => r.textContent)).toEqual([
-      expect.stringContaining('Sold out OXYZ'),
-      expect.stringContaining('Trimmed ACME'),
-      expect.stringContaining('Added BOLT'),
-    ])
-    expect(rows[0]!.textContent).toContain('−$96M')
-    expect(rows[1]!.textContent).toContain('−$15M')
-    expect(rows[1]!.textContent).toContain('−500K shares (-33.33%)')
-    expect(rows[1]!.getAttribute('title')).toContain('no trade dates or trade prices')
-    expect(within(moves).getByText(COPY.changeBasis)).toBeTruthy()
-  })
-
-  it('ranks the holdings with weight and says what was left out', async () => {
-    setup([fund()])
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    const holdings = region(COPY.holdingsTitle)
-    const rows = within(holdings).getAllByRole('listitem')
-    expect(rows).toHaveLength(4)
-    expect(rows[0]!.textContent).toContain('ACME')
-    expect(rows[0]!.textContent).toContain('22.40%')
-    expect(rows[0]!.textContent).toContain('Acme Corp · 1M shares')
-    expect(
-      within(rows[0]!)
-        .getByText(/1M shares/)
-        .getAttribute('title'),
-    ).toContain('about $30M')
-    expect(rows[3]!.textContent).not.toContain('shares')
-    expect(
-      within(holdings).getByText(new RegExp(`${COPY.unmatched(1)} Mystery Trust \\(4\\.10%\\)`)),
-    ).toBeTruthy()
-  })
-})
-
-describe('a House member', () => {
-  it('is labelled estimated and lists trades newest first with the stock since', async () => {
-    setup([member()])
-    expect(await screen.findByRole('heading', { name: /Pat Placeholder/ })).toBeTruthy()
-    expect(screen.getAllByText(COPY.estimated).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText(new RegExp(COPY.estimatedSubtitle))).toBeTruthy()
-    expect(screen.getByText(COPY.unreadReports(2))).toBeTruthy()
-    const rows = within(region(COPY.tradesTitle)).getAllByRole('listitem')
-    expect(rows[0]!.textContent).toContain('Muni Bond 2030')
-    expect(rows[0]!.textContent).toContain(COPY.notCounted)
-    expect(rows[1]!.textContent).toContain('Bought NOVA')
-    await waitFor(() => expect(rows[1]!.textContent).toContain('+10.2%'))
-    expect(rows[2]!.textContent).toContain('Sold OLDR')
-    expect(within(rows[0]!).queryByRole('button')).toBeNull()
-    fireEvent.click(within(rows[1]!).getByRole('button', { name: /^Copy this trade: bought NOVA/ }))
-    expect(onAskLucius.mock.calls[0]![0]).toContain(
-      'I want to copy this trade from Pat Placeholder: bought NOVA (Nova Systems) on',
-    )
-    expect(screen.queryByRole('region', { name: COPY.movesTitle })).toBeNull()
-  })
-})
-
-describe('states', () => {
-  it('keeps the model above a failed update and says so', async () => {
-    setup([fund({ status: 'error', error: 'SEC did not answer' })])
-    expect(
-      await screen.findByText(/We couldn't update this portfolio: SEC did not answer/),
-    ).toBeTruthy()
-    expect(within(region(COPY.holdingsTitle)).getByText('Crux Holdings')).toBeTruthy()
-    expect(screen.getAllByText(COPY.couldNotUpdate).length).toBeGreaterThan(0)
-  })
-
-  it('explains a stale filing, and offers Refresh when nothing could be read', async () => {
-    setup([fund({ status: 'stale' })])
-    expect(await screen.findByText(/it is 88 days old/)).toBeTruthy()
-    cleanup()
-    clearQueryCache()
-    setup([fund({ status: 'error', error: 'bad parse', model: null })])
-    expect(await screen.findByText(COPY.loadFailedTitle)).toBeTruthy()
-    expect(screen.getByText('bad parse')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: COPY.copyCta })).toBeNull()
-  })
-})
-
-describe('refresh and unfollow', () => {
-  it('refreshes the selected follow and re-reads the list', async () => {
-    setup([fund()])
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    const listReads = () =>
-      calls('GET', '/api/followed-portfolios').filter(([u]) => u === '/api/followed-portfolios')
-        .length
-    const before = listReads()
-    await pick(COPY.refresh)
-    await waitFor(() => expect(calls('POST', '/fol_fund/refresh')).toHaveLength(1))
-    await waitFor(() => expect(listReads()).toBeGreaterThan(before))
-  })
-
-  it('shows the error when a refresh cannot be sent', async () => {
-    setup([fund()])
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    const original = mockFetch.getMockImplementation()!
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) =>
-      String(url).endsWith('/refresh') ? json({ detail: 'try later' }, 503) : original(url, init),
-    )
-    await pick(COPY.refresh)
-    expect(await screen.findByText(COPY.refreshFailed('try later'))).toBeTruthy()
-  })
-
-  it('removes a follow only after the confirmation, then shows the next one', async () => {
-    setup()
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    await pick(COPY.unfollow)
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(calls('DELETE', '/fol_fund')).toHaveLength(0)
-    await pick(COPY.unfollow)
-    expect(screen.getByText(COPY.unfollowTitle('Acme Capital'))).toBeTruthy()
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: COPY.unfollow }))
-    await waitFor(() => expect(calls('DELETE', '/fol_fund')).toHaveLength(1))
-    expect(await screen.findByRole('heading', { name: /Pat Placeholder/ })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Acme Capital' })).toBeNull()
-  })
-})
-
-describe('follow dialog', () => {
-  async function openDialog() {
-    setup([fund()])
-    await screen.findByRole('heading', { name: 'Acme Capital' })
-    fireEvent.click(screen.getByRole('button', { name: COPY.follow }))
-    return screen.findByRole('dialog')
-  }
-
-  it('searches the directory and restores the featured list when cleared', async () => {
-    const dialog = await openDialog()
-    await within(dialog).findByText('Borealis Partners')
-    fireEvent.change(within(dialog).getByRole('searchbox'), { target: { value: 'bore' } })
-    expect(await within(dialog).findByText(COPY.results('bore'))).toBeTruthy()
-    await waitFor(() => expect(within(dialog).queryByText('Pat Placeholder')).toBeNull())
-    fireEvent.change(within(dialog).getByRole('searchbox'), { target: { value: '' } })
-    expect(await within(dialog).findByText(COPY.featured)).toBeTruthy()
-  })
-
-  it('says so when nothing matches', async () => {
-    const dialog = await openDialog()
-    fireEvent.change(within(dialog).getByRole('searchbox'), { target: { value: 'zzzz' } })
-    expect(await within(dialog).findByText(COPY.noMatch('zzzz'))).toBeTruthy()
-  })
-
-  it('marks an already followed result and offers no Follow button for it', async () => {
-    const dialog = await openDialog()
-    await within(dialog).findByText('Pat Placeholder')
-    expect(within(dialog).getByText(COPY.following)).toBeTruthy()
-    expect(within(dialog).getAllByRole('button', { name: COPY.followAction })).toHaveLength(2)
-  })
-
-  it('shows the filing fetch while following, then selects the new follow and closes', async () => {
-    const dialog = await openDialog()
-    let release: (r: Response) => void = () => {}
-    const pending = new Promise<Response>((resolve) => (release = resolve))
-    const original = mockFetch.getMockImplementation()!
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) =>
-      init?.method === 'POST' ? pending : original(url, init),
-    )
-    const borealis = (await within(dialog).findByText('Borealis Partners')).closest('li')!
-    fireEvent.click(within(borealis).getByRole('button', { name: COPY.followAction }))
-    expect(await within(dialog).findByText(COPY.fetching)).toBeTruthy()
-    const created = fund({ id: 'fol_new', name: 'Borealis Partners' })
-    server.follows.push(created)
-    release(json({ follow: created, new_filing: true }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(await screen.findByRole('heading', { name: 'Borealis Partners' })).toBeTruthy()
-  })
-
-  it('closes from its header, with no second Close button below', async () => {
-    const dialog = await openDialog()
-    const closers = within(dialog).getAllByRole('button', { name: /close/i })
-    expect(closers).toHaveLength(1)
-    fireEvent.click(closers[0]!)
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  })
-})
-
-describe('copy', () => {
-  it('names the action for what the user gets, not for where it lives', () => {
-    expect(COPY.copyCta).toBe('Start copy trading')
-    expect(
-      Object.values(COPY)
-        .filter((v) => typeof v === 'string')
-        .join(' '),
-    ).not.toMatch(/in Automations/)
+    expect(screen.getByText('SPY +6.0%')).toBeTruthy()
   })
 })

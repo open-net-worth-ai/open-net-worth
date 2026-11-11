@@ -202,7 +202,8 @@ export interface PerfWindow {
  *  owner's benchmark. Not the fund's or the member's own return. */
 export interface FollowPerformance {
   benchmark: string
-  periods: Partial<Record<PerfPeriod, PerfWindow>>
+  /** ``ALL`` runs over the portfolio's whole history (Trading Activity's chart zooms into it). */
+  periods: Partial<Record<PerfPeriod | 'ALL', PerfWindow>>
   /** "<trade date>|<symbol>" to the return since that trade, for a member's counted trades. */
   trade_returns: Record<string, number>
 }

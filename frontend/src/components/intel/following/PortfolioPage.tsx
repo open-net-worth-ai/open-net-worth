@@ -4,29 +4,29 @@ import {
   ActionMenu,
   Badge,
   Button,
+  Tag,
   ConfirmDialog,
   ErrorState,
   PageTabs,
-  SummaryBar,
   TabSkeleton,
 } from '../../ui'
 import { Bell, ChevronLeft } from '../../../ui/icons'
+import { Spark } from '../../../lucius/identity'
 import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import {
   followPortfolio,
   refreshFollow,
   setFollowTicker,
   unfollowPortfolio,
-  type PerfPeriod,
 } from '../../../api/followedPortfolios'
 import { COPY, askPrompt } from './following.copy'
-import { ageText, shortDate } from './following.format'
+import { shortDate } from './following.format'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { ActivityTab } from './ActivityTab'
-import { activitySections, hasActivity as anyActivity } from './activityRows'
+import { activitySections, hasActivity as anyActivity, missedQuarter } from './activityRows'
 import { HoldingRows } from './HoldingRows'
-import { PerformanceBlock } from './PerformanceBlock'
+import { OverviewTab } from './OverviewTab'
 import { usePreviewPage } from './useFollowing'
-import { headlineCards } from './headlineCards'
 import type { PortfolioRef } from './Discover'
 
 type Tab = 'activity' | 'holdings' | 'overview'
@@ -42,9 +42,9 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Props) {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
   const [tab, setTab] = useState<Tab>('activity')
-  const [period, setPeriod] = useState<PerfPeriod>('12M')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -94,6 +94,8 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     } as never)
   }
   const menu = [
+    // On a phone the call to action lives here: the header keeps only the name.
+    ...(isMobile ? [{ label: COPY.copyCta, onSelect: () => void copyPortfolio() }] : []),
     ...(onAskLucius
       ? [
           {
@@ -127,12 +129,22 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // its holdings, and offers no tab that would only say "nothing here".
   const hasActivity = anyActivity(activitySections(follow))
   const tabs: { key: Tab; label: string }[] = [
-    ...(hasActivity
-      ? [{ key: 'activity' as Tab, label: member ? COPY.tabTrades : COPY.tabActivity }]
-      : []),
+    ...(hasActivity ? [{ key: 'activity' as Tab, label: COPY.tabActivity }] : []),
     { key: 'holdings', label: COPY.tabHoldings },
     { key: 'overview', label: COPY.tabOverview },
   ]
+  const missed = follow.kind === 'fund_13f' && model ? missedQuarter(model.as_of) : null
+  // The newest dated trade: for a fund only when it is newer than the snapshot (else the
+  // snapshot already says it all); for a member, always (their holdings are an estimate).
+  const newest = follow.activity
+    .filter((t) => t.counted && t.symbol && t.side !== 'exchange')
+    .reduce<
+      (typeof follow.activity)[number] | null
+    >((best, t) => (!best || t.date > best.date ? t : best), null)
+  const latestTrade =
+    newest && (follow.kind === 'house_member' || !model || newest.date > model.as_of)
+      ? newest
+      : null
   const shownTab: Tab = tab === 'activity' && !hasActivity ? 'holdings' : tab
 
   return (
@@ -147,12 +159,22 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
             {follow.name}
             {model?.estimated && <Badge tone="warn">{COPY.estimated}</Badge>}
           </h2>
-          <div className="fol-by fol-by--row">
-            {follow.subtitle && <span>{follow.subtitle}</span>}
-            {model && <span>{COPY.updated(follow.kind, shortDate(model.filed_at))}</span>}
-            {model && model.age_days != null && model.age_days > 90 && (
-              <span className="fol-stale">{COPY.positionsAge(ageText(model.age_days))}</span>
+          {/* Who it is, then the two facts every tab rests on, each its own chip so they never
+              read as one sentence: the snapshot Holdings and Overview describe, and the newest
+              dated trade (Trading Activity runs past the snapshot). */}
+          <div className="fol-facts">
+            {follow.subtitle && <span className="fol-by">{follow.subtitle}</span>}
+            {model && follow.kind !== 'house_member' && (
+              <span title={COPY.disclosedOn(shortDate(model.filed_at))}>
+                <Tag tone="muted">{COPY.holdingsOn(shortDate(model.as_of))}</Tag>
+              </span>
             )}
+            {latestTrade && (
+              <span title={COPY.disclosedOn(shortDate(latestTrade.filed_at))}>
+                <Tag tone="muted">{COPY.latestTrade(shortDate(latestTrade.date))}</Tag>
+              </span>
+            )}
+            {missed && <Badge tone="warn">{COPY.notDisclosed(missed)}</Badge>}
           </div>
         </div>
         {/* Icon actions stay level with the name at every width; the call to action sits
@@ -168,13 +190,20 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
             title={followId ? COPY.unwatchLabel : COPY.watchLabel}
             iconLeft={<Bell size={15} fill={followId ? 'currentColor' : 'none'} />}
             onClick={() => (followId ? setConfirming(true) : void watch())}
-          >
-            <span className="fol-watch-label">{followId ? COPY.watching : COPY.watch}</span>
-          </Button>
+          />
           <ActionMenu label={COPY.moreActions(follow.name)} title={follow.name} items={menu} />
         </div>
+        {/* Lucius does the copying (an automation that trades your broker account to match), so
+            it is the app's Lucius action: the primary button in Lucius's colour with its Spark. */}
         <div className="fol-cta">
-          <Button variant="primary" size="sm" onClick={() => void copyPortfolio()}>
+          <Button
+            size="sm"
+            variant="primary"
+            className="fi-lucius"
+            iconLeft={<Spark size={15} ariaHidden />}
+            title={COPY.copyPitch}
+            onClick={() => void copyPortfolio()}
+          >
             {COPY.copyCta}
           </Button>
         </div>
@@ -200,15 +229,8 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
           onSetTicker={follow.kind === 'fund_13f' ? setTicker : undefined}
         />
       )}
-      {shownTab === 'overview' && model && <SummaryBar cards={headlineCards(model, performance)} />}
-      {shownTab === 'overview' && (
-        <PerformanceBlock
-          perf={performance}
-          loading={false}
-          onRetry={() => void page.refresh()}
-          period={period}
-          onPeriod={setPeriod}
-        />
+      {shownTab === 'overview' && model && (
+        <OverviewTab model={model} perf={performance} onRetry={() => void page.refresh()} />
       )}
       <ConfirmDialog
         data={

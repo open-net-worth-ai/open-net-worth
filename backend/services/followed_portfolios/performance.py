@@ -96,6 +96,23 @@ def _trade_returns(activity: list[dict], closes: dict[str, dict[str, float]]) ->
     return out
 
 
+def _history_start(follow: dict) -> str | None:
+    """Where ``ALL`` starts: a fund's oldest quarter on record; for a member (no quarters) the
+    quarter-end before their oldest counted trade, the same start Trading Activity's whole-range
+    period uses, so the chart and the period it is shown for always cover the same days."""
+    oldest = (follow.get("history") or [{}])[-1].get("as_of")
+    if oldest:
+        return str(oldest)
+    days = [
+        str(t["date"]) for t in follow.get("activity") or [] if t.get("counted") and t.get("date")
+    ]
+    if not days:
+        return None
+    first = date.fromisoformat(min(days))
+    start_month = (first.month - 1) // 3 * 3 + 1
+    return (date(first.year, start_month, 1) - timedelta(days=1)).isoformat()
+
+
 def build_performance(
     *,
     weights: dict[str, float],
@@ -165,7 +182,7 @@ def performance_for(follow: dict) -> dict:
             filed_at=str(model["filed_at"]),
             today=today,
             activity=follow.get("activity") or [],
-            all_from=(follow.get("history") or [{}])[-1].get("as_of"),
+            all_from=_history_start(follow),
         ),
     }
     _cache[cache_key] = (time.monotonic(), out)

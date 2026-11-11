@@ -16,7 +16,7 @@ previous filing, and when it was filed. This screen is information. It does not 
 accounts and it does not trade.
 
 This feature is off by default. Turn it on in **Settings → Developer → Experimental →
-Followed portfolios**. It then appears as the **Famous portfolios** tab in **Intel**.
+Followed portfolios**. It then appears as the **Famous Portfolios** tab in **Intel**.
 
 > This is not investment advice. The filings behind it are weeks or months old by law.
 
@@ -45,60 +45,93 @@ Limits you should know:
   member's trades but carry no weight. A scanned paper report cannot be read and is counted on
   the screen.
 
-## Follow a portfolio
+## Open a portfolio
 
-1. Open **Intel → Famous portfolios**. The first time, it shows well-known portfolios to pick from.
-2. Click **Follow** on one, or search by fund or member name.
-3. Fetching the filing takes a few seconds. Later, add more with **Follow a portfolio**.
+Open **Intel → Famous Portfolios**. Every portfolio in the directory is a card with its past
+year against your benchmark, its two newest moves, and the date of the newest of them. Filter
+the cards with **All**, **Watching**, **Funds**, **Politicians** and **ETFs** (each shows how many
+there are), sort them, or search by fund or member name. On a phone, or in a narrow pane, the
+filter and the sort are in the **Filter** button beside the search.
 
-The portfolios you follow sit in a row at the top, each with its past-year figure. Opening one
-shows:
+Click a card to open it. **‹ Famous Portfolios** takes you back.
 
-- **How its holdings have done.** A large figure and a chart compare the price return of the
-  portfolio's current top holdings, at their filed weights, with your benchmark. Switch between
-  **1M**, **6M**, **12M** and **Since filing**.
-  - **Since filing** is what copying it on the day it was filed would have returned, before
-    costs and dividends.
-  - **1M**, **6M** and **12M** apply today's holdings to the past. They are not the fund's own return,
-    and they flatter a portfolio that recently bought its winners.
-- **Latest moves** (a fund). Each stock it added, trimmed, started or sold out of between its
-  last two filings, with the approximate dollar value and the share change. A 13F gives share counts at two
-  quarter-ends and nothing else: no trade dates and no trade prices, so the dollar figures use
-  the quarter-end price.
-- **Recent trades** (a fund's Form 4 trades, or a House member). A fund's trades show the exact
-  date, shares and price, and link to the SEC filing. Each disclosed trade with its date, the dollar range
-  reported, and how the stock has moved since. Members do not report share counts or prices.
-- **Holdings.** The top 20 by weight, each with its own return over the window you chose.
+Under the name are who runs it and two dates, each its own chip:
 
-The line under the name says how old the newest information is, as one number of days: for a
-fund, the newer of its 13F quarter-end and its latest Form 4 trade; for a member, their newest
-trade; for an ARK ETF, the date of its holdings file. A 13F's positions date from the
-quarter-end, up to 45 days before the filing. Under the chart, **SEC filing** (or **House Clerk
-report**) opens the source document, and **Checked …** says when the app last looked for a
-newer one. Each of a
-member's trades links to the report it came from.
+- **Holdings on Jun 30, 2026** (an example): the day the holdings list describes. Holdings and
+  Overview are built on it. Point at it to see the day it was disclosed. A House member has no
+  such list, so this chip is not shown for one.
+- **Latest trade Nov 3, 2026**: their newest dated trade, when it is newer than the holdings.
+- **Apr – Jun 2026 not disclosed** appears when a quarter's 45-day deadline has passed with no
+  holdings report from the fund (some funds file only a notice that another manager reports for
+  them).
 
-An ARK ETF's page shows what changed since the previous day it was read. A day with no change
-adds no story to Intel.
+The bell beside **Copy with Lucius** watches the portfolio: you get an Intel story each time it
+files. A filled bell means you are watching; click it again to stop (it asks first). **Refresh**,
+the source document (**SEC filing** or **House Clerk report**) and **Ask Lucius** are in the
+**⋯** menu.
 
-Filings are checked automatically twice a day while the app is running (the first check is a
-few minutes after it starts). A new one updates the portfolio and adds a story to **Intel**.
-The chart's prices are separate: they are daily prices that update through the day, whether or
-not there is a new filing. The **ⓘ** beside **Checked** says the same on the screen. Use **Refresh** in the **⋯** menu on the card to check now; **Unfollow** is in the same menu. If
-a check fails, the last portfolio stays and the screen says what went wrong. A fund whose latest
-filing is more than about two quarters old, or a member with no report for a year, is marked
-out of date.
+### Trading Activity
+
+Everything they did, newest first, over the period you pick. The period starts on the whole range
+(for example **Jul 2024 – Now**); you can also pick the days since the last quarter (**Since
+Jun 30**) or any single quarter. Filter a fund's moves by **New**, **Increase**, **Decrease** and
+**Sold out**, or a member's by **Bought** and **Sold**. Each row shows the date, the change in
+dollars with a bar for its size, and the change in shares.
+
+Above the table, with no row picked, a chart shows the portfolio over the same period, with **B**
+and **S** markers on its moves. A quarter's change has no trade day (a fund reports its holdings
+at each quarter-end, not when it traded), so its marker sits on the day it was **disclosed**,
+the first day anyone could act on it. Each quarter marks its biggest purchase and its biggest
+sale. Point at a marker to see what moved and why it sits on that day.
+
+Click a row to see that stock's price with every move the portfolio made in it, and a dashed line
+at its price on the day it was made public. **Trade details ›** lists every quarter and every
+dated trade in that stock. **Copy trade** hands that one trade to Lucius (see below).
+
+### Holdings
+
+A map of what they hold: one tile per sector (or per stock, when sectors are unknown), sized by its
+share of the portfolio. Its colour is what they did with it last quarter: green where they
+added shares, red where they sold, grey where it did not move. Under the map, every sector is
+listed as a chip with its share and its change, so a tile too small for its name is still named.
+Click a tile or a chip to list only its holdings; click it again to list them all.
+
+The table lists every holding with its share of the portfolio, the shares held and its return
+over the past 12 months. Search it by ticker or name. A holding the filing names without a ticker
+we could match is a row of its own with **Set ticker**; on any fund holding, **Wrong ticker?** is
+in the row's menu. A correction is kept with a portfolio you watch, so setting one starts
+watching it.
+
+### Overview
+
+The holdings' total value and the number of stocks, each with its change since the previous
+report when there is one. Then the price return of these holdings against your benchmark, with
+dates along the bottom, over **1M**, **6M**, **12M** or **Since filed**:
+
+- **Since filed** is what copying it on the day it was made public would have returned, before
+  costs and dividends.
+- **1M**, **6M** and **12M** apply today's holdings to the past. They are not the fund's own
+  return, and they flatter a portfolio that recently bought its winners.
+
+Point at the chart to read both figures for a day.
+
+### When it updates
+
+Filings are checked automatically twice a day while the app is running (the first check is a few
+minutes after it starts). A new one updates the portfolio and, if you watch it, adds a story to
+**Intel**. Prices are separate: they are daily prices that update through the day. Use
+**Refresh** in the **⋯** menu to check now. If a check fails, the last portfolio stays and the
+screen says what went wrong.
 
 ## Copy a portfolio
 
 There are two ways.
 
-**Copy one trade now.** Point at a row under **Latest moves** or **Recent trades** and click
-**Copy trade**. Lucius gets that one trade, checks your broker account and what you already
+**Copy one trade now.** In **Trading Activity**, click a row, then **Copy trade**. Lucius gets that one trade, checks your broker account and what you already
 hold, suggests a size, and drafts the order for you to approve.
 
-**Copy the whole portfolio, every week.** Click **Start copy trading**, the main button at the
-top of the card. It opens a ready-made automation; you can also find it in **Automations** as **Copy a
+**Copy the whole portfolio, every week.** Click **Copy with Lucius** at the top of the page
+(on a phone it is in the **⋯** menu). It opens a ready-made automation; you can also find it in **Automations** as **Copy a
 followed portfolio**.
 
 The automation is a set of instructions for Lucius that you edit before saving:

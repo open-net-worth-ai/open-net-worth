@@ -86,7 +86,7 @@ export function partitionByTab(
   watched: Set<string>,
   tickersByList: Map<string, Set<string>>,
 ): Record<IntelTabKey, StoryArc[]> {
-  const out: Record<IntelTabKey, StoryArc[]> = { holdings: [], macro: [], following: [] }
+  const out: Record<IntelTabKey, StoryArc[]> = { holdings: [], macro: [], portfolios: [] }
   for (const id of tickersByList.keys()) out[listTabKey(id)] = []
   for (const s of stories) {
     const scope = storyScope(s, held, watched)

@@ -1,4 +1,4 @@
-import { Sparkles } from '../../../ui/icons'
+import { Spark } from '../../../lucius/identity'
 import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import { COPY, copyTradePrompt } from './following.copy'
 
@@ -26,7 +26,7 @@ export function CopyTradeButton({ who, what, onAskLucius }: Props) {
         onAskLucius(copyTradePrompt(who, what))
       }}
     >
-      <Sparkles size={13} aria-hidden="true" />
+      <Spark size={13} ariaHidden />
       {COPY.copyTrade}
     </button>
   )

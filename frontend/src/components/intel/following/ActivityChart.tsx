@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   AreaSeries,
   LineSeries,
@@ -12,10 +12,13 @@ import {
   type Time,
 } from 'lightweight-charts'
 import { useTheme } from '../../../theme'
-import { formatAxisPrice, hexAlpha, niceTicks, toTime } from '../assetPriceChartLwc'
+import { formatAxisPrice, hexAlpha, niceTicks, tipPlacement, toTime } from '../assetPriceChartLwc'
 
 export const CHART_HEIGHT = 200
 const BARS_HEIGHT = 80
+const LABEL_GAP_PX = 60
+// A label is centred on its arrow: this close to an edge it would be cut off.
+const EDGE_PX = 28
 const compact = (n: number) =>
   new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
 
@@ -39,8 +42,17 @@ interface Props {
   compare?: { date: string; value: number }[]
   /** Show only this span (the line keeps its full history behind it). */
   range?: { from: string; to: string }
+  /** What the hover tooltip says for a day; it floats over the plot, so the layout never moves. */
+  tip?: (date: string) => ReactNode
   label: string
 }
+
+const isoOf = (t: Time) =>
+  typeof t === 'number'
+    ? new Date(t * 1000).toISOString().slice(0, 10)
+    : typeof t === 'string'
+      ? t
+      : `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
 
 /** One neutral mountain with markers on it, on the same chart engine and theme as Intel's
  *  price chart (see TechnicalsMiniChart). */
@@ -52,8 +64,21 @@ export function ActivityChart({
   bars,
   compare,
   range,
+  tip,
   label,
 }: Props) {
+  // The chart is built once per data change; it reads the newest tooltip through this ref.
+  const tipRef = useRef(tip)
+  useEffect(() => {
+    tipRef.current = tip
+  }, [tip])
+  const [hover, setHover] = useState<{
+    date: string
+    x: number
+    y: number
+    w: number
+    h: number
+  } | null>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const { resolved: themeName } = useTheme()
   // The axis is drawn INSIDE the plot, as on Intel's price chart: no gutter pushing it in.
@@ -87,7 +112,12 @@ export function ActivityChart({
       rightPriceScale: { visible: false, borderVisible: false },
       // The line runs to the right edge: the axis labels sit inside the plot, nothing needs room.
       timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true, rightOffset: 0 },
-      crosshair: { mode: CrosshairMode.Magnet },
+      // The tooltip says the day and the figures: the engine's own axis labels would repeat it.
+      crosshair: {
+        mode: CrosshairMode.Magnet,
+        vertLine: { labelVisible: false },
+        horzLine: { visible: false, labelVisible: false },
+      },
       handleScroll: false,
       handleScale: false,
     })
@@ -130,7 +160,24 @@ export function ActivityChart({
         axisLabelVisible: false,
         title: '',
       })
-    createSeriesMarkers(line, markers(colors))
+    const markerSet = createSeriesMarkers(line, [])
+    // Labels that would collide keep their arrow and lose their words (the tooltip still names
+    // every move): measured in pixels on the chart as drawn, so a phone shows fewer.
+    const label = () => {
+      const all = markers(colors)
+      const kept: { x: number; pos: string | undefined }[] = []
+      markerSet.setMarkers(
+        all.map((m) => {
+          const x = chart.timeScale().timeToCoordinate(m.time)
+          if (x == null || !m.text) return m
+          if (x < EDGE_PX || x > el.clientWidth - EDGE_PX) return { ...m, text: '' }
+          if (kept.some((k) => k.pos === m.position && Math.abs(k.x - x) < LABEL_GAP_PX))
+            return { ...m, text: '' }
+          kept.push({ x, pos: m.position })
+          return m
+        }),
+      )
+    }
     if (bars?.length) {
       const hist = chart.addSeries(
         HistogramSeries,
@@ -167,7 +214,9 @@ export function ActivityChart({
       else chart.timeScale().fitContent()
     }
     fit()
+    label()
     const place = () => {
+      label()
       const range = line.priceScale().getVisibleRange()
       if (!range) return
       setTicks(
@@ -181,6 +230,16 @@ export function ActivityChart({
         y == null || !refLine ? null : { y, label: `${refLine.title} ${fmt(refLine.value)}` },
       )
     }
+    chart.subscribeCrosshairMove((p) => {
+      if (!tipRef.current || p.point == null || p.time == null) return setHover(null)
+      setHover({
+        date: isoOf(p.time),
+        x: p.point.x,
+        y: p.point.y,
+        w: el.clientWidth,
+        h: el.clientHeight,
+      })
+    })
     const frame = requestAnimationFrame(place)
     // A box that grows or shrinks re-fits the line to its new width, then re-places the labels.
     const resized = () => {
@@ -213,6 +272,11 @@ export function ActivityChart({
           {t.label}
         </span>
       ))}
+      {hover && tip && (
+        <div className="asd-chart-tip" style={tipPlacement(hover.x, hover.y, hover.w, hover.h)}>
+          {tip(hover.date)}
+        </div>
+      )}
       {refTag && (
         <span className="asd-chart-prevclose-tag" style={{ top: refTag.y }} aria-hidden="true">
           {refTag.label}

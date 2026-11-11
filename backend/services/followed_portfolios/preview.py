@@ -152,19 +152,47 @@ def _downsample(series: list[dict], points: int) -> list[float]:
 _VERB = {"new": "New", "increased": "Added", "reduced": "Trimmed"}
 
 
-def latest_moves(row: dict, model: dict | None, n: int = 2) -> list[dict]:
-    """The biggest moves a card shows: a member's newest trades, else the largest changes."""
-    if row["kind"] == "house_member":
-        trades = [t for t in row.get("activity") or [] if t.get("counted") and t.get("symbol")]
-        return [
+def _dated_moves(trades: list[dict], n: int) -> list[dict]:
+    """Newest first, one per stock and direction: an order filled over several days (and
+    Form 4s) is one move, not several."""
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for t in trades:
+        key = (t["symbol"], t["side"])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
             {
                 "symbol": t["symbol"],
                 "verb": "Bought" if t["side"] == "buy" else "Sold",
                 "detail": t["date"],
                 "up": t["side"] == "buy",
             }
-            for t in trades[:n]
-        ]
+        )
+        if len(out) == n:
+            break
+    return out
+
+
+def latest_moves(row: dict, model: dict | None, n: int = 2) -> list[dict]:
+    """The moves a card shows, newest first: a member's trades; a fund's dated trades made
+    after its latest quarter (its Form 4s), else that quarter's largest changes."""
+    trades = sorted(
+        (
+            t
+            for t in row.get("activity") or []
+            if t.get("counted") and t.get("symbol") and t.get("side") in ("buy", "sell")
+        ),
+        key=lambda t: str(t.get("date")),
+        reverse=True,
+    )
+    if row["kind"] == "house_member":
+        return _dated_moves(trades, n)
+    as_of = str((model or {}).get("as_of") or "")
+    newer = [t for t in trades if str(t.get("date")) > as_of]
+    if newer:
+        return _dated_moves(newer, n)
     changed = [
         h
         for h in (model or {}).get("holdings") or []
@@ -204,7 +232,9 @@ def summary(row: dict) -> dict:
     key = (row["kind"], row["source_ref"])
     today = user_today().isoformat()
     hit = _summaries.get(key)
-    stamp = f"{today}|{(row.get('current') or {}).get('filing_id')}"
+    # A new dated trade (a Form 4) changes the card without a new quarterly filing.
+    newest = max((str(t.get("filed_at")) for t in row.get("activity") or []), default="")
+    stamp = f"{today}|{(row.get('current') or {}).get('filing_id')}|{newest}"
     if hit and hit[1] == stamp and time.monotonic() - hit[0] < _TTL_SECONDS:
         return hit[2]
     out = _summary(row)

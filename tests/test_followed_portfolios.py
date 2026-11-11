@@ -368,6 +368,81 @@ def test_card_moves(source):
     ]
 
 
+def test_a_funds_card_leads_with_its_dated_trades_after_the_quarter(source):
+    """A fund's dated trades (its Form 4s) after its latest quarter are what it did most
+    recently: the card shows them, newest first, one per stock and direction."""
+    from backend.services.followed_portfolios import preview
+
+    model = {
+        "as_of": "2026-06-30",
+        "holdings": [
+            {"symbol": "ACME", "change": "increased", "change_value": 5.0, "shares_change_pct": 0.5}
+        ],
+    }
+    row = {
+        "kind": "fund_13f",
+        "source_ref": "1",
+        "activity": [
+            {"symbol": "BOLT", "counted": True, "side": "buy", "date": "2026-10-30"},
+            {"symbol": "BOLT", "counted": True, "side": "buy", "date": "2026-11-03"},
+            {"symbol": "CRUX", "counted": True, "side": "sell", "date": "2026-10-27"},
+            {"symbol": "OLDR", "counted": True, "side": "sell", "date": "2026-05-01"},
+        ],
+    }
+    assert preview.latest_moves(row, model) == [
+        {"symbol": "BOLT", "verb": "Bought", "detail": "2026-11-03", "up": True},
+        {"symbol": "CRUX", "verb": "Sold", "detail": "2026-10-27", "up": False},
+    ]
+    # Nothing dated after the quarter: the quarter's own changes, as before.
+    row["activity"] = row["activity"][3:]
+    assert [m["symbol"] for m in preview.latest_moves(row, model)] == ["ACME"]
+
+
+def test_a_new_dated_trade_refreshes_a_cached_card(source, monkeypatch):
+    """The card cache is keyed by the day, the quarterly filing AND the newest trade: a new
+    Form 4 with no new quarter must not leave yesterday's moves on the card."""
+    from backend.services.followed_portfolios import preview
+
+    built: list[int] = []
+    monkeypatch.setattr(preview, "_summaries", {})
+    monkeypatch.setattr(preview, "_save_disk", lambda: None)
+    monkeypatch.setattr(
+        preview, "_summary", lambda row: built.append(1) or {"return_12m": 0.1, "moves": []}
+    )
+    row = {
+        "kind": "fund_13f",
+        "source_ref": "1",
+        "current": {"filing_id": "q2"},
+        "activity": [{"filed_at": "2026-10-29"}],
+    }
+    preview.summary(row)
+    preview.summary(row)
+    assert len(built) == 1
+    row["activity"].append({"filed_at": "2026-11-03"})
+    preview.summary(row)
+    assert len(built) == 2
+
+
+def test_a_members_whole_history_starts_the_quarter_before_their_first_trade():
+    """A member has no quarters: ALL starts at the quarter-end before their oldest counted
+    trade, where Trading Activity's whole-range period starts, so the chart covers it."""
+    from backend.services.followed_portfolios import performance
+
+    member = {
+        "activity": [
+            {"date": "2024-05-14", "counted": True},
+            {"date": "2023-01-02", "counted": False},
+            {"date": "2025-01-03", "counted": True},
+        ]
+    }
+    assert performance._history_start(member) == "2024-03-31"
+    assert (
+        performance._history_start({"history": [{"as_of": "2026-06-30"}, {"as_of": "2025-06-30"}]})
+        == "2025-06-30"
+    )
+    assert performance._history_start({"activity": []}) is None
+
+
 def test_preview_route_and_its_demo_lock(client, monkeypatch):
     from backend.api.demo_lockdown import is_demo_locked
 

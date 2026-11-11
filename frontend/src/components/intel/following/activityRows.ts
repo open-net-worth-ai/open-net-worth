@@ -170,8 +170,10 @@ const QUARTER_TOLERANCE = 0.01
 export interface ChartTrade {
   date: string
   up: boolean
-  /** A 13F change is dated by its quarter's end, not the trade day: it is drawn differently. */
+  /** A quarter's net change: the trade day is unknown, so it is dated by the day it was
+   *  disclosed, and ``during`` names the quarter it happened in ("Apr – Jun 2026"). */
   quarter?: boolean
+  during?: string
 }
 
 /** Every move the source shows in one stock, for the chart's markers: each dated trade (a
@@ -187,7 +189,12 @@ export function exactTrades(follow: Follow, symbol: string): ChartTrade[] {
     const now = quarters[i]!.qty[symbol] ?? 0
     const moved = before > 0 ? now / before - 1 : now > 0 ? 1 : 0
     if (Math.abs(moved) > QUARTER_TOLERANCE)
-      out.push({ date: quarters[i]!.as_of, up: moved > 0, quarter: true })
+      out.push({
+        date: quarters[i]!.filed_at,
+        up: moved > 0,
+        quarter: true,
+        during: quarterSpan(quarters[i]!.as_of),
+      })
   }
   return out
 }
@@ -337,9 +344,11 @@ function quarterEnd(day: string): string {
   return `${y}-${String(q).padStart(2, '0')}-${String(last).padStart(2, '0')}`
 }
 
+/** The quarter-end before ``end``: a day in the quarter's first month back, then its end.
+ *  ``Date.UTC`` months count from 0, so the first month of the quarter before is ``m - 4``. */
 const minusQuarter = (end: string) => {
   const [y, m] = end.split('-').map(Number)
-  return quarterEnd(new Date(Date.UTC(y!, (m ?? 3) - 3, 1)).toISOString().slice(0, 10))
+  return quarterEnd(new Date(Date.UTC(y!, (m ?? 3) - 4, 1)).toISOString().slice(0, 10))
 }
 
 /** The spans a reader can pick, newest first. A fund: the days since its last quarter (when it
@@ -515,6 +524,18 @@ function rowsIn(follow: Follow, names: Names, period: Period): ActivityRow[] {
   return changesBetween(follow, names, period)
 }
 
+const FILING_DEADLINE_DAYS = 45
+
+/** The quarter after ``asOf`` when its filing deadline (45 days after it ends) has passed and
+ *  the newest report is still ``asOf``: they did not disclose it (a fund can file only a
+ *  notice that someone else reports for it). The oldest such quarter; null when none. */
+export function missedQuarter(asOf: string, today: Date = new Date()): string | null {
+  const [y, m] = asOf.split('-').map(Number)
+  const next = quarterEnd(new Date(Date.UTC(y!, m ?? 3, 1)).toISOString().slice(0, 10))
+  const due = new Date(`${next}T00:00:00Z`).getTime() + FILING_DEADLINE_DAYS * 86_400_000
+  return today.getTime() > due ? quarterSpan(next) : null
+}
+
 /** Where the charts start: the portfolio's oldest quarter on record, else a year back. */
 export function historyStart(follow: Follow): string {
   const oldest = follow.history?.[follow.history.length - 1]?.as_of
@@ -525,17 +546,22 @@ export function historyStart(follow: Follow): string {
 }
 
 /** Each quarter's largest buy and largest sale by dollars, for the overview chart's markers. */
-export function biggestPerQuarter(
-  follow: Follow,
-): { date: string; top: { symbol: string; up: boolean }[] }[] {
+export function biggestPerQuarter(follow: Follow): {
+  /** The day the quarter was disclosed: when the public, and a copier, first saw it. */
+  date: string
+  during: string
+  top: { symbol: string; up: boolean }[]
+}[] {
   return periods(follow)
     .filter((p) => p.shows === 'changes')
     .map((p) => {
       const rows = changesBetween(follow, {}, p)
       const buy = rows.filter((r) => r.up).sort((a, b) => b.magnitude - a.magnitude)[0]
       const sale = rows.filter((r) => !r.up).sort((a, b) => b.magnitude - a.magnitude)[0]
+      const filed = (follow.history ?? []).find((q) => q.as_of === p.to)?.filed_at ?? p.to
       return {
-        date: p.to,
+        date: filed,
+        during: p.label,
         top: [buy, sale].filter(Boolean).map((r) => ({ symbol: r!.symbol, up: r!.up })),
       }
     })

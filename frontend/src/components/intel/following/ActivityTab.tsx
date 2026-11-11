@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Button, SegmentedControl } from '../../ui'
-import { CalendarDays, ChevronDown, ChevronRight } from '../../../ui/icons'
+import { Button, SegmentedControl, Select } from '../../ui'
+import { ChevronRight } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { FilterSheet } from '../../tabs/investments/FilterSheet'
 import type { Follow, FollowPerformance } from '../../../api/followedPortfolios'
@@ -25,6 +25,10 @@ import { TradeDetails } from './TradeDetails'
 import { PortfolioActivityChart } from './PortfolioActivityChart'
 import { useSinceFiled } from './useFollowing'
 import { spanReturn } from './spanReturn'
+import { useNarrow } from './useNarrow'
+
+// The filter (five options) and the period fit side by side from here.
+const WIDE_TOOLBAR_PX = 640
 
 interface Props {
   follow: Follow
@@ -106,14 +110,25 @@ const nameColumn: Column<ActivityRow> = {
     </span>
   ),
 }
-const amountColumn: Column<ActivityRow> = {
+/** The change, with a bar for its size against the period's largest move. */
+const amountColumn = (max: number): Column<ActivityRow> => ({
   key: 'amount',
   label: COPY.colChange,
   primary: true,
   sortValue: (r) => r.amount ?? r.magnitude * (r.up ? 1 : -1),
   className: (r) => (r.up ? 'up' : 'down'),
-  cell: (r) => r.amountText,
-}
+  cell: (r) => (
+    <span className="fol-chg">
+      <span className="fol-chg-track" aria-hidden="true">
+        <span
+          className="fol-chg-bar"
+          style={{ width: `${max > 0 ? Math.max(2, (r.magnitude / max) * 100) : 0}%` }}
+        />
+      </span>
+      <span className="fol-chg-v">{r.amountText}</span>
+    </span>
+  ),
+})
 const sharesColumn: Column<ActivityRow> = {
   key: 'shares',
   label: COPY.colShares,
@@ -130,9 +145,10 @@ const dateColumn = (label: string): Column<ActivityRow> => ({
 })
 
 /** A dated trade shows when and at what price; a filing's change shows how much moved. */
-function columns(set: FilterSet, member: boolean): Column<ActivityRow>[] {
+function columns(set: FilterSet, member: boolean, max: number): Column<ActivityRow>[] {
+  const amountColumnFor = amountColumn(max)
   if (set === 'changes' || set === 'all')
-    return [nameColumn, dateColumn(COPY.colDate), amountColumn, sharesColumn]
+    return [nameColumn, dateColumn(COPY.colDate), amountColumnFor, sharesColumn]
   if (member)
     return [
       nameColumn,
@@ -145,12 +161,12 @@ function columns(set: FilterSet, member: boolean): Column<ActivityRow>[] {
         wide: true,
         cell: (r) => shortDate(r.filedAt).replace(/, \d{4}$/, ''),
       },
-      amountColumn,
+      amountColumnFor,
     ]
   return [
     nameColumn,
     dateColumn(COPY.colDate),
-    amountColumn,
+    amountColumnFor,
     sharesColumn,
     {
       key: 'price',
@@ -182,6 +198,10 @@ function Table({
 }) {
   const [filter, setFilter] = useState<ActivityFilter>('all')
   const isMobile = useIsMobile()
+  // [period (fills) | Filter sheet] whenever the row is too narrow for the filter and the
+  // period side by side (a tablet, a pane beside Lucius), as on a phone.
+  const [barRef, narrow] = useNarrow<HTMLDivElement>(WIDE_TOOLBAR_PX)
+  const compact = isMobile || narrow
   const options = filtersFor(set, rows)
   const shown = rows.filter((r) => matches(set, r, filter))
   // A filter that shortens the table must not shorten the page: the browser would pull the
@@ -193,10 +213,10 @@ function Table({
   }, [filter, rows.length])
   return (
     <div className="fol-sec">
-      {/* As Investments' Activity does: wide, the filter chips LEFT and the period RIGHT; on a
-          phone the chips fold into the Filter sheet and the row is [period (fills) | Filter]. */}
-      <div className="fol-toolbar">
-        {options.length > 2 && !isMobile && (
+      {/* One row at every width, kit controls at one height. Wide: the filter LEFT, the
+          period RIGHT. Phone (Investments' pattern): [period (fills) | Filter sheet]. */}
+      <div ref={barRef} className="fol-toolbar">
+        {options.length > 2 && !compact && (
           <SegmentedControl
             options={options.map((o) => ({ value: o.value as ActivityFilter, label: o.label }))}
             value={filter}
@@ -205,9 +225,9 @@ function Table({
           />
         )}
         {period}
-        {options.length > 2 && isMobile && (
+        {options.length > 2 && compact && (
           <FilterSheet
-            presentation="sheet"
+            presentation={isMobile ? 'sheet' : 'popover'}
             title={COPY.filterTitle}
             active={filter !== 'all'}
             groups={[
@@ -225,7 +245,7 @@ function Table({
       <div ref={box} style={filter === 'all' ? undefined : { minHeight: fullHeight }}>
         <SortTable
           rows={shown}
-          columns={columns(set, member)}
+          columns={columns(set, member, Math.max(0, ...rows.map((r) => r.magnitude)))}
           rowKey={(r) => r.key}
           label={label}
           onRowClick={onPick}
@@ -288,25 +308,16 @@ export function ActivityTab({ follow, perf, names, onAskLucius }: Props) {
           onPick={pick}
           period={
             spans.length > 1 ? (
-              <span className="intel-sort fol-period">
-                <CalendarDays size={13} className="intel-sort-icon" aria-hidden="true" />
-                <select
-                  className="intel-sort-select"
-                  aria-label={COPY.periodLabel}
-                  value={period.key}
-                  onChange={(e) => {
-                    setPeriodKey(e.target.value)
-                    setPickedKey(null)
-                  }}
-                >
-                  {spans.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={13} className="intel-sort-chev" aria-hidden="true" />
-              </span>
+              <Select
+                className="fol-period"
+                aria-label={COPY.periodLabel}
+                value={period.key}
+                options={spans.map((p) => ({ value: p.key, label: p.label }))}
+                onChange={(e) => {
+                  setPeriodKey(e.target.value)
+                  setPickedKey(null)
+                }}
+              />
             ) : null
           }
         />

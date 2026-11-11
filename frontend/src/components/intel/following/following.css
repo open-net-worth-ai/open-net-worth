@@ -10,9 +10,12 @@
   min-width: 0;
 }
 
-/* The page's own gap spaces the tab bar; its kit margin on top of that doubled it. */
+/* The page's own gap spaces the tab bar; its kit margin on top of that doubled it. It sits
+   right under Intel's own tab bar, so it draws no rule of its own: the active tab's underline
+   is enough. */
 .fol-page > .ui-page-tabs {
   margin-bottom: 0;
+  border-bottom: 0;
 }
 
 .fol-page .up {
@@ -31,50 +34,31 @@
 .fol-discover-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-5);
-  flex-wrap: wrap;
-}
-
-.fol-discover-tools {
-  display: flex;
-  align-items: center;
   gap: var(--space-3);
+  flex-wrap: nowrap;
   min-width: 0;
 }
 
-.fol-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex: 0 1 240px;
-  min-width: 180px;
+/* Side by side at the kit's 40px; the search takes what is left (all of the row on a phone). */
+.fol-discover-bar > .fol-sort {
+  flex: 0 0 auto;
+  width: auto;
 }
-.fol-search svg {
-  position: absolute;
-  left: 10px;
+
+.fol-discover-bar > .fol-find {
+  flex: 0 1 260px;
+  min-width: 0;
+}
+
+.fol-seg-n {
+  margin-left: var(--space-1);
   color: var(--faint);
-  pointer-events: none;
+  font-variant-numeric: tabular-nums;
 }
-.fol-search input {
-  width: 100%;
-  height: 28px;
-  box-sizing: border-box;
-  padding: 0 10px 0 30px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-sm);
-  outline: none;
-  transition: border-color 0.12s ease;
-}
-.fol-search input:focus {
-  border-color: var(--accent);
-}
-.fol-search input::placeholder {
-  color: var(--fg-3);
+
+/* In the compact row the search takes all the room the Filter button leaves. */
+.fol-discover-bar > .fol-find:first-child {
+  flex: 1 1 auto;
 }
 
 .fol-cards {
@@ -226,16 +210,18 @@
   color: var(--ink);
 }
 
-@media (max-width: 640px) {
+/* A phone keeps the name, its one quiet line and the icons; Copy moves into the ⋯ menu. */
+@media (max-width: 639.98px) {
   .fol-head {
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'id icons'
-      'cta cta';
+    grid-template-areas: 'id icons';
     align-items: start;
   }
   .fol-head > .fol-cta {
-    justify-self: start;
+    display: none;
+  }
+  .fol-title {
+    font-size: var(--text-xl);
   }
 }
 
@@ -256,16 +242,6 @@
   color: var(--muted);
 }
 
-.fol-stale {
-  color: var(--warn);
-}
-
-.fol-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
 .fol-sec {
   display: grid;
   /* minmax(0, …): a chart canvas must not hold its track open when the page narrows. */
@@ -274,14 +250,11 @@
   min-width: 0;
 }
 
-/* The move in focus: its figures in one line, the chart under them. */
+/* The move in focus: its figures in one line, the chart under them. No box: the page's own
+   background, as Intel's price chart sits. */
 .fol-spot {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-6) var(--space-7);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-2xl);
-  background: var(--surface);
 }
 
 .fol-spot-head {
@@ -299,7 +272,8 @@
 }
 
 .fol-spot-title b {
-  font-size: var(--text-md);
+  font-size: var(--text-base);
+  font-weight: 600;
   color: var(--ink);
 }
 
@@ -309,6 +283,7 @@
 }
 
 .fol-spot-move {
+  font-size: var(--text-base);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -323,12 +298,6 @@
   min-width: 0;
 }
 
-.fol-num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .fol-foot {
   font-size: var(--text-xs);
   color: var(--faint);
@@ -338,19 +307,16 @@
   margin: 0;
 }
 
-/* ── performance (PerformanceBlock) ── */
+/* ── Overview: the return chart, no box ── */
 .fol-perf {
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-6) var(--space-7);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-2xl);
-  background: var(--surface);
+  min-width: 0;
 }
 
 .fol-perf-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-4);
@@ -377,26 +343,6 @@
 
 .fol-perf-vs b {
   font-weight: 600;
-}
-
-.fol-perf-cap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--faint);
-}
-
-.fol-legend-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.fol-legend-row > .mk-legend {
-  margin-top: 0;
 }
 
 .fol-note {
@@ -427,15 +373,6 @@
     height: 120px;
   }
 
-  .fol-mix {
-    justify-content: center;
-  }
-  .fol-watch-label {
-    display: none;
-  }
-  .fol-spot {
-    padding: var(--space-4);
-  }
   .fol-spot-head {
     flex-wrap: wrap;
     gap: var(--space-2);
@@ -451,7 +388,8 @@
   transition: opacity 0.12s ease;
 }
 
-/* One row: wide, the filter LEFT and the period RIGHT; on a phone [period (fills) | Filter]. */
+/* One row at every width, kit controls at the kit's 40px: wide, the filter LEFT and the
+   period RIGHT; on a phone [period (fills) | Filter]. */
 .fol-toolbar {
   display: flex;
   flex-wrap: nowrap;
@@ -461,22 +399,31 @@
 }
 
 .fol-toolbar > .fol-period {
-  flex: none;
+  flex: 0 0 auto;
+  width: auto;
   margin-left: auto;
 }
 
-.fol-toolbar .ui-segmented {
+.fol-toolbar .ui-segmented,
+.fol-discover-bar .ui-segmented {
   flex-wrap: nowrap;
+  min-height: 40px;
+  box-sizing: border-box;
+  align-items: stretch;
 }
 
-@media (max-width: 640px) {
-  .fol-toolbar > .fol-period {
-    flex: 1 1 auto;
-    margin-left: 0;
-  }
-  .fol-toolbar > .fol-period .intel-sort-select {
-    width: 100%;
-  }
+.fol-toolbar .mk-filter-btn,
+.fol-discover-bar .mk-filter-btn {
+  height: 40px;
+  width: 40px;
+  box-sizing: border-box;
+}
+
+/* In the compact row the period takes all the room the Filter button leaves. */
+.fol-toolbar > .fol-period:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 0;
 }
 
 .fol-tc {
@@ -486,43 +433,7 @@
   font-size: var(--text-xs);
 }
 
-.fol-by--row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
-
 /* The holdings ring with its legend: every colour named, "Others" included. */
-.fol-mix {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-5) var(--space-4);
-}
-
-.fol-legend {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 200px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--text-sm);
-}
-
-.fol-legend li {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.fol-legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-}
 
 /* ── tables: the app's .mk-tbl (Investments), sized to sit inside a page ── */
 .fol-tbl.mk-tbl {
@@ -570,37 +481,12 @@
   flex-shrink: 0;
 }
 
-.fol-h {
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.fol-about {
-  margin: 0;
-  max-width: 72ch;
-  font-size: var(--text-base);
-  color: var(--muted);
-}
-
 /* Holdings, top to bottom (as Moomoo's): the ring with its legend beside it, unboxed; the
    search; the table. */
 .fol-holdings {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
-}
-
-.fol-holdings > .fol-mix {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding: 0;
-}
-
-.fol-holdings .fol-legend {
-  flex: 0 1 360px;
 }
 
 .fol-ticker-form {
@@ -627,12 +513,6 @@
   }
 }
 
-@media (max-width: 640px) {
-  .fol-holdings > .fol-mix {
-    gap: var(--space-5);
-  }
-}
-
 .fol-back {
   display: inline-flex;
   align-items: center;
@@ -642,7 +522,7 @@
   border: 0;
   background: none;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--faint);
   cursor: pointer;
 }
@@ -764,33 +644,11 @@ div.fol-row-main {
   min-width: 0;
 }
 
-/* The period picker sits beside the filter, so it takes the filter's box exactly: the same
-   track (.ui-segmented's background, border, radius) and the same inner height. */
-.fol-toolbar .intel-sort {
-  height: 37px;
-  box-sizing: border-box;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-}
-
-.fol-toolbar .intel-sort-select {
-  height: 100%;
-  border-radius: var(--radius-md);
-}
-
 .fol-empty {
   margin: 0;
   padding: var(--space-5) 0;
   font-size: var(--text-sm);
   color: var(--muted);
-}
-
-/* The search runs the table's full width. */
-.fol-holdings .fol-search {
-  flex: none;
-  width: 100%;
-  max-width: none;
 }
 
 /* A row's menu shows on the row being pointed at (always on a touch screen). */
@@ -802,5 +660,346 @@ div.fol-row-main {
   .fol-tbl.mk-tbl tr:hover .fol-row-menu,
   .fol-tbl.mk-tbl tr:focus-within .fol-row-menu {
     opacity: 1;
+  }
+}
+
+/* A move's size: a thin bar against the period's largest, its figure beside it. */
+.fol-chg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.fol-chg-track {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 72px;
+  height: 4px;
+}
+
+.fol-chg-bar {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.fol-chg-v {
+  min-width: 64px;
+  text-align: right;
+}
+
+.fol-rows .fol-chg-track {
+  display: none;
+}
+
+/* A move inside a chart tooltip: what, then why that day. */
+.fol-tip-move {
+  display: grid;
+  margin-top: var(--space-1);
+  white-space: nowrap;
+}
+
+.fol-tip-move .up {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.fol-tip-move .down {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.fol-tip-why {
+  font-size: var(--text-2xs);
+  color: var(--faint);
+}
+
+.fol-htools {
+  display: flex;
+}
+
+.fol-htools > .ui-input {
+  flex: 0 1 280px;
+  min-width: 0;
+}
+
+@media (max-width: 639.98px) {
+  .fol-htools > .ui-input {
+    flex: 1 1 auto;
+  }
+}
+
+/* Overview: two plain figures, each change as a kit Badge beside it. */
+
+.fol-figs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5) var(--space-8);
+}
+
+.fol-fig {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.fol-fig-l {
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+
+.fol-fig-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fol-fig-v {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* The headline doubles as the legend: a short line in each series' own colour and stroke. */
+.fol-key {
+  display: inline-block;
+  width: 14px;
+  align-self: center;
+}
+
+.fol-key--main {
+  border-top: 2px solid var(--accent);
+}
+
+.fol-key--bench {
+  margin-left: var(--space-2);
+  border-top: 1px dashed var(--faint);
+}
+
+/* Under the name: who it is, then the facts every tab rests on as chips. */
+.fol-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.fol-facts > .fol-by {
+  margin: 0;
+}
+
+.fol-facts .ui-tag {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border: 1px solid var(--line);
+}
+
+.fol-facts .ui-badge {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-pill);
+}
+
+/* Holdings map: two rows of tiles, each sized by its share (the Overview holdings map's
+   flexbox treemap), the label dropped from a tile too small to carry it. */
+.fol-map {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  height: 200px;
+}
+
+.fol-map-row {
+  display: flex;
+  gap: 3px;
+  flex-basis: 0;
+  min-height: 0;
+}
+
+.fol-map-tile {
+  all: unset;
+  box-sizing: border-box;
+  flex-basis: 0;
+  min-width: 0;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: center;
+  transition: opacity 0.12s ease;
+}
+
+.fol-map-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.fol-map-tile.is-on {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.fol-map-tile.is-dim {
+  opacity: 0.45;
+}
+
+.fol-map-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.fol-map-fig {
+  display: flex;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  opacity: 0.85;
+}
+
+@container (max-width: 96px) or (max-height: 40px) {
+  .fol-map-fig {
+    display: none;
+  }
+}
+
+@container (max-width: 34px) or (max-height: 20px) {
+  .fol-map-name {
+    display: none;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .fol-map {
+    height: 168px;
+  }
+  .fol-map-name {
+    font-size: var(--text-sm);
+  }
+}
+
+/* Kit controls side by side share the kit's 40px (Select and TextField came out at 38/36 in
+   these rows). */
+.fol-discover-bar > .ui-select,
+.fol-discover-bar > .ui-input,
+.fol-toolbar > .ui-select,
+.fol-htools > .ui-input {
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.fol-discover-bar .ui-segmented__seg,
+.fol-toolbar .ui-segmented__seg {
+  white-space: nowrap;
+}
+
+/* The header's actions share one height. */
+.fol-cta > .ui-btn,
+.fol-icons .fol-watch,
+.fol-icons .kebab-trigger {
+  height: 32px;
+  box-sizing: border-box;
+}
+
+.fol-icons .fol-watch,
+.fol-icons .kebab-trigger {
+  width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* On a phone the return heads its own line and the periods fill the next, one row. */
+@media (max-width: 639.98px) {
+  .fol-perf-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .fol-perf-top > .ui-segmented {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+  .fol-perf-top > .ui-segmented > .ui-segmented__seg {
+    flex: 1 1 0;
+    padding-inline: var(--space-2);
+    white-space: nowrap;
+  }
+}
+
+/* The map, then every tile again as a chip with its words. */
+.fol-mapbox {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.fol-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.fol-key-chip {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 28px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fol-key-chip > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.fol-key-name {
+  color: var(--ink);
+}
+
+.fol-key-chip.is-on {
+  border-color: var(--line-strong);
+  background: var(--selected);
+}
+
+.fol-key-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .fol-key-chip:hover {
+    border-color: var(--line-strong);
   }
 }

@@ -50,8 +50,14 @@ export function PortfolioCard({ entry, onOpen }: Props) {
                 </div>
               ))}
             </div>
+            {/* The day of the newest move shown when it is a dated trade (its trade day, not the
+                day it was filed), else the day the report was disclosed. */}
             {s.filed_at && (
-              <div className="fol-card-updated">{COPY.updated(s.kind, shortDate(s.filed_at))}</div>
+              <div className="fol-card-updated">
+                {s.kind !== 'house_member' && typeof s.moves[0]?.detail === 'string'
+                  ? COPY.latestTrade(shortDate(s.moves[0].detail))
+                  : COPY.updated(s.kind, shortDate(s.filed_at))}
+              </div>
             )}
           </>
         ) : card.error ? (
