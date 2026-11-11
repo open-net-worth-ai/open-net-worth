@@ -159,7 +159,7 @@ describe('the hero leads with performance and the copy action', () => {
     setup([fund()], { performance: performance({ periods: {} }) })
     const hero = await screen.findByRole('region', { name: 'Acme Capital' })
     expect(await within(hero).findByText(COPY.perfUnavailable)).toBeTruthy()
-    expect(within(region(COPY.holdingsTitle)).getByText('Acme Corp')).toBeTruthy()
+    expect(within(region(COPY.holdingsTitle)).getByText(/Acme Corp/)).toBeTruthy()
   })
 
   it('offers a retry when performance cannot be loaded', async () => {
