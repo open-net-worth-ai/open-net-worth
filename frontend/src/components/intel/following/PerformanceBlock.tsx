@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ErrorState, Skeleton, StatInfo } from '../../ui'
 import { PerfChart } from '../../tabs/investments/PerformanceTab'
 import type { Follow, PerfPeriod } from '../../../api/followedPortfolios'
@@ -17,6 +17,8 @@ interface Props {
   follow: Follow
   period: PerfPeriod
   onPeriod: (p: PerfPeriod) => void
+  /** Sits at the right of the legend row (the source link and the last check). */
+  foot?: ReactNode
 }
 
 interface HeadlineProps {
@@ -43,7 +45,7 @@ function Headline({ value, bench, benchmark }: HeadlineProps) {
 }
 
 /** The reason to copy a portfolio, or not: how its current holdings have done. */
-export function PerformanceBlock({ follow, period, onPeriod }: Props) {
+export function PerformanceBlock({ follow, period, onPeriod, foot }: Props) {
   const perf = usePerformance(follow.id)
   const [at, setAt] = useState<number | null>(null)
   const win = perf.data?.periods[period]
@@ -109,19 +111,25 @@ export function PerformanceBlock({ follow, period, onPeriod }: Props) {
             exactDates
             onHover={setAt}
           />
-          <div className="mk-legend">
-            <span>
-              <i style={{ background: 'var(--good)' }} />
-              {COPY.perfLine}
-            </span>
-            <span>
-              <i style={{ background: 'var(--muted)' }} />
-              {benchmark}
-            </span>
+          <div className="fol-legend-row">
+            <div className="mk-legend">
+              <span>
+                <i style={{ background: 'var(--good)' }} />
+                {COPY.perfLine}
+              </span>
+              <span>
+                <i style={{ background: 'var(--muted)' }} />
+                {benchmark}
+              </span>
+            </div>
+            {foot}
           </div>
         </>
       ) : (
-        <p className="fol-foot">{COPY.perfUnavailable}</p>
+        <>
+          <p className="fol-foot">{COPY.perfUnavailable}</p>
+          {foot}
+        </>
       )}
     </div>
   )

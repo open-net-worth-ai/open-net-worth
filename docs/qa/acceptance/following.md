@@ -37,8 +37,8 @@ automation template. Every control on the screen has an entry.
 
 ### FOLLOWING-SOURCE
 - GIVEN a portfolio is open
-- WHEN I read the line under the name
-- THEN "View filing at the SEC" (a fund) or "View report at the House Clerk" (a member) opens the source document in a new tab, and "Checked {time} ago" says when the app last looked, and the info button beside it gives the full time, says filings are checked automatically twice a day and on Refresh, and that chart prices update separately; each of a member's trades links its "filed" date to that report
+- WHEN I read the line under the name and the foot of the card
+- THEN the line says how old the positions are, and under the chart "SEC filing" (a fund) or "House Clerk report" (a member) opens the source document in a new tab, and "Checked {time} ago" says when the app last looked, and the info button beside it gives the full time, says filings are checked automatically twice a day and on Refresh, and that chart prices update separately; each of a member's trades links its "filed" date to that report
 
 ### FOLLOWING-PERFORMANCE
 - GIVEN a portfolio is open
@@ -78,7 +78,7 @@ automation template. Every control on the screen has an entry.
 ### FOLLOWING-MOVES
 - GIVEN a fund whose latest filing changed
 - WHEN I read "Latest moves"
-- THEN each changed stock has a bar to the right for a purchase or to the left for a sale, sized by approximate value, with the dollar figure and the share change; the period is in the heading; hovering a row gives the share counts before and after and says the filing has no trade dates or prices; "Show all N moves" lists the rest
+- THEN each changed stock reads "Added", "Trimmed", "New position" or "Sold out" with its ticker, the approximate dollar value and the share change, biggest first; the period is in the heading; hovering a row gives the share counts before and after and says the filing has no trade dates or prices; "Show all N moves" lists the rest
 
 ### FOLLOWING-HOLDINGS
 - GIVEN a portfolio is open
@@ -132,5 +132,10 @@ automation template. Every control on the screen has an entry.
 
 ### FOLLOWING-DIALOG-CLOSE
 - GIVEN the dialog is open
-- WHEN I press Escape or click Close
-- THEN it closes
+- WHEN I press Escape or click the close button in its header
+- THEN it closes; there is no second Close button at the bottom
+
+### FOLLOWING-NARROW
+- GIVEN the Intel pane is narrow (a phone, or the chat open beside it)
+- WHEN I open a portfolio
+- THEN Ask Lucius and Start copy trading sit on their own row under the name and the menu stays on screen, the window buttons go under the headline, and nothing overflows sideways

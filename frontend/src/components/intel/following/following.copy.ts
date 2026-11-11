@@ -53,8 +53,10 @@ export const COPY = {
   notCounted: 'Option or other asset, not counted in the weights',
   showAllTrades: (n: number) => `Show all ${n} trades`,
   refreshing: 'Checking for a newer filing…',
-  viewFiling: 'View filing at the SEC',
-  viewReport: 'View report at the House Clerk',
+  viewFiling: 'SEC filing',
+  viewReport: 'House Clerk report',
+  positionsAsOf: (day: string, age: string) => `Positions as of ${day}${age ? `, ${age}` : ''}`,
+  lastReport: (day: string, age: string) => `Last report ${day}, ${age}`,
   checked: (ago: string) => `Checked ${ago}`,
   checkedInfo: (when: string) =>
     `Last checked for a newer filing on ${when}. The app checks automatically twice a day while it is running, and whenever you choose Refresh in the menu. A new filing also appears as a story in Intel. The chart uses daily prices, which update separately through the day.`,

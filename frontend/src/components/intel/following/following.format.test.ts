@@ -123,7 +123,7 @@ describe('exitedDetail', () => {
 
 describe('holdingsAge', () => {
   it('counts days from the quarter-end the positions date from', () => {
-    expect(holdingsAge('2026-06-30', new Date('2026-11-11T12:00:00'))).toBe(' (134 days old)')
+    expect(holdingsAge('2026-06-30', new Date('2026-11-11T12:00:00'))).toBe('134 days old')
     expect(holdingsAge('2026-11-11', new Date('2026-11-11T12:00:00'))).toBe('')
     expect(holdingsAge('nonsense')).toBe('')
   })

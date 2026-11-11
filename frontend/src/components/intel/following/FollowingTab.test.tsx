@@ -112,14 +112,14 @@ describe('the hero leads with performance and the copy action', () => {
     expect(within(hero).getByText(/\+5\.5 pts ahead/)).toBeTruthy()
     expect(within(hero).getByText(new RegExp(COPY.perfCaption['12M']))).toBeTruthy()
     expect(
-      within(hero).getByText(new RegExp(`Filed ${shortDate('2026-08-14')}, 88 days ago`)),
+      within(hero).getByText(new RegExp(`Ada Acme · Positions as of ${shortDate('2026-06-30')}`)),
     ).toBeTruthy()
   })
 
   it('says how old the positions themselves are, not only the filing', async () => {
     setup([fund()])
     const hero = await screen.findByRole('region', { name: 'Acme Capital' })
-    expect(within(hero).getByText(/Holdings as of .*2026 \(\d+ days old\)/)).toBeTruthy()
+    expect(within(hero).getByText(/Positions as of .*2026, \d+ days old/)).toBeTruthy()
   })
 
   it('links to the filing at its source and says when it was last checked', async () => {
@@ -247,10 +247,12 @@ describe('what a fund did and what it holds', () => {
     ).toBeTruthy()
     const rows = within(moves).getAllByRole('listitem')
     expect(rows.map((r) => r.textContent)).toEqual([
-      expect.stringContaining('Sold out · −$96M'),
-      expect.stringContaining('−$15M'),
-      expect.stringContaining('+$2M'),
+      expect.stringContaining('Sold out OXYZ'),
+      expect.stringContaining('Trimmed ACME'),
+      expect.stringContaining('Added BOLT'),
     ])
+    expect(rows[0]!.textContent).toContain('−$96M')
+    expect(rows[1]!.textContent).toContain('−$15M')
     expect(rows[1]!.textContent).toContain('−500K shares (-33.33%)')
     expect(rows[1]!.getAttribute('title')).toContain('no trade dates or trade prices')
     expect(within(moves).getByText(COPY.changeBasis)).toBeTruthy()
@@ -409,9 +411,11 @@ describe('follow dialog', () => {
     expect(await screen.findByRole('heading', { name: 'Borealis Partners' })).toBeTruthy()
   })
 
-  it('closes from the footer button', async () => {
+  it('closes from its header, with no second Close button below', async () => {
     const dialog = await openDialog()
-    fireEvent.click(within(dialog).getAllByRole('button', { name: COPY.close }).at(-1)!)
+    const closers = within(dialog).getAllByRole('button', { name: /close/i })
+    expect(closers).toHaveLength(1)
+    fireEvent.click(closers[0]!)
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 })

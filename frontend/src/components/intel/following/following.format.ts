@@ -97,6 +97,8 @@ export const toneOf = (n: number | null | undefined): 'up' | 'down' | 'flat' =>
 export interface MoveRow {
   symbol: string
   name: string
+  /** What the fund did, in a word: "Added", "Trimmed", "New position", "Sold out". */
+  verb: string
   /** Approximate dollars, signed: a buy is positive, a sale negative. */
   value: number
   label: string
@@ -114,8 +116,9 @@ export function moveRows(model: FollowModel): MoveRow[] {
     rows.push({
       symbol: h.symbol,
       name: h.name,
+      verb: h.change === 'new' ? 'New position' : h.change === 'increased' ? 'Added' : 'Trimmed',
       value: h.change_value ?? 0,
-      label: `${h.change === 'new' ? 'New · ' : ''}${sign}${usd(h.change_value ?? 0)}`,
+      label: `${sign}${usd(h.change_value ?? 0)}`,
       detail: `${sign}${fCompact(Math.abs(h.shares_change))} shares${
         h.shares_change_pct == null
           ? ''
@@ -129,8 +132,9 @@ export function moveRows(model: FollowModel): MoveRow[] {
     rows.push({
       symbol: x.symbol,
       name: x.name,
+      verb: 'Sold out',
       value: -(x.prev_value ?? 0),
-      label: `Sold out · −${usd(x.prev_value ?? 0)}`,
+      label: `−${usd(x.prev_value ?? 0)}`,
       detail: `all ${fCompact(x.prev_shares)} shares`,
       title: 'Held in the previous filing, gone from this one.',
     })
@@ -138,12 +142,12 @@ export function moveRows(model: FollowModel): MoveRow[] {
   return rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
 }
 
-/** " (134 days old)": a 13F's positions date from the quarter-end, well before it was filed. */
+/** "134 days old": a 13F's positions date from the quarter-end, well before it was filed. */
 export function holdingsAge(asOf: string, now: Date = new Date()): string {
   const then = new Date(`${asOf}T00:00:00`)
   if (Number.isNaN(then.getTime())) return ''
   const days = Math.floor((now.getTime() - then.getTime()) / 86_400_000)
-  return days > 0 ? ` (${days} days old)` : ''
+  return days > 0 ? `${days} days old` : ''
 }
 
 /** " · 280M shares" for a fund holding; nothing for a member, who reports no share counts. */

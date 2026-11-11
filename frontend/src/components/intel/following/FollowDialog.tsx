@@ -1,17 +1,8 @@
 import { useState } from 'react'
-import {
-  Stack,
-  Badge,
-  Button,
-  ErrorState,
-  FormField,
-  Loading,
-  Modal,
-  Text,
-  TextField,
-} from '../../ui'
+import { Stack, Button, ErrorState, Loading, Modal, Text, TextField } from '../../ui'
 import { followPortfolio, type DirectoryEntry, type Follow } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
+import { Monogram } from './Monogram'
 import { useDirectory } from './useFollowing'
 
 interface Props {
@@ -34,12 +25,13 @@ function ResultRow({ entry, busy, locked, failure, onFollow }: RowProps) {
   return (
     <li className="fol-result" aria-busy={busy || undefined}>
       <div className="fol-result-line">
+        <Monogram name={entry.name} />
         <div className="fol-id">
           <div className="fol-sym">{entry.name}</div>
           <div className="fol-sub">{entry.subtitle}</div>
         </div>
         {entry.followed ? (
-          <Badge tone="muted">{COPY.following}</Badge>
+          <span className="fol-sub fol-followed">{COPY.following}</span>
         ) : (
           <Button size="sm" loading={busy} disabled={locked && !busy} onClick={onFollow}>
             {busy ? COPY.followBusy : failure ? COPY.tryAgain : COPY.followAction}
@@ -83,28 +75,19 @@ export function FollowDialog({ onClose, onFollowed }: Props) {
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={COPY.follow}
-      size="md"
-      footer={<Button onClick={onClose}>{COPY.close}</Button>}
-    >
-      <Stack gap="--space-4">
-        <Text tone="muted">{COPY.dialogIntro}</Text>
-        <FormField label={COPY.searchLabel} htmlFor="fol-search">
-          <TextField
-            id="fol-search"
-            type="search"
-            autoFocus
-            placeholder={COPY.searchPlaceholder}
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-          />
-        </FormField>
-        <Text weight={600} as="div">
+    <Modal open onClose={onClose} title={COPY.follow} subtitle={COPY.dialogIntro} size="md">
+      <Stack gap="--space-5">
+        <TextField
+          type="search"
+          autoFocus
+          aria-label={COPY.searchLabel}
+          placeholder={COPY.gallerySearch}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        <div className="fol-head-label">
           {searching ? COPY.results(directory.q) : COPY.featured}
-        </Text>
+        </div>
         {directory.initialLoading && <Loading label={COPY.searching} />}
         {!results && directory.error != null && (
           <ErrorState

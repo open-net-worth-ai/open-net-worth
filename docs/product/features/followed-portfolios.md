@@ -54,18 +54,19 @@ shows:
     costs and dividends.
   - **1M**, **6M** and **12M** apply today's holdings to the past. They are not the fund's own return,
     and they flatter a portfolio that recently bought its winners.
-- **Latest moves** (a fund). One bar per stock it bought or sold between its last two filings,
-  with the approximate dollar value and the share change. A 13F gives share counts at two
+- **Latest moves** (a fund). Each stock it added, trimmed, started or sold out of between its
+  last two filings, with the approximate dollar value and the share change. A 13F gives share counts at two
   quarter-ends and nothing else: no trade dates and no trade prices, so the dollar figures use
   the quarter-end price.
 - **Recent trades** (a House member). Each disclosed trade with its date, the dollar range
   reported, and how the stock has moved since. Members do not report share counts or prices.
 - **Holdings.** The top 20 by weight, each with its own return over the window you chose.
 
-The line under the name says how old the data is: for a fund, when it was filed and how many
-days old the positions themselves are (they date from the quarter-end, up to 45 days before
-the filing). **View filing at the SEC** (or **View report at the House Clerk**) opens the
-source document, and **Checked …** says when the app last looked for a newer one. Each of a
+The line under the name says how old the data is: for a fund, the date its positions are from
+and how many days ago that was (they date from the quarter-end, up to 45 days before the
+filing); for a member, their last report. Under the chart, **SEC filing** (or **House Clerk
+report**) opens the source document, and **Checked …** says when the app last looked for a
+newer one. Each of a
 member's trades links to the report it came from.
 
 Filings are checked automatically twice a day while the app is running (the first check is a

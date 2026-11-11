@@ -29,39 +29,38 @@ interface Props {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-/** Under the name: who it is, how old the filing is, where to read it, when we last looked.
- *  Never a claim that the data is current. */
+/** Under the name: who it is, and how old the positions are. Nothing else competes with it. */
 function MetaLine({ follow }: { follow: Follow }) {
   const model = follow.model
   if (!model) return <>{follow.subtitle}</>
-  const member = follow.kind === 'house_member'
-  const filed = `${member ? 'Last report' : 'Filed'} ${shortDate(model.filed_at)}, ${ageText(model.age_days)}`
+  const asOf =
+    follow.kind === 'house_member'
+      ? COPY.lastReport(shortDate(model.filed_at), ageText(model.age_days))
+      : COPY.positionsAsOf(shortDate(model.as_of), holdingsAge(model.as_of))
   return (
     <>
-      {follow.subtitle} · {filed}
-      {!member && ` · Holdings as of ${shortDate(model.as_of)}${holdingsAge(model.as_of)}`}
+      {follow.subtitle} · {asOf}
+    </>
+  )
+}
+
+/** The card's foot, beside the chart legend: where the data comes from and when we last looked. */
+function SourceLine({ follow }: { follow: Follow }) {
+  return (
+    <div className="fol-source">
       {follow.source_url && (
-        <>
-          {' · '}
-          <a
-            className="fol-link"
-            href={follow.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {member ? COPY.viewReport : COPY.viewFiling}
-            <ExternalLink size={11} aria-hidden="true" />
-          </a>
-        </>
+        <a className="fol-link" href={follow.source_url} target="_blank" rel="noopener noreferrer">
+          {follow.kind === 'house_member' ? COPY.viewReport : COPY.viewFiling}
+          <ExternalLink size={11} aria-hidden="true" />
+        </a>
       )}
       {follow.last_checked_at && (
-        <>
-          {' · '}
+        <span>
           {COPY.checked(timeAgo(follow.last_checked_at))}
           <StatInfo text={COPY.checkedInfo(fDateTime(follow.last_checked_at))} />
-        </>
+        </span>
       )}
-    </>
+    </div>
   )
 }
 
@@ -167,19 +166,29 @@ export function FollowView({ follow, onChanged, onUnfollowed, onAskLucius }: Pro
               {refreshing ? COPY.refreshing : <MetaLine follow={follow} />}
             </div>
           </div>
-          <div className="fol-actions">
-            {hasModel && <HeroActions follow={follow} onAskLucius={onAskLucius} />}
-            <ActionMenu
-              label={COPY.moreActions(follow.name)}
-              title={follow.name}
-              items={[
-                { label: COPY.refresh, onSelect: () => void refresh(), disabled: refreshing },
-                { label: COPY.unfollow, onSelect: () => setConfirming(true), tone: 'danger' },
-              ]}
-            />
-          </div>
+          {hasModel && (
+            <div className="fol-actions">
+              <HeroActions follow={follow} onAskLucius={onAskLucius} />
+            </div>
+          )}
+          <ActionMenu
+            className="fol-menu"
+            label={COPY.moreActions(follow.name)}
+            title={follow.name}
+            items={[
+              { label: COPY.refresh, onSelect: () => void refresh(), disabled: refreshing },
+              { label: COPY.unfollow, onSelect: () => setConfirming(true), tone: 'danger' },
+            ]}
+          />
         </div>
-        {hasModel && <PerformanceBlock follow={follow} period={period} onPeriod={setPeriod} />}
+        {hasModel && (
+          <PerformanceBlock
+            follow={follow}
+            period={period}
+            onPeriod={setPeriod}
+            foot={<SourceLine follow={follow} />}
+          />
+        )}
       </section>
       <Notes follow={follow} error={actionError} />
       {!hasModel &&
