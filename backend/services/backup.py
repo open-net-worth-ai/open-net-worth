@@ -33,6 +33,7 @@ Never raises into the scheduler — a failed backup logs and returns an error di
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -44,6 +45,7 @@ from sqlalchemy import Table, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import insert as sa_insert
 
+from backend.core import platform_fs
 from backend.core.errors import DataIntegrityError
 from backend.core.io import _atomic_write_bytes
 from backend.core.paths import BACKUPS_DIR, DATA_DIR, DB_FILE, SESSIONS_DIR
@@ -221,6 +223,16 @@ def _zip_live_db(zf: zipfile.ZipFile) -> tuple[set[Path], int]:
     return skip, 1
 
 
+def _restrict_backups_to_owner() -> None:
+    """A scheduled backup is the whole ``onw.db`` WITH its secret tables (only a download is
+    sanitised), so its folder is owner-only whatever the process umask made it, which also
+    covers every zip already in it. Best-effort: a share that refuses chmod keeps its mode."""
+    try:
+        platform_fs.restrict_to_owner(BACKUPS_DIR)
+    except OSError as exc:
+        logger.warning("backup: could not make %s owner-only: %s", BACKUPS_DIR, type(exc).__name__)
+
+
 def run_backup(*, now: datetime | None = None, force: bool = False, trigger: str = "auto") -> dict:
     """Zip the entire ``DATA_DIR`` into a new timestamped ``.zip`` under ``BACKUPS_DIR``,
     then prune backups older than the configured retention window.
@@ -241,6 +253,7 @@ def run_backup(*, now: datetime | None = None, force: bool = False, trigger: str
         return {"ok": False, "error": f"backup {ts} already exists"}
 
     BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+    _restrict_backups_to_owner()
     swept = _sweep_stale_temp(now=now)
 
     # Written to `<name>.zip.partial` and renamed into place only once complete — a crash or
@@ -256,6 +269,7 @@ def run_backup(*, now: datetime | None = None, force: bool = False, trigger: str
                     continue
                 zf.write(path, arcname=str(path.relative_to(DATA_DIR)))
                 file_count += 1
+        os.chmod(partial, 0o600)
         partial.replace(dest)  # atomic rename — same filesystem, both under BACKUPS_DIR
         size_bytes = dest.stat().st_size
     except Exception as exc:
