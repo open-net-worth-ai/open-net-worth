@@ -28,7 +28,7 @@ const status = (over: Record<string, unknown> = {}) => ({
   has_session: false,
   last_synced_at: null,
   last_status: 'never_run',
-  last_error: null,
+  last_error: null as string | null,
   ...over,
 })
 
