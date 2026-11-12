@@ -62,6 +62,7 @@ _VALUES = {
     "budget_currency": "USD",
     "cash": 10.5,
     "buying_power": 20.5,
+    "proxy_headers": "X-Acme-Proxy: secret-proxy_headers",
 }
 
 

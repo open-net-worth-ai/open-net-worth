@@ -7,7 +7,7 @@ import { emitDataChanged } from '../../../lucius/bus'
 import { Button, ConfirmDialog, Text } from '../../ui'
 import { fDate } from '../../../utils/format'
 import { ENDED, type GoCardlessBank } from './gocardlessBank'
-import { openBankPageTab } from './bankPage'
+import { bankReturnUrl, openBankPageTab } from './bankPage'
 
 function bankLine(b: GoCardlessBank): { text: string; warn: boolean } {
   if (b.status === 'LN') {
@@ -43,7 +43,7 @@ export function GoCardlessBanks({
   async function post(bank: GoCardlessBank, action: 'relink' | 'remove') {
     const tab = action === 'relink' ? openBankPageTab() : null
     let opened = false
-    setBusy(bank.key)
+    setBusy(`${action}:${bank.key}`)
     setError(null)
     const key = encodeURIComponent(bank.key)
     const url =
@@ -54,8 +54,7 @@ export function GoCardlessBanks({
       const r = await authFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:
-          action === 'relink' ? JSON.stringify({ redirect: window.location.origin }) : undefined,
+        body: action === 'relink' ? JSON.stringify({ redirect: bankReturnUrl() }) : undefined,
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) {
@@ -104,7 +103,7 @@ export function GoCardlessBanks({
                 <Button
                   size="sm"
                   variant={ended ? 'primary' : 'secondary'}
-                  loading={busy === b.key}
+                  loading={busy === `relink:${b.key}`}
                   disabled={busy !== null}
                   aria-label={`${b.status === 'LN' ? 'Renew access to' : 'Link again'} ${name(b)}`}
                   onClick={() => void post(b, 'relink')}
@@ -116,6 +115,7 @@ export function GoCardlessBanks({
                 size="sm"
                 variant="ghost"
                 className="plaid-bank-remove"
+                loading={busy === `remove:${b.key}`}
                 disabled={busy !== null}
                 aria-label={`Remove ${name(b)}`}
                 onClick={() => setRemoving(b)}

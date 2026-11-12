@@ -60,10 +60,11 @@
 }
 .a3-awake {
   container-type: inline-size;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 8px;
   padding: 11px 15px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -76,27 +77,34 @@
   flex: none;
   color: var(--muted);
 }
+.a3-awake-text {
+  min-width: 0;
+}
+/* The label and its switch are ONE unit: wrapping them separately stranded the switch alone on a
+   second line under the label (owner, 2026-11-12). */
+.a3-awake-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
 .a3-awake-label {
-  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--muted);
   font-weight: 600;
 }
-.a3-awake-text {
-  flex: 1 1 220px;
-  min-width: 0;
-}
 .a3-awake-switch {
   flex: none;
 }
-/* Too narrow for one line: the label and switch wrap together under the sentence, starting where
-   its text starts (past the icon + gap), not squeezed beside it as a five-line column (owner,
-   2026-11-09). On one line the text's flex-grow already pushes them to the right. */
+/* Too narrow for one row: the control unit drops under the sentence, starting where its text
+   starts (past the icon), never squeezed beside it as a column (owner, 2026-11-09). */
 @container (max-width: 440px) {
-  .a3-awake-label {
-    margin-left: 25px;
+  .a3-awake-ctl {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    justify-self: start;
   }
 }
 .a3-toolbar > .grow,

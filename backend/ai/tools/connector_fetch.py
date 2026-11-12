@@ -51,8 +51,9 @@ class FetchTransactionsInput(ToolInput):
         default=None,
         json_schema_extra=explicit_null("string"),
         description=(
-            "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback "
-            "window (wide enough to see a late-posted row or a bank-side correction)."
+            "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the "
+            "newest row already booked from it — so a pause is caught up (up to 90 days) and a "
+            "late-posted row or bank-side correction is still seen."
         ),
     )
     before: Optional[str] = Field(
@@ -111,11 +112,14 @@ def _register_fetch_tool(
     already knows how to route to that provider's own wire protocol."""
     provider = PROVIDERS[provider_key]
     description = (
-        f"Fetch {provider.label} transactions for a date window (default: the provider's own "
-        f"{provider.lookback_days}-day lookback). Returns the window, the linked provider "
+        f"Fetch {provider.label} transactions for a date window (default: from "
+        f"{provider.lookback_days} days before the newest row already booked from it, so a "
+        "pause is caught up). Returns the window, the linked provider "
         "accounts (with linked_account_id — the app account each is tied to, or null if "
         "unlinked), the transaction drafts themselves (external_refs/date/amount/currency/"
-        "description/pending — amount is signed, positive = money in; category_hint, if any, "
+        "description/pending — amount is signed, positive = money in; payee, if any, is the "
+        "counterparty's own name: pass it as add_transactions' payee and keep the description "
+        "as given; category_hint, if any, "
         "is the BANK's category: use it only to pick one of the user's existing categories, "
         "never to make one), and any modified/"
         "vanished changes detected since the last fetch. Rows are draft-shaped: pass "

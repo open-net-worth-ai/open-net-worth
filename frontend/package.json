@@ -26,6 +26,7 @@
     "acceptance-qa": "node qa/run.mjs",
     "e2e:mobile-search": "node qa/mobile-search-e2e.mjs",
     "e2e:crypto-market-data": "node qa/crypto-market-data-failover.mjs",
+    "e2e:gocardless-bank-link": "node qa/gocardless-bank-link.mjs",
     "test": "vitest run"
   },
   "dependencies": {

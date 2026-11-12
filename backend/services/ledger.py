@@ -2205,6 +2205,25 @@ def known_external_refs(source: str) -> dict[tuple[str | None, str], str]:
     return out
 
 
+def newest_booked_date(source: str) -> date | None:
+    """The date of the newest LIVE transaction carrying a ``source`` ref (a merged-away row
+    counts through its canonical one, as in ``known_external_refs``) — where the ledger's
+    record of that connector stops."""
+    newest: date | None = None
+    for t in transactions.all():
+        if t.get("deleted") and not t.get("merged_into"):
+            continue
+        if not any(pair[0] == source for pair in ext_ref_pairs(t)):
+            continue
+        try:
+            d = date.fromisoformat(str(t.get("date"))[:10])
+        except ValueError:
+            continue
+        if newest is None or d > newest:
+            newest = d
+    return newest
+
+
 def _resolve_emitter(source: str | None, ref: str | None) -> str | None:
     """Dispatch an emitter lookup to the store that actually holds the snapshot: email keeps
     its own module (unchanged), every other source routes to the connector snapshot service

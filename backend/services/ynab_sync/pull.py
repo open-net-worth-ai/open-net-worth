@@ -10,6 +10,7 @@ from backend.core.errors import ConflictError, OpenNetWorthError
 from backend.core.txn_sources import canonical_writer
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current
+from backend.services.memo_tags import tags_of, with_tags
 from backend.services.ynab_sync.canon import Canon, canon, changed_fields
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,31 @@ def row_changes(rendered: dict, row: dict, changed: list[str]) -> dict:
     have = {(e.get("source"), e.get("ref")) for e in row.get("external_refs") or []}
     if any((e["source"], e["ref"]) not in have for e in rendered["external_refs"]):
         patch["external_refs"] = rendered["external_refs"]
+    if "memo" in changed or "splits" in changed:
+        tags = with_tags(row.get("tags"), rendered.get("tags") or [])
+        if tags != (row.get("tags") or []):
+            patch["tags"] = tags
     return patch
+
+
+def add_note_tags() -> int:
+    """Once, for rows booked before notes' tags were read: each of this app's rows gains the tags
+    its note carries. Returns how many rows changed."""
+    source, changed = current().source, 0
+    for row in ledger_service.transactions.all():
+        if row.get("deleted") or not any(
+            e.get("source") == source for e in row.get("external_refs") or []
+        ):
+            continue
+        tags = with_tags(row.get("tags"), tags_of(row))
+        if tags == (row.get("tags") or []):
+            continue
+        try:
+            ledger_service.update_transaction(row["id"], {"tags": tags})
+            changed += 1
+        except OpenNetWorthError as exc:  # a row the ledger guards keeps its tags; the run goes on
+            logger.info("note tags not added to %s: %s", row["id"], exc)
+    return changed
 
 
 def create(rendered: dict, *, resurrect: bool = False) -> dict:

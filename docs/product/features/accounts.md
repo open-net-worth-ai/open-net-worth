@@ -98,9 +98,24 @@ optional:
   **Payoff date**, **Minimum payment**.
 - **Interest rate (APY, %)** (Cash and Fixed deposit) — shows a rough monthly and yearly
   interest figure.
-- **Linked to** — any bank connection feeding this account, with **Unlink**.
+- **Linked to** — any bank connection feeding this account, with **Unlink**, and **Link a bank
+  account** to add one (see below).
 
 Click **Save changes**.
+
+## Link an account to your bank
+
+Once a bank or broker is connected (see [Bank and brokerage connectors](../connectors/bank-brokerage.md)),
+you can pick which of its accounts feeds this one from the account itself: open the account,
+click **⋯ → Link to a bank account…** (or **Link a bank account** in **Edit account**).
+
+The list shows every account your connected banks can see, grouped by connector. The closest
+match — same currency and type, matching last four digits or name — is marked **Suggested**, but
+nothing is linked until you click **Link**. A bank account already feeding another of your
+accounts says which, and can't be picked twice. Linking imports nothing by itself; the window
+that follows offers to set up the automation, or you can ask Lucius to fetch now.
+
+Nothing to pick? The window offers **Connect a bank**, which opens Connectors.
 
 ## Change the starting balance or start date
 

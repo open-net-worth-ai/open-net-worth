@@ -3,6 +3,8 @@
 // The opening balance is a real "Starting Balance" ledger row. Quick create records it today;
 // later corrections happen by editing that transaction in the register.
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from '@tanstack/react-router'
+import { LinkBankAccountDialog } from './LinkBankAccountDialog'
 import { AccIcon, InstitutionPicker, CurrencyPicker } from './ds'
 import type { InstitutionOption } from './ds'
 import { InstitutionManager } from './InstitutionManager'
@@ -153,6 +155,9 @@ export default function AccountModal({
   // Unlink click can update it in place without waiting on the parent's full save/close cycle
   // (`onSave` here would close the whole modal and toast "Saved …", which Unlink must not).
   const [externalIds, setExternalIds] = useState<ExternalId[]>([])
+  const [linkingBank, setLinkingBank] = useState(false)
+  // Optional: the modal also renders outside the router (tests).
+  const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
   const [unlinkingIdx, setUnlinkingIdx] = useState<number | null>(null)
   const [confirmUnlink, setConfirmUnlink] = useState<number | null>(null)
   const [unlinkErr, setUnlinkErr] = useState<string | null>(null)
@@ -832,7 +837,7 @@ export default function AccountModal({
                     </section>
                   )}
 
-                  {mode === 'edit' && (externalIds.length > 0 || unlinkErr) && (
+                  {mode === 'edit' && account && (
                     <section>
                       <div className="acct-section-label">Linked to</div>
                       <Stack gap="--space-2">
@@ -895,7 +900,30 @@ export default function AccountModal({
                             {unlinkErr}
                           </Text>
                         )}
+                        <div>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setLinkingBank(true)}
+                          >
+                            {externalIds.length
+                              ? 'Link another bank account'
+                              : 'Link a bank account'}
+                          </Button>
+                        </div>
                       </Stack>
+                      {linkingBank && (
+                        <LinkBankAccountDialog
+                          account={{ ...account, externalIds }}
+                          onClose={() => setLinkingBank(false)}
+                          onLinked={(link) => setExternalIds((ids) => [...ids, link])}
+                          onConnectBank={() => {
+                            setLinkingBank(false)
+                            if (router) void router.navigate({ to: '/connectors' as never })
+                            else window.location.assign('/connectors')
+                          }}
+                        />
+                      )}
                     </section>
                   )}
                   {valuation && account && (

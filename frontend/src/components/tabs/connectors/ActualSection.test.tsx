@@ -23,6 +23,8 @@ const BLANK = {
   has_token: false,
   has_encryption_password: false,
   has_server_url: false,
+  has_proxy_headers: false,
+  proxy_header_names: [] as string[],
   server_host: null as string | null,
   server_scheme: null as string | null,
   server_plain_http: false,
@@ -190,7 +192,7 @@ describe('ActualSection', () => {
     status = { ...SAVED, server_plain_http: true, server_host: '192.168.1.20:5006' }
     form()
     expect(await screen.findByText(warning)).toBeTruthy()
-    expect(screen.getByText(/your password or token/)).toBeTruthy()
+    expect(screen.getByText(/your password, token or proxy headers/)).toBeTruthy()
     expect(screen.getByText(/change what this app reads and writes/)).toBeTruthy()
   })
 
@@ -400,5 +402,37 @@ describe('ActualSection', () => {
     type(/^Password/, 'pw-2')
     await save()
     expect(lastSave()).toEqual({ password: 'pw-2' })
+  })
+
+  it('saves proxy headers, shows only their names, and can remove them', async () => {
+    status = SAVED
+    form()
+    await screen.findByLabelText(/Proxy headers/)
+    type(/Proxy headers/, 'X-Acme-Proxy token')
+    expect(screen.getByText('Write each header on its own line, as Name: value.')).toBeTruthy()
+    expect(canSave()).toBe(false)
+    type(/Proxy headers/, 'X-Acme-Proxy: PROXY-1')
+    expect(canSave()).toBe(true)
+    await save()
+    expect(lastSave()).toEqual({ proxy_headers: 'X-Acme-Proxy: PROXY-1' })
+    cleanup()
+
+    status = { ...SAVED, has_proxy_headers: true, proxy_header_names: ['X-Acme-Proxy'] }
+    form()
+    expect(await screen.findByText(/Saved: X-Acme-Proxy\./)).toBeTruthy()
+    expect(screen.queryByText(/PROXY-1/)).toBeNull()
+    expect(canSave()).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(screen.getByText(/Removed when you save/)).toBeTruthy()
+    await save()
+    expect(lastSave()).toEqual({ clear_proxy_headers: true })
+  })
+
+  it('says saved headers stay behind when the address moves', async () => {
+    status = { ...SAVED, has_proxy_headers: true, proxy_header_names: ['X-Acme-Proxy'] }
+    form()
+    await screen.findByLabelText(/Server address/)
+    type(/Server address/, 'https://other.acme.test')
+    expect(screen.getByText(/the saved ones aren't sent to another server/)).toBeTruthy()
   })
 })

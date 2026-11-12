@@ -138,10 +138,12 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
         )
     except ExternalServiceError as exc:
         if "HTTP 401" in str(exc) or "HTTP 403" in str(exc):
-            raise ValidationError(
+            message = (
                 "GoCardless rejected the secret ID / secret key — check them in "
                 "bankaccountdata.gocardless.com → User secrets"
-            ) from None
+            )
+            store.note_credentials(rejected_with=message)
+            raise ValidationError(message) from None
         raise
     data = _json(resp) or {}
     access = str(data.get("access") or "").strip()
@@ -152,6 +154,7 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
     except (TypeError, ValueError):
         lifetime = 0
     store.save_token(access, _iso(_now() + timedelta(seconds=lifetime)) if lifetime else None)
+    store.note_credentials(rejected_with=None)
     return access
 
 
@@ -503,6 +506,42 @@ def _txn_description(txn: dict) -> str:
     return (str(info).strip() if info else "") or "GoCardless"
 
 
+def _txn_payee(txn: dict, amount: float) -> Optional[str]:
+    """The counterparty's own name — who was paid (money out) or who paid (money in) — or
+    ``None`` when the bank names neither. It becomes the row's payee; the description keeps
+    the bank's wording, which payee matching learns from."""
+    keys = ("creditorName", "debtorName") if amount < 0 else ("debtorName", "creditorName")
+    for key in keys:
+        name = " ".join(str(txn.get(key) or "").split())
+        if name:
+            return name[:120]
+    return None
+
+
+def _txn_memo(txn: dict) -> Optional[str]:
+    """For a purchase in another currency, what was actually paid — the one thing on the
+    wire a person wants on the row that neither the amount nor the payee carries."""
+    parts: list[str] = []
+    for fx in _currency_exchanges(txn):
+        paid = fx.get("instructedAmount") if isinstance(fx.get("instructedAmount"), dict) else {}
+        currency = str(paid.get("currency") or fx.get("sourceCurrency") or "").upper()
+        try:
+            amount = abs(float(paid.get("amount")))
+        except (TypeError, ValueError):
+            continue
+        booked_in = str((txn.get("transactionAmount") or {}).get("currency") or "").upper()
+        if currency and currency != booked_in:
+            parts.append(f"Paid {amount:.2f} {currency}")
+    return "; ".join(parts) or None
+
+
+def _currency_exchanges(txn: dict) -> list[dict]:
+    raw = txn.get("currencyExchange")
+    if isinstance(raw, dict):
+        return [raw]
+    return [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
+
+
 def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool) -> Optional[dict]:
     """One GoCardless transaction → the common row. ``transactionAmount.amount`` is already
     signed, positive = money in. A row with no amount or no date is dropped."""
@@ -530,7 +569,8 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         "amount": amount,
         "currency": currency,
         "description": description,
-        "memo": None,
+        "memo": _txn_memo(txn),
+        "payee": _txn_payee(txn, amount),
         "pending": pending,
         "supersedes_ref": None,
     }
