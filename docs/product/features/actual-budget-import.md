@@ -6,7 +6,7 @@ order: 171
 audience: [user]
 status: stable
 related: [features/imports-and-sync, connectors/bank-brokerage, operations/backup-and-restore, concepts/envelopes-and-budgeting]
-keywords: [actual, actual budget, proxy, proxy headers, reverse proxy, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
+keywords: [actual, actual budget, tags, hashtags, proxy, proxy headers, reverse proxy, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
 ---
 
 # Import from Actual Budget
@@ -121,6 +121,10 @@ knowing, or the first one on a phone. **Show more notes** opens the rest.
   named "Credit Card Payments (Actual)". The name itself is kept for this app's own group. Actual
   has no card payment categories, and a card payment there is a plain transfer.
 - **Future-dated transactions** come across with their dates.
+- **Tags** in a note, written `#groceries`, become the transaction's tags here. The note itself is
+  kept as it is. When a note changes in Actual, its new tags are added and the ones you added here
+  stay. A tag you remove here comes back only if the note changes again in Actual. Transactions
+  imported before tags were read get theirs on the next sync.
 - **A budget in tracking mode** brings its accounts, categories and transactions but no Assigned
   amounts, because its figures aren't envelopes. Its cash starts in Ready to Assign. On an empty
   book the budget method is still set to zero-based, and you can change it afterwards.
@@ -219,7 +223,7 @@ moves.
 that envelope and doesn't raise Ready to Assign. **Worth checking** warns you, and its Assigned stays
 here.
 
-**What stays local.** Actual's rules, schedules, tags, goals, account groups, dashboards and bank
+**What stays local.** Actual's rules, schedules, tag colours, goals, account groups, dashboards and bank
 sync are never touched. Card payment envelopes are this book's own: Actual has none, so their
 Assigned is never sent or taken. That's one reason Ready to Assign won't match To Budget.
 

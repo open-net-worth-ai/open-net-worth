@@ -13,6 +13,7 @@ from collections import Counter
 from backend.core.errors import ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.services.budget_app import current
+from backend.services.memo_tags import tags_of
 
 # YNAB's value, for what still imports it; the engine reads ``budget_app.current().source``.
 SOURCE = "ynab"  # external_refs / external_ids namespace — the connector's, so both dedup
@@ -532,6 +533,8 @@ def render_piece(p: dict, acct_ids: dict, cat_ids: dict, currency: str) -> dict:
             {"category": cat_ids[s["category"]], "amount": amt(s["milli"]), "memo": s["memo"]}
             for s in p["splits"]
         ]
+    if current().caps.memo_tags and (tags := tags_of(row)):
+        row["tags"] = tags
     return row
 
 

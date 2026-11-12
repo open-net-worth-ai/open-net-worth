@@ -36,6 +36,7 @@ from backend.services.ynab_sync import (
     conflicts,
     context,
     delta,
+    pull,
     recorder,
     starts,
     txn_sync,
@@ -275,6 +276,10 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> str | None:
             _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
             _compared(base, fresh)
         starts.review(ctx, st)
+        if current().caps.memo_tags and not st.get("note_tags_read"):
+            recorder.phase("reading tags in notes")
+            pull.add_note_tags()
+            st["note_tags_read"] = True
     except BaseException:
         _carry_unsettled(st, change, held)
         raise
