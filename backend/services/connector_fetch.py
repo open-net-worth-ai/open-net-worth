@@ -32,7 +32,12 @@ from backend.core.user_time import user_today
 from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
 from backend.services.aggregation import providers
-from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
+from backend.services.aggregation.providers import (
+    FetchWindow,
+    Provider,
+    UnknownProvider,
+    ref_source_of,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -428,7 +433,14 @@ def fetch(
         r["linked_account_id"] = linked.get(r.get("provider_account_id"))
 
     # ── step 7: filter already-booked rows unless include_booked ───────────────────────
-    known = ledger_service.known_external_refs(provider_key)
+    # Keyed by the provider key below, but looked up by the source the rows actually carry
+    # (Enable Banking's is "enablebanking") — else nothing ever reads as already booked.
+    known = {
+        (provider_key, ref): txn_id
+        for (_src, ref), txn_id in ledger_service.known_external_refs(
+            ref_source_of(provider_key)
+        ).items()
+    }
     seen_refs = {_row_ref(r) for r in rows if _row_ref(r)}
     kept: list[dict] = []
     already_booked = 0

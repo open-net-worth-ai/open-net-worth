@@ -650,6 +650,19 @@ def _txn_description(eb_txn: dict) -> str:
     return (str(info).strip() if info else "") or "Enable Banking"
 
 
+def _txn_payee(eb_txn: dict, amount: float) -> Optional[str]:
+    """The counterparty's own name — who was paid (money out) or who paid (money in) — or
+    None when the bank names neither. It becomes the row's payee; the description keeps the
+    bank's wording, which payee matching learns from (as GoCardless does)."""
+    first, second = ("creditor", "debtor") if amount < 0 else ("debtor", "creditor")
+    for key in (first, second):
+        party = eb_txn.get(key)
+        name = " ".join(str(party.get("name") or "").split()) if isinstance(party, dict) else ""
+        if name:
+            return name[:120]
+    return None
+
+
 # Transaction `status` (verified on the sandbox: GET .../transactions returns EVERY status by
 # default). Money that never moved is dropped — a cancelled, rejected or scheduled row booked
 # as spending lowers the balance for nothing; one not yet final is pending. BOOK, OTHR and a
@@ -685,6 +698,7 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "amount": amount,
         "currency": currency,
         "description": description,
+        "payee": _txn_payee(eb_txn, amount),
         "memo": None,
         "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,

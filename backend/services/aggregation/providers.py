@@ -120,6 +120,15 @@ class Provider:
     _fetch: tuple[str, str]
     _store: tuple[str, str]
     _classify: tuple[str, str]
+    # The ``source`` this provider's transaction ``external_refs`` carry, when it isn't the
+    # provider key. Enable Banking's rows have always been tagged "enablebanking"; renaming
+    # that would stop booked rows matching the dedup floor and re-book them, so every
+    # "already booked?" lookup reads it from here instead.
+    _ref_source: str = ""
+
+    @property
+    def ref_source(self) -> str:
+        return self._ref_source or self.key
 
     @property
     def disabled(self) -> bool:
@@ -239,6 +248,7 @@ PROVIDERS: dict[str, Provider] = {
             _fetch=("backend.services.aggregation.enable_banking", "fetch_window"),
             _classify=("backend.services.aggregation.enable_banking", "classify_error"),
             _store=("backend.db", "EnableBankingConfigStore"),
+            _ref_source="enablebanking",
         ),
         Provider(
             key="gocardless",
@@ -336,3 +346,10 @@ def status(keys: list[str]) -> dict:
             logger.warning("get_connector_status: %s failed to read: %s", provider.key, exc)
             out[provider.key] = {"status": "error", "error": str(exc)}
     return out
+
+
+def ref_source_of(provider_key: str) -> str:
+    """The ``external_refs`` source a provider's booked rows carry (its key, unless it says
+    otherwise) — what every "is this row already booked?" lookup must match on."""
+    provider = PROVIDERS.get(provider_key) if isinstance(PROVIDERS, dict) else None
+    return provider.ref_source if provider is not None else provider_key

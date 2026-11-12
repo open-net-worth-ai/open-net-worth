@@ -904,3 +904,82 @@ def test_accounts_name_the_country_only_when_two_banks_share_a_name(monkeypatch)
     monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
     w = svc.fetch_window(_store(), "2026-10-01", "2026-11-13", None, accounts_only=True)
     assert [a["institution"] for a in w.accounts] == ["Nordea (FI)", "Nordea (SE)", "OP"]
+
+
+def test_rows_carry_the_counterparty_as_payee():
+    """Money out names who was paid (creditor); money in names who paid (debtor). The
+    description keeps the bank's own wording."""
+    out = {
+        "entry_reference": "E1",
+        "booking_date": "2026-11-11",
+        "transaction_amount": {"amount": "9.50", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+        "creditor": {"name": "ACME  Cafe"},
+        "remittance_information": ["ACME Cafe-DBIT-9.50-ref"],
+    }
+    row = svc._txn_to_row(out, "U1", "EUR")
+    assert row["payee"] == "ACME Cafe"
+    assert row["description"] == "ACME Cafe-DBIT-9.50-ref"
+    salary = {
+        **out,
+        "credit_debit_indicator": "CRDT",
+        "creditor": None,
+        "debtor": {"name": "ACME Corp"},
+    }
+    assert svc._txn_to_row(salary, "U1", "EUR")["payee"] == "ACME Corp"
+    assert svc._txn_to_row({**out, "creditor": None}, "U1", "EUR")["payee"] is None
+
+
+def test_every_provider_looks_up_booked_rows_by_the_source_its_rows_carry():
+    """The fetch's "already booked?" check, its default window and the evidence snapshots all
+    read booked rows by the provider's ref source. A module stamping rows with a different
+    source than its provider declares is never seen as booked (Enable Banking: rows say
+    "enablebanking", the key is "enable_banking" — every sync re-offered everything)."""
+    import importlib
+
+    from backend.services.aggregation.providers import PROVIDERS
+
+    for provider in PROVIDERS.values():
+        module = importlib.import_module(provider._fetch[0])
+        stamped = getattr(module, "EXTERNAL_SOURCE", provider.key)
+        assert provider.ref_source == stamped, provider.key
+
+
+def test_fetch_counts_an_enable_banking_row_already_in_the_ledger_as_booked(monkeypatch):
+    from backend.services import connector_fetch
+    from backend.services import ledger as ledger_service
+    from backend.services.aggregation.providers import FetchWindow
+
+    _store().update(
+        {"application_id": "app", "private_key": "k", "enabled": True, "session_id": "S"}
+    )
+    ref = "ACC-1:E1"
+    row = {
+        "external_refs": [{"source": svc.EXTERNAL_SOURCE, "ref": ref}],
+        "raw": {},
+        "provider_account_id": "ACC-1",
+        "date": "2026-11-12",
+        "amount": -45.2,
+        "currency": "EUR",
+        "description": "ACME Grocery",
+        "payee": "ACME Grocery",
+        "memo": None,
+        "pending": False,
+        "supersedes_ref": None,
+    }
+    monkeypatch.setattr(
+        svc, "fetch_window", lambda *a, **k: FetchWindow(accounts=[], rows=[row], complete=True)
+    )
+    booked = {(svc.EXTERNAL_SOURCE, ref): "txn_1"}
+    monkeypatch.setattr(
+        ledger_service,
+        "known_external_refs",
+        lambda source: booked if source == svc.EXTERNAL_SOURCE else {},
+    )
+    out = connector_fetch.fetch("enable_banking", since="2026-11-01", before="2026-11-13")
+    assert out["counts"]["already_booked"] == 1
+    assert out["transactions"] == []
+    with_booked = connector_fetch.fetch(
+        "enable_banking", since="2026-11-01", before="2026-11-13", include_booked=True
+    )
+    assert with_booked["transactions"][0]["booked_txn_id"] == "txn_1"
