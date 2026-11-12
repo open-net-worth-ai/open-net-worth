@@ -4,7 +4,8 @@ The whole journey a user takes to get a bank's accounts into the book through Go
 Account Data: credentials → pick a bank → consent at the bank → back in the app → link each synced
 account to an Open Net Worth account.
 
-Executable form: `frontend/qa/gocardless-bank-link.mjs` (`npm run e2e:gocardless-bank-link`). It
+Executable form: `frontend/qa/gocardless-bank-link.mjs` (`npm run e2e:gocardless-bank-link`;
+`GCL_MODEL=haiku` runs Lucius on Haiku instead of Sonnet — release-gate both). It
 boots a disposable backend whose GoCardless API base points at an in-process **fake GoCardless**
 (token, institutions, agreements, requisitions, account details, a consent page that approves and
 redirects), and drives the production build in Chromium **with its pop-up blocker on**. Two
@@ -96,15 +97,23 @@ with real credentials; not automated (new signups are closed, and we hold no acc
 - GIVEN Lucius runs on Claude Code, and the bank holds: a card payment whose counterparty
   differs from its remittance text, a salary credit naming only the payer, two separate id-less
   £3.00 coffees on one day, a purchase paid in euros, a row dated only by its booking date-time,
+  a life-insurance premium and a university tuition fee (no category in the book fits either),
   an older direct debit, a pending taxi fare, and interest on the second account
-- WHEN I tap "Fetch my GoCardless transactions" on the connector page, send, and approve what
-  Lucius asks
-- THEN the book holds exactly the bank's eight booked rows — each once, on the right account,
+- WHEN the GoCardless sync Automation — created from its template, word for word — runs
+- THEN the book holds exactly the bank's ten booked rows — each once, on the right account,
   with the bank's date and amount — and not the pending fare; no two rows share a bank ref
 
+### GCL-CATEGORISED
+- GIVEN that sync run, which books through the `book-transactions` skill
+- THEN every row has a category; the grocery row is a food/grocery one and the salary an income
+  one; no row sits in a catch-all (*Other*, *Stuff I Forgot to Budget For*); the insurance and
+  tuition rows each get a fitting category, created when the book has none (general names, never
+  a merchant's, never a near-copy of one that exists); and *Acme Grocer* has learned a default
+  category, so its next row is categorised without Lucius
+
 ### GCL-LUCIUS-REFETCH
-- GIVEN that first fetch was booked
-- WHEN I ask Lucius to fetch again
+- GIVEN that sync was booked
+- WHEN I tap "Fetch my GoCardless transactions" on the connector page and send it
 - THEN nothing new is booked and nothing is duplicated
 
 ### GCL-STATUS-AFTER

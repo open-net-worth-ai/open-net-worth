@@ -1178,6 +1178,8 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
     # references/trades.md, read before logging a trade).
     "log-transactions-from-email": frozenset(
         {
+            # 2026-11-13: categories and payee hygiene moved to book-transactions.
+            "a06dac2762127b53292e18f8100e0858e84ebf22e7a2e622d08257a0d7be34ed",
             "23029f81e7d4ff685dcba55c25fdd84ae15cc3774e46e9beeef8a49af9aa8ba4",
             # 2026-10-11 (a607394d3): a fixed 1-day fetch window, sized for a 12-hour
             # schedule — a weekly one missed six days of mail. Now since the last completed run.
@@ -1335,6 +1337,8 @@ _ADDED_STARTERS: tuple[str, ...] = (
     "balance-mismatch-tracer",
     # 2026-11-05: the Email finance digest template runs it — logging plus what else needs them.
     "email-finance-digest",
+    # 2026-11-13: the bank-sync templates and the email-logging skill book through it.
+    "book-transactions",
 )
 
 # ── Built-in starter skills ────────────────────────────────────────────────────

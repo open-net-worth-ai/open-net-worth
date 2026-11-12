@@ -111,19 +111,15 @@ const BANK_TEMPLATE_KEYS = [
   'sync_enable_banking',
 ]
 
-it('the 6 bank templates say "bring it in line" and "never override something I changed by hand"', () => {
+// The booking rules (categories, payee clean-up, bring changes in line, never override a hand
+// edit, never delete) live in the shared book-transactions skill — a saved Automation keeps its
+// own copy of this text forever, while an unedited skill updates (2026-11-13). The skill's own
+// wording is held by tests/test_book_transactions_skill.py.
+it('every bank template books through the shared book-transactions skill, restating no rules', () => {
   for (const key of BANK_TEMPLATE_KEYS) {
     const template = CONNECTOR_SYNC_TEMPLATES.find((t) => t.key === key)!
-    expect(template.instructions).toContain('bring it in line')
-    expect(template.instructions).toContain('never override something I changed by hand')
-    // Design review nice-to-have: "If it withdrew one" named no subject — spelled out to
-    // match the sentence it follows ("if the BANK changed something already booked...").
-    expect(template.instructions).toContain(
-      'If the bank withdrew a transaction it already booked, flag it and tell me',
-    )
-    expect(template.instructions).toContain('Never delete anything')
-    expect(template.instructions).not.toContain('If the bank changed or withdrew something')
-    expect(template.instructions).not.toContain('If it withdrew one')
+    expect(template.instructions).toContain('book them using the book-transactions skill')
+    expect(template.instructions).not.toMatch(/category|bring it in line|Never delete/i)
   }
 })
 

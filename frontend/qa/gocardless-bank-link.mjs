@@ -11,7 +11,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -27,7 +27,10 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
-const OUT_DIR = resolve(REPO_ROOT, 'qa/artifacts/gocardless-bank-link')
+// GCL_MODEL picks the Claude Code model Lucius runs on (sonnet | haiku …); each keeps its own
+// artifacts.
+const MODEL = process.env.GCL_MODEL || 'sonnet'
+const OUT_DIR = resolve(REPO_ROOT, `qa/artifacts/gocardless-bank-link-${MODEL}`)
 const LINK_DELAY_MS = Number(process.env.GC_FAKE_LINK_DELAY_MS ?? 8000)
 // GoCardless took ~4 s to delete a requisition on the 2026-11-12 NAS log.
 const DELETE_DELAY_MS = Number(process.env.GC_FAKE_DELETE_DELAY_MS ?? 2000)
@@ -60,6 +63,8 @@ const EXPECTED_BOOKED = [
   ['CA_Monzo', 4, -3],
   ['CA_Monzo', 5, -42.1],
   ['CA_Monzo', 6, -1],
+  ['CA_Monzo', 7, -24.99],
+  ['CA_Monzo', 8, -850],
   ['CA_Monzo', 10, -60],
   ['Savings Pot', 1, 0.42],
 ]
@@ -125,6 +130,21 @@ function fakeGoCardless() {
           bookingDateTime: `${daysAgo(6)}T08:15:00Z`,
           transactionAmount: { amount: '-1.00', currency: 'GBP' },
           remittanceInformationUnstructured: 'ACME PARKING',
+        },
+        {
+          // No insurance or education category exists: each must get a fitting new one.
+          transactionId: 'tx_c8',
+          bookingDate: daysAgo(7),
+          transactionAmount: { amount: '-24.99', currency: 'GBP' },
+          remittanceInformationUnstructured: 'DD ACME LIFE INSURANCE PREMIUM 88412',
+          creditorName: 'Acme Life Insurance',
+        },
+        {
+          transactionId: 'tx_c9',
+          bookingDate: daysAgo(8),
+          transactionAmount: { amount: '-850.00', currency: 'GBP' },
+          remittanceInformationUnstructured: 'ACME UNIVERSITY TUITION FEE TERM 2',
+          creditorName: 'Acme University',
         },
         {
           transactionId: 'tx_c7',
@@ -345,8 +365,38 @@ async function bookedFromGoCardless(baseUrl, accountId) {
       amount: t.to_account_id === accountId ? Number(t.to_amount) : -Number(t.from_amount),
       refs: (t.external_refs ?? []).filter((r) => r.source === 'gocardless').map((r) => r.ref),
       payeeId: t.payee_id ?? null,
+      category: t.category ?? null,
       description: t.description ?? '',
     }))
+}
+
+/** The GoCardless sync template's instructions, exactly as a user creating it gets them. */
+function goCardlessTemplate() {
+  const src = readFileSync(
+    join(REPO_ROOT, 'frontend/src/components/tabs/automations/automationTemplates.ts'),
+    'utf8',
+  )
+  const at = src.indexOf("key: 'sync_gocardless'")
+  const start = src.indexOf('instructions:\n', at)
+  const end = src.indexOf("',\n", start) + 1
+  const instructions = [...src.slice(start, end).matchAll(/'((?:[^'\\]|\\.)*)'/g)]
+    .map((m) => m[1])
+    .join('')
+  assert.match(instructions, /book-transactions skill/, 'template no longer names the skill')
+  return instructions
+}
+
+/** Run an Automation now and wait for its run to finish → the finished run. */
+async function runAutomation(baseUrl, automationId, { timeoutMs = 12 * 60_000 } = {}) {
+  await api(baseUrl, `/api/automations/${automationId}/run`, { method: 'POST' })
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 4000))
+    const { runs } = await api(baseUrl, `/api/automations/${automationId}/runs?limit=1`)
+    const run = runs?.[0]
+    if (run && !['queued', 'running', 'pending', 'starting'].includes(run.status)) return run
+  }
+  throw new Error(`automation run did not finish within ${timeoutMs / 1000}s`)
 }
 
 /** The newest conversation's messages — evidence of what Lucius said and did. */
@@ -497,7 +547,7 @@ async function main() {
       // Precondition, as for a user who set Lucius up already: Claude Code is the AI provider.
       await api(baseUrl, '/api/model-config', {
         method: 'PUT',
-        body: JSON.stringify({ provider: 'claude_cli', model: 'sonnet' }),
+        body: JSON.stringify({ provider: 'claude_cli', model: MODEL }),
       })
     }
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } })
@@ -752,6 +802,7 @@ async function main() {
         a.id,
       ]),
     )
+    let categoriesBefore = []
     const bookedAll = async () => [
       ...(await bookedFromGoCardless(baseUrl, accountIds.CA_Monzo)).map((r) => ['CA_Monzo', r]),
       ...(await bookedFromGoCardless(baseUrl, accountIds['Savings Pot'])).map((r) => [
@@ -764,31 +815,21 @@ async function main() {
       'GCL-LUCIUS-FETCH',
       async () => {
         if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
-        await bank.goto(`${baseUrl}/connectors?connector=gocardless`)
-        await dismissIntro(bank)
-        await bank.getByRole('button', { name: /Fetch my GoCardless transactions/ }).click()
-        const turn = await runLuciusTurn(bank, null)
-        let approvals = turn.approvals
-        // Lucius may ask before booking (it rightly asks about two identical charges). Answer
-        // as the user would; the outcome is what's judged, not how many turns it took.
-        for (
-          let reply = 0;
-          reply < 2 && (await bookedAll()).length < EXPECTED_BOOKED.length;
-          reply += 1
-        ) {
-          console.log(`  Lucius asked before booking — replying (${reply + 1})`)
-          const next = await runLuciusTurn(
-            bank,
-            'Yes, book all of them. The two identical café charges are two separate purchases.',
-          )
-          approvals += next.approvals
-        }
-        console.log(`  Lucius approvals: ${approvals}`)
-        writeFileSync(
-          join(OUT_DIR, 'lucius-transcript.json'),
-          JSON.stringify(await transcript(baseUrl), null, 2),
-        )
-        await bank.screenshot({ path: join(OUT_DIR, 'lucius-after-fetch.png'), fullPage: true })
+        // The bank sync as users run it: an Automation made from the GoCardless template.
+        const automation = await api(baseUrl, '/api/automations', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: 'Sync GoCardless',
+            description: 'Fetch new GoCardless transactions and book them.',
+            instructions: goCardlessTemplate(),
+            trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+            permission_mode: 'auto',
+          }),
+        })
+        categoriesBefore = await api(baseUrl, '/api/categories?include_hidden=true')
+        const run = await runAutomation(baseUrl, automation.id)
+        console.log(`  sync run (${MODEL}): ${run.status}`)
+        writeFileSync(join(OUT_DIR, 'sync-run.json'), JSON.stringify(run, null, 2))
         const got = await bookedAll()
         const want = EXPECTED_BOOKED.map(
           ([acct, ago, amount]) => `${acct} ${daysAgo(ago)} ${amount.toFixed(2)}`,
@@ -802,12 +843,82 @@ async function main() {
     )
 
     await step(
+      'GCL-CATEGORISED',
+      async () => {
+        if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
+        const cats = await api(baseUrl, '/api/categories?include_hidden=true')
+        const label = Object.fromEntries(cats.map((c) => [c.id, c.label]))
+        const got = await bookedAll()
+        const uncategorised = got.filter(([, r]) => !r.category).map(([a, r]) => `${a} ${r.amount}`)
+        assert.deepEqual(uncategorised, [], 'rows left uncategorised')
+        const labelOf = (amount) =>
+          String(
+            label[got.find(([, r]) => Math.abs(r.amount - amount) < 0.001)?.[1].category] ?? '',
+          )
+        assert.match(labelOf(-12.4), /groc|food/i, `grocery row filed as ${labelOf(-12.4)}`)
+        assert.match(labelOf(2500), /salar|income|wage|pay/i, `salary filed as ${labelOf(2500)}`)
+        console.log(
+          `  row categories (${MODEL}): ` +
+            got.map(([, r]) => `${r.amount}→${label[r.category] ?? '—'}`).join(', '),
+        )
+        assert.deepEqual(
+          got.filter(([, r]) => /^(other|stuff i forgot|misc)/i.test(label[r.category] ?? '')),
+          [],
+          'a row was dumped in a catch-all category',
+        )
+        // Nothing in the book fits these two: each needs a fitting category, made if missing.
+        assert.match(labelOf(-24.99), /insur/i, `insurance filed as ${labelOf(-24.99)}`)
+        assert.match(
+          labelOf(-850),
+          /educat|tuition|school|universit|course|studi/i,
+          `tuition filed as ${labelOf(-850)}`,
+        )
+        const before = new Set(categoriesBefore.map((c) => c.id))
+        const created = cats.filter((c) => !before.has(c.id)).map((c) => c.label)
+        console.log(`  categories created (${MODEL}): ${created.join(', ') || 'none'}`)
+        if (!categoriesBefore.some((c) => /insur/i.test(c.label))) {
+          assert.ok(
+            created.some((l) => /insur/i.test(l)),
+            'no insurance category was created',
+          )
+        }
+        assert.deepEqual(
+          created.filter((l) => /acme|monzo|card \d/i.test(l)),
+          [],
+          'a category was named after a merchant or bank',
+        )
+        const norm = (l) =>
+          l
+            .toLowerCase()
+            .replace(/[^a-z]/g, '')
+            .replace(/s$/, '')
+        const existing = new Set(categoriesBefore.map((c) => norm(c.label)))
+        assert.deepEqual(
+          created.filter((l) => existing.has(norm(l))),
+          [],
+          'a near-copy of an existing category was created',
+        )
+        const payees = (await api(baseUrl, '/api/payees')).payees
+        const grocer = payees.find((p) => p.name.toLowerCase() === 'acme grocer')
+        assert.ok(
+          grocer && Object.values(grocer.default_categories ?? {}).length,
+          'Acme Grocer learned no default category, so the next row from it is not automatic',
+        )
+      },
+      bank,
+    )
+
+    await step(
       'GCL-LUCIUS-REFETCH',
       async () => {
         if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
         const before = (await bookedAll()).length
-        assert.ok(before > 0, 'nothing was booked by the first fetch, so a refetch proves nothing')
-        await runLuciusTurn(bank, 'Fetch my GoCardless transactions again and book anything new.')
+        assert.ok(before > 0, 'nothing was booked by the sync, so a refetch proves nothing')
+        // The other way in: the connector page's "Fetch my GoCardless transactions".
+        await bank.goto(`${baseUrl}/connectors?connector=gocardless`)
+        await dismissIntro(bank)
+        await bank.getByRole('button', { name: /Fetch my GoCardless transactions/ }).click()
+        await runLuciusTurn(bank, null)
         const after = (await bookedAll()).length
         assert.equal(after, before, `a second fetch changed the book (${before} → ${after} rows)`)
       },

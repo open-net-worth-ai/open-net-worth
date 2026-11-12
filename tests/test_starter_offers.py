@@ -36,6 +36,7 @@ ADDED = [
     "log-transactions-from-email",
     "balance-mismatch-tracer",
     "email-finance-digest",
+    "book-transactions",
 ]
 
 

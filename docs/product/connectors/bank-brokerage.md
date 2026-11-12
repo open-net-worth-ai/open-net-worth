@@ -428,10 +428,19 @@ The schedule and the wording are yours to change. Each run:
   two.
 - **Uses the linked account** for each transaction, and asks you about any account that isn't
   linked instead of guessing.
-- **Picks a category only when it clearly fits one of yours.** Lucius uses the merchant and, for
-  Plaid, the bank's own category (for example *Food and drink: Fast food* → **Dining out**). If
-  nothing clearly matches — or the payee already has a default category of its own — the
-  transaction stays **Uncategorized** for you to sort; he never invents a category.
+- **Categorises everything it books.** A payee with a default category keeps it. Otherwise
+  Lucius picks the category of yours that fits the merchant and, for Plaid, the bank's own
+  category (for example *Food and drink: Fast food* → **Dining out**). When none of yours fits,
+  he creates a plain, general one — *Groceries*, *Salary* — and tells you which. A new category
+  is only a label: it creates no envelope and doesn't change your budget. Once a payee's first
+  transaction has a category, the payee keeps it as its default, so the same merchant is sorted
+  the same way next time. A transaction stays **Uncategorized** only when Lucius can't tell what
+  it is. If you'd rather he never creates categories, say so in the automation's instructions.
+
+These rules live in the built-in **book-transactions** [skill](../lucius/skills.md), which every bank
+sync — and logging from email — follows, so when the skill improves, your sync does too (unless
+you've edited it). A sync created before 13 November 2026 that you never edited was moved onto
+the skill automatically; one you edited keeps your wording.
 - **Brings a changed transaction in line, but never over your own edits.** If your bank changes
   something already booked — a pending charge that settles at a different amount, a date that
   moves — Lucius updates it. If you'd already changed that amount or date by hand, he keeps your

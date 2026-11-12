@@ -1101,6 +1101,7 @@ def test_retired_hashes_name_only_dropped_starters():
 # skill-creator (it IS the guide) is held to it.
 _HOUSE_STANDARD = [
     "balance-mismatch-tracer",
+    "book-transactions",
     "budget-review",
     "can-i-afford-it",
     "catch-up",
