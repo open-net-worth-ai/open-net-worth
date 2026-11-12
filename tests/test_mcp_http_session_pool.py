@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import threading
+import time
 import urllib.error
 
 from tests.test_mcp_client import (  # noqa: F401 — fixtures
@@ -29,7 +31,11 @@ class _StatefulServer:
     """Issues ``session-N`` on initialize; refuses any other request without a live, initialized
     session (400), and 404s a session it has forgotten — as the Streamable HTTP spec says."""
 
-    def __init__(self, *, tool_error: bool = False):
+    def __init__(
+        self, *, tool_error: bool = False, init_delay: float = 0.0, no_handshake: bool = False
+    ):
+        self.init_delay = init_delay
+        self.no_handshake = no_handshake
         self.log: list[tuple] = []
         self.sessions: dict[str, bool] = {}
         self.issued = 0
@@ -47,7 +53,10 @@ class _StatefulServer:
         body = json.loads(request.data)
         method = body["method"]
         self.log.append((method, sid))
+        if method == "initialize" and self.no_handshake:
+            raise urllib.error.HTTPError(request.full_url, 405, "", {}, io.BytesIO(b""))
         if method == "initialize":
+            time.sleep(self.init_delay)
             self.issued += 1
             new = f"session-{self.issued}"
             self.sessions[new] = False
@@ -55,6 +64,9 @@ class _StatefulServer:
                 json.dumps(_rpc_envelope(method, body["id"])).encode(),
                 headers=_Headers({"Mcp-Session-Id": new}),
             )
+        if sid is None and self.no_handshake:
+            envelope = _rpc_envelope(method, body["id"], call_text="positions")
+            return _FakeResp(json.dumps(envelope).encode())
         if sid is None:
             raise urllib.error.HTTPError(
                 request.full_url,
@@ -210,4 +222,54 @@ def test_an_oauth_token_refresh_keeps_the_session(manager, monkeypatch):
     _call(mgr)
 
     assert seen  # the refreshed config reached the call
+    assert [m for m, _ in server.log].count("initialize") == 1
+
+
+def test_concurrent_calls_during_a_reconnect_never_go_out_without_a_session(manager, monkeypatch):
+    """Review: the re-handshake cleared the session id before opening the new one, so a call
+    sent meanwhile carried none and a stateful server rejected it (400, not retried). And two
+    calls that both saw the dead session re-handshook twice, abandoning the first new one."""
+    server = _StatefulServer(init_delay=0.3)
+    mgr, _ = _setup(manager, monkeypatch, server)
+    mgr.connect_enabled()
+    server.forget_all()
+
+    results: list[str] = []
+    threads = [threading.Thread(target=lambda: results.append(_call(mgr))) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert all("positions" in r for r in results), results
+    sent = [(m, sid) for m, sid in server.log if m == "tools/call"]
+    assert ("tools/call", None) not in sent
+    assert [m for m, _ in server.log].count("initialize") == 2  # boot + ONE reconnect
+
+
+def test_a_new_sign_in_ends_the_session(manager, monkeypatch):
+    """Review: a sign-in as a different account kept the old account's session (the access
+    token is not part of the pool's identity, so an hourly refresh keeps it)."""
+    from backend.mcp import client_manager, oauth_flow
+
+    server = _StatefulServer()
+    mgr, _ = _setup(manager, monkeypatch, server)
+    mgr.connect_enabled()
+    monkeypatch.setattr(client_manager, "get_manager", lambda: mgr)
+
+    oauth_flow._end_pooled_session("drive")
+    _call(mgr)
+
+    assert ("DELETE", "session-1") in server.log
+    assert ("tools/call", "session-2") in server.log
+
+
+def test_a_refused_handshake_is_not_retried_on_every_call(manager, monkeypatch):
+    server = _StatefulServer(no_handshake=True)
+    mgr, s = _setup(manager, monkeypatch, server)
+    s.record_discovery("drive", [{"name": "search_files", "inputSchema": {}}], "ok", None)
+
+    assert "positions" in _call(mgr)
+    assert "positions" in _call(mgr)
+
     assert [m for m, _ in server.log].count("initialize") == 1

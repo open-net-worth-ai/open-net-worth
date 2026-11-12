@@ -531,6 +531,9 @@ class McpClientManager:
         finally:
             lock.release()
         assert isinstance(conn, McpClientConnection)
+        # Outside the pool lock: a slow handshake must not make concurrent calls "busy". The
+        # connection serializes its own handshake.
+        conn.ensure_session()
         return conn
 
     def _call_via_server_connection(
@@ -664,11 +667,9 @@ class McpClientManager:
         if conn is not None:
             if isinstance(conn, McpClientConnection):
                 conn.adopt_config(server)
-                self._ensure_http_session(server, conn)
             return conn
         if server.transport != "stdio":
             http = McpClientConnection(server)
-            self._ensure_http_session(server, http)
             with self._conns_lock:
                 self._server_conns[server.id] = http
                 self._server_conn_sigs[server.id] = sig
@@ -696,22 +697,6 @@ class McpClientManager:
             self._server_conns[server.id] = fresh
             self._server_conn_sigs[server.id] = sig
         return fresh
-
-    @staticmethod
-    def _ensure_http_session(server: McpServerConfig, conn: McpClientConnection) -> None:
-        """Open the session if this connection has none yet. A server that refuses the
-        handshake still gets its calls sent, as before sessions existed; the next use tries the
-        handshake again."""
-        if conn.has_session():
-            return
-        try:
-            conn.initialize()
-        except McpCallError as exc:
-            logger.info(
-                "mcp '%s' initialize failed; calling without a session: %s",
-                server.id,
-                exc.safe_summary,
-            )
 
     def _close_locked(self, server_id: str) -> None:
         """Pop and close ``server_id``'s pooled connection, best-effort (never raises).

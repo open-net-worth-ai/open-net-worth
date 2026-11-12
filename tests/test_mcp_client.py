@@ -2038,8 +2038,11 @@ def test_accept_header_json_only_would_406_against_a_real_server(monkeypatch):
     )
     conn = McpClientConnection(McpServerConfig(id="deepwiki", url="https://mcp.deepwiki.com/mcp"))
     # Force the pre-fix header shape to prove the fake 406s on it, the same as the real vendors.
+    # On the CLASS: the handshake runs on a side connection that is swapped in on success.
     monkeypatch.setattr(
-        conn, "_headers", lambda: {"Content-Type": "application/json", "Accept": "application/json"}
+        McpClientConnection,
+        "_headers",
+        lambda self, *_a: {"Content-Type": "application/json", "Accept": "application/json"},
     )
     with pytest.raises(McpCallError, match="406"):
         conn.initialize()

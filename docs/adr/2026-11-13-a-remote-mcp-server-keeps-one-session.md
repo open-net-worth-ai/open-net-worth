@@ -32,17 +32,23 @@ An HTTP server's entry in the app-lifetime pool is ONE `McpClientConnection` hol
   on the connection: once per session.
 - **Concurrent calls do not queue.** The per-server lock covers connect-or-reuse only; HTTP
   requests are independent, and the connection serializes request ids and a re-handshake.
-- **A 404 on a request that carried a session** raises `McpSessionExpired`; the connection
-  re-handshakes once (concurrent callers that saw the same dead session share one) and repeats
-  the request. Safe: the spec says a 404 for an unknown session was not processed.
+- **A 404 on a request that carried a session** raises `McpSessionExpired` (carrying the id that
+  request sent); the connection re-handshakes once and repeats the request. Safe: the spec says
+  a 404 for an unknown session was not processed. Only a caller whose dead id is still current
+  re-handshakes, so concurrent callers share one. The new session is built on a side connection
+  and swapped in whole: no request ever goes out with NO session id (a stateful server rejects
+  that outright, unrecoverably), and only an `initialize` reply may set the id, so a late answer
+  on a replaced session cannot put the dead one back.
 - **Nothing a call does ends the session.** A tool error (`McpToolError`, the tool's own
   `isError`) and a network failure leave it; only a config change (`reconcile_pooled_connection`,
   or a changed endpoint/credential signature on next use) or shutdown (`close_all_pooled_connections`)
   closes it, with a best-effort `DELETE`. A stdio child likewise survives a tool error now.
 - **An OAuth refresh keeps the session.** The access token is not part of the pool signature; the
-  refreshed config is handed to the live connection (`adopt_config`).
+  refreshed config is handed to the live connection (`adopt_config`). **A finished sign-in ends
+  it** (`oauth_flow._end_pooled_session`): it may be a different account.
 - A server that refuses `initialize` still gets its calls, sessionless, as before; the handshake
-  is retried on the next use.
+  is asked again only after 30 seconds, and never while holding the pool lock, so a slow or
+  refusing handshake never makes concurrent calls "busy".
 - The interactive probe / "Refresh tools" click stays a one-off connection under its own
   deadline.
 
