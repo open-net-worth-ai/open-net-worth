@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { biggestPerQuarter, exactTrades, missedQuarter, periods } from './activityRows'
+import {
+  activitySections,
+  biggestPerQuarter,
+  exactTrades,
+  missedQuarter,
+  periods,
+} from './activityRows'
+import { contractLabel, contractWords } from './following.format'
 import { tilesOf } from './sectorTiles'
 import { spanReturn } from './spanReturn'
 import { fund, member, SECTORS } from './followingTestKit'
@@ -104,5 +111,35 @@ describe('the address of an open portfolio', () => {
       source_ref: '1067983',
     })
     expect(parsePortfolioParam('nonsense')).toBeNull()
+  })
+})
+
+describe('a member’s option trade', () => {
+  const call = { right: 'call' as const, strike: 150, expiry: '2027-01-15', contracts: 20 }
+  const withCall = () => {
+    const m = member()
+    const stock = m.activity[0]!
+    return member({
+      activity: [
+        { ...stock, date: '2026-10-05', asset_type: 'OP', option: call },
+        { ...stock, date: '2026-10-02' },
+      ],
+    })
+  }
+
+  it('is its own move, named as calls, with the contract leading what Lucius copies', () => {
+    const [opt, shares] = activitySections(withCall()).trades
+    expect(opt!.verb).toBe('Bought calls')
+    expect(opt!.option).toEqual(call)
+    expect(opt!.detail.startsWith('20 calls, $150 strike, expiring Jan 15, 2027')).toBe(true)
+    expect(shares!.verb).toBe('Bought')
+    expect(shares!.option).toBeNull()
+  })
+
+  it('reads as a chip and in full', () => {
+    expect(contractLabel(call)).toBe('Call $150 Jan 2027')
+    expect(contractWords({ ...call, right: 'put', contracts: 1 })).toBe(
+      '1 put, $150 strike, expiring Jan 15, 2027',
+    )
   })
 })

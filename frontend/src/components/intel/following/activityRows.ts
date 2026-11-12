@@ -1,6 +1,6 @@
-import type { Follow, FollowActivity } from '../../../api/followedPortfolios'
+import type { Follow, FollowActivity, OptionContract } from '../../../api/followedPortfolios'
 import { fCompact, fCompactAmount } from '../../../utils/format'
-import { companyName, nameClasses, shortDate } from './following.format'
+import { companyName, contractWords, nameClasses, shortDate } from './following.format'
 
 /** One row of "Trading activity", whatever the source: a quarter's change in a 13F (or an ETF's
  *  day-over-day change), a fund's exact Form 4 trade, or a House member's disclosed trade. */
@@ -32,6 +32,8 @@ export interface ActivityRow {
   /** A Form 4 trade's average fill price (a member reports none). */
   avgPrice: number | null
   shareClass?: string | null
+  /** A member's option trade: its contract. */
+  option?: OptionContract | null
 }
 
 export type Names = Record<string, string>
@@ -107,7 +109,16 @@ function runs(trades: FollowActivity[]): FollowActivity[][] {
   const out: FollowActivity[][] = []
   for (const t of trades) {
     const last = out[out.length - 1]
-    if (last && last[0]!.symbol === t.symbol && last[0]!.side === t.side) last.push(t)
+    // A stock trade and an option trade in it are two moves, never one.
+    const series = (x: FollowActivity) =>
+      x.option ? `${x.option.right}${x.option.strike}${x.option.expiry}` : ''
+    if (
+      last &&
+      last[0]!.symbol === t.symbol &&
+      last[0]!.side === t.side &&
+      series(last[0]!) === series(t)
+    )
+      last.push(t)
     else out.push([t])
   }
   return out
@@ -128,7 +139,7 @@ function tradeRows(follow: Follow, names: Names): ActivityRow[] {
       key: `t-${t.date}-${t.symbol}-${i}`,
       symbol: t.symbol!,
       name: nameOf(names, t.symbol!, t.name),
-      verb: up ? 'Bought' : 'Sold',
+      verb: `${up ? 'Bought' : 'Sold'}${t.option ? ` ${t.option.right}s` : ''}`,
       group: up ? 'buy' : 'sell',
       up,
       amount: exact ? (up ? value : -value) : null,
@@ -139,9 +150,11 @@ function tradeRows(follow: Follow, names: Names): ActivityRow[] {
       filedAt: first.filed_at,
       source: exact ? 'Form 4' : 'disclosure',
       tradedAt: first.date,
+      // The contract's terms lead: Lucius copies exactly this option, never the stock.
       detail: exact
         ? `${fCompact(shares)} shares at $${(value / (shares || 1)).toFixed(2)}${fills}`
-        : `traded ${day(first.date)}, filed ${day(first.filed_at)}${fills}`,
+        : `${t.option ? `${contractWords(t.option)}, ` : ''}traded ${day(first.date)}, filed ${day(first.filed_at)}${fills}`,
+      option: t.option ?? null,
       dateText: first.date === t.date ? day(t.date) : `${day(first.date)} – ${day(t.date)}`,
       avgPrice: exact && shares ? value / shares : null,
     }

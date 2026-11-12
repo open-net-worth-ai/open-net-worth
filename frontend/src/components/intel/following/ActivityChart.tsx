@@ -115,7 +115,13 @@ export function ActivityChart({
         attributionLogo: false,
       },
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-      rightPriceScale: { visible: false, borderVisible: false },
+      // The engine keeps a fifth of the plot empty above the line by default: with the figures
+      // right above the chart that read as a blank band. A thin margin keeps room for the markers.
+      rightPriceScale: {
+        visible: false,
+        borderVisible: false,
+        scaleMargins: { top: 0.08, bottom: 0.06 },
+      },
       // The line runs to the right edge: the axis labels sit inside the plot, nothing needs room.
       timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true, rightOffset: 0 },
       // The tooltip says the day and the figures: the engine's own axis labels would repeat it.
@@ -273,7 +279,8 @@ export function ActivityChart({
     }
   }, [points, markers, refLine, percent, bars, compare, mine, range?.from, range?.to, themeName])
 
-  if (points.length < 2) return null
+  // No prices: the chart's space stays, empty, so the page below never moves for it.
+  if (points.length < 2) return <div style={{ height: CHART_HEIGHT }} aria-hidden="true" />
   return (
     <div className="fol-tc-wrap" role="img" aria-label={label}>
       <div

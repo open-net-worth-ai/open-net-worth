@@ -157,22 +157,27 @@ describe('Discover', () => {
   it('opens a portfolio, and the back button returns to the list', async () => {
     setup()
     await open('Acme Capital')
-    fireEvent.click(screen.getByRole('button', { name: COPY.backToAll }))
+    fireEvent.click(screen.getByRole('button', { name: COPY.backToAllLabel }))
     expect(await screen.findByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeTruthy()
   })
 })
 
 describe('the header', () => {
-  it('names who it is and the two facts every tab rests on, as separate chips', async () => {
+  it('keeps the header to one line, and puts what it holds and when on Overview', async () => {
     setup()
     await open('Acme Capital')
+    // The header: the name and whose it is, nothing else.
     expect(screen.getByText('Ada Acme')).toBeTruthy()
-    // Named by the filing it comes from; the day it describes is on hover.
-    const snapshot = screen.getByText(COPY.quarterlyFiled(shortDate('2026-08-14')))
-    expect(snapshot.closest('[title]')?.getAttribute('title')).toBe(
-      COPY.holdingsAsOf(shortDate('2026-06-30')),
-    )
-    expect(screen.getByText(COPY.latestTrade(shortDate('2026-10-02')))).toBeTruthy()
+    expect(screen.queryByText(COPY.figFiled)).toBeNull()
+    tab('Acme Capital', COPY.tabOverview)
+    // Overview: a description written from the data, then the key figures.
+    expect(screen.getByRole('region', { name: COPY.aboutLabel('Acme Capital') })).toBeTruthy()
+    expect(screen.getByText(COPY.figStocks)).toBeTruthy()
+    const filed = screen.getByText(shortDate('2026-08-14'))
+    fireEvent.mouseEnter(filed.closest('.tip-anchor')!)
+    expect(await screen.findByText(COPY.holdingsAsOf(shortDate('2026-06-30')))).toBeTruthy()
+    // A fund's newest trade is in its table, never a key figure (only a member's is).
+    expect(screen.queryByText(COPY.figLatestTrade)).toBeNull()
   })
 
   it('copies the portfolio with Lucius through the automation template', async () => {
@@ -274,8 +279,12 @@ describe('Trading Activity', () => {
   it('offers a member Bought and Sold, newest first', async () => {
     setup()
     await open('Pat Placeholder')
-    expect(screen.queryByText(/^Quarterly report filed /)).toBeNull()
-    expect(screen.getByText(COPY.latestTrade(shortDate('2026-10-02')))).toBeTruthy()
+    tab('Pat Placeholder', COPY.tabOverview)
+    // A member has no quarterly report: their latest trade is the date the figures rest on.
+    expect(screen.queryByText(COPY.figFiled)).toBeNull()
+    expect(screen.getByText(COPY.figLatestTrade)).toBeTruthy()
+    expect(screen.getByText(shortDate('2026-10-02'))).toBeTruthy()
+    tab('Pat Placeholder', COPY.tabActivity)
     const bar = filters()
     expect(
       within(bar)
@@ -288,7 +297,9 @@ describe('Trading Activity', () => {
   })
 })
 
-describe('Latest moves', () => {
+// Latest moves is off for now (owner, 2026-11-12: SHOW_LATEST in ActivityTab.tsx). These come
+// back with it.
+describe.skip('Latest moves', () => {
   it('leads with the newest trades, then the last report’s biggest buys and sales', async () => {
     setup()
     await open('Acme Capital')
@@ -378,19 +389,42 @@ describe('Holdings', () => {
   })
 })
 
-describe('Overview', () => {
-  it('shows the two figures and the return against the benchmark for the chosen window', async () => {
+describe('Overview: the return', () => {
+  // A figure is a small name over its value; find the value by its name.
+  const figure = (name: string) =>
+    screen
+      .getAllByText(name)
+      .map((e) => e.closest('.fol-ret3-item'))
+      .find(Boolean)
+      ?.querySelector('.fol-ret3-v')?.textContent
+
+  it('shows the return against the benchmark for the chosen window, on Overview', async () => {
     setup()
     await open('Acme Capital')
     tab('Acme Capital', COPY.tabOverview)
-    expect(screen.getByText(COPY.kpiValue)).toBeTruthy()
-    expect(screen.getByText(/^\+\$100(\.0)?M$/)).toBeTruthy()
-    expect(screen.getByText('SPY +10.8%')).toBeTruthy()
+    expect(figure('SPY')).toBe('+10.8%')
     fireEvent.click(
       within(screen.getByRole('tablist', { name: COPY.perfPeriodLabel })).getByRole('tab', {
         name: '6M',
       }),
     )
-    expect(screen.getByText('SPY +6.0%')).toBeTruthy()
+    expect(figure('SPY')).toBe('+6.0%')
+  })
+
+  it('draws your own line from where your history starts when the range starts earlier', async () => {
+    setup()
+    // Your history starts halfway through the year the chart shows.
+    server.ownReturns = [
+      { date: '2026-05-10', portfolio: 0.1, benchmark: null },
+      { date: '2026-11-10', portfolio: 0.21, benchmark: null },
+    ]
+    await open('Acme Capital')
+    tab('Acme Capital', COPY.tabOverview)
+    // Rebased to its own first day: 1.21 / 1.10 - 1 = +10%. It used to vanish.
+    expect((await screen.findAllByText(COPY.yourPortfolio)).length).toBeGreaterThan(0)
+    expect(figure(COPY.yourPortfolio)).toBe('+10.0%')
+    const label = screen.getAllByText(COPY.yourPortfolio).find((e) => e.closest('.fol-ret3-item'))!
+    fireEvent.mouseEnter(label.closest('.tip-anchor')!)
+    expect(await screen.findByText(COPY.yourSince(shortDate('2026-05-10')))).toBeTruthy()
   })
 })

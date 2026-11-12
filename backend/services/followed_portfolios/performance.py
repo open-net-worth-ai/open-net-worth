@@ -1,10 +1,9 @@
-"""How a followed portfolio's CURRENT top holdings have done, against the owner's benchmark.
+"""What copying a followed portfolio would have returned, against the owner's benchmark.
 
-This is not the fund's or the member's own return: nobody outside knows that. It is the price
-return of the holdings in the newest filing, at their filed weights, over a window — "since the
-filing" is what copying it on the filing date would have done, before costs. The longer windows
-apply today's holdings to the past, so they flatter a portfolio that just bought its winners;
-the screen says which is which.
+This is not the fund's or the member's own return: nobody outside knows that. The line is a
+copy that rebalanced to each report on the day it was filed (``copier``), so no window uses a
+holding before it was public. Since the newest filing that copy IS today's holdings at their
+filed weights. Each listed holding also carries its own price return over the window.
 
 ``build_performance`` is pure. ``performance_for`` fetches daily closes (cached by
 ``prices.fetch_history``) and keeps its own short cache, since one answer costs a fetch per
@@ -19,6 +18,7 @@ from datetime import date, timedelta
 
 from backend.core.user_time import user_today
 from backend.services import prices
+from backend.services.followed_portfolios import copier, share_classes
 from backend.services.followed_portfolios.model import build_model, normalize_symbol
 from backend.services.risk_metrics import BENCHMARK_ROSTER, preferred_benchmark
 
@@ -47,10 +47,14 @@ def _window(
     bench: dict[str, float],
     start: str,
     listed: tuple[str, ...] = (),
+    path: dict | None = None,
 ) -> dict:
-    """The portfolio's path over the window from ``weights``; each holding's own return for every
-    weighted symbol AND every ``listed`` one (the page lists every holding, the line weighs the
-    top ones), so no listed row is left without its return."""
+    """The portfolio's path over the window; each holding's own return for every weighted
+    symbol AND every ``listed`` one (the page lists every holding, the line weighs the top
+    ones), so no listed row is left without its return. With ``path`` (the copy's growth,
+    report by report) the line is that copy's, started at 0% on the window's first day."""
+    if path is not None:
+        return _copied_window(weights, closes, bench, start, listed, path)
     dates = [d for d in sorted(bench) if d >= start]
     if len(dates) < 2:
         return {"status": "unavailable", "series": [], "holdings": {}, "missing": sorted(weights)}
@@ -81,6 +85,40 @@ def _window(
         ],
         "holdings": {s: paths[s][-1] for s in paths},
         "missing": sorted(set(weights) - set(paths)),
+    }
+
+
+def _copied_window(
+    weights: dict[str, float],
+    closes: dict[str, dict[str, float]],
+    bench: dict[str, float],
+    start: str,
+    listed: tuple[str, ...],
+    path: dict,
+) -> dict:
+    pairs = [(d, g) for d, g in zip(path["days"], path["growth"]) if d >= start]
+    if len(pairs) < 2:
+        return {"status": "unavailable", "series": [], "holdings": {}, "missing": sorted(weights)}
+    dates = [d for d, _ in pairs]
+    own = _window(weights, closes, bench, dates[0], listed)
+    base = pairs[0][1]
+    portfolio = [g / base - 1 for _, g in pairs]
+    bench_filled = _filled(bench, dates)
+    bench_path = [p / bench_filled[0] - 1 for p in bench_filled]  # type: ignore[operator]
+    return {
+        "status": "ok",
+        "start": dates[0],
+        "end": dates[-1],
+        "return": portfolio[-1],
+        "benchmark_return": bench_path[-1],
+        "covered_weight": path["covered"],
+        "method": "copied",
+        "series": [
+            {"date": d, "portfolio": round(portfolio[i], 6), "benchmark": round(bench_path[i], 6)}
+            for i, d in enumerate(dates)
+        ],
+        "holdings": own.get("holdings") or {},
+        "missing": own.get("missing") or [],
     }
 
 
@@ -130,9 +168,19 @@ def build_performance(
     activity: list[dict] | None = None,
     all_from: str | None = None,
     listed: tuple[str, ...] = (),
+    points: list[tuple[str, dict[str, float]]] | None = None,
 ) -> dict:
     """Every window in one answer, so the screen switches between them without a fetch.
-    ``ALL`` starts where the portfolio's own history does (its oldest quarter on record)."""
+    With ``points`` (each report's filing date and holdings) every window is cut from the one
+    report-by-report copy and ``ALL`` starts at the first report's filing; without them, the
+    newest holdings are applied over each window."""
+    path = None
+    if points:
+        path = copier.copied_path(points, closes, sorted(bench))
+        if len(path["days"]) < 2:
+            path = None
+        else:
+            all_from = path["days"][0]
     starts = {
         "ALL": all_from or (today - timedelta(days=731)).isoformat(),
         "1M": (today - timedelta(days=30)).isoformat(),
@@ -141,7 +189,9 @@ def build_performance(
         "FILING": filed_at,
     }
     return {
-        "periods": {key: _window(weights, closes, bench, starts[key], listed) for key in PERIODS},
+        "periods": {
+            key: _window(weights, closes, bench, starts[key], listed, path) for key in PERIODS
+        },
         "trade_returns": _trade_returns(activity or [], closes),
     }
 
@@ -160,7 +210,19 @@ def closes(symbol: str) -> dict[str, float]:
 _closes = closes
 
 
+def listing_exchanges(symbols: list[str]) -> dict[str, str]:
+    """``{symbol: exchange}`` from each ticker's OWN quote, never a name search (which once named
+    Milan for a Nasdaq stock). A ticker whose quote says nothing is left out, not guessed."""
+    wanted = sorted({s for s in symbols if s})
+    try:
+        quotes = prices.fetch_quote_snapshots(wanted)
+    except Exception:  # an exchange label is never worth failing the page over
+        return {}
+    return {s: str(q["exchange"]) for s, q in quotes.items() if s in wanted and q.get("exchange")}
+
+
 def performance_for(follow: dict) -> dict:
+    follow = share_classes.grouped(follow)
     today = user_today()
     model = build_model(follow, today)
     key = preferred_benchmark()
@@ -170,15 +232,31 @@ def performance_for(follow: dict) -> dict:
     if not model or not model["holdings"]:
         return empty
     weights = {h["symbol"]: h["weight"] for h in model["holdings"]}
-    cache_key = (follow["id"], (follow.get("current") or {}).get("filing_id"), benchmark, today)
+    # The reports the copy is built from are part of the answer: a refresh that reads further
+    # back (or a member's new report) is a different answer under the same newest filing.
+    reports = tuple(q.get("filed_at") for q in follow.get("history") or [])
+    filed = tuple(sorted({str(t.get("filed_at")) for t in follow.get("activity") or []}))
+    cache_key = (
+        follow["id"],
+        (follow.get("current") or {}).get("filing_id"),
+        reports,
+        filed,
+        benchmark,
+        today,
+    )
     hit = _cache.get(cache_key)
     if hit and time.monotonic() - hit[0] < _CACHE_SECONDS:
         return hit[1]
     traded = {normalize_symbol(t.get("symbol")) for t in follow.get("activity") or []}
+    points = (
+        copier.member_points(follow.get("activity") or [])
+        if follow.get("kind") == "house_member"
+        else copier.fund_points(follow.get("history") or [])
+    )
     # Every holding the page lists gets its own return, not only the top ones the line weighs.
     every = build_model(follow, today, None) or {}
     listed = tuple(h["symbol"] for h in every.get("holdings") or [])
-    symbols = sorted((set(weights) | traded | set(listed)) - {""})
+    symbols = sorted((set(weights) | traded | set(listed) | copier.symbols(points)) - {""})
     with ThreadPoolExecutor(max_workers=6) as pool:
         fetched = dict(zip([benchmark, *symbols], pool.map(_closes, [benchmark, *symbols])))
     bench = fetched.pop(benchmark)
@@ -195,7 +273,9 @@ def performance_for(follow: dict) -> dict:
             activity=follow.get("activity") or [],
             all_from=_history_start(follow),
             listed=listed,
+            points=points,
         ),
+        "exchanges": listing_exchanges([*listed, *traded]),
     }
     _cache[cache_key] = (time.monotonic(), out)
     return out

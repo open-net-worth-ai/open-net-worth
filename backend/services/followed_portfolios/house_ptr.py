@@ -22,6 +22,7 @@ from datetime import date, datetime
 from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.core.user_time import user_today
+from backend.services.followed_portfolios import house_options
 from backend.services.followed_portfolios.http import fetch_bytes
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,9 @@ _BASE = "https://disclosures-clerk.house.gov/public_disc"
 WINDOW_MONTHS = 36
 MAX_REPORTS = 80
 MAX_ACTIVITY = 50
+# Bumped when a report is read differently: a report cached under an older reading is fetched
+# again (2: option contracts, exercises and share counts from each row's description).
+PARSER_VERSION = 2
 _MAX_PAGES = 200
 _PDF_MAX_BYTES = 4 * 1024 * 1024
 # One follow or refresh may spend this long downloading reports; the rest wait for the next.
@@ -54,6 +58,31 @@ _ROW = re.compile(
     r"(?P<traded>\d{2}/\d{2}/\d{4})\s+(?P<notified>\d{2}/\d{2}/\d{4})\s+"
     r"\$(?P<low>[\d,]+)(?:\s*-\s*\$(?P<high>[\d,]+))?"
 )
+# A row the page breaks in two: its side, dates and low amount end one page; the next page's
+# column header, then the rest of its name with the ticker and type, then its high amount.
+_PAGE_HEADER = (
+    r"(?:Filing ID #\d+\s*)?ID Owner Asset Transaction Type Date Notification Date Amount"
+    r" Cap\. Gains > \$200\?\s*"
+)
+_SPLIT_ROW = re.compile(
+    r"(?P<side>P|S \(partial\)|S|E)\s+(?P<traded>\d{2}/\d{2}/\d{4})\s+"
+    r"(?P<notified>\d{2}/\d{2}/\d{4})\s+\$(?P<low>[\d,]+)\s*-\s*"
+    + _PAGE_HEADER
+    + r"(?P<rest>[^\[\]$]*?)\((?P<sym>[A-Z][A-Z0-9.\-]{0,6})\)\s*\[(?P<type>[A-Z]{2})\]\s*"
+    r"\$(?P<high>[\d,]+)"
+)
+
+
+def _rejoin_split_rows(flat: str) -> str:
+    return _SPLIT_ROW.sub(
+        lambda m: (
+            f"{m['rest']}({m['sym']}) [{m['type']}] {m['side']} {m['traded']} "
+            f"{m['notified']} ${m['low']} - ${m['high']}"
+        ),
+        flat,
+    )
+
+
 # What sits between two rows in the flattened text: the previous row's filing status and an
 # optional free-text description ("D : Purchased 50 call options ... of 6/17/27.").
 _ROW_TAIL = re.compile(r"^.*(?:\$200\?|: New|: Amended)", re.S)
@@ -196,12 +225,14 @@ def _settle_names(trades: list[dict]) -> None:
 
 
 def parse_report_text(text: str) -> list[dict]:
-    """Every trade row in one report's text. ``counted`` marks a stock row with a ticker and a
-    plain buy or sell — the only rows the estimate uses."""
+    """Every trade row in one report's text, with the terms its description states (an option
+    contract, an exercise, an exact share count). ``counted`` marks a row the estimate uses: a
+    stock bought or sold, or a call or put whose contract the description names."""
     # The form's small-caps labels come out of the PDF as NUL runs.
-    flat = " ".join(text.replace("\x00", " ").split())
+    flat = _rejoin_split_rows(" ".join(text.replace("\x00", " ").split()))
     trades, cursor = [], 0
-    for match in _ROW.finditer(flat):
+    matches = list(_ROW.finditer(flat))
+    for i, match in enumerate(matches):
         name, clean = _clean_name(flat[cursor : match.start()])
         cursor = match.end()
         traded = _iso(match["traded"])
@@ -212,6 +243,10 @@ def parse_report_text(text: str) -> list[dict]:
         side_raw = match["side"]
         side = "buy" if side_raw == "P" else "sell" if side_raw.startswith("S") else "exchange"
         symbol = match["sym"] or None
+        # The row's description runs up to the next row.
+        after = flat[match.end() : matches[i + 1].start() if i + 1 < len(matches) else len(flat)]
+        stated = house_options.terms(house_options.description(after), match["type"])
+        plain = side in ("buy", "sell")
         trades.append(
             {
                 "date": traded,
@@ -222,7 +257,10 @@ def parse_report_text(text: str) -> list[dict]:
                 "amount_low": low,
                 "amount_high": max(low, high),
                 "asset_type": match["type"],
-                "counted": bool(symbol) and match["type"] == "ST" and side in ("buy", "sell"),
+                **stated,
+                "counted": bool(symbol)
+                and plain
+                and (match["type"] == "ST" or (match["type"] == "OP" and "option" in stated)),
                 "name_clean": clean,
             }
         )
@@ -247,39 +285,93 @@ def _fetch_report(meta: dict) -> dict:
     for trade in trades:
         trade["filed_at"] = meta["filed_at"]
         trade["doc_id"] = meta["doc_id"]
-    return {**meta, "readable": bool(trades), "trades": trades}
+    return {**meta, "readable": bool(trades), "trades": trades, "parser": PARSER_VERSION}
 
 
-def estimate_positions(trades: list[dict]) -> list[dict]:
-    """Fold counted trades, oldest first, into ``[{key, symbol, name, value, qty}]``."""
+def _fold_option(options: list[dict], contract: dict, side: str, mid: float) -> None:
+    """A bought contract joins its series; a sold one leaves it, its cost going in proportion."""
+    if side == "buy":
+        key = house_options.contract_key(contract)
+        for held in options:
+            if house_options.contract_key(held) == key:
+                held["contracts"] += contract["contracts"]
+                held["value"] += mid
+                return
+        options.append({**contract, "value": mid})
+    else:
+        _close(options, contract)
+
+
+def _close(options: list[dict], contract: dict) -> None:
+    """Take ``contract``'s count out of its series (a sale, or an exercise into shares)."""
+    left = contract["contracts"]
+    for held in options:
+        if left <= 0 or held["contracts"] <= 0 or not house_options.same_series(held, contract):
+            continue
+        taken = min(left, held["contracts"])
+        held["value"] *= (held["contracts"] - taken) / held["contracts"]
+        held["contracts"] -= taken
+        left -= taken
+
+
+def estimate_positions(trades: list[dict], today: str | None = None) -> list[dict]:
+    """Fold counted trades, oldest first, into ``[{key, symbol, name, value, qty, options}]``.
+
+    A stock purchase adds its range midpoint, a partial sale subtracts it, a full sale clears
+    the stock. A call adds its midpoint to the same holding (exposure to that stock, as trade
+    trackers count it) and is listed in ``options``; a put is listed but adds nothing (it is a
+    bet against the stock). An exercise moves its contracts into the shares it bought, and a
+    contract past its expiry on ``today`` is gone."""
     held: dict[str, dict] = {}
     for trade in sorted(trades, key=lambda t: (t["date"], t.get("doc_id", ""))):
         if not trade.get("counted"):
             continue
         symbol = trade["symbol"]
         mid = (trade["amount_low"] + trade["amount_high"]) / 2
-        slot = held.setdefault(symbol, {"name": trade["name"], "value": 0.0})
+        slot = held.setdefault(symbol, {"name": trade["name"], "value": 0.0, "options": []})
+        if trade.get("option"):
+            _fold_option(slot["options"], trade["option"], trade["side"], mid)
+            continue
         if trade["side"] == "buy":
             slot["value"] += mid
             slot["name"] = trade["name"]
+            if trade.get("exercised"):
+                _close(slot["options"], trade["exercised"])
         elif trade.get("partial"):
             slot["value"] = max(0.0, slot["value"] - mid)
         else:
             slot["value"] = 0.0
-    rows = [
-        {"key": s, "symbol": s, "name": v["name"], "value": v["value"], "qty": v["value"]}
-        for s, v in held.items()
-        if v["value"] > 0
-    ]
+    rows = []
+    for symbol, slot in held.items():
+        live = [
+            o
+            for o in slot["options"]
+            if o["contracts"] > 0 and (today is None or o["expiry"] >= today)
+        ]
+        value = slot["value"] + sum(o["value"] for o in live if o["right"] == "call")
+        if value <= 0:
+            continue
+        rows.append(
+            {
+                "key": symbol,
+                "symbol": symbol,
+                "name": slot["name"],
+                "value": value,
+                "qty": value,
+                "options": [
+                    {k: o[k] for k in ("right", "strike", "expiry", "contracts")} for o in live
+                ],
+            }
+        )
     return sorted(rows, key=lambda p: (-p["value"], p["symbol"]))
 
 
-def _snapshot(reports: list[dict], window_start: str) -> dict | None:
+def _snapshot(reports: list[dict], window_start: str, today: str | None = None) -> dict | None:
     if not reports:
         return None
     trades = [t for r in reports for t in r["trades"] if t["date"] >= window_start]
     newest = max(reports, key=lambda r: (r["filed_at"], r["doc_id"]))
-    positions = estimate_positions(trades)
+    positions = estimate_positions(trades, today)
     return {
         "filing_id": newest["doc_id"],
         "as_of": max((t["date"] for t in trades), default=newest["filed_at"]),
@@ -318,16 +410,17 @@ def fetch(ref: str, known: dict | None = None) -> dict:
     metas = metas[:MAX_REPORTS]
     cached = (known or {}).get("reports") or {}
     newest_known = (known or {}).get("current") or {}
+    current = {doc: r for doc, r in cached.items() if (r or {}).get("parser") == PARSER_VERSION}
     if newest_known.get("filing_id") == metas[0]["doc_id"] and all(
-        m["doc_id"] in cached for m in metas
+        m["doc_id"] in current for m in metas
     ):
         return {"unchanged": True}
     # A report that could not be read is fetched again: the Clerk does replace bad uploads.
     deadline = time.monotonic() + _FETCH_BUDGET_SECONDS
     reports = []
     for meta in metas:
-        if (cached.get(meta["doc_id"]) or {}).get("readable"):
-            reports.append(cached[meta["doc_id"]])
+        if (current.get(meta["doc_id"]) or {}).get("readable"):
+            reports.append(current[meta["doc_id"]])
         elif time.monotonic() < deadline:
             reports.append(_fetch_report(meta))
         else:  # out of time: counted as unread now, fetched on the next refresh
@@ -343,8 +436,8 @@ def fetch(ref: str, known: dict | None = None) -> dict:
         "subtitle": (
             f"Representative, {metas[0]['district']}" if metas[0]["district"] else "Representative"
         ),
-        "current": _snapshot(reports, window_start),
-        "previous": _snapshot(reports[1:], window_start),
+        "current": _snapshot(reports, window_start, today.isoformat()),
+        "previous": _snapshot(reports[1:], window_start, today.isoformat()),
         "activity": activity[:MAX_ACTIVITY],
         "reports": {r["doc_id"]: r for r in reports},
     }

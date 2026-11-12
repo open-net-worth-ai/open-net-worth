@@ -255,17 +255,34 @@
    background, as Intel's price chart sits. */
 .fol-spot {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-3);
 }
-
-.fol-spot-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  /* The picked move's line carries 34px buttons; the overview's does not. One height for both,
-     so picking a row never shifts the page. */
-  min-height: 34px;
+/* Everything spans the card, but a picked move's actions sit at the end of its figures' line. */
+.fol-spot > * {
+  grid-column: 1 / -1;
+}
+.fol-spot > .fol-spot-figrow {
+  grid-column: 1;
+}
+.fol-spot > .fol-spot-actions {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+}
+/* A narrow card: the actions are the card's footer, under the chart, two equal buttons. */
+@container fol-act (width < 560px) {
+  .fol-spot > .fol-spot-figrow {
+    grid-column: 1 / -1;
+  }
+  .fol-spot > .fol-spot-actions {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    order: 1;
+  }
+  .fol-spot > .fol-spot-actions > * {
+    flex: 1;
+  }
 }
 
 .fol-spot-title {
@@ -330,13 +347,6 @@
   color: var(--bad);
 }
 
-/* A row's own action shows on hover or focus; always on a touch screen. */
-@media (hover: hover) {
-  .fol-spot-head > .ui-btn {
-    opacity: 1;
-  }
-}
-
 @container fol-page (width < 640px) {
   .fol-card {
     padding: var(--space-6);
@@ -344,11 +354,6 @@
   .fol-card-ring svg {
     width: 120px;
     height: 120px;
-  }
-
-  /* No room for words: Trade details keeps its arrow and its tooltip. */
-  .fol-spot-actions .fol-btn-label {
-    display: none;
   }
 }
 
@@ -463,26 +468,6 @@
   }
 }
 
-.fol-back {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: var(--text-sm);
-  color: var(--faint);
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .fol-back:hover {
-    color: var(--ink);
-  }
-}
-
 /* A table on a phone: one card per row. */
 .fol-rows {
   display: grid;
@@ -504,6 +489,19 @@
 
 .fol-row:last-child {
   border-bottom: 0;
+}
+
+/* A card that swipes (a touch screen): the slide fills the row and lays its content out as the
+   row does, so a card looks the same whether or not it has actions behind it. */
+.fol-row-swipe {
+  flex: 1;
+  min-width: 0;
+}
+.fol-row-swipe > .ui-swipe-face {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--surface);
 }
 
 .fol-row.is-on {
@@ -540,7 +538,48 @@ div.fol-row-main {
 }
 
 .fol-row-head {
+  flex: 1;
   min-width: 0;
+}
+
+/* A stock's line and its tags (option contracts, "You own"): side by side in a table row. */
+.fol-name-line,
+.fol-name-tags {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* On a phone card the tags take a line of their own under the stock, and the stock's line
+   truncates its company name: neither may run into the figures on the right. */
+.fol-row-head .fol-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.fol-row-head .fol-name-line {
+  display: flex;
+  max-width: 100%;
+  overflow: hidden;
+}
+.fol-row-head .fol-name-line .mk-hsym,
+.fol-row-head .fol-name-line .fol-exch,
+.fol-row-head .fol-name-line .fol-open-inline {
+  flex: none;
+}
+.fol-row-head .fol-name-line .mk-hnm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fol-row-head .fol-name-tags {
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.fol-row-head .fol-name-tags .fol-own {
+  margin-left: 0;
 }
 
 .fol-row-primary {
@@ -579,12 +618,6 @@ div.fol-row-main {
   color: var(--bad);
 }
 
-.fol-spot-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 .fol-tc-wrap {
   position: relative;
   min-width: 0;
@@ -601,7 +634,8 @@ div.fol-row-main {
   color: var(--muted);
 }
 
-/* A row's menu shows on the row being pointed at (always on a touch screen). */
+/* A row's "⋯" menu shows only on the row being pointed at or focused, in the table and in the
+   cards a narrow column uses alike; a touch screen has no "⋯" at all, it swipes the row. */
 @media (hover: hover) {
   .fol-tbl.mk-tbl .fol-row-menu {
     opacity: 0;
@@ -609,6 +643,28 @@ div.fol-row-main {
   }
   .fol-tbl.mk-tbl tr:hover .fol-row-menu,
   .fol-tbl.mk-tbl tr:focus-within .fol-row-menu {
+    opacity: 1;
+  }
+  /* A card keeps no room for a hidden menu (it left a blank column beside the figures): at rest
+     the menu has no width; pointed at or focused, it opens to its size and the figures slide
+     left to make room, so nothing ever sits over them. A visible action (Set ticker) keeps its
+     place. */
+  .fol-rows .fol-row-action:has(.fol-row-menu) {
+    width: 0;
+    margin-left: calc(-1 * var(--space-3));
+    padding-right: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      width 0.15s ease,
+      margin 0.15s ease,
+      opacity 0.12s ease;
+  }
+  .fol-rows .fol-row:hover .fol-row-action:has(.fol-row-menu),
+  .fol-rows .fol-row:focus-within .fol-row-action:has(.fol-row-menu) {
+    width: calc(var(--space-8) + var(--space-3));
+    margin-left: 0;
+    padding-right: var(--space-3);
     opacity: 1;
   }
 }
@@ -678,63 +734,6 @@ div.fol-row-main {
   .fol-htools > .mk-search-wrap {
     flex: 1 1 auto;
   }
-}
-
-/* Overview: two plain figures, each change as a kit Badge beside it. */
-
-.fol-figs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5) var(--space-8);
-}
-
-.fol-fig {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.fol-fig-l {
-  font-size: var(--text-xs);
-  color: var(--faint);
-}
-
-.fol-fig-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.fol-fig-v {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-
-/* Under the name: who it is, then the facts every tab rests on as chips. */
-.fol-facts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-  margin-top: var(--space-2);
-}
-
-.fol-facts > .fol-by {
-  margin: 0;
-}
-
-.fol-facts .ui-tag {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  border: 1px solid var(--line);
-}
-
-.fol-facts .ui-badge {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  padding: 2px var(--space-3);
-  border-radius: var(--radius-pill);
 }
 
 /* Holdings map: two rows of tiles, each sized by its share (the Overview holdings map's
@@ -846,13 +845,6 @@ div.fol-row-main {
   justify-content: center;
 }
 
-/* On a phone the return heads its own line and the periods fill the next, one row. */
-
-/* Overview: the figures, then real space before the return and its chart. */
-.fol-figs + .fol-perf {
-  margin-top: var(--space-6);
-}
-
 .fol-line {
   display: inline-block;
   width: 16px;
@@ -899,6 +891,9 @@ div.fol-row-main {
 }
 
 /* One title style for every block of the page: Latest moves, All moves, By sector, … */
+/* Block titles are the app's panel title (.ui-panel__title: "YOUR POSITION" on a stock's
+   page), so a section reads the same here as everywhere else. Set in capitals by CSS; the words
+   stay Title Case in the copy, so a screen reader says them as words, not letters. */
 .fol-sec-title {
   display: flex;
   align-items: center;
@@ -906,7 +901,9 @@ div.fol-row-main {
   margin: 0;
   font-size: var(--text-base);
   font-weight: 600;
-  color: var(--ink);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
 /* A titled block's own space from the block above it. */
@@ -1021,16 +1018,7 @@ div.fol-row-main {
 }
 
 .fol-own .ui-tag {
-  padding: 0 var(--space-2);
-  font-size: var(--text-2xs);
-  font-weight: 600;
   white-space: nowrap;
-}
-
-/* The picked stock's ticker: a real button to its page. */
-.fol-spot-open {
-  font-weight: 600;
-  gap: var(--space-1);
 }
 
 .fol-latest + .fol-spot,
@@ -1258,16 +1246,6 @@ div.fol-row-main {
   background: var(--surface);
 }
 
-/* The figures share the card's width in equal columns, never bunched at its start. */
-.fol-figs.fol-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-}
-
-.fol-figs + .fol-perf {
-  margin-top: 0;
-}
-
 @container fol-page (width < 640px) {
   .fol-panel,
   .fol-latest {
@@ -1283,16 +1261,13 @@ div.fol-row-main {
 
 /* The return block's figures, side by side on one row (they wrap only when the pane is too
    narrow for them). */
+/* The figures are always one line, spread edge to edge: the first at the left, the last at the
+   right, equal space between (equal columns left the last one's empty part as a wider right
+   margin). They compare across, never stack. */
 .fol-ret3 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: var(--space-3) var(--space-8);
-}
-
-/* With no stock picked the figures are the head's only content: they take its full width. */
-.fol-spot-head > .fol-ret3 {
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-8);
 }
 
 .fol-ret3-item {
@@ -1305,6 +1280,8 @@ div.fol-row-main {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--text-xs);
   color: var(--muted);
   white-space: nowrap;
@@ -1347,58 +1324,309 @@ div.fol-row-main {
   align-items: center;
 }
 
-/* The picked move's two actions: one height, side by side. */
-.fol-spot-actions .ui-btn {
-  height: 32px;
-  box-sizing: border-box;
-}
-
 /* On a phone's cards the whole card opens the stock: no small icon to aim at. */
 .fol-rows .fol-open-inline {
   display: none;
 }
 
-/* The picked stock's line: its button, then the price and the move large, SPY beside them. */
-.fol-spot-open.ui-btn {
-  height: 32px;
-  box-sizing: border-box;
+/* Every chip on this screen is the design system's one pill (Tag): no chip restyles its shape,
+   padding or border here. The title row's chips (value, stock count, "Estimated") are a step
+   larger together so they sit level with the name; the two figures are in full ink, read first. */
+.fol-title .ui-tag {
+  font-size: var(--text-base);
 }
 
-.fol-spot-title {
-  align-items: center;
+/* Where the ticker trades, after the company name: quiet, it is a fact to check, not read.
+   Set apart by space and colour only, never a dot separator (owner, 2026-11-12). */
+.fol-exch {
+  margin-left: var(--space-3);
+  color: var(--faint);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
-/* The picked stock's line never wraps: its title gives way first. */
-.fol-spot-head {
-  flex-wrap: nowrap;
+/* A narrow column (a phone, the chat open) keeps the three figures on their one line. */
+@container fol-act (width < 440px) {
+  .fol-ret3 {
+    gap: var(--space-4);
+  }
+  .fol-ret3-v {
+    font-size: var(--text-lg);
+    white-space: nowrap;
+  }
 }
 
-.fol-spot-title {
-  flex-wrap: nowrap;
+/* A portfolio's tab content is at least a screen tall: switching to a short tab never pulls the
+   page up under the reader, and a long one ends where its content does. */
+.fol-tabpanel {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* The page's blocks are spaced by its own gap; the tab bar's built-in bottom margin added 20px on
+   top of it, which read as a hole between the tabs and the first card. */
+.fol-page .ui-page-tabs {
+  margin-bottom: 0;
+}
+
+/* The move in focus. Its title line (in the block head) is the stock; under it one line of
+   figures with the actions at its end, one height whether or not a move is picked, so picking
+   one never moves the table. */
+.fol-spot-figrow {
+  display: flex;
+  align-items: flex-end;
+  min-height: 44px;
   min-width: 0;
 }
-
-.fol-spot-actions {
-  flex: none;
+/* The figures never shrink into each other: with no room beside them, the actions take the
+   next line instead. */
+.fol-spot-figrow > .fol-ret3 {
+  flex: 1 0 auto;
+  justify-content: flex-start;
 }
-
-.fol-spot-title .fol-spot-price {
-  font-size: var(--text-base);
-  font-weight: 600;
+.fol-spot-figrow .fol-ret3-item,
+.fol-spot-figrow .fol-ret3-v {
+  white-space: nowrap;
+}
+.fol-spot-figrow > .fol-spot-sub {
+  margin: 0;
+  align-self: center;
+}
+.fol-spot-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-2);
+}
+/* The picked stock as the block's title: the back chevron, the ticker in the title's own
+   capitals, the company in its normal case, the way to its page. */
+.fol-spot-titleline {
+  min-width: 0;
+  gap: var(--space-2);
+}
+.fol-spot-name {
+  all: unset;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.fol-spot-name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.fol-spot-name .mk-hsym {
+  flex: none;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: normal;
   color: var(--ink);
 }
+.fol-spot-name .mk-hnm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-md);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--muted);
+}
+.fol-spot-name svg {
+  flex: none;
+  align-self: center;
+}
+@media (hover: hover) {
+  .fol-spot-name:hover .mk-hnm,
+  .fol-spot-name:hover svg {
+    color: var(--ink);
+  }
+}
+/* A picked move's way back: the block title itself, with a chevron, reads as a link back. */
+.fol-sec-back {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.fol-sec-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .fol-sec-back:hover {
+    color: var(--ink);
+  }
+}
+/* Keyboard focus on a portfolio's tabs is the tab itself in the accent (its text and underline),
+   not a box drawn around it: the browser also shows it when focus comes back to the window,
+   where a box read as a stray border (owner, 2026-11-12). */
+.fol-page .ui-page-tabs__tab:focus-visible {
+  outline: none;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 
-.fol-spot-bench {
+/* Trading Activity's card (its title, figures and chart) stays pinned under the app's top bar
+   while the moves table scrolls beneath it: picking a move redraws it in place. Its `top` is
+   measured (useStickTop); its own background covers the rows passing under it. */
+.fol-act-card {
+  position: sticky;
+  z-index: 2;
+  /* A ring of the page's own colour around the card: the rows passing beneath showed through
+     between its rounded corners and its square edge. Wide enough to fill a corner of this radius
+     (it needs radius x 0.42), and narrower than the space around the card. */
+  box-shadow: 0 0 0 var(--space-4) var(--bg);
+}
+
+/* The way back to Famous Portfolios, on the name's own line. */
+.fol-back-icon {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: calc(-1 * var(--space-2));
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  cursor: pointer;
+}
+.fol-back-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .fol-back-icon:hover {
+    color: var(--ink);
+    background: var(--hover);
+  }
+}
+
+/* The Overview's opening description: three lines, More opens the rest. */
+.fol-about {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+}
+.fol-about-text {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 1.55;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.fol-about-text.is-open {
+  display: block;
+}
+.fol-about-more {
+  all: unset;
   font-size: var(--text-sm);
-  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+.fol-about-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The key figures: a small name over each large value, its change since the last report under
+   it; a caution (an estimate, a missing report) beneath them. */
+.fol-keyfigs {
+  display: grid;
+  gap: var(--space-3);
+}
+.fol-keyfigs .fol-ret3-v {
+  white-space: nowrap;
+}
+.fol-keyfig-chg {
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
-
-.fol-spot-bench.up {
+.fol-keyfig-chg.up {
   color: var(--good);
 }
-
-.fol-spot-bench.down {
+.fol-keyfig-chg.down {
   color: var(--bad);
+}
+.fol-cautions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The header is one line: the way back, the name, whose it is (quiet, giving way first). */
+.fol-title {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.fol-title-name {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fol-title-by {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--muted);
+}
+/* The key figures as moomoo sets them: equal columns, each centred, a thin rule between them, a
+   small name over a large value over its change. */
+.fol-keyfigs > .fol-ret3 {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+}
+.fol-keyfigs .fol-ret3-item,
+.fol-keyfigs .fol-ret3 > .tip-anchor {
+  justify-items: center;
+  text-align: center;
+  padding-inline: var(--space-3);
+}
+.fol-keyfigs .fol-ret3 > * + * {
+  border-left: 1px solid var(--line);
+}
+.fol-keyfigs .fol-ret3-l {
+  justify-content: center;
+  font-size: var(--text-sm);
+}
+/* A narrow screen has no room for whose it is beside the name (it showed as "W…"): the
+   Overview's description names them. */
+@media (max-width: 640px) {
+  .fol-title-by {
+    display: none;
+  }
+}
+/* Whose it is sits on the name's baseline, not centred against the much larger name (it floated
+   above it); the back arrow, an icon, stays centred on the line. */
+.fol-title {
+  align-items: baseline;
+}
+.fol-title > .tip-anchor:first-child,
+.fol-title > .fol-back-icon {
+  align-self: center;
+}
+/* A narrow card puts the actions in its footer, so the figures' line is theirs alone: spread them
+   edge to edge, as Performance does, instead of bunched at its start. */
+@container fol-act (width < 560px) {
+  .fol-spot-figrow > .fol-ret3 {
+    justify-content: space-between;
+  }
 }

@@ -19,9 +19,9 @@ from backend.services.followed_portfolios.http import fetch_bytes, fetch_json
 
 SEC = "SEC EDGAR"
 # Positions kept per snapshot: the largest top N plus what a change needs to see.
-# Two years of quarter-to-quarter changes (nine filings), for the period picker and the chart's
-# markers. The two newest are also the model's.
-HISTORY_QUARTERS = 9
+# Four years of reports (fifteen filings): the period picker's 3Y, the chart's markers
+# and the report-by-report copy's return all read them. The two newest are also the model's.
+HISTORY_QUARTERS = 15
 # A card (two quarters) matches its largest holdings only; the page matches every one.
 CARD_LOOKUPS = 25
 _INFO_TABLE_MAX_BYTES = 16 * 1024 * 1024

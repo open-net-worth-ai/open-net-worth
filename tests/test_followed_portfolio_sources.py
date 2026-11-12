@@ -135,7 +135,7 @@ def test_fetch_retries_a_ticker_lookup_that_never_answered(monkeypatch):
         "previous": None,
         "cusip_map": {"000000202": ""},
         "history": [{"as_of": "2026-06-30", "filed_at": "2026-08-14", "qty": {}, "value": {}}],
-        "history_quarters": 9,
+        "history_quarters": edgar_13f.HISTORY_QUARTERS,
         "all_positions": True,
     }
     monkeypatch.setattr(figi, "tickers_for", lambda cusips: {})
@@ -197,7 +197,7 @@ def test_a_holding_the_code_lookup_missed_is_matched_by_its_exact_name(monkeypat
         "cusip_map": {},
         "ticker_overrides": {"000000202": "BOLT"},
         "history": [{"as_of": "2026-06-30", "filed_at": "2026-08-14", "qty": {}, "value": {}}],
-        "history_quarters": 9,
+        "history_quarters": edgar_13f.HISTORY_QUARTERS,
         "all_positions": True,
     }
     out = edgar_13f.fetch("12345", known)
@@ -340,7 +340,14 @@ def test_estimate_folds_buys_partial_and_full_sales_in_date_order():
         _trade("DYNA", "sell", 5000, 5000, "2026-01-01", partial=True),
     ]
     assert house_ptr.estimate_positions(trades) == [
-        {"key": "ACME", "symbol": "ACME", "name": "Acme", "value": 13000.0, "qty": 13000.0}
+        {
+            "key": "ACME",
+            "symbol": "ACME",
+            "name": "Acme",
+            "value": 13000.0,
+            "qty": 13000.0,
+            "options": [],
+        }
     ]
 
 
@@ -645,7 +652,9 @@ def test_a_member_holding_carries_its_newest_counted_trade_and_no_share_counts()
         "side": "buy",
         "amount_low": 1001.0,
         "amount_high": 15000.0,
+        "option": None,
     }
+    assert holding["options"] == []
     assert "shares" not in holding
 
 

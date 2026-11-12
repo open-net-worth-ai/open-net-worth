@@ -6,7 +6,7 @@ import { NameCell } from './NameCell'
 import { LatestMoves } from './LatestMoves'
 
 const SHOW_LATEST = false
-import { ArrowUpRight, ChevronRight } from '../../../ui/icons'
+import { ArrowUpRight, ChevronLeft, ChevronRight } from '../../../ui/icons'
 import { Tooltip } from '../../ui/Tooltip'
 import type { Follow, FollowPerformance } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
@@ -59,54 +59,45 @@ function Spotlight({
   const since = useSinceFiled(row.symbol, benchmark, from)
   const trades = useMemo(() => exactTrades(follow, row.symbol), [follow, row.symbol])
   const [details, setDetails] = useState(false)
-  const { openAsset } = useAssetNav()
   return (
     <div className="fol-spot">
-      {/* One row that never wraps: the stock's own page, its price, and the two actions. */}
-      <div className="fol-spot-head">
-        <div className="fol-spot-title">
-          <Tooltip label={COPY.openStock(row.symbol)}>
-            <Button
-              size="sm"
-              className="fol-spot-open"
-              aria-label={COPY.openStock(row.symbol)}
-              onClick={() => openAsset({ ticker: row.symbol, label: row.name })}
-            >
-              {row.symbol}
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </Button>
-          </Tooltip>
-          {since.price != null && <span className="fol-spot-price">${since.price.toFixed(2)}</span>}
-        </div>
-        <div className="fol-spot-actions">
-          <Tooltip label={COPY.tradeDetails}>
-            <Button size="sm" aria-label={COPY.tradeDetails} onClick={() => setDetails(true)}>
-              <span className="fol-btn-label">{COPY.tradeDetails}</span>
-              <ChevronRight size={14} aria-hidden="true" />
-            </Button>
-          </Tooltip>
-          <CopyTradeButton
-            who={follow.name}
-            what={`${row.verb.toLowerCase()} ${row.symbol} (${row.name}), ${row.amountText}, ${row.detail}, made public ${shortDate(row.filedAt)}${since.stock != null ? `, ${signedPct(since.stock)} ${rangeWords}` : ''}`}
-            onAskLucius={onAskLucius}
-          />
-        </div>
+      {/* The move's figures, as Performance shows its own (a small name over a large value).
+          The stock itself is the block's title. */}
+      <div className="fol-spot-figrow">
+        {since.stock == null ? (
+          <p className="fol-spot-sub">{COPY.noPriceSince}</p>
+        ) : (
+          <div className="fol-ret3">
+            {since.price != null && (
+              <div className="fol-ret3-item">
+                <span className="fol-ret3-l">{COPY.priceLabel}</span>
+                <span className="fol-ret3-v">${since.price.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="fol-ret3-item">
+              <span className="fol-ret3-l">{row.symbol}</span>
+              <span className={`fol-ret3-v ${toneOf(since.stock)}`}>{signedPct(since.stock)}</span>
+            </div>
+            <div className="fol-ret3-item">
+              <span className="fol-ret3-l">{benchmark}</span>
+              <span className={`fol-ret3-v ${toneOf(since.bench)}`}>{signedPct(since.bench)}</span>
+            </div>
+          </div>
+        )}
       </div>
-      {/* The period's two figures, laid out exactly as with no stock picked. */}
-      {since.stock == null ? (
-        <span className="fol-spot-sub">{COPY.noPriceSince}</span>
-      ) : (
-        <div className="fol-ret3">
-          <div className="fol-ret3-item">
-            <span className="fol-ret3-l">{row.symbol}</span>
-            <span className={`fol-ret3-v ${toneOf(since.stock)}`}>{signedPct(since.stock)}</span>
-          </div>
-          <div className="fol-ret3-item">
-            <span className="fol-ret3-l">{benchmark}</span>
-            <span className={`fol-ret3-v ${toneOf(since.bench)}`}>{signedPct(since.bench)}</span>
-          </div>
-        </div>
-      )}
+      {/* What to do about the move: beside its figures on a wide card, under its chart on a
+          narrow one (one grid, see .fol-spot). */}
+      <div className="fol-spot-actions">
+        <Button size="sm" onClick={() => setDetails(true)}>
+          {COPY.tradeDetails}
+          <ChevronRight size={14} aria-hidden="true" />
+        </Button>
+        <CopyTradeButton
+          who={follow.name}
+          what={`${row.verb.toLowerCase()} ${row.symbol} (${row.name}), ${row.amountText}, ${row.detail}, made public ${shortDate(row.filedAt)}${since.stock != null ? `, ${signedPct(since.stock)} ${rangeWords}` : ''}`}
+          onAskLucius={onAskLucius}
+        />
+      </div>
       <TradeChart row={row} trades={trades} from={from} />
       {details && (
         <TradeDetails
@@ -120,12 +111,24 @@ function Spotlight({
   )
 }
 
-const nameColumn = (held: Set<string>): Column<ActivityRow> => ({
+const nameColumn = (
+  held: Set<string>,
+  exchanges: Record<string, string> = {},
+): Column<ActivityRow> => ({
   key: 'name',
   label: COPY.colStock,
   left: true,
   sortValue: (r) => r.name,
-  cell: (r) => <NameCell symbol={r.symbol} name={r.name} held={held.has(r.symbol)} linkTicker />,
+  cell: (r) => (
+    <NameCell
+      symbol={r.symbol}
+      name={r.name}
+      held={held.has(r.symbol)}
+      linkTicker
+      contracts={r.option ? [r.option] : undefined}
+      exchange={exchanges[r.symbol]}
+    />
+  ),
 })
 /** The change, with a bar for its size against the period's largest move. */
 const amountColumn = (max: number): Column<ActivityRow> => ({
@@ -169,9 +172,10 @@ function columns(
   member: boolean,
   max: number,
   held: Set<string>,
+  exchanges?: Record<string, string>,
 ): Column<ActivityRow>[] {
   const amountColumnFor = amountColumn(max)
-  const nameCol = nameColumn(held)
+  const nameCol = nameColumn(held, exchanges)
   if (set === 'changes' || set === 'all')
     return [nameCol, dateColumn(COPY.colDate), amountColumnFor, sharesColumn]
   if (member)
@@ -212,6 +216,7 @@ function Table({
   picked,
   onPick,
   held,
+  exchanges,
 }: {
   set: FilterSet
   rows: ActivityRow[]
@@ -220,6 +225,7 @@ function Table({
   picked: string | undefined
   onPick: (r: ActivityRow) => void
   held: Set<string>
+  exchanges?: Record<string, string>
 }) {
   const [filter, setFilter] = useState<ActivityFilter>('all')
   const options = filtersFor(set)
@@ -253,7 +259,13 @@ function Table({
       <div ref={box} style={filter === 'all' ? undefined : { minHeight: fullHeight }}>
         <SortTable
           rows={shown}
-          columns={columns(set, member, Math.max(0, ...rows.map((r) => r.magnitude)), held)}
+          columns={columns(
+            set,
+            member,
+            Math.max(0, ...rows.map((r) => r.magnitude)),
+            held,
+            exchanges,
+          )}
           rowKey={(r) => r.key}
           label={label}
           onRowClick={onPick}
@@ -264,11 +276,35 @@ function Table({
   )
 }
 
+/** Where a pinned block's top sits: just under the app's top bar, measured from the block's own
+ *  scroll area (the page on a desktop, the content pane on a phone), since the bar's height
+ *  differs by platform (52px, 48px in the Mac app). */
+function useStickTop(ref: React.RefObject<HTMLElement | null>): number {
+  const [top, setTop] = useState(0)
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = ref.current
+      const bar = document.querySelector<HTMLElement>('.topbar')
+      if (!el || !bar) return setTop(0)
+      let scroller: HTMLElement | null = el.parentElement
+      while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY))
+        scroller = scroller.parentElement
+      const from = scroller ? scroller.getBoundingClientRect().top : 0
+      setTop(Math.max(0, Math.round(bar.getBoundingClientRect().bottom - from)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [ref])
+  return top
+}
+
 /** What they did: one move in focus with its chart (every move when none is picked), then
  *  the chosen period's moves as one table — a quarter's changes, or the dated trades since. */
 export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
   const member = follow.kind === 'house_member'
   const spans = useMemo(() => rangePeriods(follow), [follow])
+  const { openAsset } = useAssetNav()
   const [periodKey, setPeriodKey] = useState<string | null>(null)
   // All by default; the ranges (1 week … 3 years) narrow it.
   const period =
@@ -282,13 +318,10 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
   const panelRef = useRef<HTMLDivElement>(null)
   // Picking a move shows it in the card above the table: on a phone that card is usually off
   // screen by then, so it is brought into view.
-  const pick = (r: ActivityRow) => {
-    const opening = pickedKey !== r.key
-    setPickedKey(opening ? r.key : null)
-    const panel = panelRef.current
-    if (opening && panel && panel.getBoundingClientRect().top < 0)
-      panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  // The card stays pinned under the app's top bar while the table scrolls beneath it, so
+  // picking a move shows its chart in place: the page never jumps to it.
+  const stickTop = useStickTop(panelRef)
+  const pick = (r: ActivityRow) => setPickedKey(pickedKey !== r.key ? r.key : null)
   // The overview runs over the whole history and zooms to the chosen period; its headline is
   // the return over exactly the span on screen.
   const year = perf?.periods.ALL?.status === 'ok' ? perf.periods.ALL : perf?.periods['12M']
@@ -310,10 +343,39 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
         />
       )}
       {/* All moves: its title, period, return and chart are one raised card. */}
-      <div className="fol-panel" ref={panelRef}>
+      <div className="fol-panel fol-act-card" ref={panelRef} style={{ top: stickTop }}>
         {/* The chart follows the table's period, so the two are one titled block. */}
         <div className="fol-sec-head">
-          <h2 className="fol-sec-title">{COPY.allMovesSection}</h2>
+          {/* The block's title is what it shows: every move, or the picked stock (its page one
+              click away) with the way back to every move before it. */}
+          {picked ? (
+            <h2 className="fol-sec-title fol-spot-titleline">
+              <Tooltip label={COPY.backToAllMoves}>
+                <button
+                  type="button"
+                  className="fol-sec-back"
+                  aria-label={COPY.backToAllMoves}
+                  onClick={() => setPickedKey(null)}
+                >
+                  <ChevronLeft size={16} aria-hidden="true" />
+                </button>
+              </Tooltip>
+              <Tooltip label={COPY.openStock(picked.symbol)}>
+                <button
+                  type="button"
+                  className="fol-spot-name"
+                  aria-label={COPY.openStock(picked.symbol)}
+                  onClick={() => openAsset({ ticker: picked.symbol, label: picked.name })}
+                >
+                  <span className="mk-hsym">{picked.symbol}</span>
+                  <span className="mk-hnm">{picked.name}</span>
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </button>
+              </Tooltip>
+            </h2>
+          ) : (
+            <h2 className="fol-sec-title">{COPY.allMovesSection}</h2>
+          )}
           {/* The period sets the chart AND the table, so it sits with the block's title: the stock
               page's own timeframe chips with room, its compact dropdown without (as it does). */}
           {period && spans.length > 1 && (
@@ -354,26 +416,17 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
         ) : (
           year?.status === 'ok' && (
             <div className="fol-spot">
-              <div className="fol-spot-head">
-                {/* The two figures large, each under its short name and line style (as the
-                    Overview's return): the period chips above already say which period. */}
+              {/* The same line as a picked move's figures, so picking one never moves the table. */}
+              <div className="fol-spot-figrow">
+                {/* The holdings' return over the period, large: the chart draws only their line. */}
                 <div className="fol-ret3">
                   <div className="fol-ret3-item">
                     <span className="fol-ret3-l">
                       <i className="fol-line fol-line--main" aria-hidden="true" />
-                      {COPY.holdingsShort}
+                      {follow.name}
                     </span>
                     <span className={`fol-ret3-v ${toneOf(shown?.portfolio)}`}>
                       {signedPct(shown?.portfolio)}
-                    </span>
-                  </div>
-                  <div className="fol-ret3-item">
-                    <span className="fol-ret3-l">
-                      <i className="fol-line fol-line--bench" aria-hidden="true" />
-                      {benchmark}
-                    </span>
-                    <span className={`fol-ret3-v ${toneOf(shown?.benchmark)}`}>
-                      {signedPct(shown?.benchmark)}
                     </span>
                   </div>
                 </div>
@@ -393,6 +446,7 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
           picked={picked?.key}
           onPick={pick}
           held={held}
+          exchanges={perf?.exchanges}
         />
       )}
     </div>

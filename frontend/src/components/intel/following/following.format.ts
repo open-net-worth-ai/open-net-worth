@@ -1,9 +1,23 @@
 import { fCompact, fCompactAmount, fDate } from '../../../utils/format'
-import type { FollowModel, LastTrade, ModelHolding } from '../../../api/followedPortfolios'
+import type {
+  FollowModel,
+  LastTrade,
+  ModelHolding,
+  OptionContract,
+} from '../../../api/followedPortfolios'
 
 // The spec's rule says days below 60, but its own acceptance entry and wireframe read
 // "88 days ago", so days run to the 120 mark, past a quarter's filing lag.
 const DAYS_LIMIT = 120
+
+/** An exchange as a reader names it: Yahoo's market tiers ("NasdaqGS") are just Nasdaq. */
+export function exchangeLabel(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  if (/^nasdaq/i.test(raw)) return 'Nasdaq'
+  if (/^nyse\s*arca$/i.test(raw)) return 'NYSE Arca'
+  if (/^nyse\s*american$/i.test(raw)) return 'NYSE American'
+  return raw
+}
 
 export function ageText(days: number | null | undefined): string {
   if (days == null) return ''
@@ -20,7 +34,25 @@ const usd = (n: number) => fCompactAmount(Math.abs(n), 'USD')
 
 export function tradeLine(t: LastTrade): string {
   const verb = t.side === 'buy' ? 'Bought' : t.side === 'sell' ? 'Sold' : 'Exchanged'
-  return `${verb} ${shortDate(t.date)}, ${usd(t.amount_low)} to ${usd(t.amount_high)}`
+  const what = t.option ? ` ${t.option.right}s` : ''
+  return `${verb}${what} ${shortDate(t.date)}, ${usd(t.amount_low)} to ${usd(t.amount_high)}`
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "Call $150 Jan 2027": a contract in a chip. */
+export function contractLabel(c: OptionContract): string {
+  const [y, m] = c.expiry.split('-')
+  const right = c.right === 'call' ? 'Call' : 'Put'
+  return `${right} $${c.strike.toLocaleString('en-US')} ${MONTHS[Number(m) - 1] ?? ''} ${y}`
+}
+
+/** "20 calls, $150 strike, expiring Jan 15, 2027": the contract in full. */
+export function contractWords(c: OptionContract): string {
+  const n = c.contracts.toLocaleString('en-US')
+  const strike = c.strike.toLocaleString('en-US')
+  const plural = c.contracts === 1 ? '' : 's'
+  return `${n} ${c.right}${plural}, $${strike} strike, expiring ${shortDate(c.expiry)}`
 }
 
 /** "+12.4%", "−3.1%", or "—" when unknown. `unit` swaps the sign for points ("+3.2 pts"). */

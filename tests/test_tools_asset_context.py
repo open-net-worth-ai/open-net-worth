@@ -477,7 +477,8 @@ def test_never_records_price_history_or_persists_exchange(env, monkeypatch):
 
     monkeypatch.setattr("backend.services.prices.fetch_live", _fake_fetch_live)
     monkeypatch.setattr(
-        "backend.services.prices.search_symbol", lambda *a, **k: {"exchange": "XETRA"}
+        "backend.services.prices.fetch_quote_snapshots",
+        lambda symbols: {inst["price_source_id"]: {"exchange": "XETRA"}},
     )
 
     res, _ = call("get_asset_context", instrument_id="inst-1")

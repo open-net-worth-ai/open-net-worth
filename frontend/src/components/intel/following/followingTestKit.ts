@@ -265,6 +265,8 @@ export interface Server {
   watched: Set<string>
   directory: DirectoryEntry[]
   failList?: boolean
+  /** Your own book's return series (the Investments Performance tab's), when it has one. */
+  ownReturns?: { date: string; portfolio: number; benchmark: number | null }[]
 }
 
 export function json(body: unknown, status = 200): Response {
@@ -282,6 +284,10 @@ export function installServer(authFetch: ReturnType<typeof vi.fn>, server: Serve
       return server.failList
         ? json({ detail: 'down' }, 500)
         : json({ follows: server.portfolios.filter((p) => server.watched.has(p.id)) })
+    if (u.pathname === '/api/returns')
+      return server.ownReturns
+        ? json({ series: server.ownReturns })
+        : json({ detail: 'no history' }, 404)
     if (u.pathname === '/api/followed-portfolios/directory') {
       const q = (u.searchParams.get('q') ?? '').toLowerCase()
       const results =

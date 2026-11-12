@@ -22,11 +22,12 @@ export const COPY = {
     'Recent trades: a fund that owns more than 10% of a company must file each trade in it within 2 business days. Exact day, shares and price, but only for its biggest stakes.',
   latestInfoReport:
     'Quarterly report: everything it held at the quarter’s end, compared with the report before. It shows what it bought or sold, not the day or the price, and is filed up to 45 days after the quarter ends.',
-  allMovesSection: 'All moves',
-  bySectorTitle: 'By sector',
-  bySizeTitle: 'By size',
-  allHoldingsTitle: (n: number) => `All holdings (${n})`,
-  returnTitle: 'Return',
+  allMovesSection: 'All Moves',
+  backToAllMoves: 'Back to all moves',
+  bySectorTitle: 'By Sector',
+  bySizeTitle: 'By Size',
+  allHoldingsTitle: (n: number) => `All Holdings (${n})`,
+  returnTitle: 'Performance',
   /** A fund's dated trades: the filings it must make within 2 business days of each one. */
   recentTrades: 'Recent trades',
   /** A quarter's changes: from the quarterly report, which gives no trade days. */
@@ -57,6 +58,7 @@ export const COPY = {
   holdingActions: (symbol: string) => `Actions for ${symbol}`,
   tickerSetAction: 'Set ticker',
   tickerFixAction: 'Wrong ticker?',
+  tickerFixFor: (symbol: string) => `Wrong ticker? Fix ${symbol}`,
   tickerSetTitle: 'Set the ticker',
   tickerFixTitle: 'Correct the ticker',
   tickerLabel: 'Ticker',
@@ -85,6 +87,8 @@ export const COPY = {
   colAvgPrice: 'Avg price',
   kpiValue: 'Holdings value',
   kpiCount: 'Stocks held',
+  priceLabel: 'Price',
+  stocksCount: (n: number) => `${n} ${n === 1 ? 'stock' : 'stocks'}`,
   kpiReturn: '1Y return',
   kpiSincePrevious: (change: string) => `${change} since the previous filing`,
   colWeight: '% Portfolio',
@@ -95,10 +99,11 @@ export const COPY = {
   sectionsLabel: (name: string) => `${name} sections`,
   activityFilter: { all: 'All', buy: 'Bought', sell: 'Sold' },
   openLabel: (name: string) => `Open ${name}`,
-  /** After a card's return: it is today's holdings over a year, not the fund's own record. */
-  oneYear: "today's holdings, 1Y",
+  /** After a card's return: a year of copying each report as it was filed. */
+  oneYear: '1Y return',
   cardUnavailable: 'No figures yet',
   backToAll: 'Famous Portfolios',
+  backToAllLabel: 'Back to Famous Portfolios',
   loadingPage: 'Loading the portfolio…',
   pageErrorBody: "The filing didn't load. Try again.",
   /** The date line names the source too: what was published, and when. */
@@ -113,6 +118,8 @@ export const COPY = {
   holdingsOn: (day: string) => `Holdings on ${day}`,
   /** A fund's snapshot, named by the filing it comes from (hover: the day it describes). */
   quarterlyFiled: (day: string) => `Quarterly report filed ${day}`,
+  /** The header's short form; the full wording is its tooltip. */
+  filedShort: (day: string) => `Filed ${day}`,
   holdingsAsOf: (day: string) => `Holdings as of ${day}`,
   disclosedOn: (day: string) => `Disclosed ${day}`,
   /** A quarter whose filing deadline passed with no holdings report from them. */
@@ -125,6 +132,9 @@ export const COPY = {
   tabActivity: 'Trading Activity',
   tabHoldings: 'Holdings',
   tabOverview: 'Overview',
+  aboutLabel: (name: string) => `About ${name}`,
+  aboutMore: 'More',
+  aboutLess: 'Less',
   /** Since the day it became public: the first day a copier could have acted. */
   sinceFiled: (_source: string, day: string) => `since it became public on ${day}`,
   sinceFiledCol: 'Since filed',
@@ -159,6 +169,12 @@ export const COPY = {
   couldNotUpdate: 'Could not update',
   noDataYet: 'No data yet',
   estimated: 'Estimated',
+  /** The key figures atop Holdings: a small name over each. */
+  figValue: 'Value',
+  figStocks: 'Stocks',
+  figFiled: 'Report filed',
+  figHoldingsOn: 'Holdings on',
+  figLatestTrade: 'Latest trade',
   estimatedSubtitle:
     'Estimated from disclosed trades over the last 36 months. Members report ranges, not exact amounts.',
   refresh: 'Refresh',
@@ -226,23 +242,16 @@ export const COPY = {
       }[range] ?? 'all time'
     }`,
   yourPortfolio: 'Your portfolio',
+  loadingYours: 'Loading your return',
+  /** Your line starts after the range does: from your history's first day. */
+  yourSince: (day: string) => `From ${day}, where your history in this app starts`,
   holdingsShort: 'Holdings',
   perfLineToday: "Today's holdings",
-  /** The return block's title, with its range in words. */
-  returnTitleFor: (range: string) =>
-    `Return, ${
-      {
-        '1W': 'past week',
-        '1M': 'past month',
-        '3M': 'past 3 months',
-        '6M': 'past 6 months',
-        YTD: 'this year',
-        '1Y': 'past year',
-        '2Y': 'past 2 years',
-        '3Y': 'past 3 years',
-      }[range] ?? 'all time'
-    }`,
-  perfChartLabel: "Today's holdings, your portfolio and the benchmark over the chosen range",
+  /** How the portfolio's line is worked out, on its name. */
+  perfLineCopiedTip:
+    'Worked out from its reports: each one bought on the day it was filed and held until the next, before costs and dividends.',
+  perfChartLabelFor: (line: string) =>
+    `${line}, your portfolio and the benchmark over the chosen range`,
   perfCaption: {
     '1M': 'These holdings over the past month',
     '6M': 'These holdings over the past 6 months',

@@ -3794,6 +3794,15 @@ body.hide-amounts .mask * {
     align-items: center;
     flex-shrink: 0;
   }
+  /* The column can be narrow on a wide window (the chat pane open): the actions then wrap
+     below the title instead of squeezing the subtitle to a word per line. */
+  .intel-page-header {
+    flex-wrap: wrap;
+    row-gap: var(--space-3);
+  }
+  .intel-page-header .ui-page-header__titles {
+    flex: 1 1 18rem;
+  }
   @keyframes intel-pulse {
     0%,
     100% {
@@ -7352,9 +7361,15 @@ body.hide-amounts .mask * {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 15%, transparent);
   }
+  /* A tint of the ink, like accent and warn are tints of theirs: --surface2 is pure white in the
+     light theme, the same as the page, so the pill vanished and screens patched borders on. */
   .ui-tag--muted {
     color: var(--muted);
-    background: var(--surface2);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+  .ui-tag--warn {
+    color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
   }
   .ui-tag__remove {
     all: unset;

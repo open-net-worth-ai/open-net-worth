@@ -31,6 +31,7 @@ from backend.services.followed_portfolios import (
     house_ptr,
     performance,
     preview,
+    share_classes,
     signals,
 )
 from backend.services.followed_portfolios.model import DEFAULT_TOP_N, build_model, status_of
@@ -66,6 +67,8 @@ _ACTIVITY_FIELDS = (
     "amount_high",
     "asset_type",
     "counted",
+    "option",
+    "exercised",
     "shares",
     "price",
     "value",
@@ -134,6 +137,7 @@ def source_url(row: dict) -> str | None:
 
 def view(row: dict, top_n: int | None = DEFAULT_TOP_N) -> dict:
     """The follow as every surface reads it — the model derived, the caches left out."""
+    row = share_classes.grouped(row)
     today = user_today()
     model = build_model(row, today, top_n)
     return {
@@ -433,7 +437,9 @@ def apply_followed_portfolio_change(change: dict) -> dict:
     elif op == "refresh":
         row, new_filing = _refresh(change)
         if new_filing:
-            signals.emit_new_filing_story(row, build_model(row, user_today()))
+            signals.emit_new_filing_story(
+                row, build_model(share_classes.grouped(row), user_today())
+            )
     elif op == "unfollow":
         row = _unfollow(change)
     elif op == "set_ticker":

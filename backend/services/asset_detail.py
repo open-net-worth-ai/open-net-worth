@@ -1080,6 +1080,45 @@ def _dedupe_peers_by_ticker(peers: list[dict]) -> list[dict]:
     return out
 
 
+# Where a listing's exchange came from. Only the price provider's own quote for the EXACT ticker
+# the app prices is trusted; a label stored without this mark came from a name search, which can
+# return another company (bare "WBD" returned Webuild on Milan), and is checked again once.
+_EXCHANGE_SOURCE = "quote"
+
+
+def _listing_exchange(instrument_id: str, inst: dict, ident: dict, *, persist: bool) -> str | None:
+    """The exchange the instrument's own ticker trades on, or None when it cannot be confirmed.
+    Never a guess: a wrong exchange sends a reader (or Lucius, placing an order) to another
+    company's listing, so an unconfirmed one is shown as no exchange at all."""
+    if ident.get("exchange_source") == _EXCHANGE_SOURCE:
+        return ident.get("exchange") or None
+    ticker = inst.get("price_source_id")
+    if not ticker or (inst.get("asset_class") or "").lower() == "crypto":
+        return None
+    try:
+        from backend.services.prices import fetch_quote_snapshots
+
+        snap = fetch_quote_snapshots([ticker]).get(ticker)
+    except Exception:
+        logger.debug("asset_detail: no quote for %s's exchange", instrument_id, exc_info=True)
+        snap = None
+    if snap is None:  # the quote could not be read: no label now, checked again next time
+        return None
+    exchange = snap.get("exchange") or None
+    if persist:
+        fixed = {k: v for k, v in ident.items() if k != "exchange"}
+        fixed["exchange_source"] = _EXCHANGE_SOURCE
+        if exchange:
+            fixed["exchange"] = exchange
+        try:
+            InstrumentStore().touch(instrument_id, {"identifiers": fixed})
+        except Exception:
+            logger.debug(
+                "asset_detail: could not persist exchange for %s", instrument_id, exc_info=True
+            )
+    return exchange
+
+
 def read_asset_detail(
     instrument_id: str,
     *,
@@ -1150,42 +1189,7 @@ def read_asset_detail(
     has_ticker = bool(inst.get("price_source_id"))
 
     ident = inst.get("identifiers") or {}
-    # Resolve the exchange/market via Yahoo search (reliable: "ONWAI.DE" -> "XETRA"), falling
-    # back to any stored identifier. Resolved once, then persisted onto the instrument (below).
-    exchange = ident.get("exchange") or None
-    if (
-        not exchange
-        and inst.get("price_source_id")
-        and (inst.get("asset_class") or "").lower() != "crypto"
-    ):
-        try:
-            from backend.services.prices import search_symbol
-
-            for q in (inst.get("price_source_id"), inst.get("name")):
-                if not q:
-                    continue
-                info = search_symbol(q)
-                if info.get("exchange"):
-                    exchange = info["exchange"]
-                    break
-        except Exception:
-            exchange = None
-        # Persist the resolved exchange onto the instrument so this live Yahoo lookup is a
-        # one-time cost: search_symbol's cache is in-memory (wiped on restart) and a security's
-        # listing exchange never changes, so an un-persisted result was re-fetched live on every
-        # cold open — blocking the otherwise-cached detail read by seconds. Best-effort: a write
-        # failure must not break the read. Skipped entirely for a caller that opted into
-        # ``persist_exchange=False`` (this read must stay genuinely writeless) — the resolved
-        # value still rides this call's own `asset.exchange` below either way.
-        if exchange and persist_exchange:
-            try:
-                InstrumentStore().touch(
-                    instrument_id, {"identifiers": {**ident, "exchange": exchange}}
-                )
-            except Exception:
-                logger.debug(
-                    "asset_detail: could not persist exchange for %s", instrument_id, exc_info=True
-                )
+    exchange = _listing_exchange(instrument_id, inst, ident, persist=persist_exchange)
 
     asset_block = {
         "name": display_name(inst.get("name") or inst.get("symbol") or ""),

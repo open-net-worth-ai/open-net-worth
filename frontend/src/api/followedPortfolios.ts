@@ -4,6 +4,14 @@ export type FollowKind = 'fund_13f' | 'house_member' | 'etf_daily'
 export type FollowStatus = 'ok' | 'stale' | 'error' | 'empty'
 export type HoldingChange = 'new' | 'increased' | 'reduced' | 'unchanged'
 
+/** An option contract a House member's report names: the right, strike, expiry and count. */
+export interface OptionContract {
+  right: 'call' | 'put'
+  strike: number
+  expiry: string
+  contracts: number
+}
+
 export interface ModelHolding {
   symbol: string
   name: string
@@ -21,6 +29,8 @@ export interface ModelHolding {
   change_value?: number | null
   /** House member only: the newest counted trade in this stock. */
   last_trade?: LastTrade | null
+  /** House member only: the live option contracts on this stock (calls count toward it). */
+  options?: OptionContract[]
   /** Fund only: the filing codes (CUSIPs) behind it — what a ticker correction names. */
   keys?: string[]
   /** The share class the filing names ("A", "C"), when it names one. */
@@ -33,6 +43,8 @@ export interface LastTrade {
   side: 'buy' | 'sell' | 'exchange'
   amount_low: number
   amount_high: number
+  /** The contract, when the trade was in options. */
+  option?: OptionContract | null
 }
 
 export interface FollowModel {
@@ -71,6 +83,10 @@ export interface FollowActivity {
   amount_high: number
   asset_type: string
   counted: boolean
+  /** An option trade's contract, as its report describes it. */
+  option?: OptionContract | null
+  /** The contract a stock purchase came from, when it was an exercise. */
+  exercised?: OptionContract | null
   /** The Clerk's PDF this trade was disclosed in. */
   report_url?: string | null
   /** Form 4 (a fund's >10% stake): the exact trade. */
@@ -193,6 +209,8 @@ export interface PerfWindow {
   return?: number
   benchmark_return?: number
   covered_weight?: number
+  /** ``copied``: rebalanced to each report on its filing day; absent: today's holdings. */
+  method?: 'copied'
   series: { date: string; portfolio: number; benchmark: number | null }[]
   holdings: Record<string, number>
   missing: string[]
@@ -206,6 +224,8 @@ export interface FollowPerformance {
   periods: Partial<Record<PerfPeriod | 'ALL', PerfWindow>>
   /** "<trade date>|<symbol>" to the return since that trade, for a member's counted trades. */
   trade_returns: Record<string, number>
+  /** Each ticker's exchange, from its own quote; a ticker missing here shows none. */
+  exchanges?: Record<string, string>
 }
 
 export const performanceKey = (id: string) => `${FOLLOWING_KEY}/${id}/performance`

@@ -59,18 +59,21 @@ the cards with **All**, **Watching**, **Funds**, **Politicians** and **ETFs** (e
 there are), sort them, or search by fund or member name. On a phone, or in a narrow pane, the
 filter and the sort are in the **Filter** button beside the search.
 
-Click a card to open it. **‹ Famous Portfolios** takes you back.
+Click a card to open it. The page's header is one line: **‹** (back to Famous Portfolios), the
+portfolio's name and who runs it (dropped on a phone). Under it are three tabs: **Trading
+Activity**, **Holdings** and **Overview**.
 
-Under the name are who runs it and two dates, each its own chip:
+**Overview** starts with a few sentences about the portfolio, written from its own data: where its
+numbers come from, its largest holdings and how much of it they are, and what changed in its last
+report. **More** shows the rest. Then its key figures:
 
-- **Quarterly report filed Aug 14, 2026** (an example): the fund's latest quarterly report, which
-  lists everything it held at the quarter's end. Holdings and Overview are built on it; point at
-  it to see that day (**Holdings as of Jun 30, 2026**). An ARK ETF shows **Holdings on** its
-  latest day instead. A House member has no such list, so neither is shown for one.
-- **Latest trade Nov 3, 2026**: their newest dated trade, when it is newer than the holdings.
-- **Apr – Jun 2026 not disclosed** appears when a quarter's 45-day deadline has passed with no
-  holdings report from the fund (some funds file only a notice that another manager reports for
-  them).
+- **Value** and **Stocks**, each with its change since the previous report.
+- **Report filed** (a fund): the day its latest quarterly report was filed; point at it to see the
+  day it describes (**Holdings as of Jun 30, 2026**). An ARK ETF shows **Holdings on** its latest
+  day; a House member shows **Latest trade**, their newest dated trade.
+- **Estimated** (a House member) and **Apr – Jun 2026 not disclosed** (a fund whose quarterly
+  report is past its 45-day deadline; some funds file only a notice that another manager reports
+  for them) appear under them as cautions.
 
 The bell beside **Copy with Lucius** watches the portfolio: you get an Intel story each time it
 files. A filled bell means you are watching; click it again to stop (it asks first). **Refresh**,
@@ -87,7 +90,7 @@ fund that owns more than 10% of a company must file each trade in it within two 
 with the exact day, shares and price), then the three biggest purchases and the three biggest
 sales in its latest quarterly report (**Bought, in quarterly report Aug 14**). A quarterly report
 shows what changed since the one before, not the day or the price of each trade. Click
-one to show it under **All moves**, with its chart and **Copy trade**.
+one to show it under **All Moves**, with its chart and **Copy trade**.
 
 Under them is everything they did, newest first, over the period you pick. The period starts on the whole range
 (for example **Jul 2024 – Now**); you can also pick the days since the last quarter (**Since
@@ -115,25 +118,28 @@ for its name, to see its name, share and change above the table and list only it
 **Show all** (or the tile again) lists them all.
 
 The table lists every holding in the report, each as its share of the whole portfolio, with the
-shares held and its return over the past 12 months. Click a row to open the stock's own page. Search it by ticker or name. A holding the filing names without a ticker
+shares held and its return over the past 12 months. Two share classes of one company (Alphabet's
+class A and class C, say) are one row, under the class the fund holds more of. Beside each company
+is the exchange its ticker trades on, read from that ticker's own quote; when it can't be
+confirmed, none is shown. Click a row to open the stock's own page. Search it by ticker or name. A holding the filing names without a ticker
 we could match is a row of its own with **Set ticker**, which searches for the company the filing
 names and lets you pick it; on any fund holding, **Wrong ticker?** is
-in the row's menu. A correction is kept with a portfolio you watch, so setting one starts
+in the row's **⋯** menu (on a touch screen, swipe the holding left and tap the pencil). A correction is kept with a portfolio you watch, so setting one starts
 watching it.
 
-### Overview
+### The return
 
-The holdings' total value and the number of stocks, each with its change since the previous
-report when there is one. Then the price return of these holdings against your benchmark, with
-dates along the bottom. The periods are under the chart: **1M**, **6M**, **12M** or **Since
-filed**. The dashed line is your benchmark:
+Under the key figures on **Overview**: what copying this portfolio would have returned, against your
+benchmark and your own portfolio, with dates along the bottom. Pick the range above the chart;
+**All** starts at the oldest report on record (about four years of a fund's quarterly reports).
 
-- **Since filed** is what copying it on the day it was made public would have returned, before
-  costs and dividends.
-- Every return on these screens, the cards' **1Y** included, is the return of the stocks they
-  hold today, at today's weights. It is not the fund's own track record.
-- **1M**, **6M** and **12M** apply today's holdings to the past. They are not the fund's own
-  return, and they flatter a portfolio that recently bought its winners.
+- The **Copied** line buys each report on the day it was made public and holds it until the next
+  one is filed, before costs and dividends. It never uses a holding before it was public: a stock
+  bought last quarter earns nothing for the years before, and one sold since still earns what it
+  did while it was held. Point at **Copied** for the rule.
+- Each report is copied by its 25 largest holdings. A holding with no price on the day it was filed
+  is left out of that stretch and the rest are scaled up.
+- It is not the fund's own track record: nobody outside knows its trading between reports.
 
 Point at the chart to read both figures for a day.
 

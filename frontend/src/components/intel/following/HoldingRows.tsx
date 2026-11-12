@@ -1,8 +1,14 @@
 import { useState } from 'react'
 import { fCompact, fPct } from '../../../utils/format'
-import { ActionMenu, Button } from '../../ui'
+import { ActionMenu, Button, type SwipeAction } from '../../ui'
+import { Pencil } from '../../../ui/icons'
 import { SearchBox } from './Controls'
-import type { FollowModel, PerfPeriod, PerfWindow } from '../../../api/followedPortfolios'
+import type {
+  FollowModel,
+  OptionContract,
+  PerfPeriod,
+  PerfWindow,
+} from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { companyName, nameClasses, signedPct, toneOf, tradeLine } from './following.format'
 import { SectorMap } from './SectorMap'
@@ -25,6 +31,8 @@ interface Props {
   watchesToo?: boolean
   /** The tickers in your own book, upper-cased: their rows say "You own". */
   held: Set<string>
+  /** Each ticker's exchange, from its own quote. */
+  exchanges?: Record<string, string>
 }
 
 interface Row {
@@ -40,6 +48,8 @@ interface Row {
   /** The filing code a correction names; none for a member's holdings. */
   code: string | null
   shareClass?: string | null
+  /** A member's option contracts on it. */
+  contracts?: OptionContract[]
 }
 
 const pct = (n: number) => fPct(n, { fraction: true })
@@ -68,6 +78,7 @@ function rowsOf(
     ret: returns[h.symbol] ?? null,
     code: h.keys?.[0] ?? null,
     shareClass: h.share_class,
+    contracts: h.options,
   }))
   // A holding with no ticker is a row like any other, never a footnote: copying the portfolio
   // without it would silently drop a position, so it says so and offers the fix.
@@ -97,6 +108,7 @@ export function HoldingRows({
   onSetTicker,
   watchesToo,
   held,
+  exchanges,
 }: Props) {
   const { openAsset } = useAssetNav()
   const returns = win?.status === 'ok' ? win.holdings : {}
@@ -121,7 +133,13 @@ export function HoldingRows({
       left: true,
       sortValue: (r) => r.symbol ?? r.name,
       cell: (r) => (
-        <NameCell symbol={r.symbol} name={r.name} held={!!r.symbol && held.has(r.symbol)} />
+        <NameCell
+          symbol={r.symbol}
+          name={r.name}
+          held={!!r.symbol && held.has(r.symbol)}
+          contracts={r.contracts}
+          exchange={r.symbol ? exchanges?.[r.symbol] : undefined}
+        />
       ),
     },
     {
@@ -162,6 +180,18 @@ export function HoldingRows({
         ]
       : []),
   ]
+  // On a touch screen the card slides left onto the fix; the "⋯" menu is for a mouse.
+  const swipeFix = (r: Row): SwipeAction[] =>
+    onSetTicker && r.code && r.symbol
+      ? [
+          {
+            label: COPY.tickerFixAction,
+            ariaLabel: COPY.tickerFixFor(r.symbol),
+            onClick: () => setFixing(r),
+            icon: <Pencil size={20} strokeWidth={1.8} aria-hidden="true" />,
+          },
+        ]
+      : []
   function fixCell(r: Row) {
     return r.symbol ? (
       <span className="fol-row-menu">
@@ -228,6 +258,7 @@ export function HoldingRows({
           initialSort="weight"
           // A row opens its stock, as a holding does everywhere else in the app.
           onRowClick={(r) => r.symbol && openAsset({ ticker: r.symbol, label: r.name })}
+          swipeActions={swipeFix}
         />
       </div>
       {fixing && onSetTicker && (

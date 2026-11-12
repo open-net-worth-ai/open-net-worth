@@ -16,7 +16,14 @@ from datetime import datetime, timezone
 from backend.core.paths import CACHE_DIR
 from backend.core.user_time import user_today
 from backend.db.followed_portfolio_store import KINDS, FollowedPortfolioStore
-from backend.services.followed_portfolios import edgar_13f, etf_daily, form4, house_ptr, performance
+from backend.services.followed_portfolios import (
+    edgar_13f,
+    etf_daily,
+    form4,
+    house_ptr,
+    performance,
+    share_classes,
+)
 from backend.services.followed_portfolios.model import build_model
 
 _TTL_SECONDS = 12 * 3600
@@ -89,6 +96,17 @@ def _featured(kind: str, ref: str) -> dict:
     return {}
 
 
+def _read_as_now(row: dict) -> bool:
+    """False for a member's preview whose reports were read before the reader last changed
+    (options were once dropped): it is read again rather than shown as it was."""
+    if row.get("kind") != "house_member":
+        return True
+    return all(
+        (r or {}).get("parser") == house_ptr.PARSER_VERSION
+        for r in (row.get("reports") or {}).values()
+    )
+
+
 def preview_row(kind: str, ref: str, *, full: bool = False) -> dict:
     """The follow-shaped row for (kind, ref): the stored one when followed, else a cached fetch.
     Raises what the source raises when it cannot be read."""
@@ -103,7 +121,7 @@ def preview_row(kind: str, ref: str, *, full: bool = False) -> dict:
     key = (kind, ref)
     with _lock(key):
         hit = _cache.get(key)
-        fresh = hit and time.monotonic() - hit[0] < _TTL_SECONDS
+        fresh = hit and time.monotonic() - hit[0] < _TTL_SECONDS and _read_as_now(hit[1])
         # A card reads two quarters (fast, and Discover has 19 of them); the page, opened one at
         # a time, reads the year of quarters its stock history needs.
         if fresh and (not full or hit[1].get("full_history") or kind != "fund_13f"):
@@ -246,7 +264,7 @@ def summary(row: dict) -> dict:
 
 
 def _summary(row: dict) -> dict:
-    model = build_model(row, user_today())
+    model = build_model(share_classes.grouped(row), user_today())
     perf = performance.performance_for(row)
     year = (perf.get("periods") or {}).get("12M") or {}
     ok = year.get("status") == "ok"

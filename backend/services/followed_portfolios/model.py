@@ -42,6 +42,8 @@ def _merged(snapshot: dict | None) -> dict[str, dict]:
             slot["keys"].append(str(pos["key"]))
         slot["value"] += float(pos["value"])
         slot["qty"] += float(pos.get("qty") or 0)
+        # A member's option contracts on this stock (calls count toward it, puts are listed).
+        slot.setdefault("options", []).extend(pos.get("options") or [])
     return out
 
 
@@ -125,7 +127,8 @@ def _last_trades(follow: dict) -> dict[str, dict]:
         symbol = normalize_symbol(trade.get("symbol"))
         if symbol and trade.get("counted") and symbol not in out:
             out[symbol] = {
-                k: trade.get(k) for k in ("date", "filed_at", "side", "amount_low", "amount_high")
+                k: trade.get(k)
+                for k in ("date", "filed_at", "side", "amount_low", "amount_high", "option")
             }
     return out
 
@@ -161,7 +164,10 @@ def build_model(follow: dict, today: date, top_n: int | None = DEFAULT_TOP_N) ->
             **(
                 _fund_detail(now[symbol], before.get(symbol), previous is not None)
                 if fund
-                else {"last_trade": last_trades.get(symbol)}
+                else {
+                    "last_trade": last_trades.get(symbol),
+                    "options": now[symbol].get("options") or [],
+                }
             ),
         }
         for symbol, weight in weights.items()

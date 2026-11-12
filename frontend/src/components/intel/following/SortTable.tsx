@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { SwipeActions, useSwipeRows, type SwipeAction } from '../../ui'
 
 export interface Column<R> {
   key: string
@@ -31,6 +32,9 @@ interface Props<R> {
    *  the chart a row's click drives is a long scroll away on a phone). */
   onCardClick?: (row: R) => void
   selectedKey?: string | null
+  /** A card's actions on a touch screen: the card slides left onto them, and the row's own
+   *  action cell (its "⋯" menu) is not drawn. A row with none keeps its action cell. */
+  swipeActions?: (row: R) => SwipeAction[]
 }
 
 const CARDS_BELOW_PX = 640
@@ -51,6 +55,7 @@ export function SortTable<R>({
   onRowClick,
   onCardClick,
   selectedKey,
+  swipeActions,
 }: Props<R>) {
   // Cards or a table by the width the table actually has, not the screen's: a tablet, or a
   // column beside the holdings ring, is too narrow for every column long before a phone is.
@@ -85,7 +90,7 @@ export function SortTable<R>({
         <CardList
           rows={sorted}
           onRowClick={onCardClick ?? onRowClick}
-          {...{ columns, rowKey, label, selectedKey }}
+          {...{ columns, rowKey, label, selectedKey, swipeActions }}
         />
       ) : (
         <div className="mk-tbl-wrap">
@@ -168,7 +173,9 @@ function CardList<R>({
   label,
   onRowClick,
   selectedKey,
+  swipeActions,
 }: Omit<Props<R>, 'initialSort' | 'onCardClick'>) {
+  const swipes = useSwipeRows()
   const head = columns.find((c) => c.left) ?? columns[0]!
   const primary = columns.find((c) => c.primary)
   const action = columns.find((c) => c.action)
@@ -209,8 +216,9 @@ function CardList<R>({
             )}
           </>
         )
-        return (
-          <li key={k} className={`fol-row${selectedKey === k ? ' is-on' : ''}`}>
+        const swiped = swipes ? (swipeActions?.(r) ?? []) : []
+        const card = (
+          <>
             {onRowClick ? (
               <button
                 type="button"
@@ -223,7 +231,18 @@ function CardList<R>({
             ) : (
               <div className="fol-row-main">{body}</div>
             )}
-            {action && <span className="fol-row-action">{action.cell(r)}</span>}
+            {action && !swiped.length && <span className="fol-row-action">{action.cell(r)}</span>}
+          </>
+        )
+        return (
+          <li key={k} className={`fol-row${selectedKey === k ? ' is-on' : ''}`}>
+            {swiped.length ? (
+              <SwipeActions actions={swiped} className="fol-row-swipe">
+                {card}
+              </SwipeActions>
+            ) : (
+              card
+            )}
           </li>
         )
       })}

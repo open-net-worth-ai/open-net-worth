@@ -1,19 +1,9 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useState } from 'react'
-import {
-  ActionMenu,
-  Badge,
-  Button,
-  Tag,
-  ConfirmDialog,
-  ErrorState,
-  PageTabs,
-  TabSkeleton,
-} from '../../ui'
+import { useRef, useState } from 'react'
+import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs, TabSkeleton } from '../../ui'
 import { Bell, ChevronLeft } from '../../../ui/icons'
 import { Spark } from '../../../lucius/identity'
 import { Tooltip } from '../../ui/Tooltip'
-import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import {
   followPortfolio,
   refreshFollow,
@@ -21,12 +11,13 @@ import {
   unfollowPortfolio,
 } from '../../../api/followedPortfolios'
 import { COPY, askPrompt } from './following.copy'
-import { shortDate } from './following.format'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { usePortfolioTickerMaps } from '../usePortfolioTickerMaps'
 import { ActivityTab } from './ActivityTab'
 import { activitySections, hasActivity as anyActivity, missedQuarter } from './activityRows'
 import { HoldingRows } from './HoldingRows'
+import { KeyFigures } from './KeyFigures'
+import { AboutPortfolio } from './AboutPortfolio'
 import { OverviewTab } from './OverviewTab'
 import { usePreviewPage } from './useFollowing'
 import type { PortfolioRef } from './Discover'
@@ -50,6 +41,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
   // The open tab lives in the address (?tab=), so a reload, Back and a shared link keep it.
   const search = useSearch({ strict: false }) as { tab?: string }
+  // Overview was folded into Holdings: an old ?tab=overview link opens Holdings.
   const tab: Tab = search.tab === 'holdings' || search.tab === 'overview' ? search.tab : 'activity'
   const setTab = (next: Tab) =>
     void navigate({
@@ -63,6 +55,15 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  // Switching tabs from below the tab bar starts the new tab at its top, the tab bar in view:
+  // a tab's height differs (Trading Activity is often twice Holdings), so keeping the old scroll
+  // would land in the middle of the new one, or past its end.
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const switchTab = (next: Tab) => {
+    const bar = tabsRef.current
+    if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start' })
+    setTab(next)
+  }
 
   if (page.initialLoading)
     return <TabSkeleton variant="holdings" label={COPY.loadingPage} header={false} />
@@ -115,10 +116,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       ? [
           {
             label: COPY.askLucius,
-            onSelect: () => {
-              sendNextPrefill()
-              onAskLucius(askPrompt(follow.name))
-            },
+            // A question to edit, not a request: it waits in Lucius's composer (as every other
+            // "Ask Lucius" in the app does) until the user sends it.
+            onSelect: () => onAskLucius(askPrompt(follow.name)),
           },
         ]
       : []),
@@ -164,43 +164,24 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
 
   return (
     <div className="fol-page">
-      <button type="button" className="fol-back" onClick={onBack}>
-        <ChevronLeft size={14} aria-hidden="true" />
-        {COPY.backToAll}
-      </button>
       <header className="fol-head">
         <div className="fol-id">
           <h2 className="fol-title">
-            {follow.name}
-            {model?.estimated && <Badge tone="warn">{COPY.estimated}</Badge>}
+            {/* The way back sits on the name's own line: no line of its own above it. */}
+            <Tooltip label={COPY.backToAllLabel}>
+              <button
+                type="button"
+                className="fol-back-icon"
+                aria-label={COPY.backToAllLabel}
+                onClick={onBack}
+              >
+                <ChevronLeft size={20} aria-hidden="true" />
+              </button>
+            </Tooltip>
+            <span className="fol-title-name">{follow.name}</span>
+            {/* Whose it is, quiet after the name; it gives way first on a narrow screen. */}
+            {follow.subtitle && <span className="fol-title-by">{follow.subtitle}</span>}
           </h2>
-          {/* Who it is, then the two facts every tab rests on, each its own chip so they never
-              read as one sentence: the snapshot Holdings and Overview describe, and the newest
-              dated trade (Trading Activity runs past the snapshot). */}
-          <div className="fol-facts">
-            {follow.subtitle && <span className="fol-by">{follow.subtitle}</span>}
-            {/* A fund's snapshot is named by the report it comes from; an ETF's is its day. */}
-            {model && follow.kind === 'fund_13f' && (
-              <Tooltip label={COPY.holdingsAsOf(shortDate(model.as_of))}>
-                <span tabIndex={0}>
-                  <Tag tone="muted">{COPY.quarterlyFiled(shortDate(model.filed_at))}</Tag>
-                </span>
-              </Tooltip>
-            )}
-            {model && follow.kind === 'etf_daily' && (
-              <Tag tone="muted">{COPY.holdingsOn(shortDate(model.as_of))}</Tag>
-            )}
-            {/* A fund's newest trade is right below, in Latest moves: only a member (who has no
-                such strip) carries it up here. */}
-            {latestTrade && follow.kind === 'house_member' && (
-              <Tooltip label={COPY.disclosedOn(shortDate(latestTrade.filed_at))}>
-                <span tabIndex={0}>
-                  <Tag tone="muted">{COPY.latestTrade(shortDate(latestTrade.date))}</Tag>
-                </span>
-              </Tooltip>
-            )}
-            {missed && <Badge tone="warn">{COPY.notDisclosed(missed)}</Badge>}
-          </div>
         </div>
         {/* Icon actions stay level with the name at every width; the call to action sits
             with them on a wide screen and moves under the name on a narrow one. */}
@@ -236,36 +217,52 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
         </div>
       </header>
       {error && <div className="fol-note fol-note--bad">{error}</div>}
-      <PageTabs
-        tabs={tabs}
-        value={shownTab}
-        onChange={setTab}
-        ariaLabel={COPY.sectionsLabel(follow.name)}
-      />
-      {shownTab === 'activity' && (
-        <ActivityTab
-          follow={follow}
-          perf={performance}
-          names={names}
-          held={heldSet}
-          onAskLucius={onAskLucius}
+      <div ref={tabsRef}>
+        <PageTabs
+          tabs={tabs}
+          value={shownTab}
+          onChange={switchTab}
+          ariaLabel={COPY.sectionsLabel(follow.name)}
         />
-      )}
-      {shownTab === 'holdings' && model && (
-        <HoldingRows
-          model={model}
-          period="12M"
-          win={performance.periods['12M']}
-          names={names}
-          sectors={sectors}
-          watchesToo={!followId}
-          held={heldSet}
-          onSetTicker={follow.kind === 'fund_13f' ? setTicker : undefined}
-        />
-      )}
-      {shownTab === 'overview' && model && (
-        <OverviewTab model={model} perf={performance} onRetry={() => void page.refresh()} />
-      )}
+      </div>
+      {/* At least a screen tall: a short tab never pulls the page up under the reader. */}
+      <div className="fol-tabpanel">
+        {shownTab === 'activity' && (
+          <ActivityTab
+            follow={follow}
+            perf={performance}
+            names={names}
+            held={heldSet}
+            onAskLucius={onAskLucius}
+          />
+        )}
+        {/* One Holdings tab: what they hold and how it has done, then the holdings themselves. */}
+        {shownTab === 'holdings' && model && (
+          <HoldingRows
+            model={model}
+            period="12M"
+            win={performance.periods['12M']}
+            names={names}
+            sectors={sectors}
+            watchesToo={!followId}
+            held={heldSet}
+            exchanges={performance.exchanges}
+            onSetTicker={follow.kind === 'fund_13f' ? setTicker : undefined}
+          />
+        )}
+        {/* What it is and how it has done: a few sentences, its key figures, its return. */}
+        {shownTab === 'overview' && model && (
+          <div className="fol-sec">
+            <AboutPortfolio follow={follow} model={model} names={names} sectors={sectors} />
+            <KeyFigures follow={follow} model={model} latestTrade={latestTrade} missed={missed} />
+            <OverviewTab
+              perf={performance}
+              name={follow.name}
+              onRetry={() => void page.refresh()}
+            />
+          </div>
+        )}
+      </div>
       <ConfirmDialog
         data={
           confirming
