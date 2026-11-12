@@ -161,7 +161,8 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 2. In the application's allowed redirect URLs, add the address you open Open Net Worth at,
    followed by `/connectors` — for example `http://localhost:8080/connectors`. Enable Banking
    compares it exactly, so copy the start from your browser's address bar (no trailing `/`, no
-   `?…`). Also add `https://localhost/connectors` as a fallback.
+   `?…`), or copy it from **Redirect URL** at the top of the Enable Banking form in step 4.
+   Also add `https://localhost/connectors` as a fallback.
 3. In Open Net Worth: **Connectors → Browse & add → Enable Banking → Add connector**.
 4. Paste the **Application ID**, and paste the whole contents of the `.pem` file — including its
    first "BEGIN PRIVATE KEY" line and last "END PRIVATE KEY" line — into **Private key (PEM)**.

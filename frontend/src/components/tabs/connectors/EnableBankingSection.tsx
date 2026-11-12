@@ -80,6 +80,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   // After Link bank: whether the bank will bring the user back here (the app's URL is
   // registered), or to the old https://localhost/connectors page they copy the code from.
   const [returnsToApp, setReturnsToApp] = useState<boolean | null>(null)
+  const [copied, setCopied] = useState(false)
   // Post-consent code → session exchange.
   const [authCode, setAuthCode] = useState('')
   const [completing, setCompleting] = useState(false)
@@ -244,6 +245,14 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     )
   }
 
+  const redirectUrl = enableBankingReturnUrl()
+  function copyRedirect() {
+    // Absent over plain http on another host: the value is on screen and selectable anyway.
+    navigator.clipboard?.writeText(redirectUrl).catch(() => {})
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+
   const set = <K extends keyof EnableBankingForm>(k: K, v: EnableBankingForm[K]) =>
     setForm((f) => f && { ...f, [k]: v })
 
@@ -255,7 +264,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           Enable Banking
         </a>{' '}
         to get an application ID and RSA private key. Then link a bank: you&apos;ll authorise access
-        at the bank&apos;s own site and paste the code it returns into the field below.
+        at the bank&apos;s own site, and it brings you back here.
       </Text>
 
       {cfg.configured && !cfg.enabled && (
@@ -271,6 +280,24 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           Last error: {cfg.last_error}
         </Text>
       )}
+
+      <FormField
+        label="Redirect URL"
+        htmlFor="conn-eb-redirect"
+        help="Add this to your Enable Banking application's allowed redirect URLs, exactly as shown, so your bank brings you back here after you approve access."
+      >
+        <Cluster gap="--space-2" align="center" wrap={false}>
+          <TextField
+            id="conn-eb-redirect"
+            value={redirectUrl}
+            readOnly
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <Button size="sm" variant="secondary" onClick={copyRedirect}>
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+        </Cluster>
+      </FormField>
 
       <FormField
         label="Application ID"
