@@ -583,7 +583,9 @@ _KINDS: tuple[ConnectorKind, ...] = (
         "actual_budget",
         "Actual Budget",
         _actual_budget_configured,
-        secret_fields=_secrets("server_url", "password", "token", "encryption_password"),
+        secret_fields=_secrets(
+            "server_url", "password", "token", "encryption_password", "proxy_headers"
+        ),
         config_keys=("budget_id",),
         moved_state=("budget_name", "budget_currency"),
     ),
