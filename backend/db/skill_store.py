@@ -1178,6 +1178,8 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
     # references/trades.md, read before logging a trade).
     "log-transactions-from-email": frozenset(
         {
+            # 2026-11-13: a foreign purchase passes what the account was charged as settled_amount.
+            "f23a59135c5caa8bfc26cca70dfb397ab56fd824aac664fc2910357c71e154be",
             # 2026-11-13: categories and payee hygiene moved to book-transactions.
             "a06dac2762127b53292e18f8100e0858e84ebf22e7a2e622d08257a0d7be34ed",
             "23029f81e7d4ff685dcba55c25fdd84ae15cc3774e46e9beeef8a49af9aa8ba4",
@@ -1262,6 +1264,12 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "8c1ebb1af245d07ad6697f02135aead68ab65d749300f222a8cc351ddf9d245c",
             # 2026-11-06: before security notes were limited to finance apps.
             "d7c70868131e008f640a1fa61bb7370a15259954218acc1610d83390ffeb48fa",
+        }
+    ),
+    # 2026-11-13: also carry a foreign purchase's original amount and currency through.
+    "book-transactions": frozenset(
+        {
+            "22e6e8ff517850cb61fad5a51b82b62be400bd39fb5164c5703c81b2a3359acc",
         }
     ),
 }

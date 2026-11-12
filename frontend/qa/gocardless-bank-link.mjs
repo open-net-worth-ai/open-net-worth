@@ -92,6 +92,7 @@ function fakeGoCardless() {
           bookingDate: daysAgo(2),
           transactionAmount: { amount: '-12.40', currency: 'GBP' },
           remittanceInformationUnstructured: 'CARD 1234 ACME STORES LONDON',
+          merchantCategoryCode: '5411',
           creditorName: 'Acme Grocer',
         },
         {
@@ -137,6 +138,7 @@ function fakeGoCardless() {
           bookingDate: daysAgo(7),
           transactionAmount: { amount: '-24.99', currency: 'GBP' },
           remittanceInformationUnstructured: 'DD ACME LIFE INSURANCE PREMIUM 88412',
+          merchantCategoryCode: '6300',
           creditorName: 'Acme Life Insurance',
         },
         {
@@ -144,6 +146,7 @@ function fakeGoCardless() {
           bookingDate: daysAgo(8),
           transactionAmount: { amount: '-850.00', currency: 'GBP' },
           remittanceInformationUnstructured: 'ACME UNIVERSITY TUITION FEE TERM 2',
+          merchantCategoryCode: '8220',
           creditorName: 'Acme University',
         },
         {
@@ -366,6 +369,10 @@ async function bookedFromGoCardless(baseUrl, accountId) {
       refs: (t.external_refs ?? []).filter((r) => r.source === 'gocardless').map((r) => r.ref),
       payeeId: t.payee_id ?? null,
       category: t.category ?? null,
+      original:
+        t.original_amount != null
+          ? `${Number(t.original_amount).toFixed(2)} ${t.original_currency}`
+          : null,
       description: t.description ?? '',
     }))
 }
@@ -470,22 +477,25 @@ const httpFailures = []
 // user leaving a page does the same. Kept apart and reported, never counted as an app error.
 const abortedByNavigation = []
 function watchConsole(page, errors, label) {
-  let navigatedAt = 0
-  page.on('request', (r) => {
-    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navigatedAt = Date.now()
+  // A read the page itself abandoned — the run navigating away mid-load — fails with the
+  // browser's net::ERR_ABORTED and the app logs "Failed to fetch". Only that pairing is
+  // set aside; a "Failed to fetch" with no aborted request beside it is a real error.
+  let abortedAt = 0
+  page.on('requestfailed', (r) => {
+    if ((r.failure()?.errorText ?? '').includes('ERR_ABORTED')) abortedAt = Date.now()
   })
   page.on('console', (m) => {
     // A failed request's console line has no URL; the response listener below records it.
     if (m.type() !== 'error' || m.text().startsWith('Failed to load resource')) return
-    if (m.text().includes('Failed to fetch') && Date.now() - navigatedAt < 2000) {
+    if (m.text().includes('Failed to fetch') && Date.now() - abortedAt < 3000) {
       abortedByNavigation.push(`${label}: ${m.text().split('\n')[0]}`)
     } else errors.push(`${label}: ${m.text()}`)
   })
+  page.on('pageerror', (e) => errors.push(`${label}: uncaught ${e.message}`))
   page.on('response', (r) => {
     if (r.status() >= 400)
       httpFailures.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`)
   })
-  page.on('pageerror', (e) => errors.push(`${label}: uncaught ${e.message}`))
 }
 
 /** The Connectors tab's first-visit intro covers the page once per browser profile. */
@@ -830,6 +840,13 @@ async function main() {
         const run = await runAutomation(baseUrl, automation.id)
         console.log(`  sync run (${MODEL}): ${run.status}`)
         writeFileSync(join(OUT_DIR, 'sync-run.json'), JSON.stringify(run, null, 2))
+        if (run.session_id) {
+          const convo = await api(
+            baseUrl,
+            `/api/sessions/${encodeURIComponent(run.session_id)}/messages?tail=200`,
+          ).catch((e) => ({ error: String(e) }))
+          writeFileSync(join(OUT_DIR, 'sync-conversation.json'), JSON.stringify(convo, null, 2))
+        }
         const got = await bookedAll()
         const want = EXPECTED_BOOKED.map(
           ([acct, ago, amount]) => `${acct} ${daysAgo(ago)} ${amount.toFixed(2)}`,
@@ -943,6 +960,19 @@ async function main() {
         assert.equal(payeeFor(2500).toLowerCase(), 'acme ltd', `salary payee: ${payeeFor(2500)}`)
         const raw = payees.filter((p) => /^card \d/i.test(p.name)).map((p) => p.name)
         assert.deepEqual(raw, [], 'a payee was named after raw card text')
+      },
+      bank,
+    )
+
+    await step(
+      'GCL-ORIGINAL-CHARGE',
+      async () => {
+        if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
+        // The euro purchase: debited £42.10, charged €48.00 — kept in the ledger's own fields.
+        const paris = (await bookedFromGoCardless(baseUrl, accountIds.CA_Monzo)).find(
+          (r) => Math.abs(r.amount + 42.1) < 0.001,
+        )
+        assert.equal(paris?.original, '48.00 EUR', `original charge stored as ${paris?.original}`)
       },
       bank,
     )

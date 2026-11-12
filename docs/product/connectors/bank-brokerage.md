@@ -441,6 +441,9 @@ The schedule and the wording are yours to change. Each run:
 - **Names the payee after who was paid**, where the bank says (GoCardless sends it): a card
   payment shows *Acme Grocer* as the payee, while the transaction keeps the bank's own wording
   (*CARD 1234 ACME STORES LONDON*) so the payee learns to recognise it next time.
+- **Keeps both figures for a purchase in another currency.** A €48.00 meal your UK card was
+  charged £42.10 for is booked at £42.10, with €48.00 as its original charge — shown on the
+  transaction, and used to recognise the same purchase when its receipt arrives by email.
 - **Never books the same transaction twice.** One it already booked is skipped. Two genuinely
   separate identical transactions (two £3.00 coffees at the same place on one day) are booked as
   two.

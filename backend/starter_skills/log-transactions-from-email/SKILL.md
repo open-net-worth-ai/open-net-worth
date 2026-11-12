@@ -35,7 +35,7 @@ Work from whatever bank, card and wallet mail actually arrives — there is no f
 
 - **account** — the card, wallet or bank account the money moved on, matched against this run's account list.
 - **amount** — always positive; direction carries the sign (debit = money out, credit = money in).
-- **currency** — as the source states it. A card charged in a foreign currency is logged in that currency, never the bank's converted amount; FX conversion is the system's job.
+- **currency** — as the source states it. A card charged in a foreign currency is logged in that currency, never the bank's converted amount; FX conversion is the system's job. When the alert also states what the account was actually charged, pass that as `settled_amount` (the `book-transactions` skill's foreign-purchase rule).
 - **date** — the transaction's own date, in the profile's timezone.
 - **description** — the raw bank/card string, verbatim, including any reference or trace code. Dedup, spend rules and payee matching all read this field, so a tidied-up version breaks all three.
 - **memo** — empty unless the email says something the row doesn't already show: the items ordered, what a transfer was for. Never a retelling of the alert — not the bank or alert name, the time, card or account numbers, the counterparty's bank, the payee again, or how it was paid; the linked email keeps all of that. (There is no `note` field on a transaction.)

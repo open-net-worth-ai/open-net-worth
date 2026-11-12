@@ -7,7 +7,8 @@ You book transactions so the user never has to sort them afterwards: every row o
 
 ## Gotchas
 
-- **Book a fetched row as the fetch gave it.** `external_refs`, `date`, `amount`, `currency` and `description` go to `add_transactions` unchanged — they are how a re-fetch knows the row is already booked. Pass `linked_account_id` straight through as `from_account_id`/`to_account_id` and the row's `payee`, when it has one, as `payee`. Never tidy the description: dedup, payee rules and spend rules all read it.
+- **Book a fetched row as the fetch gave it.** `external_refs`, `date`, `amount`, `currency` and `description` go to `add_transactions` unchanged — they are how a re-fetch knows the row is already booked. Pass `linked_account_id` straight through as `from_account_id`/`to_account_id`, the row's `payee`, when it has one, as `payee`, and a purchase made in another currency's `original_amount`/`original_currency` as they are — the duplicate check compares them, so a receipt for the same purchase is recognised. Never tidy the description: dedup, payee rules and spend rules all read it.
+- **A purchase in another currency keeps both figures.** `amount`/`currency` are what the merchant charged; when the source also says what the account was actually debited, pass that as `settled_amount` — never convert it yourself, and never book the converted figure as the amount. A fetched bank row already carries both (`original_amount`/`original_currency`).
 - **A truncated fetch is not the whole window.** When `counts.truncated` is true, call the fetch again with `offset` advanced until it isn't. Rows you didn't fetch are not booked.
 - **Pending rows wait.** The fetch leaves them out (`counts.pending_skipped`); they arrive once posted. They are not missing.
 - **An account that isn't linked is a question, not a guess.** Don't book its rows anywhere; tell the user which account needs linking.

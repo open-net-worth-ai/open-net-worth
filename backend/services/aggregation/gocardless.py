@@ -38,6 +38,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.gocardless_config_store import ENDED, LINKED, GoCardlessConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -518,10 +519,12 @@ def _txn_payee(txn: dict, amount: float) -> Optional[str]:
     return None
 
 
-def _txn_memo(txn: dict) -> Optional[str]:
-    """For a purchase in another currency, what was actually paid — the one thing on the
-    wire a person wants on the row that neither the amount nor the payee carries."""
-    parts: list[str] = []
+def _original_charge(txn: dict) -> tuple[Optional[float], Optional[str]]:
+    """A purchase made in another currency: what the merchant charged (``instructedAmount``),
+    beside the converted amount the account was debited. ``(None, None)`` for a row in the
+    account's own currency. It goes in the row's ``original_amount``/``original_currency`` —
+    the ledger's own fields for it, which the duplicate check compares — never in the memo."""
+    booked_in = str((txn.get("transactionAmount") or {}).get("currency") or "").upper()
     for fx in _currency_exchanges(txn):
         paid = fx.get("instructedAmount") if isinstance(fx.get("instructedAmount"), dict) else {}
         currency = str(paid.get("currency") or fx.get("sourceCurrency") or "").upper()
@@ -529,10 +532,9 @@ def _txn_memo(txn: dict) -> Optional[str]:
             amount = abs(float(paid.get("amount")))
         except (TypeError, ValueError):
             continue
-        booked_in = str((txn.get("transactionAmount") or {}).get("currency") or "").upper()
-        if currency and currency != booked_in:
-            parts.append(f"Paid {amount:.2f} {currency}")
-    return "; ".join(parts) or None
+        if currency and currency != booked_in and amount:
+            return amount, currency
+    return None, None
 
 
 def _currency_exchanges(txn: dict) -> list[dict]:
@@ -555,6 +557,7 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         return None
     currency = str(amount_obj.get("currency") or currency_hint).upper()
     description = _txn_description(txn)
+    original_amount, original_currency = _original_charge(txn)
     txn_id = _txn_id(txn)
     ref = (
         f"{account_id}:{txn_id}"
@@ -569,8 +572,11 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         "amount": amount,
         "currency": currency,
         "description": description,
-        "memo": _txn_memo(txn),
+        "memo": None,
         "payee": _txn_payee(txn, amount),
+        "original_amount": original_amount,
+        "original_currency": original_currency,
+        "category_hint": merchant_category(txn.get("merchantCategoryCode")),
         "pending": pending,
         "supersedes_ref": None,
     }

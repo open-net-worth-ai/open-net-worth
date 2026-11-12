@@ -612,7 +612,44 @@ def test_a_purchase_in_another_currency_keeps_what_was_actually_paid():
         }
     )
     assert (row["amount"], row["currency"]) == (-42.10, "GBP")
-    assert row["memo"] == "Paid 48.00 EUR"
+    # The ledger's own fields for the original charge (the duplicate check reads them), not
+    # text in the memo, which is the user's.
+    assert (row["original_amount"], row["original_currency"]) == (48.0, "EUR")
+    assert row["memo"] is None
+
+
+def test_a_purchase_in_the_accounts_own_currency_has_no_original_charge():
+    row = _row_of(
+        {
+            "transactionId": "t3b",
+            "bookingDate": "2026-11-09",
+            "transactionAmount": {"amount": "-5.00", "currency": "GBP"},
+            "currencyExchange": {"instructedAmount": {"amount": "5.00", "currency": "GBP"}},
+        }
+    )
+    assert (row["original_amount"], row["original_currency"]) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "code, hint",
+    [
+        ("5411", "Grocery stores and supermarkets"),
+        ("6300", "Insurance"),
+        ("8220", "Colleges and universities"),
+        ("3015", "Airlines"),  # a block the networks give one industry
+        ("0000", None),  # unknown: no hint rather than a guess
+        (None, None),
+    ],
+)
+def test_the_merchant_category_code_becomes_the_banks_category_hint(code, hint):
+    txn = {
+        "transactionId": "t5",
+        "bookingDate": "2026-11-09",
+        "transactionAmount": {"amount": "-9.00", "currency": "GBP"},
+    }
+    if code is not None:
+        txn["merchantCategoryCode"] = code
+    assert _row_of(txn)["category_hint"] == hint
 
 
 def test_a_booking_datetime_alone_still_dates_the_row():
