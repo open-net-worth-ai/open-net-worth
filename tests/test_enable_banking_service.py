@@ -446,7 +446,7 @@ def test_fetch_window_normalizes_accounts_and_transactions(monkeypatch):
     assert by_ref["EB-CHK:T1"]["amount"] == -42.5  # DBIT → negative
     assert by_ref["EB-CHK:T2"]["amount"] == 2000.0  # CRDT → positive
     assert by_ref["EB-SAV:T3"]["amount"] == 100.0
-    assert all(row["external_refs"][0]["source"] == "enablebanking" for row in window.rows)
+    assert all(row["external_refs"][0]["source"] == "enable_banking" for row in window.rows)
 
 
 def test_fetch_window_filters_to_requested_account(monkeypatch):
@@ -546,7 +546,7 @@ def test_txn_to_row_falls_back_to_derived_ref_when_no_id():
     }
     row = svc._txn_to_row(txn, "EB-CHK", "EUR")
     expected_ref = derived_ref("EB-CHK", "2026-05-01", -10.0, "EUR", "No ID Merchant")
-    assert row["external_refs"] == [{"source": "enablebanking", "ref": expected_ref}]
+    assert row["external_refs"] == [{"source": "enable_banking", "ref": expected_ref}]
     assert row["raw"] is txn
 
 
@@ -930,19 +930,20 @@ def test_rows_carry_the_counterparty_as_payee():
     assert svc._txn_to_row({**out, "creditor": None}, "U1", "EUR")["payee"] is None
 
 
-def test_every_provider_looks_up_booked_rows_by_the_source_its_rows_carry():
-    """The fetch's "already booked?" check, its default window and the evidence snapshots all
-    read booked rows by the provider's ref source. A module stamping rows with a different
-    source than its provider declares is never seen as booked (Enable Banking: rows say
-    "enablebanking", the key is "enable_banking" — every sync re-offered everything)."""
+def test_every_provider_tags_its_rows_with_its_own_key():
+    """Every "already booked?" lookup (the fetch filter, its default window, the evidence
+    snapshots) and the dedup authority list (core.txn_sources) key a connector's rows by its
+    provider key. Enable Banking once tagged rows "enablebanking": nothing it booked was ever
+    seen as booked, and its bank ids lost their authority in dedup."""
     import importlib
 
+    from backend.core.txn_sources import AUTHORITATIVE_ID_NAMESPACES
     from backend.services.aggregation.providers import PROVIDERS
 
     for provider in PROVIDERS.values():
         module = importlib.import_module(provider._fetch[0])
-        stamped = getattr(module, "EXTERNAL_SOURCE", provider.key)
-        assert provider.ref_source == stamped, provider.key
+        assert getattr(module, "EXTERNAL_SOURCE", provider.key) == provider.key, provider.key
+    assert svc.EXTERNAL_SOURCE in AUTHORITATIVE_ID_NAMESPACES
 
 
 def test_fetch_counts_an_enable_banking_row_already_in_the_ledger_as_booked(monkeypatch):
@@ -974,7 +975,7 @@ def test_fetch_counts_an_enable_banking_row_already_in_the_ledger_as_booked(monk
     monkeypatch.setattr(
         ledger_service,
         "known_external_refs",
-        lambda source: booked if source == svc.EXTERNAL_SOURCE else {},
+        lambda source: booked if source == "enable_banking" else {},
     )
     out = connector_fetch.fetch("enable_banking", since="2026-11-01", before="2026-11-13")
     assert out["counts"]["already_booked"] == 1

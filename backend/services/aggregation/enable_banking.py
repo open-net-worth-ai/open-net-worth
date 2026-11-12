@@ -66,7 +66,7 @@ from backend.services.aggregation.providers import FetchWindow, derived_ref
 logger = logging.getLogger(__name__)
 
 SOURCE_ID = "enable_banking"
-EXTERNAL_SOURCE = "enablebanking"
+EXTERNAL_SOURCE = "enable_banking"
 
 API_BASE = "https://api.enablebanking.com"
 _HTTP_TIMEOUT = 30.0

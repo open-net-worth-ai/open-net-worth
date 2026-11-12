@@ -110,15 +110,9 @@ def _lazy_known_refs(source: str) -> Callable[[], dict]:
 
     def get() -> dict:
         if "v" not in cache:
-            from backend.services.aggregation.providers import ref_source_of
             from backend.services.ledger import known_external_refs
 
-            # Re-keyed by the provider key callers look up with; read by the source the
-            # booked rows actually carry (they differ for Enable Banking).
-            cache["v"] = {
-                (source, ref): txn_id
-                for (_src, ref), txn_id in known_external_refs(ref_source_of(source)).items()
-            }
+            cache["v"] = known_external_refs(source)
         return cache["v"]
 
     return get
