@@ -51,8 +51,9 @@ fetch from the provider's website and which fields to fill in.
    click **Save**.
    To come back to the form later — for example to link a bank after saving your keys — open the
    connector and choose **⋯ (More actions) → Edit configuration**.
-3. **Link each provider account to one of your accounts.** At the bottom of the connector's form
-   is an **Accounts** list with one row per account the provider can see, grouped by type (cash,
+3. **Link each provider account to one of your accounts.** Once the connector is connected, its
+   page (and the bottom of its form) shows an **Accounts** list with one row per account the
+   provider can see, grouped by type (cash,
    credit cards, loans, retirement…) where the provider says what each account is. For each row:
    - **Add** creates a new account in Open Net Worth, with the form already filled in — name,
      type, currency, last four digits, and today's balance as the starting balance (for a card or
@@ -192,11 +193,12 @@ signups in 2025, so if you don't have one, use **Enable Banking** instead.
    **Bank**, and click **Link bank**.
 5. Your bank's sign-in page opens in a new tab. If no tab opens (some browsers block it, and the
    iPhone home-screen app can't open one), click **open your bank's page** under the form. Approve
-   access there. Afterwards the bank sends you back to Open Net Worth. You don't need to copy a
-   code.
-6. Back in Open Net Worth, open the GoCardless form again. It checks the link by itself. If the
-   bank still says to finish authorising, click **Check links**. Once it says **Linked**, link
-   your accounts in the **Accounts** list.
+   access there. Afterwards the bank sends you back to the GoCardless connector in Open Net
+   Worth. You don't need to copy a code.
+6. The connector's page lists the bank's accounts under **Accounts** — link each one there (see
+   step 3 above). If they're not there yet, open the form (**⋯ → Edit configuration**): it checks
+   the link by itself, and **Check links** asks again if the bank still says to finish
+   authorising.
 
 **More than one bank:** one GoCardless connector holds all of them. Repeat steps 4–6 under
 **Add a bank** for each one (the button reads **Link this bank** once a bank is listed). Every
@@ -413,8 +415,17 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 
 The schedule and the wording are yours to change. Each run:
 
-- **Looks back 14 days every time**, so a transaction your bank posts late is still caught.
-- **Never books the same transaction twice.** One it already booked is skipped.
+- **Looks back 14 days from the newest transaction it already booked**, so a transaction your
+  bank posts late is still caught — and after a pause (a holiday, an expired bank link, a paused
+  automation) the next run picks up where the book stops instead of skipping the gap. Banks only
+  serve about 90 days of history, so a gap longer than that is reported for you to check against
+  a statement.
+- **Names the payee after who was paid**, where the bank says (GoCardless sends it): a card
+  payment shows *Acme Grocer* as the payee, while the transaction keeps the bank's own wording
+  (*CARD 1234 ACME STORES LONDON*) so the payee learns to recognise it next time.
+- **Never books the same transaction twice.** One it already booked is skipped. Two genuinely
+  separate identical transactions (two £3.00 coffees at the same place on one day) are booked as
+  two.
 - **Uses the linked account** for each transaction, and asks you about any account that isn't
   linked instead of guessing.
 - **Picks a category only when it clearly fits one of yours.** Lucius uses the merchant and, for

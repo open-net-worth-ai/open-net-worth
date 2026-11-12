@@ -271,8 +271,12 @@ def _txn_data_from_ai(item: dict, default_date: str, *, derived_out: dict | None
     if category and kind in ("expense", "income"):
         from backend.services import payee_registry
 
-        _pid = (item.get("payee_id") or "").strip() or payee_registry.resolve_payee_id(
-            text, create=False
+        _pid = (
+            (item.get("payee_id") or "").strip()
+            or payee_registry.resolve_payee_id_by_name(
+                str(item.get("payee") or "").strip(), create=False
+            )
+            or payee_registry.resolve_payee_id(text, create=False)
         )
         if (
             _pid
@@ -432,4 +436,9 @@ def _txn_data_from_ai(item: dict, default_date: str, *, derived_out: dict | None
     payee_id = (item.get("payee_id") or "").strip()
     if payee_id and data["kind"] in ("expense", "income"):
         data["payee_id"] = payee_id
+    # A clean payee NAME beside raw bank text (a fetched row's `payee`): the create choke
+    # matches it by name, then the description, and names a new payee only as a last resort.
+    payee_name = str(item.get("payee") or "").strip()[:120]
+    if payee_name and not payee_id and data["kind"] in ("expense", "income"):
+        data["payee"] = payee_name
     return data
