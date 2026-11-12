@@ -334,15 +334,22 @@ class McpClientConnection:
         none: a stateful server rejects a request with no session outright, and that is not
         recoverable the way a 404 for a stale one is."""
         side = McpClientConnection(self._config, deadline=self._deadline)
-        result = side._rpc(
-            "initialize",
-            {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": CLIENT_INFO,
-            },
-        )
-        side._notify("notifications/initialized")
+        try:
+            result = side._rpc(
+                "initialize",
+                {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": CLIENT_INFO,
+                },
+            )
+            side._notify("notifications/initialized")
+        except Exception:
+            side.__exit__(None, None, None)  # a session issued before the failure is closed
+            raise
+        if self._closed:  # evicted while handshaking: close the new session, never adopt it
+            side.__exit__(None, None, None)
+            raise McpCallError(f"server '{self._config.id}' connection was closed")
         self._config = side._config  # an OAuth refresh during the handshake is kept
         self._session_id = side._session_id
         self._protocol_version = side._protocol_version
