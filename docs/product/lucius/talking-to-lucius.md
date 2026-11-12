@@ -6,7 +6,7 @@ order: 20
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/mentions, lucius/permissions, lucius/models-and-cost]
-keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone]
+keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone, upload, file types, supported files, excel, xlsx, xls, csv, ofx, qif, word, docx]
 ---
 
 # How to talk to Lucius
@@ -83,15 +83,31 @@ Globe key twice on a Mac, or Win+H on Windows.
 
 Click the paperclip (**Attach file or image**) or drop a file anywhere on the Lucius panel (or
 into the message box of the floating dock): a statement (PDF, CSV, Excel), a receipt photo, a
-screenshot of your banking app, a Word document. Then say
+screenshot of your banking app. Then say
 what to do — *"import this"*, *"log these purchases"*, *"what's my deductible?"*. Files you send
 are stored so the conversation can refer back to them (they're listed in **Settings → Data →
 Uploaded files**). To keep one with your other papers, ask Lucius to save it to
 [Documents](documents.md).
 
+### File types Lucius can read
+
+| Kind | Types |
+|---|---|
+| Pictures | PNG, JPG, HEIC and other images |
+| Documents | PDF, TXT |
+| Spreadsheets | CSV, Excel (.xlsx, .xls) |
+| Bank statement files | OFX, QFX, QBO, QIF, MT940, CAMT |
+
+Word documents (.docx) can't be read yet: save one as PDF first. A password-protected PDF needs
+its password removed; a password-protected Excel file can be sent with the password in your
+message. Each file can be up to 25 MB.
+
+### If a file won't upload
+
 If you press **Send** while a file is still uploading, the message goes the moment the upload
-finishes. If a file can't be uploaded, the message stays in the box and a note under the file
-tells you which one, so nothing is sent without it by accident.
+finishes. If a file can't be uploaded, the message stays in the box and a note tells you which
+file and why: a type Lucius can't read (with the list above), a password-protected file, a file
+over 25 MB, or a dropped connection. Nothing is sent without it by accident.
 
 ## Ask for a file when you want to keep it
 

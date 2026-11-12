@@ -10,6 +10,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LuciusComposer } from './Composer'
+import { ATTACH_ACCEPT } from './useComposerAttachments'
 import type { ComposerParsed, LuciusComposerHandle, LuciusComposerProps } from './Composer'
 
 vi.mock('../../../state/chatComposer', () => ({
@@ -96,7 +97,9 @@ function type(text: string) {
 }
 
 const sendButton = () => screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement
-const note = () => document.querySelector('.lx-send-note')
+// The send notice; the per-file reason under the chips is its own note.
+const note = () => document.querySelector('.lx-send-note:not([data-upload-failures])')
+const failNote = () => document.querySelector('[data-upload-failures]')
 const chips = () => document.querySelectorAll('.lx-att')
 const finishUpload = (i = 0) =>
   act(async () => {
@@ -177,11 +180,13 @@ describe('a send that is refused says why', () => {
       await Promise.resolve()
     })
     expect(document.querySelector('.lx-att--failed')).not.toBeNull()
+    // The reason shows the moment the upload fails — before any Send.
+    expect(failNote()?.textContent).toBe("statement.pdf wasn't uploaded. too large")
 
     fireEvent.click(sendButton())
 
     expect(sent).toHaveLength(0)
-    expect(note()?.textContent).toContain('statement.pdf could not be uploaded')
+    expect(note()?.textContent).toBe("Remove statement.pdf to send this — it wasn't uploaded.")
     expect(note()?.getAttribute('role')).toBe('alert')
     expect(editor.textContent).toBe('here you go')
   })
@@ -194,9 +199,26 @@ describe('a send that is refused says why', () => {
       uploads[0]!.reject(new Error('offline'))
       await Promise.resolve()
     })
+    expect(failNote()?.textContent).toContain('The connection dropped before it finished.')
     fireEvent.click(sendButton())
     expect(sent).toHaveLength(0)
-    expect(note()?.textContent).toContain('could not be uploaded')
+  })
+
+  it('a refusal with no reason from the server still says what happened', async () => {
+    mount()
+    attach('statement.pdf')
+    type('here you go')
+    await act(async () => {
+      uploads[0]!.resolve({ ok: false, status: 413, json: async () => null } as unknown as Response)
+      await Promise.resolve()
+    })
+    expect(failNote()?.textContent).toContain('over the 25 MB limit')
+  })
+
+  it('the file picker offers what the server reads, and not Word documents', () => {
+    expect(ATTACH_ACCEPT).toContain('.xls')
+    expect(ATTACH_ACCEPT).toContain('.ofx')
+    expect(ATTACH_ACCEPT).not.toContain('.docx')
   })
 
   it('removing the failed file lets the message go, and editing clears the notice', async () => {

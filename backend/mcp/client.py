@@ -43,6 +43,9 @@ from backend.models.mcp_client import McpServerConfig, ServerInfo, redact_endpoi
 
 logger = logging.getLogger(__name__)
 
+# Closing a session is housekeeping: it must not hold a finished tool call for the full timeout.
+_END_SESSION_TIMEOUT_SECONDS = 5
+
 # Per-call HTTP timeout (seconds) — bounds a slow/wedged external server so it can
 # never hang a chat turn (RFC §5.4 hang/flood clamp).
 CALL_TIMEOUT_SECONDS = 20
@@ -219,12 +222,15 @@ class McpClientConnection:
         return self
 
     def __exit__(self, *exc: object) -> Literal[False]:
-        # Nothing to release: each ``_rpc`` is one self-contained urllib request/response.
-        # Present so ``with make_connection(cfg) as conn`` is transport-agnostic — the stdio
-        # sibling DOES have a spawned process group to kill on the way out.
+        # A server that issued a session is told we are done with it (MCP Streamable HTTP: the
+        # client SHOULD send DELETE with the session id), so a stateful server is not left an
+        # orphan per call. Best-effort, like the notification. The stdio sibling kills its
+        # process group here instead.
         #
         # ``Literal[False]``, not ``bool``: a ``bool`` return says the manager MAY swallow an
         # exception, and this one never does — mypy's own ``exit-return`` check says so.
+        if self._session_id:
+            self._end_session()
         return False
 
     # ── public API ───────────────────────────────────────────────────────────────
@@ -234,8 +240,12 @@ class McpClientConnection:
 
         The result carries ``serverInfo: {name, version}`` — what the server calls ITSELF.
         Callers read it through ``parse_server_info`` rather than indexing it raw.
+
+        Completes the handshake with ``notifications/initialized`` (MCP lifecycle: the client
+        MUST send it before normal operation) — a stateful server refuses ``tools/call`` on a
+        session that never finished initializing.
         """
-        return self._rpc(
+        result = self._rpc(
             "initialize",
             {
                 "protocolVersion": PROTOCOL_VERSION,
@@ -243,6 +253,8 @@ class McpClientConnection:
                 "clientInfo": CLIENT_INFO,
             },
         )
+        self._notify("notifications/initialized")
+        return result
 
     def list_tools(self) -> list[dict]:
         """MCP ``tools/list`` → the server's tool descriptors (``[{name, description, inputSchema}]``).
@@ -325,6 +337,41 @@ class McpClientConnection:
         self._config = oauth_flow.ensure_fresh_token(
             self._config, force=True, stale_access_token=stale
         )
+
+    def _end_session(self) -> None:
+        """DELETE the session (best-effort; a 405 means the server does not allow it)."""
+        url = (self._config.url or "").strip()
+        timeout = CALL_TIMEOUT_SECONDS if self._deadline is None else self._deadline.remaining()
+        if not url or timeout <= 0:
+            return
+        request = urllib.request.Request(url, headers=self._headers(), method="DELETE")
+        try:
+            with _urlopen(request, min(timeout, _END_SESSION_TIMEOUT_SECONDS)) as resp:
+                resp.read(MAX_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            exc.close()
+        except Exception as exc:  # noqa: BLE001 — closing a session must never fail the call
+            logger.debug("mcp '%s' session close not delivered: %s", self._config.id, exc)
+        self._session_id = None
+
+    def _notify(self, method: str) -> None:
+        """POST one JSON-RPC notification (no ``id``, no reply expected — the server answers
+        202). Best-effort by design: a stateless server may reject or ignore it, and the call
+        that follows surfaces any real failure as an ordinary ``McpCallError``."""
+        body = json.dumps({"jsonrpc": "2.0", "method": method}).encode("utf-8")
+        url = (self._config.url or "").strip()
+        timeout = CALL_TIMEOUT_SECONDS if self._deadline is None else self._deadline.remaining()
+        if not url or timeout <= 0:
+            return
+        request = urllib.request.Request(url, data=body, headers=self._headers(), method="POST")
+        try:
+            with _urlopen(request, timeout) as resp:
+                resp.read(MAX_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            exc.close()
+            logger.debug("mcp '%s' answered %s with HTTP %s", self._config.id, method, exc.code)
+        except Exception as exc:  # noqa: BLE001 — a notification must never fail the handshake
+            logger.debug("mcp '%s' %s not delivered: %s", self._config.id, method, exc)
 
     def _send(self, method: str, params: dict) -> dict:
         """One JSON-RPC request/response cycle — the body ``_rpc`` retries at most once."""
