@@ -2733,6 +2733,10 @@ def _make_stateful_session_urlopen(log: list):
     def fake_urlopen(request, timeout=None):
         headers = {k.lower(): v for k, v in dict(request.headers).items()}
         sid = headers.get("mcp-session-id")
+        if request.get_method() == "DELETE":
+            log.append(("DELETE", sid))
+            sessions.pop(sid, None)
+            return _FakeResp(b"")
         body = json.loads(request.data)
         method = body["method"]
         log.append((method, sid))
@@ -2782,6 +2786,7 @@ def test_http_tool_call_opens_a_session_before_calling(manager, monkeypatch):
         ("initialize", None),
         ("notifications/initialized", "sess-live"),
         ("tools/call", "sess-live"),
+        ("DELETE", "sess-live"),  # the session is closed, not left orphaned on the server
     ]
 
 
@@ -2802,3 +2807,30 @@ def test_a_rejected_initialized_notification_never_fails_the_handshake(monkeypat
     monkeypatch.setattr("backend.mcp.client._urlopen", fake_urlopen)
     conn = McpClientConnection(McpServerConfig(id="x", url="https://x/mcp"))
     assert conn.initialize()["protocolVersion"] == "2024-11-05"
+
+
+def test_a_server_that_rejects_initialize_still_gets_the_call(manager, monkeypatch):
+    """Before sessions, tools/call went out with no handshake; a non-spec server that errors on
+    ``initialize`` must not lose tools that used to work."""
+    import io
+    import urllib.error
+
+    mgr, s = manager
+    s.create(_cfg())
+    calls: list = []
+
+    def fake_urlopen(request, timeout=None):
+        body = json.loads(request.data) if request.data else {}
+        calls.append(body.get("method"))
+        if body.get("method") == "initialize":
+            raise urllib.error.HTTPError(request.full_url, 404, "nope", {}, io.BytesIO(b""))
+        return _FakeResp(
+            json.dumps(_rpc_envelope(body["method"], body["id"], call_text="ok")).encode()
+        )
+
+    monkeypatch.setattr("backend.mcp.client._urlopen", fake_urlopen)
+    s.record_discovery("drive", [{"name": "search_files", "inputSchema": {}}], "ok", None)
+    _allow("drive", "search_files")
+    text, _proposed, _images = asyncio.run(mgr.call_external_tool("mcp__drive__search_files", {}))
+    assert "ok" in text
+    assert calls == ["initialize", "tools/call"]

@@ -77,3 +77,42 @@ def test_the_structured_importer_reads_it_too():
 
     result = parse_xlsx(_xlsx(break_styles=True))
     assert "ACME" in repr(result)
+
+
+def test_a_crafted_stylesheet_is_repaired_in_linear_time():
+    """Review 2026-11-13: the repair used a lazy ``.*?`` regex, quadratic on many unclosed
+    ``<fonts >`` (8,000 of them took 4.4s; a megabyte would pin a worker for hours)."""
+    import time
+
+    from backend.services.xlsx_open import _sanitized_styles
+
+    crafted = "<styleSheet>" + "<fonts >" * 200_000 + "</styleSheet>"  # ~1.6 MB
+    started = time.monotonic()
+    _sanitized_styles(crafted)
+    assert time.monotonic() - started < 1.0
+
+
+def test_the_splice_swaps_only_the_named_block():
+    from backend.services.xlsx_open import _sanitized_styles
+
+    xml = (
+        '<styleSheet><fontsX/><fonts count="9"><font><family val="99"/></font></fonts>'
+        '<cellXfs><xf numFmtId="14" fontId="7" fillId="3"/></cellXfs></styleSheet>'
+    )
+    out = _sanitized_styles(xml)
+    assert "<fontsX/>" in out
+    assert 'val="99"' not in out
+    assert 'numFmtId="14" fontId="0" fillId="0"' in out
+
+
+def test_a_zip_that_lies_about_a_part_still_raises_the_original_error(monkeypatch):
+    from backend.services import xlsx_open
+
+    def lying(_content):
+        raise zipfile.BadZipFile("Bad CRC-32")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(xlsx_open, "_repairs", lying)
+    with pytest.raises(Exception) as ei:
+        load_values_workbook(_xlsx(break_styles=True))
+    assert not isinstance(ei.value, zipfile.BadZipFile)

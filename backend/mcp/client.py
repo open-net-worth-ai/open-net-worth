@@ -43,6 +43,9 @@ from backend.models.mcp_client import McpServerConfig, ServerInfo, redact_endpoi
 
 logger = logging.getLogger(__name__)
 
+# Closing a session is housekeeping: it must not hold a finished tool call for the full timeout.
+_END_SESSION_TIMEOUT_SECONDS = 5
+
 # Per-call HTTP timeout (seconds) — bounds a slow/wedged external server so it can
 # never hang a chat turn (RFC §5.4 hang/flood clamp).
 CALL_TIMEOUT_SECONDS = 20
@@ -219,12 +222,15 @@ class McpClientConnection:
         return self
 
     def __exit__(self, *exc: object) -> Literal[False]:
-        # Nothing to release: each ``_rpc`` is one self-contained urllib request/response.
-        # Present so ``with make_connection(cfg) as conn`` is transport-agnostic — the stdio
-        # sibling DOES have a spawned process group to kill on the way out.
+        # A server that issued a session is told we are done with it (MCP Streamable HTTP: the
+        # client SHOULD send DELETE with the session id), so a stateful server is not left an
+        # orphan per call. Best-effort, like the notification. The stdio sibling kills its
+        # process group here instead.
         #
         # ``Literal[False]``, not ``bool``: a ``bool`` return says the manager MAY swallow an
         # exception, and this one never does — mypy's own ``exit-return`` check says so.
+        if self._session_id:
+            self._end_session()
         return False
 
     # ── public API ───────────────────────────────────────────────────────────────
@@ -331,6 +337,22 @@ class McpClientConnection:
         self._config = oauth_flow.ensure_fresh_token(
             self._config, force=True, stale_access_token=stale
         )
+
+    def _end_session(self) -> None:
+        """DELETE the session (best-effort; a 405 means the server does not allow it)."""
+        url = (self._config.url or "").strip()
+        timeout = CALL_TIMEOUT_SECONDS if self._deadline is None else self._deadline.remaining()
+        if not url or timeout <= 0:
+            return
+        request = urllib.request.Request(url, headers=self._headers(), method="DELETE")
+        try:
+            with _urlopen(request, min(timeout, _END_SESSION_TIMEOUT_SECONDS)) as resp:
+                resp.read(MAX_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            exc.close()
+        except Exception as exc:  # noqa: BLE001 — closing a session must never fail the call
+            logger.debug("mcp '%s' session close not delivered: %s", self._config.id, exc)
+        self._session_id = None
 
     def _notify(self, method: str) -> None:
         """POST one JSON-RPC notification (no ``id``, no reply expected — the server answers

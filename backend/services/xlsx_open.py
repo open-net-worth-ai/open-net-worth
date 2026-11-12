@@ -22,9 +22,14 @@ import zipfile
 logger = logging.getLogger(__name__)
 
 _STYLES = "xl/styles.xml"
-# A rebuild decompresses every part; refuse to do that for a zip that inflates past this
-# (the upload itself is capped at 25 MB compressed).
-_MAX_INFLATED_BYTES = 200 * 1024 * 1024
+# A rebuild decompresses every part. The upload itself is capped at 25 MB compressed; these bound
+# what a crafted zip can make us inflate and copy (the sizes are the zip's own claims, but
+# ``ZipFile.read`` refuses a part that inflates past what it declared).
+_MAX_INFLATED_BYTES = 64 * 1024 * 1024
+_MAX_PARTS = 2000
+# The repair splices the stylesheet; a real one is kilobytes. Past this we skip straight to
+# dropping it.
+_MAX_STYLES_BYTES = 2 * 1024 * 1024
 
 _MINIMAL_BLOCKS = {
     "fonts": '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>',
@@ -48,7 +53,11 @@ def load_values_workbook(content: bytes):
         return _load(content)
     except Exception as exc:  # noqa: BLE001 — openpyxl raises a zoo of types for one bad attribute
         original = exc
-    for label, rebuilt in _repairs(content):
+    try:
+        repairs = list(_repairs(content))
+    except Exception:  # noqa: BLE001 — a zip that lies about itself is still the ORIGINAL failure
+        raise original from None
+    for label, rebuilt in repairs:
         try:
             wb = _load(rebuilt)
         except Exception:  # noqa: BLE001
@@ -70,23 +79,57 @@ def _repairs(content: bytes):
     except zipfile.BadZipFile:
         return
     with zf:
-        names = zf.namelist()
-        if _STYLES not in names:
+        infos = zf.infolist()
+        if len(infos) > _MAX_PARTS or _STYLES not in zf.namelist():
             return
-        if sum(i.file_size for i in zf.infolist()) > _MAX_INFLATED_BYTES:
+        if sum(i.file_size for i in infos) > _MAX_INFLATED_BYTES:
             return
-        parts = {n: zf.read(n) for n in names}
-    styles = parts[_STYLES].decode("utf-8", errors="replace")
-    yield "repairing its stylesheet", _rezip(parts, _sanitized_styles(styles).encode("utf-8"))
+        parts = {i.filename: zf.read(i) for i in infos}
+    styles = parts[_STYLES]
+    if len(styles) <= _MAX_STYLES_BYTES:
+        repaired = _sanitized_styles(styles.decode("utf-8", errors="replace"))
+        yield "repairing its stylesheet", _rezip(parts, repaired.encode("utf-8"))
     yield "dropping its stylesheet", _rezip(parts, None)
 
 
 def _sanitized_styles(xml: str) -> str:
+    """Swap each cosmetic block for its minimal form — plain ``str.find`` splicing, linear in the
+    size of the (untrusted) stylesheet; a backtracking regex here was quadratic."""
     for tag, minimal in _MINIMAL_BLOCKS.items():
-        pattern = re.compile(rf"<(\w+:)?{tag}\b[^>]*?(/>|>.*?</(\w+:)?{tag}>)", re.S)
-        xml = pattern.sub(minimal, xml, count=1)
+        xml = _replace_block(xml, tag, minimal)
     # Every cell format now points at the single font/fill/border the minimal blocks define.
-    return re.sub(r'\b(fontId|fillId|borderId|xfId)="\d+"', r'\1="0"', xml)
+    return _ID_ATTR.sub(r'\1="0"', xml)
+
+
+# Linear: an attribute name, then a quoted run of digits — no nested or overlapping repetition.
+_ID_ATTR = re.compile(r'\b(fontId|fillId|borderId|xfId)="[0-9]{1,9}"')
+
+
+def _replace_block(xml: str, tag: str, minimal: str) -> str:
+    start = _find_open_tag(xml, tag)
+    if start < 0:
+        return xml
+    head_end = xml.find(">", start)
+    if head_end < 0:
+        return xml
+    if xml[head_end - 1] == "/":
+        return xml[:start] + minimal + xml[head_end + 1 :]
+    close = xml.find(f"</{tag}>", head_end)
+    if close < 0:
+        return xml
+    return xml[:start] + minimal + xml[close + len(tag) + 3 :]
+
+
+def _find_open_tag(xml: str, tag: str) -> int:
+    """Index of ``<tag`` as a whole element name (``<fonts`` not ``<fontsX``), or -1."""
+    needle = f"<{tag}"
+    at = xml.find(needle)
+    while at >= 0:
+        nxt = xml[at + len(needle) : at + len(needle) + 1]
+        if nxt in (">", "/", " ", "\t", "\n", "\r"):
+            return at
+        at = xml.find(needle, at + 1)
+    return -1
 
 
 def _rezip(parts: dict[str, bytes], styles: bytes | None) -> bytes:

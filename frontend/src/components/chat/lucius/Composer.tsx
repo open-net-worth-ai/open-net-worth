@@ -146,17 +146,17 @@ export interface LuciusComposerHandle {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** "a.csv", "a.csv and b.pdf", "a.csv, b.pdf and 2 more" — for a sentence about files. */
+function fileNames(items: AttachmentItem[]): string {
+  const names = items.map((a) => a.name)
+  if (names.length <= 2) return names.join(' and ')
+  return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
+}
+
 /** The send refusal: the WHY is already on screen under the chips, so this says what to do. */
 function uploadRefusal(failed: AttachmentItem[]): string {
   return failed.length > 1
     ? `Remove the ${failed.length} files that weren't uploaded to send this.`
     : `Remove ${failed[0]!.name} to send this — it wasn't uploaded.`
-}
-
-function fileNames(items: AttachmentItem[]): string {
-  const names = items.map((a) => a.name)
-  if (names.length <= 2) return names.join(' and ')
-  return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 }
 
 function fmtBytes(n: number): string {

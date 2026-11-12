@@ -513,7 +513,16 @@ class McpClientManager:
         """
         if server.transport != "stdio":
             with make_connection(server) as conn:
-                conn.initialize()
+                try:
+                    conn.initialize()
+                except McpCallError as exc:
+                    # A server that never spoke the handshake still answered tools/call before
+                    # we began sending one — try the call; its own error is the one to report.
+                    logger.info(
+                        "mcp '%s' initialize failed; calling anyway: %s",
+                        server.id,
+                        exc.safe_summary,
+                    )
                 return conn.call_tool(tool, args)
         return self._call_via_server_connection(server, tool, args)
 
