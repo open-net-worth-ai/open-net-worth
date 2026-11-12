@@ -189,6 +189,12 @@ Ask Lucius to use it, for example after adding Playwright:
 The first time he uses each tool, you'll get a card to approve it. The server's page under
 **Connectors** lists its tools and their levels under **Tool permissions**.
 
+The app keeps **one connection to each server for as long as it runs**, hosted or local, and
+every conversation shares it. What a server remembers between calls (a page Playwright has open,
+a broker you signed in to) is still there on the next call. If a hosted server forgets the
+connection, for example because it restarted, the app reconnects and repeats the request on its
+own. Editing or removing the server, or quitting the app, closes the connection.
+
 ## Managing a server
 
 Open the server under **Connectors**:
@@ -285,6 +291,10 @@ Connect again.
 
 **Was connected — sign-in expired** — click **Reconnect** (or **Edit configuration**) and sign in
 again.
+
+**Shows Connected, but every tool call fails with "missing Mcp-Session-Id header"** — fixed:
+versions before this one didn't send a hosted server the session it opened at startup. Update
+the app.
 
 **It hangs on a first connect** — a local command may still be downloading. If the output box has
 been quiet for a long time, click **‹ Back** at the top, check the command, and try again.
