@@ -108,10 +108,33 @@ export async function completeEnableBankingReturn(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: ret.code, state: ret.state }),
     })
-    if (r.ok) return { ok: true, message: 'Bank linked. Link its accounts below.' }
+    if (r.ok) return { ok: true, message: 'Bank linked. Add its accounts from the Accounts list.' }
     const d = await r.json().catch(() => ({}))
     return { ok: false, message: d.detail || 'Could not complete the bank link.' }
   } catch {
     return { ok: false, message: 'Could not complete the bank link.' }
+  }
+}
+
+// A failed Enable Banking return opens the connector's form, which shows the reason under
+// Link bank — a toast alone vanished before it was read, over a page with nothing linked.
+const EB_RETURN_ERROR = 'onw:enable-banking:return-error'
+
+export function keepEnableBankingReturnError(message: string): void {
+  try {
+    sessionStorage.setItem(EB_RETURN_ERROR, message)
+  } catch {
+    // storage unavailable — the toast still says it
+  }
+}
+
+/** The failed return's message, once: reading it clears it. */
+export function takeEnableBankingReturnError(): string | null {
+  try {
+    const message = sessionStorage.getItem(EB_RETURN_ERROR)
+    sessionStorage.removeItem(EB_RETURN_ERROR)
+    return message
+  } catch {
+    return null
   }
 }

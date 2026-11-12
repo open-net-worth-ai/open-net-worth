@@ -535,3 +535,22 @@ describe('coming back from Enable Banking', () => {
     expect(authFetch.mock.calls.some((c) => c[0] === '/api/enable-banking/complete')).toBe(false)
   })
 })
+
+describe('a failed return from Enable Banking', () => {
+  it('keeps the reason for the form instead of only a toast', async () => {
+    const fallback = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/enable-banking/complete')
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ detail: "This bank link doesn't match one started here" }),
+        })
+      return fallback(url, init)
+    })
+    routerSearch.value = { state: 'stale', code: 'c' }
+    await renderTab()
+    await waitFor(() =>
+      expect(sessionStorage.getItem('onw:enable-banking:return-error')).toMatch(/doesn't match/),
+    )
+  })
+})

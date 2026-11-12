@@ -34,7 +34,12 @@ import { savePermissions } from './permissions'
 import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
 import { mcpAuthType, mcpNeedsSignIn, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
-import { BANK_RETURN_CHECKS, completeEnableBankingReturn, enableBankingReturnOf } from './bankPage'
+import {
+  BANK_RETURN_CHECKS,
+  completeEnableBankingReturn,
+  enableBankingReturnOf,
+  keepEnableBankingReturnError,
+} from './bankPage'
 import {
   useRegisterScreenCommands,
   useRegisterScreenFacts,
@@ -215,7 +220,10 @@ export function ConnectorsTab(): JSX.Element {
     void navigate({ to: '/connectors', search: {}, replace: true } as never)
     void completeEnableBankingReturn(ebReturn).then((res) => {
       toast(res.message)
-      void reload().finally(() => openConnector('enable_banking'))
+      // Linked: the connector page, whose Accounts list is the next step. Not linked: the form,
+      // with the reason under Link bank and the pickers to try again.
+      if (!res.ok) keepEnableBankingReturnError(res.message)
+      void reload().finally(() => openConnector('enable_banking', { configure: !res.ok }))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, ebReturn?.state, ebReturn?.code])

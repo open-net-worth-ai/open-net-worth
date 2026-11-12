@@ -18,6 +18,10 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+function bankRow(aspsp: string, country: string, key: string, validUntil = '2099-02-10') {
+  return { key, aspsp, country, valid_until: validUntil, linked_at: '2026-11-01', accounts: 2 }
+}
+
 const status = (over: Record<string, unknown> = {}) => ({
   configured: false,
   enabled: true,
@@ -26,6 +30,7 @@ const status = (over: Record<string, unknown> = {}) => ({
   aspsp: '',
   country: '',
   has_session: false,
+  banks: [] as ReturnType<typeof bankRow>[],
   last_synced_at: null,
   last_status: 'never_run',
   last_error: null as string | null,
@@ -39,6 +44,7 @@ const linked = status({
   aspsp: 'ACME Bank',
   country: 'FI',
   has_session: true,
+  banks: [bankRow('ACME Bank', 'FI', 'k1')],
 })
 
 function okJson(body: unknown) {
@@ -47,6 +53,7 @@ function okJson(body: unknown) {
 
 function serve(current: ReturnType<typeof status>, link?: Record<string, unknown>) {
   authFetch.mockImplementation((url: string) => {
+    if (url.startsWith('/api/enable-banking/banks/')) return okJson({ removed: true })
     if (url === '/api/enable-banking/status') return okJson(current)
     if (url.startsWith('/api/enable-banking/institutions'))
       return okJson({ institutions: [{ id: 'ACME Bank', name: 'ACME Bank', country: 'FI' }] })
@@ -75,7 +82,8 @@ describe('EnableBankingSection', () => {
     render(<EnableBankingSection />)
     expect(await screen.findByText(/Application ID 96bb32ba… · private key saved/)).toBeTruthy()
     expect(screen.queryByText(`${window.location.origin}/connectors`)).toBeNull()
-    expect(screen.getByText('Linked: ACME Bank · Finland')).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Linked banks' }).textContent).toContain('ACME Bank')
+    expect(screen.getByText(/Finland · 2 accounts · access until/)).toBeTruthy()
     expect(await screen.findByRole('button', { name: 'Renew link' })).toBeTruthy()
     // The paste-a-code fallback is folded away until asked for.
     expect(screen.queryByLabelText('Code from the address bar')).toBeNull()
@@ -96,6 +104,55 @@ describe('EnableBankingSection', () => {
   it('says the consent ran out when a fetch was refused after a link', async () => {
     serve({ ...linked, last_error: 'Enable Banking HTTP 401' })
     render(<EnableBankingSection />)
-    expect(await screen.findByText(/Your bank access has expired/)).toBeTruthy()
+    expect(await screen.findByText(/Access to a bank has expired/)).toBeTruthy()
+  })
+
+  it('lists every linked bank and adds another with the picker', async () => {
+    serve({
+      ...linked,
+      banks: [bankRow('ACME Bank', 'FI', 'k1'), bankRow('Other Bank', 'SE', 'k2', '2020-01-01')],
+    })
+    render(<EnableBankingSection />)
+    expect(await screen.findByText('Other Bank')).toBeTruthy()
+    expect(screen.getByText(/Sweden · access ended/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Renew access to ACME Bank (Finland)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove Other Bank (Sweden)' })).toBeTruthy()
+  })
+
+  it('Renew on a listed bank starts a consent for that bank, not the picked one', async () => {
+    serve(
+      { ...linked, banks: [bankRow('ACME Bank', 'FI', 'k1'), bankRow('Other Bank', 'SE', 'k2')] },
+      { url: 'https://bank.example/consent', returns_to_app: true },
+    )
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<EnableBankingSection />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Renew access to Other Bank (Sweden)' }),
+    )
+    await waitFor(() => {
+      const call = authFetch.mock.calls.find((c) => c[0] === '/api/enable-banking/link')
+      expect(JSON.parse(String(call![1]?.body))).toMatchObject({
+        aspsp: 'Other Bank',
+        country: 'SE',
+      })
+    })
+  })
+
+  it('Remove asks first, then unlinks only that bank', async () => {
+    serve({
+      ...linked,
+      banks: [bankRow('ACME Bank', 'FI', 'k1'), bankRow('Other Bank', 'SE', 'k2')],
+    })
+    render(<EnableBankingSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Other Bank (Sweden)' }))
+    expect(screen.getByText('Remove Other Bank (Sweden)?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await waitFor(() =>
+      expect(
+        authFetch.mock.calls.some(
+          (c) => c[0] === '/api/enable-banking/banks/k2/remove' && c[1]?.method === 'POST',
+        ),
+      ).toBe(true),
+    )
   })
 })

@@ -168,11 +168,18 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 4. Under **1 Register your app with Enable Banking**, paste the **Application ID**, and paste the
    whole contents of the `.pem` file — including its first "BEGIN PRIVATE KEY" line and last
    "END PRIVATE KEY" line — into **Private key**. Click **Save**.
-5. Reopen the form (**⋯ → Edit configuration**). Under **2 Link your bank**, choose your
+5. Reopen the form (**⋯ → Edit configuration**). Under **2 Link your banks**, choose your
    **Country** — its banks load by themselves — then your **Bank**, and click **Link bank**.
 6. Your bank's sign-in page opens in a new tab. After you approve access, your bank brings you
    back to **Connectors**, the link finishes by itself, and the Enable Banking connector opens.
    Link your accounts in its **Accounts** list.
+
+**More than one bank:** one Enable Banking connector holds all of them. Under **2 Link your
+banks**, each linked bank is listed with its country, account count and how long its access
+lasts; pick another country and bank and click **Add bank** for the next one. Their accounts all
+appear in the one **Accounts** list, each labelled with its bank. **Remove** next to a bank
+revokes its access at Enable Banking and stops its accounts syncing; transactions already
+imported stay, and your other banks are not affected.
 
 If the address from step 2 isn't registered, the link still works, the old way: the form says so
 under **Link bank**, and after you approve access the browser goes to
@@ -185,7 +192,8 @@ example, `REDIRECT_URI_NOT_ALLOWED` names the URL to add to your application's a
 URLs.
 
 Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
-error, and the form says your bank access has expired — click **Renew link** to renew it.
+error, and the form says which bank's access has ended — click **Renew** next to it. Each bank
+renews on its own; linking the same bank again also renews it rather than adding it twice.
 
 ## GoCardless
 

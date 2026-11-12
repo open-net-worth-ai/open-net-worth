@@ -49,7 +49,6 @@ recomputed from the native leg there, never fabricated here).
 from __future__ import annotations
 
 import base64
-import hmac
 import json
 import logging
 import uuid
@@ -67,7 +66,7 @@ from backend.services.aggregation.providers import FetchWindow, derived_ref
 logger = logging.getLogger(__name__)
 
 SOURCE_ID = "enable_banking"
-EXTERNAL_SOURCE = "enablebanking"
+EXTERNAL_SOURCE = "enable_banking"
 
 API_BASE = "https://api.enablebanking.com"
 _HTTP_TIMEOUT = 30.0
@@ -261,8 +260,8 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     the URL the setup docs have always asked for, where the user pastes the code by hand —
     so an existing setup keeps working. ``returns_to_app`` says which one was used.
 
-    The ``state`` sent is kept as ``pending_state`` so ``create_session`` can tell the return
-    belongs to the link started here. Returns ``{url, authorization_id, aspsp,
+    The ``state`` sent is remembered with its bank (``pending_links``) so ``create_session``
+    can tell the return belongs to a link started here, and which bank it linked. Returns ``{url, authorization_id, aspsp,
     returns_to_app, redirect_url}``. Raises ``ValidationError`` on a bad bank / auth /
     transport failure."""
     bank = (aspsp or "").strip()
@@ -302,7 +301,8 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     if not url:
         raise ValidationError("Enable Banking did not return a consent URL")
 
-    store.update({"aspsp": bank, "country": code, "pending_state": state})
+    store.update({"aspsp": bank, "country": code})
+    store.add_pending_link(state, aspsp=bank, country=code, now=datetime.now(timezone.utc))
     return {
         "url": url,
         "authorization_id": authorization_id,
@@ -319,21 +319,26 @@ def create_session(code: str, state: str = "") -> dict:
     ``start_authorization`` sent: a return that isn't (a stale tab, a link started on another
     install, a forged URL) is refused before any call. A hand-pasted code carries no state.
 
-    POSTs ``/sessions`` ``{code}``; Enable Banking returns ``{session_id, accounts[]}``. We
-    persist the ``session_id`` (the per-bank consent handle the accounts/transactions
-    endpoints need). Returns ``{session_id, accounts}``. Raises ``ValidationError`` on a bad
-    code / state / auth / transport failure."""
+    POSTs ``/sessions`` ``{code}``; Enable Banking returns ``{session_id, accounts[], access}``.
+    The session becomes one more linked bank, named by the bank the link was started for.
+    Linking a bank that is already listed renews it: the new session takes its place and the
+    old one is revoked at Enable Banking. Returns ``{session_id, accounts, bank_key}``. Raises
+    ``ValidationError`` on a bad code / state / auth / transport failure."""
     auth_code = (code or "").strip()
     if not auth_code:
         raise ValidationError("the authorization code is required")
 
     store = EnableBankingConfigStore()
+    now = datetime.now(timezone.utc)
     returned = (state or "").strip()
-    if returned and not hmac.compare_digest(returned, store.get().get("pending_state") or ""):
+    pending = store.pending_link(returned, now=now) if returned else None
+    if returned and pending is None:
         raise ValidationError(
-            "This bank link doesn't match the one started here (or it was already completed)."
-            " Click Link bank to start again."
+            "This bank link doesn't match one started here, or it was already completed or"
+            " has expired. Click Link bank to start again."
         )
+    if pending is None:
+        pending = store.latest_pending_link(now=now) or {}
     token = _bearer(store)
     try:
         resp = httpx.post(
@@ -352,9 +357,62 @@ def create_session(code: str, state: str = "") -> dict:
     if not session_id:
         raise ValidationError("Enable Banking did not return a session id")
 
-    store.update({"session_id": session_id, "pending_state": ""})
+    cfg = store.get()
+    named = data.get("aspsp") if isinstance(data.get("aspsp"), dict) else {}
     accounts = data.get("accounts") or []
-    return {"session_id": session_id, "accounts": accounts}
+    key, replaced = store.add_bank(
+        session_id,
+        aspsp=str(pending.get("aspsp") or named.get("name") or cfg.get("aspsp") or ""),
+        country=str(pending.get("country") or named.get("country") or cfg.get("country") or ""),
+        valid_until=(data.get("access") or {}).get("valid_until"),
+        linked_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        account_ids=[_account_uid(a) for a in accounts if isinstance(a, dict)],
+    )
+    if pending.get("state"):
+        store.drop_pending_link(pending["state"])
+    for old_session in replaced:
+        _revoke_session(token, old_session)
+    return {"session_id": session_id, "accounts": accounts, "bank_key": key}
+
+
+def _revoke_session(token: str, session_id: str) -> bool:
+    """Revoke a bank's consent at Enable Banking (``DELETE /sessions/{id}``). Best effort:
+    the bank is forgotten here either way, and a consent that can't be revoked still ends
+    by itself. Logs the status only — never the session id."""
+    try:
+        resp = httpx.delete(
+            f"{API_BASE}/sessions/{session_id}", headers=_auth_headers(token), timeout=_HTTP_TIMEOUT
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("enable_banking: revoking a session failed (%s)", type(exc).__name__)
+        return False
+    if resp.status_code not in (200, 204):
+        logger.warning("enable_banking: revoking a session failed (HTTP %s)", resp.status_code)
+        return False
+    return True
+
+
+def remove_all_banks(store: EnableBankingConfigStore) -> int:
+    """Revoke every linked bank's consent (the connector's Remove). Returns how many were
+    revoked; the caller then erases the row."""
+    banks = store.banks()
+    if not banks:
+        return 0
+    token = _bearer(store)
+    return sum(_revoke_session(token, b["session_id"]) for b in banks)
+
+
+def remove_bank(key: str) -> dict:
+    """Unlink one bank: revoke its consent at Enable Banking, then forget it here. Its
+    already-imported transactions and linked accounts stay. Returns ``{removed, revoked,
+    banks_left}``. Raises ``ValidationError`` for a bank that isn't listed."""
+    store = EnableBankingConfigStore()
+    bank = store.bank((key or "").strip())
+    if bank is None:
+        raise ValidationError("That bank isn't linked to Enable Banking.")
+    revoked = _revoke_session(_bearer(store), bank["session_id"])
+    store.drop_bank(bank["key"])
+    return {"removed": True, "revoked": revoked, "banks_left": len(store.banks())}
 
 
 # ── account / transaction fetch ──────────────────────────────────────────────────────
@@ -497,6 +555,7 @@ def _account_to_common(eb_account: dict, balance: Optional[float] = None) -> dic
         "currency": _account_currency(eb_account),
         "balance": balance,
         "account_type": _ACCOUNT_TYPES.get(kind),
+        "institution": eb_account.get("_institution"),
         # No currency from the bank means _account_currency filled in the base: a balance must
         # never be booked as if the bank had said so (account_value_sync fails closed on this).
         "currency_inferred": not eb_account.get("currency"),
@@ -591,6 +650,19 @@ def _txn_description(eb_txn: dict) -> str:
     return (str(info).strip() if info else "") or "Enable Banking"
 
 
+def _txn_payee(eb_txn: dict, amount: float) -> Optional[str]:
+    """The counterparty's own name — who was paid (money out) or who paid (money in) — or
+    None when the bank names neither. It becomes the row's payee; the description keeps the
+    bank's wording, which payee matching learns from (as GoCardless does)."""
+    first, second = ("creditor", "debtor") if amount < 0 else ("debtor", "creditor")
+    for key in (first, second):
+        party = eb_txn.get(key)
+        name = " ".join(str(party.get("name") or "").split()) if isinstance(party, dict) else ""
+        if name:
+            return name[:120]
+    return None
+
+
 # Transaction `status` (verified on the sandbox: GET .../transactions returns EVERY status by
 # default). Money that never moved is dropped — a cancelled, rejected or scheduled row booked
 # as spending lowers the balance for nothing; one not yet final is pending. BOOK, OTHR and a
@@ -626,10 +698,47 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "amount": amount,
         "currency": currency,
         "description": description,
+        "payee": _txn_payee(eb_txn, amount),
         "memo": None,
         "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,
     }
+
+
+def _bank_label(bank: dict, banks: list[dict]) -> Optional[str]:
+    """The bank an account is shown (and filed) under: its name, plus its country only when
+    another linked bank shares that name (Nordea FI and Nordea SE are two banks; a lone Nordea
+    stays "Nordea", which is also what Add files a new account under)."""
+    name = (bank.get("aspsp") or "").strip()
+    if not name:
+        return None
+    twins = [b for b in banks if (b.get("aspsp") or "").strip() == name]
+    country = (bank.get("country") or "").strip().upper()
+    return f"{name} ({country})" if len(twins) > 1 and country else name
+
+
+def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tuple[list[dict], bool]:
+    """Every linked bank's accounts, each tagged with its bank (``institution``). One bank
+    that can't be read (its consent ended, the bank is down) never hides the others: it is
+    skipped and the result is marked incomplete."""
+    out: list[dict] = []
+    complete = True
+    seen: set[str] = set()
+    banks = store.banks()
+    for bank in banks:
+        try:
+            accounts = fetch_session_accounts(token, bank["session_id"])
+        except (ExternalServiceError, httpx.HTTPError) as exc:
+            logger.warning("enable_banking: a bank's accounts are unavailable: %s", exc)
+            complete = False
+            continue
+        for a in accounts:
+            uid = _account_uid(a)
+            if uid in seen:
+                continue
+            seen.add(uid)
+            out.append({**a, "_institution": _bank_label(bank, banks)})
+    return out, complete
 
 
 def fetch_window(
@@ -647,7 +756,7 @@ def fetch_window(
     ``_MAX_FETCH_PAGES`` without exhausting its ``continuation_key`` — a truncated fetch must
     never look complete to the vanished-row check."""
     token = _bearer(store)
-    eb_accounts = fetch_session_accounts(token, store.session_id())
+    eb_accounts, complete = _accounts_of_every_bank(token, store)
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
     accounts = [
@@ -655,7 +764,6 @@ def fetch_window(
     ]
 
     rows: list[dict] = []
-    complete = True
     for eb_account in eb_accounts:
         account_uid = _account_uid(eb_account)
         if not account_uid or accounts_only:

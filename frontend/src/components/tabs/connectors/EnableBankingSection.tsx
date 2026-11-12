@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { enableBankingReturnUrl, openBankPageTab } from './bankPage'
+import { enableBankingReturnUrl, openBankPageTab, takeEnableBankingReturnError } from './bankPage'
 import {
   Stack,
   Cluster,
@@ -18,6 +18,8 @@ import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { Icons } from './icons'
+import { EnableBankingBanks } from './EnableBankingBanks'
+import { accessEnded, type EnableBankingBank } from './enableBankingBank'
 import { SetupStep, type SetupStepState } from './SetupStep'
 
 // Enable Banking (EU PSD2 open banking) connector config over /api/enable-banking/* (per-
@@ -39,6 +41,7 @@ interface EnableBankingStatus {
   aspsp: string
   country: string
   has_session: boolean
+  banks: EnableBankingBank[]
   last_synced_at: string | null
   last_status: string
   last_error: string | null
@@ -126,7 +129,8 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [aspsp, setAspsp] = useState('')
   const [loadingBanks, setLoadingBanks] = useState(false)
-  const [linkErr, setLinkErr] = useState<string | null>(null)
+  // A failed return from the bank lands here with its reason (ConnectorsTab keeps it).
+  const [linkErr, setLinkErr] = useState<string | null>(takeEnableBankingReturnError)
   const [linking, setLinking] = useState(false)
   // After Link bank: whether the bank will bring the user back here (the app's URL is
   // registered), or to the old https://localhost/connectors page they copy the code from.
@@ -134,6 +138,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const [copied, setCopied] = useState(false)
   const [showPaste, setShowPaste] = useState(false)
   const [editingSetup, setEditingSetup] = useState(false)
+  const [renewingKey, setRenewingKey] = useState<string | null>(null)
   // Post-consent code → session exchange.
   const [authCode, setAuthCode] = useState('')
   const [completing, setCompleting] = useState(false)
@@ -214,17 +219,21 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     if (cfg?.has_credentials) void loadBanks(code)
   }
 
-  async function linkBank() {
-    if (!aspsp) return
+  /** Start a consent: for the picked bank, or — Renew on a listed one — for that bank. */
+  async function linkBank(target?: EnableBankingBank) {
+    const bank = target ? target.aspsp : aspsp
+    const code = target ? target.country : country
+    if (!bank) return
     const tab = openBankPageTab()
     let opened = false
     setLinking(true)
+    setRenewingKey(target?.key ?? null)
     setLinkErr(null)
     try {
       const r = await authFetch('/api/enable-banking/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aspsp, country, redirect: enableBankingReturnUrl() }),
+        body: JSON.stringify({ aspsp: bank, country: code, redirect: enableBankingReturnUrl() }),
       })
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
@@ -241,6 +250,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     } finally {
       if (!opened) tab.cancel()
       setLinking(false)
+      setRenewingKey(null)
     }
   }
 
@@ -308,10 +318,13 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
 
   // The paste fallback stays folded away unless asked for, or unless this link fell back to it.
   const pasteOpen = showPaste || returnsToApp === false
-  const renewing = Boolean(cfg.has_session && aspsp && aspsp === cfg.aspsp)
-  // A fetch refused by the bank after a link existed: the ~90-day consent has run out.
+  const banks = cfg.banks ?? []
+  // Picking a bank that is already listed renews it (the server swaps the consent in).
+  const renewing = banks.some((b) => b.aspsp === aspsp && b.country === country)
+  // A consent past its end date, or a fetch the bank refused: access has run out somewhere.
   const consentExpired =
-    cfg.has_session && /401|403|expired|unauthori[sz]ed|consent/i.test(cfg.last_error || '')
+    banks.some((b) => accessEnded(b)) ||
+    (cfg.has_session && /401|403|expired|unauthori[sz]ed|consent/i.test(cfg.last_error || ''))
   // Step 1 stays open until its keys are saved, while being edited, or when a link fell back
   // to pasting a code (its Redirect URL is the fix).
   const setupOpen = !cfg.has_credentials || editingSetup || returnsToApp === false
@@ -461,26 +474,31 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
         )}
       </SetupStep>
 
-      <SetupStep n={2} title="Link your bank" state={linkState}>
+      <SetupStep n={2} title="Link your banks" state={linkState}>
         <Stack gap="--space-3">
           {consentExpired && (
             <Text size="xs" tone="warn">
-              Your bank access has expired. Link again to renew it.
+              Access to a bank has expired. Click Renew next to it to keep it syncing.
             </Text>
           )}
-          {cfg.has_session && cfg.aspsp ? (
-            <Stack gap="--space-1">
-              <Text size="sm">
-                Linked: {cfg.aspsp} · {countryName(cfg.country)}
-              </Text>
+          {banks.length > 0 ? (
+            <>
+              <EnableBankingBanks
+                banks={banks}
+                countryName={countryName}
+                renewing={renewingKey}
+                busy={linking}
+                onRenew={(bank) => void linkBank(bank)}
+                onChanged={load}
+              />
               <Text size="xs" tone="muted">
-                Consent lasts about 90 days. Link again to renew it.
+                Access lasts about 90 days per bank. Add another bank below.
               </Text>
-            </Stack>
+            </>
           ) : (
             <Text size="xs" tone={cfg.has_credentials ? 'muted' : 'faint'}>
               {cfg.has_credentials
-                ? 'Pick your bank and approve access on its own site.'
+                ? 'Pick your bank and approve access on its own site. You can add more banks after.'
                 : 'Save your application ID and private key first.'}
             </Text>
           )}
@@ -516,11 +534,11 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
             <Button
               size="sm"
               variant="primary"
-              loading={linking}
-              disabled={!aspsp || !cfg.has_credentials}
-              onClick={linkBank}
+              loading={linking && renewingKey === null}
+              disabled={!aspsp || !cfg.has_credentials || linking}
+              onClick={() => void linkBank()}
             >
-              {renewing ? 'Renew link' : 'Link bank'}
+              {renewing ? 'Renew link' : banks.length ? 'Add bank' : 'Link bank'}
             </Button>
           </Cluster>
 
@@ -581,7 +599,13 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
         </Stack>
       </SetupStep>
 
-      <ConnectorAccountsList provider="enable_banking" providerLabel="Enable Banking" />
+      {/* Re-read when a bank is added, renewed or removed — like PlaidSection's banksVersion —
+          so a removed bank's accounts never linger in the list. */}
+      <ConnectorAccountsList
+        key={banks.map((b) => b.key).join(',')}
+        provider="enable_banking"
+        providerLabel="Enable Banking"
+      />
     </Stack>
   )
 }

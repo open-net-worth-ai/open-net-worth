@@ -169,3 +169,20 @@ def test_front_door_provider_map(client):
     body = r.json()
     assert "US" in body["map"]
     assert body["providers"][0]["provider"] == "plaid"
+
+
+def test_remove_bank_route_returns_the_new_status(client, monkeypatch):
+    from backend.services.aggregation import enable_banking as svc
+
+    monkeypatch.setattr(
+        svc, "remove_bank", lambda key: {"removed": True, "revoked": True, "banks_left": 0}
+    )
+    r = client.post("/api/enable-banking/banks/abc123/remove")
+    assert r.status_code == 200
+    assert r.json()["removed"] is True and "banks" in r.json()["status"]
+
+
+def test_remove_unknown_bank_is_422(client):
+    client.put("/api/enable-banking/config", json={"application_id": "app-1", "private_key": _PEM})
+    r = client.post("/api/enable-banking/banks/nope/remove")
+    assert r.status_code == 422
