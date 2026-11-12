@@ -156,6 +156,10 @@ describe('GoCardlessSection bank page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'List banks' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
     expect(open).toHaveBeenCalledTimes(1) // before the server answered
+    const linkCall = authFetch.mock.calls.find((c) => c[0] === '/api/gocardless/link')
+    expect(JSON.parse(linkCall?.[1]?.body as string).redirect).toBe(
+      `${window.location.origin}/connectors?connector=gocardless`,
+    )
     expect(tab.opener).toBeNull()
     current = status([bank({ status: 'CR', accounts: 0 })])
     resolveLink({ ok: true, json: () => Promise.resolve({ link: 'https://bank.example/consent' }) })

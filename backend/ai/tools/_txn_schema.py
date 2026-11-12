@@ -318,6 +318,14 @@ _FIELDS: dict[str, dict[str, Any]] = {
             "auto-resolving one from the description. Expense/income only."
         ),
     },
+    "payee": {
+        "type": "string",
+        "description": (
+            "The merchant/person's clean name when the description is raw bank text — a fetched "
+            "row's `payee`, passed straight through. Matches an existing payee by name (then by "
+            "the description) and names a new one only if neither matches. Expense/income only."
+        ),
+    },
 }
 
 
@@ -383,6 +391,7 @@ def create_item_properties() -> dict[str, dict[str, Any]]:
         "splits",
         "external_refs",
         "payee_id",
+        "payee",
     )
 
 

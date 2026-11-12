@@ -59,6 +59,19 @@ export function openBankPageTab(): BankPageTab {
   }
 }
 
+/** Where GoCardless sends the user after consent: back to its own connector page, which lists
+ *  the bank's accounts to link — not the app's home page, with no hint of the next step. */
+export function bankReturnUrl(): string {
+  return `${window.location.origin}/connectors?connector=gocardless`
+}
+
+/** What to ask a provider when its bank sends the user back, before the connector page shows:
+ *  without it the page reads the bank as still waiting (an Error badge) until something else
+ *  happens to re-read it. A failure is ignored — the page then shows what it knows. */
+export const BANK_RETURN_CHECKS: Record<string, () => Promise<unknown>> = {
+  gocardless: () => authFetch('/api/gocardless/check-link', { method: 'POST' }),
+}
+
 /** Where Enable Banking sends the user after consent. It accepts only a redirect registered on
  *  the user's application and compares it EXACTLY, query string included, so this is the bare
  *  page — the return is recognised by the `state` + `code` Enable Banking appends. */

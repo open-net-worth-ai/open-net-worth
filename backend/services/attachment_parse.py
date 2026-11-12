@@ -16,18 +16,35 @@ import csv
 import io
 
 import fitz  # pymupdf
-import openpyxl
 import pypdf
 import xlrd
 from pypdf.errors import FileNotDecryptedError
 
 from backend.services.office_crypt import decrypt_office
+from backend.services.xlsx_open import load_values_workbook
 
 # The structured statement formats that carry their own machine-readable transaction
 # structure (no column mapping). They are plain text (OFX/QFX SGML/XML, QIF, MT940) or XML
 # (CAMT.053) — we extract a text view for Lucius to read AND stash the raw bytes + detected
 # format so ``import_transactions(attachment_ref=…)`` can run the structured importer.
 _STRUCTURED_EXTS = (".ofx", ".qfx", ".qbo", ".qif", ".mt940", ".sta", ".camt")
+
+# What a person can attach, in their words — the ONE list every refusal names. The composer's
+# file picker (frontend ``ATTACH_ACCEPT``) offers exactly these.
+SUPPORTED_UPLOADS = (
+    "images (PNG, JPG, HEIC, …), PDF, CSV, TXT, Excel (.xlsx, .xls), "
+    "and bank statement files (OFX, QFX, QBO, QIF, MT940, CAMT)"
+)
+
+
+class UnsupportedFileError(ValueError):
+    """A file type no reader handles — answered with 415 and the supported list."""
+
+
+def unsupported_file_message(filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    what = f"a .{ext} file" if ext else "a file type"
+    return f"Lucius can't read {what}. Supported: {SUPPORTED_UPLOADS}."
 
 
 class PasswordProtectedPdfError(ValueError):
@@ -72,7 +89,7 @@ def parse_upload(filename: str, mime: str, content: bytes, password: str | None 
             "summary": f"Image ({filename}, {len(content) // 1024}KB)",
         }
 
-    if mime in ("text/csv", "text/plain") or filename.endswith(".csv"):
+    if mime in ("text/csv", "text/plain") or filename.lower().endswith((".csv", ".txt")):
         text = content.decode("utf-8", errors="replace")
         try:
             reader = csv.DictReader(io.StringIO(text))
@@ -137,7 +154,7 @@ def parse_upload(filename: str, mime: str, content: bytes, password: str | None 
                     sheets_text.append(f"[Sheet: {sheet_name}]\n{buf.getvalue()}")
                 n_sheets = wb_xls.nsheets
             else:
-                wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+                wb = load_values_workbook(content)
                 for sheet_name in wb.sheetnames:
                     ws = wb[sheet_name]
                     rows = list(ws.iter_rows(values_only=True))
@@ -154,7 +171,10 @@ def parse_upload(filename: str, mime: str, content: bytes, password: str | None 
             text = "\n\n".join(sheets_text)
             summary = f"Excel file '{filename}' — {n_sheets} sheet(s), ~{total_rows} data rows"
         except Exception as exc:
-            raise ValueError(f"Could not read Excel file: {exc}")
+            raise ValueError(
+                "This Excel file couldn't be opened. Open it, save it again as .xlsx (or "
+                "export it as CSV), and attach that copy."
+            ) from exc
         entry = {"kind": "text", "text": text, "summary": summary, "was_encrypted": was_encrypted}
         # Only modern .xlsx has a structured importer (import_xlsx reads OOXML); a legacy
         # .xls has none, so it stays text-only (no `format`). Stash the DECRYPTED bytes so
@@ -213,10 +233,7 @@ def parse_upload(filename: str, mime: str, content: bytes, password: str | None 
             "content": content,
         }
 
-    raise ValueError(
-        "Unsupported file type. Supported: images, CSV, Excel (xlsx), PDF, "
-        "OFX/QFX, QIF, MT940, CAMT."
-    )
+    raise UnsupportedFileError(unsupported_file_message(filename))
 
 
 _PDF_RENDER_DPI = 150

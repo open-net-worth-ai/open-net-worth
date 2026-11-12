@@ -1084,7 +1084,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1132,7 +1132,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1180,7 +1180,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1228,7 +1228,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1276,7 +1276,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1331,7 +1331,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1379,7 +1379,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1427,7 +1427,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1475,7 +1475,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -1523,7 +1523,7 @@
           "string",
           "null"
         ],
-        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the newest row already booked from it — so a pause is caught up (up to 90 days) and a late-posted row or bank-side correction is still seen."
       },
       "before": {
         "type": [
@@ -4420,6 +4420,10 @@
             "payee_id": {
               "type": "string",
               "description": "Link to a payee entity (pay_… id from get_payees or create_payee) instead of auto-resolving one from the description. Expense/income only."
+            },
+            "payee": {
+              "type": "string",
+              "description": "The merchant/person's clean name when the description is raw bank text — a fetched row's `payee`, passed straight through. Matches an existing payee by name (then by the description) and names a new one only if neither matches. Expense/income only."
             }
           },
           "required": [

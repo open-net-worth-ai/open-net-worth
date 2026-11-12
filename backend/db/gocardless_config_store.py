@@ -154,6 +154,22 @@ class GoCardlessConfigStore(AggregatorConfigStore):
             self._ensure(c)
             self._apply(c, {"access_token": access_token, "access_expires_at": expires_at})
 
+    def note_credentials(self, *, rejected_with: Optional[str]) -> None:
+        """What GoCardless last said of the saved keys, so the connector never reads
+        Connected over keys it refuses. A refusal is an ``auth_error`` (without touching
+        ``last_synced_at`` — nothing was fetched); a later accepted sign-in clears only that
+        error, never a fetch's own."""
+        cfg = self.get()
+        if rejected_with is not None:
+            self._record({"last_status": "auth_error", "last_error": rejected_with})
+        elif cfg.get("last_status") == "auth_error":
+            self._record(
+                {
+                    "last_status": "ok" if cfg.get("last_synced_at") else "never_run",
+                    "last_error": None,
+                }
+            )
+
     def clear_token(self) -> None:
         """Forget the cached bearer so the next call mints a fresh one."""
         self.save_token(None, None)

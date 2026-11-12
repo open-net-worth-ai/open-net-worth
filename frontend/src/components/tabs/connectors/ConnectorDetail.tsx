@@ -41,6 +41,7 @@ import { useConnectorSaveHost } from './formSave'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
+import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { cachedRestApi, getRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
@@ -120,6 +121,18 @@ export interface ConnectorDetailProps {
    *  gets, so the operator isn't left inferring "it worked" from the modal merely closing. */
   onSaved?: () => void
 }
+
+/** Connectors whose `GET /api/connectors/{id}/accounts` lists accounts to link. */
+const ACCOUNT_CONNECTORS = new Set([
+  'plaid',
+  'gocardless',
+  'enable_banking',
+  'simplefin',
+  'lunch_flow',
+  'lunch_money',
+  'alpaca',
+  'ibkr',
+])
 
 export function ConnectorDetail({
   entry,
@@ -600,6 +613,12 @@ export function ConnectorDetail({
               verification={entry.verification}
               url={entry.url}
             />
+          ) : null}
+
+          {/* Linking the synced accounts is the step that makes anything arrive, so a connected
+            bank or broker shows them here — not only behind Edit configuration. */}
+          {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured && entry.enabled ? (
+            <ConnectorAccountsList provider={entry.id} providerLabel={entry.name} />
           ) : null}
 
           {entry.prompts.length > 0 ? (

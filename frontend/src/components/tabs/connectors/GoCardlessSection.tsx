@@ -17,7 +17,7 @@ import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { GoCardlessBanks } from './GoCardlessBanks'
 import { isPending, type GoCardlessBank } from './gocardlessBank'
-import { openBankPageTab } from './bankPage'
+import { bankReturnUrl, openBankPageTab } from './bankPage'
 
 // GoCardless Bank Account Data connector config over /api/gocardless/*. A blank secret-key
 // field keeps the saved key; the GET echoes only `has_credentials`. One connector holds any
@@ -179,7 +179,7 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
         body: JSON.stringify({
           institution_id: institutionId,
           country,
-          redirect: window.location.origin,
+          redirect: bankReturnUrl(),
         }),
       })
       const d = await r.json().catch(() => ({}))

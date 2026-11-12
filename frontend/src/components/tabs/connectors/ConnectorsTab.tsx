@@ -34,7 +34,7 @@ import { savePermissions } from './permissions'
 import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
 import { mcpAuthType, mcpNeedsSignIn, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
-import { completeEnableBankingReturn, enableBankingReturnOf } from './bankPage'
+import { BANK_RETURN_CHECKS, completeEnableBankingReturn, enableBankingReturnOf } from './bankPage'
 import {
   useRegisterScreenCommands,
   useRegisterScreenFacts,
@@ -164,16 +164,38 @@ export function ConnectorsTab(): JSX.Element {
   const linkedConnector = useRouterState({
     select: (st) => (st.location.search as { connector?: unknown }).connector,
   })
+  const linkedRef = useRouterState({
+    select: (st) => (st.location.search as { ref?: unknown }).ref,
+  })
   useEffect(() => {
     if (initialLoading || typeof linkedConnector !== 'string' || !linkedConnector) return
-    const id = linkedConnector
-    const raf = requestAnimationFrame(() => {
-      if (connectors.some((c) => c.id === id)) {
-        openConnector(id, { configure: !entries.some((e) => e.id === id) })
-      } else openLandingPage(id)
-      void navigate({ to: '/connectors', search: {}, replace: true } as never)
-    })
-    return () => cancelAnimationFrame(raf)
+    // A bank's consent page sends the user back here with its own `ref=…` appended — after a
+    // `?` even when the URL already had one, so it can land inside the id. Keep only the id.
+    const raw = String(linkedConnector)
+    const id = raw.split('?')[0] ?? ''
+    const fromBank = raw.includes('ref=') || typeof linkedRef === 'string'
+    let live = true
+    let raf = 0
+    const open = () => {
+      if (!live) return
+      raf = requestAnimationFrame(() => {
+        if (connectors.some((c) => c.id === id)) {
+          // Back from a bank: the connector page, which lists the accounts to link — never the
+          // credential form, which a link still marked unfinished would otherwise pick.
+          openConnector(id, { configure: !fromBank && !entries.some((e) => e.id === id) })
+        } else openLandingPage(id)
+        void navigate({ to: '/connectors', search: {}, replace: true } as never)
+      })
+    }
+    // Ask the provider whether the consent finished BEFORE showing the page, so its badge and
+    // accounts read what the bank just did rather than the "waiting" left before it.
+    const check = fromBank ? BANK_RETURN_CHECKS[id] : undefined
+    if (check) void check().finally(() => void reload().finally(open))
+    else open()
+    return () => {
+      live = false
+      cancelAnimationFrame(raf)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
 
