@@ -1239,6 +1239,9 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "e285d7433a577013205dc4cc0964d13e2a7af525088de990b6d67a50c6c64bc5",
             # 2026-11-06: before what's still open got its own line and a reminder to recheck.
             "853ae7eae7692d36d5bb4ffd635a1b9670d7dd21edef1b453adea5e593b559c0",
+            # 2026-11-12: a card bill counted only within 3 days, so one due in 5 went unsaid
+            # while the Dashboard flagged it. Now the same week the Dashboard uses.
+            "be8d1c0f677e52cacdfc8af1c2b88dc65eaf4d0a47194a2a54e8a204013fc25e",
         }
     ),
     # 2026-11-05: before one money test for every email, and connecting each item to the books.

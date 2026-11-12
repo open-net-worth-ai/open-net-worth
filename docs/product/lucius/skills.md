@@ -35,7 +35,7 @@ A new install comes with these. Find them in **Skills** in the sidebar.
 | `catch-up` | "Catch me up" — new transactions in, duplicates merged, unsorted ones labelled, balances checked, overspending covered before the month rolls |
 | `log-transactions-from-email` | "Log my transactions from email" — bank, card and trade confirmations booked, payees cleaned up, nothing twice |
 | `email-finance-digest` | "Anything important in my email?" — logs your bank, card and trade mail, then tells you what else affects your money, like a failed payment, a bill due, a new login to a money account or a deposit maturing |
-| `daily-briefing` | "How did yesterday go?" — a few friendly sentences on money in and out, the portfolio, bills due and anything to review |
+| `daily-briefing` | "How did yesterday go?" — a few friendly sentences on money in and out, the portfolio, bills due and anything to review. An unpaid card bill comes up every morning from a week before it's due — or earlier, from the day you usually pay that card (read from your last three statements) — until it's paid |
 | `weekly-report` | "How did last week go?" — a designed report page |
 | `monthly-report` | "How did September go?" — a designed report page |
 | `budget-review` | "Am I over budget?" / "Adjust my targets" |
