@@ -9,7 +9,9 @@ Thin router over ``db.EnableBankingConfigStore`` + ``services.aggregation.enable
   * ``POST /api/enable-banking/link``          — start the consent flow for a bank → returns
     the bank-auth ``url`` the user opens.
   * ``POST /api/enable-banking/complete``      — exchange the post-consent auth code for a
-    session (the per-bank consent handle, persisted).
+    session: one more linked bank (or a renewal of one already listed).
+  * ``POST /api/enable-banking/banks/{key}/remove`` — unlink one bank (revoked at Enable
+    Banking first). ``key`` is the bank's public handle from the status, never its session.
 
 Auth is the app-wide ``require_auth`` dependency (this is under ``/api``). The private_key /
 session are SECRETS — accepted (write-only) but NEVER returned (the status echoes only
@@ -119,3 +121,14 @@ async def enable_banking_complete(body: EnableBankingCompleteRequest):
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     # Don't leak the session id / raw accounts to the client — return the public status.
     return EnableBankingConfigStore().public()
+
+
+@router.post("/api/enable-banking/banks/{key}/remove")
+async def enable_banking_remove_bank(key: str):
+    """Unlink one bank: its consent is revoked at Enable Banking, then forgotten here. Its
+    imported transactions and linked accounts stay. Unknown bank → 422."""
+    try:
+        result = await asyncio.to_thread(enable_banking_service.remove_bank, key)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    return {**result, "status": EnableBankingConfigStore().public()}

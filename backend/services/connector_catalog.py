@@ -420,6 +420,30 @@ def discover_mcp_tools_if_unlisted(server_id: str) -> None:
     get_manager().test_connect(server_id)
 
 
+def _enable_banking_configured(row: Row, have: Have) -> bool:
+    """Credentials plus at least one bank — the multi-bank list, or the legacy single session."""
+    return bool(
+        "private_key" in have
+        and ("sessions" in have or "session_id" in have)
+        and _text(row["config"].get("application_id"))
+    )
+
+
+def _remove_enable_banking(connector_id: str) -> None:
+    """Revoke every bank's consent at Enable Banking BEFORE clearing the local row
+    (revoke-before-delete, like GoCardless and Plaid). Best effort: the local credentials are
+    erased either way."""
+    from backend.db.enable_banking_config_store import EnableBankingConfigStore
+    from backend.services.aggregation.enable_banking import remove_all_banks
+
+    store = EnableBankingConfigStore()
+    try:
+        remove_all_banks(store)
+    except Exception:
+        logger.warning("enable_banking: revoking linked banks on Remove failed", exc_info=True)
+    store.reset()
+
+
 def _gocardless_configured(row: Row, have: Have) -> bool:
     """Credentials plus at least one bank, linked or not: an unfinished or expired link stays a
     list row that reads as an error (``_gocardless_error``), never drops back into the
@@ -590,9 +614,14 @@ _KINDS: tuple[ConnectorKind, ...] = (
     _kind(
         "enable_banking",
         "Enable Banking",
-        _needs(secrets=("private_key", "session_id"), config=("application_id",)),
-        secret_fields=_secrets("private_key", minted=("session_id",)),
+        _enable_banking_configured,
+        secret_fields=_secrets("private_key", minted=("session_id", "sessions")),
         config_keys=("application_id", "aspsp", "country"),
+        private_state=("banks", "pending_links"),
+        # The moved sessions are still consented at Enable Banking; without each bank's name the
+        # receiver would list unnamed banks.
+        moved_state=("banks",),
+        remove=_remove_enable_banking,
     ),
     _kind(
         "gocardless",
