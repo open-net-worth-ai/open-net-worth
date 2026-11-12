@@ -35,18 +35,25 @@ net worth, budgeting, investments, and an AI assistant called Lucius). The reade
 They are not developers. They will see these bullets in the app right after updating and in a
 Discord announcement.
 
-You get the release's changes as commit subjects, grouped under New, Fixes and Polish. Write 1 to
-{MAX_HIGHLIGHTS} bullets.
+You get the release's changes as commit subjects, grouped under New, Fixes and Polish. Those
+groups are how the commits were labelled, not how users see the release. Write 1 to
+{MAX_HIGHLIGHTS} bullets, and only as many as the release has distinct features: a release with
+two features gets two or three bullets, never six.
 
-What to include, in this order:
+First, find the features. A feature is one thing a user would name: a new connector, a screen,
+a dialog. Every subject about it belongs to it, whichever group it came from. A fix to something
+that is itself new in this release is part of that feature, not a fix: its users never saw the
+bug. Fold it into the feature's bullet, or leave it out.
+
+Then write one bullet per feature, in this order:
 1. What a user can now do that they couldn't before.
-2. Fixes a user would have noticed: something that looked wrong, failed or lost their work.
+2. Fixes to things that existed before this release, that a user would have noticed: something
+   that looked wrong, failed or lost their work.
 Most valuable first, judged by how many users it touches. A change to a common screen beats a
-change to a rare setting.
+change to a rare setting. A big feature may take two bullets, and they then sit next to each
+other, never split by another feature.
 
-One bullet per feature. If several subjects describe one feature (a setup flow, a reconnect
-button and a status label for the same connector), merge them into one bullet about the feature.
-Leave the smaller parts out rather than listing them.
+Say what the feature lets the user do. Leave its smaller parts out rather than listing them.
 
 Leave out entirely:
 - Anything only developers, the build, tests, the public demo or the release process would notice.
@@ -59,6 +66,8 @@ Wording:
   endpoint, token, schema, sync job, or a code or file name. If a feature only makes sense with
   one of these, describe what the user sees instead ("a connector's settings", "the connector
   directory"). A term the app itself shows on screen is fine, such as MCP server.
+- Never word a fix as new support or a new feature. Say what now works: "Cost tracking now
+  prices Claude Haiku 5.5 correctly", not "Claude Haiku 5.5 is now supported".
 - Name a screen or button as a noun, never as the first words of a bullet: "The Add account form
   now…", not "Add account now…".
 - Each bullet is one sentence of at most 15 words, with one idea. No semicolons. No lists of more
