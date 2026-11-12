@@ -21,6 +21,7 @@ from backend.services.statements.tiers import (
     tier2_text,
     tier3_vision,
 )
+from backend.services.xlsx_open import load_values_workbook
 
 _PDF_MAGIC = b"%PDF-"
 _VISION_PAGE_CAP = 40  # cost ceiling (D3): a vision call per page; past this, refuse loudly
@@ -141,8 +142,6 @@ def _xlsx_to_csv_text(content: bytes, password: str | None = None) -> str:
     import csv as _csv
     import io
 
-    import openpyxl
-
     from backend.services.office_crypt import decrypt_office
 
     try:
@@ -152,7 +151,7 @@ def _xlsx_to_csv_text(content: bytes, password: str | None = None) -> str:
     except ValueError as exc:
         raise StatementParseError(str(exc))
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        wb = load_values_workbook(content)
     except Exception as exc:  # zipfile.BadZipFile & friends — user-correctable, never a 500
         raise StatementParseError(f"Not a readable Excel (.xlsx) file: {exc}")
     out = io.StringIO()

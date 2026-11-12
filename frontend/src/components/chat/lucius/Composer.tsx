@@ -146,6 +146,13 @@ export interface LuciusComposerHandle {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** "a.csv", "a.csv and b.pdf", "a.csv, b.pdf and 2 more" — for a sentence about files. */
+/** The send refusal: the WHY is already on screen under the chips, so this says what to do. */
+function uploadRefusal(failed: AttachmentItem[]): string {
+  return failed.length > 1
+    ? `Remove the ${failed.length} files that weren't uploaded to send this.`
+    : `Remove ${failed[0]!.name} to send this — it wasn't uploaded.`
+}
+
 function fileNames(items: AttachmentItem[]): string {
   const names = items.map((a) => a.name)
   if (names.length <= 2) return names.join(' and ')
@@ -291,8 +298,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       // A file that did not upload would be silently left out of the message, which is worse
       // than not sending: the reader believes Lucius has it.
       if (att.failed.length) {
-        const names = fileNames(att.failed)
-        return refuse(`${names} could not be uploaded. Remove it, or add it again, to send.`)
+        return refuse(uploadRefusal(att.failed))
       }
       if (att.uploading.length) {
         setSendWhenReady(true)
@@ -664,7 +670,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
                 key={a.id}
                 className={`lx-att${a.uploading ? ' lx-att--uploading' : ''}${a.failed ? ' lx-att--failed' : ''}`}
                 onClick={() => setAttDetail(a)}
-                title={a.failed ? 'This file did not upload' : 'View attachment'}
+                title={a.failed ? (a.failReason ?? 'This file did not upload') : 'View attachment'}
               >
                 {a.kind === 'image' && a.url ? (
                   <img className="lx-att-thumb" src={a.url} alt="" />
@@ -706,6 +712,18 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
                   </svg>
                 </span>
               </button>
+            ))}
+          </div>
+        )}
+
+        {/* Why a file failed, the moment it fails — a red outline alone left the reader to
+            press Send to find out (and the chip's tooltip is invisible on touch). */}
+        {att.failed.length > 0 && (
+          <div className="lx-send-note lx-send-note--refused" role="status" data-upload-failures>
+            {att.failed.map((f) => (
+              <div key={f.id}>
+                <strong>{f.name}</strong> wasn't uploaded. {f.failReason}
+              </div>
             ))}
           </div>
         )}

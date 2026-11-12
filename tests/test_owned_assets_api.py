@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from backend.api.assets_api import router
 from backend.db.account_store import AccountStore
+from backend.services.attachment_parse import SUPPORTED_UPLOADS
 
 _PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-but-fine-for-this-route"
 
@@ -787,10 +788,7 @@ def test_upload_refusals_are_readable(client):
     word = _upload_doc(client, asset["id"], "letter.docx", b"PK", "application/msword")
     assert word.status_code == 415
     assert word.json() == {
-        "detail": (
-            "Unsupported file type. Supported: images, CSV, Excel (xlsx), PDF, OFX/QFX, QIF, "
-            "MT940, CAMT."
-        ),
+        "detail": f"That file type can't be read. Supported: {SUPPORTED_UPLOADS}.",
         "code": "unsupported_type",
         "field": "file",
     }
