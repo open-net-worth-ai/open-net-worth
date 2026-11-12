@@ -497,16 +497,12 @@ class McpClientManager:
         """The blocking transport call ``_fire`` runs in a worker thread — where the
         shared-connection decision actually happens.
 
-        **HTTP keeps today's stateless-per-call shape, unchanged.** Two concrete reasons,
-        not an assumption: there is no process to reuse (the cost this fix targets —
-        spawning a fresh child on every call — simply doesn't exist for HTTP), and this
-        method never even calls ``initialize()`` on an HTTP connection before ``tools/call``
-        (it never has), so there is no negotiated ``Mcp-Session-Id`` a persistent connection
-        would preserve here either — reusing the client object would change nothing
-        observable. If a future HTTP server turns out to rely on session affinity, that is a
-        separate, currently-nonexistent gap (this method would need to start calling
-        ``initialize()`` at all first) — not something this fix should paper over by pooling
-        a connection whose session is never established in the first place.
+        **HTTP opens one short-lived session per call**: ``initialize`` (which also sends
+        ``notifications/initialized``), then ``tools/call`` on the SAME connection, so a
+        server-issued ``Mcp-Session-Id`` is echoed on the call. A stateful Streamable HTTP
+        server (moomoo's, for one) answers a session-less ``tools/call`` with HTTP 400
+        "missing Mcp-Session-Id header"; a stateless one simply ignores the handshake. Nothing
+        is pooled — there is no child process to reuse, and the session ends with the block.
 
         **stdio reuses the ONE pooled connection to `server`** (Claude Desktop's
         one-connection-per-server-for-the-whole-app shape) so a server whose state lives on
@@ -517,6 +513,7 @@ class McpClientManager:
         """
         if server.transport != "stdio":
             with make_connection(server) as conn:
+                conn.initialize()
                 return conn.call_tool(tool, args)
         return self._call_via_server_connection(server, tool, args)
 
