@@ -540,10 +540,21 @@ def _txn_description(eb_txn: dict) -> str:
     return (str(info).strip() if info else "") or "Enable Banking"
 
 
+# Transaction `status` (verified on the sandbox: GET .../transactions returns EVERY status by
+# default). Money that never moved is dropped — a cancelled, rejected or scheduled row booked
+# as spending lowers the balance for nothing; one not yet final is pending. BOOK, OTHR and a
+# missing status are final.
+_NOT_MONEY_STATUSES = frozenset({"CNCL", "RJCT", "SCHD"})
+_PENDING_STATUSES = frozenset({"PDNG", "HOLD"})
+
+
 def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | None:
     """One Enable Banking transaction → the common normalized row shape (RFC §A step 3).
     Returns None for an unparseable/zero amount or an unrecognized credit/debit indicator
     (``_txn_amount`` already logs that case)."""
+    status = str(eb_txn.get("status") or "").upper()
+    if status in _NOT_MONEY_STATUSES:
+        return None
     amount, currency = _txn_amount(eb_txn)
     if amount is None:
         return None
@@ -565,8 +576,7 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "currency": currency,
         "description": description,
         "memo": None,
-        # Verified field (sandbox): `status` is BOOK or PDNG. A pending row must not look final.
-        "pending": str(eb_txn.get("status") or "").upper() == "PDNG",
+        "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,
     }
 

@@ -302,16 +302,26 @@ def test_account_to_common_suggests_type_and_mask():
     assert svc._account_to_common({"uid": "U2"})["currency_inferred"] is True
 
 
-def test_pending_status_marks_the_row_pending():
+def test_transaction_status_decides_pending_or_dropped():
+    """Seen on the sandbox: every status comes back by default. Cancelled, rejected and
+    scheduled rows are not money that moved; pending and on-hold rows are not final."""
     base = {
         "entry_reference": "E1",
         "booking_date": "2026-11-11",
         "transaction_amount": {"amount": "9.50", "currency": "EUR"},
         "credit_debit_indicator": "DBIT",
     }
-    assert svc._txn_to_row({**base, "status": "PDNG"}, "U1", "EUR")["pending"] is True
-    assert svc._txn_to_row({**base, "status": "BOOK"}, "U1", "EUR")["pending"] is False
-    assert svc._txn_to_row(base, "U1", "EUR")["pending"] is False
+
+    def row(status):
+        return svc._txn_to_row({**base, "status": status}, "U1", "EUR")
+
+    for gone in ("CNCL", "RJCT", "SCHD", "cncl"):
+        assert row(gone) is None
+    assert row("PDNG")["pending"] is True
+    assert row("HOLD")["pending"] is True
+    for final in ("BOOK", "OTHR", None):
+        assert row(final)["pending"] is False
+        assert row(final)["amount"] == -9.5
 
 
 def test_create_session_persists_session_id(monkeypatch):
