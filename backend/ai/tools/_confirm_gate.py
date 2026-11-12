@@ -129,6 +129,11 @@ def is_gated_tool(tool_name: str) -> bool:
     """
     if tool_name in GATED_TOOL_NAMES:
         return True
+    from backend.ai.tools._given_urls import current_call_composed
+
+    # A page fetch of a URL Lucius wrote asks, for that one call (``_given_urls``).
+    if current_call_composed(tool_name):
+        return True
     if not GATE_ALL_WRITES:
         return False
     from backend.ai import _confirm_gate as _policy
@@ -596,6 +601,7 @@ def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[d
             "NOTHING was written. Try the call again."
         )
 
+    from backend.ai.tools import _given_urls
     from backend.ai.tools.registry import tool_precheck, tool_preview_adapter
 
     # A call the handler would refuse is never staged: approving it could only ever run the
@@ -625,7 +631,7 @@ def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[d
         "type": "tool_permission",
         "grant_tool": tool_name,
         "display": outcome,
-        "reason": f"{tool_name} needs your approval before it runs.",
+        "reason": _given_urls.card_reason(tool_name),
         "tool_use_id": tool_use_id,
         "session_id": get_session_id(),
     }

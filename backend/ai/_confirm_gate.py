@@ -179,8 +179,20 @@ HARDLINE_UNATTENDED_TOOLS = frozenset({"delete_transactions_where", "apply_payee
 
 
 def is_hardline_blocked(tool_name: str) -> bool:
-    """True when ``tool_name`` must never execute from an unattended caller, full stop."""
-    return tool_name in HARDLINE_UNATTENDED_TOOLS
+    """True when ``tool_name`` must never execute from an unattended caller, full stop.
+
+    So is the page fetch in flight when Lucius wrote its URL: what it sends can't be taken back,
+    so an ``auto`` mode with no judge (this gate's) pauses on it (``ai.tools._given_urls``)."""
+    if tool_name in HARDLINE_UNATTENDED_TOOLS:
+        return True
+    from backend.ai.tools._given_urls import current_call_composed
+
+    if not current_call_composed(tool_name):
+        return False
+    # A level the owner stored wins, as in every other mode: Always allow turns the check off.
+    from backend.ai.tools._confirm_gate import effective_level
+
+    return effective_level(tool_name) != "always_allow"
 
 
 # ── The per-agent unattended-write envelope ─────────────────────────────────────────────────

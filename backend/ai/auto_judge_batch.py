@@ -71,7 +71,7 @@ def _fingerprint(name: str, args: dict) -> str:
     and the trusted consequence line (which reads STORED state an earlier call in the step may
     have changed — a changed fingerprint sends the call back to the single-call judge)."""
     blob = json.dumps(
-        [name, args or {}, auto_judge.automation_consequence(name, args or {})],
+        [name, args or {}, auto_judge.call_consequence(name, args or {})],
         sort_keys=True,
         ensure_ascii=False,
         default=str,

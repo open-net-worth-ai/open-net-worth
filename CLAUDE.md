@@ -281,6 +281,7 @@ One line each — full reasoning and the scar behind each is in
 
 **AI harness**
 - Tool results are bounded AT THE TOOL — filter before you cap.
+- A page fetch runs freely only for a URL Lucius was GIVEN (owner's words, a search/fetch/email result); a URL it wrote is seeded Ask for that call (`ai/tools/_given_urls.py`). A new tool that fetches a caller-chosen URL joins `is_fetch_tool`; a new outside-text tool joins `is_source_tool` — never one that returns book data (ADR `2026-11-13-a-page-fetch-runs-only-for-a-url-lucius-was-given`).
 - Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤500 chars (prompts aim for 280; an over-long extracted fact is shortened once, not dropped); memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change`; a background pass never deletes a fact (it retires), and a user's forget leaves only a hash in `memory_forgotten` that refuses an implicit re-add (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, amendments 7 and 12).
 - Codex gets our tools as real (dynamic) tool calls that the HOST captures and runs — Codex never
   executes one; text `<tool_call>` is the fallback (ADR `2026-10-03-codex-tools-are-native-calls-the-host-runs`).

@@ -57,6 +57,24 @@ Automation — change it on the Automation."* Change it in the Automation's edit
 Everything Lucius changes, whether or not he asked first, can be undone: see
 [Undoing a change](#undoing-a-change).
 
+## Reading a web page whose address Lucius wrote
+
+Lucius reads a web page without asking when its address was **given** to him: you typed it, or it
+came in a web search result, a page he read, or an email. When he wants to open an address he
+**wrote himself**, he asks first, even though reading a page normally just runs. The card says
+"Lucius wrote this web address itself".
+
+Why: a message or page can contain hidden instructions telling Lucius to put your balances or
+transactions into a link and open it, which would hand them to whoever runs that site. A link
+someone planted can't contain your data, because they wrote it before Lucius read anything. Your
+data can only end up in an address Lucius writes, so that's the one that asks.
+
+- In **Automatically approve**, it still asks, because what a page request sends can't be undone.
+  **Skip all approvals** opens it.
+- If you set the page-reading tool to **Always allow**, this check is off for that tool.
+- A small leak is still possible: a page full of planted links can get Lucius to pick one based on
+  something he read, which gives away a little each time. It can't send your transaction list.
+
 ## The three permission levels
 
 | Level | What happens when Lucius wants to use the tool |

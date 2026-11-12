@@ -116,6 +116,11 @@ server's output — is treated as information for Lucius to read, never as instr
 Text written to look like a command ("ignore your instructions and…") can't make Lucius do
 anything; what he may do is decided by you, in [Permissions](../lucius/permissions.md).
 
+One thing it could try is getting your data out by having Lucius open a web address with your
+balances in it. So Lucius reads a page without asking only when its address was given to him (you
+typed it, or it came in a search result, a page or an email). An address he wrote himself asks
+first: see [Reading a web page whose address Lucius wrote](../lucius/permissions.md#reading-a-web-page-whose-address-lucius-wrote).
+
 ## Hiding amounts on screen
 
 Press <kbd>H</kbd>, or use **Hide amounts** in the sidebar (on a phone, in the **More** menu), to

@@ -586,7 +586,7 @@ def test_a_parked_verdict_is_dropped_when_the_consequence_it_was_judged_on_chang
     (an Automation's mode); the verdict judged on the old line must not be used."""
     model.reply = _verdicts("allow", "allow")
     line = {"now": "Consequence at batch time."}
-    monkeypatch.setattr(auto_judge, "automation_consequence", lambda *_: line["now"])
+    monkeypatch.setattr(auto_judge, "call_consequence", lambda *_: line["now"])
     calls = _step("zz_batch_a", "zz_batch_b")
     _run(auto_judge_batch.judge_step(calls))
     line["now"] = "Changed by an earlier call."

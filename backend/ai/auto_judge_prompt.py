@@ -334,6 +334,14 @@ def _update_lines(item: object) -> dict[str, int]:
     return out
 
 
+def call_consequence(tool_name: str, args: dict) -> Optional[str]:
+    """Every trusted line about what this call does: the Automation one, or a page fetch of a URL
+    the assistant wrote (``ai.tools._given_urls``)."""
+    from backend.ai.tools._given_urls import consequence
+
+    return automation_consequence(tool_name, args) or consequence(tool_name, args)
+
+
 def automation_consequence(tool_name: str, args: dict) -> Optional[str]:
     """A plain sentence about what this call does to an Automation's authority, or ``None``.
 

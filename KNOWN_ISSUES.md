@@ -13,7 +13,19 @@ Issues are rated by **impact** (how wrong does it make the numbers?) and **effor
 
 ---
 
-## 🔴 High — a prompt injection can send the ledger out in a `fetch_page` URL
+## 🟡 Medium (was 🔴 High) — a prompt injection can send the ledger out in a `fetch_page` URL
+
+**Narrowed 2026-11-13 (issue #91, ADR `2026-11-13-a-page-fetch-runs-only-for-a-url-lucius-was-given`):**
+a page fetch (`fetch_page` and every `<provider>_fetch_page`) now runs freely only for a URL that
+reached the conversation from outside the book: the owner's typed words, or the result of a web
+search, a fetch or an email read, less anything that call's own arguments held. Any other URL is
+seeded Ask for that call, under both gates (`ai/tools/_given_urls.py`): a card in manual, the Auto
+judge (told the URL was written) in v2 auto, the always-ask tier in the old gate's auto; skip and an
+owner's stored Always allow still run it. Signed receipt links stay unattended, since they arrive
+verbatim in the email. **What remains:** choosing among many planted URLs by a value read leaks a
+few bits per fetch; a surface that cannot show a card runs an Ask call, as for every tool; and the
+other outbound paths (a search query reaches the search provider, not an attacker) are untouched.
+The original entry follows.
 
 **Owner decision 2026-10-05: known and accepted.** Security audit 2026-08-25 FINDING 1:
 `run_sql_query` and `fetch_page` are both read-classified (`always_allow`, never gated), and the
