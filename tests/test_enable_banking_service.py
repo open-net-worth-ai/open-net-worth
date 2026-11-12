@@ -324,6 +324,77 @@ def test_transaction_status_decides_pending_or_dropped():
         assert row(final)["amount"] == -9.5
 
 
+def _refused():
+    return _JsonResp(
+        400,
+        {"code": 400, "message": "Redirect URI not allowed", "error": "REDIRECT_URI_NOT_ALLOWED"},
+    )
+
+
+def test_start_authorization_returns_to_the_app_when_its_url_is_registered(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = []
+
+    def _post(url, json, **kw):
+        sent.append(dict(json))
+        return _JsonResp(200, {"url": "https://bank.example/a", "authorization_id": "A"})
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    out = svc.start_authorization("Mock ASPSP", "FI", "http://localhost:8090/connectors")
+    assert [p["redirect_url"] for p in sent] == ["http://localhost:8090/connectors"]
+    assert out["returns_to_app"] is True
+    assert _store().get()["pending_state"] == sent[0]["state"]
+
+
+def test_start_authorization_falls_back_when_the_app_url_is_not_registered(monkeypatch):
+    """An install set up from the old docs registered only the default URL: the link must
+    still start (the user pastes the code), not fail with REDIRECT_URI_NOT_ALLOWED."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = []
+
+    def _post(url, json, **kw):
+        sent.append(dict(json))
+        if json["redirect_url"] != svc._DEFAULT_REDIRECT:
+            return _refused()
+        return _JsonResp(200, {"url": "https://bank.example/a", "authorization_id": "A"})
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    out = svc.start_authorization("Mock ASPSP", "FI", "http://localhost:8090/connectors")
+    assert [p["redirect_url"] for p in sent] == [
+        "http://localhost:8090/connectors",
+        svc._DEFAULT_REDIRECT,
+    ]
+    assert out["returns_to_app"] is False and out["redirect_url"] == svc._DEFAULT_REDIRECT
+
+
+def test_start_authorization_refuses_a_non_http_redirect():
+    with pytest.raises(ValidationError):
+        svc.start_authorization("Mock ASPSP", "FI", "javascript:alert(1)")
+
+
+def test_create_session_refuses_a_state_it_did_not_send(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    _store().update({"pending_state": "S-1"})
+    called = []
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: called.append(1))
+    with pytest.raises(ValidationError):
+        svc.create_session("code-xyz", "S-OTHER")
+    assert called == []
+
+
+def test_create_session_with_its_state_completes_and_clears_it(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    _store().update({"pending_state": "S-1"})
+    monkeypatch.setattr(
+        svc.httpx, "post", lambda *a, **k: _JsonResp(200, {"session_id": "SESS-9", "accounts": []})
+    )
+    svc.create_session("code-xyz", "S-1")
+    assert _store().session_id() == "SESS-9"
+    assert _store().get()["pending_state"] == ""
+    with pytest.raises(ValidationError):
+        svc.create_session("code-xyz", "S-1")  # a replayed return is refused
+
+
 def test_create_session_persists_session_id(monkeypatch):
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
 

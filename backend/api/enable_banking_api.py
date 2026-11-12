@@ -50,6 +50,8 @@ class EnableBankingLinkRequest(BaseModel):
 
 class EnableBankingCompleteRequest(BaseModel):
     code: str  # the post-consent authorization code returned to the redirect URI
+    # The `state` the bank returned with the code (automatic return); blank for a pasted code.
+    state: Optional[str] = None
 
 
 @router.get("/api/enable-banking/status")
@@ -112,7 +114,7 @@ async def enable_banking_complete(body: EnableBankingCompleteRequest):
     handle, persisted). Requires credentials. Bad code / auth → 422. Blocking httpx off the
     loop."""
     try:
-        await asyncio.to_thread(enable_banking_service.create_session, body.code)
+        await asyncio.to_thread(enable_banking_service.create_session, body.code, body.state or "")
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     # Don't leak the session id / raw accounts to the client — return the public status.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { openBankPageTab } from './bankPage'
+import { enableBankingReturnUrl, openBankPageTab } from './bankPage'
 import {
   Stack,
   Cluster,
@@ -77,6 +77,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const [loadingBanks, setLoadingBanks] = useState(false)
   const [linkErr, setLinkErr] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
+  // After Link bank: whether the bank will bring the user back here (the app's URL is
+  // registered), or to the old https://localhost/connectors page they copy the code from.
+  const [returnsToApp, setReturnsToApp] = useState<boolean | null>(null)
   // Post-consent code → session exchange.
   const [authCode, setAuthCode] = useState('')
   const [completing, setCompleting] = useState(false)
@@ -159,14 +162,15 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       const r = await authFetch('/api/enable-banking/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aspsp, country }),
+        body: JSON.stringify({ aspsp, country, redirect: enableBankingReturnUrl() }),
       })
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
         setLinkErr(d.detail || 'Could not start the bank link.')
         return
       }
-      const data = (await r.json()) as { url: string }
+      const data = (await r.json()) as { url: string; returns_to_app?: boolean }
+      setReturnsToApp(data.returns_to_app === true)
       if (data.url) {
         opened = tab.go(data.url)
         if (!opened) window.open(data.url, '_blank', 'noopener,noreferrer')
@@ -377,10 +381,25 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           </Button>
         </Cluster>
 
+        {returnsToApp === true && (
+          <Text size="xs" tone="muted">
+            After you approve access, your bank brings you back here and the link finishes by
+            itself.
+          </Text>
+        )}
+        {returnsToApp === false && (
+          <Text size="xs" tone="muted">
+            Your bank will send you to a page that won&apos;t load — copy the code from its address
+            and paste it below. To come back here automatically instead, add{' '}
+            <code>{enableBankingReturnUrl()}</code> to your Enable Banking application&apos;s
+            allowed redirect URLs.
+          </Text>
+        )}
+
         <FormField
           label="Authorization code"
           htmlFor="conn-eb-code"
-          help="After authenticating at your bank, paste the code from the redirect URL here, then Complete."
+          help="Only needed if your bank didn't bring you back here: paste the code from the address it sent you to, then Complete."
         >
           <TextField
             id="conn-eb-code"

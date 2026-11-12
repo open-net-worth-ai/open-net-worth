@@ -34,6 +34,7 @@ import { savePermissions } from './permissions'
 import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
 import { mcpAuthType, mcpNeedsSignIn, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
+import { completeEnableBankingReturn, enableBankingReturnOf } from './bankPage'
 import {
   useRegisterScreenCommands,
   useRegisterScreenFacts,
@@ -175,6 +176,27 @@ export function ConnectorsTab(): JSX.Element {
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
+
+  // Back from Enable Banking's consent: it returns to the bare /connectors (its redirect match
+  // is exact, so no `?connector=`) with its own `state` + `code`. Finish the link here, so the
+  // user never copies a code, then show the connector's accounts. Once per return.
+  const routerSearchAll = useRouterState({
+    select: (st) => st.location.search as Record<string, unknown>,
+  })
+  const ebReturn = enableBankingReturnOf(routerSearchAll ?? {})
+  const ebHandled = useRef('')
+  useEffect(() => {
+    if (initialLoading || !ebReturn) return
+    const key = `${ebReturn.state}:${ebReturn.code}`
+    if (ebHandled.current === key) return
+    ebHandled.current = key
+    void navigate({ to: '/connectors', search: {}, replace: true } as never)
+    void completeEnableBankingReturn(ebReturn).then((res) => {
+      toast(res.message)
+      void reload().finally(() => openConnector('enable_banking'))
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLoading, ebReturn?.state, ebReturn?.code])
 
   // Lucius's `connectors.open_setup`: UI state only. It opens the same form a card's `+` (or an
   // installed row's settings) does; the user enters credentials and clicks Connect themselves.

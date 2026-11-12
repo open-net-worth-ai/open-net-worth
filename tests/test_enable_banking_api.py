@@ -42,7 +42,7 @@ def client(db_isolated, monkeypatch):
         },
     )
 
-    def _fake_create_session(code):
+    def _fake_create_session(code, state=""):
         # Mirror the real create_session's persistence side-effect (the route returns the
         # public status, which reads has_session from the store).
         from backend.db.enable_banking_config_store import EnableBankingConfigStore

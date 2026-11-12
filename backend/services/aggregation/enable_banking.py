@@ -49,11 +49,13 @@ recomputed from the native leg there, never fabricated here).
 from __future__ import annotations
 
 import base64
+import hmac
 import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -220,69 +222,118 @@ def list_institutions(country: str) -> list[dict]:
     return out
 
 
+def _app_redirect(redirect: str) -> str:
+    """The caller's return URL (the app's own ``/connectors``), or "" for none. Only an
+    absolute http(s) URL is ever sent to Enable Banking."""
+    url = (redirect or "").strip()
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValidationError("redirect must be an http(s) URL")
+    return url
+
+
+def _post_auth(token: str, payload: dict) -> httpx.Response:
+    try:
+        return httpx.post(
+            f"{API_BASE}/auth", json=payload, headers=_auth_headers(token), timeout=_HTTP_TIMEOUT
+        )
+    except httpx.HTTPError as exc:
+        raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
+
+
+def _redirect_refused(resp: httpx.Response) -> bool:
+    try:
+        body = resp.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("error") == "REDIRECT_URI_NOT_ALLOWED"
+
+
 def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     """Start the bank-consent flow for ``aspsp`` (a bank name from ``list_institutions``).
 
-    POSTs ``/auth`` with the chosen bank + a redirect URI; Enable Banking returns a consent
-    ``url`` (the bank-auth URL the USER opens) and an ``authorization_id``/``state`` handle.
-    We persist the chosen bank + country so a later ``create_session`` + sync can read the
-    accounts the user consents to. Returns ``{url, authorization_id, aspsp}``. Raises
-    ``ValidationError`` on a bad bank / auth / transport failure."""
+    POSTs ``/auth``; Enable Banking returns the consent ``url`` the USER opens. The bank sends
+    them back to ``redirect`` (the app's own page) with ``?state=…&code=…``. Enable Banking
+    accepts only a redirect registered on the application, matched exactly (verified on the
+    sandbox): when the app's own URL is refused, the link falls back to ``_DEFAULT_REDIRECT``,
+    the URL the setup docs have always asked for, where the user pastes the code by hand —
+    so an existing setup keeps working. ``returns_to_app`` says which one was used.
+
+    The ``state`` sent is kept as ``pending_state`` so ``create_session`` can tell the return
+    belongs to the link started here. Returns ``{url, authorization_id, aspsp,
+    returns_to_app, redirect_url}``. Raises ``ValidationError`` on a bad bank / auth /
+    transport failure."""
     bank = (aspsp or "").strip()
     if not bank:
         raise ValidationError("aspsp (bank) is required")
     code = (country or "").strip().upper()
     if len(code) != 2:
         raise ValidationError("country must be a 2-letter ISO code (e.g. FI, DE, FR)")
-    redirect_url = (redirect or "").strip() or _DEFAULT_REDIRECT
+    app_url = _app_redirect(redirect)
 
     store = EnableBankingConfigStore()
     token = _bearer(store)
     # Consent validity is capped at ~90 days for most banks; request the documented max.
     valid_until = (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(timespec="seconds")
+    state = str(uuid.uuid4())
     # Verified against the sandbox (issue #103): `state` is required (422 without it) and
     # `aspsp` needs both name and country.
     payload = {
         "access": {"valid_until": valid_until},
         "aspsp": {"name": bank, "country": code},
-        "state": str(uuid.uuid4()),
-        "redirect_url": redirect_url,
+        "state": state,
+        "redirect_url": app_url or _DEFAULT_REDIRECT,
         "psu_type": "personal",
     }
-    try:
-        resp = httpx.post(
-            f"{API_BASE}/auth",
-            json=payload,
-            headers=_auth_headers(token),
-            timeout=_HTTP_TIMEOUT,
-        )
-    except httpx.HTTPError as exc:
-        raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
+    resp = _post_auth(token, payload)
+    if app_url and app_url != _DEFAULT_REDIRECT and _redirect_refused(resp):
+        payload["redirect_url"] = _DEFAULT_REDIRECT
+        resp = _post_auth(token, payload)
     if resp.status_code not in (200, 201):
-        raise _api_error(resp, "starting the bank link", redirect_url=redirect_url)
+        # Neither URL is registered: name the app's own, the one that brings the user back.
+        shown = app_url or payload["redirect_url"]
+        raise _api_error(resp, "starting the bank link", redirect_url=shown)
 
     data = resp.json() or {}
     url = (data.get("url") or data.get("authorization_url") or "").strip()
-    authorization_id = (data.get("authorization_id") or data.get("state") or "").strip()
+    authorization_id = (data.get("authorization_id") or "").strip()
     if not url:
         raise ValidationError("Enable Banking did not return a consent URL")
 
-    store.update({"aspsp": bank, "country": code})
-    return {"url": url, "authorization_id": authorization_id, "aspsp": bank}
+    store.update({"aspsp": bank, "country": code, "pending_state": state})
+    return {
+        "url": url,
+        "authorization_id": authorization_id,
+        "aspsp": bank,
+        "returns_to_app": payload["redirect_url"] == app_url,
+        "redirect_url": payload["redirect_url"],
+    }
 
 
-def create_session(code: str) -> dict:
+def create_session(code: str, state: str = "") -> dict:
     """Exchange the post-consent auth ``code`` for a session.
+
+    ``state`` comes with an automatic return to the app and must be the one the last
+    ``start_authorization`` sent: a return that isn't (a stale tab, a link started on another
+    install, a forged URL) is refused before any call. A hand-pasted code carries no state.
 
     POSTs ``/sessions`` ``{code}``; Enable Banking returns ``{session_id, accounts[]}``. We
     persist the ``session_id`` (the per-bank consent handle the accounts/transactions
     endpoints need). Returns ``{session_id, accounts}``. Raises ``ValidationError`` on a bad
-    code / auth / transport failure."""
+    code / state / auth / transport failure."""
     auth_code = (code or "").strip()
     if not auth_code:
         raise ValidationError("the authorization code is required")
 
     store = EnableBankingConfigStore()
+    returned = (state or "").strip()
+    if returned and not hmac.compare_digest(returned, store.get().get("pending_state") or ""):
+        raise ValidationError(
+            "This bank link doesn't match the one started here (or it was already completed)."
+            " Click Link bank to start again."
+        )
     token = _bearer(store)
     try:
         resp = httpx.post(
@@ -301,7 +352,7 @@ def create_session(code: str) -> dict:
     if not session_id:
         raise ValidationError("Enable Banking did not return a session id")
 
-    store.update({"session_id": session_id})
+    store.update({"session_id": session_id, "pending_state": ""})
     accounts = data.get("accounts") or []
     return {"session_id": session_id, "accounts": accounts}
 
