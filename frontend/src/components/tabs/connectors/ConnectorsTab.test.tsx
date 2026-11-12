@@ -516,3 +516,22 @@ describe('coming back from a bank', () => {
     expect(await screen.findByText('Tool permissions', {}, { timeout: 3000 })).toBeTruthy()
   })
 })
+
+describe('coming back from Enable Banking', () => {
+  it('finishes the link with the code and state the bank returned, no copy-paste', async () => {
+    routerSearch.value = { state: 'state-123', code: 'code-456' }
+    await renderTab()
+    await waitFor(() => {
+      const call = authFetch.mock.calls.find((c) => c[0] === '/api/enable-banking/complete')
+      expect(call).toBeTruthy()
+      expect(JSON.parse(String(call![1]?.body))).toEqual({ code: 'code-456', state: 'state-123' })
+    })
+  })
+
+  it('does not call the server when the bank reports the consent was cancelled', async () => {
+    routerSearch.value = { state: 'state-123', error: 'access_denied' }
+    await renderTab()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(authFetch.mock.calls.some((c) => c[0] === '/api/enable-banking/complete')).toBe(false)
+  })
+})

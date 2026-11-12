@@ -71,3 +71,47 @@ export function bankReturnUrl(): string {
 export const BANK_RETURN_CHECKS: Record<string, () => Promise<unknown>> = {
   gocardless: () => authFetch('/api/gocardless/check-link', { method: 'POST' }),
 }
+
+/** Where Enable Banking sends the user after consent. It accepts only a redirect registered on
+ *  the user's application and compares it EXACTLY, query string included, so this is the bare
+ *  page — the return is recognised by the `state` + `code` Enable Banking appends. */
+export function enableBankingReturnUrl(): string {
+  return `${window.location.origin}/connectors`
+}
+
+export interface EnableBankingReturn {
+  state: string
+  code: string
+  error: string
+}
+
+/** An Enable Banking return in the page's query: `?state=…&code=…` after consent, or
+ *  `?state=…&error=…` when the user cancelled or the bank refused. Null for anything else. */
+export function enableBankingReturnOf(search: Record<string, unknown>): EnableBankingReturn | null {
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const state = text(search.state)
+  const code = text(search.code)
+  const error = text(search.error_description) || text(search.error)
+  if (!state || (!code && !error) || search.connector !== undefined) return null
+  return { state, code, error }
+}
+
+/** Finish the link the bank just returned from. The server checks `state` against the link it
+ *  started, so a stale or foreign return is refused there. Returns the message to show. */
+export async function completeEnableBankingReturn(
+  ret: EnableBankingReturn,
+): Promise<{ ok: boolean; message: string }> {
+  if (!ret.code) return { ok: false, message: `The bank link didn't finish: ${ret.error}` }
+  try {
+    const r = await authFetch('/api/enable-banking/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: ret.code, state: ret.state }),
+    })
+    if (r.ok) return { ok: true, message: 'Bank linked. Link its accounts below.' }
+    const d = await r.json().catch(() => ({}))
+    return { ok: false, message: d.detail || 'Could not complete the bank link.' }
+  } catch {
+    return { ok: false, message: 'Could not complete the bank link.' }
+  }
+}

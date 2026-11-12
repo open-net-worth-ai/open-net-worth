@@ -38,6 +38,8 @@ DEFAULTS: dict = {
     "aspsp": "",  # the chosen bank id/name (Enable Banking calls a bank an "ASPSP")
     "country": "",  # the ISO 3166 alpha-2 country of the chosen bank
     "session_id": "",  # the post-consent session id (the per-bank consent handle)
+    # The `state` the last /auth sent; the bank's return must carry it back (not a credential).
+    "pending_state": "",
     # status / fetch state
     "last_synced_at": None,  # "Last fetched" in the UI
     "last_status": "never_run",  # never_run | ok | auth_error | connect_error | error
@@ -51,7 +53,7 @@ class EnableBankingConfigStore(AggregatorConfigStore):
     DEFAULTS = DEFAULTS
     CONFIG_KEYS = ("application_id", "aspsp", "country")
     SECRET_KEYS = ("private_key", "session_id")
-    STATE_KEYS = ("last_synced_at", "last_status", "last_error")
+    STATE_KEYS = ("last_synced_at", "last_status", "last_error", "pending_state")
 
     # ── status helpers ───────────────────────────────────────────────────────────
 

@@ -159,23 +159,33 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 
 1. Sign up at [Enable Banking](https://enablebanking.com) and register an application. Note its
    **application ID** and download its **private key** (a `.pem` file).
-2. In the application's allowed redirect URLs, add exactly: `https://localhost/connectors`
+2. In the application's allowed redirect URLs, add the address you open Open Net Worth at,
+   followed by `/connectors` — for example `http://localhost:8080/connectors`. Enable Banking
+   compares it exactly, so copy the start from your browser's address bar (no trailing `/`, no
+   `?…`), or copy it from **Redirect URL** at the top of the Enable Banking form in step 4.
+   Also add `https://localhost/connectors` as a fallback.
 3. In Open Net Worth: **Connectors → Browse & add → Enable Banking → Add connector**.
-4. Paste the **Application ID**, and paste the whole contents of the `.pem` file — including its
-   first "BEGIN PRIVATE KEY" line and last "END PRIVATE KEY" line — into **Private key (PEM)**.
-   Click **Save**.
-5. Reopen the form (**⋯ → Edit configuration**). Type your bank's two-letter country code into
-   **Country** (for example `DE`, `FR`, `FI`) and click **List banks**, then choose your bank
-   under **Bank** and click **Link bank**.
-6. Your bank's sign-in page opens in a new tab. After you approve access, the browser goes to
-   `https://localhost/connectors?code=…` — the page itself will probably fail to load; that's
-   expected. Copy the value after `code=` (up to the next `&`, if there is one) from the address
-   bar.
-7. Paste it into **Authorization code** and click **Complete link**. Then link your accounts in
-   the **Accounts** list.
+4. Under **1 Register your app with Enable Banking**, paste the **Application ID**, and paste the
+   whole contents of the `.pem` file — including its first "BEGIN PRIVATE KEY" line and last
+   "END PRIVATE KEY" line — into **Private key**. Click **Save**.
+5. Reopen the form (**⋯ → Edit configuration**). Under **2 Link your bank**, choose your
+   **Country** — its banks load by themselves — then your **Bank**, and click **Link bank**.
+6. Your bank's sign-in page opens in a new tab. After you approve access, your bank brings you
+   back to **Connectors**, the link finishes by itself, and the Enable Banking connector opens.
+   Link your accounts in its **Accounts** list.
+
+If the address from step 2 isn't registered, the link still works, the old way: the form says so
+under **Link bank**, and after you approve access the browser goes to
+`https://localhost/connectors?…&code=…`, a page that won't load. Copy the value after `code=` (up
+to the next `&`) from the address bar, paste it into **Code from the address bar**, and click
+**Complete link**. (**Bank didn't bring you back? Enter its code** opens that field any time.)
+
+If **Link bank** or **Complete link** fails, the message gives Enable Banking's own reason. For
+example, `REDIRECT_URI_NOT_ALLOWED` names the URL to add to your application's allowed redirect
+URLs.
 
 Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
-error — repeat steps 5–7 to renew it.
+error, and the form says your bank access has expired — click **Renew link** to renew it.
 
 ## GoCardless
 
@@ -480,8 +490,8 @@ provider too if you no longer need it.
   amount, date and description. It's usually right; **Unlink source** fixes it when it isn't.
 - Enable Banking is the newest connector here and the least tested against real banks.
 - A linked investment account's total (experimental **Brokerage total**) comes from the
-  connector's account list, not from transactions. Plaid, SimpleFIN, Yodlee, Alpaca and YNAB
-  report one; Enable Banking, GoCardless, Lunch Flow and Lunch Money don't, so their investment
+  connector's account list, not from transactions. Plaid, SimpleFIN, Yodlee, Alpaca, YNAB and
+  Enable Banking report one; GoCardless, Lunch Flow and Lunch Money don't, so their investment
   accounts stay as you enter them. It's only as fresh as the connector — about a day for Plaid.
 
 ## Troubleshooting

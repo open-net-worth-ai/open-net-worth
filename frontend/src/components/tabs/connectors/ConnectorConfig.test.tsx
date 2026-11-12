@@ -302,7 +302,7 @@ const CASES: ProviderCase[] = [
       name: 'Enable Banking',
       kind: 'enable_banking',
     }),
-    fields: ['Application ID', 'Private key (PEM)'],
+    fields: ['Application ID', 'Private key'],
     saveLabel: 'Save',
     saveUrl: '/api/enable-banking/config',
     fillBeforeSave: [
@@ -312,7 +312,7 @@ const CASES: ProviderCase[] = [
         // gitleaks' private-key rule (it does content-shape matching, not context-aware
         // "is this a fixture" detection). The field itself doesn't validate PEM-ness; this
         // only proves the multi-line value reaches Save.
-        label: 'Private key (PEM)',
+        label: 'Private key',
         value: 'not-a-real-key-line-one\nnot-a-real-key-line-two',
       },
     ],
