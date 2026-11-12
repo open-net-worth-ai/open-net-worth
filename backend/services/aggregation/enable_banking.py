@@ -424,15 +424,56 @@ def _account_currency(eb_account: dict) -> str:
     return (eb_account.get("currency") or ledger_service.base_currency()).upper()
 
 
-def _account_to_common(eb_account: dict) -> dict:
+# ISO 20022 cash account type → the app's suggested account type (as GoCardless maps it).
+_ACCOUNT_TYPES = {"CARD": "credit", "LOAN": "loan", "CACC": "cash", "SVGS": "cash", "TRAN": "cash"}
+# Booked balances first (what the ledger should match), then the rest in a stable order.
+_BALANCE_PREFERENCE = ("CLBD", "ITBD", "XPCD", "ITAV", "CLAV", "OPBD", "PRCD", "INFO")
+
+
+def _account_mask(eb_account: dict) -> Optional[str]:
+    acct_id = eb_account.get("account_id")
+    iban = acct_id.get("iban") if isinstance(acct_id, dict) else None
+    return str(iban)[-4:] if iban else None
+
+
+def _account_to_common(eb_account: dict, balance: Optional[float] = None) -> dict:
     """An Enable Banking account → the common ``accounts[]`` shape (RFC §A)."""
+    kind = str(eb_account.get("cash_account_type") or "").upper()
     return {
         "provider_account_id": _account_uid(eb_account),
         "name": _account_name(eb_account),
-        "mask": None,
+        "mask": _account_mask(eb_account),
         "currency": _account_currency(eb_account),
-        "balance": None,
+        "balance": balance,
+        "account_type": _ACCOUNT_TYPES.get(kind),
+        # No currency from the bank means _account_currency filled in the base: a balance must
+        # never be booked as if the bank had said so (account_value_sync fails closed on this).
+        "currency_inferred": not eb_account.get("currency"),
     }
+
+
+def fetch_account_balance(token: str, account_uid: str) -> Optional[float]:
+    """GET ``/accounts/{uid}/balances`` → one signed figure, booked balance preferred
+    (verified on the sandbox: ``[{balance_type: "CLBD", balance_amount: {amount, currency}}]``).
+    Never raises — a bank that won't give balances leaves the account without one."""
+    try:
+        data = _safe_get(token, f"/accounts/{account_uid}/balances", {}).json() or {}
+    except (ExternalServiceError, ValueError) as exc:
+        logger.warning("enable_banking balances unavailable: %s", exc)
+        return None
+    by_type: dict[str, float] = {}
+    for b in data.get("balances") or []:
+        if not isinstance(b, dict):
+            continue
+        try:
+            amount = float((b.get("balance_amount") or {}).get("amount"))
+        except (TypeError, ValueError):
+            continue
+        by_type.setdefault(str(b.get("balance_type") or "").upper(), amount)
+    for kind in _BALANCE_PREFERENCE:
+        if kind in by_type:
+            return by_type[kind]
+    return next(iter(by_type.values()), None)
 
 
 def _txn_id(eb_txn: dict) -> str:
@@ -524,7 +565,8 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "currency": currency,
         "description": description,
         "memo": None,
-        "pending": False,
+        # Verified field (sandbox): `status` is BOOK or PDNG. A pending row must not look final.
+        "pending": str(eb_txn.get("status") or "").upper() == "PDNG",
         "supersedes_ref": None,
     }
 
@@ -547,7 +589,9 @@ def fetch_window(
     eb_accounts = fetch_session_accounts(token, store.session_id())
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
-    accounts = [_account_to_common(a) for a in eb_accounts]
+    accounts = [
+        _account_to_common(a, fetch_account_balance(token, _account_uid(a))) for a in eb_accounts
+    ]
 
     rows: list[dict] = []
     complete = True

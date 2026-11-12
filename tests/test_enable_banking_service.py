@@ -97,6 +97,7 @@ def _configure(monkeypatch, txns_by_account=None):
     feed = txns_by_account if txns_by_account is not None else _TXNS
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(_ACCOUNTS))
+    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
     monkeypatch.setattr(
         svc,
         "fetch_account_transactions",
@@ -266,6 +267,51 @@ def test_fetch_session_accounts_reads_uid_strings_and_details(monkeypatch):
     monkeypatch.setattr(svc, "_safe_get", _get)
     out = svc.fetch_session_accounts("JWT", "S1")
     assert out == [{"uid": "U1", "name": "Main", "currency": "EUR"}, {"uid": "U2"}]
+
+
+def test_fetch_account_balance_prefers_the_booked_balance(monkeypatch):
+    body = {
+        "balances": [
+            {"balance_type": "ITAV", "balance_amount": {"amount": "11.12", "currency": "EUR"}},
+            {"balance_type": "CLBD", "balance_amount": {"amount": "-7.98", "currency": "EUR"}},
+        ]
+    }
+    monkeypatch.setattr(svc, "_safe_get", lambda *a: _JsonResp(200, body))
+    assert svc.fetch_account_balance("JWT", "U1") == -7.98
+
+
+def test_fetch_account_balance_failure_is_none(monkeypatch):
+    from backend.core.errors import ExternalServiceError
+
+    def _boom(*a):
+        raise ExternalServiceError("Enable Banking HTTP 429")
+
+    monkeypatch.setattr(svc, "_safe_get", _boom)
+    assert svc.fetch_account_balance("JWT", "U1") is None
+
+
+def test_account_to_common_suggests_type_and_mask():
+    card = {"uid": "U1", "name": "Card", "currency": "EUR", "cash_account_type": "CARD"}
+    current = {**card, "cash_account_type": "CACC", "account_id": {"iban": "FI0000001234"}}
+    assert svc._account_to_common(card, -50.0)["account_type"] == "credit"
+    assert svc._account_to_common(card, -50.0)["balance"] == -50.0
+    assert svc._account_to_common(current)["account_type"] == "cash"
+    assert svc._account_to_common(current)["mask"] == "1234"
+    assert svc._account_to_common({"uid": "U2"})["account_type"] is None
+    assert svc._account_to_common(card)["currency_inferred"] is False
+    assert svc._account_to_common({"uid": "U2"})["currency_inferred"] is True
+
+
+def test_pending_status_marks_the_row_pending():
+    base = {
+        "entry_reference": "E1",
+        "booking_date": "2026-11-11",
+        "transaction_amount": {"amount": "9.50", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+    }
+    assert svc._txn_to_row({**base, "status": "PDNG"}, "U1", "EUR")["pending"] is True
+    assert svc._txn_to_row({**base, "status": "BOOK"}, "U1", "EUR")["pending"] is False
+    assert svc._txn_to_row(base, "U1", "EUR")["pending"] is False
 
 
 def test_create_session_persists_session_id(monkeypatch):

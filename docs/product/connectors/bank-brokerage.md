@@ -464,8 +464,8 @@ provider too if you no longer need it.
   amount, date and description. It's usually right; **Unlink source** fixes it when it isn't.
 - Enable Banking is the newest connector here and the least tested against real banks.
 - A linked investment account's total (experimental **Brokerage total**) comes from the
-  connector's account list, not from transactions. Plaid, SimpleFIN, Yodlee, Alpaca and YNAB
-  report one; Enable Banking, GoCardless, Lunch Flow and Lunch Money don't, so their investment
+  connector's account list, not from transactions. Plaid, SimpleFIN, Yodlee, Alpaca, YNAB and
+  Enable Banking report one; GoCardless, Lunch Flow and Lunch Money don't, so their investment
   accounts stay as you enter them. It's only as fresh as the connector — about a day for Plaid.
 
 ## Troubleshooting
