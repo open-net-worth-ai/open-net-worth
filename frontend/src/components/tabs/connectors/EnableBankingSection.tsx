@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
+import { openBankPageTab } from './bankPage'
 import {
   Stack,
   Cluster,
@@ -150,6 +151,8 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
 
   async function linkBank() {
     if (!aspsp) return
+    const tab = openBankPageTab()
+    let opened = false
     setLinking(true)
     setLinkErr(null)
     try {
@@ -164,9 +167,13 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
         return
       }
       const data = (await r.json()) as { url: string }
-      if (data.url) window.open(data.url, '_blank', 'noopener,noreferrer')
+      if (data.url) {
+        opened = tab.go(data.url)
+        if (!opened) window.open(data.url, '_blank', 'noopener,noreferrer')
+      }
       load()
     } finally {
+      if (!opened) tab.cancel()
       setLinking(false)
     }
   }

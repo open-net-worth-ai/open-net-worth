@@ -190,8 +190,10 @@ signups in 2025, so if you don't have one, use **Enable Banking** instead.
 4. Reopen the form (**⋯ → Edit configuration**). Type your bank's two-letter country code into
    **Country** (for example `GB`, `DE`, `FR`), click **List banks**, choose your bank under
    **Bank**, and click **Link bank**.
-5. Your bank's sign-in page opens in a new tab. Approve access there. Afterwards the bank sends
-   you back to Open Net Worth. You don't need to copy a code.
+5. Your bank's sign-in page opens in a new tab. If no tab opens (some browsers block it, and the
+   iPhone home-screen app can't open one), click **open your bank's page** under the form. Approve
+   access there. Afterwards the bank sends you back to Open Net Worth. You don't need to copy a
+   code.
 6. Back in Open Net Worth, open the GoCardless form again. It checks the link by itself. If the
    bank still says to finish authorising, click **Check links**. Once it says **Linked**, link
    your accounts in the **Accounts** list.

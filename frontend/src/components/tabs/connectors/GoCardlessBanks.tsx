@@ -7,6 +7,7 @@ import { emitDataChanged } from '../../../lucius/bus'
 import { Button, ConfirmDialog, Text } from '../../ui'
 import { fDate } from '../../../utils/format'
 import { ENDED, type GoCardlessBank } from './gocardlessBank'
+import { openBankPageTab } from './bankPage'
 
 function bankLine(b: GoCardlessBank): { text: string; warn: boolean } {
   if (b.status === 'LN') {
@@ -27,16 +28,21 @@ function bankLine(b: GoCardlessBank): { text: string; warn: boolean } {
 export function GoCardlessBanks({
   banks,
   onChanged,
+  onLink,
 }: {
   banks: GoCardlessBank[]
   /** A bank was renewed or left the list — re-read the status. */
   onChanged: () => void
+  /** A relink started — the bank page's URL, kept on screen in case no tab opened. */
+  onLink: (url: string) => void
 }) {
   const [removing, setRemoving] = useState<GoCardlessBank | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function post(bank: GoCardlessBank, action: 'relink' | 'remove') {
+    const tab = action === 'relink' ? openBankPageTab() : null
+    let opened = false
     setBusy(bank.key)
     setError(null)
     const key = encodeURIComponent(bank.key)
@@ -61,12 +67,16 @@ export function GoCardlessBanks({
         )
         return
       }
-      if (action === 'relink' && d.link) window.open(d.link, '_blank', 'noopener,noreferrer')
+      if (tab && d.link) {
+        opened = tab.go(d.link)
+        onLink(d.link)
+      }
       onChanged()
       emitDataChanged(['config'])
     } catch {
       setError('Could not reach the server.')
     } finally {
+      if (tab && !opened) tab.cancel()
       setBusy(null)
       setRemoving(null)
     }
