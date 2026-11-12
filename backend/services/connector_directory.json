@@ -344,6 +344,23 @@
       }
     },
     {
+      "id": "web_search:keirolabs",
+      "name": "Keirolabs",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search"
+      ],
+      "publisher": "Keirolabs",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
       "id": "mcp-playwright",
       "name": "Playwright MCP",
       "families": [

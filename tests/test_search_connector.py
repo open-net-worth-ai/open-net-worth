@@ -21,6 +21,7 @@ _PROVIDER_IDS = {
     "serper",
     "google_pse",
     "firecrawl",
+    "keirolabs",
 }
 
 

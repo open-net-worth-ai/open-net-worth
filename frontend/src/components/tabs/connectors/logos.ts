@@ -52,6 +52,7 @@ export const LOGO_FILES: Record<string, string> = {
   'web_search:serper': 'serper.png',
   'web_search:google_pse': 'google_pse.png',
   'web_search:firecrawl': 'firecrawl-web.png',
+  'web_search:keirolabs': 'keirolabs.png',
   'mcp-playwright': 'playwright.svg',
   'mcp-firecrawl': 'firecrawl.png',
   'mcp-stripe': 'stripe.svg',

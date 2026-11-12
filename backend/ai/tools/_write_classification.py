@@ -298,6 +298,8 @@ READ_ONLY_TOOLS = frozenset(
         "google_pse_fetch_page",
         "firecrawl_search",
         "firecrawl_fetch_page",
+        "keirolabs_search",
+        "keirolabs_fetch_page",
     }
 )
 

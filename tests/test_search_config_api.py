@@ -39,6 +39,7 @@ def test_status_default(client):
         "serper",
         "google_pse",
         "firecrawl",
+        "keirolabs",
     ]
     by_id = {p["id"]: p for p in body["providers"]}
     # DuckDuckGo: key-free, enabled-by-default.

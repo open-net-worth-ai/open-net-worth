@@ -110,6 +110,15 @@ PROVIDER_CATALOG: list = [
         "native_fetch": True,
         "extra_fields": [],
     },
+    {
+        "id": "keirolabs",
+        "label": "Keirolabs",
+        "hint": "Low-cost web results: titles, links and snippets at $0.10 per 1,000 searches.",
+        "docs_url": "https://platform.keirolabs.cloud/dashboard/keys",
+        "needs_api_key": True,
+        "native_fetch": False,
+        "extra_fields": [],
+    },
 ]
 
 _CATALOG_BY_ID = {p["id"]: p for p in PROVIDER_CATALOG}

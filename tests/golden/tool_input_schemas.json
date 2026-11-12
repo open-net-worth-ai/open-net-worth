@@ -10799,5 +10799,36 @@
     "properties": {},
     "type": "object",
     "required": []
+  },
+  "keirolabs_search": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "description": "Search query — be specific, include tickers/company names/locations",
+        "type": "string"
+      },
+      "max_results": {
+        "default": 8,
+        "description": "Number of results (default 8, max 15)",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
+  },
+  "keirolabs_fetch_page": {
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "description": "Full URL to fetch",
+        "type": "string"
+      }
+    },
+    "required": [
+      "url"
+    ],
+    "type": "object"
   }
 }

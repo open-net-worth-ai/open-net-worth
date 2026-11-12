@@ -140,6 +140,14 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             read_only=True,
         ),
     ],
+    "web_search:keirolabs": [
+        _t("keirolabs_search", "Search the web via Keirolabs specifically.", read_only=True),
+        _t(
+            "keirolabs_fetch_page",
+            "Read the full text of a URL via Keirolabs specifically.",
+            read_only=True,
+        ),
+    ],
     # Each of the nine aggregation providers has its OWN first-class, separately-schema'd
     # status/fetch pair — `<provider>_get_status` / `<provider>_fetch_transactions` (or
     # `alpaca_fetch_positions`/`ibkr_fetch_activity` for the two brokers) — promoted back
@@ -358,7 +366,7 @@ TOOLS: dict[str, list[ConnectorTool]] = {
 SHORT: dict[str, str] = {
     "email": "Auto-logs bank and broker activity, straight from your own mailbox.",
     "web_search": "Web search and page reading for Lucius.",
-    # Web search is SIX connectors sharing one kind (one card per provider) —
+    # Web search is SEVEN connectors sharing one kind (one card per provider) —
     # ``connector_catalog.copy_for`` looks up by ``id`` before
     # ``kind``, so these override the family blurb above per provider. Verbatim from the
     # Browse & add catalog's own per-provider copy before the 2026-08-14 fix that made this
@@ -370,6 +378,7 @@ SHORT: dict[str, str] = {
     "web_search:serper": "Google results, fast and low-cost",
     "web_search:google_pse": "Google Custom Search",
     "web_search:firecrawl": "Search + full-page scraping, JS-rendered pages included",
+    "web_search:keirolabs": "Web results at $0.10 per 1,000 searches",
     "telegram": "Chat with Lucius and get alerts on Telegram.",
     "voice": "Talk to Lucius out loud from the chat.",
     "webhook": "Send notifications to any URL.",
@@ -432,6 +441,10 @@ LONG: dict[str, str] = {
     "web_search:firecrawl": (
         "Search plus full page scraping, including JS-rendered pages a plain fetch can't read "
         "— the provider to pick if page reads are coming back thin or blocked."
+    ),
+    "web_search:keirolabs": (
+        "Titles, links and snippets from the open web at $0.10 per 1,000 searches, billed per "
+        "search whatever the result count. Pages are read with a plain fetch, like Serper."
     ),
     "voice": (
         "Press Call in Lucius's chat and talk instead of typing. A fast voice keeps the "

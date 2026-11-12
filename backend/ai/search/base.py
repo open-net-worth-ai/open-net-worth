@@ -146,6 +146,12 @@ def _google_pse_factory(cfg: dict) -> SearchProvider:
     return GooglePseProvider(api_key=cfg["api_key"], cx=str(cfg.get("cx") or ""))
 
 
+def _keirolabs_factory(cfg: dict) -> SearchProvider:
+    from backend.ai.search.keirolabs_provider import KeirolabsProvider
+
+    return KeirolabsProvider(api_key=cfg["api_key"])
+
+
 def _duckduckgo_factory(cfg: dict) -> SearchProvider:
     from backend.ai.search.duckduckgo_provider import DuckDuckGoProvider
 
@@ -222,6 +228,14 @@ PROVIDER_REGISTRY: tuple = (
         docs_url="https://www.firecrawl.dev/app/api-keys",
         native_fetch=True,
         factory=_firecrawl_factory,
+    ),
+    ProviderSpec(
+        id="keirolabs",
+        label="Keirolabs",
+        hint="Low-cost web results: titles, links and snippets at $0.10 per 1,000 searches.",
+        docs_url="https://platform.keirolabs.cloud/dashboard/keys",
+        native_fetch=False,
+        factory=_keirolabs_factory,
     ),
 )
 

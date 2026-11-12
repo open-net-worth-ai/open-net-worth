@@ -30,7 +30,15 @@ from backend.ai.tools import execute_tool
 from backend.ai.tools.registry import build_tool_schemas, mutated_domains, tool_connector
 from backend.db.search_config_store import SearchConfigStore
 
-_PROVIDER_IDS = ("duckduckgo", "tavily", "perplexity", "serper", "google_pse", "firecrawl")
+_PROVIDER_IDS = (
+    "duckduckgo",
+    "tavily",
+    "perplexity",
+    "serper",
+    "google_pse",
+    "firecrawl",
+    "keirolabs",
+)
 
 
 def call(name: str, **inp):

@@ -605,6 +605,22 @@ export const CATALOG: CatalogEntry[] = [
     popular: false,
     tools: ['firecrawl_search', 'firecrawl_fetch_page'],
   },
+  {
+    id: 'web_search:keirolabs',
+    name: 'Keirolabs',
+    families: ['Web'],
+    categories: ['Web search'],
+    icon: 'search',
+    hue: 'var(--warn)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:keirolabs"]`.
+    publisher: 'Keirolabs',
+    verification: 'unverified',
+    homepageUrl: 'https://keirolabs.cloud/',
+    privacyUrl: 'https://keirolabs.cloud/privacy',
+    mcp: false,
+    popular: false,
+    tools: ['keirolabs_search', 'keirolabs_fetch_page'],
+  },
 
   // ── MCP (third-party — someone else's code, over a transport we don't own) ────
   //
