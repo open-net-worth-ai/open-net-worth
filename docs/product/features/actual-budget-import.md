@@ -6,7 +6,7 @@ order: 171
 audience: [user]
 status: stable
 related: [features/imports-and-sync, connectors/bank-brokerage, operations/backup-and-restore, concepts/envelopes-and-budgeting]
-keywords: [actual, actual budget, tags, hashtags, proxy, proxy headers, reverse proxy, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
+keywords: [actual, actual budget, categories, starter categories, merge categories, tags, hashtags, proxy, proxy headers, reverse proxy, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
 ---
 
 # Import from Actual Budget
@@ -218,6 +218,22 @@ budget's name. If a budget
 changes mode while the sync is on, the sync follows it. Going to tracking stops Assigned. Coming back
 to envelopes compares every category afresh: any difference goes to the review list and no figure
 moves.
+
+**The categories this app came with.** A new book starts with a few
+[starter categories](../concepts/categories.md), such as Groceries, Dining out and Rent/Mortgage.
+The import removes the ones you never used, so your Actual categories don't sit beside a second,
+half-matching set. The review lists them in its notes, which may be under **Show more notes**. A
+starter you renamed, funded or put a transaction on is always kept. To keep another, pick it for
+one of Actual's categories in the **Categories** tab: Actual's "Food" can go to Groceries, and the
+two are paired from then on.
+
+**Simplifying your categories.** Each Actual category pairs with one category here, so the review
+can't fold several into one. Do that after the import, here: in **Manage categories**, delete the
+category you're folding away and pick the one to keep under **Reassign activity to**. With the sync
+on, both ways or To Actual, Actual follows: its transactions move to the category you kept, which
+is created in Actual if it's new there, and the folded one is hidden in Actual, never deleted.
+Renaming a category or moving it to another group here reaches Actual too. See
+[Categories and payees](categories-payees.md#manage-categories).
 
 **An income category you later put in an envelope** keeps syncing, but what it receives stays in
 that envelope and doesn't raise Ready to Assign. **Worth checking** warns you, and its Assigned stays
