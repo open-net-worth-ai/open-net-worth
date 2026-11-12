@@ -6,10 +6,16 @@ rather hear about a problem privately than find it in a public issue.
 
 ## Supported versions
 
-There are no numbered releases yet — this project ships from `main`. Until a versioned release
-process exists, the **only supported version is the latest commit on `main`**. If you're running
-an older checkout, please update before reporting, if practical; if the issue is
-version-independent (e.g. present since a specific commit), say so in your report.
+Releases are numbered, signed and published on the
+[releases page](https://github.com/open-net-worth-ai/open-net-worth-releases/releases) (the PyPI
+wheel, the `ghcr.io/open-net-worth-ai/open-net-worth` image, the desktop installers). **Only the
+latest release receives security fixes**, and a fix ships as a new release, never a patch to an
+older one. Each release's notes list what changed since the one before, so you can see when a
+fix landed. A checkout of `main` is supported at its latest commit. `onw upgrade` (or
+`onw start --auto-upgrade`) moves an install to the latest signed release.
+
+If you're running an older release, please upgrade before reporting, if practical; if the issue
+is version-independent (e.g. present since a specific release), say so in your report.
 
 ## Scope
 
