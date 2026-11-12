@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { enableBankingReturnUrl, openBankPageTab } from './bankPage'
 import {
@@ -17,6 +17,8 @@ import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
+import { Icons } from './icons'
+import { SetupStep, type SetupStepState } from './SetupStep'
 
 // Enable Banking (EU PSD2 open banking) connector config over /api/enable-banking/* (per-
 // provider plane), mirroring PlaidSection. A blank private-key field leaves the saved creds
@@ -49,6 +51,54 @@ interface Institution {
   logo: string | null
 }
 
+// Enable Banking covers the EEA and the UK; names come from the browser, in the user's language.
+const COUNTRY_CODES = [
+  'AT',
+  'BE',
+  'BG',
+  'HR',
+  'CY',
+  'CZ',
+  'DK',
+  'EE',
+  'FI',
+  'FR',
+  'DE',
+  'GR',
+  'HU',
+  'IS',
+  'IE',
+  'IT',
+  'LV',
+  'LI',
+  'LT',
+  'LU',
+  'MT',
+  'NL',
+  'NO',
+  'PL',
+  'PT',
+  'RO',
+  'SK',
+  'SI',
+  'ES',
+  'SE',
+  'GB',
+]
+
+function countryName(code: string): string {
+  try {
+    return new Intl.DisplayNames(undefined, { type: 'region' }).of(code) || code
+  } catch {
+    return code
+  }
+}
+
+const COUNTRY_OPTIONS = COUNTRY_CODES.map((code) => ({
+  value: code,
+  label: countryName(code),
+})).sort((a, b) => a.label.localeCompare(b.label))
+
 interface EnableBankingForm {
   application_id: string
   private_key: string
@@ -71,7 +121,8 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const [saveErr, setSaveErr] = useState<string | null>(null)
 
   // Bank-link flow state.
-  const [country, setCountry] = useState((initialCountry || 'FI').toUpperCase())
+  const startCountry = useRef((initialCountry || 'FI').toUpperCase())
+  const [country, setCountry] = useState(startCountry.current)
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [aspsp, setAspsp] = useState('')
   const [loadingBanks, setLoadingBanks] = useState(false)
@@ -81,6 +132,8 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   // registered), or to the old https://localhost/connectors page they copy the code from.
   const [returnsToApp, setReturnsToApp] = useState<boolean | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showPaste, setShowPaste] = useState(false)
+  const [editingSetup, setEditingSetup] = useState(false)
   // Post-consent code → session exchange.
   const [authCode, setAuthCode] = useState('')
   const [completing, setCompleting] = useState(false)
@@ -92,8 +145,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       .then((c: EnableBankingStatus) => {
         setCfg(c)
         setForm(enableBankingFormOf(c))
-        if (c.aspsp) setAspsp(c.aspsp)
+        const code = c.country || startCountry.current
         if (c.country) setCountry(c.country)
+        if (c.has_credentials) void loadBanks(code, c.aspsp)
       })
       .catch(() => setError(true))
   }
@@ -131,26 +185,33 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     }
   }
 
-  async function loadBanks() {
+  async function loadBanks(code: string, keep?: string) {
     setLoadingBanks(true)
     setLinkErr(null)
     setInstitutions([])
+    setAspsp('')
     try {
       const r = await authFetch(
-        `/api/enable-banking/institutions?country=${encodeURIComponent(country)}`,
+        `/api/enable-banking/institutions?country=${encodeURIComponent(code)}`,
       )
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
-        setLinkErr(d.detail || 'Could not list banks. Save your credentials first.')
+        setLinkErr(d.detail || 'Could not list banks.')
         return
       }
       const data = (await r.json()) as { institutions: Institution[] }
-      setInstitutions(data.institutions || [])
-      const first = data.institutions?.[0]
-      if (first) setAspsp(first.id)
+      const banks = data.institutions || []
+      setInstitutions(banks)
+      const pick = banks.find((i) => i.id === keep) ?? banks[0]
+      if (pick) setAspsp(pick.id)
     } finally {
       setLoadingBanks(false)
     }
+  }
+
+  function chooseCountry(code: string) {
+    setCountry(code)
+    if (cfg?.has_credentials) void loadBanks(code)
   }
 
   async function linkBank() {
@@ -245,6 +306,21 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     )
   }
 
+  // The paste fallback stays folded away unless asked for, or unless this link fell back to it.
+  const pasteOpen = showPaste || returnsToApp === false
+  const renewing = Boolean(cfg.has_session && aspsp && aspsp === cfg.aspsp)
+  // A fetch refused by the bank after a link existed: the ~90-day consent has run out.
+  const consentExpired =
+    cfg.has_session && /401|403|expired|unauthori[sz]ed|consent/i.test(cfg.last_error || '')
+  // Step 1 stays open until its keys are saved, while being edited, or when a link fell back
+  // to pasting a code (its Redirect URL is the fix).
+  const setupOpen = !cfg.has_credentials || editingSetup || returnsToApp === false
+  const keysState: SetupStepState = cfg.has_credentials ? 'done' : 'current'
+  const linkState: SetupStepState = cfg.has_session
+    ? 'done'
+    : cfg.has_credentials
+      ? 'current'
+      : 'todo'
   const redirectUrl = enableBankingReturnUrl()
   function copyRedirect() {
     // Absent over plain http on another host: the value is on screen and selectable anyway.
@@ -257,14 +333,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     setForm((f) => f && { ...f, [k]: v })
 
   return (
-    <Stack gap="--space-4">
+    <Stack gap="--space-4" className="gc-form">
       <Text size="sm" tone="faint">
-        Register an application with{' '}
-        <a href="https://enablebanking.com" target="_blank" rel="noreferrer">
-          Enable Banking
-        </a>{' '}
-        to get an application ID and RSA private key. Then link a bank: you&apos;ll authorise access
-        at the bank&apos;s own site, and it brings you back here.
+        Banks in the EU and UK. You approve access on your bank&apos;s own site.
       </Text>
 
       {cfg.configured && !cfg.enabled && (
@@ -273,180 +344,242 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           turn it back on.
         </Text>
       )}
-
       <ConnectorStatusLine lastSyncedAt={cfg.last_synced_at} lastStatus={cfg.last_status} />
-      {cfg.last_error && (
+      {cfg.last_error && !consentExpired && (
         <Text size="xs" tone="bad">
           Last error: {cfg.last_error}
         </Text>
       )}
 
-      <FormField
-        label="Redirect URL"
-        htmlFor="conn-eb-redirect"
-        help="Add this to your Enable Banking application's allowed redirect URLs, exactly as shown, so your bank brings you back here after you approve access."
-      >
-        <Cluster gap="--space-2" align="center" wrap={false}>
-          <TextField
-            id="conn-eb-redirect"
-            value={redirectUrl}
-            readOnly
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <Button size="sm" variant="secondary" onClick={copyRedirect}>
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        </Cluster>
-      </FormField>
-
-      <FormField
-        label="Application ID"
-        htmlFor="conn-eb-id"
-        required
-        help="Your Enable Banking application id (the JWT key id)."
-        error={
-          applicationIdTouched.touched && !applicationIdValid
-            ? 'An application ID is required.'
-            : undefined
+      <SetupStep
+        n={1}
+        title="Register your app with Enable Banking"
+        state={keysState}
+        aside={
+          cfg.has_credentials && !setupOpen ? (
+            <Button size="sm" variant="ghost" onClick={() => setEditingSetup(true)}>
+              Edit
+            </Button>
+          ) : undefined
         }
       >
-        <TextField
-          id="conn-eb-id"
-          value={form.application_id}
-          placeholder="00000000-0000-0000-0000-000000000000"
-          onChange={(e) => set('application_id', e.target.value)}
-          onBlur={applicationIdTouched.onBlur}
-        />
-      </FormField>
-
-      <FormField
-        label="Private key (PEM)"
-        htmlFor="conn-eb-key"
-        required
-        help={privateKeyReveal.caption || 'Your application RSA private key, PEM format.'}
-        error={
-          privateKeyReveal.error ||
-          (privateKeyTouched.touched && !privateKeyValid ? 'A private key is required.' : undefined)
-        }
-      >
-        {cfg.has_credentials ? (
-          // The eye belongs on this branch only — it's the one with a saved value to reveal.
-          // A revealed PEM key is multi-line; that's acceptable in this single-line input (it
-          // scrolls), and switching to a TextArea on reveal would remount the field and drop
-          // focus.
-          <PasswordField
-            id="conn-eb-key"
-            value={form.private_key}
-            placeholder="••••••••"
-            onChange={(e) => set('private_key', e.target.value)}
-            onBlur={privateKeyTouched.onBlur}
-            {...privateKeyReveal.fieldProps}
-          />
+        {setupOpen ? (
+          <Stack gap="--space-3">
+            <Text size="xs" tone="muted">
+              Create an app at{' '}
+              <a href="https://enablebanking.com/cp/applications" target="_blank" rel="noreferrer">
+                enablebanking.com
+              </a>{' '}
+              and keep its Application ID and private key handy.
+            </Text>
+            <FormField
+              label="Redirect URL"
+              help="Paste this into your Enable Banking app's Redirect URLs so your bank can bring you back here."
+            >
+              <Cluster gap="--space-2" align="center" wrap={false}>
+                <code className="eb-url">{redirectUrl}</code>
+                <Button size="sm" aria-label="Copy the redirect URL" onClick={copyRedirect}>
+                  {copied ? <Icons.check /> : <Icons.copy />}
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </Cluster>
+            </FormField>
+            <FormField
+              label="Application ID"
+              htmlFor="conn-eb-id"
+              required
+              error={
+                applicationIdTouched.touched && !applicationIdValid
+                  ? 'An application ID is required.'
+                  : undefined
+              }
+            >
+              <TextField
+                id="conn-eb-id"
+                value={form.application_id}
+                placeholder="00000000-0000-0000-0000-000000000000"
+                onChange={(e) => set('application_id', e.target.value)}
+                onBlur={applicationIdTouched.onBlur}
+              />
+            </FormField>
+            <FormField
+              label="Private key"
+              htmlFor="conn-eb-key"
+              required
+              help={
+                privateKeyReveal.caption ||
+                (cfg.has_credentials
+                  ? 'Saved. Leave blank to keep it.'
+                  : 'Paste the whole .pem file, first and last lines included.')
+              }
+              error={
+                privateKeyReveal.error ||
+                (privateKeyTouched.touched && !privateKeyValid
+                  ? 'A private key is required.'
+                  : undefined)
+              }
+            >
+              {cfg.has_credentials ? (
+                // The eye belongs on this branch only — it's the one with a saved value to
+                // reveal. A revealed PEM key is multi-line; that's acceptable in this
+                // single-line input (it scrolls), and switching to a TextArea on reveal would
+                // remount the field and drop focus.
+                <PasswordField
+                  id="conn-eb-key"
+                  value={form.private_key}
+                  placeholder="••••••••"
+                  onChange={(e) => set('private_key', e.target.value)}
+                  onBlur={privateKeyTouched.onBlur}
+                  {...privateKeyReveal.fieldProps}
+                />
+              ) : (
+                <TextArea
+                  id="conn-eb-key"
+                  rows={4}
+                  value={form.private_key}
+                  placeholder="-----BEGIN PRIVATE KEY----- …"
+                  onChange={(e) => set('private_key', e.target.value)}
+                  onBlur={privateKeyTouched.onBlur}
+                />
+              )}
+            </FormField>
+            {!cfg.has_credentials && (
+              <Text size="xs" tone="faint">
+                Click Save at the bottom when both are filled in.
+              </Text>
+            )}
+            {saveErr && (
+              <Text size="xs" tone="bad">
+                {saveErr}
+              </Text>
+            )}
+          </Stack>
         ) : (
-          <TextArea
-            id="conn-eb-key"
-            rows={4}
-            value={form.private_key}
-            placeholder="-----BEGIN PRIVATE KEY-----&#10;…&#10;-----END PRIVATE KEY-----"
-            onChange={(e) => set('private_key', e.target.value)}
-            onBlur={privateKeyTouched.onBlur}
-          />
-        )}
-      </FormField>
-
-      {saveErr && (
-        <Text size="xs" tone="bad">
-          {saveErr}
-        </Text>
-      )}
-
-      {/* ── Bank link flow ── */}
-      <Stack gap="--space-3">
-        <Text size="sm">{cfg.has_session ? 'Linked bank' : 'Link a bank'}</Text>
-        <Cluster gap="--space-2" align="end" wrap>
-          <FormField label="Country" htmlFor="conn-eb-country">
-            <TextField
-              id="conn-eb-country"
-              value={country}
-              placeholder="FI"
-              maxLength={2}
-              style={{ width: '5rem' }}
-              onChange={(e) => setCountry(e.target.value.toUpperCase())}
-            />
-          </FormField>
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={loadingBanks}
-            disabled={!cfg.has_credentials}
-            onClick={loadBanks}
-          >
-            List banks
-          </Button>
-        </Cluster>
-
-        {institutions.length > 0 && (
-          <FormField label="Bank" htmlFor="conn-eb-bank">
-            <Select
-              id="conn-eb-bank"
-              value={aspsp}
-              options={institutions.map((i) => ({ value: i.id, label: i.name }))}
-              onChange={(e) => setAspsp(e.target.value)}
-            />
-          </FormField>
-        )}
-
-        {linkErr && (
-          <Text size="xs" tone="bad">
-            {linkErr}
-          </Text>
-        )}
-
-        <Cluster gap="--space-3" align="center">
-          <Button size="sm" loading={linking} disabled={!aspsp} onClick={linkBank}>
-            Link bank
-          </Button>
-        </Cluster>
-
-        {returnsToApp === true && (
           <Text size="xs" tone="muted">
-            After you approve access, your bank brings you back here and the link finishes by
-            itself.
+            Application ID {cfg.application_id.slice(0, 8)}… · private key saved
           </Text>
         )}
-        {returnsToApp === false && (
-          <Text size="xs" tone="muted">
-            Your bank will send you to a page that won&apos;t load — copy the code from its address
-            and paste it below. To come back here automatically instead, add{' '}
-            <code>{enableBankingReturnUrl()}</code> to your Enable Banking application&apos;s
-            allowed redirect URLs.
-          </Text>
-        )}
+      </SetupStep>
 
-        <FormField
-          label="Authorization code"
-          htmlFor="conn-eb-code"
-          help="Only needed if your bank didn't bring you back here: paste the code from the address it sent you to, then Complete."
-        >
-          <TextField
-            id="conn-eb-code"
-            value={authCode}
-            placeholder="paste the returned code"
-            onChange={(e) => setAuthCode(e.target.value)}
-          />
-        </FormField>
+      <SetupStep n={2} title="Link your bank" state={linkState}>
+        <Stack gap="--space-3">
+          {consentExpired && (
+            <Text size="xs" tone="warn">
+              Your bank access has expired. Link again to renew it.
+            </Text>
+          )}
+          {cfg.has_session && cfg.aspsp ? (
+            <Stack gap="--space-1">
+              <Text size="sm">
+                Linked: {cfg.aspsp} · {countryName(cfg.country)}
+              </Text>
+              <Text size="xs" tone="muted">
+                Consent lasts about 90 days. Link again to renew it.
+              </Text>
+            </Stack>
+          ) : (
+            <Text size="xs" tone={cfg.has_credentials ? 'muted' : 'faint'}>
+              {cfg.has_credentials
+                ? 'Pick your bank and approve access on its own site.'
+                : 'Save your application ID and private key first.'}
+            </Text>
+          )}
 
-        <Cluster gap="--space-3" align="center">
-          <Button
-            size="sm"
-            loading={completing}
-            disabled={!authCode.trim() || !cfg.has_credentials}
-            onClick={completeLink}
-          >
-            Complete link
-          </Button>
-        </Cluster>
-      </Stack>
+          <Cluster gap="--space-2" align="end" wrap className="gc-pick-row">
+            <FormField label="Country" htmlFor="conn-eb-country">
+              <Select
+                id="conn-eb-country"
+                value={country}
+                options={COUNTRY_OPTIONS}
+                disabled={!cfg.has_credentials || linking}
+                onChange={(e) => chooseCountry(e.target.value)}
+              />
+            </FormField>
+            <div className="gc-bank-pick">
+              <FormField label="Bank" htmlFor="conn-eb-bank">
+                <Select
+                  id="conn-eb-bank"
+                  value={aspsp}
+                  placeholder={
+                    loadingBanks
+                      ? 'Loading banks…'
+                      : cfg.has_credentials
+                        ? 'No banks found for this country'
+                        : 'Choose a bank'
+                  }
+                  options={institutions.map((i) => ({ value: i.id, label: i.name }))}
+                  disabled={!institutions.length || linking}
+                  onChange={(e) => setAspsp(e.target.value)}
+                />
+              </FormField>
+            </div>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={linking}
+              disabled={!aspsp || !cfg.has_credentials}
+              onClick={linkBank}
+            >
+              {renewing ? 'Renew link' : 'Link bank'}
+            </Button>
+          </Cluster>
+
+          {linkErr && (
+            <Text size="xs" tone="bad">
+              {linkErr}
+            </Text>
+          )}
+          {returnsToApp === true && (
+            <Text size="xs" tone="muted">
+              Approve access in the tab that just opened. Your bank brings you back here and the
+              link finishes by itself.
+            </Text>
+          )}
+          {returnsToApp === false && (
+            <Text size="xs" tone="warn">
+              Your bank will send you to a page that won&apos;t load. Copy the code from its address
+              bar (the part after code=) and paste it below. To skip this next time, add the
+              Redirect URL from step 1 to your Enable Banking app.
+            </Text>
+          )}
+
+          {pasteOpen ? (
+            <Cluster gap="--space-2" align="end" wrap className="gc-pick-row">
+              <div className="gc-bank-pick">
+                <FormField label="Code from the address bar" htmlFor="conn-eb-code">
+                  <TextField
+                    id="conn-eb-code"
+                    value={authCode}
+                    placeholder="the value after code="
+                    onChange={(e) => setAuthCode(e.target.value)}
+                  />
+                </FormField>
+              </div>
+              <Button
+                size="sm"
+                loading={completing}
+                disabled={!authCode.trim() || !cfg.has_credentials}
+                onClick={completeLink}
+              >
+                Complete link
+              </Button>
+            </Cluster>
+          ) : (
+            cfg.has_credentials && (
+              <div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="eb-link"
+                  onClick={() => setShowPaste(true)}
+                >
+                  Bank didn&apos;t bring you back? Enter its code
+                </Button>
+              </div>
+            )
+          )}
+        </Stack>
+      </SetupStep>
 
       <ConnectorAccountsList provider="enable_banking" providerLabel="Enable Banking" />
     </Stack>

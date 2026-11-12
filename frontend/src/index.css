@@ -9356,6 +9356,31 @@ body.hide-amounts .mask * {
     flex: 1;
     min-width: 12rem;
   }
+  /* A lone ghost button under a form row reads as a text link, flush with the fields' edge. */
+  .gc-form .ui-btn--ghost.eb-link {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  /* Enable Banking's Redirect URL: a value to copy, not a field — dashed, sunken, one click
+     selects it all, the 30px of the Copy button beside it. */
+  .eb-url {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 var(--space-3);
+    overflow-x: auto;
+    white-space: nowrap;
+    user-select: all;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--muted);
+    background: var(--bg-2);
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-md);
+  }
 
   /* Connector setup steps (connectors/SetupStep) — ① keys → ② link a bank → ③ choose accounts.
      The number carries the state: accent ring for the current step, a green check once done,

@@ -164,12 +164,11 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
    `?…`), or copy it from **Redirect URL** at the top of the Enable Banking form in step 4.
    Also add `https://localhost/connectors` as a fallback.
 3. In Open Net Worth: **Connectors → Browse & add → Enable Banking → Add connector**.
-4. Paste the **Application ID**, and paste the whole contents of the `.pem` file — including its
-   first "BEGIN PRIVATE KEY" line and last "END PRIVATE KEY" line — into **Private key (PEM)**.
-   Click **Save**.
-5. Reopen the form (**⋯ → Edit configuration**). Type your bank's two-letter country code into
-   **Country** (for example `DE`, `FR`, `FI`) and click **List banks**, then choose your bank
-   under **Bank** and click **Link bank**.
+4. Under **1 Register your app with Enable Banking**, paste the **Application ID**, and paste the
+   whole contents of the `.pem` file — including its first "BEGIN PRIVATE KEY" line and last
+   "END PRIVATE KEY" line — into **Private key**. Click **Save**.
+5. Reopen the form (**⋯ → Edit configuration**). Under **2 Link your bank**, choose your
+   **Country** — its banks load by themselves — then your **Bank**, and click **Link bank**.
 6. Your bank's sign-in page opens in a new tab. After you approve access, your bank brings you
    back to **Connectors**, the link finishes by itself, and the Enable Banking connector opens.
    Link your accounts in its **Accounts** list.
@@ -177,15 +176,15 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 If the address from step 2 isn't registered, the link still works, the old way: the form says so
 under **Link bank**, and after you approve access the browser goes to
 `https://localhost/connectors?…&code=…`, a page that won't load. Copy the value after `code=` (up
-to the next `&`) from the address bar, paste it into **Authorization code**, and click **Complete
-link**.
+to the next `&`) from the address bar, paste it into **Code from the address bar**, and click
+**Complete link**. (**Bank didn't bring you back? Enter its code** opens that field any time.)
 
 If **Link bank** or **Complete link** fails, the message gives Enable Banking's own reason. For
 example, `REDIRECT_URI_NOT_ALLOWED` names the URL to add to your application's allowed redirect
 URLs.
 
 Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
-error — repeat steps 5–6 to renew it.
+error, and the form says your bank access has expired — click **Renew link** to renew it.
 
 ## GoCardless
 
