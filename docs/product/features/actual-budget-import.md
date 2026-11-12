@@ -6,7 +6,7 @@ order: 171
 audience: [user]
 status: stable
 related: [features/imports-and-sync, connectors/bank-brokerage, operations/backup-and-restore, concepts/envelopes-and-budgeting]
-keywords: [actual, actual budget, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
+keywords: [actual, actual budget, proxy, proxy headers, reverse proxy, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
 ---
 
 # Import from Actual Budget
@@ -30,7 +30,7 @@ Open **Automations → Data sync → Actual** and click **Connect Actual…**. I
 **Connectors → Actual Budget**, and it opens right over the page.
 
 - **Server address** is the address you open Actual at. Plain http to another computer still works,
-  but it isn't encrypted: anyone on that network could read your password or token and your budget,
+  but it isn't encrypted: anyone on that network could read your password, token or proxy headers and your budget,
   and change what this app reads and writes. The form warns you under the field, so use https if you
   can. A certificate this computer doesn't trust stops the connection, and there's no switch to skip
   that check.
@@ -42,9 +42,20 @@ Open **Automations → Data sync → Actual** and click **Connect Actual…**. I
   The budget you pick here is the one the import starts from.
 - **Encryption password** is only for a budget with end-to-end encryption on in Actual. An encrypted
   budget says `(encrypted)` in the list, and **Save** waits until it has its password.
+- **Proxy headers** are only for a server behind a sign-in proxy, such as Pangolin, Authelia or
+  Cloudflare Access, that accepts a header in place of its login page. Write one per line, as
+  `Name: value`, up to ten. They go with every request to your server, and nowhere else: the app
+  never follows a redirect, and a new server address drops them, as it does a saved password. Headers
+  the app sets itself, such as `Host` or Actual's own sign-in header, are refused. The form shows
+  only the names of saved headers; **Remove** deletes them when you save.
 
-Passwords and tokens never come back from the server. A saved one shows as dots, and leaving the
-field blank keeps it.
+Passwords, tokens and header values never come back from the server. A saved one shows as dots, and
+leaving the field blank keeps it.
+
+**Behind a sign-in proxy?** If the proxy answers instead of Actual, with a redirect or its own login
+page, the connector says so. Either add the header your proxy accepts under **Proxy headers**, or let
+these paths through to Actual without the proxy's login: `/account`, `/info`, `/sync`, `/data` and
+`/data-file-index.txt`. The sync doesn't use `/api`.
 
 On a hosted instance the form says Actual isn't available, and **Data sync** doesn't list it.
 

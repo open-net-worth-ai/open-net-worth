@@ -256,7 +256,10 @@ def test_plain_http_to_another_machine_warns_but_is_allowed(
 
 def test_the_plain_http_warning_names_the_password_and_tampering():
     (notice,) = client.plain_http_notice("http://192.168.1.20:5006")
-    assert "password or token" in notice and "change what this app reads and writes" in notice
+    assert (
+        "password, token or proxy headers" in notice
+        and "change what this app reads and writes" in notice
+    )
 
 
 def test_the_password_signs_in_when_both_are_saved(store, work, fake):

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import functools
 import io
+import json
 import logging
 import re
 import shutil
@@ -47,7 +48,11 @@ from backend.core.errors import (
 )
 from backend.core.pinned_http import https_context
 from backend.core.user_time import user_today
-from backend.db.actual_budget_config_store import ActualBudgetConfigStore, plain_http_remote
+from backend.db.actual_budget_config_store import (
+    ActualBudgetConfigStore,
+    parse_proxy_headers,
+    plain_http_remote,
+)
 from backend.services import actual_flag
 from backend.services.actual_sync import compat, shape, sql_guard
 from backend.services.actual_sync import rows as reader
@@ -76,7 +81,8 @@ _TOO_LARGE = "This Actual file is too large to read safely."
 _NOT_A_BUDGET = "This Actual file holds more than a budget, so it wasn't read."
 _PLAIN_HTTP = (
     "This Actual server is reached over plain http, which isn't encrypted. Anyone on that network "
-    "could read your password or token and the budget, and change what this app reads and writes."
+    "could read your password, token or proxy headers and the budget, and change what this app "
+    "reads and writes."
 )
 PAUSED = (
     "The Actual connection is paused, so this app isn't talking to your server. "
@@ -317,6 +323,24 @@ class SignInRefused(Stopped):
     """The server turned the saved password or token away."""
 
 
+# A sign-in proxy answers with a redirect or its own login page, where Actual answers JSON.
+_BEHIND_PROXY = (
+    "The server answered with a sign-in page or a redirect, not Actual. If a sign-in proxy is in "
+    "front of Actual, add the header it accepts under Proxy headers, or let these paths through: "
+    "/account, /info, /sync, /data and /data-file-index.txt."
+)
+
+
+def _not_json(exc: BaseException) -> bool:
+    import pydantic
+
+    if isinstance(exc, json.JSONDecodeError):
+        return True
+    return isinstance(exc, pydantic.ValidationError) and any(
+        err.get("type") == "json_invalid" for err in exc.errors()
+    )
+
+
 def _plain_error(exc: Exception) -> Stopped:
     """Ours, in plain words, from whatever the library raised. Never ``str(exc)``: it can hold
     the server address or a password. It ends a run, whatever status it names."""
@@ -349,6 +373,8 @@ def _plain_error(exc: Exception) -> Stopped:
             "The Actual server's certificate could not be verified. "
             "Use a certificate this computer trusts."
         )
+    elif (code and 300 <= code < 400) or any(_not_json(e) for e in chain):
+        text = _BEHIND_PROXY
     elif code:
         text = f"The Actual server answered with an error (HTTP {code})."
     elif has(httpx.TransportError, TimeoutError):
@@ -410,6 +436,9 @@ def _build(creds: dict, directory: Path | None = None):
         "token": None if creds["password"] else creds["token"],
         "cert": https_context() if url.lower().startswith("https:") else True,
         "encryption_password": creds["encryption_password"] or None,
+        # Sent on every request, for a sign-in proxy in front of the server. The client follows
+        # no redirect, so they reach only the saved address.
+        "extra_headers": parse_proxy_headers(creds["proxy_headers"]) or None,
         "timeout": TIMEOUT,
     }
     if directory is not None:
