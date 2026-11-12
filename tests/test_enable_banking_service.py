@@ -181,6 +181,93 @@ def test_start_authorization_returns_url_and_persists(monkeypatch):
     assert cfg["aspsp"] == "Bank A" and cfg["country"] == "DE"
 
 
+class _JsonResp:
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def test_start_authorization_sends_the_required_state(monkeypatch):
+    """Issue #103: Enable Banking 422s an /auth body without `state` (verified on the
+    sandbox). The body carries state, aspsp {name, country} and access.valid_until."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = {}
+
+    def _post(url, json, **kw):
+        sent.update(json)
+        return _JsonResp(200, {"url": "https://bank.example/a", "authorization_id": "A"})
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    svc.start_authorization("Mock ASPSP", "fi", "")
+    assert sent["state"]
+    assert sent["aspsp"] == {"name": "Mock ASPSP", "country": "FI"}
+    assert sent["access"]["valid_until"]
+    assert sent["redirect_url"] == svc._DEFAULT_REDIRECT
+    assert "valid_until" not in sent
+
+
+def test_start_authorization_requires_a_country():
+    with pytest.raises(ValidationError):
+        svc.start_authorization("Mock ASPSP", "", "")
+
+
+def test_start_authorization_error_carries_enable_bankings_reason(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    body = {
+        "code": 422,
+        "message": "Wrong request parameters provided",
+        "error": "WRONG_REQUEST_PARAMETERS",
+        "detail": [{"loc": ["body", "state"], "msg": "Field required", "input": {"x": 1}}],
+    }
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _JsonResp(422, body))
+    with pytest.raises(ValidationError) as exc:
+        svc.start_authorization("Mock ASPSP", "FI", "")
+    msg = str(exc.value)
+    assert "Wrong request parameters provided" in msg and "WRONG_REQUEST_PARAMETERS" in msg
+    assert "state" in msg and "'x'" not in msg
+
+
+def test_start_authorization_unregistered_redirect_names_the_url(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    body = {"code": 400, "message": "Redirect URI not allowed", "error": "REDIRECT_URI_NOT_ALLOWED"}
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _JsonResp(400, body))
+    with pytest.raises(ValidationError) as exc:
+        svc.start_authorization("Mock ASPSP", "FI", "https://app.example/connectors")
+    assert "https://app.example/connectors" in str(exc.value)
+
+
+def test_api_error_survives_a_non_json_body():
+    class _Bad:
+        status_code = 502
+
+        @staticmethod
+        def json():
+            raise ValueError("not json")
+
+    assert str(svc._api_error(_Bad(), "listing banks")) == "listing banks failed: HTTP 502"
+
+
+def test_fetch_session_accounts_reads_uid_strings_and_details(monkeypatch):
+    """Issue #103 follow-up: GET /sessions/{id} lists `accounts` as bare uid strings (seen
+    on the sandbox); each is enriched from /accounts/{uid}/details, and a details failure
+    still keeps the uid so its transactions fetch."""
+    from backend.core.errors import ExternalServiceError
+
+    def _get(token, path, params):
+        if path == "/sessions/S1":
+            return _JsonResp(200, {"accounts": ["U1", "U2", "U1"], "accounts_data": []})
+        if path == "/accounts/U1/details":
+            return _JsonResp(200, {"uid": "U1", "name": "Main", "currency": "EUR"})
+        raise ExternalServiceError("Enable Banking HTTP 500")
+
+    monkeypatch.setattr(svc, "_safe_get", _get)
+    out = svc.fetch_session_accounts("JWT", "S1")
+    assert out == [{"uid": "U1", "name": "Main", "currency": "EUR"}, {"uid": "U2"}]
+
+
 def test_create_session_persists_session_id(monkeypatch):
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
 

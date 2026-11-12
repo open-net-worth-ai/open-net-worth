@@ -173,6 +173,10 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 7. Paste it into **Authorization code** and click **Complete link**. Then link your accounts in
    the **Accounts** list.
 
+If **Link bank** or **Complete link** fails, the message gives Enable Banking's own reason. For
+example, `REDIRECT_URI_NOT_ALLOWED` means the URL from step 2 isn't in your application's allowed
+redirect URLs.
+
 Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
 error — repeat steps 5–7 to renew it.
 

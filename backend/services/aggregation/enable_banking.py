@@ -51,6 +51,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -136,6 +137,41 @@ def _auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}", "accept": "application/json"}
 
 
+def _api_error(resp: httpx.Response, what: str, *, redirect_url: str = "") -> ValidationError:
+    """A ``ValidationError`` carrying Enable Banking's own reason (``message`` + ``error``
+    code + the rejected field names), never only the status — a bare "HTTP 422" left issue
+    #103 undiagnosable. The request ``input`` echoed in ``detail`` is never repeated."""
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+    body = body if isinstance(body, dict) else {}
+    reason = str(body.get("message") or "").strip()[:200]
+    code = str(body.get("error") or "").strip()[:60]
+    fields = (
+        [
+            ".".join(str(p) for p in (d.get("loc") or [])[1:])
+            for d in body.get("detail") or []
+            if isinstance(d, dict)
+        ]
+        if isinstance(body.get("detail"), list)
+        else []
+    )
+    text = f"{what} failed: HTTP {resp.status_code}"
+    if reason:
+        text += f" — {reason}"
+    if code:
+        text += f" ({code})"
+    if fields:
+        text += f": {', '.join(f for f in fields if f)[:200]}"
+    if code == "REDIRECT_URI_NOT_ALLOWED" and redirect_url:
+        text += (
+            f". Add {redirect_url} to your application's allowed redirect URLs in the"
+            " Enable Banking control panel."
+        )
+    return ValidationError(text)
+
+
 # ── institution picker + consent link ────────────────────────────────────────────────
 
 
@@ -159,7 +195,7 @@ def list_institutions(country: str) -> list[dict]:
     except httpx.HTTPError as exc:
         raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
     if resp.status_code != 200:
-        raise ValidationError(f"listing banks failed: HTTP {resp.status_code}")
+        raise _api_error(resp, "listing banks")
 
     data = resp.json() or {}
     # TODO(enable-banking): confirm the response shape — documented as {"aspsps": [...]}.
@@ -196,19 +232,22 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     if not bank:
         raise ValidationError("aspsp (bank) is required")
     code = (country or "").strip().upper()
+    if len(code) != 2:
+        raise ValidationError("country must be a 2-letter ISO code (e.g. FI, DE, FR)")
     redirect_url = (redirect or "").strip() or _DEFAULT_REDIRECT
 
     store = EnableBankingConfigStore()
     token = _bearer(store)
     # Consent validity is capped at ~90 days for most banks; request the documented max.
     valid_until = (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(timespec="seconds")
+    # Verified against the sandbox (issue #103): `state` is required (422 without it) and
+    # `aspsp` needs both name and country.
     payload = {
-        # TODO(enable-banking): the documented body keys the ASPSP by {name, country}; confirm
-        # exact field names against the sandbox.
-        "aspsp": {"name": bank, "country": code} if code else {"name": bank},
-        "redirect_url": redirect_url,
-        "valid_until": valid_until,
         "access": {"valid_until": valid_until},
+        "aspsp": {"name": bank, "country": code},
+        "state": str(uuid.uuid4()),
+        "redirect_url": redirect_url,
+        "psu_type": "personal",
     }
     try:
         resp = httpx.post(
@@ -220,7 +259,7 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     except httpx.HTTPError as exc:
         raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
     if resp.status_code not in (200, 201):
-        raise ValidationError(f"starting the bank link failed: HTTP {resp.status_code}")
+        raise _api_error(resp, "starting the bank link", redirect_url=redirect_url)
 
     data = resp.json() or {}
     url = (data.get("url") or data.get("authorization_url") or "").strip()
@@ -255,7 +294,7 @@ def create_session(code: str) -> dict:
     except httpx.HTTPError as exc:
         raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
     if resp.status_code not in (200, 201):
-        raise ValidationError(f"completing the bank link failed: HTTP {resp.status_code}")
+        raise _api_error(resp, "completing the bank link")
 
     data = resp.json() or {}
     session_id = (data.get("session_id") or data.get("id") or "").strip()
@@ -309,15 +348,30 @@ def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
 
 
 def fetch_session_accounts(token: str, session_id: str) -> list[dict]:
-    """GET ``/sessions/{id}`` → the list of consented Enable Banking accounts.
+    """GET ``/sessions/{id}`` → the consented accounts, each enriched from
+    ``/accounts/{uid}/details`` (name, currency, type).
 
-    Each account dict carries at least an ``uid``/``account_id`` + a currency + a name.
-    Raises ``ExternalServiceError`` (never the raw httpx exception — see ``_safe_get``) on
-    a transport/HTTP failure."""
+    Verified on the sandbox (issue #103): the session lists ``accounts`` as bare uid STRINGS
+    (``accounts_data`` holds only uid + hashes), so keeping only dicts dropped every account.
+    A details failure keeps ``{"uid": uid}`` so transactions still fetch. Raises
+    ``ExternalServiceError`` (never the raw httpx exception — see ``_safe_get``) when the
+    session itself can't be read."""
     resp = _safe_get(token, f"/sessions/{session_id}", {})
     data = resp.json() or {}
-    accounts = data.get("accounts") or []
-    return [a for a in accounts if isinstance(a, dict)]
+    uids: list[str] = []
+    for entry in data.get("accounts") or []:
+        uid = _account_uid(entry) if isinstance(entry, dict) else str(entry or "").strip()
+        if uid and uid not in uids:
+            uids.append(uid)
+    accounts: list[dict] = []
+    for uid in uids:
+        try:
+            details = _safe_get(token, f"/accounts/{uid}/details", {}).json()
+        except (ExternalServiceError, ValueError) as exc:
+            logger.warning("enable_banking account details failed: %s", exc)
+            details = None
+        accounts.append({**details, "uid": uid} if isinstance(details, dict) else {"uid": uid})
+    return accounts
 
 
 def fetch_account_transactions(
