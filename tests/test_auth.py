@@ -367,6 +367,28 @@ def test_q1_knob_trust_loopback(auth_env):
     assert _client().get("/api/portfolio").status_code == 401
 
 
+@pytest.mark.parametrize(
+    "header",
+    [
+        ("X-Forwarded-For", "203.0.113.7"),
+        ("Forwarded", "for=203.0.113.7"),
+        ("X-Real-IP", "203.0.113.7"),
+        ("X-Forwarded-Host", "money.example"),
+    ],
+)
+def test_a_proxied_loopback_request_is_not_trusted(auth_env, header):
+    """A reverse proxy on this host connects from 127.0.0.1; its forwarding header is what
+    keeps its whole audience from being the operator (issue #91)."""
+    configure, auth_json = auth_env
+    _seed_auth_json(auth_json, password_hash=security.hash_password("pw"))
+    configure(AUTH_PASSWORD_HASH="x", AUTH_TRUST_LOOPBACK="true")
+    c = _client()
+    assert c.get("/api/portfolio").status_code == 200
+    assert c.get("/api/portfolio", headers=dict([header])).status_code == 401
+    status = c.get("/api/auth/status", headers=dict([header])).json()
+    assert status["required"] is True and status["authenticated"] is False
+
+
 def test_persisted_loopback_setting_controls_api_and_auth_status(auth_env):
     from backend.db.auth_store import AuthStore
 
