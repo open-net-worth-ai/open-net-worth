@@ -75,6 +75,15 @@ def list_connectors():
     }
 
 
+@router.get("/api/linkable-bank-accounts")
+def get_linkable_bank_accounts():
+    """Every connected connector's accounts with what each is linked to — the Accounts
+    screen's "Link to a bank account…" picker (``services.connector_linking``)."""
+    from backend.services import connector_linking
+
+    return {"connectors": connector_linking.linkable_accounts()}
+
+
 @router.get("/api/connectors/{connector_id:path}/accounts")
 def get_connector_accounts(connector_id: str):
     """Per-provider account list (RFC connectors-as-data-sources §E) — the Connectors tab's

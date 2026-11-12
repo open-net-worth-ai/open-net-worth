@@ -25,6 +25,12 @@ vi.mock('./restApi', async (load) => {
   }
 })
 
+vi.mock('./ConnectorAccountsList', () => ({
+  ConnectorAccountsList: ({ provider }: { provider: string }) => (
+    <div data-testid="accounts-list">{provider}</div>
+  ),
+}))
+
 afterEach(() => {
   cleanup()
   restApi.notes = ''
@@ -631,5 +637,27 @@ describe('on a phone a running connector keeps Pause in the ⋮; only a fix reac
     expect(buttons[0]!.className).toContain('secondary')
     fireEvent.click(buttons[1]!)
     expect(onSetEnabled).toHaveBeenCalledWith(true)
+  })
+})
+
+// Reported 2026-11-12: a GoCardless bank linked fine, then nothing said how its accounts reach
+// the book — the link rows lived only behind Edit configuration.
+describe('ConnectorDetail synced accounts', () => {
+  it('lists a connected bank connector’s accounts on its page', () => {
+    renderDetail(entry({ id: 'gocardless', name: 'GoCardless' }))
+    expect(screen.getByTestId('accounts-list').textContent).toBe('gocardless')
+  })
+
+  it('shows none while the connector is paused or not set up', () => {
+    renderDetail(entry({ id: 'gocardless', name: 'GoCardless', enabled: false }))
+    expect(screen.queryByTestId('accounts-list')).toBeNull()
+    cleanup()
+    renderDetail(entry({ id: 'gocardless', name: 'GoCardless', configured: false }))
+    expect(screen.queryByTestId('accounts-list')).toBeNull()
+  })
+
+  it('shows none for a connector with no accounts to link', () => {
+    renderDetail(entry({ id: 'tavily', name: 'Tavily' }))
+    expect(screen.queryByTestId('accounts-list')).toBeNull()
   })
 })

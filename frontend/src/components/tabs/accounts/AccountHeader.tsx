@@ -12,6 +12,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { StatementViewer, StatementsModal } from './StatementsSection'
 import { Button, FormField, TextField } from '../../ui'
+import { LinkBankAccountDialog } from './LinkBankAccountDialog'
 import { BalanceTermsInfo } from './BalanceTermsInfo'
 import { Spark } from '../../../lucius/identity'
 import {
@@ -50,6 +51,7 @@ type MenuIconName =
   | 'export'
   | 'archive'
   | 'delete'
+  | 'link'
 
 function MenuIcon({ name }: { name: MenuIconName }) {
   const common = { size: 16, strokeWidth: 1.75, 'aria-hidden': true }
@@ -72,6 +74,8 @@ function MenuIcon({ name }: { name: MenuIconName }) {
       return <Archive {...common} />
     case 'delete':
       return <Trash2 {...common} />
+    case 'link':
+      return <Link2 {...common} />
   }
 }
 
@@ -408,6 +412,7 @@ export function AccountHeader({
   }
   const [viewStatement, setViewStatement] = useState(false)
   const [showStatements, setShowStatements] = useState(false)
+  const [linkingBank, setLinkingBank] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -583,6 +588,15 @@ export function AccountHeader({
                 </AccountMenuItem>
                 <AccountMenuItem icon="edit" onClick={onEdit}>
                   Edit account
+                </AccountMenuItem>
+                <AccountMenuItem
+                  icon="link"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setLinkingBank(true)
+                  }}
+                >
+                  Link to a bank account…
                 </AccountMenuItem>
                 <div className="sep" />
                 <AccountMenuItem icon="archive" danger onClick={onArchive}>
@@ -808,6 +822,17 @@ export function AccountHeader({
         <StatementViewer
           stmt={{ id: dueInfo.statementId }}
           onClose={() => setViewStatement(false)}
+        />
+      )}
+      {linkingBank && (
+        <LinkBankAccountDialog
+          account={account}
+          onClose={() => setLinkingBank(false)}
+          onConnectBank={() => {
+            setLinkingBank(false)
+            if (router) void router.navigate({ to: '/connectors' as never })
+            else window.location.assign('/connectors')
+          }}
         />
       )}
       {showStatements && (

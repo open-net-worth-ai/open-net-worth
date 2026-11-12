@@ -18,9 +18,13 @@ const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
 const signInWithOAuth = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true, error: null })))
 vi.mock('./oauthSignIn', () => ({ signInWithOAuth }))
+const routerSearch = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  useRouterState: () => undefined,
+  // The connector page's Accounts list asks for the router; it copes with none.
+  useRouter: () => undefined,
+  useRouterState: (opts?: { select?: (st: unknown) => unknown }) =>
+    opts?.select ? opts.select({ location: { search: routerSearch.value } }) : undefined,
 }))
 
 const TELEGRAM: Connector = {
@@ -81,7 +85,10 @@ beforeEach(() => {
   })
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  routerSearch.value = {}
+})
 
 async function renderTab() {
   const view = render(<ConnectorsTab />)
@@ -458,5 +465,54 @@ describe('connectors.open_setup (Lucius) — opens a form, changes nothing', () 
     // 'custom' is the Add MCP server form — any MCP server the directory doesn't list.
     expect(setupTargetFor([], 'custom')).toEqual({ kind: 'add', id: 'mcp-custom' })
     expect(setupTargetFor([], 'zzz')).toEqual({ kind: 'unknown' })
+  })
+})
+
+// The bank's consent page returns to /connectors?connector=gocardless and may append its own
+// `?ref=…` to that URL — the connector must still open.
+describe('a link straight to one connector', () => {
+  it('opens it even with a query a bank appended to the id', async () => {
+    routerSearch.value = { connector: 'telegram?ref=abc-123' }
+    await renderTab()
+    expect(await screen.findByText('Tool permissions', {}, { timeout: 3000 })).toBeTruthy()
+  })
+})
+
+describe('coming back from a bank', () => {
+  it('asks GoCardless whether the consent finished before opening the connector page', async () => {
+    const gocardless: Connector = {
+      id: 'gocardless',
+      name: 'GoCardless',
+      kind: 'gocardless',
+      enabled: true,
+      config: {},
+      secrets_public: { has_secret_key: true },
+      status: 'error',
+      error: 'Bank link not finished — open the connector and select Check links',
+      pausable: true,
+      short_description: 'EU and UK bank accounts',
+      tools: [],
+    }
+    const fallback = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/connectors') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ connectors: [TELEGRAM, gocardless] }),
+        })
+      }
+      return fallback(url, init)
+    })
+    routerSearch.value = { connector: 'gocardless?ref=gcl-req-0001' }
+    await renderTab()
+    await waitFor(() =>
+      expect(
+        authFetch.mock.calls.some(
+          (c) => c[0] === '/api/gocardless/check-link' && c[1]?.method === 'POST',
+        ),
+      ).toBe(true),
+    )
+    // The connector page, not the credential form an unfinished-looking link would pick.
+    expect(await screen.findByText('Tool permissions', {}, { timeout: 3000 })).toBeTruthy()
   })
 })

@@ -5,6 +5,7 @@
 // and the caller still shows the URL as a link: a blocked tab, a mini-window browser that hands
 // back no handle, or an iOS home-screen app (which cannot steer a sheet it opened) all leave the
 // user one tap from the bank. The desktop app hands the URL to the system browser instead.
+import { authFetch } from '../../../api/client'
 import { desktopBridge, openExternal } from '../../../platform/desktop'
 
 export interface BankPageTab {
@@ -56,4 +57,17 @@ export function openBankPageTab(): BankPageTab {
       }
     },
   }
+}
+
+/** Where GoCardless sends the user after consent: back to its own connector page, which lists
+ *  the bank's accounts to link — not the app's home page, with no hint of the next step. */
+export function bankReturnUrl(): string {
+  return `${window.location.origin}/connectors?connector=gocardless`
+}
+
+/** What to ask a provider when its bank sends the user back, before the connector page shows:
+ *  without it the page reads the bank as still waiting (an Error badge) until something else
+ *  happens to re-read it. A failure is ignored — the page then shows what it knows. */
+export const BANK_RETURN_CHECKS: Record<string, () => Promise<unknown>> = {
+  gocardless: () => authFetch('/api/gocardless/check-link', { method: 'POST' }),
 }
