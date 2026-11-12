@@ -892,3 +892,15 @@ def test_only_the_newest_few_pending_links_are_kept():
     for i in range(8):
         _pending(f"S-{i}")
     assert [p["state"] for p in _store().get()["pending_links"]] == [f"S-{i}" for i in range(3, 8)]
+
+
+def test_accounts_name_the_country_only_when_two_banks_share_a_name(monkeypatch):
+    _link(monkeypatch, "SESS-FI", "Nordea", "FI")
+    _link(monkeypatch, "SESS-SE", "Nordea", "SE")
+    _link(monkeypatch, "SESS-OP", "OP", "FI")
+    monkeypatch.setattr(
+        svc, "fetch_session_accounts", lambda token, sid: [{"uid": f"{sid}-A", "currency": "EUR"}]
+    )
+    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    w = svc.fetch_window(_store(), "2026-10-01", "2026-11-13", None, accounts_only=True)
+    assert [a["institution"] for a in w.accounts] == ["Nordea (FI)", "Nordea (SE)", "OP"]

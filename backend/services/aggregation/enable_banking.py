@@ -691,6 +691,18 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
     }
 
 
+def _bank_label(bank: dict, banks: list[dict]) -> Optional[str]:
+    """The bank an account is shown (and filed) under: its name, plus its country only when
+    another linked bank shares that name (Nordea FI and Nordea SE are two banks; a lone Nordea
+    stays "Nordea", which is also what Add files a new account under)."""
+    name = (bank.get("aspsp") or "").strip()
+    if not name:
+        return None
+    twins = [b for b in banks if (b.get("aspsp") or "").strip() == name]
+    country = (bank.get("country") or "").strip().upper()
+    return f"{name} ({country})" if len(twins) > 1 and country else name
+
+
 def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tuple[list[dict], bool]:
     """Every linked bank's accounts, each tagged with its bank (``institution``). One bank
     that can't be read (its consent ended, the bank is down) never hides the others: it is
@@ -698,7 +710,8 @@ def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tupl
     out: list[dict] = []
     complete = True
     seen: set[str] = set()
-    for bank in store.banks():
+    banks = store.banks()
+    for bank in banks:
         try:
             accounts = fetch_session_accounts(token, bank["session_id"])
         except (ExternalServiceError, httpx.HTTPError) as exc:
@@ -710,7 +723,7 @@ def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tupl
             if uid in seen:
                 continue
             seen.add(uid)
-            out.append({**a, "_institution": bank["aspsp"] or None})
+            out.append({**a, "_institution": _bank_label(bank, banks)})
     return out, complete
 
 
