@@ -164,8 +164,9 @@ FLAGS: tuple[Flag, ...] = (
         name="price_alert_lucius_run",
         description=(
             "When a price alert fires, Lucius looks into it before you hear about it: it follows "
-            "the alert's instructions by searching the web and X. It can delay an alert by up to "
-            "two minutes and uses your search quota and AI model. Off: you get the quick alert only."
+            "the alert's instructions by searching the web and X. A crash-watch alert on a holding "
+            "gets the same search for why it fell. It can delay an alert by up to two minutes and "
+            "uses your search quota and AI model. Off: you get the quick alert only."
         ),
         default=False,
         owner="owner",

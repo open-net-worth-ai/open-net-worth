@@ -2328,6 +2328,17 @@ def _row_age_hours(row: dict) -> float:
     return _hours_since(row.get("created_at") or "")
 
 
+def _decider_judges_repeats() -> bool:
+    """With the delivery decider on, Lucius sees what the person was told in the last 48 hours and
+    judges "same event or a new development" itself. The claims gate keys on the COMPANY, not the
+    fact, so it muted a confirmed CEO resignation for 24h behind an earlier "possible ouster"
+    alert (2026-11-12). An unreadable flag keeps the gate."""
+    try:
+        return delivery.delivery_active()
+    except Exception:
+        return False
+
+
 def _push_decision(
     row: dict,
     materiality: str,
@@ -2427,7 +2438,11 @@ def _push_decision(
         return False, "signal_missing", _row_age_hours(row)
     if entry_meta.get("flagged") or not (entry_meta.get("sources") or []):
         return False, "ungrounded", _row_age_hours(row)
-    if group_key and _claims_svc.is_recent_duplicate_push(group_key):
+    if (
+        group_key
+        and not _decider_judges_repeats()
+        and _claims_svc.is_recent_duplicate_push(group_key)
+    ):
         return False, "duplicate_claim", _row_age_hours(row)
     confirmed_at = entry_meta.get("confirmed_at")
     if confirmed_at:
