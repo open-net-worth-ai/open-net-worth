@@ -295,7 +295,12 @@ _WARM_RETURNS_MAX = 300
 
 
 def warm_featured() -> int:
-    """Price every featured card and look up its company names ahead of a visit."""
+    """Price every featured card and look up its company names ahead of a visit — once Copy
+    Trading has been used here. On by default for every install (2026-11-14), a cold warm-up
+    took ~15 minutes and ~1,500 requests (SEC, prices) on an install that might never open
+    the screen; it now waits for the first visit, which shows its own loading banner."""
+    if not preview.ever_opened() and not FollowedPortfolioStore().all():
+        return 0
     done = preview.warm(_featured_all())
     for entry in _featured_all():
         try:

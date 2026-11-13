@@ -54,6 +54,12 @@ _DISK = CACHE_DIR / "followed_portfolio_previews.json"
 _disk_lock = threading.Lock()
 
 
+def ever_opened() -> bool:
+    """Whether Copy Trading has been used on this install: its first visit writes the previews
+    to disk. The background warm-up waits for it (``service.warm_featured``)."""
+    return _DISK.exists()
+
+
 def _load_disk() -> None:
     try:
         data = json.loads(_DISK.read_text(encoding="utf-8"))

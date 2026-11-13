@@ -809,3 +809,19 @@ def test_the_owner_corrects_a_ticker_and_it_survives_a_refresh(source, client, m
     cleared = _apply(op="set_ticker", id=fid, key=key, symbol="")
     assert "CRUX" not in {h["symbol"] for h in cleared["follow"]["model"]["holdings"]}
     assert FollowedPortfolioStore().find_by_id(fid)["ticker_overrides"] == {}
+
+
+def test_the_background_warm_up_waits_until_copy_trading_is_used(monkeypatch, tmp_path):
+    """On by default for every install, the warm-up (~15 min and ~1,500 requests cold) must not
+    run on an install that never opened Copy Trading or followed anything."""
+    from backend.services.followed_portfolios import preview
+
+    calls = []
+    monkeypatch.setattr(preview, "warm", lambda entries: calls.append(len(entries)) or 0)
+    monkeypatch.setattr(preview, "_DISK", tmp_path / "followed_portfolio_previews.json")
+    monkeypatch.setattr(service, "_featured_all", lambda: [])
+    assert service.warm_featured() == 0
+    assert calls == []
+    (tmp_path / "followed_portfolio_previews.json").write_text("{}")
+    service.warm_featured()
+    assert calls == [0]

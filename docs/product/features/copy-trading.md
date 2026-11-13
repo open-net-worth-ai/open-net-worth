@@ -203,7 +203,8 @@ the chart, for the same range and the same choice:
 ### When it updates
 
 Filings are checked automatically twice a day while the app is running (the first check is a few
-minutes after it starts). A new one updates the portfolio and, if you watch it, adds a story to
+minutes after it starts). Until you first open Copy Trading, the app fetches nothing for it in the
+background; your first visit loads the portfolios, which can take a few minutes. A new one updates the portfolio and, if you watch it, adds a story to
 **Intelligence**. Prices are separate: they are daily prices that update through the day. Use
 **Refresh** in the **⋯** menu to check now. If a check fails, the last portfolio stays and the
 screen says what went wrong.
