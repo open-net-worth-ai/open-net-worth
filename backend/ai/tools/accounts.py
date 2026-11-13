@@ -1296,9 +1296,9 @@ class AlignAccountStartInput(ToolInput):
     description=(
         "Move a cash or card account's tracking start EARLIER so transactions imported from "
         "before it count, without changing today's balance: the opening balance is rewound by "
-        "exactly what those transactions add up to. Use it after a bank's first import brings "
-        "in history older than the account's Starting Balance (the booking result warns "
-        "'before tracking start'). Refuses a later date, and investment/loan-type accounts "
+        "exactly what those transactions add up to. Only when the user asks — after rows were "
+        "booked before the account's Starting Balance (the booking result warns 'before "
+        "tracking start'); whether those rows are right is theirs to judge. Refuses a later date, and investment/loan-type accounts "
         "whose opening summarizes holdings."
     ),
     input_schema=schema_of(AlignAccountStartInput, tool_name="align_account_start"),

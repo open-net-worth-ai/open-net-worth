@@ -379,6 +379,11 @@ async function api(baseUrl, path, init = {}) {
   return text ? JSON.parse(text) : null
 }
 
+async function caMonzoOf(baseUrl) {
+  const list = await api(baseUrl, '/api/accounts')
+  return (Array.isArray(list) ? list : list.accounts).find((a) => a.name === 'CA_Monzo')
+}
+
 /** Every live ledger row on `accountId` carrying a GoCardless ref → {date, amount, refs}. */
 async function bookedFromGoCardless(baseUrl, accountId) {
   const body = await api(baseUrl, `/api/transactions?account_ids=${encodeURIComponent(accountId)}`)
@@ -530,6 +535,9 @@ async function dismissIntro(page) {
     .then(() => true)
     .catch(() => false)
   if (shown) await close.first().click()
+  // Lucius's panel, once opened, walks through its tips ("Lucius sees this screen") over the page.
+  const tip = page.locator('.pt-layer').getByRole('button', { name: /^Done$/ })
+  if (await tip.isVisible().catch(() => false)) await tip.click()
 }
 
 async function openGoCardlessForm(page, baseUrl) {
@@ -840,6 +848,7 @@ async function main() {
       ]),
     )
     let categoriesBefore = []
+    const caMonzo = () => caMonzoOf(baseUrl)
     const bookedAll = async () => [
       ...(await bookedFromGoCardless(baseUrl, accountIds.CA_Monzo)).map((r) => ['CA_Monzo', r]),
       ...(await bookedFromGoCardless(baseUrl, accountIds['Savings Pot'])).map((r) => [
@@ -973,9 +982,10 @@ async function main() {
       'GCL-LUCIUS-RANGE',
       async () => {
         if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
-        // History is asked for, never defaulted: the user names the range, Lucius books the
-        // older rows, and the account's start moves back so they count — today's balance (the
-        // £1,000 the user typed) unchanged.
+        // History is asked for, never defaulted: the user names the range and Lucius books the
+        // older rows. It does NOT move the account's start — only the user knows whether those
+        // rows are right (owner, 2026-11-13).
+        const startBefore = await caMonzo()
         const before = await bookedAll()
         await runLuciusTurn(
           bank,
@@ -989,13 +999,12 @@ async function main() {
           ([acct, ago, amount]) => `${acct} ${daysAgo(ago)} ${amount.toFixed(2)}`,
         ).sort()
         assert.deepEqual(fresh, want, 'the asked-for range did not book exactly the older rows')
-        const list = await api(baseUrl, '/api/accounts')
-        const ca = (Array.isArray(list) ? list : list.accounts).find((a) => a.name === 'CA_Monzo')
-        assert.ok(
-          String(ca.initial_balance_date) <= daysAgo(75),
-          `CA_Monzo still starts ${ca.initial_balance_date}, after its oldest imported row ${daysAgo(75)}`,
+        const after = await caMonzo()
+        assert.equal(
+          after.initial_balance_date,
+          startBefore.initial_balance_date,
+          "Lucius moved CA_Monzo's start on its own",
         )
-        assert.ok(Math.abs(Number(ca.balance) - 1000) < 0.005, `balance moved to ${ca.balance}`)
       },
       bank,
     )

@@ -122,8 +122,8 @@ with real credentials; not automated (new signups are closed, and we hold no acc
 ### GCL-LUCIUS-RANGE
 - GIVEN that sync was booked, and the bank still holds the two older rows
 - WHEN I ask Lucius to fetch my GoCardless transactions from 90 days ago and book what's missing
-- THEN exactly those two rows are booked, CA_Monzo's start moves back to the oldest of them,
-  and its balance is still the £1,000 I set
+- THEN exactly those two rows are booked, and CA_Monzo's start is NOT moved — whether they're
+  right is mine to judge
 
 ### GCL-STATUS-AFTER
 - GIVEN the bank was approved in the other tab

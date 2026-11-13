@@ -1269,6 +1269,8 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
     # 2026-11-13: also carry a foreign purchase's original amount and currency through.
     "book-transactions": frozenset(
         {
+            # 2026-11-13: moving the start is the user's call.
+            "d22d4839bbc34f3530f9fbd4b12fd131ee3fbb2ce98b6ef965d878b2445ac4e2",
             # 2026-11-13: a sync no longer pulls history by default; alignment is for a range
             # the user asked for.
             "9c40f71a200705daa78f1c4ba231514386c2cfc3e98a3aa11dce78d50386c21f",

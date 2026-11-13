@@ -470,9 +470,9 @@ The schedule and the wording are yours to change. Each run:
 - **Doesn't pull your bank's whole history.** A run is for keeping up day to day, so even the
   first run reads the last 14 days — booking months of history through Lucius would cost a lot of
   model use. To bring in older transactions, ask Lucius for the range ("fetch my Monzo
-  transactions since March 1"): it books them and moves the account's starting point back so
-  they count, while today's balance stays exactly what you set. Banks serve about 90 days (up to
-  two years for a bank linked through Plaid).
+  transactions since March 1"). Transactions older than the account's start are booked but
+  don't count in its balance; Lucius tells you, and moves the start back only if you ask. Banks
+  serve about 90 days (up to two years for a bank linked through Plaid).
 - **Looks back 14 days from the newest transaction it already booked**, so a transaction your
   bank posts late is still caught — and after a pause (a holiday, an expired bank link, a paused
   automation) the next run picks up where the book stops instead of skipping the gap. Banks only
