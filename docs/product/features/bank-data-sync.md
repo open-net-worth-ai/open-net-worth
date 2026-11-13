@@ -48,7 +48,8 @@ This sync never uses an AI model. If you'd rather Lucius synced a bank, use a Lu
 such as **Sync GoCardless** instead (see [Automations](../lucius/automations.md)). Only one of
 the two can sync a bank: turning this sync on pauses that bank's Lucius sync Automation and says
 which one it paused, so nothing is booked twice. While it's on, turning that Automation back on
-is refused, with a message telling you to turn this sync off first.
+is refused, with a message telling you to turn this sync off first. While it's on, the connector page
+doesn't suggest setting up a Lucius sync either.
 
 ## What a run does
 

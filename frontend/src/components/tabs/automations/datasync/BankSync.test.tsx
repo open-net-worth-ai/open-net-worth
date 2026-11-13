@@ -13,12 +13,16 @@ import { BankSyncSetup } from './BankSyncSetup'
 import { BankSyncSection } from './BankSyncSummary'
 import { BankSyncReviews } from './BankSyncReviews'
 import { DataSyncView } from './DataSyncView'
+import { ConnectorNextStep } from '../../connectors/ConnectorNextStep'
 import type { BankSyncStatus } from './bankSync'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../../api/client', () => ({ authFetch }))
 const navigate = vi.hoisted(() => vi.fn())
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => navigate,
+  useRouter: () => undefined,
+}))
 
 const reply = (body: unknown, status = 200) =>
   Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) })
@@ -75,6 +79,7 @@ beforeEach(() => {
       })
     }
     if (url === '/api/bank-sync/gocardless') return reply(current)
+    if (url === '/api/bank-sync') return reply({ connectors: [current] })
     if (url.startsWith('/api/bank-sync/reviews?'))
       return reply({
         items: [
@@ -215,6 +220,27 @@ describe('with bank_data_sync on', () => {
       expect(sent.at(-1)).toMatchObject({ url: '/api/bank-sync/reviews/bsr_1/accept' }),
     )
   })
+
+  it.each([
+    ['off', true],
+    ['data', false],
+  ] as const)(
+    "with the sync %s, the connector's Lucius next step shows: %s",
+    async (mode, shows) => {
+      current = status({ mode })
+      render(
+        <ConnectorNextStep
+          provider="gocardless"
+          providerLabel="GoCardless"
+          linkedCount={1}
+          unlinkedCount={0}
+        />,
+      )
+      await waitFor(() => expect(authFetch).toHaveBeenCalledWith('/api/bank-sync'))
+      await new Promise((r) => setTimeout(r, 20))
+      expect(!!screen.queryByText(/Linking doesn.t import anything yet/)).toBe(shows)
+    },
+  )
 
   it('puts bank connectors in the Data sync view beside the budget apps', () => {
     const onOpen = vi.fn()
