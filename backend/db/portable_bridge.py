@@ -410,6 +410,8 @@ from backend.db.tables import (
     attachments,
     automation_runs,
     automations,
+    bank_sync_reviews,
+    bank_sync_settings,
     budget_assignments,
     budget_engine_state,
     categories,
@@ -1292,6 +1294,15 @@ def _wipe_ynab_sync(conn: Connection) -> list[Path]:
     return paths
 
 
+def _wipe_bank_sync(conn: Connection) -> list[Path]:
+    """The bank data sync's settings and review list — a reset book has no linked accounts or
+    booked rows for either to point at."""
+    paths: list[Path] = []
+    for table in (bank_sync_reviews, bank_sync_settings):
+        paths.extend(_capture_then_delete(conn, table, "id"))
+    return paths
+
+
 def _wipe_actual_sync(conn: Connection) -> list[Path]:
     """As ``_wipe_ynab_sync``, for Actual's own tables."""
     paths: list[Path] = []
@@ -1489,6 +1500,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     "tool_permissions.json": _wipe_tool_permissions,
     "ynab_sync.json": _wipe_ynab_sync,
     "actual_sync.json": _wipe_actual_sync,
+    "bank_sync.json": _wipe_bank_sync,
     "memory_settings.json": _wipe_memory_settings,
     "preferred_models.json": _wipe_preferred_models,
     # Misc stores (plan 4e task 1) — the three BRIDGED misc stores, reached via the

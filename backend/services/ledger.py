@@ -2217,15 +2217,17 @@ def accounts_booked_from(source: str) -> set[str]:
     return out
 
 
-def newest_booked_date(source: str) -> date | None:
+def newest_booked_date(source: str, account_id: str | None = None) -> date | None:
     """The date of the newest LIVE transaction carrying a ``source`` ref (a merged-away row
     counts through its canonical one, as in ``known_external_refs``) — where the ledger's
-    record of that connector stops."""
+    record of that connector stops. ``account_id`` narrows it to rows on that account."""
     newest: date | None = None
     for t in transactions.all():
         if t.get("deleted") and not t.get("merged_into"):
             continue
         if not any(pair[0] == source for pair in ext_ref_pairs(t)):
+            continue
+        if account_id and account_id not in (t.get("from_account_id"), t.get("to_account_id")):
             continue
         try:
             d = date.fromisoformat(str(t.get("date"))[:10])

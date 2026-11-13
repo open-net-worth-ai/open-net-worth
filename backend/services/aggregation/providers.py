@@ -123,6 +123,13 @@ class Provider:
     # How far back an account's FIRST import reaches — the history the bank serves (GoCardless
     # / PSD2: 90 days). 0 = a first import uses the ordinary lookback, as before.
     history_days: int = 0
+    # Bank data sync (ADR 2026-11-13) — adapter config only, never per-provider booking code:
+    # whether the no-AI sync may book this provider's rows, how often it runs, and how many
+    # transaction reads per account a rolling 24 h allows (None = no app-side cap). PSD2 banks
+    # often allow 4 unattended reads a day; "Sync now" spends the same budget.
+    data_sync: bool = False
+    sync_interval_hours: int = 6
+    daily_reads: Optional[int] = None
 
     @property
     def disabled(self) -> bool:
@@ -256,6 +263,9 @@ PROVIDERS: dict[str, Provider] = {
             ),
             lookback_days=14,
             history_days=90,
+            data_sync=True,
+            sync_interval_hours=12,
+            daily_reads=4,
             _fetch=("backend.services.aggregation.gocardless", "fetch_window"),
             _classify=("backend.services.aggregation.gocardless", "classify_error"),
             _store=("backend.db", "GoCardlessConfigStore"),

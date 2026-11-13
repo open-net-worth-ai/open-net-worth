@@ -317,6 +317,48 @@ def fetch(
     offset: int = 0,
     plan_id: Optional[str] = None,
 ) -> dict:
+    """What a fetch TOOL returns: ``_fetch`` with its rows bounded to ``limit`` from ``offset``
+    (CLAUDE.md: tool results are bounded at the tool). See ``_fetch``."""
+    limit = max(1, min(_HARD_MAX_LIMIT, int(limit or _DEFAULT_LIMIT)))
+    return _fetch(
+        provider_key,
+        since=since,
+        before=before,
+        account=account,
+        include_booked=include_booked,
+        include_pending=include_pending,
+        limit=limit,
+        offset=offset,
+        plan_id=plan_id,
+    )
+
+
+def fetch_all(
+    provider_key: str,
+    *,
+    since: Optional[str] = None,
+    before: Optional[str] = None,
+    account: Optional[str] = None,
+) -> dict:
+    """The same fetch with every unbooked, posted row of the window in ONE provider read — no
+    ``limit``/``offset`` slice, so no second read is spent paging (the bank data sync's caller:
+    a GoCardless account may be read only 4 times a day). ``_MAX_FETCH_ROWS`` still caps it and
+    marks the window incomplete. Never handed to a model."""
+    return _fetch(provider_key, since=since, before=before, account=account, limit=None)
+
+
+def _fetch(
+    provider_key: str,
+    *,
+    since: Optional[str] = None,
+    before: Optional[str] = None,
+    account: Optional[str] = None,
+    include_booked: bool = False,
+    include_pending: bool = False,
+    limit: Optional[int] = _DEFAULT_LIMIT,
+    offset: int = 0,
+    plan_id: Optional[str] = None,
+) -> dict:
     """Fetch + normalize + stash + link + filter one provider's window (RFC §A). ``plan_id``
     is YNAB's only: which plan to read (omitted = the saved or only one). NEVER
     raises for a provider-side failure — a dormant connector, an auth/rate/connect error,
@@ -329,7 +371,6 @@ def fetch(
     since_resolved, before_resolved, window_warning = connector_window.default_window(
         provider, since, before
     )
-    limit = max(1, min(_HARD_MAX_LIMIT, int(limit or _DEFAULT_LIMIT)))
     offset = max(0, int(offset or 0))
 
     # ── step 1: dormant gate ────────────────────────────────────────────────────────────
@@ -449,8 +490,11 @@ def fetch(
         kept.append(r)
 
     fetched_count = len(rows)
-    truncated = (offset + limit) < len(kept)
-    returned = kept[offset : offset + limit]
+    if limit is None:  # fetch_all: the whole window, one read
+        truncated, returned = False, kept[offset:]
+    else:
+        truncated = (offset + limit) < len(kept)
+        returned = kept[offset : offset + limit]
     window_complete = window.complete and not truncated and not rows_truncated
 
     # ── step 8: vanished check — only on a COMPLETE, non-truncated window ──────────────
