@@ -311,6 +311,14 @@ export const LOGOS: Record<string, PortfolioLogo> = {
     license: 'firm logo',
     source: '',
   },
+  'fund_13f:1517137': {
+    src: '/portfolio-logos/starboard-value-c5540c46.webp',
+    firm: 'Starboard Value',
+    // The owner's choice (2026-11-14): the firm's own mark, supplied by the owner, not freely
+    // licensed. Shrunk on white so its round shape sits inside the ring's circular crop.
+    license: 'firm logo',
+    source: '',
+  },
   'fund_13f:1067983': {
     src: '/portfolio-logos/berkshire-hathaway-602faf72.webp',
     firm: 'Berkshire Hathaway',

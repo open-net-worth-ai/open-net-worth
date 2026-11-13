@@ -39,6 +39,12 @@ interface Props {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+function scrollerOf(el: HTMLElement): HTMLElement {
+  let node: HTMLElement | null = el.parentElement
+  while (node && !/(auto|scroll)/.test(getComputedStyle(node).overflowY)) node = node.parentElement
+  return node ?? (document.scrollingElement as HTMLElement)
+}
+
 export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Props) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -113,11 +119,38 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     const h = tabsRef.current?.offsetHeight ?? 0
     if (h !== tabsHeight) setTabsHeight(h)
   })
+  // Each tab keeps its own scroll (owner, 2026-11-14): back to a tab is back where you were in
+  // it, and a tab not yet opened starts at its top, just under the pinned name and tabs. Since
+  // the tabs stick they never leave the screen, so the old "scrolled past them" reset never ran
+  // and every tab opened at the last one's depth.
+  const tabScroll = useRef<Partial<Record<Tab, number>>>({})
+  const restoreTo = useRef<number | null>(null)
   const switchTab = (next: Tab) => {
     const bar = tabsRef.current
-    if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start' })
+    const scroller = bar ? scrollerOf(bar) : null
+    if (bar && scroller && next !== tab) {
+      tabScroll.current[tab] = scroller.scrollTop
+      // Where the tabs start to stick: the top of any tab's own content.
+      const crumb = bar.parentElement?.querySelector<HTMLElement>('.fol-crumb')
+      const style = getComputedStyle(bar)
+      const natural = crumb
+        ? crumb.getBoundingClientRect().bottom -
+          scroller.getBoundingClientRect().top +
+          scroller.scrollTop +
+          parseFloat(getComputedStyle(bar.parentElement!).rowGap || '0') +
+          parseFloat(style.marginTop || '0')
+        : 0
+      const stickAt = Math.max(0, natural - tabsTop)
+      restoreTo.current = tabScroll.current[next] ?? Math.min(scroller.scrollTop, stickAt)
+    }
     setTab(next)
   }
+  useLayoutEffect(() => {
+    const bar = tabsRef.current
+    if (restoreTo.current == null || !bar) return
+    scrollerOf(bar).scrollTop = restoreTo.current
+    restoreTo.current = null
+  }, [tab])
 
   if (page.initialLoading)
     return (
@@ -240,59 +273,63 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       style={{ ['--fol-tabs-h' as string]: `${tabsHeight}px` } as React.CSSProperties}
     >
       <Crumb name={follow.name} onBack={onBack} />
-      <header className="fol-head">
-        <div className="fol-id">
-          <h2 className="fol-title">
-            <span className="fol-title-name">{follow.name}</span>
-            {/* Whose it is, quiet after the name; it gives way first on a narrow screen. */}
-            {follow.subtitle && <span className="fol-title-by">{follow.subtitle}</span>}
-          </h2>
-        </div>
-        {/* Icon actions stay level with the name at every width; the call to action sits
-            with them on a wide screen and moves under the name on a narrow one. */}
-        <div className="fol-icons">
-          <Tooltip label={followId ? COPY.unwatchLabel : COPY.watchLabel}>
-            <Button
-              size="sm"
-              variant="ghost"
-              loading={busy}
-              className={followId ? `fol-watch is-on${isMobile ? '' : ' has-label'}` : 'fol-watch'}
-              aria-label={followId ? COPY.unwatchLabel : COPY.watchLabel}
-              aria-pressed={!!followId}
-              iconLeft={<Bell size={15} fill={followId ? 'currentColor' : 'none'} />}
-              onClick={() =>
-                followId
-                  ? setConfirming(true)
-                  : void watch().then(
-                      (ok) => ok && setNotice(COPY.watchedNotice(follow.kind, follow.name)),
-                    )
-              }
-            >
-              {/* Watched says so in words; unwatched stays a quiet bell. */}
-              {followId && !isMobile ? COPY.watching : null}
-            </Button>
-          </Tooltip>
-          <ActionMenu label={COPY.moreActions(follow.name)} title={follow.name} items={menu} />
-        </div>
-        {/* Lucius does the copying (an automation that trades your broker account to match), so
-            it is the app's Lucius action: the primary button in Lucius's colour with its Spark. */}
-        <div className="fol-cta">
-          <Tooltip label={COPY.copyPitch}>
-            <Button
-              size="sm"
-              variant="primary"
-              className="fi-lucius"
-              iconLeft={<Spark size={15} ariaHidden />}
-              onClick={() => void copyPortfolio()}
-            >
-              {COPY.copyCta}
-            </Button>
-          </Tooltip>
-        </div>
-      </header>
       {error && <div className="fol-note fol-note--bad">{error}</div>}
       <Toast message={notice} onDone={() => setNotice(null)} />
+      {/* The name, its actions and the tabs stay in view together while the page scrolls
+          (owner, 2026-11-14), at every width. */}
       <div ref={tabsRef} className="fol-tabs-sticky" style={{ top: tabsTop }}>
+        <header className="fol-head">
+          <div className="fol-id">
+            <h2 className="fol-title">
+              <span className="fol-title-name">{follow.name}</span>
+              {/* Whose it is, quiet after the name; it gives way first on a narrow screen. */}
+              {follow.subtitle && <span className="fol-title-by">{follow.subtitle}</span>}
+            </h2>
+          </div>
+          {/* Icon actions stay level with the name at every width; the call to action sits
+              with them on a wide screen and moves under the name on a narrow one. */}
+          <div className="fol-icons">
+            <Tooltip label={followId ? COPY.unwatchLabel : COPY.watchLabel}>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={busy}
+                className={
+                  followId ? `fol-watch is-on${isMobile ? '' : ' has-label'}` : 'fol-watch'
+                }
+                aria-label={followId ? COPY.unwatchLabel : COPY.watchLabel}
+                aria-pressed={!!followId}
+                iconLeft={<Bell size={15} fill={followId ? 'currentColor' : 'none'} />}
+                onClick={() =>
+                  followId
+                    ? setConfirming(true)
+                    : void watch().then(
+                        (ok) => ok && setNotice(COPY.watchedNotice(follow.kind, follow.name)),
+                      )
+                }
+              >
+                {/* Watched says so in words; unwatched stays a quiet bell. */}
+                {followId && !isMobile ? COPY.watching : null}
+              </Button>
+            </Tooltip>
+            <ActionMenu label={COPY.moreActions(follow.name)} title={follow.name} items={menu} />
+          </div>
+          {/* Lucius does the copying (an automation that trades your broker account to match), so
+              it is the app's Lucius action: the primary button in Lucius's colour with its Spark. */}
+          <div className="fol-cta">
+            <Tooltip label={COPY.copyPitch}>
+              <Button
+                size="sm"
+                variant="primary"
+                className="fi-lucius"
+                iconLeft={<Spark size={15} ariaHidden />}
+                onClick={() => void copyPortfolio()}
+              >
+                {COPY.copyCta}
+              </Button>
+            </Tooltip>
+          </div>
+        </header>
         <PageTabs
           tabs={tabs}
           value={shownTab}

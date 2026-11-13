@@ -16,7 +16,7 @@ previous filing, and when it was filed. This screen is information. It does not 
 accounts and it does not trade.
 
 This feature is off by default. Turn it on in **Settings → Developer → Experimental →
-Followed portfolios**. It then appears as the **Famous Portfolios** tab in **Intel**.
+Followed portfolios**. It then appears as the **Famous Portfolios** tab in **Intelligence**.
 
 > This is not investment advice. The filings behind it are weeks or months old by law.
 
@@ -125,7 +125,8 @@ sale. Point at a marker to see what moved and why it sits on that day.
 Click a row to see that stock's price with every move the portfolio made in it, and a dashed line
 at its price on the day it was made public. Click the ticker above that chart to open the stock's
 own page. **Trade details ›** lists every quarter and every
-dated trade in that stock. **Copy trade** hands that one trade to Lucius (see below).
+dated trade in that stock. **Copy trade** hands that one trade to Lucius (see below). It sits beside
+Trade details on a wide screen, and at the bottom of Trade details on a phone.
 
 ### Overview: what they hold
 
@@ -196,7 +197,7 @@ the chart, for the same range and the same choice:
 
 Filings are checked automatically twice a day while the app is running (the first check is a few
 minutes after it starts). A new one updates the portfolio and, if you watch it, adds a story to
-**Intel**. Prices are separate: they are daily prices that update through the day. Use
+**Intelligence**. Prices are separate: they are daily prices that update through the day. Use
 **Refresh** in the **⋯** menu to check now. If a check fails, the last portfolio stays and the
 screen says what went wrong.
 

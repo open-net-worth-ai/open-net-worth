@@ -447,6 +447,23 @@
   min-width: 0;
 }
 
+/* A chip row cut off by the width fades out on the side that still hides chips. */
+.fol-chips[data-more='end'] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+.fol-chips[data-more='start'] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+}
+.fol-chips[data-more='both'] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 32px,
+    #000 calc(100% - 32px),
+    transparent
+  );
+}
+
 .fol-tc {
   width: 100%;
   min-width: 0;
@@ -755,8 +772,20 @@ div.fol-row-main {
   color: var(--faint);
 }
 
+/* The search and the All / Owned by you chips share one line; on a narrow screen the chips
+   scroll, fading where they are cut off (owner, 2026-11-14). */
 .fol-htools {
   display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.fol-htools > .fol-chips {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.fol-htools > .fol-hfilter {
+  display: none;
+  flex: none;
 }
 
 .fol-htools > .mk-search-wrap {
@@ -766,6 +795,13 @@ div.fol-row-main {
 @container fol-page (width < 640px) {
   .fol-htools > .mk-search-wrap {
     flex: 1 1 auto;
+    min-width: 0;
+  }
+  .fol-htools > .fol-chips {
+    display: none;
+  }
+  .fol-htools > .fol-hfilter {
+    display: flex;
   }
 }
 
@@ -1160,6 +1196,21 @@ div.fol-row-main {
   justify-content: space-between;
   gap: var(--space-4);
   min-width: 0;
+}
+
+.fol-picked-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: none;
+}
+.fol-copy-inline {
+  display: contents;
+}
+@container fol-page (width < 640px) {
+  .fol-copy-inline {
+    display: none;
+  }
 }
 
 .fol-sec-head.is-next {
@@ -1983,15 +2034,19 @@ div.fol-row-main {
   grid-template-columns: 10px minmax(0, 1fr) var(--fol-pie-pct);
 }
 
-/* As Overview's key figures (owner, 2026-11-13): spread evenly, the first on the left edge and
-   the last on the right. A phone keeps them on one line: a long label wraps, figures a size
-   smaller, as Trading Activity's do on a narrow column. */
+/* Every figure row here is three equal columns: left, centred, right edge, so "Shared stocks"
+   sits centred over "Top 5" on a phone (owner, 2026-11-14). A phone keeps them on one line: a long label wraps, figures a size smaller, as
+   Trading Activity's do on a narrow column. */
 .fol-vs-block .fol-ret3 {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
 }
-.fol-vs-block .fol-ret3 > .fol-ret3-item:last-child:not(:first-child) {
+.fol-vs-block .fol-ret3 > .fol-ret3-item:nth-child(2) {
+  justify-items: center;
+  text-align: center;
+}
+.fol-vs-block .fol-ret3 > .fol-ret3-item:nth-child(3) {
   /* Label and figure together on the right edge: text-align moved the figure, not the label
      (a box of its own), so they did not line up. */
   justify-items: end;
@@ -2019,7 +2074,20 @@ div.fol-row-main {
 .fol-tabs-sticky {
   position: sticky;
   z-index: 3;
+  display: flex;
+  flex-direction: column;
+  /* The name and its tabs read as one bar: a small gap, not the page's section gap (owner,
+     2026-11-14). */
+  gap: var(--space-3);
+  /* Room above the name once pinned, taken back from the page's gap so nothing moves before. */
+  padding-top: var(--space-3);
+  margin-top: calc(-1 * var(--space-3));
   background: var(--bg);
+  /* The page's colour a little past each side: a card's edges scrolling beneath showed beside
+     the name. */
+  box-shadow:
+    var(--space-4) 0 0 var(--bg),
+    calc(-1 * var(--space-4)) 0 0 var(--bg);
 }
 /* Under the tabs, the Assets tab's fade (.as-bar::after), not a solid strip (owner,
    2026-11-13): what scrolls beneath fades into view instead of meeting a hard edge. Several
@@ -2261,17 +2329,11 @@ div.fol-row-main {
   pointer-events: none;
 }
 
-/* "What you share" with only two figures: on a wide screen they sit side by side from the left
-   (spread to opposite edges, the middle was empty); on a phone they spread edge to edge, the
-   last on the right, as every figure row does there (owner, 2026-11-13). */
+/* "What you share" spans the page while the columns below are halves: on a wide screen it
+   takes one half's width, so its figures line up over the left column's. */
 @container fol-page (width >= 640px) {
-  .fol-vs-block .fol-ret3:not(:has(> :nth-child(3))) {
-    justify-content: flex-start;
-    gap: var(--space-9) calc(var(--space-9) * 2);
-  }
-  .fol-vs-block .fol-ret3:not(:has(> :nth-child(3))) > .fol-ret3-item:last-child {
-    justify-items: start;
-    text-align: left;
+  .fol-vs-block > .fol-ret3:not(:has(> :nth-child(3))) {
+    width: calc((100% - var(--space-9)) / 2);
   }
 }
 

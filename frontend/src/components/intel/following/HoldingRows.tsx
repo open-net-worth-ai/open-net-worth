@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { fCompact, fPct } from '../../../utils/format'
 import { ActionMenu, Button, type SwipeAction } from '../../ui'
 import { Pencil } from '../../../ui/icons'
@@ -17,6 +17,8 @@ import { useAssetNav } from '../../../state/assetNav'
 import { tilesOf, UNCHANGED } from './sectorTiles'
 import { SortTable, type Column } from './SortTable'
 import { TickerDialog } from './TickerDialog'
+import { FilterSheet } from '../../tabs/investments/FilterSheet'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import type { Names } from './activityRows'
 
 interface Props {
@@ -121,6 +123,11 @@ export function HoldingRows({
   const [tile, setTile] = useState<string | null>(null)
   // Theirs, or only what you hold too (owner, 2026-11-13): the rows' "You own" badge, as a filter.
   const [ownedOnly, setOwnedOnly] = useState(false)
+  const isMobile = useIsMobile()
+  // Owned by you keeps the full list's height, as Trading Activity's filters do: the page did
+  // not shrink under a reader scrolled down, so the rows did not jump (owner, 2026-11-14).
+  const listBox = useRef<HTMLDivElement>(null)
+  const [fullHeight, setFullHeight] = useState<number | undefined>(undefined)
   const isHeld = (r: Row) => !!r.symbol && held.has(r.symbol)
   const ownedCount = rows.filter(isHeld).length
   const pickedTile = tiles.find((t) => t.key === tile) ?? null
@@ -211,6 +218,9 @@ export function HoldingRows({
       </Button>
     )
   }
+  useLayoutEffect(() => {
+    if (!ownedOnly && listBox.current) setFullHeight(listBox.current.offsetHeight)
+  })
   return (
     <section className="fol-holdings" aria-label={COPY.holdingsTitle}>
       {tiles.length > 1 && (
@@ -239,18 +249,39 @@ export function HoldingRows({
             label={COPY.holdingsSearch}
             placeholder={`${COPY.holdingsSearch}…`}
           />
+          {ownedCount > 0 && (
+            <FilterChips
+              label={COPY.holdingsFilterLabel}
+              value={ownedOnly ? 'owned' : 'all'}
+              onChange={(v) => setOwnedOnly(v === 'owned')}
+              options={[
+                { value: 'all', label: COPY.filterAllHoldings, count: rows.length },
+                { value: 'owned', label: COPY.filterOwned, count: ownedCount },
+              ]}
+            />
+          )}
+          {/* A phone folds the chips into Investments' filter button and its sheet (owner,
+              2026-11-14); a wider screen keeps the chips. */}
+          {ownedCount > 0 && (
+            <FilterSheet
+              className="fol-hfilter"
+              presentation={isMobile ? 'sheet' : 'popover'}
+              title={COPY.holdingsFilterLabel}
+              active={ownedOnly}
+              groups={[
+                {
+                  title: COPY.holdingsFilterLabel,
+                  value: ownedOnly ? 'owned' : 'all',
+                  onChange: (v) => setOwnedOnly(v === 'owned'),
+                  options: [
+                    { id: 'all', label: COPY.filterAllHoldings, count: rows.length },
+                    { id: 'owned', label: COPY.filterOwned, count: ownedCount },
+                  ],
+                },
+              ]}
+            />
+          )}
         </div>
-        {ownedCount > 0 && (
-          <FilterChips
-            label={COPY.holdingsFilterLabel}
-            value={ownedOnly ? 'owned' : 'all'}
-            onChange={(v) => setOwnedOnly(v === 'owned')}
-            options={[
-              { value: 'all', label: COPY.filterAllHoldings, count: rows.length },
-              { value: 'owned', label: COPY.filterOwned, count: ownedCount },
-            ]}
-          />
-        )}
         {/* A picked tile, however small, is named here with its share and change. */}
         {pickedTile && (
           <div className="fol-picked">
@@ -265,17 +296,19 @@ export function HoldingRows({
             </Button>
           </div>
         )}
-        {shown.length === 0 && <p className="fol-empty">{COPY.noHoldingMatch(query.trim())}</p>}
-        <SortTable
-          rows={shown}
-          columns={columns}
-          rowKey={(r) => r.key}
-          label={COPY.holdingsTitle}
-          initialSort="weight"
-          // A row opens its stock, as a holding does everywhere else in the app.
-          onRowClick={(r) => r.symbol && openAsset({ ticker: r.symbol, label: r.name })}
-          swipeActions={swipeFix}
-        />
+        <div ref={listBox} style={ownedOnly ? { minHeight: fullHeight } : undefined}>
+          {shown.length === 0 && <p className="fol-empty">{COPY.noHoldingMatch(query.trim())}</p>}
+          <SortTable
+            rows={shown}
+            columns={columns}
+            rowKey={(r) => r.key}
+            label={COPY.holdingsTitle}
+            initialSort="weight"
+            // A row opens its stock, as a holding does everywhere else in the app.
+            onRowClick={(r) => r.symbol && openAsset({ ticker: r.symbol, label: r.name })}
+            swipeActions={swipeFix}
+          />
+        </div>
       </div>
       {fixing && onSetTicker && (
         <TickerDialog

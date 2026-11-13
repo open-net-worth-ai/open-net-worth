@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStickTop } from './useStickTop'
 import { SegmentedControl } from '../../ui'
 import { useAssetNav } from '../../../state/assetNav'
@@ -29,7 +29,7 @@ import { TradeChart } from './TradeChart'
 import { historyStart } from './activityRows'
 import { TradeDetails } from './TradeDetails'
 import { PortfolioActivityChart } from './PortfolioActivityChart'
-import { useSinceFiled } from './useFollowing'
+import { usePriceHistory, useSinceFiled } from './useFollowing'
 import { spanReturn } from './spanReturn'
 
 interface Props {
@@ -58,7 +58,6 @@ function Spotlight({
 }) {
   const since = useSinceFiled(row.symbol, benchmark, from)
   const trades = useMemo(() => exactTrades(follow, row.symbol), [follow, row.symbol])
-  const [details, setDetails] = useState(false)
   return (
     <div className="fol-spot">
       {/* One headline figure (owner, 2026-11-13: three figures and two buttons were too busy):
@@ -73,7 +72,8 @@ function Spotlight({
           <div className="fol-spot-headline">
             <span className={`fol-ret3-v ${toneOf(since.stock)}`}>{signedPct(since.stock)}</span>
             <span className="fol-spot-context">
-              {row.symbol} · {benchmark} {signedPct(since.bench)}
+              {/* No benchmark beside it (owner, 2026-11-14): the stock's own move is the point. */}
+              {row.symbol}
               {/* The latest close, not what they paid: the move runs from the range's start;
                   their estimated price is in Trade details. */}
               {since.price != null && ` · ${COPY.priceNow(`$${since.price.toFixed(2)}`)}`}
@@ -82,18 +82,6 @@ function Spotlight({
         )}
       </div>
       <TradeChart row={row} trades={trades} from={from} />
-      <button type="button" className="fol-spot-link" onClick={() => setDetails(true)}>
-        {COPY.tradeDetails}
-        <ChevronRight size={14} aria-hidden="true" />
-      </button>
-      {details && (
-        <TradeDetails
-          row={row}
-          follow={follow}
-          benchmark={benchmark}
-          onClose={() => setDetails(false)}
-        />
-      )}
     </div>
   )
 }
@@ -117,12 +105,36 @@ function PickedCopy({
 }) {
   const since = useSinceFiled(row.symbol, benchmark, from)
   const moved = since.stock != null ? `, ${signedPct(since.stock)} ${rangeWords}` : ''
-  return (
+  const [details, setDetails] = useState(false)
+  const copy = (
     <CopyTradeButton
       who={follow.name}
       what={`${row.verb.toLowerCase()} ${row.symbol} (${row.name}), ${row.amountText}, ${row.detail}, made public ${shortDate(row.filedAt)}${moved}`}
       onAskLucius={onAskLucius}
     />
+  )
+  // Trade details beside Copy trade, on the title's line (owner, 2026-11-14): a line of its own
+  // under the chart made a picked move's card taller than All moves', so picking one moved
+  // everything below it.
+  return (
+    <div className="fol-picked-actions">
+      <button type="button" className="fol-spot-link" onClick={() => setDetails(true)}>
+        {COPY.tradeDetails}
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
+      {/* On a phone Copy trade lives in Trade details, so the title's line keeps room for the
+          stock's name (owner, 2026-11-14); a wide screen has it here too. */}
+      <span className="fol-copy-inline">{copy}</span>
+      {details && (
+        <TradeDetails
+          row={row}
+          follow={follow}
+          benchmark={benchmark}
+          onClose={() => setDetails(false)}
+          action={copy}
+        />
+      )}
+    </div>
   )
 }
 
@@ -297,6 +309,58 @@ function Table({
 
 /** What they did: one move in focus with its chart (every move when none is picked), then
  *  the chosen period's moves as one table — a quarter's changes, or the dated trades since. */
+/** Renders nothing; tells its parent once this stock's prices are in, so the card can switch
+ *  to it whole instead of showing an empty chart while they load. */
+function WhenPriced({ symbol, onReady }: { symbol: string; onReady: () => void }) {
+  const hist = usePriceHistory(symbol)
+  const ready = !hist.initialLoading
+  useEffect(() => {
+    if (ready) onReady()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per symbol, when it is priced
+  }, [ready, symbol])
+  return null
+}
+
+function scrollerOf(el: HTMLElement): HTMLElement {
+  let node: HTMLElement | null = el.parentElement
+  while (node && !/(auto|scroll)/.test(getComputedStyle(node).overflowY)) node = node.parentElement
+  return node ?? (document.scrollingElement as HTMLElement)
+}
+
+/** Keeps a tapped row where the finger left it while the card above it changes height (a new
+ *  stock's figures and chart): iPhone Safari does not re-anchor the scroll as Chromium does, so
+ *  the row slid away under the reader (owner, 2026-11-14). */
+function useKeepRowInPlace(card: React.RefObject<HTMLElement | null>) {
+  const anchor = useRef<{ key: string; top: number; until: number } | null>(null)
+  const find = (key: string) =>
+    [...(card.current?.parentElement?.querySelectorAll<HTMLElement>('[data-row-key]') ?? [])].find(
+      (el) => el.dataset.rowKey === key,
+    ) ?? null
+  const hold = () => {
+    const a = anchor.current
+    if (!a || performance.now() > a.until) return
+    const row = find(a.key)
+    if (!row) return
+    const moved = row.getBoundingClientRect().top - a.top
+    if (Math.abs(moved) >= 1) scrollerOf(row).scrollTop += moved
+  }
+  useLayoutEffect(hold)
+  useEffect(() => {
+    const el = card.current
+    if (!el) return
+    const observer = new ResizeObserver(hold)
+    observer.observe(el)
+    return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hold reads only refs and the DOM
+  }, [])
+  return (key: string) => {
+    const row = find(key)
+    anchor.current = row
+      ? { key, top: row.getBoundingClientRect().top, until: performance.now() + 2000 }
+      : null
+  }
+}
+
 export function ActivityTab({ follow, perf, names, held, onAskLucius, range, onRange }: Props) {
   const member = follow.kind === 'house_member'
   const spans = useMemo(() => rangePeriods(follow), [follow])
@@ -308,7 +372,10 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius, range, onR
   const [pickedKey, setPickedKey] = useState<string | null>(null)
   // Nothing is picked until the reader picks: the chart then shows every move. Picking the
   // same row again goes back to that overview.
-  const picked = rows.find((r) => r.key === pickedKey)
+  // The card shows a picked move once its prices are in; until then it keeps what it showed.
+  const [shownKey, setShownKey] = useState<string | null>(null)
+  const pending = rows.find((r) => r.key === pickedKey)
+  const picked = pickedKey == null ? undefined : (rows.find((r) => r.key === shownKey) ?? undefined)
   const benchmark = perf?.benchmark ?? 'SPY'
   const panelRef = useRef<HTMLDivElement>(null)
   // Picking a move shows it in the card above the table: on a phone that card is usually off
@@ -316,7 +383,13 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius, range, onR
   // The card stays pinned under the app's top bar while the table scrolls beneath it, so
   // picking a move shows its chart in place: the page never jumps to it.
   const stickTop = useStickTop(panelRef)
-  const pick = (r: ActivityRow) => setPickedKey(pickedKey !== r.key ? r.key : null)
+  const keepInPlace = useKeepRowInPlace(panelRef)
+  const pick = (r: ActivityRow) => {
+    keepInPlace(r.key)
+    const next = pickedKey !== r.key ? r.key : null
+    setPickedKey(next)
+    if (next == null) setShownKey(null)
+  }
   // The overview runs over the whole history and zooms to the chosen period; its headline is
   // the return over exactly the span on screen.
   const year = perf?.periods.ALL?.status === 'ok' ? perf.periods.ALL : perf?.periods['12M']
@@ -334,7 +407,15 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius, range, onR
             // All holds every move under the same key: show it there, picked.
             onRange('ALL')
             setPickedKey(rowKey)
+            setShownKey(rowKey)
           }}
+        />
+      )}
+      {pending && pending.key !== shownKey && (
+        <WhenPriced
+          key={pending.key}
+          symbol={pending.symbol}
+          onReady={() => setShownKey(pending.key)}
         />
       )}
       {/* All moves: its title, period, return and chart are one raised card. */}
@@ -416,6 +497,8 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius, range, onR
                     onChange={(v) => {
                       onRange(v)
                       setPickedKey(null)
+                      setShownKey(null)
+                      setShownKey(null)
                     }}
                   />
                 </div>
@@ -437,7 +520,7 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius, range, onR
           rows={rows}
           member={member}
           label={period.label}
-          picked={picked?.key}
+          picked={pending?.key}
           onPick={pick}
           held={held}
           exchanges={perf?.exchanges}

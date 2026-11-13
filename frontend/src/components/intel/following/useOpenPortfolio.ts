@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { useNavigate, useSearch } from '@tanstack/react-router'
+import { useNavigate, useRouter, useSearch } from '@tanstack/react-router'
 import type { FollowKind } from '../../../api/followedPortfolios'
 import type { PortfolioRef } from './Discover'
 
@@ -72,6 +72,9 @@ const withName = (p: PortfolioRef | null): PortfolioRef | null => {
 
 export function useOpenPortfolio() {
   const navigate = useNavigate()
+  const router = useRouter()
+  const routerRef = useRef(router)
+  routerRef.current = router
   const search = useSearch({ strict: false }) as { portfolio?: string }
   const open = withName(parsePortfolioParam(search.portfolio))
   // Set when THIS screen opened the portfolio (a history entry it added): closing it then steps
@@ -126,10 +129,13 @@ export function useOpenPortfolio() {
   )
 
   // Leaving for another Intel tab takes the param off that tab's address; leaving Intel itself
-  // (a stock's page opened from a row) writes nothing: the address is that page's by then.
+  // (a stock's page, Lucius) writes nothing. Where the router is GOING decides it, not the
+  // address bar: on a phone, Ask Lucius unmounted this page before /lucius reached the address
+  // bar, so the tidy-up saw /intel, navigated there and cancelled the trip to Lucius (owner,
+  // 2026-11-14).
   useEffect(
     () => () => {
-      if (window.location.pathname.startsWith('/intel')) write(undefined, true)
+      if (routerRef.current.latestLocation.pathname.startsWith('/intel')) write(undefined, true)
     },
     [write],
   )

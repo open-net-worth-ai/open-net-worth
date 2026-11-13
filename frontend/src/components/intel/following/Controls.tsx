@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { FocusEvent, ReactNode } from 'react'
 
 // The controls every Famous Portfolios toolbar uses, and nothing else: Investments' own (its
 // search, its dropdown and its filter pills, the same classes), so the two screens match and
@@ -12,6 +13,29 @@ interface Chip<T extends string> {
   count?: number
 }
 
+// Which sides of a scrolling chip row still hide chips ('start', 'end', 'both' or ''), so the
+// row can fade on that side instead of slicing a chip in half (owner, 2026-11-14).
+function useScrollEdges() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState('')
+  const update = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const start = el.scrollLeft > 1
+    const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+    setEdges(start && end ? 'both' : start ? 'start' : end ? 'end' : '')
+  }, [])
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [update])
+  return { ref, edges, update }
+}
+
 export function FilterChips<T extends string>({
   options,
   value,
@@ -23,8 +47,16 @@ export function FilterChips<T extends string>({
   onChange: (v: T) => void
   label: string
 }) {
+  const { ref, edges, update } = useScrollEdges()
   return (
-    <div className="mk-chips fol-chips" role="tablist" aria-label={label}>
+    <div
+      ref={ref}
+      className="mk-chips fol-chips"
+      role="tablist"
+      aria-label={label}
+      data-more={edges || undefined}
+      onScroll={update}
+    >
       {options.map((o) => (
         <button
           key={o.value}
@@ -40,6 +72,18 @@ export function FilterChips<T extends string>({
       ))}
     </div>
   )
+}
+
+// A phone's keyboard shrinks the viewport AFTER the field takes focus, and the app scrolls an
+// inner pane the browser does not bring the field back into, so the field ended up hidden behind
+// the keyboard (owner, 2026-11-14). Once the visible area has resized, centre the field in it.
+function revealAboveKeyboard(e: FocusEvent<HTMLInputElement>) {
+  const field = e.currentTarget
+  const viewport = window.visualViewport
+  if (!viewport) return
+  viewport.addEventListener('resize', () => field.scrollIntoView({ block: 'center' }), {
+    once: true,
+  })
 }
 
 export function SearchBox({
@@ -74,6 +118,7 @@ export function SearchBox({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={revealAboveKeyboard}
       />
     </label>
   )

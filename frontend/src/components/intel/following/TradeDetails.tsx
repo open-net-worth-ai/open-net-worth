@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { Modal } from '../../ui'
 import type { Follow } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
@@ -14,6 +14,8 @@ interface Props {
   follow: Follow
   benchmark: string
   onClose: () => void
+  /** Copy trade, at the foot of the sheet: on a phone it lives only here. */
+  action?: ReactNode
 }
 
 const columns: Column<HistoryRow>[] = [
@@ -43,12 +45,12 @@ const columns: Column<HistoryRow>[] = [
 
 /** Everything this portfolio did in one stock: the price with every move marked, each move's
  *  size as a bar, and the list — each 13F quarter it changed, and each dated trade. */
-export function TradeDetails({ row, follow, benchmark, onClose }: Props) {
+export function TradeDetails({ row, follow, benchmark, onClose, action }: Props) {
   const since = useSinceFiled(row.symbol, benchmark, row.filedAt)
   const trades = useMemo(() => exactTrades(follow, row.symbol), [follow, row.symbol])
   const history = useMemo(() => stockHistory(follow, row.symbol), [follow, row.symbol])
   return (
-    <Modal open onClose={onClose} title={COPY.tradeDetails} size="lg">
+    <Modal open onClose={onClose} title={COPY.tradeDetails} size="lg" footer={action}>
       <div className="fol-sec">
         <div className="fol-spot-title">
           <b>{row.symbol}</b>

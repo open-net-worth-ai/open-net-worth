@@ -132,6 +132,7 @@ export function SortTable<R>({
                   return (
                     <tr
                       key={k}
+                      data-row-key={k}
                       className={`data${onRowClick ? ' drill' : ''}${selectedKey === k ? ' is-on' : ''}`}
                       onClick={onRowClick ? () => onRowClick(r) : undefined}
                       onKeyDown={
@@ -235,7 +236,7 @@ function CardList<R>({
           </>
         )
         return (
-          <li key={k} className={`fol-row${selectedKey === k ? ' is-on' : ''}`}>
+          <li key={k} data-row-key={k} className={`fol-row${selectedKey === k ? ' is-on' : ''}`}>
             {swiped.length ? (
               <SwipeActions actions={swiped} className="fol-row-swipe">
                 {card}

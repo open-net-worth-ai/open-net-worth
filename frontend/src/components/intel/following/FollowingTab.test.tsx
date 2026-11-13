@@ -35,6 +35,8 @@ vi.mock('@tanstack/react-router', async () => {
   return {
     useNavigate: () => navigate,
     useSearch: () => useSyncExternalStore(router.subscribe, router.get),
+    // Where the app is going: in these tests, always the Intel screen.
+    useRouter: () => ({ latestLocation: { pathname: '/intel' } }),
   }
 })
 /** Picks the page's time range from its menu (one range, shared by every tab). */
@@ -284,9 +286,14 @@ describe('Trading Activity', () => {
       .getAllByRole('row')
       .find((r) => r.textContent?.includes('Oct 2'))!
     fireEvent.click(bolt)
-    expect(screen.getByRole('button', { name: new RegExp(COPY.tradeDetails) })).toBeTruthy()
+    // The card switches to the move once its prices are in.
+    expect(await screen.findByRole('button', { name: new RegExp(COPY.tradeDetails) })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /^Copy this trade:/ }))
     expect(onAskLucius).toHaveBeenCalledWith(expect.stringContaining('BOLT'))
+    // Trade details carries Copy trade too: on a phone that is the only place it is.
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(COPY.tradeDetails) }))
+    const sheet = await screen.findByRole('dialog', { name: COPY.tradeDetails })
+    expect(within(sheet).getByRole('button', { name: /^Copy this trade:/ })).toBeTruthy()
   })
 
   it('offers a member Bought and Sold, newest first', async () => {

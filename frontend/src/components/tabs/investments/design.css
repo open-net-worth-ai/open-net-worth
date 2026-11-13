@@ -2806,6 +2806,9 @@
   font-weight: 700;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 14px;
 }
 .mk-filter-item--on .mk-filter-item-label {
   color: var(--ink);
