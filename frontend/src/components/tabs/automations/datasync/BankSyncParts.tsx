@@ -116,7 +116,7 @@ export function LinkAccountsButton({
           open
           size="lg"
           title={`Link ${status.label} accounts`}
-          subtitle="Add each bank account as a new account, or link it to one you already have."
+          subtitle="Add as a new account, or link to one you have."
           onClose={close}
           footer={
             <Button size="sm" variant="primary" onClick={close}>
