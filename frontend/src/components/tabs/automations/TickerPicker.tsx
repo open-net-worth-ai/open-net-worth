@@ -28,7 +28,7 @@ export interface PickedInstrument {
   currency?: string
 }
 
-/** The command palette's market search, debounced: shared with the Famous Portfolios ticker
+/** The command palette's market search, debounced: shared with the Copy Trading ticker
  *  fix (search only; nothing is created until something is picked here). */
 export function useMarketSearch(query: string, enabled: boolean) {
   const [results, setResults] = useState<MarketResult[]>([])

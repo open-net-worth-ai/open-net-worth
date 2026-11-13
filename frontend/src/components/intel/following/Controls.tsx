@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FocusEvent, ReactNode } from 'react'
 
-// The controls every Famous Portfolios toolbar uses, and nothing else: Investments' own (its
+// The controls every Copy Trading toolbar uses, and nothing else: Investments' own (its
 // search, its dropdown and its filter pills, the same classes), so the two screens match and
 // these three screens can never drift apart from each other.
 

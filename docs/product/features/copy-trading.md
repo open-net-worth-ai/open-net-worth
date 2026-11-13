@@ -1,22 +1,22 @@
 ---
-title: Followed portfolios
+title: Copy Trading
 description: Follow a famous fund or a US House member and see what they hold, what changed in their latest filing, and their recent trades.
 category: features
 order: 95
 audience: [user]
 status: beta
 related: [features/intel, features/investments, lucius/overview, connectors/external-mcp]
-keywords: [copy trading, follow, 13F, congress, house, politician, fund, autopilot, filings]
+keywords: [copy trading, famous portfolios, followed portfolios, follow, 13F, congress, house, politician, fund, autopilot, filings]
 ---
 
-# Followed portfolios
+# Copy Trading
 
 Follow a public portfolio and see what is in it: its top holdings, what changed since the
 previous filing, and when it was filed. This screen is information. It does not read your
 accounts and it does not trade.
 
 This feature is off by default. Turn it on in **Settings → Developer → Experimental →
-Followed portfolios**. It then appears as the **Famous Portfolios** tab in **Intelligence**.
+Followed portfolios**. It then appears as the **Copy Trading** tab in **Intelligence**.
 
 > This is not investment advice. The filings behind it are weeks or months old by law.
 
@@ -56,7 +56,7 @@ Limits you should know:
 
 ## Open a portfolio
 
-Open **Intel → Famous Portfolios**. It starts with a hand-picked list: 28 well-known funds that
+Open **Intelligence → Copy Trading**. It starts with a hand-picked list: 28 well-known funds that
 still file their quarterly report, NVIDIA (which reports its own stakes in other companies), 5
 House members whose reports can be read and who traded in the last six months, and ARK's 6 ETFs.
 Search by the start of a name (**nv** finds NVIDIA) for any other company or fund that files a
@@ -73,7 +73,7 @@ the cards with **All**, **Watching**, **Funds**, **Politicians** and **ETFs** (e
 there are), sort them, or search by fund or member name. On a phone, or in a narrow pane, the
 filter and the sort are in the **Filter** button beside the search.
 
-Click a card to open it. The page's header is one line: **‹** (back to Famous Portfolios), the
+Click a card to open it. The page's header is one line: **‹** (back to Copy Trading), the
 portfolio's name and who runs it (dropped on a phone). Under it are three tabs: **Trading
 Activity**, **Overview** and **You vs. …** (named for the portfolio, e.g. **You vs. Berkshire
 Hathaway**). The range under the charts (1W … All, 1Y at first, the window the gallery card

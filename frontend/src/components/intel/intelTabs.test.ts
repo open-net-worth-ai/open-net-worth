@@ -87,6 +87,11 @@ describe('resolveTabKey', () => {
     expect(resolveTabKey('list:wl-div', LISTS)).toBe('list:wl-div')
   })
 
+  it('opens Copy Trading by its key, and by its old key from before the rename', () => {
+    expect(resolveTabKey('copy-trading', LISTS)).toBe('copy-trading')
+    expect(resolveTabKey('portfolios', LISTS)).toBe('copy-trading')
+  })
+
   it('opens the last list for the legacy "watching", else the first', () => {
     expect(resolveTabKey('watching', LISTS, 'wl-div')).toBe('list:wl-div')
     expect(resolveTabKey('watching', LISTS, 'gone')).toBe('list:wl-tech')

@@ -40,7 +40,7 @@ import { useSignalActions } from '../intel/useSignalActions'
 import { useStoryFocus } from '../intel/useStoryFocus'
 import { useWatchlistRemoval } from '../intel/useWatchlistRemoval'
 
-/** Famous Portfolios sits right after My holdings, before the owner's own watchlists (owner,
+/** Copy Trading sits right after My holdings, before the owner's own watchlists (owner,
  *  2026-11-12); with no My holdings tab it leads. */
 function withFollowing<T extends { key: string }>(tabs: T[]): (T | typeof FOLLOWING_TAB)[] {
   const at = tabs.findIndex((t) => t.key === 'holdings') + 1
@@ -162,7 +162,7 @@ function IntelFeed({
   const followingOn = followingFlag === true
   const setTab = nav.setTab
   useEffect(() => {
-    if (tab === 'portfolios' && followingFlag === false) setTab('holdings')
+    if (tab === 'copy-trading' && followingFlag === false) setTab('holdings')
   }, [tab, followingFlag, setTab])
   // The sidebar card shows the tab's list: My holdings on Holdings, the list on a list tab (none
   // on Topics & macro — topics are in no list; its lead card lists and adds them).
@@ -275,7 +275,7 @@ function IntelFeed({
           onScan={() => !scan.scanning && scan.askToScan()}
         />
 
-        {/* My holdings · Famous Portfolios · Topics & macro · your ticker watchlists. */}
+        {/* My holdings · Copy Trading · Topics & macro · your ticker watchlists. */}
         <div className="intel-tabs-row">
           <PageTabs
             ariaLabel="Intelligence view"
@@ -295,14 +295,14 @@ function IntelFeed({
         </div>
 
         {/* Topics & macro is one column: topics are in no list, so there's no list pane. */}
-        {tab === 'portfolios' && followingOn && (
+        {tab === 'copy-trading' && followingOn && (
           <div role="tabpanel" aria-labelledby="ui-page-tab-following" className="fol-shell">
             <FollowingTab onAskLucius={onChatSuggest} />
           </div>
         )}
         {/* A flag switched off while this tab was remembered shows nothing here: the effect
             above is already sending the visit back to My holdings. */}
-        {tab !== 'portfolios' && (
+        {tab !== 'copy-trading' && (
           <div className={`intel-layout${tab === 'macro' ? ' intel-layout--solo' : ''}`}>
             <div className="intel-feed">
               <div

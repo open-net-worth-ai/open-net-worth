@@ -3,7 +3,7 @@ const PAST_WINDOW = (window: string) =>
   `Price return of the holdings in the newest filing, at their filed weights, over ${window}. It is not the fund's own return: it applies today's holdings to the past, so recent winners flatter it.`
 
 export const COPY = {
-  discoverTitle: 'Famous Portfolios',
+  discoverTitle: 'Copy Trading',
   filterLabel: 'Filter',
   filterTitle: 'Filter',
   showLabel: 'Show',
@@ -114,10 +114,10 @@ export const COPY = {
   /** After a card's return: a year of copying each report as it was filed. */
   oneYear: '1Y return',
   cardUnavailable: 'No figures yet',
-  backToAll: 'Famous Portfolios',
+  backToAll: 'Copy Trading',
   crumbThis: (kind: FollowKind) =>
     kind === 'house_member' ? 'This member' : kind === 'etf_daily' ? 'This ETF' : 'This fund',
-  backToAllLabel: 'Back to Famous Portfolios',
+  backToAllLabel: 'Back to Copy Trading',
   loadingPage: 'Loading the portfolio…',
   /** A first look is slow because the app reads the source itself; the floating banner says
    *  so once the wait is real (the asset page's pattern). */

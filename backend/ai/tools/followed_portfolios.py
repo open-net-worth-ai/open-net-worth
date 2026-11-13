@@ -98,7 +98,8 @@ def _listed(wanted: Optional[List[str]], top_n: Optional[int]) -> dict:
 @tool(
     "get_followed_portfolios",
     description=(
-        "Public portfolios the user follows (13F funds, US House members, ARK ETFs): top holdings with "
+        "Public portfolios the user follows on the Copy Trading screen (Intelligence): 13F funds, "
+        "US House members, ARK ETFs. Top holdings with "
         "weights, what changed in the newest filing (new, increased, reduced, exited), the "
         "filing date, and a member's recent disclosed trades. Pass `search` to find one to "
         "follow. " + _ABOUT

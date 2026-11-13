@@ -11,7 +11,7 @@ const mockNavigate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
   useRouterState: () => ({ matches: [] }),
-  // Famous Portfolios reads where the router is heading when it unmounts.
+  // Copy Trading reads where the router is heading when it unmounts.
   useRouter: () => ({ latestLocation: { pathname: '/intel' } }),
   useSearch: () => ({}),
 }))
@@ -211,10 +211,10 @@ const tabButton = (c: HTMLElement, label: string) =>
   )!
 
 describe('Intel tabs', () => {
-  it('offers Famous portfolios only while its flag is on, right after My holdings', async () => {
+  it('offers Copy Trading only while its flag is on, right after My holdings', async () => {
     const off = mount()
     await within(off.container).findByTestId('holdings-brief')
-    expect(tabButton(off.container, 'Famous Portfolios')).toBeUndefined()
+    expect(tabButton(off.container, 'Copy Trading')).toBeUndefined()
     cleanup()
     overrideFlagsForTests({ followed_portfolios: true })
     const base = mockAuthFetch.getMockImplementation()!
@@ -225,6 +225,7 @@ describe('Intel tabs', () => {
           ? ok({ results: [] })
           : base(url),
     )
+    // The old key, from a saved link, still opens it (renamed 2026-11-14).
     const on = mount({ subTabRequest: 'portfolios' })
     expect(
       await within(on.container).findByRole('searchbox', {
@@ -234,7 +235,7 @@ describe('Intel tabs', () => {
     const labels = [...on.container.querySelectorAll('.ui-page-tabs [role="tab"]')].map(
       (b) => b.textContent,
     )
-    expect(labels[1]).toBe('Famous Portfolios')
+    expect(labels[1]).toBe('Copy Trading')
     expect(on.container.querySelector('.intel-layout')).toBeNull()
   })
 

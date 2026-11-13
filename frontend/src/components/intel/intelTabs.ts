@@ -13,7 +13,7 @@ import type { Watchlist, WatchlistItem } from './WatchlistsSection'
 // is per story, so a story on two tabs is marked read on both at once — the tab badges just no
 // longer add up.
 
-export type IntelTabKey = 'holdings' | 'macro' | 'portfolios' | `list:${string}`
+export type IntelTabKey = 'holdings' | 'macro' | 'copy-trading' | `list:${string}`
 
 export interface IntelTab {
   key: IntelTabKey
@@ -24,9 +24,13 @@ export interface IntelTab {
 
 export const TOPICS_TAB_LABEL = 'Topics & macro'
 
-/** Famous portfolios you follow (flag `followed_portfolios`): a screen of its own, not a story
+/** Copy Trading, the portfolios you follow (flag `followed_portfolios`): a screen of its own, not a story
  *  feed, so no story is ever partitioned onto it. Intel appends it after the feed tabs. */
-export const FOLLOWING_TAB: IntelTab = { key: 'portfolios', label: 'Famous Portfolios' }
+export const FOLLOWING_TAB: IntelTab = { key: 'copy-trading', label: 'Copy Trading' }
+
+/** Its old key, from before the rename to Copy Trading (owner, 2026-11-14): a saved link or a
+ *  remembered tab still opens it. */
+const LEGACY_FOLLOWING_KEY = 'portfolios'
 
 export const listTabKey = (id: string): IntelTabKey => `list:${id}`
 
@@ -38,7 +42,7 @@ const ownLists = (watchlists: Watchlist[]) =>
   watchlists.filter((w) => !w.is_auto_sync).sort((a, b) => a.order - b.order)
 
 /** The fixed tabs first (My holdings, then Topics & macro), the owner's own lists after them
- *  (owner, 2026-11-12); Famous Portfolios, behind its flag, goes in right after My holdings. */
+ *  (owner, 2026-11-12); Copy Trading, behind its flag, goes in right after My holdings. */
 export function buildTabs(watchlists: Watchlist[]): IntelTab[] {
   return [
     { key: 'holdings', label: 'My holdings' },
@@ -61,7 +65,8 @@ export function resolveTabKey(
   watchlists: Watchlist[],
   lastList?: string | null,
 ): IntelTabKey | null {
-  if (raw === 'holdings' || raw === 'macro' || raw === 'portfolios') return raw
+  if (raw === 'holdings' || raw === 'macro' || raw === 'copy-trading') return raw
+  if (raw === LEGACY_FOLLOWING_KEY) return 'copy-trading'
   const own = ownLists(watchlists)
   if (raw === 'watching') {
     const list = own.find((w) => w.id === lastList) ?? own[0]
@@ -88,7 +93,7 @@ export function partitionByTab(
   watched: Set<string>,
   tickersByList: Map<string, Set<string>>,
 ): Record<IntelTabKey, StoryArc[]> {
-  const out: Record<IntelTabKey, StoryArc[]> = { holdings: [], macro: [], portfolios: [] }
+  const out: Record<IntelTabKey, StoryArc[]> = { holdings: [], macro: [], 'copy-trading': [] }
   for (const id of tickersByList.keys()) out[listTabKey(id)] = []
   for (const s of stories) {
     const scope = storyScope(s, held, watched)

@@ -121,11 +121,11 @@ lets its news scans search the web too. Explained alerts and Lucius's reads need
 Want a daily summary of your money and portfolio? Start the **Daily briefing** template in
 [Automations](../lucius/automations.md).
 
-## Famous portfolios (experimental)
+## Copy Trading
 
 With **Followed portfolios** switched on (Settings → Developer → Experimental), Intel gains a
-**Famous portfolios** tab: famous funds and US House members you follow, what they hold and what
-changed in their latest filing. See [Followed portfolios](followed-portfolios.md).
+**Copy Trading** tab: famous funds and US House members you follow, what they hold and what
+changed in their latest filing. See [Copy Trading](copy-trading.md).
 
 ## Find your way around
 

@@ -273,7 +273,7 @@ export function json(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: async () => body } as Response
 }
 
-/** An in-memory stand-in for the routes Famous Portfolios reads and writes. */
+/** An in-memory stand-in for the routes Copy Trading reads and writes. */
 export function installServer(authFetch: ReturnType<typeof vi.fn>, server: Server) {
   const byRef = (kind: string | null, ref: string | null) =>
     server.portfolios.find((p) => p.kind === kind && p.source_ref === ref)

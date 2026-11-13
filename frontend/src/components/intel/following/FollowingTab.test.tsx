@@ -175,7 +175,7 @@ describe('Discover', () => {
   it('opens a portfolio, and the breadcrumb returns to the list', async () => {
     setup()
     await open('Acme Capital')
-    // "Famous Portfolios / Acme Capital": its first part goes back (owner, 2026-11-13).
+    // "Copy Trading / Acme Capital": its first part goes back (owner, 2026-11-13).
     const crumb = screen.getByRole('navigation', { name: COPY.breadcrumbLabel })
     expect(crumb.textContent).toContain('Acme Capital')
     fireEvent.click(within(crumb).getByRole('button', { name: COPY.backToAll }))

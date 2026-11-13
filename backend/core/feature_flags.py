@@ -103,8 +103,8 @@ FLAGS: tuple[Flag, ...] = (
     Flag(
         name="followed_portfolios",
         description=(
-            "Follow a famous fund or a House member in Investments, see what they hold, and "
-            "work out the trades to copy them."
+            "Copy Trading in Intelligence: follow a famous fund or a House member, see what they "
+            "hold, and copy their trades with Lucius."
         ),
         default=False,
         owner="owner",

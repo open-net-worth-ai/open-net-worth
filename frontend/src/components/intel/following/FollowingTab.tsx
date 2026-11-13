@@ -22,7 +22,7 @@ function scrollerOf(el: HTMLElement | null): HTMLElement | null {
   return document.scrollingElement as HTMLElement | null
 }
 
-/** Intel › Famous portfolios: browse the cards, open one, copy it. */
+/** Intelligence › Copy Trading: browse the cards, open one, copy it. */
 export function FollowingTab({ onAskLucius }: Props) {
   const list = useFollowList()
   const { open, setOpen } = useOpenPortfolio()
