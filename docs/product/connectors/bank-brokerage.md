@@ -170,9 +170,10 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
    "END PRIVATE KEY" line — into **Private key**. Click **Save**.
 5. Reopen the form (**⋯ → Edit configuration**). Under **2 Link your banks**, choose your
    **Country** — its banks load by themselves — then your **Bank**, and click **Link bank**.
-6. Your bank's sign-in page opens in a new tab. After you approve access, your bank brings you
-   back to **Connectors**, the link finishes by itself, and the Enable Banking connector opens.
-   Link your accounts in its **Accounts** list.
+6. Your bank's sign-in page opens in a new tab. If no tab opens (some browsers block it, and the
+   iPhone home-screen app can't open one), click **Open your bank's page** under the form. After
+   you approve access, your bank brings you back to **Connectors**, the link finishes by itself,
+   and the Enable Banking connector opens. Link your accounts in its **Accounts** list.
 
 **More than one bank:** one Enable Banking connector holds all of them. Under **2 Link your
 banks**, each linked bank is listed with its country, account count and how long its access

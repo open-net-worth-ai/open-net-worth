@@ -210,6 +210,52 @@ describe('EnableBankingSection', () => {
   })
 })
 
+describe('EnableBankingSection bank page', () => {
+  // Found 2026-11-13: with the bank's tab blocked (a pop-up blocker, an embedded browser, the
+  // iPhone home-screen app) the form said "Approve access in the tab that just opened" and left
+  // nothing to click. GoCardless's form already kept the link on screen.
+  const renew = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Renew access to ACME Bank (Finland)' }))
+
+  it('with the tab blocked, the link to the bank is the instruction', async () => {
+    serve(linked, { url: 'https://bank.example/consent', returns_to_app: true })
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<EnableBankingSection />)
+    await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
+    renew()
+    const link = await screen.findByRole('link', { name: /open your bank.s page/i })
+    expect(link.getAttribute('href')).toBe('https://bank.example/consent')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    expect(screen.queryByText(/tab that just opened/)).toBeNull()
+  })
+
+  it('opens the tab on the click, points it at the bank, and keeps the link as a fallback', async () => {
+    serve(linked, { url: 'https://bank.example/consent', returns_to_app: true })
+    const tab = { opener: {}, closed: false, location: { href: '' }, close: vi.fn() }
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    render(<EnableBankingSection />)
+    await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
+    renew()
+    expect(open).toHaveBeenCalledTimes(1) // on the click, before the server answered
+    await waitFor(() => expect(tab.location.href).toBe('https://bank.example/consent'))
+    expect(await screen.findByText(/tab that just opened/)).toBeTruthy()
+    const link = screen.getByRole('link', { name: /open your bank.s page/i })
+    expect(link.getAttribute('href')).toBe('https://bank.example/consent')
+    expect(tab.close).not.toHaveBeenCalled()
+  })
+
+  it('keeps the link when the bank returns a code to paste, too', async () => {
+    serve(linked, { url: 'https://bank.example/consent', returns_to_app: false })
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<EnableBankingSection />)
+    await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
+    renew()
+    const link = await screen.findByRole('link', { name: /open your bank.s page/i })
+    expect(link.getAttribute('href')).toBe('https://bank.example/consent')
+    expect(screen.getByText(/paste it below/)).toBeTruthy()
+  })
+})
+
 describe('EnableBankingSection after switching apps', () => {
   // A bank's consent belongs to the app that created it; after another app is saved, every
   // bank answered nothing while the form still said Connected (2026-11-13).
