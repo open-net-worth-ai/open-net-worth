@@ -189,3 +189,69 @@ def test_both_identical_rows_are_offered_and_the_second_after_the_first_is_booke
     second = connector_fetch.fetch("simplefin")
     assert second["counts"]["already_booked"] == 1
     assert _refs(second["transactions"]) == [_refs(first["transactions"])[1]]
+
+
+# ── a first import takes the bank's whole history ─────────────────────────────────────
+
+
+def _link_gocardless(provider_account: str) -> str:
+    from backend.services import accounts as accounts_service
+
+    return accounts_service.create_account(
+        {
+            "name": f"Monzo {provider_account}",
+            "kind": "asset",
+            "type": "cash",
+            "currency": "USD",
+            "initial_balance": 0,
+            "external_ids": [{"source": "gocardless", "ref": provider_account}],
+        }
+    )["id"]
+
+
+def _book_gocardless(on: str, account_id: str, ref: str) -> None:
+    ledger_service.create_transaction(
+        {
+            "date": on,
+            "kind": "expense",
+            "description": "ACME CAFE",
+            "from_account_id": account_id,
+            "from_amount": 3.0,
+            "from_currency": "USD",
+            "source": "ai",
+            "external_refs": [{"source": "gocardless", "ref": ref}],
+        }
+    )
+
+
+def test_a_newly_linked_account_imports_the_banks_whole_history():
+    gc = PROVIDERS["gocardless"]
+    _link_gocardless("acc-new")
+    since, _, warning = connector_window.default_window(gc, None, None)
+    assert since == _days_ago(gc.history_days) == _days_ago(90)
+    assert warning is None
+
+
+def test_once_every_linked_account_has_imported_the_usual_catch_up_applies():
+    gc = PROVIDERS["gocardless"]
+    account_id = _link_gocardless("acc-1")
+    _book_gocardless(_days_ago(1), account_id, "acc-1:tx-1")
+    since, _, _ = connector_window.default_window(gc, None, None)
+    assert since == _days_ago(1 + gc.lookback_days)
+
+
+def test_linking_a_second_bank_later_brings_in_its_history_too():
+    gc = PROVIDERS["gocardless"]
+    first = _link_gocardless("acc-1")
+    _book_gocardless(_days_ago(1), first, "acc-1:tx-1")
+    _link_gocardless("acc-2")  # linked after the first was already importing
+    since, _, _ = connector_window.default_window(gc, None, None)
+    assert since == _days_ago(90)
+
+
+def test_a_provider_without_history_days_keeps_its_lookback_for_a_first_import():
+    sf = PROVIDERS["simplefin"]
+    assert sf.history_days == 0
+    _account_id()  # linked to simplefin, nothing booked
+    since, _, _ = connector_window.default_window(sf, None, None)
+    assert since == _days_ago(sf.lookback_days)

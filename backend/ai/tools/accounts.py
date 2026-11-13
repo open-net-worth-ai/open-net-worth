@@ -36,6 +36,7 @@ from pydantic import Field
 from backend.ai.tools._shared import no_op_write_result, svc
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of, schema_of_batch_only
+from backend.core.errors import ValidationError
 from backend.models.account import ACCOUNT_BAND
 
 # The seven account types (ADR 2026-09-07-seven-account-types-one-axis) — the ONE
@@ -1276,3 +1277,42 @@ async def set_transactions_cleared(input_data: dict):
         },
         ensure_ascii=False,
     ), None
+
+
+class AlignAccountStartInput(ToolInput):
+    """Schema-of-record for ``align_account_start``."""
+
+    account_id: str = Field(description="The account's id (from list_accounts) or exact name.")
+    start_date: str = Field(
+        description=(
+            "YYYY-MM-DD, EARLIER than the account's current tracking start — usually the date "
+            "of the oldest transaction just imported into it."
+        )
+    )
+
+
+@tool(
+    "align_account_start",
+    description=(
+        "Move a cash or card account's tracking start EARLIER so transactions imported from "
+        "before it count, without changing today's balance: the opening balance is rewound by "
+        "exactly what those transactions add up to. Use it after a bank's first import brings "
+        "in history older than the account's Starting Balance (the booking result warns "
+        "'before tracking start'). Refuses a later date, and investment/loan-type accounts "
+        "whose opening summarizes holdings."
+    ),
+    input_schema=schema_of(AlignAccountStartInput, tool_name="align_account_start"),
+    mutates=("accounts", "ledger"),
+)
+async def align_account_start(input_data: dict):
+    from backend.services import accounts as accounts_service
+    from backend.services import tracking_start
+
+    ref = str(input_data.get("account_id") or "")
+    account_id = accounts_service.resolve_account_ref(ref, rows=svc.accounts.all())
+    if not account_id:
+        raise ValidationError(f"No account matches {ref!r} — call list_accounts for ids.")
+    result = await asyncio.to_thread(
+        tracking_start.align_tracking_start, account_id, str(input_data.get("start_date") or "")
+    )
+    return json.dumps({"ok": True, **result}, default=str), None

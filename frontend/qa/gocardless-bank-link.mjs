@@ -66,6 +66,8 @@ const EXPECTED_BOOKED = [
   ['CA_Monzo', 7, -24.99],
   ['CA_Monzo', 8, -850],
   ['CA_Monzo', 10, -60],
+  ['CA_Monzo', 40, -80],
+  ['CA_Monzo', 75, -120],
   ['Savings Pot', 1, 0.42],
 ]
 
@@ -148,6 +150,22 @@ function fakeGoCardless() {
           remittanceInformationUnstructured: 'ACME UNIVERSITY TUITION FEE TERM 2',
           merchantCategoryCode: '8220',
           creditorName: 'Acme University',
+        },
+        {
+          // History older than two weeks: only a first import that takes the bank's 90 days
+          // brings these in.
+          transactionId: 'tx_c10',
+          bookingDate: daysAgo(40),
+          transactionAmount: { amount: '-80.00', currency: 'GBP' },
+          remittanceInformationUnstructured: 'ACME GYM MEMBERSHIP',
+          creditorName: 'Acme Gym',
+        },
+        {
+          transactionId: 'tx_c11',
+          bookingDate: daysAgo(75),
+          transactionAmount: { amount: '-120.00', currency: 'GBP' },
+          remittanceInformationUnstructured: 'ACME TRAINS SEASON TICKET',
+          creditorName: 'Acme Trains',
         },
         {
           transactionId: 'tx_c7',
@@ -549,7 +567,12 @@ async function main() {
   try {
     await api(baseUrl, '/api/accounts', {
       method: 'POST',
-      body: JSON.stringify({ name: 'CA_Monzo', type: 'cash', currency: 'GBP', initial_balance: 0 }),
+      body: JSON.stringify({
+        name: 'CA_Monzo',
+        type: 'cash',
+        currency: 'GBP',
+        initial_balance: 1000,
+      }),
     })
     const profile = await api(baseUrl, '/api/profile').catch(() => ({}))
     if (profile?.timezone) APP_TZ = profile.timezone
@@ -921,6 +944,24 @@ async function main() {
           grocer && Object.values(grocer.default_categories ?? {}).length,
           'Acme Grocer learned no default category, so the next row from it is not automatic',
         )
+      },
+      bank,
+    )
+
+    await step(
+      'GCL-FIRST-IMPORT-HISTORY',
+      async () => {
+        if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
+        // The 75-day-old row is in (asserted with the rest by GCL-LUCIUS-FETCH); here: it
+        // counts. The start moved back to the oldest imported row, and today's balance — the
+        // £1,000 the user typed — is unchanged.
+        const list = await api(baseUrl, '/api/accounts')
+        const ca = (Array.isArray(list) ? list : list.accounts).find((a) => a.name === 'CA_Monzo')
+        assert.ok(
+          String(ca.initial_balance_date) <= daysAgo(75),
+          `CA_Monzo still starts ${ca.initial_balance_date}, after its oldest imported row ${daysAgo(75)}`,
+        )
+        assert.ok(Math.abs(Number(ca.balance) - 1000) < 0.005, `balance moved to ${ca.balance}`)
       },
       bank,
     )

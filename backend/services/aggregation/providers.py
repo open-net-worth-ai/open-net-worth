@@ -120,6 +120,9 @@ class Provider:
     _fetch: tuple[str, str]
     _store: tuple[str, str]
     _classify: tuple[str, str]
+    # How far back an account's FIRST import reaches — the history the bank serves (GoCardless
+    # / PSD2: 90 days). 0 = a first import uses the ordinary lookback, as before.
+    history_days: int = 0
 
     @property
     def disabled(self) -> bool:
@@ -248,6 +251,7 @@ PROVIDERS: dict[str, Provider] = {
                 "account per day: on 'rate_limited', wait for the reset it names."
             ),
             lookback_days=14,
+            history_days=90,
             _fetch=("backend.services.aggregation.gocardless", "fetch_window"),
             _classify=("backend.services.aggregation.gocardless", "classify_error"),
             _store=("backend.db", "GoCardlessConfigStore"),

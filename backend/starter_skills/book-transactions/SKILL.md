@@ -42,8 +42,9 @@ A row booked with the fetch's `payee` usually needs none of this.
 1. Fetch new transactions with the connector's `<provider>_fetch_transactions` tool, leaving the window at its default — it starts before the newest row already booked, so a pause is caught up. Page through a truncated result.
 2. Book every returned row with `add_transactions`, following the Gotchas and Categories above.
 3. Resolve every `payee_minted` row (Payee hygiene).
-4. Read `changes`: a row the bank changed after it was booked is brought in line with `update_transactions` — unless the user changed that field by hand, which always wins. A row the bank withdrew is flagged and reported.
-5. Report, only when something was booked, created, changed or went wrong: how many rows on which accounts, the categories you created, anything that needs the user (an unlinked account, a withdrawn row, a fetch error and what it said).
+4. **A first import brings history.** An account's first sync reaches back as far as the bank serves (90 days for GoCardless), so rows can predate the account's Starting Balance — booked but not counted, which the booking result warns about ("before tracking start"). For a cash or card account, call `align_account_start` with the date of the oldest row you booked into it: the history then counts and today's balance doesn't move. Never compute or set an opening balance yourself.
+5. Read `changes`: a row the bank changed after it was booked is brought in line with `update_transactions` — unless the user changed that field by hand, which always wins. A row the bank withdrew is flagged and reported.
+6. Report, only when something was booked, created, changed or went wrong: how many rows on which accounts, the categories you created, anything that needs the user (an unlinked account, a withdrawn row, a fetch error and what it said).
 
 ## Before ending the turn
 

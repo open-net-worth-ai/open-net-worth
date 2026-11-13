@@ -2205,6 +2205,18 @@ def known_external_refs(source: str) -> dict[tuple[str | None, str], str]:
     return out
 
 
+def accounts_booked_from(source: str) -> set[str]:
+    """Ids of the accounts holding at least one LIVE transaction that carries a ``source``
+    ref — which linked accounts a connector has already imported into."""
+    out: set[str] = set()
+    for t in transactions.all():
+        if t.get("deleted") and not t.get("merged_into"):
+            continue
+        if any(pair[0] == source for pair in ext_ref_pairs(t)):
+            out.update(a for a in (t.get("from_account_id"), t.get("to_account_id")) if a)
+    return out
+
+
 def newest_booked_date(source: str) -> date | None:
     """The date of the newest LIVE transaction carrying a ``source`` ref (a merged-away row
     counts through its canonical one, as in ``known_external_refs``) — where the ledger's

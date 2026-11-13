@@ -444,6 +444,10 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 
 The schedule and the wording are yours to change. Each run:
 
+- **Brings in your bank's whole history the first time.** A newly linked account's first sync
+  reaches back as far as the bank allows (90 days for GoCardless), and the account's starting
+  point moves back to the oldest of those transactions so they count — in spending and reports —
+  while today's balance stays exactly what you set.
 - **Looks back 14 days from the newest transaction it already booked**, so a transaction your
   bank posts late is still caught — and after a pause (a holiday, an expired bank link, a paused
   automation) the next run picks up where the book stops instead of skipping the gap. Banks only

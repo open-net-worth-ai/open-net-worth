@@ -10803,5 +10803,23 @@
     "properties": {},
     "type": "object",
     "required": []
+  },
+  "align_account_start": {
+    "additionalProperties": false,
+    "properties": {
+      "account_id": {
+        "description": "The account's id (from list_accounts) or exact name.",
+        "type": "string"
+      },
+      "start_date": {
+        "description": "YYYY-MM-DD, EARLIER than the account's current tracking start — usually the date of the oldest transaction just imported into it.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "account_id",
+      "start_date"
+    ],
+    "type": "object"
   }
 }

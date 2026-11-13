@@ -1269,6 +1269,8 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
     # 2026-11-13: also carry a foreign purchase's original amount and currency through.
     "book-transactions": frozenset(
         {
+            # 2026-11-13: a first import aligns the account start (align_account_start).
+            "5652046a02220d073f95020742dbda974ebde87063e6b6da1d9659032a725909",
             "22e6e8ff517850cb61fad5a51b82b62be400bd39fb5164c5703c81b2a3359acc",
         }
     ),

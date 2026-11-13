@@ -2,6 +2,8 @@
 
 Two ways a fetch silently lost transactions (found 2026-11-13, GoCardless e2e):
 
+* **A first import.** An account linked but never imported into gets the whole history the bank
+  serves (``Provider.history_days`` — 90 days for GoCardless), not two weeks of it.
 * **The window.** The default was a fixed ``lookback_days`` back from TODAY. A pause longer than
   that — a holiday, an expired consent, a bank's daily limit, a paused Automation — left every
   row older than the window unfetched for good. The default now counts back from the NEWEST
@@ -42,6 +44,10 @@ def default_window(
     resolved_before = before or today.isoformat()
     if since:
         return since, resolved_before, None
+    if _has_unimported_account(provider):
+        # An account linked but never imported into gets everything the bank serves.
+        first = today - timedelta(days=provider.history_days)
+        return first.isoformat(), resolved_before, None
     newest = ledger_service.newest_booked_date(provider.key)
     anchor = min(newest, today) if newest else today
     start = anchor - timedelta(days=provider.lookback_days)
@@ -55,6 +61,21 @@ def default_window(
         )
         start = floor
     return start.isoformat(), resolved_before, warning
+
+
+def _has_unimported_account(provider: Provider) -> bool:
+    """A provider that serves history (``history_days``) has a linked account nothing has been
+    imported into yet — its first import must reach back that far, not one lookback."""
+    if provider.history_days <= 0:
+        return False
+    from backend.services import accounts as accounts_service
+
+    linked = {
+        a["linked_account_id"]
+        for a in accounts_service.linked_accounts_for_source(provider.key)
+        if a.get("linked_account_id")
+    }
+    return bool(linked - ledger_service.accounts_booked_from(provider.key))
 
 
 def number_repeated_refs(rows: list[dict]) -> None:
