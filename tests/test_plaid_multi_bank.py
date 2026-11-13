@@ -314,6 +314,8 @@ def test_a_new_bank_link_still_asks_for_transactions_and_is_not_update_mode(stor
     )
     svc.create_link_token("")
     assert calls[0][1]["products"] == ["transactions"] and "access_token" not in calls[0][1]
+    # Plaid pulls 90 days unless asked at link time, and an Item can never reach back later.
+    assert calls[0][1]["transactions"] == {"days_requested": 730}
     assert store.pending_link_bank() is None
 
 

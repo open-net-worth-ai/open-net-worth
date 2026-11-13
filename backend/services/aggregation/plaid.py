@@ -57,6 +57,9 @@ EXTERNAL_SOURCE = "plaid"
 _HTTP_TIMEOUT = 30.0
 # Plaid product + the country/language for the link token (US and Canada; the user re-classifies).
 _LINK_PRODUCTS = ["transactions"]
+# Plaid fetches 90 days of history at link unless asked for more, and an Item can never
+# fetch further back later. 730 is its maximum (Plaid's /link/token/create reference).
+_TRANSACTIONS_DAYS_REQUESTED = 730
 _LINK_COUNTRY_CODES = ["US", "CA"]
 _LINK_LANGUAGE = "en"
 _CLIENT_NAME = "Open Net Worth"
@@ -137,6 +140,7 @@ def create_link_token(redirect: str = "", *, bank: str = "", add_accounts: bool 
             payload["update"] = {"account_selection_enabled": True}
     else:
         payload["products"] = _LINK_PRODUCTS
+        payload["transactions"] = {"days_requested": _TRANSACTIONS_DAYS_REQUESTED}
     redirect_url = (redirect or "").strip()
     if redirect_url:
         payload["redirect_uri"] = redirect_url

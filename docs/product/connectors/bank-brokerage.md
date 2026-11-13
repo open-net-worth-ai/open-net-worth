@@ -445,7 +445,8 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 The schedule and the wording are yours to change. Each run:
 
 - **Brings in your bank's whole history the first time.** A newly linked account's first sync
-  reaches back as far as the bank allows (90 days for GoCardless), and the account's starting
+  reaches back as far as the bank allows (90 days for GoCardless, Enable Banking, SimpleFIN and
+  Lunch Flow; up to two years for a bank linked through Plaid), and the account's starting
   point moves back to the oldest of those transactions so they count — in spending and reports —
   while today's balance stays exactly what you set.
 - **Looks back 14 days from the newest transaction it already booked**, so a transaction your
@@ -453,7 +454,8 @@ The schedule and the wording are yours to change. Each run:
   automation) the next run picks up where the book stops instead of skipping the gap. Banks only
   serve about 90 days of history, so a gap longer than that is reported for you to check against
   a statement.
-- **Names the payee after who was paid**, where the bank says (GoCardless sends it): a card
+- **Names the payee after who was paid**, where the bank says (GoCardless, Enable Banking,
+  SimpleFIN and Lunch Flow send it): a card
   payment shows *Acme Grocer* as the payee, while the transaction keeps the bank's own wording
   (*CARD 1234 ACME STORES LONDON*) so the payee learns to recognise it next time.
 - **Keeps both figures for a purchase in another currency.** A €48.00 meal your UK card was

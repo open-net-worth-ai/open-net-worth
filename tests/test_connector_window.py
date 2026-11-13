@@ -8,6 +8,7 @@ coffees on one day shared one content key, so the second was refused as already 
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import timedelta
 
 import pytest
@@ -250,8 +251,7 @@ def test_linking_a_second_bank_later_brings_in_its_history_too():
 
 
 def test_a_provider_without_history_days_keeps_its_lookback_for_a_first_import():
-    sf = PROVIDERS["simplefin"]
-    assert sf.history_days == 0
+    sf = dataclasses.replace(PROVIDERS["simplefin"], history_days=0)
     _account_id()  # linked to simplefin, nothing booked
     since, _, _ = connector_window.default_window(sf, None, None)
     assert since == _days_ago(sf.lookback_days)
