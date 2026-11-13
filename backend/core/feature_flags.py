@@ -106,7 +106,7 @@ FLAGS: tuple[Flag, ...] = (
             "Copy Trading in Intelligence: follow a famous fund or a House member, see what they "
             "hold, and copy their trades with Lucius."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 10),
         remove_by=date(2027, 2, 28),

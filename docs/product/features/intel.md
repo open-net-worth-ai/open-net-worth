@@ -123,8 +123,8 @@ Want a daily summary of your money and portfolio? Start the **Daily briefing** t
 
 ## Copy Trading
 
-With **Followed portfolios** switched on (Settings → Developer → Experimental), Intel gains a
-**Copy Trading** tab: famous funds and US House members you follow, what they hold and what
+Intelligence has a **Copy Trading** tab (turn it off with **Followed portfolios** in Settings →
+Developer → Experimental): famous funds and US House members you follow, what they hold and what
 changed in their latest filing. See [Copy Trading](copy-trading.md).
 
 ## Find your way around

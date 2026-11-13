@@ -15,8 +15,8 @@ Follow a public portfolio and see what is in it: its top holdings, what changed 
 previous filing, and when it was filed. This screen is information. It does not read your
 accounts and it does not trade.
 
-This feature is off by default. Turn it on in **Settings → Developer → Experimental →
-Followed portfolios**. It then appears as the **Copy Trading** tab in **Intelligence**.
+It is the **Copy Trading** tab in **Intelligence**, on by default. To hide it, turn off
+**Settings → Developer → Experimental → Followed portfolios**.
 
 > This is not investment advice. The filings behind it are weeks or months old by law.
 
