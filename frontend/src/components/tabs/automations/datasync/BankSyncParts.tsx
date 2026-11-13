@@ -47,10 +47,9 @@ export function AccountBoxes({
 }
 
 function readsLine(a: BankSyncAccount, daily: number | null): string {
-  // The bank's own name for the account only when it says something the label doesn't.
-  const bank = a.bank_name && a.bank_name !== a.name ? a.bank_name : ''
-  const mask = a.mask ? `··${a.mask}` : ''
-  return [bank, mask, syncLine(a, daily)].filter(Boolean).join(' · ')
+  // The label is the account in your book; this line says which bank account feeds it.
+  const source = [a.bank_name, a.mask ? `··${a.mask}` : ''].filter(Boolean).join(' ')
+  return [source && `From ${source}`, syncLine(a, daily)].filter(Boolean).join(' · ')
 }
 
 function syncLine(a: BankSyncAccount, daily: number | null): string {
