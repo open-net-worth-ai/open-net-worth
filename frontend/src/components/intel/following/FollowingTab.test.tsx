@@ -4,6 +4,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { ReactNode } from 'react'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
+// Stopping watching looks for a running Auto-copy of the portfolio (the Automations API).
+const automationsApi = vi.hoisted(() => ({
+  listAutomations: vi.fn(),
+  updateAutomation: vi.fn(),
+}))
+vi.mock('../../../api/automations', () => automationsApi)
 // A small stand-in for the router: the open portfolio lives in the address (?portfolio=), so
 // navigating changes what useSearch returns, and opening one adds a history entry Back undoes.
 const router = vi.hoisted(() => {
@@ -125,6 +131,10 @@ const calls = (method: string) =>
 
 beforeEach(() => {
   clearQueryCache()
+  automationsApi.listAutomations
+    .mockReset()
+    .mockResolvedValue({ automations: [], showing: 0, total: 0 })
+  automationsApi.updateAutomation.mockReset()
   sessionStorage.clear()
   navigate.mockReset()
   router.reset()
@@ -204,6 +214,41 @@ describe('the header', () => {
         }),
       ),
     )
+  })
+
+  it('stopping watching offers to pause a running Auto-copy of it, ticked by default', async () => {
+    automationsApi.listAutomations.mockResolvedValue({
+      automations: [
+        {
+          id: 'auto_1',
+          status: 'active',
+          instructions: 'Copy the followed portfolio Acme Capital in my broker account X.',
+        },
+        {
+          id: 'auto_2',
+          status: 'active',
+          instructions: 'Copy the followed portfolio Pat Placeholder in my broker account X.',
+        },
+      ],
+      showing: 2,
+      total: 2,
+    })
+    automationsApi.updateAutomation.mockResolvedValue({})
+    setup()
+    await open('Acme Capital')
+    fireEvent.click(screen.getByRole('button', { name: COPY.unwatchLabel }))
+    const dialog = await screen.findByRole('dialog')
+    const pause = await within(dialog).findByRole('checkbox', {
+      name: COPY.unfollowPauseAutoCopy(1),
+    })
+    expect((pause as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(within(dialog).getByRole('button', { name: COPY.unwatch }))
+    await waitFor(() => expect(calls('DELETE')).toHaveLength(1))
+    // Only this portfolio's Auto-copy, never another's.
+    await waitFor(() =>
+      expect(automationsApi.updateAutomation).toHaveBeenCalledWith('auto_1', { status: 'paused' }),
+    )
+    expect(automationsApi.updateAutomation).toHaveBeenCalledTimes(1)
   })
 
   it('watches with the bell, and stops only after the confirmation', async () => {

@@ -94,7 +94,10 @@ report. **More** shows the rest. Then its key figures:
 
 The bell beside **Auto-copy** watches the portfolio: you get an Intel story each time it
 files. While you watch, the bell is filled and says **Watching**; a short note under the header
-confirms each change. Click it again to stop (it asks first). **Refresh**,
+confirms each change. Click it again to stop (it asks first). If an **Auto-copy** of the
+portfolio is running, the question says so and offers to pause it too (ticked): without the
+portfolio followed, Auto-copy can't trade, and Lucius stops and tells you if it runs anyway.
+**Refresh**,
 the source document (**SEC filing** or **House Clerk report**) and **Ask Lucius** are in the
 **⋯** menu.
 

@@ -186,7 +186,13 @@ def resolve(ref: str) -> dict:
     ]
     if len(hits) != 1:
         names = ", ".join(sorted(r["name"] for r in rows)) or "none yet"
-        raise NotFoundError(f"No followed portfolio '{wanted}'. Followed: {names}.")
+        # Said to Lucius too: an Auto-copy saved before its "no longer followed" rule must not
+        # re-follow a portfolio the user stopped watching (owner, 2026-11-14).
+        raise NotFoundError(
+            f"No followed portfolio '{wanted}': the user is not following it (they may have "
+            f"stopped watching it). Do not follow it again or trade it unless they ask. "
+            f"Followed: {names}."
+        )
     return hits[0]
 
 

@@ -231,6 +231,15 @@ export const COPY = {
   unfollowTitle: (name: string) => `Stop watching ${name}?`,
   unfollowBody:
     'You will no longer get a story when they file. Your accounts and any copy automation are not touched.',
+  /** Stop watching while an Auto-copy of it is running: it would keep running every week. */
+  unfollowAutoCopyBody: (n: number) =>
+    `You will no longer get a story when they file. ${
+      n === 1 ? 'An Auto-copy automation copies' : `${n} Auto-copy automations copy`
+    } this portfolio: without it followed, ${n === 1 ? 'it' : 'they'} can't trade, so pausing is the clean stop. Your accounts are not touched.`,
+  unfollowPauseAutoCopy: (n: number) => (n === 1 ? 'Also pause Auto-copy' : `Also pause all ${n}`),
+  unwatchedPausedNotice: (name: string) => `Stopped watching ${name} and paused its Auto-copy.`,
+  unwatchedPauseFailed: (name: string) =>
+    `Stopped watching ${name}, but its Auto-copy could not be paused. Pause it in Automations.`,
   staleFund: (age: string) =>
     `This is the latest filing we have, and it is ${age.replace(/ ago$/, '')} old. Copying it may not reflect what they hold today.`,
   staleMember: 'No trades were filed in the last 36 months.',

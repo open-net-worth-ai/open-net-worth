@@ -1,6 +1,6 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs } from '../../ui'
+import { ActionMenu, Button, Checkbox, ConfirmDialog, ErrorState, PageTabs } from '../../ui'
 import { Bell } from '../../../ui/icons'
 import { Spark } from '../../../lucius/identity'
 import { Tooltip } from '../../ui/Tooltip'
@@ -26,6 +26,8 @@ import { FetchBanner, PageSkeleton } from './FirstLoad'
 import { Crumb } from './Crumb'
 import { Toast } from '../../tabs/accounts/Toast'
 import type { PortfolioRef } from './Discover'
+import { listAutomations, updateAutomation, type Automation } from '../../../api/automations'
+import { activeAutoCopies } from './autoCopy'
 
 type Tab = 'activity' | 'holdings' | 'compare'
 const DEFAULT_RANGE = '1Y'
@@ -100,6 +102,22 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  // Stopping watching warns about a running Auto-copy of this portfolio and offers to pause it
+  // (owner, 2026-11-14): left on, it would run every week against a portfolio no longer followed.
+  const [copies, setCopies] = useState<Automation[]>([])
+  const [pauseCopies, setPauseCopies] = useState(true)
+  const portfolioName = portfolio.name
+  useEffect(() => {
+    if (!confirming || !portfolioName) return
+    let live = true
+    setPauseCopies(true)
+    listAutomations()
+      .then((r) => live && setCopies(activeAutoCopies(r.automations, portfolioName)))
+      .catch(() => live && setCopies([]))
+    return () => {
+      live = false
+    }
+  }, [confirming, portfolioName])
   // What a tap on the bell just did: the app's toast, not a note in the page (owner,
   // 2026-11-13). It dismisses itself.
   const [notice, setNotice] = useState<string | null>(null)
@@ -412,7 +430,18 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
           confirming
             ? {
                 title: COPY.unfollowTitle(follow.name),
-                body: COPY.unfollowBody,
+                body: copies.length ? (
+                  <>
+                    <p>{COPY.unfollowAutoCopyBody(copies.length)}</p>
+                    <Checkbox
+                      label={COPY.unfollowPauseAutoCopy(copies.length)}
+                      checked={pauseCopies}
+                      onChange={(e) => setPauseCopies(e.target.checked)}
+                    />
+                  </>
+                ) : (
+                  COPY.unfollowBody
+                ),
                 confirmLabel: COPY.unwatch,
                 danger: true,
               }
@@ -420,10 +449,31 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
         }
         onConfirm={() => {
           setConfirming(false)
+          const toPause = pauseCopies ? copies : []
+          let failed = 0
           if (followId)
-            void act(() => unfollowPortfolio(followId)).then(
-              (ok) => ok && setNotice(COPY.unwatchedNotice(follow.name)),
-            )
+            // The pause is part of the action, so a refresh that fails afterwards cannot skip it.
+            void act(async () => {
+              await unfollowPortfolio(followId)
+              const paused = await Promise.all(
+                toPause.map((a) =>
+                  updateAutomation(a.id, { status: 'paused' }).then(
+                    () => true,
+                    () => false,
+                  ),
+                ),
+              )
+              failed = paused.filter((p) => !p).length
+            }).then((ok) => {
+              if (!ok) return
+              setNotice(
+                failed
+                  ? COPY.unwatchedPauseFailed(follow.name)
+                  : toPause.length
+                    ? COPY.unwatchedPausedNotice(follow.name)
+                    : COPY.unwatchedNotice(follow.name),
+              )
+            })
         }}
         onCancel={() => setConfirming(false)}
       />
