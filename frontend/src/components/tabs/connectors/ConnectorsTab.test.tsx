@@ -519,7 +519,7 @@ describe('coming back from a bank', () => {
 
 describe('coming back from Enable Banking', () => {
   it('finishes the link with the code and state the bank returned, no copy-paste', async () => {
-    routerSearch.value = { state: 'state-123', code: 'code-456' }
+    routerSearch.value = { connector: 'enable_banking', state: 'state-123', code: 'code-456' }
     await renderTab()
     await waitFor(() => {
       const call = authFetch.mock.calls.find((c) => c[0] === '/api/enable-banking/complete')
@@ -529,7 +529,14 @@ describe('coming back from Enable Banking', () => {
   })
 
   it('does not call the server when the bank reports the consent was cancelled', async () => {
-    routerSearch.value = { state: 'state-123', error: 'access_denied' }
+    routerSearch.value = { connector: 'enable_banking', state: 'state-123', error: 'access_denied' }
+    await renderTab()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(authFetch.mock.calls.some((c) => c[0] === '/api/enable-banking/complete')).toBe(false)
+  })
+
+  it('never finishes a link from a bare state and code without the marker', async () => {
+    routerSearch.value = { state: 'state-123', code: 'code-456' }
     await renderTab()
     await new Promise((r) => setTimeout(r, 50))
     expect(authFetch.mock.calls.some((c) => c[0] === '/api/enable-banking/complete')).toBe(false)
@@ -547,7 +554,7 @@ describe('a failed return from Enable Banking', () => {
         })
       return fallback(url, init)
     })
-    routerSearch.value = { state: 'stale', code: 'c' }
+    routerSearch.value = { connector: 'enable_banking', state: 'stale', code: 'c' }
     await renderTab()
     await waitFor(() =>
       expect(sessionStorage.getItem('onw:enable-banking:return-error')).toMatch(/doesn't match/),

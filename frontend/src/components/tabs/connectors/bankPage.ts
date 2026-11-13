@@ -72,12 +72,16 @@ export const BANK_RETURN_CHECKS: Record<string, () => Promise<unknown>> = {
   gocardless: () => authFetch('/api/gocardless/check-link', { method: 'POST' }),
 }
 
-/** Where Enable Banking sends the user after consent. It accepts only a redirect registered on
- *  the user's application and compares it EXACTLY, query string included, so this is the bare
- *  page — the return is recognised by the `state` + `code` Enable Banking appends. */
+/** Where Enable Banking sends the user after consent. The path marks the return as Enable
+ *  Banking's (a bare `state` + `code` is what any OAuth-style redirect carries, so it alone never
+ *  finishes a link); the router turns it into `/connectors?connector=enable_banking&…`. A path,
+ *  not a query: Enable Banking refuses to register a redirect URL with query parameters, and
+ *  compares the one it holds exactly — so this is the URL the setup form shows to register. */
 export function enableBankingReturnUrl(): string {
-  return `${window.location.origin}/connectors`
+  return `${window.location.origin}/connectors/enable-banking`
 }
+
+const ENABLE_BANKING = 'enable_banking'
 
 export interface EnableBankingReturn {
   state: string
@@ -85,14 +89,21 @@ export interface EnableBankingReturn {
   error: string
 }
 
-/** An Enable Banking return in the page's query: `?state=…&code=…` after consent, or
- *  `?state=…&error=…` when the user cancelled or the bank refused. Null for anything else. */
+/** An Enable Banking return, as the `/connectors/enable-banking` route hands it on:
+ *  `?connector=enable_banking&state=…&code=…` after consent, or `…&state=…&error=…` when the
+ *  user cancelled or the bank refused. Null for anything else — including a `state` + `code`
+ *  without the marker. A `?…` appended after one already there lands inside `connector`, so
+ *  that is read too. */
 export function enableBankingReturnOf(search: Record<string, unknown>): EnableBankingReturn | null {
   const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
-  const state = text(search.state)
-  const code = text(search.code)
-  const error = text(search.error_description) || text(search.error)
-  if (!state || (!code && !error) || search.connector !== undefined) return null
+  const [id, tail = ''] = text(search.connector).split('?', 2)
+  if (id !== ENABLE_BANKING) return null
+  const extra = Object.fromEntries(new URLSearchParams(tail))
+  const param = (k: string) => text(search[k]) || text(extra[k])
+  const state = param('state')
+  const code = param('code')
+  const error = param('error_description') || param('error')
+  if (!state || (!code && !error)) return null
   return { state, code, error }
 }
 

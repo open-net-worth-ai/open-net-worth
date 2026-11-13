@@ -160,10 +160,11 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 1. Sign up at [Enable Banking](https://enablebanking.com) and register an application. Note its
    **application ID** and download its **private key** (a `.pem` file).
 2. In the application's allowed redirect URLs, add the address you open Open Net Worth at,
-   followed by `/connectors` — for example `http://localhost:8080/connectors`. Enable Banking
-   compares it exactly, so copy the start from your browser's address bar (no trailing `/`, no
-   `?…`), or copy it from **Redirect URL** at the top of the Enable Banking form in step 4.
-   Also add `https://localhost/connectors` as a fallback.
+   followed by `/connectors/enable-banking` — for example
+   `http://localhost:8080/connectors/enable-banking`. Enable Banking compares it exactly, so
+   copy it from **Redirect URL** at the top of the Enable Banking form in step 4 (or copy the
+   start from your browser's address bar, with no trailing `/`). Also add
+   `https://localhost/connectors` as a fallback.
 3. In Open Net Worth: **Connectors → Browse & add → Enable Banking → Add connector**.
 4. Under **1 Register your app with Enable Banking**, paste the **Application ID**, and paste the
    whole contents of the `.pem` file — including its first "BEGIN PRIVATE KEY" line and last
@@ -530,7 +531,9 @@ the form.
 secret was rejected, or you haven't saved them yet.
 
 **Enable Banking: "starting the bank link failed: HTTP 4xx"** — usually the redirect URL isn't
-registered. Add `https://localhost/connectors` to your application's allowed redirect URLs.
+registered. Add the **Redirect URL** the form shows (ending in `/connectors/enable-banking`) to
+your application's allowed redirect URLs. If you registered `…/connectors` for version 0.1.48,
+add the new one: the bank now brings you back only to `…/connectors/enable-banking`.
 
 **Enable Banking: "the Enable Banking private key is not a valid PEM RSA key"** — paste the whole
 `.pem` file, including the BEGIN and END lines.

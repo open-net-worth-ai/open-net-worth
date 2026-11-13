@@ -68,7 +68,7 @@ describe('EnableBankingSection', () => {
     serve(status())
     render(<EnableBankingSection />)
     expect(await screen.findByText('Register your app with Enable Banking')).toBeTruthy()
-    const url = screen.getByText(`${window.location.origin}/connectors`)
+    const url = screen.getByText(`${window.location.origin}/connectors/enable-banking`)
     expect(url.tagName).toBe('CODE') // a value to copy, never an editable field
     expect(screen.getByRole('button', { name: 'Copy the redirect URL' })).toBeTruthy()
     expect(screen.getByText('Save your application ID and private key first.')).toBeTruthy()
@@ -81,7 +81,7 @@ describe('EnableBankingSection', () => {
     serve(linked)
     render(<EnableBankingSection />)
     expect(await screen.findByText(/Application ID 96bb32ba… · private key saved/)).toBeTruthy()
-    expect(screen.queryByText(`${window.location.origin}/connectors`)).toBeNull()
+    expect(screen.queryByText(`${window.location.origin}/connectors/enable-banking`)).toBeNull()
     expect(screen.getByRole('list', { name: 'Linked banks' }).textContent).toContain('ACME Bank')
     expect(screen.getByText(/Finland · 2 accounts · access until/)).toBeTruthy()
     expect(await screen.findByRole('button', { name: 'Renew link' })).toBeTruthy()
@@ -98,7 +98,7 @@ describe('EnableBankingSection', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Renew link' }))
     await waitFor(() => expect(screen.getByLabelText('Code from the address bar')).toBeTruthy())
     expect(screen.getByText(/won't load/)).toBeTruthy()
-    expect(screen.getByText(`${window.location.origin}/connectors`)).toBeTruthy()
+    expect(screen.getByText(`${window.location.origin}/connectors/enable-banking`)).toBeTruthy()
   })
 
   it('says the consent ran out when a fetch was refused after a link', async () => {

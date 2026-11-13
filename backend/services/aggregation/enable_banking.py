@@ -254,7 +254,9 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     """Start the bank-consent flow for ``aspsp`` (a bank name from ``list_institutions``).
 
     POSTs ``/auth``; Enable Banking returns the consent ``url`` the USER opens. The bank sends
-    them back to ``redirect`` (the app's own page) with ``?state=…&code=…``. Enable Banking
+    them back to ``redirect`` (the app's own ``/connectors/enable-banking`` — the path is
+    what tells the app the return is Enable Banking's; the control panel refuses a redirect
+    with a query string) with ``state`` and ``code`` added. Enable Banking
     accepts only a redirect registered on the application, matched exactly (verified on the
     sandbox): when the app's own URL is refused, the link falls back to ``_DEFAULT_REDIRECT``,
     the URL the setup docs have always asked for, where the user pastes the code by hand —

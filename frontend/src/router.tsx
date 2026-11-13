@@ -185,6 +185,24 @@ const connectorsRoute = createRoute({
   // URL, not the tab id — see SLUG_ALIASES's own comment).
   path: '/connectors',
 })
+// Enable Banking's return. Its control panel refuses a redirect URL with a query string, so the
+// marker lives in the path; this turns it into /connectors?connector=enable_banking&state=…,
+// which ConnectorsTab finishes. A bare state + code on /connectors is never taken as one.
+export function enableBankingReturnSearch(search: Record<string, unknown>) {
+  return { ...search, connector: 'enable_banking' }
+}
+const enableBankingReturnRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/connectors/enable-banking',
+  beforeLoad: ({ location }) => {
+    throw redirect({
+      to: '/connectors',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      search: enableBankingReturnSearch(location.search as Record<string, unknown>) as any,
+      replace: true,
+    })
+  },
+})
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -289,6 +307,8 @@ const routeTree = rootRoute.addChildren([
   automationsRoute,
   buildRoute,
   profileRoute,
+  // Drill-in before parent
+  enableBankingReturnRoute,
   connectorsRoute,
   settingsRoute,
   helpIndexRoute,

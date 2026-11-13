@@ -166,6 +166,10 @@ export function ConnectorsTab(): JSX.Element {
   // its settings, or its page in Browse & add when it is not a connector the app has yet.
   // Read from the router, not once at mount: the same link tapped while Connectors is already
   // open only changes the URL, and has to open the connector all the same.
+  const routerSearchAll = useRouterState({
+    select: (st) => st.location.search as Record<string, unknown>,
+  })
+  const ebReturn = enableBankingReturnOf(routerSearchAll ?? {})
   const linkedConnector = useRouterState({
     select: (st) => (st.location.search as { connector?: unknown }).connector,
   })
@@ -174,6 +178,9 @@ export function ConnectorsTab(): JSX.Element {
   })
   useEffect(() => {
     if (initialLoading || typeof linkedConnector !== 'string' || !linkedConnector) return
+    // Enable Banking's return carries `?connector=enable_banking` too; its own effect below
+    // finishes the link first, then opens the page.
+    if (ebReturn) return
     // A bank's consent page sends the user back here with its own `ref=…` appended — after a
     // `?` even when the URL already had one, so it can land inside the id. Keep only the id.
     const raw = String(linkedConnector)
@@ -204,13 +211,9 @@ export function ConnectorsTab(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
 
-  // Back from Enable Banking's consent: it returns to the bare /connectors (its redirect match
-  // is exact, so no `?connector=`) with its own `state` + `code`. Finish the link here, so the
-  // user never copies a code, then show the connector's accounts. Once per return.
-  const routerSearchAll = useRouterState({
-    select: (st) => st.location.search as Record<string, unknown>,
-  })
-  const ebReturn = enableBankingReturnOf(routerSearchAll ?? {})
+  // Back from Enable Banking's consent (`?connector=enable_banking` + its own `state` + `code`).
+  // Finish the link here, so the user never copies a code, then show the connector's accounts.
+  // Once per return.
   const ebHandled = useRef('')
   useEffect(() => {
     if (initialLoading || !ebReturn) return
