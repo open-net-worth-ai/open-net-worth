@@ -74,6 +74,29 @@ you press Send.
 
 <sub>Based on each launch's announcement and coverage as of November 2026.</sub>
 
+## The open-source alternative to Monarch, YNAB, Actual Budget, Firefly III and Ghostfolio
+
+Monarch Money and YNAB keep your budget on their servers. Actual Budget and Firefly III keep it on
+yours, and Ghostfolio does the same for a portfolio. Open Net Worth puts the budget, the holdings,
+the loans and the property in one book on your own machine, and gives an AI agent the tools to keep
+that book. If you searched for an open-source Monarch Money alternative, a YNAB alternative you can
+self-host, or a Ghostfolio alternative that also budgets, this is the repository.
+
+| Looking for | What it is | How Open Net Worth differs | Read more |
+|---|---|---|---|
+| **Open-source Monarch Money alternative** | Hosted budgeting and net worth app, US and Canada only, $99.99 a year | Free and self-hosted; any currency; you pick the AI model, a local one included; the MCP server runs where your data lives | [Monarch Money alternative](https://opennetworth.ai/blog/open-net-worth-vs-monarch-money/) |
+| **Open-source YNAB alternative** | A zero-based budgeting method and its hosted app, from $109 a year | Zero-Based envelopes, Ready to Assign and targets, beside your investments and property; the YNAB import is on by default | [YNAB alternative](https://opennetworth.ai/blog/open-net-worth-vs-ynab/) · [Migrate from YNAB](https://opennetworth.ai/blog/migrate-from-ynab/) |
+| **Actual Budget alternative** | Local-first envelope budget, MIT, no AI in the app | Adds holdings with live prices, accounts in any currency, and an agent that changes the books under rules you set | [Actual Budget alternative](https://opennetworth.ai/blog/open-net-worth-vs-actual-budget/) |
+| **Firefly III alternative** | Self-hosted income and expense manager with rules, recurring transactions and a REST API, no AI by design | Adds holdings, property, a zero-based budget and the agent in the same book | [Firefly III alternative](https://opennetworth.ai/blog/firefly-iii-alternative/) |
+| **Ghostfolio or Wealthfolio alternative** | Portfolio trackers: Ghostfolio is AGPL-3.0 and free to self-host, Wealthfolio is local-first | Your budget, loans and property sit beside the holdings | [Ghostfolio alternative](https://opennetworth.ai/blog/ghostfolio-alternative/) |
+| **Open-source Claude Personal Finance alternative** | Anthropic's read-only view of your accounts inside Claude, US only, through Plaid | Works in any country; the data stays on your machine; the agent can change the books; runs on a Claude plan that includes Claude Code | [Claude Personal Finance alternative](https://opennetworth.ai/blog/claude-personal-finance-alternative/) |
+| **Open Muse or dots for your money** | Meta's and OpenAI's general agents, running in their makers' clouds | One ledger of everything you own and owe, in a file on your computer; the agent asks first by default | [Muse vs dots vs Open Net Worth](https://opennetworth.ai/blog/muse-vs-dots-vs-self-hosted-ai-wealth-assistant/) |
+
+Each post also says where the other tool is the better pick. Monarch and YNAB have phone apps and
+household sharing, Actual Budget is the more established budget, and Ghostfolio is the more focused
+portfolio tracker. All of them side by side:
+[Open source net worth trackers compared](https://opennetworth.ai/blog/open-source-net-worth-tracker/).
+
 ## What's inside
 
 | | |
