@@ -133,9 +133,12 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       // Where the tabs start to stick: the top of any tab's own content.
       const crumb = bar.parentElement?.querySelector<HTMLElement>('.fol-crumb')
       const style = getComputedStyle(bar)
+      // The window's own scroller sits at 0 on screen whatever its scroll; an inner pane does not.
+      const viewTop =
+        scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top
       const natural = crumb
         ? crumb.getBoundingClientRect().bottom -
-          scroller.getBoundingClientRect().top +
+          viewTop +
           scroller.scrollTop +
           parseFloat(getComputedStyle(bar.parentElement!).rowGap || '0') +
           parseFloat(style.marginTop || '0')
@@ -145,11 +148,31 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     }
     setTab(next)
   }
+  // A tab opened for the first time is short while its data loads, so the browser clamps the
+  // scroll; keep putting it back as the tab grows, until the reader scrolls or 3s pass.
   useLayoutEffect(() => {
     const bar = tabsRef.current
-    if (restoreTo.current == null || !bar) return
-    scrollerOf(bar).scrollTop = restoreTo.current
+    const target = restoreTo.current
+    if (target == null || !bar) return
     restoreTo.current = null
+    const scroller = scrollerOf(bar)
+    scroller.scrollTop = target
+    const panel = bar.parentElement?.querySelector('.fol-tabpanel')
+    const observer = new ResizeObserver(() => {
+      if (Math.abs(scroller.scrollTop - target) > 1) scroller.scrollTop = target
+    })
+    if (panel) observer.observe(panel)
+    const opts = { capture: true, passive: true }
+    const stop = () => {
+      observer.disconnect()
+      clearTimeout(timer)
+      for (const type of ['wheel', 'touchstart', 'keydown'] as const)
+        window.removeEventListener(type, stop, opts)
+    }
+    const timer = setTimeout(stop, 3000)
+    for (const type of ['wheel', 'touchstart', 'keydown'] as const)
+      window.addEventListener(type, stop, opts)
+    return stop
   }, [tab])
 
   if (page.initialLoading)
