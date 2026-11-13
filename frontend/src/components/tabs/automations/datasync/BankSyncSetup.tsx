@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Download, Play } from 'lucide-react'
 import { Button } from '../../../ui'
@@ -17,7 +18,11 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   const navigate = useNavigate()
   const { busy, error, act } = useAct()
   const p = status.provider
-  const reached = REACHED[status.stage ?? 'accounts']
+  // Skip for now: step 2 is optional — the first sync brings the history in anyway. Kept on
+  // this screen only; the server's stage still says the history isn't in.
+  const [skipped, setSkipped] = useState(false)
+  const stage = REACHED[status.stage ?? 'accounts']
+  const reached = skipped && stage === 2 ? 3 : stage
   const accounts = status.accounts ?? []
   const imported = accounts.some((a) => a.sync && a.imported)
   const outcome = status.last_run?.outcome
@@ -50,7 +55,9 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
               <p>
                 {imported
                   ? `Imported${outcome ? `: ${outcome}` : ''}. Balances unchanged.`
-                  : `Up to ${status.history_days ?? 90} days. Today’s balances stay the same.`}
+                  : skipped
+                    ? 'Skipped. The first sync brings it in.'
+                    : `Up to ${status.history_days ?? 90} days. Today’s balances stay the same.`}
               </p>
               <div className="bs-actions">
                 <Button
@@ -63,6 +70,11 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
                 >
                   {imported ? 'Import again' : 'Import history'}
                 </Button>
+                {reached === 2 && (
+                  <Button size="sm" variant="ghost" onClick={() => setSkipped(true)}>
+                    Skip for now
+                  </Button>
+                )}
                 {noReads && <span className="bs-note">Out of bank reads today.</span>}
               </div>
             </>

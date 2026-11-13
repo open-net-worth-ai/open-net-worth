@@ -35,7 +35,7 @@ export function BankSyncCard({ status, onOpen }: { status: BankSyncStatus; onOpe
           )}
           {on && !status.ready && <span className="a3-tag warn">Connection paused</span>}
         </span>
-        <span className="a3-row-blurb">Books new bank transactions on a schedule. No AI.</span>
+        <span className="a3-row-blurb">Books new bank transactions on a schedule.</span>
         <span className={`a3-when${on ? '' : ' off'}`}>
           <Clock3 size={13} strokeWidth={1.7} aria-hidden="true" />
           {when}

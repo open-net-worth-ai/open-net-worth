@@ -70,7 +70,7 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
       <div className="a3-detail-head">
         <div className="a3-detail-title">
           <h1>{label}</h1>
-          <div className="a3-detail-sub">Books new bank transactions on a schedule. No AI.</div>
+          <div className="a3-detail-sub">Books new bank transactions on a schedule.</div>
         </div>
       </div>
       <BankSyncSetup status={status} />

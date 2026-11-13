@@ -38,7 +38,7 @@ export function BankSyncHead({ status }: { status: BankSyncStatus }) {
       <div className="a3-detail-head">
         <div className="a3-detail-title">
           <h1>{status.label}</h1>
-          <div className="a3-detail-sub">Books new bank transactions on a schedule. No AI.</div>
+          <div className="a3-detail-sub">Books new bank transactions on a schedule.</div>
         </div>
         <div className="a3-detail-bar">
           <div className="a3-detail-state">

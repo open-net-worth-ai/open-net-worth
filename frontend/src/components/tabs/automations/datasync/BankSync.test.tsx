@@ -119,7 +119,7 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
   afterEach(() => restore())
 
   it(
-    on ? 'shows one line and a way in on the connector page' : 'shows nothing at all',
+    on ? 'is the connector page’s one next step until set up' : 'shows nothing at all',
     async () => {
       render(<BankSyncSection provider="gocardless" />)
       if (!on) {
@@ -129,7 +129,8 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
         return
       }
       expect(await screen.findByRole('region', { name: 'GoCardless sync' })).toBeTruthy()
-      expect(screen.getByText('Off')).toBeTruthy()
+      expect(screen.getByText('Next: bring in transactions')).toBeTruthy()
+      expect(screen.getByText(/every 12 hours/)).toBeTruthy()
       expect(screen.queryByRole('checkbox')).toBeNull() // the details live on the sync's own page
       fireEvent.click(screen.getByRole('button', { name: 'Set up sync' }))
       expect(navigate).toHaveBeenCalledWith(
@@ -221,12 +222,26 @@ describe('with bank_data_sync on', () => {
     )
   })
 
-  it.each([
-    ['off', true],
-    ['data', false],
-  ] as const)(
-    "with the sync %s, the connector's Lucius next step shows: %s",
-    async (mode, shows) => {
+  it('step 2 can be skipped: Skip for now moves on to Turn on, importing nothing', () => {
+    render(<BankSyncSetup status={status()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+    expect(screen.getByText('Skipped. The first sync brings it in.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).toBeNull()
+    expect(sent).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Turn on' })).toBeTruthy()
+  })
+
+  it('once set up, the connector page shows one line and Manage', async () => {
+    current = status({ mode: 'off', stage: 'done' })
+    render(<BankSyncSection provider="gocardless" />)
+    expect(await screen.findByText('Off')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeTruthy()
+    expect(screen.queryByText('Next: bring in transactions')).toBeNull()
+  })
+
+  it.each(['off', 'data'] as const)(
+    'with the sync %s, the Lucius next-step card never shows beside it',
+    async (mode) => {
       current = status({ mode })
       render(
         <ConnectorNextStep
@@ -238,9 +253,22 @@ describe('with bank_data_sync on', () => {
       )
       await waitFor(() => expect(authFetch).toHaveBeenCalledWith('/api/bank-sync'))
       await new Promise((r) => setTimeout(r, 20))
-      expect(!!screen.queryByText(/Linking doesn.t import anything yet/)).toBe(shows)
+      expect(screen.queryByText(/Set up an automation and Lucius/)).toBeNull()
     },
   )
+
+  it('a connector with no bank sync keeps the Lucius next step', async () => {
+    authFetch.mockImplementation(() => reply({ connectors: [] }))
+    render(
+      <ConnectorNextStep
+        provider="simplefin"
+        providerLabel="SimpleFIN"
+        linkedCount={1}
+        unlinkedCount={0}
+      />,
+    )
+    expect(await screen.findByText(/Set up an automation and Lucius/)).toBeTruthy()
+  })
 
   it('puts bank connectors in the Data sync view beside the budget apps', () => {
     const onOpen = vi.fn()

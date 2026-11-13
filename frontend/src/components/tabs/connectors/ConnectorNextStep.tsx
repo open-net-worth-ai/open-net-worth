@@ -33,13 +33,13 @@ export function ConnectorNextStep({
   // Optional: these forms also render outside the router (tests, previews).
   const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
   const templateKey = templateKeyForConnector(provider)
-  // Bank sync without AI already brings this bank's transactions in: "linking doesn't import
-  // anything yet" would be false, and offering a Lucius sync beside it would book them twice.
+  // A bank with sync without AI gets ONE next step, the connector page's Sync card (Set up sync,
+  // then its status). This card beside it offered a second, Lucius way in, and once the sync was
+  // on it said "linking doesn't import anything yet" while it did. Lucius stays one click away:
+  // the connector header's Automate.
   const bankSyncs = useBankSyncs(useFlag('bank_data_sync') === true)
-  const syncedWithoutAi = (bankSyncs.data ?? []).some(
-    (s) => s.provider === provider && s.mode === 'data',
-  )
-  if (linkedCount === 0 || syncedWithoutAi) return null
+  const hasBankSync = (bankSyncs.data ?? []).some((s) => s.provider === provider)
+  if (linkedCount === 0 || hasBankSync) return null
   const every = cadence(templateKey)
   const target = linkedCount === 1 ? 'your linked account' : 'your linked accounts'
 

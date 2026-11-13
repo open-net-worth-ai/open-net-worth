@@ -26,16 +26,15 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
 
 1. Set up the connector and link its accounts as usual — see
    [Bank & brokerage connectors](../connectors/bank-brokerage.md).
-2. Under **Sync** on the connector's page, click **Set up sync**. It opens the bank's own page in
+2. On the connector's page, under **Next: bring in transactions**, click **Set up sync**. It opens the bank's own page in
    **Automations → Data sync**, with three steps:
    1. **Choose accounts.** Every linked account is ticked. Untick one to leave it out: it's never
       read from the bank or booked.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
-      so today's balance doesn't change. Safe to run again.
+      so today's balance doesn't change. Safe to run again. **Skip for now** goes straight to step
+      3: the first sync brings the history in anyway.
    3. **Turn on.** New transactions are booked on a schedule from then on.
-
-You can turn it on without step 2: its first run brings the history in.
 
 Once it's set up, the page shows a switch to turn it on or off, the next sync and **Sync now**;
 below them, the accounts, the schedule, anything that needs your review, and the run history.
@@ -48,8 +47,8 @@ This sync never uses an AI model. If you'd rather Lucius synced a bank, use a Lu
 such as **Sync GoCardless** instead (see [Automations](../lucius/automations.md)). Only one of
 the two can sync a bank: turning this sync on pauses that bank's Lucius sync Automation and says
 which one it paused, so nothing is booked twice. While it's on, turning that Automation back on
-is refused, with a message telling you to turn this sync off first. While it's on, the connector page
-doesn't suggest setting up a Lucius sync either.
+is refused, with a message telling you to turn this sync off first. The connector page doesn't suggest a
+Lucius sync beside this one; **Automate** at the top of the connector's page sets one up.
 
 ## What a run does
 
