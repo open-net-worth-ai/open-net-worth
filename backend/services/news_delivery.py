@@ -42,9 +42,10 @@ _TEXT_CAPS = {
     "route_key": 40,
     "materiality": 40,
     "news": 2000,
+    "search": 2000,
 }
 _MAX_ACTIONS = 2
-_MAX_SOURCES = 3
+_MAX_SOURCES = 4
 _MAX_LEGACY_CHARS = 4000
 
 
@@ -71,6 +72,7 @@ def _clean_sources(raw: Any) -> list[dict]:
                 "url": url,
                 "title": _text(item.get("title"), 200),
                 "domain": _text(item.get("domain"), 100),
+                "outlet": _text(item.get("outlet"), 60),
             }
         )
         if len(out) >= _MAX_SOURCES:

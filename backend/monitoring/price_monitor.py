@@ -289,16 +289,21 @@ async def _news_context_for_alert(ticker: str, iid: str) -> str:
     watched-but-not-held ticker may have no instrument at all (see feeds.resolve_holding_feeds).
     Graceful no-op: any failure, or genuinely no signal/evidence, returns "" and the prompt says
     no news is on hand (pinned by tests/test_price_monitor_news_context.py)."""
+    return (await _alert_news(ticker, iid))[0]
+
+
+async def _alert_news(ticker: str, iid: str) -> tuple[str, list[dict]]:
+    """``_news_context_for_alert``'s block and the source links of the headlines in it, so the
+    message can cite what it was told. Best-effort: ``("", [])``."""
     try:
         signal = _current_asset_signal(iid, ticker)
         signal_summary = (signal or {}).get("current_summary") or ""
-        headlines = sanitize_snippets(
-            await _fresh_evidence(ticker, iid), max_items=_NEWS_CONTEXT_HEADLINE_LIMIT
-        )
-        return render_news_context_block(signal_summary, headlines)
+        fresh = await _fresh_evidence(ticker, iid)
+        headlines = sanitize_snippets(fresh, max_items=_NEWS_CONTEXT_HEADLINE_LIMIT)
+        return render_news_context_block(signal_summary, headlines), _cited_sources(fresh)
     except Exception as exc:
         logger.debug("price_monitor: news context failed for %s: %s", ticker, type(exc).__name__)
-        return ""
+        return "", []
 
 
 async def _fresh_evidence(ticker: str, iid: str) -> list[dict]:
@@ -334,10 +339,31 @@ async def _crash_news(ticker: str, iid: str) -> tuple[str, list[dict]]:
             for ev in items
             if (ev.get("title") or "").strip()
         ]
-        return "; ".join(lines), source_dicts(fresh)
+        return "; ".join(lines), _cited_sources(fresh)
     except Exception as exc:
         logger.debug("price_monitor: crash news failed for %s: %s", ticker, type(exc).__name__)
         return "", []
+
+
+def _cited_sources(evidence: list[dict]) -> list[dict]:
+    """``source_dicts`` with each item's outlet ("Stock Titan", "Yahoo") beside it, so a link
+    reads as who published it, not as a redirect host like news.google.com."""
+    outlets = {ev.get("url"): " ".join(str(ev.get("source") or "").split())[:60] for ev in evidence}
+    return [
+        {**s, "outlet": outlets.get(s["url"]) or s.get("domain") or ""}
+        for s in source_dicts(evidence)
+    ]
+
+
+def _merged_sources(
+    first: list[dict] | None, second: list[dict] | None, limit: int = 4
+) -> list[dict]:
+    """Two source lists as one, first list first, each URL once."""
+    out: list[dict] = []
+    for item in [*(first or []), *(second or [])]:
+        if item.get("url") and all(o["url"] != item["url"] for o in out):
+            out.append(item)
+    return out[:limit]
 
 
 def _build_alert_prompt(
@@ -557,15 +583,17 @@ async def _investigated(
     if not findings:
         return signal
     data = await asyncio.wait_for(
-        narrate(news_context=news_context + price_alert_run.findings_block(findings)),
+        narrate(news_context=news_context + price_alert_run.findings_block(findings.text)),
         price_alert_run.NARRATION_TIMEOUT_SECONDS,
     )
     cleaned = price_alert_run.usable(data)
     if not cleaned:
         return signal
-    # Text a page may have shaped reaches a phone as Lucius's words, so it says where it came from.
-    cleaned = {**cleaned, "summary": f"From a web search, unverified: {cleaned['summary']}"}
-    changes = {**fields(cleaned), "updated_at": datetime.now(timezone.utc).isoformat()}
+    changes = {
+        **fields(cleaned),
+        "sources": _merged_sources(signal.get("sources"), findings.sources),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
     try:
         merge_fired_story(signal["id"], signal.get("created_at"), changes)
     except Exception as exc:
@@ -612,7 +640,21 @@ def _format_alert(signal: dict) -> str:
     if actions:
         lines.append("")
         lines += [f"• {a}" for a in actions]
+    links = source_links(signal.get("sources"))
+    if links:
+        lines += ["", f"Sources: {links}"]
     return "\n".join(lines)
+
+
+def source_links(sources: list[dict] | None, limit: int = 4) -> str:
+    """``[outlet](url)`` links, one space apart: the outlet a person knows, never a bare host."""
+    out = []
+    for item in (sources or [])[:limit]:
+        url = str(item.get("url") or "")
+        if url.lower().startswith(("http://", "https://")):
+            name = " ".join(str(item.get("outlet") or item.get("domain") or "source").split())
+            out.append(f"[{name.replace('[', '(').replace(']', ')')}]({url})")
+    return " ".join(out)
 
 
 async def _push_external_alert(signal: dict, channels: list[str]) -> None:
@@ -647,12 +689,14 @@ async def _deliver_alert(
     *,
     crash_watch: bool = False,
     news: str = "",
+    search: str = "",
     sources: list[dict] | None = None,
 ) -> None:
     """The call site for a fired alert's external push: ``delivery.route`` runs
     ``_push_external_alert`` unchanged with the ``intel_delivery_decider`` flag off, and hands
-    Lucius the candidate with it on (the alert's own channels stay with it). ``news`` and
-    ``sources`` reach only the candidate: what a crash's headlines say is Lucius's to word."""
+    Lucius the candidate with it on (the alert's own channels stay with it). ``news`` (Intel's
+    cached headlines), ``search`` (what outlets a search turn found reported) and ``sources``
+    reach only the candidate: what they say is Lucius's to word."""
     from backend.monitoring import delivery
 
     await delivery.route(
@@ -662,6 +706,7 @@ async def _deliver_alert(
             crash_watch=crash_watch,
             legacy_message=_format_alert(signal),
             news=news,
+            search=search,
             sources=sources,
         ),
         functools.partial(_push_external_alert, signal, channels),
@@ -687,20 +732,24 @@ async def _search_then_deliver_crash(
     signal: dict, channels: list[str], news: str, sources: list[dict], prompt: str
 ) -> None:
     async def findings() -> dict:
-        return {"text": await price_alert_run.search(prompt, model=_alert_model()) or ""}
+        return {"found": await price_alert_run.search(prompt, model=_alert_model())}
 
-    found = ""
+    found = None
     try:
-        found = (await price_alert_run.until_shutdown(findings(), {"text": ""}))["text"]
+        found = (await price_alert_run.until_shutdown(findings(), {"found": None}))["found"]
     except asyncio.CancelledError:
         await _deliver_alert(signal, channels, crash_watch=True, news=news, sources=sources)
         raise
     except Exception as exc:
         logger.warning("price_monitor: crash search did not finish: %s", type(exc).__name__)
-    if found:
-        news = f"{news}; " if news else ""
-        news += f"a web search just now found (unverified): {found}"
-    await _deliver_alert(signal, channels, crash_watch=True, news=news, sources=sources)
+    await _deliver_alert(
+        signal,
+        channels,
+        crash_watch=True,
+        news=news,
+        search=found.text if found else "",
+        sources=_merged_sources(sources, found.sources if found else []),
+    )
 
 
 def _collect_crash_items(
@@ -891,15 +940,15 @@ async def _fire_alert_condition(
         position_ctx += (
             f"\n\n{thesis_judgment.prompt_block(thesis, label)}\n{thesis_judgment.THESIS_RULE}"
         )
-    # _news_context_for_alert already swallows its own failures (returns "" — see its
+    # _alert_news already swallows its own failures (returns ("", []) — see its
     # docstring), but the call is wrapped here too, defense-in-depth: the alert must still
     # fire+push even if a future change to that helper — or the news-context machinery it
     # delegates to — lets an exception through unguarded.
     try:
-        news_context = await _news_context_for_alert(ticker, instrument_id)
+        news_context, cached_sources = await _alert_news(ticker, instrument_id)
     except Exception as exc:
         logger.debug("price_monitor: news context failed for %s: %s", ticker, exc)
-        news_context = ""
+        news_context, cached_sources = "", []
     try:
         signal = await _ai_signal(
             signal_id=signal_id,
@@ -931,6 +980,8 @@ async def _fire_alert_condition(
             move_pct=move_pct,
         )
 
+    if cached_sources:
+        signal = {**signal, "sources": cached_sources}
     apply_story_change(signal)
     logger.info("price_monitor: alert fired — %s %s %s %g", ticker, op_str, currency, target)
     channels = list(condition.get("channels") or [])
