@@ -606,7 +606,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
     async () => {
       // The connector page holds one line and a way in; the details live on the sync's page.
       const summary = bank.getByRole('region', { name: 'GoCardless sync' })
-      await summary.getByText('Next: bring in transactions').waitFor({ timeout: 20_000 })
+      await summary.getByText(/^Not set up · /).waitFor({ timeout: 20_000 })
       // One way in: the Lucius next-step card doesn't show beside it.
       assert.equal(await bank.getByText(/Set up an automation and Lucius/).count(), 0)
       assert.equal(await summary.getByRole('checkbox').count(), 0, 'details on the connector page')

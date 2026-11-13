@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Button, Text } from '../../../ui'
+import { Button } from '../../../ui'
 import { useFlag } from '../../../../hooks/useFlag'
 import { everyLabel, nextRunLine } from './bankSyncHelpers'
 import { bankSyncSearch, useBankSync, type BankSyncStatus } from './bankSync'
@@ -21,34 +21,21 @@ function BankSyncSummary({ provider }: { provider: string }) {
   if (!status) return null
   const open = () =>
     void navigate({ to: '/automations', search: bankSyncSearch(provider) as never } as never)
-  if (status.stage !== 'done') {
-    // Before it's set up this IS the connector's next step, in the same card the Lucius
-    // suggestion used: one way in, not two. Nothing until an account is linked.
-    if (!(status.accounts ?? []).length) return null
-    return (
-      <section className="conn-next" aria-label={`${status.label} sync`}>
-        <Text size="sm" tone="ink" weight={600}>
-          Next: bring in transactions
-        </Text>
-        <Text size="xs" tone="muted">
-          {`Linking doesn’t import anything yet. Sync brings in your history, then new transactions ${everyLabel(status.interval_hours).toLowerCase()}.`}
-        </Text>
-        <div className="conn-next-actions">
-          <Button size="sm" variant="primary" onClick={open}>
-            Set up sync
-          </Button>
-        </div>
-      </section>
-    )
-  }
+  // Nothing to sync until an account is linked; then one line and a way in, set up or not.
+  const setUp = status.stage === 'done'
+  if (!setUp && !(status.accounts ?? []).length) return null
   return (
     <section className="bs-summary" aria-label={`${status.label} sync`}>
       <div className="bs-summary-text">
         <div className="cn-sublabel">Sync</div>
-        <p className="bs-note">{summaryLine(status)}</p>
+        <p className="bs-note">
+          {setUp
+            ? summaryLine(status)
+            : `Not set up · your history, then new transactions ${everyLabel(status.interval_hours).toLowerCase()}`}
+        </p>
       </div>
-      <Button size="sm" variant="secondary" onClick={open}>
-        Manage
+      <Button size="sm" variant={setUp ? 'secondary' : 'primary'} onClick={open}>
+        {setUp ? 'Manage' : 'Set up sync'}
       </Button>
     </section>
   )

@@ -150,8 +150,8 @@ default run proves nothing changed with the flag off.
 
 ### GCL-DS-SETUP
 - GIVEN both accounts are linked
-- THEN the GoCardless connector shows one next step, **Next: bring in transactions** with **Set up
-  sync**, no Lucius "Set up automation" card beside it, and no account boxes
+- THEN the GoCardless connector shows one **Sync** line ("Not set up · …") with **Set up sync**, no
+  Lucius "Set up automation" card beside it, and no account boxes
 - WHEN I click **Set up sync**
 - THEN its page in Automations → Data sync opens on the setup steps, each linked account ticked
 

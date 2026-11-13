@@ -169,7 +169,7 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
         return
       }
       expect(await screen.findByRole('region', { name: 'GoCardless sync' })).toBeTruthy()
-      expect(screen.getByText('Next: bring in transactions')).toBeTruthy()
+      expect(screen.getByText(/^Not set up · /)).toBeTruthy()
       expect(screen.getByText(/every 12 hours/)).toBeTruthy()
       expect(screen.queryByRole('checkbox')).toBeNull() // the details live on the sync's own page
       fireEvent.click(screen.getByRole('button', { name: 'Set up sync' }))
@@ -386,7 +386,7 @@ describe('with bank_data_sync on', () => {
     render(<BankSyncSection provider="gocardless" />)
     expect(await screen.findByText('Off')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Manage' })).toBeTruthy()
-    expect(screen.queryByText('Next: bring in transactions')).toBeNull()
+    expect(screen.queryByText(/^Not set up · /)).toBeNull()
   })
 
   it.each(['off', 'data'] as const)(
