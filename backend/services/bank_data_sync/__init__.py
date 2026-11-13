@@ -91,10 +91,20 @@ def _summary(p) -> dict:
     }
 
 
+def _set_up(p) -> bool:
+    try:
+        return bool(p.store().is_configured())
+    except Exception:  # noqa: BLE001 — a broken config is not "set up"
+        return False
+
+
 def overview() -> list[dict]:
-    """Every data-sync-capable connector — the Automations → Data sync list."""
+    """The data-sync-capable connectors that are set up (or already syncing) — the Automations →
+    Data sync list. A bank never connected has nothing to sync, so it isn't listed."""
     _require_on()
-    return [_summary(p) for p in settings.capable_providers()]
+    return [
+        _summary(p) for p in settings.capable_providers() if _set_up(p) or settings.is_data(p.key)
+    ]
 
 
 def status(key: str) -> dict:
