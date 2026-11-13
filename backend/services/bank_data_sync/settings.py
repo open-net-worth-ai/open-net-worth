@@ -2,8 +2,8 @@
 
 Stored per connector in ``bank_sync_settings`` (id = provider key): ``mode`` (``off`` | ``data``),
 ``excluded_account_ids`` (the app accounts the user unticked — Sync is on by default, so only the
-opt-outs are kept, keyed by app account id because that survives a provider relink) and
-``lucius_followup``. "Lucius" is never stored: a connector is in Lucius mode when an active Lucius
+opt-outs are kept, keyed by app account id because that survives a provider relink),
+``lucius_followup`` (built, hidden in the UI for now) and ``set_up`` (turned on at least once). "Lucius" is never stored: a connector is in Lucius mode when an active Lucius
 Automation syncs it, a fact the Automations table already holds (ADR 2026-11-13)."""
 
 from __future__ import annotations
@@ -45,6 +45,8 @@ def get(key: str) -> dict:
         "mode": row.get("mode") if row.get("mode") in ("off", "data") else "off",
         "excluded_account_ids": list(row.get("excluded_account_ids") or []),
         "lucius_followup": bool(row.get("lucius_followup")),
+        # Turned on at least once: its page shows the set-up sync from then on, on or off.
+        "set_up": bool(row.get("set_up")) or row.get("mode") == "data",
         "updated_at": row.get("updated_at"),
     }
 
@@ -104,7 +106,8 @@ def refuse_beside_data(automation: dict) -> None:
         if is_data(p.key) and syncs_connector(automation, p.key):
             raise ConflictError(
                 f"{p.label} already syncs without AI, so this Automation would book its rows "
-                f"twice. To let Lucius sync it instead, choose Lucius on the {p.label} connector."
+                f"twice. To let Lucius sync it instead, turn that sync off first in Automations → "
+                f"Data sync → {p.label}."
             )
 
 

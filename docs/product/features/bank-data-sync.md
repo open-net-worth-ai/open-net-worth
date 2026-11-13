@@ -6,7 +6,7 @@ order: 172
 audience: [user]
 status: beta
 related: [connectors/bank-brokerage, lucius/automations, features/categories-payees, features/accounts]
-keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, categorise, payee default, merchant category code, mcc]
+keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc]
 ---
 
 # Bank sync without AI
@@ -28,33 +28,27 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
    [Bank & brokerage connectors](../connectors/bank-brokerage.md).
 2. Under **Sync** on the connector's page, click **Set up sync**. It opens the bank's own page in
    **Automations → Data sync**, with three steps:
-   1. **Choose the accounts to sync.** Every linked account is ticked. Untick one to leave it
-      out: it's never read from the bank or booked.
-   2. **Bring in your history.** **Import history** books the history your bank serves (90
-      days for most European banks) into the ticked accounts, and moves each account's Starting
-      Balance back to its oldest row, so today's balance doesn't change. It shows what came in.
-      Safe to run again.
-   3. **Keep it in sync.** **Turn on sync without AI** books new transactions on a schedule from
-      then on, or choose **Let Lucius sync it instead**.
+   1. **Choose accounts.** Every linked account is ticked. Untick one to leave it out: it's never
+      read from the bank or booked.
+   2. **Import history.** Books the history your bank serves (90 days for most European banks)
+      into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
+      so today's balance doesn't change. Safe to run again.
+   3. **Turn on.** New transactions are booked on a schedule from then on.
 
-You can turn the sync on without step 2: its first run brings the history in. Afterwards the
-connector page shows one line — who books the bank's transactions, the next run, anything to
-review — and **Manage** opens the bank's page: the controls, **To review** and the run history.
+You can turn it on without step 2: its first run brings the history in.
 
-## One way to sync at a time
+Once it's set up, the page shows a switch to turn it on or off, the next sync and **Sync now**;
+below them, the accounts, the schedule, anything that needs your review, and the run history.
+The connector page shows one line (on or off, and the next sync) and **Manage**, which opens
+that page.
 
-**Sync** has three choices:
+## It's the no-AI way
 
-| Choice | Who books this bank's transactions |
-|---|---|
-| **Off** | Nobody. |
-| **Sync without AI** | Fixed rules, on a schedule. |
-| **Lucius** | A Lucius Automation, such as **Sync GoCardless**. |
-
-Only one can be on. Choosing **Sync without AI** turns off that bank's Lucius sync Automation and
-says which one it turned off, so nothing is booked twice. While it's on, turning that Automation
-back on is refused, with a message telling you to choose **Lucius** on the connector instead.
-Choosing **Lucius** turns the Automation back on, or opens the template if you don't have one.
+This sync never uses an AI model. If you'd rather Lucius synced a bank, use a Lucius Automation
+such as **Sync GoCardless** instead (see [Automations](../lucius/automations.md)). Only one of
+the two can sync a bank: turning this sync on pauses that bank's Lucius sync Automation and says
+which one it paused, so nothing is booked twice. While it's on, turning that Automation back on
+is refused, with a message telling you to turn this sync off first.
 
 ## What a run does
 
@@ -76,21 +70,10 @@ Choosing **Lucius** turns the Automation back on, or opens the template if you d
 A run books all its new transactions in one go: if something fails, nothing from that run is
 booked, and the next run tries again.
 
-## Let Lucius categorise what's left (optional)
-
-Tick **Let Lucius categorise what's left** to have Lucius look at the transactions a run booked
-**Uncategorized** — only those — and pick one of **your existing categories** for each, by the
-same rules the book-transactions skill uses. It never creates a category, and leaves a row
-Uncategorized when nothing fits. It runs within a minute of the sync, uses your AI model, and the
-run's history says how many it categorised. Booking never waits for it and doesn't depend on it.
-
-Lucius gets no tools for this: it can only suggest a category for those rows, so text in a bank
-transaction can't make it do anything else.
-
 ## When the bank changes something
 
 A bank sometimes changes a transaction after it's booked, or stops listing it. A run never
-applies that on its own. It waits under **To review**, on the sync's page:
+applies that on its own. It waits under **Needs your review**, on the sync's page:
 
 | What happened | Your choices |
 |---|---|
@@ -112,8 +95,8 @@ in the ledger changes until you choose.
 **Sync now** runs it at once. GoCardless and Enable Banking banks usually allow only **4 reads
 per account per day**, and every read counts — scheduled, **Sync now**, or Lucius fetching the
 bank in chat. Each account shows how
-many reads it has left today. Once they're used, **Sync now** says when the next read is
-possible, and the schedule waits too.
+many reads it has left today. Once they're used, the account says when its next read is, **Sync
+now** waits, and so does the schedule.
 
 If the bank refuses (its daily limit, expired access), the sync waits instead of retrying: until
 the limit resets, or a day for expired access. The connector page shows what the bank said.

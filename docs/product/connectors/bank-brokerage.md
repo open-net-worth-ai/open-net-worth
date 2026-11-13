@@ -456,7 +456,7 @@ remove it, but it is no longer supported — use one of the connectors above ins
 ## Turning on automatic syncing
 
 **Without AI (experimental):** GoCardless, Enable Banking and Plaid can book their transactions
-by fixed rules, with no AI — choose **Sync without AI** under **Sync** on the connector's page.
+by fixed rules, with no AI — click **Set up sync** under **Sync** on the connector's page.
 See [Bank sync without AI](../features/bank-data-sync.md). The rest of this section is the
 Lucius way.
 
@@ -467,8 +467,8 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 
 | Connector | Default schedule |
 |---|---|
-| SimpleFIN, Plaid, Lunch Money, Lunch Flow, YNAB, Enable Banking | Every 6 hours |
-| GoCardless | Every 12 hours (banks limit reads per day) |
+| SimpleFIN, Plaid, Lunch Money, Lunch Flow, YNAB | Every 6 hours |
+| GoCardless, Enable Banking | Every 12 hours (banks limit reads per day) |
 
 The schedule and the wording are yours to change. Each run:
 

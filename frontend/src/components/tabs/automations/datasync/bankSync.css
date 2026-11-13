@@ -14,12 +14,6 @@
   flex-direction: column;
   gap: 4px;
 }
-.bs-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
 .bs-note,
 .bs-notice,
 .bs-warn {
@@ -39,24 +33,11 @@
   flex-direction: column;
   gap: 8px;
 }
-.bs-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  font-size: 12px;
-  color: var(--muted);
-}
 .bs-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-.bs-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  max-width: 760px;
 }
 .bs-reviews,
 .bs-history {

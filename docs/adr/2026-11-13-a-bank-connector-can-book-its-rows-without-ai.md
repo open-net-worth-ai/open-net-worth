@@ -121,3 +121,19 @@ We will add a **data sync** for bank connectors, behind the flag `bank_data_sync
   inside it (Context above says otherwise, quoting 2026-09-05). Within this feature one run per
   connector at a time and the claimed decision close the gap; a Lucius booking racing a data-sync
   run on the same rows is the remaining window — a follow-up for the ledger choke.
+
+## Amendment 2 (2026-11-14, owner: the data sync page offers no AI)
+
+Data sync IS the no-AI path. Its page offers no Lucius choice: no Off / Sync without AI / Lucius
+control, no "Let Lucius sync it instead", and no "Let Lucius categorise what's left". It is one
+on/off switch, laid out as the budget apps' sync page. Someone who wants Lucius to sync a bank uses
+a Lucius Automation. The one-mode rule is unchanged: turning this sync on pauses that bank's Lucius
+sync Automation, an Automation that would sync a bank already on is refused (its message now
+points at Automations → Data sync), and the page says when a Lucius Automation syncs the bank.
+
+The categorising follow-up stays built (its setting, queue, route and tests) but is HIDDEN: the
+owner wants to see what the sync categorises on its own first. It is off by default, so nothing
+runs while the UI doesn't offer it.
+
+A sync turned on once stays set up (`bank_sync_settings.set_up`): switching it off keeps its page
+on the set-up view, as a budget app's does, instead of dropping back into the setup steps.

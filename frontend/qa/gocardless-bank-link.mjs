@@ -584,8 +584,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
     await dismissIntro(bank)
   }
   const syncNow = async () => {
-    const panel = bank.getByRole('region', { name: 'GoCardless sync' })
-    await panel.getByRole('button', { name: 'Sync now' }).click()
+    await bank.getByRole('button', { name: 'Sync now' }).click()
     return waitRun()
   }
   const waitRun = async () => {
@@ -607,7 +606,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
     async () => {
       // The connector page holds one line and a way in; the details live on the sync's page.
       const summary = bank.getByRole('region', { name: 'GoCardless sync' })
-      await summary.getByText(/nothing books this bank’s transactions yet/).waitFor({
+      await summary.getByText('Off', { exact: true }).waitFor({
         timeout: 20_000,
       })
       assert.equal(await summary.getByRole('checkbox').count(), 0, 'details on the connector page')
@@ -633,7 +632,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
       const setup = bank.locator('[data-od-id=bank-sync-setup]')
       const box = setup.getByRole('checkbox', { name: /Savings Pot/ })
       await box.click()
-      await setup.getByText(/Not synced: never read or booked/).waitFor({ timeout: 15_000 })
+      await setup.getByText(/Not synced/).waitFor({ timeout: 15_000 })
       assert.equal(await box.isChecked(), false)
     },
     bank,
@@ -647,7 +646,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
       const st = await waitRun()
       assert.equal(st.mode, 'off', 'importing the history turned the sync on')
       assert.equal(st.stage, 'sync')
-      await bank.getByText(/Imported into CA_Monzo/).waitFor({ timeout: 15_000 })
+      await bank.getByText(/^Imported: .*Balances unchanged\./).waitFor({ timeout: 15_000 })
       assert.equal(
         st.last_run.status,
         'done',
@@ -679,9 +678,10 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
   await step(
     'GCL-DS-TURN-ON',
     async () => {
-      await bank.getByRole('button', { name: 'Turn on sync without AI' }).click()
-      const panel = bank.getByRole('region', { name: 'GoCardless sync' })
-      await panel.getByRole('button', { name: 'Sync now' }).waitFor({ timeout: 15_000 })
+      await bank.getByRole('button', { name: 'Turn on', exact: true }).click()
+      await bank.getByRole('button', { name: 'Sync now' }).waitFor({ timeout: 15_000 })
+      const page = bank.locator('[data-od-id=bank-sync-detail]')
+      assert.equal(await page.getByText(/Lucius/).count(), 0, 'the sync page offers Lucius')
       const st = await api(baseUrl, '/api/bank-sync/gocardless')
       assert.equal(st.mode, 'data')
       assert.equal(st.stage, 'done')
@@ -714,7 +714,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
         .getByText('GoCardless changed a transaction you have booked.')
         .waitFor({ timeout: 20_000 })
       await app.getByRole('button', { name: 'Use the bank’s version' }).click()
-      await app.getByText('Nothing to review').waitFor({ timeout: 15_000 })
+      await app.getByText('Needs your review').waitFor({ state: 'detached', timeout: 15_000 })
       assert.equal((await parking()).amount, -1.5, 'accepting did not apply the bank’s version')
     },
     app,
@@ -729,12 +729,9 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
       assert.equal(r.status, 409, `a fifth Sync now answered ${r.status}`)
       assert.match(body.detail, /read each account 4 times a day/)
       await openSyncPage()
-      const panel = bank.getByRole('region', { name: 'GoCardless sync' })
-      await panel.getByText('Every ticked account has used today’s bank reads.').waitFor({
-        timeout: 20_000,
-      })
+      await bank.getByText('Out of bank reads today').waitFor({ timeout: 20_000 })
       assert.ok(
-        await panel.getByRole('button', { name: 'Sync now' }).isDisabled(),
+        await bank.getByRole('button', { name: 'Sync now' }).isDisabled(),
         'Sync now still offered with no reads left',
       )
       assert.ok(reads('gcl-acc-0001') <= 4, `CA_Monzo read ${reads('gcl-acc-0001')}× today`)
@@ -757,7 +754,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
     const body = await r.json()
     assert.equal(r.status, 409, `a Lucius sync beside it answered ${r.status}`)
     assert.match(body.detail, /already syncs without AI/)
-    assert.match(body.detail, /choose Lucius on the GoCardless connector/)
+    assert.match(body.detail, /Data sync → GoCardless/)
   })
 
   await step(

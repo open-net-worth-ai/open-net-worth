@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { fAmountNative, fDate } from '../../../../utils/format'
-import { Button, EmptyState, ErrorState, Loading } from '../../../ui'
+import { Button, ErrorState } from '../../../ui'
 import { bankSyncSend, useBankReviews, type BankReview, type BankRowView } from './bankSync'
 import './bankSync.css'
 
@@ -38,7 +38,8 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
   const reviews = useBankReviews(provider)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  if (reviews.initialLoading) return <Loading label="Loading the review list…" />
+  // Shown only when there is something to decide, as the budget apps' page does.
+  if (reviews.initialLoading) return null
   if (reviews.error && !reviews.data)
     return (
       <ErrorState
@@ -48,6 +49,7 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
       />
     )
   const items = reviews.data ?? []
+  if (items.length === 0) return null
 
   async function decide(item: BankReview, action: 'accept' | 'dismiss' | 'book') {
     setBusy(`${item.id}:${action}`)
@@ -64,29 +66,23 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
   }
 
   return (
-    <div className="a3-block" data-od-id="bank-sync-reviews">
+    <section className="a3-block a3-attention" data-od-id="bank-sync-reviews">
       <div className="a3-block-h">
-        To review
+        Needs your review
         <span className="count">{items.length}</span>
       </div>
+      <div className="a3-block-note">Nothing here changes until you choose.</div>
       {error && (
         <div className="a3-action-error" role="alert">
           {error}
         </div>
       )}
-      {items.length === 0 ? (
-        <EmptyState
-          title="Nothing to review"
-          body="If the bank changes or withdraws something already booked, it waits here."
-        />
-      ) : (
-        <ul className="bs-reviews" aria-label="Bank changes to review">
-          {items.map((item) => (
-            <ReviewRow key={item.id} item={item} busy={busy} onDecide={decide} />
-          ))}
-        </ul>
-      )}
-    </div>
+      <ul className="bs-reviews" aria-label="Bank changes to review">
+        {items.map((item) => (
+          <ReviewRow key={item.id} item={item} busy={busy} onDecide={decide} />
+        ))}
+      </ul>
+    </section>
   )
 }
 

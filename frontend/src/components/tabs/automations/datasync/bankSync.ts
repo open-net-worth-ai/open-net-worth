@@ -171,17 +171,9 @@ export function modeNotice(result: ModeResult): string | null {
     const word = result.paused_automations.length === 1 ? 'Automation' : 'Automations'
     return `Turned off the ${word} ${names}, so rows aren’t booked twice.`
   }
-  if (result.resumed_automation)
-    return `Sync without AI is off. Turned the Automation “${result.resumed_automation}” back on.`
-  if (result.mode === 'off') return 'Sync without AI is off. Nothing books this bank’s rows now.'
+  // The switch already says on or off; only what it did to an Automation needs a word.
   return null
 }
 
 /** Where a bank's sync lives: its page in Automations → Data sync. */
 export const bankSyncSearch = (provider: string) => ({ view: 'sync', sync: `bank:${provider}` })
-
-export const MODE_LABELS: Record<BankSyncMode, string> = {
-  off: 'Off',
-  data: 'Sync without AI',
-  lucius: 'Lucius',
-}

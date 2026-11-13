@@ -29,14 +29,16 @@ export function useAct() {
 export function lastRunLine(status: BankSyncStatus): string {
   const run = status.last_run
   if (status.running) return 'Syncing now…'
-  if (!run) return 'Not run yet.'
+  if (!run) return 'Not run yet'
   const when = timeAgo(run.finished_at || run.started_at)
-  return `Last run ${when}: ${run.outcome || run.error || run.status}.`
+  return `Last sync ${when}: ${run.outcome || run.error || run.status}`
 }
 
 export function nextRunLine(status: BankSyncStatus): string {
-  if (!status.next_run_at) return 'Next run: within a minute.'
-  return `Next run: ${fScheduleWhen(status.next_run_at)}.`
+  // Due (or overdue): the scheduler checks every 60 seconds, so a past time would only mislead.
+  if (!status.next_run_at || Date.parse(status.next_run_at) <= Date.now())
+    return 'Next sync: within a minute'
+  return `Next sync: ${fScheduleWhen(status.next_run_at)}`
 }
 
 /** Every ticked account has used today's bank reads. */

@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '../../../ui'
 import { useFlag } from '../../../../hooks/useFlag'
-import { lastRunLine, nextRunLine } from './bankSyncHelpers'
+import { nextRunLine } from './bankSyncHelpers'
 import { bankSyncSearch, useBankSync, type BankSyncStatus } from './bankSync'
 import './bankSync.css'
 
@@ -41,7 +41,7 @@ function BankSyncSummary({ provider }: { provider: string }) {
 function summaryLine(status: BankSyncStatus): string {
   const review = status.to_review ? ` · ${status.to_review} to review` : ''
   if (status.mode === 'data')
-    return `Without AI · ${status.running ? lastRunLine(status) : nextRunLine(status)}${review}`
-  if (status.mode === 'lucius') return `By a Lucius Automation${review}`
-  return 'Off — nothing books this bank’s transactions yet.'
+    return `On · ${status.running ? 'Syncing now…' : nextRunLine(status)}${review}`
+  if (status.mode === 'lucius') return `Off · a Lucius Automation syncs it${review}`
+  return 'Off'
 }

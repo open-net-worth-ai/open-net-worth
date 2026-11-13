@@ -80,7 +80,7 @@ def test_a_lucius_sync_cannot_be_turned_on_while_data_sync_is(bank):
     bank_data_sync.set_mode("gocardless", "data")
     with pytest.raises(ConflictError, match="already syncs without AI"):
         _automation()
-    with pytest.raises(ConflictError, match="choose Lucius on the GoCardless connector"):
+    with pytest.raises(ConflictError, match="Data sync → GoCardless"):
         apply_automation_change({"op": "resume", "id": paused["id"]})
 
 
@@ -142,7 +142,7 @@ def test_reads_older_than_a_day_free_up(bank):
 
 
 def test_sync_now_is_refused_unless_the_connector_is_in_data_mode(bank):
-    with pytest.raises(ConflictError, match="isn't set to Sync without AI"):
+    with pytest.raises(ConflictError, match="The GoCardless sync is off"):
         bank_data_sync.run_now("gocardless")
 
 
@@ -202,6 +202,10 @@ def test_setup_walks_accounts_then_history_then_sync(bank):
     assert st["history_days"] == 90
     bank_data_sync.set_mode("gocardless", "data")
     assert bank_data_sync.status("gocardless")["stage"] == "done"
+    # Off again is a set-up sync that is off, never back to the setup steps.
+    bank_data_sync.set_mode("gocardless", "off")
+    st = bank_data_sync.status("gocardless")
+    assert (st["mode"], st["stage"]) == ("off", "done")
 
 
 def test_history_import_is_refused_while_lucius_syncs_the_bank(bank):

@@ -65,12 +65,13 @@ def _accounts(p, key: str) -> list[dict]:
     return out
 
 
-def _stage(mode: str, accounts: list[dict]) -> str:
+def _stage(mode: str, accounts: list[dict], set_up: bool = False) -> str:
     """Where setup stands — the steps on the bank's Data sync page: ``accounts`` (nothing linked
     or ticked yet) → ``history`` (bring the history in) → ``sync`` (turn the sync on) → ``done``
-    (Sync without AI or Lucius is on). Turning the sync on before importing is fine: its first
-    run brings the history in."""
-    if mode in ("data", "lucius"):
+    (the sync is on, a Lucius Automation syncs the bank, or the sync was turned on once — turning
+    it off again leaves a set-up sync, as a budget app's does). Turning the sync on before
+    importing is fine: its first run brings the history in."""
+    if mode in ("data", "lucius") or set_up:
         return "done"
     ticked = [a for a in accounts if a["sync"]]
     if not ticked:
@@ -135,7 +136,7 @@ def status(key: str) -> dict:
         **summary,
         "accounts": accounts,
         "history_days": p.history_days or p.lookback_days,
-        "stage": _stage(summary["mode"], accounts),
+        "stage": _stage(summary["mode"], accounts, settings.get(key)["set_up"]),
     }
 
 
@@ -149,7 +150,7 @@ def set_mode(key: str, mode: str) -> dict:
     resumed: Optional[str] = None
     if mode == "data":
         paused = settings.pause_lucius_syncs(key)
-        settings.save(key, mode="data")
+        settings.save(key, mode="data", set_up=True)
         budget.schedule_from_now(p)
     else:
         settings.save(key, mode="off")
@@ -199,11 +200,10 @@ def _start(key: str, *, needs_data: bool) -> dict:
     connector is set up and at least one ticked account has a read left today."""
     p = settings.provider(key)
     if needs_data and not settings.is_data(key):
-        raise ConflictError(f"{p.label} isn't set to Sync without AI.")
+        raise ConflictError(f"The {p.label} sync is off.")
     if not needs_data and settings.mode(key) == "lucius":
         raise ConflictError(
-            f"A Lucius Automation syncs {p.label}. Choose Off or Sync without AI first, so its "
-            "rows aren't booked twice."
+            f"A Lucius Automation syncs {p.label}. Pause it first, so its rows aren't booked twice."
         )
     runner.refuse_unless_ready(p)
     accounts = runner.opted_accounts(key)

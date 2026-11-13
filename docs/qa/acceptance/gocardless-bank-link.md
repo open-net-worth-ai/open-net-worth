@@ -150,14 +150,14 @@ default run proves nothing changed with the flag off.
 
 ### GCL-DS-SETUP
 - GIVEN both accounts are linked
-- THEN the GoCardless connector shows one **Sync** line ("Off — nothing books this bank's
-  transactions yet") and **Set up sync**, with no account boxes on the connector page
+- THEN the GoCardless connector shows one **Sync** line ("Off") and **Set up sync**, with no
+  account boxes on the connector page
 - WHEN I click **Set up sync**
 - THEN its page in Automations → Data sync opens on the setup steps, each linked account ticked
 
 ### GCL-DS-UNTICK
 - WHEN I untick Savings Pot
-- THEN it says it is never read or booked
+- THEN it says Not synced
 
 ### GCL-DS-FIRST-IMPORT
 - WHEN I press **Import history** (step 2)
@@ -168,8 +168,8 @@ default run proves nothing changed with the flag off.
 - AND the sync is still off: importing doesn't turn it on
 
 ### GCL-DS-TURN-ON
-- WHEN I press **Turn on sync without AI** (step 3)
-- THEN the page shows the sync's controls with **Sync now**
+- WHEN I press **Turn on** (step 3), which offers no AI choice
+- THEN the page shows the on/off switch with **Sync now**, and no Lucius option anywhere
 
 ### GCL-DS-RERUN
 - WHEN I press **Sync now** again
@@ -178,17 +178,17 @@ default run proves nothing changed with the flag off.
 ### GCL-DS-REVIEW
 - GIVEN the bank changes a booked row's amount (£1.00 → £1.50)
 - WHEN the next run reads it
-- THEN the ledger still says £1.00 and the change waits under **To review**
+- THEN the ledger still says £1.00 and the change waits under **Needs your review**
 - AND after **Use the bank's version** the ledger says £1.50
 
 ### GCL-DS-READ-LIMIT (third-party limits)
 - WHEN a fourth sync has read CA_Monzo today
 - THEN a fifth **Sync now** is refused with "read each account 4 times a day", the button is
-  disabled with the reason, and the bank was read at most 4 times
+  disabled, the head says "Out of bank reads today", and the bank was read at most 4 times
 
 ### GCL-DS-ONE-MODE
 - WHEN a Lucius **Sync GoCardless** Automation is created while it syncs without AI
-- THEN it is refused, naming the switch: choose Lucius on the GoCardless connector
+- THEN it is refused, naming the switch: turn that sync off first in Automations → Data sync → GoCardless
 
 ### GCL-DS-DATA-SYNC-TAB
 - WHEN I open Automations → Data sync

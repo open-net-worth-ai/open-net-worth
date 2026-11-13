@@ -47,15 +47,17 @@ export function AccountBoxes({
 }
 
 function readsLine(a: BankSyncAccount, daily: number | null): string {
-  const bank = [a.bank_name, a.mask ? `··${a.mask}` : ''].filter(Boolean).join(' ')
-  return bank ? `${bank} · ${syncLine(a, daily)}` : syncLine(a, daily)
+  // The bank's own name for the account only when it says something the label doesn't.
+  const bank = a.bank_name && a.bank_name !== a.name ? a.bank_name : ''
+  const mask = a.mask ? `··${a.mask}` : ''
+  return [bank, mask, syncLine(a, daily)].filter(Boolean).join(' · ')
 }
 
 function syncLine(a: BankSyncAccount, daily: number | null): string {
-  if (!a.sync) return 'Not synced: never read or booked.'
-  if (daily === null || a.reads_left === null) return 'Synced.'
-  if (a.reads_left > 0) return `Synced. ${a.reads_left} of ${daily} bank reads left today.`
+  if (!a.sync) return 'Not synced'
+  if (daily === null || a.reads_left === null) return ''
+  if (a.reads_left > 0) return `${a.reads_left} of ${daily} reads left today`
   return a.next_read_at
-    ? `Synced. Bank reads used for today; next read ${fScheduleWhen(a.next_read_at)}.`
-    : 'Synced. Bank reads used for today.'
+    ? `No reads left · next ${fScheduleWhen(a.next_read_at)}`
+    : 'No reads left today'
 }

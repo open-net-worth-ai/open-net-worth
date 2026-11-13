@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { fDateTime } from '../../../../utils/format'
 import { ErrorState, Loading } from '../../../ui'
-import { BankSyncPanel } from './BankSyncPanel'
+import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
 import { BankSyncReviews } from './BankSyncReviews'
 import { BankSyncSetup } from './BankSyncSetup'
 import { useBankSync, useBankSyncRuns } from './bankSync'
 import './bankSync.css'
 
-// A bank connector's Data sync page in Automations (ADR 2026-11-13): the setup steps until its
-// sync is on, then its controls, the review list and the run history.
+// A bank connector's Data sync page in Automations (ADR 2026-11-13), laid out as the budget
+// apps' page: the setup steps until its sync is on; then the switch and Sync now in the head,
+// anything to review and the settings on the left, the run history on the right.
 
 export function BankSyncDetail({ provider, onBack }: { provider: string; onBack: () => void }) {
   // Re-read every two seconds only while a run is in progress.
@@ -48,32 +49,31 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
         />
       </div>
     )
+  const status = sync.data
+  if (status.stage === 'done')
+    return (
+      <div className="a3-wrap" data-od-id="bank-sync-detail">
+        {crumb}
+        <BankSyncHead status={status} />
+        <div className="a3-cols">
+          <div className="a3-col-setup">
+            <BankSyncReviews provider={provider} />
+            <BankSyncSettings status={status} />
+          </div>
+          <BankSyncHistory provider={provider} />
+        </div>
+      </div>
+    )
   return (
     <div className="a3-wrap" data-od-id="bank-sync-detail">
       {crumb}
       <div className="a3-detail-head">
         <div className="a3-detail-title">
           <h1>{label}</h1>
-          <div className="a3-detail-sub">
-            Bank transactions booked by fixed rules, no AI. Changes the bank makes afterwards wait
-            for you to review.
-          </div>
+          <div className="a3-detail-sub">Books new bank transactions on a schedule. No AI.</div>
         </div>
       </div>
-      {sync.data.stage === 'done' ? (
-        <div className="bs-detail">
-          <div className="a3-block">
-            <BankSyncPanel status={sync.data} />
-          </div>
-          <BankSyncReviews provider={provider} />
-          <BankSyncHistory provider={provider} />
-        </div>
-      ) : (
-        <div className="bs-detail">
-          <BankSyncSetup status={sync.data} />
-          {sync.data.last_run && <BankSyncHistory provider={provider} />}
-        </div>
-      )}
+      <BankSyncSetup status={status} />
     </div>
   )
 }
@@ -82,7 +82,7 @@ function BankSyncHistory({ provider }: { provider: string }) {
   const runs = useBankSyncRuns(provider)
   const list = runs.data ?? []
   return (
-    <div className="a3-block" data-od-id="bank-sync-history">
+    <div className="a3-block a3-col-history" data-od-id="bank-sync-history">
       <div className="a3-block-h">
         History
         <span className="count">

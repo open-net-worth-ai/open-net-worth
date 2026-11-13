@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 //
-// Bank sync without AI (ADR 2026-11-13): the connector panel (mode, Sync per account, what a mode
-// change did), the review list, and the Data sync card — and nothing at all with the flag off.
+// Bank sync without AI (ADR 2026-11-13): the connector line, the bank's page (the on/off switch,
+// Sync per account, the setup steps), the review list and the Data sync card — and nothing at all
+// with the flag off. No Lucius option anywhere on it.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { overrideFlagsForTests } from '../../../../hooks/useFlag'
 import { clearQueryCache } from '../../../../state/queryCache'
-import { BankSyncPanel } from './BankSyncPanel'
+import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
 import { BankSyncSetup } from './BankSyncSetup'
 import { BankSyncSection } from './BankSyncSummary'
 import { BankSyncReviews } from './BankSyncReviews'
@@ -123,7 +124,7 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
         return
       }
       expect(await screen.findByRole('region', { name: 'GoCardless sync' })).toBeTruthy()
-      expect(screen.getByText(/nothing books this bank’s transactions yet/)).toBeTruthy()
+      expect(screen.getByText('Off')).toBeTruthy()
       expect(screen.queryByRole('checkbox')).toBeNull() // the details live on the sync's own page
       fireEvent.click(screen.getByRole('button', { name: 'Set up sync' }))
       expect(navigate).toHaveBeenCalledWith(
@@ -141,9 +142,22 @@ describe('with bank_data_sync on', () => {
   beforeEach(() => (restore = overrideFlagsForTests({ bank_data_sync: true })))
   afterEach(() => restore())
 
-  it('choosing Sync without AI says which Automation it turned off', async () => {
-    render(<BankSyncPanel status={status({ stage: 'done' })} />)
-    fireEvent.click(await screen.findByRole('tab', { name: 'Sync without AI' }))
+  it('the page is one on/off switch, with no Lucius options', () => {
+    render(
+      <>
+        <BankSyncHead status={status({ mode: 'data', stage: 'done' })} />
+        <BankSyncSettings status={status({ mode: 'data', stage: 'done' })} />
+      </>,
+    )
+    expect(screen.queryByRole('tab')).toBeNull()
+    expect(screen.queryByText(/Lucius/)).toBeNull()
+    const sw = screen.getByRole('switch', { name: 'Turn the GoCardless sync off' })
+    expect((sw as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('switching it on says which Automation it turned off', async () => {
+    render(<BankSyncHead status={status({ stage: 'done' })} />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Turn the GoCardless sync on' }))
     expect(
       await screen.findByText(
         /Turned off the Automation “Sync GoCardless”, so rows aren’t booked twice/,
@@ -154,10 +168,10 @@ describe('with bank_data_sync on', () => {
   })
 
   it('lists each linked account with its own Sync box and reads left', async () => {
-    render(<BankSyncPanel status={status({ mode: 'data', stage: 'done' })} />)
+    render(<BankSyncSettings status={status({ mode: 'data', stage: 'done' })} />)
     const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
     expect((box as HTMLInputElement).checked).toBe(true)
-    expect(screen.getByText(/3 of 4 bank reads left today/)).toBeTruthy()
+    expect(screen.getByText(/3 of 4 reads left today/)).toBeTruthy()
     fireEvent.click(box)
     await waitFor(() =>
       expect(sent.at(-1)).toMatchObject({
@@ -168,9 +182,9 @@ describe('with bank_data_sync on', () => {
     expect(JSON.parse(sent.at(-1)!.body!)).toEqual({ sync: false })
   })
 
-  it('setup brings the history in first, then turns the sync on', async () => {
+  it('setup brings the history in first, then turns the sync on, with no AI choice', async () => {
     const { rerender } = render(<BankSyncSetup status={status()} />)
-    expect(screen.getByText(/Your bank serves up to 90 days/)).toBeTruthy()
+    expect(screen.getByText(/Up to 90 days/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
     await waitFor(() =>
       expect(sent.at(-1)).toMatchObject({
@@ -181,8 +195,9 @@ describe('with bank_data_sync on', () => {
     const imported = status({ stage: 'sync' })
     imported.accounts![0]!.imported = true
     rerender(<BankSyncSetup status={imported} />)
-    expect(screen.getByText(/Imported into ACME Current/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Turn on sync without AI' }))
+    expect(screen.getByText(/^Imported/)).toBeTruthy()
+    expect(screen.queryByText(/Lucius/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
     await waitFor(() =>
       expect(sent.at(-1)).toMatchObject({ url: '/api/bank-sync/gocardless/mode', method: 'PUT' }),
     )
