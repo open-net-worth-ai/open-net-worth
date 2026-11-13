@@ -11,6 +11,7 @@ import { clearQueryCache } from '../../../../state/queryCache'
 import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
 import { BankSyncSetup } from './BankSyncSetup'
 import { BankRunReport } from './BankRunReport'
+import { markFor } from './bankSyncMarks'
 import { BankSyncSection } from './BankSyncSummary'
 import { BankSyncReviews } from './BankSyncReviews'
 import { DataSyncView } from './DataSyncView'
@@ -306,6 +307,21 @@ describe('with bank_data_sync on', () => {
     expect(group.textContent).toMatch(line)
     if (fix) expect(screen.getByRole('button', { name: fix })).toBeTruthy()
     else expect(screen.queryByRole('button', { name: 'Renew' })).toBeNull()
+  })
+
+  it('marks an account the sync keeps: green, amber before access ends, red once it stopped', () => {
+    const on = status({ mode: 'data' })
+    const acc = on.accounts![0]!
+    expect(markFor(status({ mode: 'off' }), acc)).toBeNull()
+    expect(markFor(on, { ...acc, sync: false })).toBeNull()
+    expect(markFor(on, acc)?.tone).toBe('ok')
+    expect(
+      markFor(on, { ...acc, access_renew_soon: true, access_ends_at: '2099-02-11T00:00:00Z' }),
+    ).toMatchObject({ tone: 'warn', text: expect.stringContaining('access ends') })
+    expect(markFor(on, { ...acc, access_ended: true })?.tone).toBe('bad')
+    expect(markFor(status({ mode: 'data', last_status: 'reconnect_needed' }), acc)?.text).toMatch(
+      /sign in again/,
+    )
   })
 
   it('the schedule is a menu of what the bank allows, and picking one saves it', async () => {

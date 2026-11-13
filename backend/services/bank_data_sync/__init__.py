@@ -138,7 +138,12 @@ def overview() -> list[dict]:
     whose connector isn't set up yet (``connected`` false) is offered under "Add a data sync",
     as the budget apps are, so the sync is findable before its connector exists."""
     _require_on()
-    return [_summary(p) for p in settings.capable_providers()]
+    out = []
+    for p in settings.capable_providers():
+        s = _summary(p)
+        # A connected bank's accounts ride along, so the Accounts list can mark each synced one.
+        out.append({**s, "accounts": _accounts(p, p.key) if s["connected"] else []})
+    return out
 
 
 def status(key: str) -> dict:

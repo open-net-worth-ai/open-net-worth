@@ -47,6 +47,11 @@ Under each bank's name, one line says when it last synced and until when the ban
 read it. European banks grant that access for a set time (often 90 or 180 days); two weeks before
 it ends the line says so with **Renew**, and once it has ended, or the bank wants you to sign in
 again, it says that with **Renew** or **Reconnect**. Either opens the connector's own setup.
+
+In **Accounts**, every account the sync keeps has a link icon after its name: green while it
+syncs, amber when the bank's access ends within two weeks, red once the sync has stopped (access
+ended, the bank wants you to sign in again, or the last sync failed). Hover it to see which, or
+when it last synced.
 Click a run in the history to see what it did: what it read from the bank, what it booked (each
 transaction, with its account and category), what it left pending or sent to review, and any
 problems. Click a transaction there to open its details, or **View in register** to see

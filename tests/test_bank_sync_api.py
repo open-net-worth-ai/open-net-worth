@@ -114,3 +114,6 @@ def test_every_bank_that_can_sync_is_listed_set_up_or_not(client, bank):
     }
     assert listed["gocardless"] is True
     assert listed["enable_banking"] is False and listed["plaid"] is False
+    rows = {c["provider"]: c for c in client.get("/api/bank-sync").json()["connectors"]}
+    assert [a["name"] for a in rows["gocardless"]["accounts"]] == ["ACME Current"]
+    assert rows["plaid"]["accounts"] == []
