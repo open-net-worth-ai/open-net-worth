@@ -217,7 +217,7 @@ describe('with bank_data_sync on', () => {
     render(<BankSyncSettings status={status({ mode: 'data', stage: 'done' })} />)
     const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
     expect((box as HTMLInputElement).checked).toBe(true)
-    expect(screen.getByText(/^From Current Account ··0001$/)).toBeTruthy()
+    expect(screen.getByText('•••0001 · Current Account')).toBeTruthy()
     expect(screen.queryByText(/reads left/)).toBeNull()
     fireEvent.click(box)
     await waitFor(() =>
@@ -285,7 +285,7 @@ describe('with bank_data_sync on', () => {
   })
 
   it.each([
-    [{ access_ends_at: '2099-02-11T00:00:00+00:00' }, /Not synced yet · access until /, null],
+    [{ access_ends_at: '2099-02-11T00:00:00+00:00' }, /ACME Current/, null],
     [
       { access_ends_at: '2099-02-11T00:00:00+00:00', access_renew_soon: true },
       /Access ends /,

@@ -22,8 +22,9 @@ export function ActionError({ error }: { error: string | null }) {
   )
 }
 
-/** Each linked account with its Sync box, under the bank it's at: one connector can hold
- *  several banks (Enable Banking, GoCardless), and the account's own name doesn't say which. */
+/** One card per bank — one connector can hold several (Enable Banking, GoCardless), and an
+ *  account's own name doesn't say which: the bank and how it stands on top, then each linked
+ *  account with its Sync box. */
 export function AccountBoxes({
   status,
   busy,
@@ -42,39 +43,53 @@ export function AccountBoxes({
   return (
     <div className="bs-banks">
       {[...banks].map(([bank, accounts]) => (
-        <div
+        <section
           key={bank}
-          className="bs-accounts"
+          className="bs-bank"
           role="group"
           aria-label={`${bank} accounts to sync`}
         >
-          <div className="bs-bank-h">{bank}</div>
-          <BankStatusLine status={status} accounts={accounts} />
-          {accounts.map((a) => (
-            <Checkbox
-              key={a.account_id}
-              id={`bs-${p}-${a.account_id}`}
-              label={a.name}
-              description={readsLine(a, status.daily_reads)}
-              checked={a.sync}
-              disabled={busy !== null}
-              onChange={() =>
-                void act('account', () =>
-                  bankSyncSend(`/${p}/accounts/${a.account_id}`, 'PUT', { sync: !a.sync }),
-                )
-              }
-            />
-          ))}
-        </div>
+          <header className="bs-bank-head">
+            <span className="bs-bank-name">{bank}</span>
+            <BankStatus status={status} accounts={accounts} />
+          </header>
+          <ul className="bs-bank-accts">
+            {accounts.map((a) => (
+              <li key={a.account_id} className="bs-acct">
+                <Checkbox
+                  id={`bs-${p}-${a.account_id}`}
+                  label={
+                    <>
+                      {a.name}
+                      {accountMeta(a, status.daily_reads) && (
+                        <span className="bs-acct-meta">{accountMeta(a, status.daily_reads)}</span>
+                      )}
+                    </>
+                  }
+                  checked={a.sync}
+                  disabled={busy !== null}
+                  onChange={() =>
+                    void act('account', () =>
+                      bankSyncSend(`/${p}/accounts/${a.account_id}`, 'PUT', { sync: !a.sync }),
+                    )
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
       ))}
     </div>
   )
 }
 
-function readsLine(a: BankSyncAccount, daily: number | null): string {
-  // The label is the account in your book; this line says which bank account feeds it.
-  const source = [a.bank_name, a.mask ? `··${a.mask}` : ''].filter(Boolean).join(' ')
-  return [source && `From ${source}`, syncLine(a, daily)].filter(Boolean).join(' · ')
+/** What the row's right side says: the bank's own name for it (only when it differs), its last
+ *  digits, and why it isn't read when it isn't. */
+function accountMeta(a: BankSyncAccount, daily: number | null): string {
+  const bankName = a.bank_name && a.bank_name !== a.name ? a.bank_name : ''
+  // The way the Accounts list writes an account's last digits.
+  const mask = a.mask ? `•••${a.mask}` : ''
+  return [mask, bankName, syncLine(a, daily)].filter(Boolean).join(' · ')
 }
 
 function syncLine(a: BankSyncAccount, daily: number | null): string {
@@ -235,16 +250,15 @@ export function ConnectorSetupButton({
   )
 }
 
-/** One line under a bank's name: when it last synced and until when the bank lets this app
- *  read it — or, when something needs you, that thing in plain words with the one button that
- *  fixes it. */
-function BankStatusLine({
-  status,
-  accounts,
-}: {
-  status: BankSyncStatus
-  accounts: BankSyncAccount[]
-}) {
+const PILL = {
+  ok: 'bs-pill',
+  warn: 'bs-pill bs-pill-warn',
+  bad: 'bs-pill bs-pill-bad',
+} as const
+
+/** How a bank stands, top right of its card: a coloured dot and a few words — and, when
+ *  something needs you, the one button that fixes it. */
+function BankStatus({ status, accounts }: { status: BankSyncStatus; accounts: BankSyncAccount[] }) {
   const ended = accounts.some((a) => a.access_ended)
   const ends = accounts
     .map((a) => a.access_ends_at)
@@ -252,28 +266,36 @@ function BankStatusLine({
     .sort()[0]
   const soon = accounts.some((a) => a.access_renew_soon)
   const signIn = status.last_status === 'auth_error' || status.last_status === 'reconnect_needed'
-  const problem = ended
-    ? ['Access ended. Nothing syncs until you renew it.', 'Renew']
+  const problem: [keyof typeof PILL, string, string] | null = ended
+    ? ['bad', 'Access ended', 'Renew']
     : signIn
-      ? ['The bank needs you to sign in again.', 'Reconnect']
+      ? ['bad', 'Sign-in needed', 'Reconnect']
       : soon
-        ? [`Access ends ${fDate(ends!)}.`, 'Renew']
+        ? ['warn', `Access ends ${fDate(ends!)}`, 'Renew']
         : null
+  const until = ends ? `Access until ${fDate(ends)}` : undefined
   if (problem)
     return (
-      <p className="bs-bank-line warn">
-        {problem[0]} <ConnectorSetupButton status={status} label={problem[1]!} link />
-      </p>
+      <span className="bs-bank-status">
+        <span className={PILL[problem[0]]} title={until}>
+          <span className="bs-dot" aria-hidden="true" />
+          {problem[1]}
+        </span>
+        <ConnectorSetupButton status={status} label={problem[2]} link />
+      </span>
     )
+  // Nothing to say before the first sync: a grey "not synced yet" only raised a question.
   const run = status.last_run
-  const synced = status.running
+  if (!status.running && !run) return null
+  const text = status.running
     ? 'Syncing now…'
-    : run
-      ? `Synced ${timeAgo(run.finished_at || run.started_at)}`
-      : 'Not synced yet'
+    : `Synced ${timeAgo(run!.finished_at || run!.started_at)}`
   return (
-    <p className="bs-bank-line">
-      {[synced, ends && `access until ${fDate(ends)}`].filter(Boolean).join(' · ')}
-    </p>
+    <span className="bs-bank-status">
+      <span className={PILL.ok} title={until}>
+        <span className="bs-dot" aria-hidden="true" />
+        {text}
+      </span>
+    </span>
   )
 }

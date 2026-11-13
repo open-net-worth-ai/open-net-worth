@@ -53,27 +53,84 @@
 .bs-banks {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
-.bs-accounts {
+/* One card per bank: its name and status on top, its accounts below. */
+.bs-bank {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+.bs-bank-head {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
 }
-.bs-bank-line {
-  margin: -4px 0 2px;
+.bs-bank-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bs-bank-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.bs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--muted);
 }
-.bs-bank-line.warn {
+.bs-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+}
+.bs-pill-warn {
   color: var(--warn);
 }
-.bs-bank-h {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.bs-pill-warn .bs-dot {
+  background: var(--warn);
+}
+.bs-pill-bad {
+  color: var(--bad);
+}
+.bs-pill-bad .bs-dot {
+  background: var(--bad);
+}
+.bs-bank-accts {
+  list-style: none;
+  margin: 0;
+  padding: 2px 14px;
+}
+.bs-acct {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+}
+.bs-acct + .bs-acct {
+  border-top: 1px solid var(--line);
+}
+.bs-acct-meta {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .bs-actions {
   display: flex;
