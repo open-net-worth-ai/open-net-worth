@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router'
 import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
 import { useQueryCache } from '../../../../state/queryCache'
@@ -11,9 +12,11 @@ import {
   useRun,
   type RunRecord,
 } from '../../imports/runs'
+import { useTransactionSurfaces } from '../../accounts/transactionSurfacesContext'
 
 // One bank sync run, opened from its History row (ADR 2026-11-13): a line on the run, a line on
-// what it did, then the transactions it booked (read by the run's batch).
+// what it did with View in register (the register filtered to the run's batch), then the
+// transactions it booked, each opening its detail drawer.
 
 const DID: [string, (n: number) => string][] = [
   ['booked', (n) => `${n} booked`],
@@ -91,13 +94,22 @@ export function BankRunReport({ runId, onClose }: { runId: string; onClose: () =
       ) : !r ? (
         <Skeleton height={120} />
       ) : (
-        <RunBody r={r} counts={counts} />
+        <RunBody r={r} counts={counts} onClose={onClose} />
       )}
     </Modal>
   )
 }
 
-function RunBody({ r, counts }: { r: RunRecord; counts: Record<string, number> }) {
+function RunBody({
+  r,
+  counts,
+  onClose,
+}: {
+  r: RunRecord
+  counts: Record<string, number>
+  onClose: () => void
+}) {
+  const navigate = useNavigate()
   const did = DID.filter(([k]) => (counts[k] ?? 0) > 0).map(([k, say]) => say(counts[k]!))
   const problems = [...(r.errors ?? []), ...((r.warnings ?? []) as unknown[])].map(text)
   return (
@@ -107,20 +119,38 @@ function RunBody({ r, counts }: { r: RunRecord; counts: Record<string, number> }
           {r.error || 'This run failed; nothing was booked.'}
         </Text>
       ) : (
-        <Text size="sm">{did.length ? did.join(' · ') : 'Nothing new.'}</Text>
+        <div className="bs-run-head">
+          <Text size="sm">{did.length ? did.join(' · ') : 'Nothing new.'}</Text>
+          {(counts.booked ?? 0) > 0 && (
+            <button
+              type="button"
+              className="a3-linkbtn"
+              onClick={() => {
+                onClose()
+                void navigate({
+                  to: '/accounts',
+                  search: { batch: `bank_sync:${r.id}` } as never,
+                } as never)
+              }}
+            >
+              View in register
+            </button>
+          )}
+        </div>
       )}
       {problems.map((p, i) => (
         <Text key={i} size="sm" tone="warn">
           {p}
         </Text>
       ))}
-      {(counts.booked ?? 0) > 0 && <Booked runId={r.id} />}
+      {(counts.booked ?? 0) > 0 && <Booked runId={r.id} onClose={onClose} />}
     </div>
   )
 }
 
-function Booked({ runId }: { runId: string }) {
+function Booked({ runId, onClose }: { runId: string; onClose: () => void }) {
   const booked = useBooked(runId)
+  const { openTransactionById } = useTransactionSurfaces()
   const { catMap } = useCategories()
   if (booked.initialLoading) return <Skeleton height={80} />
   if (booked.error)
@@ -141,14 +171,31 @@ function Booked({ runId }: { runId: string }) {
           : 'Uncategorized'
         return (
           <li key={t.id}>
-            <span className="when">{fDate(t.date)}</span>
-            <span className="what">
-              <span>{t.payee_name || t.description}</span>
-              <span className="sub">{`${account} · ${category}`}</span>
-            </span>
-            <span className={`amt${amount < 0 ? '' : ' in'}`}>
-              {`${amount < 0 ? '−' : '+'}${fAmountNative(Math.abs(amount), currency)}`}
-            </span>
+            <button
+              type="button"
+              className="bs-run-row"
+              aria-label={`Open ${t.payee_name || t.description}`}
+              onClick={() => {
+                // The detail drawer opens over the page; the report closes first so it
+                // isn't left stacked on top of it.
+                onClose()
+                // Two ticks: closing the report hands focus back to its History row a tick
+                // later, and a drawer already open would read that as focus leaving it and
+                // close at once. Opened after the hand-back, the drawer keeps the focus.
+                setTimeout(() => {
+                  setTimeout(() => openTransactionById(t.id, t.payee_name || t.description), 0)
+                }, 0)
+              }}
+            >
+              <span className="when">{fDate(t.date)}</span>
+              <span className="what">
+                <span>{t.payee_name || t.description}</span>
+                <span className="sub">{`${account} · ${category}`}</span>
+              </span>
+              <span className={`amt${amount < 0 ? '' : ' in'}`}>
+                {`${amount < 0 ? '−' : '+'}${fAmountNative(Math.abs(amount), currency)}`}
+              </span>
+            </button>
           </li>
         )
       })}

@@ -103,11 +103,13 @@ export function validateAccountsSearch(search: Record<string, unknown>): {
   account?: string
   txn?: string
   review?: 'transactions'
+  batch?: string
 } {
   return {
     account: typeof search.account === 'string' ? search.account : undefined,
     txn: typeof search.txn === 'string' ? search.txn : undefined,
     review: search.review === 'transactions' ? search.review : undefined,
+    batch: typeof search.batch === 'string' ? search.batch : undefined,
   }
 }
 
@@ -119,6 +121,8 @@ const accountsRoute = createRoute({
   // open the SAME drawer the register opens rather than a chat-only lookalike. Mirrors the
   // /commitments?open=<id> precedent (a Plan budget row deep-linking its commitment).
   // ?review=transactions is a one-shot command that opens the compact review queue.
+  // ?batch=<id> is a one-shot command: the register, filtered to one write batch (a bank sync's
+  // run report links its run here).
   validateSearch: validateAccountsSearch,
 })
 // Assets tab — /assets. `assetRoute` (below) is already taken by the instrument-detail

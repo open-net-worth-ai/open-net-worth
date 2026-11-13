@@ -43,7 +43,8 @@ Once it's set up, the page shows a switch to turn it on or off, the next sync an
 below them, the accounts, the schedule, anything that needs your review, and the run history.
 Click a run in the history to see what it did: what it read from the bank, what it booked (each
 transaction, with its account and category), what it left pending or sent to review, and any
-problems.
+problems. Click a transaction there to open its details, or **View in register** to see
+everything that run booked in the Accounts register.
 The connector page shows one line (on or off, and the next sync) and **Manage**, which opens
 that page.
 

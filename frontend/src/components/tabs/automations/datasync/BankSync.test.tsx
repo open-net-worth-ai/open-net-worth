@@ -294,6 +294,18 @@ describe('with bank_data_sync on', () => {
     expect(screen.getByText('ACME Current · Uncategorized')).toBeTruthy()
   })
 
+  it('a run report opens the register filtered to the run, and each row closes into its drawer', async () => {
+    const onClose = vi.fn()
+    render(<BankRunReport runId="r1" onClose={onClose} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'View in register' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(navigate).toHaveBeenCalledWith(
+      expect.objectContaining({ to: '/accounts', search: { batch: 'bank_sync:r1' } }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Open ACME Grocery' }))
+    expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
   it('step 2 can be skipped: Skip for now moves on to Turn on, importing nothing', () => {
     render(<BankSyncSetup status={status()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
