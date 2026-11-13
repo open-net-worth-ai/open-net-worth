@@ -356,6 +356,8 @@ def fetch_all(
     since: Optional[str] = None,
     before: Optional[str] = None,
     account: Optional[str] = None,
+    include_booked: bool = False,
+    include_pending: bool = False,
 ) -> dict:
     """The same fetch with every unbooked, posted row of the window in ONE provider read — no
     ``limit``/``offset`` slice, so no second read is spent paging (the bank data sync's caller:
@@ -366,7 +368,14 @@ def fetch_all(
     name, so the account-resolution probe is skipped: on Enable Banking that probe alone re-reads
     every account's details and balance, against the bank's daily limit."""
     return _fetch(
-        provider_key, since=since, before=before, account=account, limit=None, probe=False
+        provider_key,
+        since=since,
+        before=before,
+        account=account,
+        include_booked=include_booked,
+        include_pending=include_pending,
+        limit=None,
+        probe=False,
     )
 
 

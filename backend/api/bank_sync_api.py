@@ -7,6 +7,7 @@
   * ``PUT  /api/bank-sync/{provider}/accounts/{id}``  ``{sync: bool}``
   * ``PUT  /api/bank-sync/{provider}/followup``       ``{enabled: bool}``
   * ``PUT  /api/bank-sync/{provider}/schedule``       ``{interval_hours: int}``
+  * ``POST /api/bank-sync/{provider}/accounts/{id}/use-bank-balance``  match the bank's balance
   * ``POST /api/bank-sync/{provider}/import``         bring in the history (setup step 2)
   * ``POST /api/bank-sync/{provider}/run``            Sync now (409 with the reason when refused)
   * ``GET  /api/bank-sync/{provider}/runs``           its run history
@@ -97,6 +98,11 @@ async def bank_sync_mode(provider: str, body: ModeBody):
 @router.put("/api/bank-sync/{provider}/accounts/{account_id}")
 async def bank_sync_account(provider: str, account_id: str, body: AccountSyncBody):
     return await _call(bank_data_sync.set_account_sync, provider, account_id, body.sync)
+
+
+@router.post("/api/bank-sync/{provider}/accounts/{account_id}/use-bank-balance")
+async def bank_sync_use_bank_balance(provider: str, account_id: str):
+    return await _call(bank_data_sync.use_bank_balance, provider, account_id)
 
 
 @router.put("/api/bank-sync/{provider}/schedule")

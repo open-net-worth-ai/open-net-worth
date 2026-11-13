@@ -474,6 +474,38 @@ def _account_to_common(account_id: str, meta: dict) -> dict:
     }
 
 
+# Booked balances first (what the ledger's cleared balance should match), then the rest.
+_BALANCE_PREFERENCE = (
+    "closingBooked",
+    "interimBooked",
+    "expected",
+    "interimAvailable",
+    "openingBooked",
+)
+
+
+def _account_balance(store: GoCardlessConfigStore, account_id: str) -> Optional[float]:
+    """The account's balance from ``/accounts/{id}/balances/`` — read with its transactions, so
+    the bank sync can compare it with the book. The bank limits this endpoint on its own (often
+    4 a day, like transactions), and a sync never calls it more often than transactions; a
+    refused or failed read is just no figure this time, never a failed fetch."""
+    try:
+        data = _json(_authed(store, "GET", f"/accounts/{account_id}/balances/")) or {}
+    except ExternalServiceError:
+        return None
+    by_type: dict[str, float] = {}
+    for b in data.get("balances") or []:
+        try:
+            amount = float(((b or {}).get("balanceAmount") or {}).get("amount"))
+        except (TypeError, ValueError):
+            continue
+        by_type.setdefault(str((b or {}).get("balanceType") or ""), amount)
+    for kind in _BALANCE_PREFERENCE:
+        if kind in by_type:
+            return by_type[kind]
+    return next(iter(by_type.values()), None)
+
+
 def _txn_id(txn: dict) -> str:
     return str(txn.get("transactionId") or txn.get("internalTransactionId") or "").strip()
 
@@ -619,6 +651,7 @@ def fetch_window(
 
     rows: list[dict] = []
     failures: list[ExternalServiceError] = []
+    by_id = {a["provider_account_id"]: a for a in accounts}
     for bank, account_id in owned:
         currency = metas[account_id].get("currency") or ledger_service.base_currency()
         try:
@@ -626,6 +659,8 @@ def fetch_window(
         except ExternalServiceError as exc:
             failures.append(exc)
             warnings.append(f"{metas[account_id].get('name')} ({_bank_name(bank)}): {exc}")
+            continue
+        by_id[account_id]["balance"] = _account_balance(store, account_id)
     if owned and len(failures) == len(owned):
         raise failures[-1]
     return FetchWindow(accounts=accounts, rows=rows, complete=not warnings, warnings=warnings)

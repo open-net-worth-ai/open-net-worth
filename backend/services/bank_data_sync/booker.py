@@ -22,7 +22,7 @@ from typing import Optional
 
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
-from backend.services.bank_data_sync import reviews
+from backend.services.bank_data_sync import pending, reviews
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,10 @@ class Booked:
     to_review: int = 0
     held: int = 0
     linked_refs: int = 0
+    # Pending rows: booked uncleared, settled (now cleared), dropped by the bank (removed).
+    pending: int = 0
+    settled: int = 0
+    pending_removed: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -64,6 +68,9 @@ def draft_for(row: dict) -> Optional[dict]:
         "description": row.get("description") or "",
         "external_refs": [dict(e) for e in row.get("external_refs") or []],
         "source": "feed",
+        # Cleared means settled at the bank: a posted row is, a pending one isn't yet
+        # (pending.py clears it when the bank settles it).
+        "cleared": not row.get("pending"),
         f"{leg}_account_id": account_id,
         f"{leg}_amount": abs(amount),
         f"{leg}_currency": row.get("currency"),
@@ -186,15 +193,33 @@ def _classify_skipped(provider: str, skipped: list[dict], by_index: list, run_id
             out.already_booked += 1
 
 
-def book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: str) -> Booked:
-    """Book ``rows`` (unbooked, posted, opted-in — the runner's job) in one ledger write. Every
-    write here — the one batch and any pending→posted link — runs under the audit surface
-    ``bank_data_sync``. Raises only when that write failed (then nothing was booked)."""
+def book(
+    provider: str,
+    rows: list[dict],
+    *,
+    run_id: Optional[str],
+    batch_id: str,
+    read: Optional[dict[str, str]] = None,
+) -> Booked:
+    """Book ``rows`` (the opted-in accounts' window: posted and pending, booked or not) in one
+    ledger write. Every write here — the batch, a pending row settled or dropped, a
+    pending→posted link — runs under the audit surface ``bank_data_sync``. ``read``: account id
+    → the window start it was read from, for dropping a pending row the bank no longer lists.
+    Raises only when that write failed (then nothing was booked)."""
     from backend.core import audit_context
 
     token = audit_context.set_audit_scope("system", SURFACE, note=f"run:{run_id}")
     try:
-        return _book(provider, rows, run_id=run_id, batch_id=batch_id)
+        out = _book(provider, rows, run_id=run_id, batch_id=batch_id)
+        if read:
+            entries = pending.tracked(provider)
+            seen: dict[str, set[str]] = {a: set() for a in read}
+            for row in rows:
+                if row.get("pending") and row.get("linked_account_id") in seen:
+                    seen[row["linked_account_id"]].add(_ref(row))
+            out.pending_removed = pending.drop_vanished(entries, seen, read)
+            pending.save(provider, entries)
+        return out
     finally:
         audit_context.clear_audit_scope(token)
 
@@ -203,21 +228,37 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     out = Booked()
     held = reviews.held_refs(provider)
     known = ledger_service.known_external_refs(provider)
+    entries = pending.tracked(provider)
+    pending_rows: dict[str, dict] = {}
     candidates: list[tuple[dict, dict]] = []
     for row in rows:
         ref = _ref(row)
-        if not ref or row.get("pending"):
+        if not ref:
             continue
-        if ref in held:
-            out.held += 1
-            continue
-        if _settle_superseding(provider, row, known, run_id, out):
-            continue
+        if row.get("pending"):
+            # Booked once, uncleared; the bank's pending list is read again every run.
+            if row.get("booked_txn_id") or (provider, ref) in known or ref in held:
+                continue
+            pending_rows[ref] = row
+        else:
+            settled = pending.settle(provider, ref, row, entries)
+            if settled == "settled":
+                out.settled += 1
+                continue
+            if row.get("booked_txn_id") and settled == "none":
+                continue  # already booked (the window is read whole, booked rows included)
+            if ref in held:
+                out.held += 1
+                continue
+            if _settle_superseding(provider, row, known, run_id, out):
+                continue
         draft = draft_for(row)
         if draft is None:
             out.errors.append(f"{row.get('date')}: a row with no account or amount was skipped")
             continue
+        draft.update(row.pop("_carry", None) or {})
         candidates.append((row, draft))
+    pending.save(provider, entries)  # what settled above is settled, whatever follows
     candidates, errors = _with_categories(candidates)
     out.errors.extend(errors)
     if not candidates:
@@ -226,6 +267,15 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
         [d for _, d in candidates], batch_id=batch_id, dedup_by_external_ref=True
     )
     out.created = created
+    pending.remember(entries, created, pending_rows)
+    out.pending = sum(
+        1
+        for t in created
+        if any(
+            str((r or {}).get("ref") or "") in pending_rows for r in t.get("external_refs") or []
+        )
+    )
+    pending.save(provider, entries)
     try:  # booked and committed: nothing after this may report it as unbooked
         _classify_skipped(provider, skipped, candidates, run_id, out)
     except Exception:  # noqa: BLE001

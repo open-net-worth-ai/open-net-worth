@@ -137,3 +137,29 @@ runs while the UI doesn't offer it.
 
 A sync turned on once stays set up (`bank_sync_settings.set_up`): switching it off keeps its page
 on the set-up view, as a budget app's does, instead of dropping back into the setup steps.
+
+## Amendment 3 (2026-11-14, owner: cleared means settled; pending is synced; the bank's balance)
+
+Cleared means settled at the bank, whoever entered the row. The sync now reads the whole window,
+pending rows included (still one read: `fetch_all(include_pending, include_booked)`), and:
+
+- books a settled row CLEARED and a pending row UNCLEARED, so the account's Cleared balance is
+  the bank's booked balance and the working balance includes what's pending;
+- remembers each pending row it booked (`runtime_state` `bank_data_sync.<provider>.pending`) and,
+  when the bank settles it, clears that same booking (same ref, Plaid's `supersedes_ref`, or —
+  Enable Banking gives neither — same amount on the same account within -3/+14 days). A changed
+  settled amount replaces the pending booking, carrying the user's labels; a pending row the bank
+  stops listing inside the read window is taken out as the sync's own booking (no rejected
+  identity). A settled row's old pending ref is remembered 60 days so its leaving the bank's list
+  is never a "vanished" review (`bank_data_sync/pending.py`). This reverses the 2026-11-13
+  "pending rows are not booked" line; bank changes to SETTLED rows stay review-only.
+
+The bank's own balance comes back with every read and is kept per account
+(`runtime_state` `...balances`), GoCardless's from its balances endpoint (limited by banks
+separately, read only alongside transactions). It is compared with the CLEARED balance (a
+liability's taken as owed, so negative; a figure equal to the working balance also counts as in
+step, for a bank whose balance includes pending). An account holding only its Starting Balance
+when first imported is set to the bank's figure (YNAB does the same); any other account is never
+changed silently — its row offers "Use the bank's balance", which moves the Starting Balance by
+the difference (`bank_data_sync/balances.py`). For a provider whose figure may hold pending
+(Plaid's "current"), the automatic set waits for a moment with nothing pending.

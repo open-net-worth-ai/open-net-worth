@@ -79,6 +79,17 @@ def test_first_import_books_the_history_and_keeps_todays_balance(bank):
     assert run["status"] == "done" and run["kind"] == "sync" and run["counts"]["booked"] == 3
 
 
+def test_what_the_sync_books_is_cleared(bank):
+    """Cleared means settled at the bank, whoever entered it — and the sync books only settled
+    rows, so each is cleared and the account's Cleared balance reads as the bank's."""
+    main = linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-12.50, days_ago(4), "ACME CAFE", tid="c1")]
+    settings.save("gocardless", mode="data")
+    _run()
+    synced = [t for t in _live(main) if t.get("source") == "feed"]
+    assert synced and all(t.get("cleared") is True for t in synced)
+
+
 def test_a_rerun_books_nothing_and_a_new_row_books_once(bank):
     main = linked_account("ACME Current", ACC_MAIN)
     bank.booked[ACC_MAIN] = [txn(-9.99, days_ago(3), "ACME STREAMING", tid="s1")]

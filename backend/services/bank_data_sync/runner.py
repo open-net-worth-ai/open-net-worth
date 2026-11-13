@@ -17,7 +17,7 @@ from backend.core.errors import ConflictError, ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.services import connector_fetch, connector_window, import_runs
 from backend.services.aggregation.providers import Provider
-from backend.services.bank_data_sync import booker, budget, reviews, settings
+from backend.services.bank_data_sync import balances, booker, budget, pending, reviews, settings
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,10 @@ class _Fetched:
     )
     warnings: list[str] = field(default_factory=list)
     statuses: list[str] = field(default_factory=list)
+    # Account id → the window start it was read from (pending rows the bank stopped listing
+    # there are dropped), and → what the bank said its balance is.
+    read: dict[str, str] = field(default_factory=dict)
+    balances: dict[str, dict] = field(default_factory=dict)
 
 
 def opted_accounts(key: str) -> list[dict]:
@@ -80,7 +84,11 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     pid, app_id = account["provider_account_id"], account["linked_account_id"]
     since, before, warning, first = connector_window.account_window(p, app_id)
     # connector_fetch counts the read against the daily limit before it calls the bank.
-    result = connector_fetch.fetch_all(p.key, since=since, before=before, account=pid)
+    # The whole window, pending and already-booked rows too: a pending row is booked uncleared
+    # and settled or dropped against what the bank lists now (pending.py). Still one read.
+    result = connector_fetch.fetch_all(
+        p.key, since=since, before=before, account=pid, include_booked=True, include_pending=True
+    )
     status = result.get("status") or "error"
     name = account.get("name") or "An account"
     if status != "ok":
@@ -90,9 +98,19 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     if warning:
         out.warnings.append(f"{name}: {warning}")
     out.warnings.extend(f"{name}: {w}" for w in result.get("warnings") or [])
-    out.counts["to_review"] += reviews.record_changes(p.key, result.get("changes"), run_id)
+    quiet = pending.quiet_refs(p.key)
+    changes = [c for c in result.get("changes") or [] if str(c.get("ref") or "") not in quiet]
+    out.counts["to_review"] += reviews.record_changes(p.key, changes, run_id)
     rows = [r for r in result.get("transactions") or [] if r.get("linked_account_id") == app_id]
     out.rows.extend(rows)
+    out.read[app_id] = since
+    for acc in result.get("accounts") or []:
+        if acc.get("provider_account_id") == pid and acc.get("balance") is not None:
+            out.balances[app_id] = {
+                "amount": float(acc["balance"]),
+                "currency": acc.get("currency"),
+                "pending": sum(float(r.get("amount") or 0) for r in rows if r.get("pending")),
+            }
     counts = result.get("counts") or {}
     for k in ("fetched", "pending_skipped", "already_booked"):
         out.counts[k] += int(counts.get(k) or 0)
@@ -126,7 +144,14 @@ def _run_status(statuses: list[str]) -> str:
 def _outcome(counts: dict, status: str) -> str:
     parts = []
     if counts.get("booked"):
-        parts.append(f"{counts['booked']} booked")
+        pend = counts.get("pending") or 0
+        parts.append(
+            f"{counts['booked']} booked ({pend} pending)" if pend else f"{counts['booked']} booked"
+        )
+    if counts.get("settled"):
+        parts.append(f"{counts['settled']} cleared")
+    if counts.get("pending_removed"):
+        parts.append(f"{counts['pending_removed']} dropped by the bank")
     if counts.get("to_review"):
         parts.append(f"{counts['to_review']} to review")
     if counts.get("errors"):
@@ -146,13 +171,18 @@ def _outcome(counts: dict, status: str) -> str:
 def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: list) -> list:
     """The one ledger write and what follows it. Returns the rows it booked. Raises only when
     the write itself failed — then nothing was booked."""
-    result = booker.book(p.key, fetched.rows, run_id=run_id, batch_id=f"bank_sync:{run_id}")
+    result = booker.book(
+        p.key, fetched.rows, run_id=run_id, batch_id=f"bank_sync:{run_id}", read=fetched.read
+    )
     counts["booked"] = len(result.created)
     counts["already_booked"] += result.already_booked
     counts["deleted_before"] = result.deleted_before
     counts["to_review"] += result.to_review
     counts["held"] = result.held
     counts["linked"] = result.linked_refs
+    counts["pending"] = result.pending
+    counts["settled"] = result.settled
+    counts["pending_removed"] = result.pending_removed
     errors.extend({"item": "A row", "reason": e} for e in result.errors)
     return result.created
 
@@ -173,6 +203,20 @@ def _align(p: Provider, first_import: set[str], warnings: list[str]) -> None:
     budget.update(p.key, pending_align=sorted(pending))
 
 
+def _record_balances(p: Provider, fetched: _Fetched, empty: set[str], run_id: str) -> None:
+    """Keep the bank's balances; set each empty first-imported account to its bank's. A failure
+    here never undoes the booking."""
+    from backend.core import audit_context
+
+    token = audit_context.set_audit_scope("system", booker.SURFACE, note=f"run:{run_id}")
+    try:
+        fetched.warnings.extend(balances.record(p, fetched.balances, empty))
+    except Exception:  # noqa: BLE001 — the booking stands
+        logger.exception("bank_data_sync: %s balances could not be recorded", p.key)
+    finally:
+        audit_context.clear_audit_scope(token)
+
+
 def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
     """Fetch, book and record one run. The run record is closed whatever happens; a failure
     anywhere still schedules the next try after a backoff (``budget.record_outcome``)."""
@@ -185,8 +229,12 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         fetched = _fetch(p, accounts, run_id)
         counts.update(fetched.counts)
         status = _run_status(fetched.statuses)
+        # Read BEFORE booking: an account holding only its Starting Balance is set to the
+        # bank's balance once its history is in (balances.py).
+        empty = balances.only_opening(fetched.first_import)
         created = _book(p, fetched, run_id, counts, errors)
         _align(p, fetched.first_import, fetched.warnings)
+        _record_balances(p, fetched, empty, run_id)
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
         logger.exception("bank_data_sync: %s run failed", p.key)
         status = "error"

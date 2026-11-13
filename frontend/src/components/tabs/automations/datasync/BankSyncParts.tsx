@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { invalidateQueryCache } from '../../../../state/queryCache'
-import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
+import { fDate, fScheduleWhen, getBaseCurrency, timeAgo } from '../../../../utils/format'
+import { fCur } from '../../accounts/format'
 import { Button, Checkbox, Modal } from '../../../ui'
 import { useNavigate } from '@tanstack/react-router'
 import { Clock3, Wallet } from 'lucide-react'
@@ -81,21 +82,26 @@ export function AccountBoxes({
                     )
                   }
                 />
-                <button
-                  type="button"
-                  className="bs-acct-book"
-                  title="Open it in Accounts"
-                  onClick={() =>
-                    void navigate({
-                      to: '/accounts',
-                      search: { account: a.account_id } as never,
-                    } as never)
-                  }
-                >
-                  <Wallet size={13} aria-hidden="true" />
-                  {a.name}
-                  {a.last_four && <span className="bs-acct-mask">{`•••${a.last_four}`}</span>}
-                </button>
+                <div className="bs-acct-side">
+                  <button
+                    type="button"
+                    className="bs-acct-book"
+                    title="Open it in Accounts"
+                    onClick={() =>
+                      void navigate({
+                        to: '/accounts',
+                        search: { account: a.account_id } as never,
+                      } as never)
+                    }
+                  >
+                    <Wallet size={13} aria-hidden="true" />
+                    {a.name}
+                    {a.last_four && <span className="bs-acct-mask">{`•••${a.last_four}`}</span>}
+                  </button>
+                  {a.balance_state === 'differs' && (
+                    <BalanceGap account={a} status={status} busy={busy} act={act} />
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -317,4 +323,38 @@ function BankStatus({ status, accounts }: { status: BankSyncStatus; accounts: Ba
 function syncedAgo(iso: string): string {
   const ago = timeAgo(iso)
   return /^\d+s ago$/.test(ago) ? 'just now' : ago
+}
+
+/** The account's book disagrees with its bank: both figures, and the one fix — which moves its
+ *  Starting Balance so the cleared balance is the bank's. Never applied without the click. */
+function BalanceGap({
+  account: a,
+  status,
+  busy,
+  act,
+}: {
+  account: BankSyncAccount
+  status: BankSyncStatus
+  busy: string | null
+  act: Act
+}) {
+  // As the Accounts list writes an amount: its currency's symbol, cents, a real minus.
+  const money = (n: number) => fCur(n, a.currency || getBaseCurrency(), { cents: true })
+  return (
+    <span className="bs-gap">
+      {`Bank ${money(a.bank_balance ?? 0)} · Your book ${money(a.cleared_balance ?? 0)}`}
+      <button
+        type="button"
+        className="a3-linkbtn"
+        disabled={busy !== null}
+        onClick={() =>
+          void act('balance', () =>
+            bankSyncSend(`/${status.provider}/accounts/${a.account_id}/use-bank-balance`, 'POST'),
+          )
+        }
+      >
+        Use the bank’s balance
+      </button>
+    </span>
+  )
 }

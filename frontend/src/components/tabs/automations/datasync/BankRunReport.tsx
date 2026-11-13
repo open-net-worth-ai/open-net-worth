@@ -21,6 +21,9 @@ import { useTransactionSurfaces } from '../../accounts/transactionSurfacesContex
 const DID: [string, (n: number) => string][] = [
   ['booked', (n) => `${n} booked`],
   ['already_booked', (n) => `${n} already in your book`],
+  ['pending', (n) => `${n} of them pending (uncleared)`],
+  ['settled', (n) => `${n} pending cleared`],
+  ['pending_removed', (n) => `${n} pending dropped by the bank`],
   ['pending_skipped', (n) => `${n} still pending at the bank`],
   ['to_review', (n) => `${n} to review`],
   ['linked', (n) => `${n} cleared and matched`],

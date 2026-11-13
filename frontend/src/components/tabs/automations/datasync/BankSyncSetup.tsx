@@ -73,7 +73,11 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
           ) : imported && missing.length === 0 ? (
             <p className="bs-done">
               <Check size={14} aria-hidden="true" />
-              {`History imported: ${importedLine(accounts)}. Balances unchanged.`}
+              {`History imported: ${importedLine(accounts)}.${
+                accounts.every((a) => !a.sync || a.balance_state !== 'differs')
+                  ? ' Balances match your bank.'
+                  : ''
+              }`}
               {status.last_run && (
                 <button
                   type="button"
@@ -166,7 +170,8 @@ function importedLine(accounts: BankSyncAccount[]): string {
     .filter((d): d is string => !!d)
     .sort()
   const banks = new Set(into.map((a) => a.bank || '')).size
-  const txns = `${n} ${n === 1 ? 'transaction' : 'transactions'}`
+  const pend = into.reduce((sum, a) => sum + (a.booked_pending ?? 0), 0)
+  const txns = `${n} ${n === 1 ? 'transaction' : 'transactions'}${pend ? ` (${pend} pending)` : ''}`
   const span =
     firsts.length && lasts.length
       ? firsts[0] === lasts[lasts.length - 1]

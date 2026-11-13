@@ -48,6 +48,12 @@ def _accounts(p, key: str) -> list[dict]:
     from backend.services.bank_data_sync import access
 
     granted = access.by_account(p)
+    from backend.services.bank_data_sync import balances
+
+    bank_said = balances.stored(key)
+    from backend.services.bank_data_sync import pending as pending_rows
+
+    pending_now = pending_rows.tracked(key)
     out = []
     for a in accounts_service.linked_accounts_for_source(key):
         left, next_at = budget.reads_left(p, a.get("provider_account_id") or "")
@@ -60,6 +66,7 @@ def _accounts(p, key: str) -> list[dict]:
                 "name": row.get("name") or a.get("name") or "",
                 # The book account's own last digits (filled from the bank's at link time).
                 "last_four": row.get("last_four") or "",
+                "currency": row.get("currency") or "",
                 # The bank it's at (filled in when it was linked): one connector can hold several.
                 "bank": row.get("institution") or "",
                 "bank_name": a.get("name") or "",
@@ -71,6 +78,12 @@ def _accounts(p, key: str) -> list[dict]:
                 "imported": a.get("linked_account_id") in booked,
                 # What came from this bank, counted in the book: the import step's line.
                 "booked": (booked.get(a.get("linked_account_id") or "") or {}).get("count", 0),
+                # Of those, the ones still pending at the bank (booked uncleared, pending.py).
+                "booked_pending": sum(
+                    1
+                    for e in pending_now.values()
+                    if not e.get("settled") and e.get("account_id") == a.get("linked_account_id")
+                ),
                 "booked_from": (booked.get(a.get("linked_account_id") or "") or {}).get("first"),
                 "booked_to": (booked.get(a.get("linked_account_id") or "") or {}).get("last"),
                 # When the bank's access for this app ends (a European bank grants it for a set
@@ -78,6 +91,12 @@ def _accounts(p, key: str) -> list[dict]:
                 "access_ends_at": bank.get("ends_at"),
                 "access_ended": bool(bank.get("ended")),
                 "access_renew_soon": bool(bank.get("renew_soon")),
+                # The bank's balance from the last read beside the book's cleared balance.
+                **(
+                    balances.compare(row, bank_said.get(a.get("linked_account_id") or ""))
+                    if row
+                    else {}
+                ),
             }
         )
     return out
@@ -204,6 +223,20 @@ def set_interval(key: str, hours: int) -> dict:
         raise ValidationError(f"{p.label} can sync every {choices} hours.")
     settings.save(key, interval_hours=hours)
     budget.reschedule(p)
+    return status(key)
+
+
+def use_bank_balance(key: str, account_id: str) -> dict:
+    """ "Use the bank's balance": move the account's Starting Balance by the difference, so its
+    cleared balance is what the bank last said. Only on the user's click."""
+    _require_on()
+    from backend.services.bank_data_sync import balances
+
+    settings.provider(key)
+    bank = balances.stored(key).get(account_id)
+    if not bank:
+        raise ConflictError("There's no balance from the bank for this account yet.")
+    balances.use_bank(account_id, bank)
     return status(key)
 
 

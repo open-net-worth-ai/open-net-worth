@@ -113,7 +113,7 @@ export function BankSyncSettings({ status }: { status: BankSyncStatus }) {
         <div className="a3-block-h">How it books</div>
         <ul className="a3-rules">
           <li>Each payee’s category, else Uncategorized.</li>
-          <li>Pending transactions wait until they post.</li>
+          <li>Pending ones are booked uncleared, then cleared when the bank settles them.</li>
           <li>A change the bank makes later waits for you.</li>
         </ul>
       </section>

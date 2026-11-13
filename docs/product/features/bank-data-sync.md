@@ -76,7 +76,13 @@ Lucius sync beside this one; **Automate** at the top of the connector's page set
 - **Books new transactions** into the linked account: each bank row once, never twice. Running
   it again books nothing new. Two identical rows (two £3.00 coffees on the same day) are two
   transactions.
-- **Leaves pending transactions** until the bank posts them.
+- **Books pending transactions as uncleared.** They count in your working balance (Cash on
+  hand), not your cleared one. When the bank settles one, the same transaction becomes cleared
+  and takes the settled date; if it settles at a different amount (a tip added, a hold settled
+  lower), the settled one replaces it and keeps your category, payee and memo. If the bank drops
+  a pending one (a released hold, a cancelled payment), it comes off your book.
+- **Books settled transactions as cleared**, so an account's **Cleared** balance is what the
+  bank has settled.
 - **Never re-books a transaction you deleted.**
 - **Keeps foreign charges' original amount and currency** beside the amount your account was
   charged.
@@ -90,6 +96,21 @@ Lucius sync beside this one; **Automate** at the top of the connector's page set
 
 A run books all its new transactions in one go: if something fails, nothing from that run is
 booked, and the next run tries again.
+
+## The bank's balance
+
+Every sync also reads each account's balance from the bank, at no extra read (GoCardless's
+balance is its own request, which banks limit separately, about as often as transactions).
+
+- **An account you've just added** (holding only its Starting Balance) is set to the bank's
+  balance when its history comes in, so it matches from the start.
+- **Any other account** is never changed for you. When its cleared balance and the bank's
+  disagree, its row says so — "Bank €1,500.00 · Your book €1,487.50" — with **Use the bank's
+  balance**, which moves the account's Starting Balance by the difference.
+
+A card or loan's balance is money owed, so it's compared as a negative figure whichever way the
+bank reports it. A bank whose balance includes pending payments matches your working balance
+instead, and counts as in step too.
 
 ## When the bank changes something
 

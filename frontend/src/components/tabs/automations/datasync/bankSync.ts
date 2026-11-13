@@ -25,10 +25,19 @@ export interface BankSyncAccount {
   next_read_at: string | null
   /** Anything from this bank is booked here yet (its history came in). */
   imported: boolean
+  /** The book account's currency. */
+  currency?: string
+  /** What the bank last said this account holds, beside the book's cleared balance (signed as
+   *  the book holds it: a card's debt negative). `differs`: they don't agree. */
+  bank_balance?: number | null
+  cleared_balance?: number | null
+  balance_state?: 'match' | 'differs' | null
   /** The book account's own last digits. */
   last_four?: string
   /** How many of its transactions came from this bank, counted in the book. */
   booked?: number
+  /** How many of them are still pending at the bank (booked uncleared). */
+  booked_pending?: number
   /** The dates of the first and last of them (ISO days). */
   booked_from?: string | null
   booked_to?: string | null
