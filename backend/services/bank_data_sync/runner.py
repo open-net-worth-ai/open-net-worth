@@ -108,6 +108,8 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
         if acc.get("provider_account_id") == pid and acc.get("balance") is not None:
             out.balances[app_id] = {
                 "amount": float(acc["balance"]),
+                "cleared": _figure(acc.get("cleared_balance")),
+                "working": _figure(acc.get("working_balance")),
                 "currency": acc.get("currency"),
                 "pending": sum(float(r.get("amount") or 0) for r in rows if r.get("pending")),
             }
@@ -201,6 +203,13 @@ def _align(p: Provider, first_import: set[str], warnings: list[str]) -> None:
         logger.exception("bank_data_sync: %s alignment failed", p.key)
         warnings.append("The account's start couldn't be moved back yet; the next run tries again.")
     budget.update(p.key, pending_align=sorted(pending))
+
+
+def _figure(value: object) -> float | None:
+    try:
+        return None if value is None else float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 def _record_balances(p: Provider, fetched: _Fetched, empty: set[str], run_id: str) -> None:

@@ -616,6 +616,8 @@ def test_provider_accounts_not_configured_still_surfaces_a_previously_linked_acc
             "mask": "",
             "currency": None,
             "balance": None,
+            "cleared_balance": None,
+            "available_to_spend": None,
             "account_type": None,
             "institution": None,
             "linked_account_id": account_id,

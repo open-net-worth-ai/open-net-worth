@@ -1,11 +1,12 @@
 """The bank's own balance for each synced account (ADR 2026-11-13, Amendment 3). Every sync read
 already brings it back with the transactions, so keeping it costs no read.
 
-It is compared with the account's CLEARED balance — what the bank has settled, which is what a
-bank's booked balance is too (pending rows are booked uncleared, pending.py). A bank whose figure
-includes pending (Plaid's "current" may) matches the WORKING balance instead; both count as in
-step. A card or loan's balance is owed money: the book holds it negative, whichever way round
-the bank reports it.
+The bank's SETTLED figure (``cleared``: GoCardless and Enable Banking send it as a booked
+balance, ``aggregation/balance_kinds``) is compared with the account's CLEARED balance — pending
+rows are booked uncleared (pending.py), so the two speak of the same money. A bank with one
+undivided figure (``amount``; Plaid's "current" may hold pending) is in step if it matches the
+cleared OR the working balance. A card or loan's balance is owed money: the book holds it
+negative, whichever way round the bank reports it.
 
 An account that held nothing but its Starting Balance when its history was first imported is set
 to the bank's figure (YNAB does the same on linking). Any other account is never changed
@@ -23,9 +24,6 @@ from backend.services.bank_data_sync import budget
 
 _TOL = 0.005
 _LIABILITY = {"credit", "loan"}
-# Providers whose balance is the bank's BOOKED figure (pending left out): safe to set an empty
-# account to on its first import even with pending rows about.
-_BOOKED = {"enable_banking", "gocardless"}
 
 
 def stored(provider: str) -> dict[str, dict]:
@@ -36,6 +34,12 @@ def _target(account: dict, amount: float) -> float:
     return -abs(amount) if account.get("type") in _LIABILITY else amount
 
 
+def _settled(bank: dict) -> Optional[float]:
+    """The bank's settled figure, when it says which figure is settled."""
+    value = bank.get("cleared")
+    return None if value is None else float(value)
+
+
 def _books(account: dict) -> tuple[list[dict], Optional[str]]:
     txns = ledger_service.transactions.all()
     return txns, ledger_service.opening_date(account, txns)
@@ -44,16 +48,20 @@ def _books(account: dict) -> tuple[list[dict], Optional[str]]:
 def compare(account: dict, bank: Optional[dict]) -> dict:
     """``{bank_balance, cleared_balance, balance_state}``: ``match``, ``differs``, or None when
     there's nothing to compare (no figure yet, another currency)."""
-    if not bank or bank.get("amount") is None:
+    settled = _settled(bank or {})
+    figure = settled if settled is not None else (bank or {}).get("amount")
+    if not bank or figure is None:
         return {"bank_balance": None, "cleared_balance": None, "balance_state": None}
     txns, start = _books(account)
     cleared = round(ledger_service.cleared_account_balance(account, txns, start), 2)
     working = round(ledger_service.account_balance(account, txns, start), 2)
-    target = round(_target(account, float(bank["amount"])), 2)
+    target = round(_target(account, float(figure)), 2)
     same_currency = not bank.get("currency") or bank["currency"] == account.get("currency")
     state = None
     if same_currency:
-        in_step = abs(target - cleared) <= _TOL or abs(target - working) <= _TOL
+        in_step = abs(target - cleared) <= _TOL or (
+            settled is None and abs(target - working) <= _TOL
+        )
         state = "match" if in_step else "differs"
     return {"bank_balance": target, "cleared_balance": cleared, "balance_state": state}
 
@@ -65,7 +73,11 @@ def use_bank(account_id: str, bank: dict) -> None:
         return
     txns, start = _books(account)
     cleared = ledger_service.cleared_account_balance(account, txns, start)
-    delta = _target(account, float(bank["amount"])) - cleared
+    settled = _settled(bank)
+    figure = settled if settled is not None else bank.get("amount")
+    if figure is None:
+        return
+    delta = _target(account, float(figure)) - cleared
     if abs(delta) <= _TOL:
         return
     opening = ledger_service.opening_amount(account, txns)
@@ -95,8 +107,8 @@ def record(p: Provider, read: dict[str, dict], empty_on_first_import: set[str]) 
     notes: list[str] = []
     for account_id in empty_on_first_import & set(read):
         bank = read[account_id]
-        if p.key not in _BOOKED and abs(float(bank.get("pending") or 0)) > _TOL:
-            continue  # the figure may hold pending: the row asks instead of guessing
+        if _settled(bank) is None and abs(float(bank.get("pending") or 0)) > _TOL:
+            continue  # the one figure may hold pending: the row asks instead of guessing
         account = ledger_service.accounts.find_by_id(account_id) or {}
         if bank.get("currency") and bank["currency"] != account.get("currency"):
             continue

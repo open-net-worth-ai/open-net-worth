@@ -61,6 +61,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, RedirectNotRegisteredError, ValidationError
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation import balance_kinds
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -595,10 +596,14 @@ def _account_mask(eb_account: dict) -> Optional[str]:
     return str(iban)[-4:] if iban else None
 
 
-def _account_to_common(eb_account: dict, balance: Optional[float] = None) -> dict:
-    """An Enable Banking account → the common ``accounts[]`` shape (RFC §A)."""
+def _account_to_common(
+    eb_account: dict, balance: Optional[float] = None, kinds: Optional[dict] = None
+) -> dict:
+    """An Enable Banking account → the common ``accounts[]`` shape (RFC §A). ``kinds``: its
+    balance by kind (``balance_kinds.split``)."""
     kind = str(eb_account.get("cash_account_type") or "").upper()
     return {
+        **(kinds or {}),
         "provider_account_id": _account_uid(eb_account),
         "name": _account_name(eb_account),
         "mask": _account_mask(eb_account),
@@ -612,15 +617,16 @@ def _account_to_common(eb_account: dict, balance: Optional[float] = None) -> dic
     }
 
 
-def fetch_account_balance(token: str, account_uid: str) -> Optional[float]:
-    """GET ``/accounts/{uid}/balances`` → one signed figure, booked balance preferred
-    (verified on the sandbox: ``[{balance_type: "CLBD", balance_amount: {amount, currency}}]``).
-    Never raises — a bank that won't give balances leaves the account without one."""
+def fetch_account_balances(token: str, account_uid: str) -> tuple[Optional[float], dict]:
+    """GET ``/accounts/{uid}/balances`` → ``(one signed figure, booked preferred; {cleared_balance,
+    working_balance, available_to_spend})`` (``balance_kinds``; verified on the sandbox:
+    ``[{balance_type: "CLBD", balance_amount: {amount, currency}}]``). Never raises — a bank
+    that won't give balances leaves the account without one."""
     try:
         data = _safe_get(token, f"/accounts/{account_uid}/balances", {}).json() or {}
     except (ExternalServiceError, ValueError) as exc:
         logger.warning("enable_banking balances unavailable: %s", exc)
-        return None
+        return None, balance_kinds.split({})
     by_type: dict[str, float] = {}
     for b in data.get("balances") or []:
         if not isinstance(b, dict):
@@ -630,10 +636,10 @@ def fetch_account_balance(token: str, account_uid: str) -> Optional[float]:
         except (TypeError, ValueError):
             continue
         by_type.setdefault(str(b.get("balance_type") or "").upper(), amount)
-    for kind in _BALANCE_PREFERENCE:
-        if kind in by_type:
-            return by_type[kind]
-    return next(iter(by_type.values()), None)
+    best = next((by_type[k] for k in _BALANCE_PREFERENCE if k in by_type), None)
+    if best is None:
+        best = next(iter(by_type.values()), None)
+    return best, balance_kinds.split(by_type)
 
 
 def _txn_id(eb_txn: dict) -> str:
@@ -878,7 +884,7 @@ def fetch_window(
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
     accounts = [
-        _account_to_common(a, fetch_account_balance(token, _api_uid(a))) for a in eb_accounts
+        _account_to_common(a, *fetch_account_balances(token, _api_uid(a))) for a in eb_accounts
     ]
 
     rows: list[dict] = []

@@ -56,8 +56,9 @@ fetch from the provider's website and which fields to fill in.
    provider can see, grouped by type (cash,
    credit cards, loans, retirement…) where the provider says what each account is. For each row:
    - **Add** creates a new account in Open Net Worth, with the form already filled in — name,
-     type, currency, last four digits, and today's balance as the starting balance (for a card or
-     loan, the amount owed). Check them and click **Add account**.
+     type, currency, last four digits, and the bank's settled balance as the starting balance
+     (for a card or loan, the amount owed). The row itself shows the bank's balance including
+     pending, when the bank sends it. Check them and click **Add account**.
    - **Link…** ties it to an account you already have instead — pick it from the list.
 
    Either way the link saves straight away; there's nothing else to save. A linked row reads

@@ -31,7 +31,7 @@ from backend.core.user_time import user_today
 from backend.models.account import AccountType
 from backend.services import connector_window
 from backend.services import ledger as ledger_service
-from backend.services.aggregation import providers
+from backend.services.aggregation import balance_kinds, providers
 from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
 
 logger = logging.getLogger(__name__)
@@ -246,6 +246,15 @@ def _linked_account_ids(provider_key: str) -> dict[str, str]:
     }
 
 
+def _balance_fields(account: dict) -> dict:
+    """The account's balances under the book's own names (``balance_kinds.book_terms``):
+    ``balance`` (working: settled + pending), ``cleared_balance`` (settled only),
+    ``available_to_spend`` (overdraft or credit included) — each None when the bank didn't
+    send it."""
+    shown = balance_kinds.book_terms(account)
+    return {k: shown.get(k) for k in ("balance", "cleared_balance", "available_to_spend")}
+
+
 def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
     """The LINKED-only account view (``currency``/``balance`` always ``None`` — no live
     provider call backs them) — what ``provider_accounts()`` returns when the provider call
@@ -258,7 +267,7 @@ def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
                 "name": info.get("name") or "",
                 "mask": info.get("mask") or "",
                 "currency": None,
-                "balance": None,
+                **_balance_fields({}),
             }
         )
         | {
@@ -591,8 +600,8 @@ def _fetch(
 def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     """The account list ONLY, no transaction fetch — ``GET /api/connectors/{id}/accounts``
     (``api/connectors_api.py``, L1) calls this directly. Returns ``{status, provider_label,
-    accounts: [{provider_account_id, name, mask, currency, balance, account_type,
-    linked_account_id}]}`` — ``account_type`` is the provider's suggested app type, or None.
+    accounts: [{provider_account_id, name, mask, currency, balance, cleared_balance,
+    available_to_spend, account_type, linked_account_id}]}`` (balances: ``_balance_fields``) — ``account_type`` is the provider's suggested app type, or None.
 
     A pure READ (C-B2/S-F7): unlike ``fetch()``, this NEVER calls ``store.record_status``
     or publishes a sync event — opening the Connectors tab's link picker must not look like
@@ -659,7 +668,7 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
                 "name": clean.get("name"),
                 "mask": clean.get("mask"),
                 "currency": clean.get("currency"),
-                "balance": clean.get("balance"),
+                **_balance_fields(clean),
                 "account_type": _known_account_type(clean.get("account_type")),
                 "institution": clean.get("institution"),
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),

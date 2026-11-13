@@ -163,3 +163,23 @@ when first imported is set to the bank's figure (YNAB does the same); any other 
 changed silently — its row offers "Use the bank's balance", which moves the Starting Balance by
 the difference (`bank_data_sync/balances.py`). For a provider whose figure may hold pending
 (Plaid's "current"), the automatic set waits for a moment with nothing pending.
+
+## Amendment 4 (2026-11-14, owner: a bank's balances use the book's names)
+
+A bank reports several balance types, and "balance" meant a different one per provider (booked
+for GoCardless and Enable Banking, Plaid's "current"), while in the book `balance` is the working
+balance and `cleared_balance` the settled one. One word now means one thing everywhere: the
+account listing (`connector_fetch.provider_accounts`, behind the connector page and Lucius's
+`<bank>_list_accounts`) gives `cleared_balance` (booked: interim, else closing), `balance`
+(expected: booked + pending) and `available_to_spend` (interim/closing available — overdraft or
+credit included, so never called a balance), each null when the bank doesn't send that type —
+never filled in from another (`aggregation/balance_kinds.py`). Plaid's "current" doesn't say
+whether pending is in it, so it stays the one undivided `balance` and is never called cleared;
+its "available" is `available_to_spend`. The providers' internal single `balance` (booked
+preferred) is unchanged, since `account_value_sync` reads it. "Add" pre-fills a new account's
+Starting Balance with `cleared_balance`, falling back to `balance`, because the bank sync books
+pending rows on top, uncleared. The sync keeps the settled (`cleared`) and expected (`working`)
+figures it reads: when the bank names a settled figure, that alone is compared with the cleared
+balance and used by "Use the bank's balance" and the first-import set; the undivided figure keeps
+Amendment 3's rule (cleared or working counts as in step; the automatic set waits for nothing
+pending).

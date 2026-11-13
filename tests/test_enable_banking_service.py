@@ -97,7 +97,7 @@ def _configure(monkeypatch, txns_by_account=None):
     feed = txns_by_account if txns_by_account is not None else _TXNS
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(_ACCOUNTS))
-    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
     _store().update({"session_id": "SESS-1", "aspsp": "ACME Bank", "country": "FI"})
     monkeypatch.setattr(
         svc,
@@ -280,7 +280,10 @@ def test_fetch_account_balance_prefers_the_booked_balance(monkeypatch):
         ]
     }
     monkeypatch.setattr(svc, "_safe_get", lambda *a: _JsonResp(200, body))
-    assert svc.fetch_account_balance("JWT", "U1") == -7.98
+    assert svc.fetch_account_balances("JWT", "U1") == (
+        -7.98,
+        {"cleared_balance": -7.98, "working_balance": None, "available_to_spend": 11.12},
+    )
 
 
 def test_fetch_account_balance_failure_is_none(monkeypatch):
@@ -290,7 +293,7 @@ def test_fetch_account_balance_failure_is_none(monkeypatch):
         raise ExternalServiceError("Enable Banking HTTP 429")
 
     monkeypatch.setattr(svc, "_safe_get", _boom)
-    assert svc.fetch_account_balance("JWT", "U1") is None
+    assert svc.fetch_account_balances("JWT", "U1")[0] is None
 
 
 def test_account_to_common_suggests_type_and_mask():
@@ -898,7 +901,7 @@ def test_fetch_window_reads_every_bank_and_one_failure_hides_none(monkeypatch):
         return [{"uid": f"{sid}-A", "name": f"{sid} main", "currency": "EUR"}]
 
     monkeypatch.setattr(svc, "fetch_session_accounts", _accounts)
-    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: 10.0)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (10.0, {}))
     monkeypatch.setattr(
         svc, "fetch_account_transactions", lambda token, uid, *, date_from, date_to: ([], True)
     )
@@ -951,7 +954,7 @@ def _two_banks(monkeypatch, ended_sid):
         return [{"uid": f"{sid}-A", "currency": "EUR"}]
 
     monkeypatch.setattr(svc, "fetch_session_accounts", _accounts)
-    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
     monkeypatch.setattr(
         svc, "fetch_account_transactions", lambda token, uid, *, date_from, date_to: ([], True)
     )
@@ -1014,7 +1017,7 @@ def _window_with(monkeypatch, sessions, seen_uids):
 
     def _balance(token, uid):
         seen_uids.append(("balance", uid))
-        return 10.0
+        return 10.0, {}
 
     def _txns(token, uid, *, date_from, date_to):
         seen_uids.append(("transactions", uid))
@@ -1029,7 +1032,7 @@ def _window_with(monkeypatch, sessions, seen_uids):
             }
         ], True
 
-    monkeypatch.setattr(svc, "fetch_account_balance", _balance)
+    monkeypatch.setattr(svc, "fetch_account_balances", _balance)
     monkeypatch.setattr(svc, "fetch_account_transactions", _txns)
     return svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
 
@@ -1126,7 +1129,7 @@ def test_accounts_name_the_country_only_when_two_banks_share_a_name(monkeypatch)
     monkeypatch.setattr(
         svc, "fetch_session_accounts", lambda token, sid: [{"uid": f"{sid}-A", "currency": "EUR"}]
     )
-    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
     w = svc.fetch_window(_store(), "2026-10-01", "2026-11-13", None, accounts_only=True)
     assert [a["institution"] for a in w.accounts] == ["Nordea (FI)", "Nordea (SE)", "OP"]
 

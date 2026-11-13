@@ -38,6 +38,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.gocardless_config_store import ENDED, LINKED, GoCardlessConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation import balance_kinds
 from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
@@ -492,15 +493,16 @@ _BALANCE_PREFERENCE = (
 )
 
 
-def _account_balance(store: GoCardlessConfigStore, account_id: str) -> Optional[float]:
-    """The account's balance from ``/accounts/{id}/balances/`` — read with its transactions, so
+def _account_balance(store: GoCardlessConfigStore, account_id: str) -> dict:
+    """``{balance, cleared_balance, working_balance, available_to_spend}`` (``balance_kinds``;
+    ``balance`` the one figure, booked preferred). The account's balance from ``/accounts/{id}/balances/`` — read with its transactions, so
     the bank sync can compare it with the book. The bank limits this endpoint on its own (often
     4 a day, like transactions), and a sync never calls it more often than transactions; a
     refused or failed read is just no figure this time, never a failed fetch."""
     try:
         data = _json(_authed(store, "GET", f"/accounts/{account_id}/balances/")) or {}
     except ExternalServiceError:
-        return None
+        return {"balance": None, **balance_kinds.split({})}
     by_type: dict[str, float] = {}
     for b in data.get("balances") or []:
         try:
@@ -508,10 +510,10 @@ def _account_balance(store: GoCardlessConfigStore, account_id: str) -> Optional[
         except (TypeError, ValueError):
             continue
         by_type.setdefault(str((b or {}).get("balanceType") or ""), amount)
-    for kind in _BALANCE_PREFERENCE:
-        if kind in by_type:
-            return by_type[kind]
-    return next(iter(by_type.values()), None)
+    best = next((by_type[k] for k in _BALANCE_PREFERENCE if k in by_type), None)
+    if best is None:
+        best = next(iter(by_type.values()), None)
+    return {"balance": best, **balance_kinds.split(by_type)}
 
 
 def _txn_id(txn: dict) -> str:
@@ -658,7 +660,7 @@ def fetch_window(
     accounts = [_account_to_common(a, metas[a]) for _, a in owned]
     if accounts_only:
         for acc in accounts:
-            acc["balance"] = _account_balance(store, acc["provider_account_id"])
+            acc.update(_account_balance(store, acc["provider_account_id"]))
         return FetchWindow(accounts=accounts, rows=[], complete=not warnings, warnings=warnings)
 
     rows: list[dict] = []
@@ -672,7 +674,7 @@ def fetch_window(
             failures.append(exc)
             warnings.append(f"{metas[account_id].get('name')} ({_bank_name(bank)}): {exc}")
             continue
-        by_id[account_id]["balance"] = _account_balance(store, account_id)
+        by_id[account_id].update(_account_balance(store, account_id))
     if owned and len(failures) == len(owned):
         raise failures[-1]
     return FetchWindow(accounts=accounts, rows=rows, complete=not warnings, warnings=warnings)

@@ -109,8 +109,20 @@ balance is its own request, which banks limit separately, about as often as tran
   balance**, which moves the account's Starting Balance by the difference.
 
 A card or loan's balance is money owed, so it's compared as a negative figure whichever way the
-bank reports it. A bank whose balance includes pending payments matches your working balance
-instead, and counts as in step too.
+bank reports it. GoCardless and Enable Banking say which figure is settled, and that's the one
+compared with your cleared balance. A bank with a single figure that may include pending
+payments (Plaid) counts as in step if it matches your working balance instead.
+
+Banks report their balances in the same terms your accounts use, both on the connector's
+**Accounts** list and when Lucius lists a bank's accounts:
+
+| Name | What the bank means |
+|---|---|
+| **Cleared balance** | Settled transactions only |
+| **Balance** | Settled plus pending, like your working balance |
+| **Available to spend** | What you can spend now, overdraft or credit line included |
+
+A figure the bank doesn't send is left empty, never filled in from another.
 
 ## When the bank changes something
 

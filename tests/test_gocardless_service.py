@@ -386,6 +386,9 @@ def test_fetch_window_maps_booked_and_pending_rows(fake):
             "mask": "1234",
             "currency": "EUR",
             "balance": None,
+            "cleared_balance": None,
+            "working_balance": None,
+            "available_to_spend": None,
             "account_type": "cash",
         }
     ]
