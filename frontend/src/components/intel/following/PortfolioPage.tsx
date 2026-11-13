@@ -63,6 +63,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     pageObserver.current?.disconnect()
     pageObserver.current = null
     if (!el) return
+    // Measured now as well, not only when the observer first reports: the page is right on its
+    // first paint, and a page that is not being rendered (a hidden window) still knows.
+    setNarrow(el.clientWidth < NARROW_PAGE_PX)
     const observer = new ResizeObserver(([entry]) =>
       setNarrow((entry?.contentRect.width ?? el.clientWidth) < NARROW_PAGE_PX),
     )
