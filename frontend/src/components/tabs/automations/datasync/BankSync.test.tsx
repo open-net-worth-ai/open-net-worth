@@ -426,7 +426,7 @@ describe('with bank_data_sync on', () => {
       <DataSyncView
         entries={[]}
         banks={[
-          status({ mode: 'data', connected: true }),
+          status({ mode: 'data', connected: true, stage: 'done' }),
           status({ provider: 'plaid', label: 'Plaid', connected: false, interval_hours: 6 }),
         ]}
         onOpen={onOpen}
@@ -451,7 +451,7 @@ describe('with bank_data_sync on', () => {
     render(
       <DataSyncView
         entries={[]}
-        banks={[status({ mode: 'data', to_review: 2 })]}
+        banks={[status({ mode: 'data', to_review: 2, stage: 'done' })]}
         onOpen={onOpen}
       />,
     )

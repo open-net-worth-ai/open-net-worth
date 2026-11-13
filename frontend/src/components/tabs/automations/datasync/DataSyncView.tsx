@@ -45,9 +45,11 @@ export function DataSyncView({
   const healthy = entries.filter((e) => !e.sync.error)
   const adopted = healthy.filter((e) => e.sync.adopted)
   const offered = healthy.filter((e) => !e.sync.adopted)
-  // A bank whose connector isn't set up yet is offered, as a budget app not adopted is.
-  const connected = banks.filter((b) => b.connected !== false)
-  const bankOffers = banks.filter((b) => b.connected === false)
+  // A bank whose sync isn't set up yet (its connector not connected, or connected and never
+  // turned on) is offered, as a budget app not adopted is; a card is a sync that's set up.
+  const isSetUp = (b: BankSyncStatus) => b.connected !== false && b.stage === 'done'
+  const connected = banks.filter(isSetUp)
+  const bankOffers = banks.filter((b) => !isSetUp(b))
   return (
     <div className="a3-wrap" data-od-id="data-sync-list">
       <KeepAwakeBanner />

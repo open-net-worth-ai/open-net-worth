@@ -148,7 +148,11 @@ def overview() -> list[dict]:
     for p in settings.capable_providers():
         s = _summary(p)
         # A connected bank's accounts ride along, so the Accounts list can mark each synced one.
-        out.append({**s, "accounts": _accounts(p, p.key) if s["connected"] else []})
+        accounts = _accounts(p, p.key) if s["connected"] else []
+        # Its setup stage too: the list shows a card only for a sync that's set up, as for the
+        # budget apps; one connected but never set up is still offered under "Add a data sync".
+        stage = _stage(s["mode"], accounts, settings.get(p.key)["set_up"])
+        out.append({**s, "accounts": accounts, "stage": stage})
     return out
 
 
