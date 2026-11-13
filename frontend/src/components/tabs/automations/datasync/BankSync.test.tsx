@@ -217,7 +217,8 @@ describe('with bank_data_sync on', () => {
     render(<BankSyncSettings status={status({ mode: 'data', stage: 'done' })} />)
     const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
     expect((box as HTMLInputElement).checked).toBe(true)
-    expect(screen.getByText('•••0001 · Current Account')).toBeTruthy()
+    expect(screen.getByText('→ ACME Current')).toBeTruthy()
+    expect(screen.getByText('•••0001')).toBeTruthy()
     expect(screen.queryByText(/reads left/)).toBeNull()
     fireEvent.click(box)
     await waitFor(() =>

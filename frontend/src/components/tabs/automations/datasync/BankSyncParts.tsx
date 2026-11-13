@@ -24,7 +24,9 @@ export function ActionError({ error }: { error: string | null }) {
 
 /** One card per bank — one connector can hold several (Enable Banking, GoCardless), and an
  *  account's own name doesn't say which: the bank and how it stands on top, then each linked
- *  account with its Sync box. */
+ *  account with its Sync box, read as "the bank's account •••0785 → the account in your book"
+ *  (both always shown: an account added from the connector has the same name, and showing it
+ *  once hid which side was which). */
 export function AccountBoxes({
   status,
   busy,
@@ -60,10 +62,13 @@ export function AccountBoxes({
                   id={`bs-${p}-${a.account_id}`}
                   label={
                     <>
-                      {a.name}
-                      {accountMeta(a, status.daily_reads) && (
-                        <span className="bs-acct-meta">{accountMeta(a, status.daily_reads)}</span>
-                      )}
+                      {a.bank_name || a.name}
+                      {a.mask && <span className="bs-acct-mask">{`•••${a.mask}`}</span>}
+                      <span className="bs-acct-meta">
+                        {[`→ ${a.name}`, syncLine(a, status.daily_reads)]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
                     </>
                   }
                   checked={a.sync}
@@ -81,15 +86,6 @@ export function AccountBoxes({
       ))}
     </div>
   )
-}
-
-/** What the row's right side says: the bank's own name for it (only when it differs), its last
- *  digits, and why it isn't read when it isn't. */
-function accountMeta(a: BankSyncAccount, daily: number | null): string {
-  const bankName = a.bank_name && a.bank_name !== a.name ? a.bank_name : ''
-  // The way the Accounts list writes an account's last digits.
-  const mask = a.mask ? `•••${a.mask}` : ''
-  return [mask, bankName, syncLine(a, daily)].filter(Boolean).join(' · ')
 }
 
 function syncLine(a: BankSyncAccount, daily: number | null): string {
