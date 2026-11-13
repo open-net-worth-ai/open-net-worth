@@ -82,63 +82,43 @@
   }
 }
 
-/* A run's report (BankRunReport). */
-.bs-run-counts {
+/* A run's report (BankRunReport): a line on what it did, then the booked rows. */
+.bs-run {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 14px;
+}
+.bs-run-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
 }
-.bs-run-counts > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  font-size: 13px;
-}
-.bs-run-counts dt {
-  color: var(--fg-3);
-}
-.bs-run-counts dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-.bs-run-problems {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 13px;
-  color: var(--warn);
-}
-.bs-run-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.bs-run-table td {
-  padding: 7px 12px 7px 0;
-  text-align: left;
-  border-bottom: 0;
-  white-space: normal;
+.bs-run-list li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 9px 0;
   border-top: 1px solid var(--line);
-  vertical-align: top;
+  font-size: 13px;
 }
-.bs-run-table tr:first-child td {
-  border-top: 0;
-}
-.bs-run-table .when {
-  width: 96px;
+.bs-run-list .when {
   color: var(--muted);
   white-space: nowrap;
 }
-.bs-run-table .sub {
+.bs-run-list .what {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bs-run-list .sub {
   font-size: 12px;
   color: var(--muted);
 }
-.bs-run-table .amt {
-  padding-right: 0;
-  text-align: right;
+.bs-run-list .amt {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.bs-run-table .amt.in {
+.bs-run-list .amt.in {
   color: var(--pos);
 }

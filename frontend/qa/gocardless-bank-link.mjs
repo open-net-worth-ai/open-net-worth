@@ -776,9 +776,14 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
         .last()
         .click()
       const report = app.getByRole('dialog')
-      await report.getByText(/^Booked \(\d+\)$/).waitFor({ timeout: 15_000 })
-      await report.getByText('Still pending at the bank, booked once they clear').waitFor()
-      await report.locator('.bs-run-table tr').first().waitFor({ timeout: 15_000 })
+      await report
+        .getByText(/\d+ booked · .*\d+ still pending at the bank/)
+        .waitFor({ timeout: 15_000 })
+      await report
+        .getByRole('list', { name: 'Booked transactions' })
+        .getByRole('listitem')
+        .first()
+        .waitFor({ timeout: 15_000 })
       await app.keyboard.press('Escape')
       await app.screenshot({ path: join(OUT_DIR, 'data-sync-page.png'), fullPage: true })
     },

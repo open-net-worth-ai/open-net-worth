@@ -2,17 +2,7 @@ import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
 import { useQueryCache } from '../../../../state/queryCache'
 import { fAmountNative, fDate } from '../../../../utils/format'
-import {
-  Badge,
-  Cluster,
-  ErrorState,
-  Modal,
-  Panel,
-  Skeleton,
-  Stack,
-  SummaryBar,
-  Text,
-} from '../../../ui'
+import { Badge, Cluster, ErrorState, Modal, Skeleton, Text } from '../../../ui'
 import {
   STATUS_LABEL,
   STATUS_TONE,
@@ -22,18 +12,18 @@ import {
   type RunRecord,
 } from '../../imports/runs'
 
-// One bank sync run, opened from its History row (ADR 2026-11-13): what it read, what it booked
-// (the transactions themselves, by the run's batch), what it held back and why.
+// One bank sync run, opened from its History row (ADR 2026-11-13): a line on the run, a line on
+// what it did, then the transactions it booked (read by the run's batch).
 
-const COUNT_LABELS: [string, string][] = [
-  ['booked', 'Booked'],
-  ['already_booked', 'Already in your book'],
-  ['pending_skipped', 'Still pending at the bank, booked once they clear'],
-  ['to_review', 'Sent to Needs your review'],
-  ['linked', 'Pending ones that cleared, matched to what was booked'],
-  ['deleted_before', 'Deleted by you before, not booked again'],
-  ['held', 'Waiting on a review you haven’t decided'],
-  ['errors', 'Errors'],
+const DID: [string, (n: number) => string][] = [
+  ['booked', (n) => `${n} booked`],
+  ['already_booked', (n) => `${n} already in your book`],
+  ['pending_skipped', (n) => `${n} still pending at the bank`],
+  ['to_review', (n) => `${n} to review`],
+  ['linked', (n) => `${n} cleared and matched`],
+  ['deleted_before', (n) => `${n} you deleted before, skipped`],
+  ['held', (n) => `${n} waiting on a review`],
+  ['errors', (n) => `${n} ${n === 1 ? 'error' : 'errors'}`],
 ]
 
 interface BookedRow {
@@ -67,10 +57,11 @@ const text = (v: unknown) =>
 export function BankRunReport({ runId, onClose }: { runId: string; onClose: () => void }) {
   const run = useRun(runId)
   const r = run.data
+  const counts = (r?.counts ?? {}) as unknown as Record<string, number>
   return (
     <Modal
       open
-      size="lg"
+      size="md"
       onClose={onClose}
       title={
         r ? (
@@ -82,6 +73,15 @@ export function BankRunReport({ runId, onClose }: { runId: string; onClose: () =
           'Sync'
         )
       }
+      subtitle={
+        r
+          ? [
+              r.trigger === 'scheduled' ? 'Scheduled' : 'Started by you',
+              `took ${formatDuration(r)}`,
+              `read ${counts.fetched ?? 0} from the bank`,
+            ].join(' · ')
+          : undefined
+      }
     >
       {run.error ? (
         <ErrorState
@@ -89,95 +89,69 @@ export function BankRunReport({ runId, onClose }: { runId: string; onClose: () =
           onRetry={() => void run.refresh()}
         />
       ) : !r ? (
-        <Skeleton height={160} />
+        <Skeleton height={120} />
       ) : (
-        <RunBody r={r} />
+        <RunBody r={r} counts={counts} />
       )}
     </Modal>
   )
 }
 
-function RunBody({ r }: { r: RunRecord }) {
-  const counts = (r.counts ?? {}) as unknown as Record<string, number>
-  const did = COUNT_LABELS.filter(([k]) => (counts[k] ?? 0) > 0)
+function RunBody({ r, counts }: { r: RunRecord; counts: Record<string, number> }) {
+  const did = DID.filter(([k]) => (counts[k] ?? 0) > 0).map(([k, say]) => say(counts[k]!))
   const problems = [...(r.errors ?? []), ...((r.warnings ?? []) as unknown[])].map(text)
   return (
-    <Stack gap="--space-5">
-      <SummaryBar
-        cards={[
-          { label: 'Started by', value: r.trigger === 'scheduled' ? 'Schedule' : 'You' },
-          { label: 'Started', value: formatWhen(r.started_at) },
-          { label: 'Took', value: formatDuration(r) },
-          { label: 'Read from the bank', value: String(counts.fetched ?? 0) },
-        ]}
-      />
-      {r.status === 'failed' && <ErrorState title="This run failed" message={r.error} />}
-      {did.length > 0 && (
-        <Panel title="What it did">
-          <dl className="bs-run-counts">
-            {did.map(([k, label]) => (
-              <div key={k}>
-                <dt>{label}</dt>
-                <dd>{counts[k]}</dd>
-              </div>
-            ))}
-          </dl>
-        </Panel>
+    <div className="bs-run">
+      {r.status === 'failed' ? (
+        <Text size="sm" tone="bad">
+          {r.error || 'This run failed; nothing was booked.'}
+        </Text>
+      ) : (
+        <Text size="sm">{did.length ? did.join(' · ') : 'Nothing new.'}</Text>
       )}
-      {(counts.booked ?? 0) > 0 && <Booked runId={r.id} count={counts.booked ?? 0} />}
-      {problems.length > 0 && (
-        <Panel title="Problems">
-          <ul className="bs-run-problems">
-            {problems.map((p, i) => (
-              <li key={i}>{p}</li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-    </Stack>
+      {problems.map((p, i) => (
+        <Text key={i} size="sm" tone="warn">
+          {p}
+        </Text>
+      ))}
+      {(counts.booked ?? 0) > 0 && <Booked runId={r.id} />}
+    </div>
   )
 }
 
-function Booked({ runId, count }: { runId: string; count: number }) {
+function Booked({ runId }: { runId: string }) {
   const booked = useBooked(runId)
   const { catMap } = useCategories()
-  const rows = booked.data ?? []
+  if (booked.initialLoading) return <Skeleton height={80} />
+  if (booked.error)
+    return (
+      <Text size="sm" tone="bad">
+        Could not load what this run booked.
+      </Text>
+    )
   return (
-    <Panel title={`Booked (${count})`}>
-      {booked.initialLoading ? (
-        <Skeleton height={80} />
-      ) : booked.error ? (
-        <Text size="sm" tone="bad">
-          Could not load what this run booked.
-        </Text>
-      ) : (
-        <table className="bs-run-table">
-          <tbody>
-            {rows.map((t) => {
-              const out = !!t.from_account_id
-              const amount = out ? -(t.from_amount ?? 0) : (t.to_amount ?? 0)
-              const currency = (out ? t.from_currency : t.to_currency) ?? undefined
-              return (
-                <tr key={t.id}>
-                  <td className="when">{fDate(t.date)}</td>
-                  <td>
-                    <div>{t.payee_name || t.description}</div>
-                    <div className="sub">
-                      {(out ? t.from_account_name : t.to_account_name) ?? ''} ·{' '}
-                      {t.category
-                        ? (catMap[t.category]?.label ?? 'Uncategorized')
-                        : 'Uncategorized'}
-                    </div>
-                  </td>
-                  <td className={`amt${amount < 0 ? '' : ' in'}`}>
-                    {`${amount < 0 ? '−' : '+'}${fAmountNative(Math.abs(amount), currency)}`}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      )}
-    </Panel>
+    <ul className="bs-run-list" aria-label="Booked transactions">
+      {(booked.data ?? []).map((t) => {
+        const out = !!t.from_account_id
+        const amount = out ? -(t.from_amount ?? 0) : (t.to_amount ?? 0)
+        const currency = (out ? t.from_currency : t.to_currency) ?? undefined
+        const account = (out ? t.from_account_name : t.to_account_name) ?? ''
+        const category = t.category
+          ? (catMap[t.category]?.label ?? 'Uncategorized')
+          : 'Uncategorized'
+        return (
+          <li key={t.id}>
+            <span className="when">{fDate(t.date)}</span>
+            <span className="what">
+              <span>{t.payee_name || t.description}</span>
+              <span className="sub">{`${account} · ${category}`}</span>
+            </span>
+            <span className={`amt${amount < 0 ? '' : ' in'}`}>
+              {`${amount < 0 ? '−' : '+'}${fAmountNative(Math.abs(amount), currency)}`}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

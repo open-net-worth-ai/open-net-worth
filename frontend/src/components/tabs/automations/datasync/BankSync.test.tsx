@@ -286,12 +286,11 @@ describe('with bank_data_sync on', () => {
   it('a run report says what it did and lists what it booked', async () => {
     render(<BankRunReport runId="r1" onClose={() => {}} />)
     expect(
-      await screen.findByText('Still pending at the bank, booked once they clear'),
+      await screen.findByText('1 booked · 1 already in your book · 1 still pending at the bank'),
     ).toBeTruthy()
-    expect(screen.getByText('Already in your book')).toBeTruthy()
+    expect(screen.getByText('Scheduled · took 5s · read 3 from the bank')).toBeTruthy()
     expect(await screen.findByText('ACME Grocery')).toBeTruthy()
-    expect(screen.getByText(/ACME Current · Uncategorized/)).toBeTruthy()
-    expect(screen.getByText('Booked (1)')).toBeTruthy()
+    expect(screen.getByText('ACME Current · Uncategorized')).toBeTruthy()
   })
 
   it('step 2 can be skipped: Skip for now moves on to Turn on, importing nothing', () => {
