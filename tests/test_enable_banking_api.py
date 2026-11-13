@@ -105,6 +105,28 @@ def test_link_returns_consent_url(client):
     assert r.json()["url"] == "https://bank.example/auth/abc"
 
 
+def test_link_names_the_address_to_add_when_enable_banking_refuses_it(client, monkeypatch):
+    """The form shows the address with a Copy button, so it comes back as data, not prose."""
+    from backend.core.errors import RedirectNotRegisteredError
+    from backend.services.aggregation import enable_banking as svc
+
+    url = "http://localhost:8080/connectors/callback/enable_banking"
+
+    def _refuse(aspsp, country, redirect):
+        raise RedirectNotRegisteredError("add it", redirect_url=redirect)
+
+    monkeypatch.setattr(svc, "start_authorization", _refuse)
+    r = client.post(
+        "/api/enable-banking/link", json={"aspsp": "Bank A", "country": "DE", "redirect": url}
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"] == {
+        "code": "redirect_not_registered",
+        "message": "add it",
+        "redirect_url": url,
+    }
+
+
 def test_complete_persists_session_and_returns_public(client):
     client.put("/api/enable-banking/config", json={"application_id": "app-1", "private_key": _PEM})
     r = client.post("/api/enable-banking/complete", json={"code": "code-xyz"})

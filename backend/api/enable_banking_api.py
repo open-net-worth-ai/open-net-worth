@@ -29,7 +29,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.errors import OpenNetWorthError, to_http_status
+from backend.core.errors import OpenNetWorthError, RedirectNotRegisteredError, to_http_status
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services.aggregation import enable_banking as enable_banking_service
 
@@ -105,6 +105,14 @@ async def enable_banking_link(body: EnableBankingLinkRequest):
             body.country or "",
             body.redirect or "",
         )
+    except RedirectNotRegisteredError as exc:
+        # The form shows the address to add (with Copy) instead of only a sentence.
+        detail = {
+            "code": exc.code,
+            "message": exc.message,
+            "redirect_url": exc.context.get("redirect_url", ""),
+        }
+        raise HTTPException(to_http_status(exc), detail) from exc
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     return result

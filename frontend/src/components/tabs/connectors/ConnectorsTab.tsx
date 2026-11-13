@@ -101,6 +101,7 @@ export function ConnectorsTab(): JSX.Element {
    *  already declared intent to set the connector up; re-decided on every `openConnector`,
    *  so it can never leak into the next connector focused. */
   const [configureOnOpen, setConfigureOnOpen] = useState(false)
+  const [formFirstOnOpen, setFormFirstOnOpen] = useState(false)
   const [toast, toastNode] = useToast()
   const composer = useChatComposerOptional()
   const navigate = useNavigate()
@@ -159,6 +160,7 @@ export function ConnectorsTab(): JSX.Element {
     setBankPickerOpen(false)
     setRoutedCountry(opts?.country)
     setConfigureOnOpen(opts?.configure === true)
+    setFormFirstOnOpen(opts?.formFirst === true)
     setDetailId(connectorId)
   }
 
@@ -166,6 +168,10 @@ export function ConnectorsTab(): JSX.Element {
   // its settings, or its page in Browse & add when it is not a connector the app has yet.
   // Read from the router, not once at mount: the same link tapped while Connectors is already
   // open only changes the URL, and has to open the connector all the same.
+  const routerSearchAll = useRouterState({
+    select: (st) => st.location.search as Record<string, unknown>,
+  })
+  const ebReturn = enableBankingReturnOf(routerSearchAll ?? {})
   const linkedConnector = useRouterState({
     select: (st) => (st.location.search as { connector?: unknown }).connector,
   })
@@ -174,6 +180,9 @@ export function ConnectorsTab(): JSX.Element {
   })
   useEffect(() => {
     if (initialLoading || typeof linkedConnector !== 'string' || !linkedConnector) return
+    // Enable Banking's return carries `?connector=enable_banking` too; its own effect below
+    // finishes the link first, then opens the page.
+    if (ebReturn) return
     // A bank's consent page sends the user back here with its own `ref=…` appended — after a
     // `?` even when the URL already had one, so it can land inside the id. Keep only the id.
     const raw = String(linkedConnector)
@@ -204,13 +213,9 @@ export function ConnectorsTab(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
 
-  // Back from Enable Banking's consent: it returns to the bare /connectors (its redirect match
-  // is exact, so no `?connector=`) with its own `state` + `code`. Finish the link here, so the
-  // user never copies a code, then show the connector's accounts. Once per return.
-  const routerSearchAll = useRouterState({
-    select: (st) => st.location.search as Record<string, unknown>,
-  })
-  const ebReturn = enableBankingReturnOf(routerSearchAll ?? {})
+  // Back from Enable Banking's consent (`?connector=enable_banking` + its own `state` + `code`).
+  // Finish the link here, so the user never copies a code, then show the connector's accounts.
+  // Once per return.
   const ebHandled = useRef('')
   useEffect(() => {
     if (initialLoading || !ebReturn) return
@@ -223,7 +228,10 @@ export function ConnectorsTab(): JSX.Element {
       // Linked: the connector page, whose Accounts list is the next step. Not linked: the form,
       // with the reason under Link bank and the pickers to try again.
       if (!res.ok) keepEnableBankingReturnError(res.message)
-      void reload().finally(() => openConnector('enable_banking', { configure: !res.ok }))
+      // An already-linked connector opens its form too: the reason is shown there.
+      void reload().finally(() =>
+        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok }),
+      )
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, ebReturn?.state, ebReturn?.code])
@@ -569,6 +577,7 @@ export function ConnectorsTab(): JSX.Element {
             ) : undefined
           }
           configureOnOpen={configureOnOpen}
+          formFirst={formFirstOnOpen}
           onConfigClosed={() => void reload()}
           onSaved={() => {
             // A save that CREATED a connector has already said so, by name.
