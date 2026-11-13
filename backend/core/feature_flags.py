@@ -173,6 +173,20 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 6),
         remove_by=date(2027, 3, 1),
     ),
+    Flag(
+        name="bank_data_sync",
+        description=(
+            "Book a bank connector's transactions without AI. On the GoCardless, Enable Banking "
+            "or Plaid connector, choose Sync without AI: each linked account you tick gets the "
+            "history the bank serves, then new rows on a schedule. Changes the bank makes "
+            "afterwards wait for you in a review list. Bank syncs join the Data sync tab in "
+            "Automations. Off: only a Lucius Automation books bank rows, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 13),
+        remove_by=date(2027, 3, 1),
+    ),
 )
 
 
