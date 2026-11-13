@@ -817,6 +817,7 @@ def _link(monkeypatch, session_id, aspsp, country="FI", accounts=None, deleted=N
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     listed = sessions or {}
     monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(listed.get(sid, [])))
+    monkeypatch.setattr(svc, "session_accounts_data", lambda token, sid: list(listed.get(sid, [])))
     _pending("S", aspsp, country)
     body = {
         "session_id": session_id,
@@ -907,6 +908,103 @@ def test_fetch_window_reads_every_bank_and_one_failure_hides_none(monkeypatch):
         ("SESS-B-A", "Other Bank"),
     ]
     assert w.complete is False
+    assert w.warnings == ["Broken Bank: couldn't be read (Enable Banking HTTP 401)"]
+    assert [b["access_ended"] for b in _store().banks()] == [None, None, None]
+
+
+# ── a consent that no longer answers ────────────────────────────────────────────────
+
+
+def test_a_closed_consent_is_an_ended_one_not_an_empty_bank(monkeypatch):
+    """Verified on the sandbox (2026-11-13): a revoked consent still answers GET /sessions
+    with 200 and its accounts, status CLOSED; only its transactions refuse. Reading it as a
+    bank with accounts made every fetch an "ok" with nothing in it."""
+    body = {"status": "CLOSED", "accounts": ["UID-1"]}
+    monkeypatch.setattr(
+        svc.httpx,
+        "get",
+        lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("GET", "https://x")),
+    )
+    with pytest.raises(svc.ConsentEndedError, match="closed"):
+        svc.fetch_session_accounts("JWT", "SESS-1")
+
+
+def test_another_apps_consent_is_an_ended_one(monkeypatch):
+    def _404(url, **k):
+        request = httpx.Request("GET", url)
+        raise httpx.HTTPStatusError(
+            "404", request=request, response=httpx.Response(404, request=request)
+        )
+
+    monkeypatch.setattr(svc.httpx, "get", _404)
+    with pytest.raises(svc.ConsentEndedError):
+        svc.fetch_session_accounts("JWT", "SESS-1")
+
+
+def _two_banks(monkeypatch, ended_sid):
+    _link(monkeypatch, "SESS-A", "ACME Bank")
+    _link(monkeypatch, "SESS-B", "Other Bank", "SE")
+
+    def _accounts(token, sid):
+        if sid == ended_sid:
+            raise svc.ConsentEndedError("Enable Banking says this consent is closed")
+        return [{"uid": f"{sid}-A", "currency": "EUR"}]
+
+    monkeypatch.setattr(svc, "fetch_session_accounts", _accounts)
+    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    monkeypatch.setattr(
+        svc, "fetch_account_transactions", lambda token, uid, *, date_from, date_to: ([], True)
+    )
+
+
+def test_a_bank_whose_consent_ended_is_named_and_flagged_to_renew(monkeypatch):
+    _two_banks(monkeypatch, "SESS-B")
+    w = svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert [a["provider_account_id"] for a in w.accounts] == ["SESS-A-A"]
+    assert w.complete is False
+    assert w.warnings == ["Other Bank: access ended — renew it in Connectors to keep it syncing"]
+    assert [b["access_ended"] for b in _store().banks()] == [None, "ended"]
+    assert [b["access_ended"] for b in _store().public()["banks"]] == [None, "ended"]
+
+
+def test_no_bank_answering_is_an_error_never_an_empty_ok(monkeypatch):
+    _link(monkeypatch, "SESS-A", "ACME Bank")
+
+    def _ended(token, sid):
+        raise svc.ConsentEndedError("Enable Banking no longer knows this consent (HTTP 404)")
+
+    monkeypatch.setattr(svc, "fetch_session_accounts", _ended)
+    with pytest.raises(ValidationError, match="No bank could be read. ACME Bank: access ended"):
+        svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert svc.classify_error(ValidationError("x")) == "auth_error"
+
+
+def test_a_bank_from_the_previous_app_is_named_without_a_call(monkeypatch):
+    _two_banks(monkeypatch, None)
+    store = _store()
+    store.mark_access_ended([store.banks()[0]["key"]], "app_changed")
+    read: list[str] = []
+    monkeypatch.setattr(
+        svc, "fetch_session_accounts", lambda token, sid: read.append(sid) or [{"uid": f"{sid}-A"}]
+    )
+    w = svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert read == ["SESS-B"]
+    assert w.warnings == [
+        "ACME Bank: linked under your previous Enable Banking app — renew it in Connectors to"
+        " keep it syncing"
+    ]
+
+
+def test_renewing_a_bank_from_the_previous_app_leaves_its_old_consent_alone(monkeypatch):
+    """The previous app's key remembered and revoked it at the switch; this app can't read
+    it: no read, no revoke with the wrong key."""
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", deleted=deleted)
+    store = _store()
+    store.mark_access_ended([store.banks()[0]["key"]], "app_changed")
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", deleted=deleted)
+    assert [(b["session_id"], b["access_ended"]) for b in _store().banks()] == [("SESS-NEW", None)]
+    assert deleted == []
 
 
 def _window_with(monkeypatch, sessions, seen_uids):
@@ -1111,3 +1209,43 @@ def test_fetch_counts_an_enable_banking_row_already_in_the_ledger_as_booked(monk
         "enable_banking", since="2026-11-01", before="2026-11-13", include_booked=True
     )
     assert with_booked["transactions"][0]["booked_txn_id"] == "txn_1"
+
+
+def test_a_flagged_bank_that_answers_again_is_unflagged(monkeypatch):
+    """Switching back to the app a bank was linked under: its consent answers again."""
+    _two_banks(monkeypatch, None)
+    store = _store()
+    store.mark_access_ended([store.banks()[1]["key"]], "ended")
+    w = svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert w.warnings == []
+    assert [b["access_ended"] for b in _store().banks()] == [None, None]
+
+
+def test_renewing_a_closed_consent_still_keeps_its_accounts_ids(monkeypatch):
+    """A 0.1.48 book recorded no identities, and its consent ran out: the account endpoints
+    refuse, but the session's accounts_data still carries each uid and hash."""
+    old = [{"uid": "UID-OLD", "identification_hash": "HASH-1"}]
+    new = [{"uid": "UID-NEW", "identification_hash": "HASH-1"}]
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old)
+    store = _store()
+    store.mark_access_ended([store.banks()[0]["key"]], "ended")
+    assert store.get()["account_identities"] == {}
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, sessions={"SESS-OLD": old})
+    after = _window_with(monkeypatch, {"SESS-NEW": new}, [])
+    assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
+
+
+def test_session_accounts_data_reads_a_closed_session(monkeypatch):
+    body = {
+        "status": "CLOSED",
+        "accounts": ["UID-1"],
+        "accounts_data": [{"uid": "UID-1", "identification_hash": "HASH-1"}],
+    }
+    monkeypatch.setattr(
+        svc.httpx,
+        "get",
+        lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("GET", "https://x")),
+    )
+    assert svc.session_accounts_data("JWT", "SESS-1") == [
+        {"uid": "UID-1", "identification_hash": "HASH-1"}
+    ]

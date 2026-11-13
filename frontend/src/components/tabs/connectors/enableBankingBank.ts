@@ -7,9 +7,13 @@ export interface EnableBankingBank {
   valid_until: string | null
   linked_at: string | null
   accounts: number
+  /** Why the consent no longer answers, until renewed: linked under the app used before this
+   *  one, or ended at Enable Banking (revoked, expired, gone). */
+  access_ended?: 'app_changed' | 'ended' | null
 }
 
-/** A consent whose end date has passed: the bank stops answering until it is renewed. */
+/** A consent that no longer answers — flagged by the server, or past its end date: the bank
+ *  stops syncing until it is renewed. */
 export function accessEnded(b: EnableBankingBank, now = Date.now()): boolean {
-  return !!b.valid_until && Date.parse(b.valid_until) <= now
+  return !!b.access_ended || (!!b.valid_until && Date.parse(b.valid_until) <= now)
 }

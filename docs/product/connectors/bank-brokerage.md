@@ -200,11 +200,27 @@ If **Link bank** or **Complete link** fails, the message gives Enable Banking's 
 example, `REDIRECT_URI_NOT_ALLOWED` names the URL to add to your application's allowed redirect
 URLs.
 
-Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
-error, and the form says which bank's access has ended — click **Renew** next to it. Each bank
-renews on its own; linking the same bank again also renews it rather than adding it twice. Renewing
-keeps everything as it was: each account stays linked to the same Open Net Worth account, and
-nothing already imported comes in again.
+Bank consent usually lasts about 90 days. When a bank's access ends (it ran out, or you revoked
+it at the bank), a fetch names that bank and keeps fetching the others, and the form shows
+**access ended** on it — click **Renew** next to it. If no bank can be read, the fetch fails
+instead of returning nothing. Each bank renews on its own; linking the same bank again also renews
+it rather than adding it twice. Renewing keeps everything as it was: each account stays linked to
+the same Open Net Worth account, and nothing already imported comes in again.
+
+### Switching to another Enable Banking application
+
+A bank's access belongs to the application you linked it with, so another application can't read
+it. To move to a new application (from a sandbox one to a production one, say), click **Edit** on
+step 1, paste the new **Application ID** and its **private key**, and click **Save**. The form
+warns you first while banks are linked. On Save:
+
+- Enable Banking checks the new ID and key. If it refuses them, nothing changes: your banks keep
+  syncing under the current application.
+- Each bank's access under the old application is revoked at Enable Banking.
+- Every bank shows **linked under your previous app**. Click **Renew** on each one and approve at
+  your bank again. Its accounts stay linked, and nothing already imported comes in again.
+
+Add the step 1 **Redirect URL** to the new application's redirect URLs too.
 
 ## GoCardless
 
@@ -562,6 +578,12 @@ link again.
 **Enable Banking: "starting the bank link failed: HTTP 4xx"** — Enable Banking's own reason
 follows. `REDIRECT_URI_NOT_ALLOWED` after **Link with a code instead** means
 `https://localhost/connectors` isn't in your application's redirect URLs.
+
+**Enable Banking: "Enable Banking refused the new app … Nothing was changed"** — you saved
+another application while banks are linked, and Enable Banking refused the ID and key. "Application
+does not exist" means the ID is wrong; "Wrong signature" means the key belongs to a different
+application, so paste the new application's own `.pem` key. Your banks keep syncing under the
+current application until a save goes through.
 
 **Enable Banking: "the Enable Banking private key is not a valid PEM RSA key"** — paste the whole
 `.pem` file, including the BEGIN and END lines.

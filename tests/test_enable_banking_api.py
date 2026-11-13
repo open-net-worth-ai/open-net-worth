@@ -208,3 +208,27 @@ def test_remove_unknown_bank_is_422(client):
     client.put("/api/enable-banking/config", json={"application_id": "app-1", "private_key": _PEM})
     r = client.post("/api/enable-banking/banks/nope/remove")
     assert r.status_code == 422
+
+
+def test_switching_to_an_app_enable_banking_refuses_is_422_and_saves_nothing(client, monkeypatch):
+    from backend.core.errors import ValidationError
+    from backend.db.enable_banking_config_store import EnableBankingConfigStore
+    from backend.services.aggregation import enable_banking_app
+
+    store = EnableBankingConfigStore()
+    store.update({"application_id": "OLD-APP", "private_key": _PEM})
+    store.add_bank(
+        "SESS-1", aspsp="ACME Bank", country="FI", valid_until=None, linked_at="x", account_ids=[]
+    )
+
+    def _refuse(application_id, private_key):
+        raise ValidationError("Enable Banking refused the new app: HTTP 403. Nothing was changed.")
+
+    monkeypatch.setattr(enable_banking_app, "_check_application", _refuse)
+    r = client.put(
+        "/api/enable-banking/config", json={"application_id": "TYPO", "private_key": _PEM}
+    )
+    assert r.status_code == 422
+    assert "Nothing was changed" in r.json()["detail"]
+    assert EnableBankingConfigStore().application_id() == "OLD-APP"
+    assert client.get("/api/enable-banking/status").json()["banks"][0]["access_ended"] is None
