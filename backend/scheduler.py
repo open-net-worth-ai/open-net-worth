@@ -579,6 +579,9 @@ async def _run_bank_data_sync() -> None:
 
         if await asyncio.to_thread(bank_data_sync.run_if_due):
             logger.info("scheduler: bank_data_sync ran")
+        # The opt-in Lucius follow-up runs here, on the loop, never inside the booking run.
+        if await bank_data_sync.run_followups():
+            logger.info("scheduler: bank_data_sync follow-up categorised rows")
     except Exception as exc:
         logger.exception("scheduler: bank_data_sync error: %s", exc)
 

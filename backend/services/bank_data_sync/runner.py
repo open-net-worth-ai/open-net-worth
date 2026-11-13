@@ -182,7 +182,19 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         errors=errors,
         notes=[{"booked_txn_ids": [t["id"] for t in created]}],
     )
-    return {"run_id": run_id, "status": status, "counts": counts, "created": created}
+    result = {"run_id": run_id, "status": status, "counts": counts, "created": created}
+    _queue_followup(p, result)
+    return result
+
+
+def _queue_followup(p: Provider, result: dict) -> None:
+    """Hand still-Uncategorized rows to the opt-in Lucius follow-up (a no-op when it's off)."""
+    from backend.services.bank_data_sync import followup
+
+    try:
+        followup.after_run(p, result)
+    except Exception:  # noqa: BLE001 — the booking stands without it
+        logger.exception("bank_data_sync: %s follow-up could not be queued", p.key)
 
 
 def start(p: Provider, trigger: str, accounts: list[dict]) -> dict:
@@ -203,12 +215,10 @@ def start(p: Provider, trigger: str, accounts: list[dict]) -> dict:
         raise
 
 
-def finish_in_background(p: Provider, run: dict, accounts: list[dict], after=None) -> None:
+def finish_in_background(p: Provider, run: dict, accounts: list[dict]) -> None:
     def work():
         try:
-            result = execute(p, accounts, run["id"])
-            if after is not None:
-                after(p, result)
+            execute(p, accounts, run["id"])
         except Exception:  # noqa: BLE001
             logger.exception("bank_data_sync: %s run failed", p.key)
             _fail(run["id"])
@@ -218,14 +228,11 @@ def finish_in_background(p: Provider, run: dict, accounts: list[dict], after=Non
     threading.Thread(target=work, name=f"bank-sync-{p.key}", daemon=True).start()
 
 
-def run_now(p: Provider, trigger: str, accounts: list[dict], after=None) -> dict:
+def run_now(p: Provider, trigger: str, accounts: list[dict]) -> dict:
     """Run synchronously (the scheduler tick, tests). Releases the slot when done."""
     run = start(p, trigger, accounts)
     try:
-        result = execute(p, accounts, run["id"])
-        if after is not None:
-            after(p, result)
-        return result
+        return execute(p, accounts, run["id"])
     except Exception:
         _fail(run["id"])
         raise

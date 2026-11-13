@@ -149,12 +149,6 @@ def set_followup(key: str, enabled: bool) -> dict:
     return status(key)
 
 
-def _after_run(p, result: dict) -> None:
-    from backend.services.bank_data_sync import followup
-
-    followup.after_run(p, result)
-
-
 def _when(dt) -> str:
     from backend.core.user_time import user_zone
 
@@ -183,7 +177,7 @@ def run_now(key: str) -> dict:
             f"those reads are used. The next one is possible at about {_when(at)}."
         )
     run = runner.start(p, "manual", ready)
-    runner.finish_in_background(p, run, ready, after=_after_run)
+    runner.finish_in_background(p, run, ready)
     return {"run_id": run["id"], "accounts": len(ready), "skipped_for_limit": len(spent)}
 
 
@@ -211,7 +205,7 @@ def _tick(p) -> bool:
         at = runner.next_read_at(p, spent) or budget.now() + budget.interval(p)
         budget.update(p.key, next_due_at=_iso(at))
         return False
-    runner.run_now(p, "scheduled", ready, after=_after_run)
+    runner.run_now(p, "scheduled", ready)
     return True
 
 
@@ -260,3 +254,13 @@ def book_review(item_id: str) -> dict:
     from backend.services.bank_data_sync import review_actions
 
     return review_actions.book_separately(item_id)
+
+
+async def run_followups() -> int:
+    """The scheduler tick's async half: the queued "Let Lucius categorise what's left" turns,
+    on the main event loop. Nothing while the flag is off or no switch is on."""
+    if not is_on():
+        return 0
+    from backend.services.bank_data_sync import followup
+
+    return await followup.run_pending()

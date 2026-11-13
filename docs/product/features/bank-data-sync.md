@@ -71,9 +71,13 @@ booked, and the next run tries again.
 ## Let Lucius categorise what's left (optional)
 
 Tick **Let Lucius categorise what's left** to have Lucius look at the transactions a run booked
-**Uncategorized** — and only those — and categorise them the way the
-[book-transactions skill](../lucius/automations.md) does. It uses your AI model. Booking never
-waits for it, and nothing about booking depends on it.
+**Uncategorized** — only those — and pick one of **your existing categories** for each, by the
+same rules the book-transactions skill uses. It never creates a category, and leaves a row
+Uncategorized when nothing fits. It runs within a minute of the sync, uses your AI model, and the
+run's history says how many it categorised. Booking never waits for it and doesn't depend on it.
+
+Lucius gets no tools for this: it can only suggest a category for those rows, so text in a bank
+transaction can't make it do anything else.
 
 ## When the bank changes something
 
