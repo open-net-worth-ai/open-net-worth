@@ -99,6 +99,7 @@ from backend.api.assets_api import router as assets_router
 from backend.api.auth import router as auth_router
 from backend.api.automations import router as automations_router
 from backend.api.backup import router as backup_router
+from backend.api.bank_sync_api import router as bank_sync_router
 from backend.api.briefing import router as briefing_router
 from backend.api.budgets import router as budgets_router
 from backend.api.builder import router as builder_router
@@ -1207,6 +1208,7 @@ app.include_router(yodlee_router)
 app.include_router(lunch_money_router)
 app.include_router(rest_connector_router)
 app.include_router(ynab_router)
+app.include_router(bank_sync_router)
 app.include_router(actual_budget_router)
 app.include_router(import_runs_router)
 app.include_router(account_linking_router)

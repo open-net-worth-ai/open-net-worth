@@ -5,7 +5,7 @@ category: connectors
 order: 60
 audience: [user]
 status: beta
-related: [lucius/automations, lucius/overview, features/importing, getting-started/what-is-open-net-worth]
+related: [lucius/automations, lucius/overview, features/importing, features/bank-data-sync, getting-started/what-is-open-net-worth]
 keywords: [plaid, simplefin, enable banking, gocardless, nordigen, lunch flow, lunch money, ynab, alpaca, interactive brokers, ibkr flex retired, bank sync, brokerage sync, setup, sync template, last fetched]
 ---
 
@@ -241,7 +241,9 @@ linking again; the other banks keep fetching. Click **Link again** on that bank 
 To renew a bank before it expires, click **Renew**: the old access keeps working until you
 finish at the bank, so you lose nothing if you stop halfway.
 
-**Banks limit how often you can fetch.** Many allow only four reads per account per day. The
+**Banks limit how often you can fetch.** Many allow only four reads per account per day. (With
+[Bank sync without AI](../features/bank-data-sync.md), each account shows the reads it has
+left today.) The
 **Sync GoCardless** template runs twice a day, which leaves room for one fetch you ask for
 yourself. If you hit the limit, the connector shows **rate limited** with roughly when the limit
 resets. Wait until then; you don't need to link again.
@@ -431,6 +433,11 @@ Yodlee. If you set it up before, it still appears in your Connectors list so you
 remove it, but it is no longer supported — use one of the connectors above instead.
 
 ## Turning on automatic syncing
+
+**Without AI (experimental):** GoCardless, Enable Banking and Plaid can book their transactions
+by fixed rules, with no AI — choose **Sync without AI** under **Sync** on the connector's page.
+See [Bank sync without AI](../features/bank-data-sync.md). The rest of this section is the
+Lucius way.
 
 Nothing is booked on a schedule until you turn it on. Open the connector and click **Automate**.
 That opens a ready-made Automation — for example **Sync SimpleFIN** — as a draft you can read and

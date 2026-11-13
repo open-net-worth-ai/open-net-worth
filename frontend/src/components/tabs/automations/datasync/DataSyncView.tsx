@@ -2,16 +2,21 @@ import { useState } from 'react'
 import { Clock3 } from 'lucide-react'
 import { ErrorState, TabSkeleton } from '../../../ui'
 import { KeepAwakeBanner } from '../KeepAwakeBanner'
+import { BankSyncCard } from './BankSyncCard'
 import { DataSyncCard } from './DataSyncCard'
+import type { BankSyncStatus } from './bankSync'
 import type { DataSyncEntry } from './useDataSyncs'
 
 // The Data sync view of Automations: syncs that keep this book and another app in step by fixed
 // rules, with no AI involved. The ones not set up yet are offered below the ones that are.
 export function DataSyncView({
   entries,
+  banks = [],
   onOpen,
 }: {
   entries: DataSyncEntry[]
+  /** Bank connectors that can sync without AI; a card opens `bank:<provider>`. */
+  banks?: BankSyncStatus[]
   onOpen: (key: string) => void
 }) {
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -23,7 +28,7 @@ export function DataSyncView({
     )
   }
   const failed = entries.filter((e) => e.sync.error)
-  if (entries.length > 0 && failed.length === entries.length) {
+  if (banks.length === 0 && entries.length > 0 && failed.length === entries.length) {
     const first = failed[0]!.sync
     return (
       <div className="a3-wrap">
@@ -46,6 +51,13 @@ export function DataSyncView({
           {refusal}
         </div>
       )}
+      {banks.length > 0 && (
+        <div className="a3-list" aria-label="Bank syncs">
+          {banks.map((b) => (
+            <BankSyncCard key={b.provider} status={b} onOpen={() => onOpen(`bank:${b.provider}`)} />
+          ))}
+        </div>
+      )}
       {adopted.length > 0 ? (
         <div className="a3-list">
           {adopted.map(({ app, sync }) => (
@@ -59,7 +71,7 @@ export function DataSyncView({
             />
           ))}
         </div>
-      ) : (
+      ) : banks.length > 0 ? null : (
         <div className="a3-empty">
           No data syncs yet. Pick one below to bring your history in and keep it in step.
         </div>

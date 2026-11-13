@@ -42,6 +42,7 @@ import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
+import { BankSyncSection } from '../automations/datasync/BankSyncPanel'
 import { cachedRestApi, getRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
@@ -619,6 +620,10 @@ export function ConnectorDetail({
             bank or broker shows them here — not only behind Edit configuration. */}
           {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured && entry.enabled ? (
             <ConnectorAccountsList provider={entry.id} providerLabel={entry.name} />
+          ) : null}
+          {/* Bank sync without AI (ADR 2026-11-13) — nothing for a connector without one. */}
+          {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured ? (
+            <BankSyncSection provider={entry.id} />
           ) : null}
 
           {entry.prompts.length > 0 ? (

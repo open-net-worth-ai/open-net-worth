@@ -130,6 +130,8 @@ def _outcome(counts: dict, status: str) -> str:
         parts.append(f"{counts['booked']} booked")
     if counts.get("to_review"):
         parts.append(f"{counts['to_review']} to review")
+    if counts.get("errors"):
+        parts.append(f"{counts['errors']} not booked")
     if counts.get("deleted_before"):
         parts.append(f"{counts['deleted_before']} you deleted left out")
     if status not in ("ok", "partial"):
