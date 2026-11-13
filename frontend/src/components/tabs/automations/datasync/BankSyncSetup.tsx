@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Check, Download, Play } from 'lucide-react'
+import { fDate } from '../../../../utils/format'
 import { Button } from '../../../ui'
 import {
   AccountBoxes,
@@ -148,12 +149,30 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   )
 }
 
-/** "3 transactions into 2 accounts", counted in the book (a run's own record can be gone). */
+/** "3 transactions from Nov 5 to Nov 12, into 2 accounts at 2 banks" — counted in the book (a
+ *  run's own record can be gone): how many, over which dates, and where they went. */
 function importedLine(accounts: BankSyncAccount[]): string {
   const into = accounts.filter((a) => a.sync && a.imported)
   const n = into.reduce((sum, a) => sum + (a.booked ?? 0), 0)
+  const firsts = into
+    .map((a) => a.booked_from)
+    .filter((d): d is string => !!d)
+    .sort()
+  const lasts = into
+    .map((a) => a.booked_to)
+    .filter((d): d is string => !!d)
+    .sort()
+  const banks = new Set(into.map((a) => a.bank || '')).size
   const txns = `${n} ${n === 1 ? 'transaction' : 'transactions'}`
-  return into.length === 1
-    ? `${txns} into ${into[0]!.name}`
-    : `${txns} into ${into.length} accounts`
+  const span =
+    firsts.length && lasts.length
+      ? firsts[0] === lasts[lasts.length - 1]
+        ? ` on ${fDate(firsts[0]!)}`
+        : ` from ${fDate(firsts[0]!)} to ${fDate(lasts[lasts.length - 1]!)}`
+      : ''
+  const where =
+    into.length === 1
+      ? into[0]!.name
+      : `${into.length} accounts${banks > 1 ? ` at ${banks} banks` : ''}`
+  return `${txns}${span}, into ${where}`
 }

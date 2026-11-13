@@ -29,6 +29,9 @@ export interface BankSyncAccount {
   last_four?: string
   /** How many of its transactions came from this bank, counted in the book. */
   booked?: number
+  /** The dates of the first and last of them (ISO days). */
+  booked_from?: string | null
+  booked_to?: string | null
   /** When the bank's access for this app ends (European banks grant it for a set time). */
   access_ends_at?: string | null
   access_ended?: boolean

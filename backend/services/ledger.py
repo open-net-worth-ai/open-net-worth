@@ -2208,19 +2208,27 @@ def known_external_refs(source: str) -> dict[tuple[str | None, str], str]:
 def accounts_booked_from(source: str) -> set[str]:
     """Ids of the accounts holding at least one LIVE transaction that carries a ``source``
     ref — which linked accounts a connector has already imported into."""
-    return set(booked_counts_from(source))
+    return set(booked_from(source))
 
 
-def booked_counts_from(source: str) -> dict[str, int]:
-    """Account id → how many LIVE transactions on it carry a ``source`` ref: what a connector
-    has booked there, read from the ledger itself (a sync's run records can be gone)."""
-    out: dict[str, int] = {}
+def booked_from(source: str) -> dict[str, dict]:
+    """Account id → ``{count, first, last}`` of the LIVE transactions on it that carry a
+    ``source`` ref: what a connector has booked there and over which dates, read from the
+    ledger itself (a sync's run records can be gone)."""
+    out: dict[str, dict] = {}
     for t in transactions.all():
         if t.get("deleted") and not t.get("merged_into"):
             continue
-        if any(pair[0] == source for pair in ext_ref_pairs(t)):
-            for a in {t.get("from_account_id"), t.get("to_account_id")} - {None, ""}:
-                out[a] = out.get(a, 0) + 1
+        if not any(pair[0] == source for pair in ext_ref_pairs(t)):
+            continue
+        day = str(t.get("date") or "")[:10]
+        for a in {t.get("from_account_id"), t.get("to_account_id")} - {None, ""}:
+            row = out.setdefault(a, {"count": 0, "first": day, "last": day})
+            row["count"] += 1
+            if day and (not row["first"] or day < row["first"]):
+                row["first"] = day
+            if day > row["last"]:
+                row["last"] = day
     return out
 
 

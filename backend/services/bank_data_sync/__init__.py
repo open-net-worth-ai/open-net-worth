@@ -44,7 +44,7 @@ def _accounts(p, key: str) -> list[dict]:
 
     excluded = set(settings.get(key)["excluded_account_ids"])
     rows = {r.get("id"): r for r in accounts_service.all_account_rows()}
-    booked = ledger_service.booked_counts_from(key)
+    booked = ledger_service.booked_from(key)
     from backend.services.bank_data_sync import access
 
     granted = access.by_account(p)
@@ -69,8 +69,10 @@ def _accounts(p, key: str) -> list[dict]:
                 "next_read_at": _iso(next_at),
                 # History brought in: whether anything from this bank is booked here yet.
                 "imported": a.get("linked_account_id") in booked,
-                # How many of its transactions came from this bank: the import step's count.
-                "booked": booked.get(a.get("linked_account_id") or "", 0),
+                # What came from this bank, counted in the book: the import step's line.
+                "booked": (booked.get(a.get("linked_account_id") or "") or {}).get("count", 0),
+                "booked_from": (booked.get(a.get("linked_account_id") or "") or {}).get("first"),
+                "booked_to": (booked.get(a.get("linked_account_id") or "") or {}).get("last"),
                 # When the bank's access for this app ends (a European bank grants it for a set
                 # time), and whether it has: the page warns before the sync quietly stops.
                 "access_ends_at": bank.get("ends_at"),

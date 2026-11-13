@@ -302,7 +302,7 @@ function BankStatus({ status, accounts }: { status: BankSyncStatus; accounts: Ba
   if (!status.running && !run) return null
   const text = status.running
     ? 'Syncing now…'
-    : `Synced ${timeAgo(run!.finished_at || run!.started_at)}`
+    : `Synced ${syncedAgo(run!.finished_at || run!.started_at)}`
   return (
     <span className="bs-bank-status">
       <span className={PILL.ok} title={until}>
@@ -311,4 +311,10 @@ function BankStatus({ status, accounts }: { status: BankSyncStatus; accounts: Ba
       </span>
     </span>
   )
+}
+
+/** "just now" for the first minute, where timeAgo reads "0s ago". */
+function syncedAgo(iso: string): string {
+  const ago = timeAgo(iso)
+  return /^\d+s ago$/.test(ago) ? 'just now' : ago
 }

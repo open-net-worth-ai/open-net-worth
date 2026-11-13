@@ -146,7 +146,14 @@ def record_outcome(p: Provider, status: str, error: Optional[str], at: Optional[
 
 
 def schedule_from_now(p: Provider, at: Optional[datetime] = None) -> None:
-    """Turning data sync on: the first run is due now."""
+    """Turning data sync on: the first run is due now — unless a good run just read the bank
+    (the history import right before Turn on), when it is due one interval after that run.
+    Reading again at once would book nothing and spend one of the bank's few daily reads."""
+    st = state(p.key)
+    last = _parse(st.get("last_run_at"))
+    if last is not None and st.get("last_status") in ("ok", "partial"):
+        update(p.key, next_due_at=_iso(last + interval(p)), failures=0)
+        return
     update(p.key, next_due_at=_iso(at or now()), failures=0)
 
 

@@ -32,7 +32,7 @@ export function markFor(s: BankSyncStatus, a: BankSyncAccount): SyncMark | null 
   return {
     tone: 'ok',
     text: run
-      ? `Synced by ${s.label} ${timeAgo(run.finished_at || run.started_at)}`
+      ? `Synced by ${s.label} ${timeAgo(run.finished_at || run.started_at).replace(/^\d+s ago$/, 'just now')}`
       : `Synced by ${s.label}`,
   }
 }
