@@ -20,6 +20,7 @@ class KeirolabsProvider(SearchProvider):
         self.api_key = api_key
 
     async def search(self, query: str, max_results: int = 8) -> list[dict]:
+        # The lite endpoint returns at most ~15 rows whatever maxResults asks (checked 2026-11-13).
         payload = {"query": query, "maxResults": max(1, min(max_results, 20))}
         headers = {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
         async with httpx.AsyncClient(timeout=60) as client:
@@ -37,7 +38,7 @@ class KeirolabsProvider(SearchProvider):
                     "title": r.get("title", "") or "",
                     "content": r.get("snippet", "") or "",
                     "score": None,
-                    "published_date": r.get("publishedDate", "") or "",
+                    "published_date": "",  # the lite endpoint returns no date
                 }
             )
         return out[:max_results]

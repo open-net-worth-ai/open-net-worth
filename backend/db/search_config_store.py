@@ -113,7 +113,7 @@ PROVIDER_CATALOG: list = [
     {
         "id": "keirolabs",
         "label": "Keirolabs",
-        "hint": "Low-cost web results: titles, links and snippets at $0.10 per 1,000 searches.",
+        "hint": "Web results: titles, links and snippets.",
         "docs_url": "https://platform.keirolabs.cloud/dashboard/keys",
         "needs_api_key": True,
         "native_fetch": False,

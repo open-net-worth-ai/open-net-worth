@@ -378,7 +378,7 @@ SHORT: dict[str, str] = {
     "web_search:serper": "Google results, fast and low-cost",
     "web_search:google_pse": "Google Custom Search",
     "web_search:firecrawl": "Search + full-page scraping, JS-rendered pages included",
-    "web_search:keirolabs": "Web results at $0.10 per 1,000 searches",
+    "web_search:keirolabs": "Web results: titles, links and snippets",
     "telegram": "Chat with Lucius and get alerts on Telegram.",
     "voice": "Talk to Lucius out loud from the chat.",
     "webhook": "Send notifications to any URL.",
@@ -443,8 +443,8 @@ LONG: dict[str, str] = {
         "— the provider to pick if page reads are coming back thin or blocked."
     ),
     "web_search:keirolabs": (
-        "Titles, links and snippets from the open web at $0.10 per 1,000 searches, billed per "
-        "search whatever the result count. Pages are read with a plain fetch, like Serper."
+        "Titles, links and snippets from the open web, billed per search whatever the result "
+        "count. Pages are read with a plain fetch, like Serper."
     ),
     "voice": (
         "Press Call in Lucius's chat and talk instead of typing. A fast voice keeps the "

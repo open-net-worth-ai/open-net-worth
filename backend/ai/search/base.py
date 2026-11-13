@@ -232,7 +232,7 @@ PROVIDER_REGISTRY: tuple = (
     ProviderSpec(
         id="keirolabs",
         label="Keirolabs",
-        hint="Low-cost web results: titles, links and snippets at $0.10 per 1,000 searches.",
+        hint="Web results: titles, links and snippets.",
         docs_url="https://platform.keirolabs.cloud/dashboard/keys",
         native_fetch=False,
         factory=_keirolabs_factory,

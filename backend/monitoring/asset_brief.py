@@ -71,7 +71,8 @@ _SEARCH_COST_USD: dict[str, float] = {
     # (yearly) plan — cheaper per call than most of the above, but real cost is plan-tier
     # dependent like every other estimate in this table.
     "firecrawl": 0.002,
-    # keirolabs.cloud/pricing: $0.10 per 1,000 lite searches on the Essential plan.
+    # keirolabs.cloud/pricing: the Essential plan ($29.99/month) includes 300,000 lite searches,
+    # $0.0001 each when the quota is used; plan-tier dependent like the Firecrawl estimate above.
     "keirolabs": 0.0001,
     # duckduckgo and searxng are free / self-hosted — no cost
 }
