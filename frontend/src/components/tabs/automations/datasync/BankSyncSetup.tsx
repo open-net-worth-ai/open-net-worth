@@ -81,7 +81,10 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
                   onClick={() =>
                     void navigate({
                       to: '/accounts',
-                      search: { batch: `bank_sync:${status.last_run!.id}` } as never,
+                      search: {
+                        batch: `bank_sync:${status.last_run!.id}`,
+                        batchLabel: `${status.label} import · ${fDate(status.last_run!.started_at)}`,
+                      } as never,
                     } as never)
                   }
                 >

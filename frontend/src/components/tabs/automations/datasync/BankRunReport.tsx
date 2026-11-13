@@ -129,7 +129,10 @@ function RunBody({
                 onClose()
                 void navigate({
                   to: '/accounts',
-                  search: { batch: `bank_sync:${r.id}` } as never,
+                  search: {
+                    batch: `bank_sync:${r.id}`,
+                    batchLabel: `${r.plan_name || 'Bank'} sync · ${formatWhen(r.started_at)}`,
+                  } as never,
                 } as never)
               }}
             >

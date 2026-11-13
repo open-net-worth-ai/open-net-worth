@@ -224,6 +224,7 @@ export function AccountsTab({
     payee?: string
     /** A bank sync run's report: exactly what one write batch booked, across accounts. */
     batch?: string
+    batchLabel?: string
   } | null
   onRegisterFilterApplied?: () => void
   refresh?: () => void
@@ -939,7 +940,16 @@ export function AccountsTab({
       !registerFilter?.batch
     )
       return
-    const { category: cat, month, uncategorized, kind, dateOn, payee, batch } = registerFilter
+    const {
+      category: cat,
+      month,
+      uncategorized,
+      kind,
+      dateOn,
+      payee,
+      batch,
+      batchLabel,
+    } = registerFilter
     selectAccount(null) // a Plan deep-link is an all-accounts view
     setFilter((f) => {
       const next = { ...f }
@@ -990,7 +1000,7 @@ export function AccountsTab({
       if (batch) {
         // Exactly that batch, whenever it was dated: no other token, no date range.
         next.preset = 'all'
-        next.tokens = [{ field: 'importBatch', value: batch, label: 'This sync' }]
+        next.tokens = [{ field: 'importBatch', value: batch, label: batchLabel || 'One import' }]
       }
       if (dateOn) {
         const label = 'On ' + fDate(dateOn, 'short', 'always')

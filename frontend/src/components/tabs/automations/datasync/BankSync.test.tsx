@@ -363,7 +363,10 @@ describe('with bank_data_sync on', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'View in register' }))
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(navigate).toHaveBeenCalledWith(
-      expect.objectContaining({ to: '/accounts', search: { batch: 'bank_sync:r1' } }),
+      expect.objectContaining({
+        to: '/accounts',
+        search: expect.objectContaining({ batch: 'bank_sync:r1' }),
+      }),
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Open ACME Grocery' }))
     expect(onClose).toHaveBeenCalledTimes(2)
