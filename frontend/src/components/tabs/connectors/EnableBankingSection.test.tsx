@@ -129,6 +129,8 @@ describe('EnableBankingSection', () => {
     expect(screen.getByText(/Add the Redirect URL from step 1/)).toBeTruthy()
     // Only the address: the saved keys stay folded away.
     expect(screen.queryByLabelText(/Application ID/)).toBeNull()
+    // One way round, not two: the "enter its code" link waits until this is resolved.
+    expect(screen.queryByRole('button', { name: /Bank didn't bring you back/ })).toBeNull()
     // Nobody went to the bank: the blank tab opened on the click is closed again.
     expect(tab.close).toHaveBeenCalled()
     expect(tab.location.href).toBe('')

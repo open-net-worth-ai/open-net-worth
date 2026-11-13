@@ -262,6 +262,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
         const d = await r.json().catch(() => ({}))
         if (d.detail?.code === 'redirect_not_registered') {
           setUnregistered({ target })
+          // The code field would be a second way round; the link below is the one offered.
+          setShowPaste(false)
+          setReturnsToApp(null)
           return
         }
         setLinkErr(
@@ -611,21 +614,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
             </Text>
           )}
           {unregistered && (
-            <Stack gap="--space-1">
-              <Text size="xs" tone="warn">
-                Add the Redirect URL from step 1 to your Enable Banking app first, then link again.
-              </Text>
-              <div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="eb-link"
-                  onClick={() => void linkBank(unregistered.target, true)}
-                >
-                  Can&apos;t add it? Link with a code instead
-                </Button>
-              </div>
-            </Stack>
+            <Text size="xs" tone="warn">
+              Add the Redirect URL from step 1 to your Enable Banking app first, then link again.
+            </Text>
           )}
           {returnsToApp === false && (
             <Text size="xs" tone="warn">
@@ -658,14 +649,27 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           ) : (
             cfg.has_credentials && (
               <div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="eb-link"
-                  onClick={() => setShowPaste(true)}
-                >
-                  Bank didn&apos;t bring you back? Enter its code
-                </Button>
+                {/* One way round the redirect at a time: while the address isn't registered,
+                    linking with a code is it; otherwise, entering a code the bank showed. */}
+                {unregistered ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="eb-link"
+                    onClick={() => void linkBank(unregistered.target, true)}
+                  >
+                    Can&apos;t add it? Link with a code instead
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="eb-link"
+                    onClick={() => setShowPaste(true)}
+                  >
+                    Bank didn&apos;t bring you back? Enter its code
+                  </Button>
+                )}
               </div>
             )
           )}
