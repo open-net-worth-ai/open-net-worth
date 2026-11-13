@@ -772,9 +772,13 @@ def test_classify_error_unknown_exception_is_error():
 # ── several banks ───────────────────────────────────────────────────────────────────
 
 
-def _link(monkeypatch, session_id, aspsp, country="FI", accounts=None, deleted=None):
-    """Complete one bank link the way the app does: start (pending bank) → return → session."""
+def _link(monkeypatch, session_id, aspsp, country="FI", accounts=None, deleted=None, sessions=None):
+    """Complete one bank link the way the app does: start (pending bank) → return → session.
+    ``sessions`` ({session_id: [accounts]}) is what Enable Banking lists for each session; a
+    renewal reads the old one before revoking it. Never the network."""
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    listed = sessions or {}
+    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(listed.get(sid, [])))
     _pending("S", aspsp, country)
     body = {
         "session_id": session_id,
@@ -865,6 +869,91 @@ def test_fetch_window_reads_every_bank_and_one_failure_hides_none(monkeypatch):
         ("SESS-B-A", "Other Bank"),
     ]
     assert w.complete is False
+
+
+def _window_with(monkeypatch, sessions, seen_uids):
+    """fetch_window over ``sessions`` ({session_id: [accounts]}), recording which uids the
+    Enable Banking endpoints were called with."""
+    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(sessions[sid]))
+
+    def _balance(token, uid):
+        seen_uids.append(("balance", uid))
+        return 10.0
+
+    def _txns(token, uid, *, date_from, date_to):
+        seen_uids.append(("transactions", uid))
+        return [
+            {
+                "transaction_id": "T1",
+                "booking_date": "2026-11-12",
+                "status": "BOOK",
+                "transaction_amount": {"amount": "45.20", "currency": "EUR"},
+                "credit_debit_indicator": "DBIT",
+                "remittance_information": ["GROCERY"],
+            }
+        ], True
+
+    monkeypatch.setattr(svc, "fetch_account_balance", _balance)
+    monkeypatch.setattr(svc, "fetch_account_transactions", _txns)
+    return svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+
+
+def test_renewing_a_bank_keeps_its_accounts_id_links_and_refs(monkeypatch):
+    """Enable Banking gives an account a NEW uid in every session (seen on the sandbox,
+    2026-11-13). Renewing must not change the account's id here: its app-account link and
+    every transaction ref are built from it, so a new id orphaned the link and re-imported
+    already-booked rows. The new uid is still the one the API is called with."""
+    old = [{"uid": "UID-OLD", "identification_hash": "HASH-1", "currency": "EUR"}]
+    new = [{"uid": "UID-NEW", "identification_hash": "HASH-1", "currency": "EUR"}]
+    sessions = {"SESS-OLD": old, "SESS-NEW": new}
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old, deleted=deleted, sessions=sessions)
+    calls: list = []
+    before = _window_with(monkeypatch, {"SESS-OLD": old}, calls)
+
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, deleted=deleted, sessions=sessions)
+    calls.clear()
+    after = _window_with(monkeypatch, {"SESS-NEW": new}, calls)
+
+    assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
+    assert [r["external_refs"] for r in after.rows] == [r["external_refs"] for r in before.rows]
+    assert [r["provider_account_id"] for r in after.rows] == ["UID-OLD"]
+    assert calls == [("balance", "UID-NEW"), ("transactions", "UID-NEW")]
+
+
+def test_a_renewal_keeps_ids_even_when_the_accounts_were_never_listed(monkeypatch):
+    """A book linked before this fix (0.1.48) has recorded no identities. Renewing reads the
+    old consent's accounts before revoking it, so the link it already holds survives."""
+    old = [{"uid": "UID-OLD", "identification_hash": "HASH-1"}]
+    new = [{"uid": "UID-NEW", "identification_hash": "HASH-1"}]
+    sessions = {"SESS-OLD": old, "SESS-NEW": new}
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old, deleted=deleted, sessions=sessions)
+    assert _store().get()["account_identities"] == {}  # nothing listed yet
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, deleted=deleted, sessions=sessions)
+    after = _window_with(monkeypatch, {"SESS-NEW": new}, [])
+    assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
+    assert deleted == [f"{svc.API_BASE}/sessions/SESS-OLD"]
+
+
+def test_the_same_account_hash_at_two_banks_stays_two_accounts(monkeypatch):
+    """The sandbox's mock banks in FI and NO expose one IBAN, so one identification_hash.
+    Two linked banks are two accounts here, whatever the hash says."""
+    fi = [{"uid": "UID-FI", "identification_hash": "HASH-1"}]
+    no = [{"uid": "UID-NO", "identification_hash": "HASH-1"}]
+    sessions = {"SESS-FI": fi, "SESS-NO": no}
+    _link(monkeypatch, "SESS-FI", "Mock ASPSP", "FI", accounts=fi, sessions=sessions)
+    _link(monkeypatch, "SESS-NO", "Mock ASPSP", "NO", accounts=no, sessions=sessions)
+    w = _window_with(monkeypatch, sessions, [])
+    assert sorted(a["provider_account_id"] for a in w.accounts) == ["UID-FI", "UID-NO"]
+
+
+def test_an_account_without_a_hash_keeps_its_session_uid(monkeypatch):
+    accounts = [{"uid": "UID-1"}]
+    _link(monkeypatch, "SESS-A", "ACME Bank", accounts=accounts, sessions={"SESS-A": accounts})
+    w = _window_with(monkeypatch, {"SESS-A": accounts}, [])
+    assert [a["provider_account_id"] for a in w.accounts] == ["UID-1"]
+    assert _store().get()["account_identities"] == {}
 
 
 def test_a_second_link_never_strands_the_first(monkeypatch):

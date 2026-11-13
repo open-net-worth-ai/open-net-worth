@@ -193,7 +193,9 @@ URLs.
 
 Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
 error, and the form says which bank's access has ended — click **Renew** next to it. Each bank
-renews on its own; linking the same bank again also renews it rather than adding it twice.
+renews on its own; linking the same bank again also renews it rather than adding it twice. Renewing
+keeps everything as it was: each account stays linked to the same Open Net Worth account, and
+nothing already imported comes in again.
 
 ## GoCardless
 

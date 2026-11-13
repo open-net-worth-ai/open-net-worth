@@ -55,6 +55,12 @@ DEFAULTS: dict = {
     # entry names the bank it linked. Several, so a second Link bank (another bank, or a retry)
     # never strands a consent still open in another tab. Not a credential.
     "pending_links": [],
+    # An account's identity across consents: ``{identity: uid}``. Enable Banking gives an
+    # account a NEW uid in every session, so a renewal would orphan its app-account link and
+    # change its transaction refs. The identity (a hash of bank, country and Enable Banking's
+    # own ``identification_hash``) maps every later uid back to the FIRST one seen, which is
+    # the account's id here for good. Not a credential.
+    "account_identities": {},
     # status / fetch state
     "last_synced_at": None,  # "Last fetched" in the UI
     "last_status": "never_run",  # never_run | ok | auth_error | connect_error | error
@@ -87,12 +93,14 @@ class EnableBankingConfigStore(AggregatorConfigStore):
         "last_error",
         "pending_links",
         "banks",
+        "account_identities",
     )
-    READ_ONLY_KEYS = ("sessions", "banks", "pending_links")
+    READ_ONLY_KEYS = ("sessions", "banks", "pending_links", "account_identities")
 
     def _normalized(self, merged: dict) -> dict:
-        if not isinstance(merged.get("banks"), dict):
-            merged["banks"] = {}
+        for key in ("banks", "account_identities"):
+            if not isinstance(merged.get(key), dict):
+                merged[key] = {}
         for key in ("sessions", "pending_links"):
             if not isinstance(merged.get(key), list):
                 merged[key] = []
@@ -189,6 +197,20 @@ class EnableBankingConfigStore(AggregatorConfigStore):
                 return None
             self._write(c, [b for b in banks if b["key"] != key])
         return gone["session_id"]
+
+    def account_id(self, *, aspsp: str, country: str, identification_hash: str, uid: str) -> str:
+        """The account's id here: the first uid ever seen for this account, whatever session
+        ``uid`` comes from. Records ``uid`` when the account is new."""
+        identity = hashlib.sha256(
+            f"enable-banking-account:{aspsp}|{country}|{identification_hash}".encode()
+        ).hexdigest()[:32]
+        with self._unit(None) as c:
+            known = dict(self.get(conn=c).get("account_identities") or {})
+            if identity in known:
+                return str(known[identity])
+            known[identity] = uid
+            self._record({"account_identities": known}, conn=c)
+        return uid
 
     def add_pending_link(self, state: str, *, aspsp: str, country: str, now: datetime) -> None:
         """Remember a link just started. Keeps the newest few, none older than the window."""
