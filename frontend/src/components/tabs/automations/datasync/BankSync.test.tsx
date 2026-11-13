@@ -212,11 +212,12 @@ describe('with bank_data_sync on', () => {
     expect(JSON.parse(sent[0]!.body!)).toEqual({ mode: 'data' })
   })
 
-  it('lists each linked account with its own Sync box and reads left', async () => {
+  it('lists each linked account with its own Sync box, and reads only once they run out', async () => {
     render(<BankSyncSettings status={status({ mode: 'data', stage: 'done' })} />)
     const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
     expect((box as HTMLInputElement).checked).toBe(true)
-    expect(screen.getByText(/^From Current Account ··0001 · 3 of 4 reads left today$/)).toBeTruthy()
+    expect(screen.getByText(/^From Current Account ··0001$/)).toBeTruthy()
+    expect(screen.queryByText(/reads left/)).toBeNull()
     fireEvent.click(box)
     await waitFor(() =>
       expect(sent.at(-1)).toMatchObject({

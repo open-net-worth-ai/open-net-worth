@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fScheduleWhen, timeAgo } from '../../../../utils/format'
+import { fScheduleWhen } from '../../../../utils/format'
 import type { BankSyncStatus } from './bankSync'
 
 // The bank sync's shared non-component pieces (ADR 2026-11-13): the one-write-at-a-time action
@@ -24,14 +24,6 @@ export function useAct() {
     }
   }
   return { busy, error, act }
-}
-
-export function lastRunLine(status: BankSyncStatus): string {
-  const run = status.last_run
-  if (status.running) return 'Syncing now…'
-  if (!run) return 'Not run yet'
-  const when = timeAgo(run.finished_at || run.started_at)
-  return `Last sync ${when}: ${run.outcome || run.error || run.status}`
 }
 
 export function nextRunLine(status: BankSyncStatus): string {

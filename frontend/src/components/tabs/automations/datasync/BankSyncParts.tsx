@@ -60,7 +60,8 @@ function readsLine(a: BankSyncAccount, daily: number | null): string {
 function syncLine(a: BankSyncAccount, daily: number | null): string {
   if (!a.sync) return 'Not synced'
   if (daily === null || a.reads_left === null) return ''
-  if (a.reads_left > 0) return `${a.reads_left} of ${daily} reads left today`
+  // The count is noise until it runs out; then it says why Sync now is waiting.
+  if (a.reads_left > 0) return ''
   return a.next_read_at
     ? `No reads left · next ${fScheduleWhen(a.next_read_at)}`
     : 'No reads left today'

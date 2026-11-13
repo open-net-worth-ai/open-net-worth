@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Play } from 'lucide-react'
 import { Button, Checkbox, Switch } from '../../../ui'
 import { ActionError, AccountBoxes, LinkAccountsButton, ScheduleMenu } from './BankSyncParts'
-import { lastRunLine, nextRunLine, outOfReads, useAct, type Act } from './bankSyncHelpers'
+import { nextRunLine, outOfReads, useAct, type Act } from './bankSyncHelpers'
 import { bankSyncSend, modeNotice, type BankSyncStatus, type ModeResult } from './bankSync'
 import './bankSync.css'
 
@@ -106,11 +106,8 @@ export function BankSyncSettings({ status }: { status: BankSyncStatus }) {
         {status.daily_reads !== null && (
           <div className="a3-last-sync">{`Your bank allows ${status.daily_reads} reads a day per account.`}</div>
         )}
-        {status.last_run && (
-          <div className={`a3-last-sync${failed ? ' bad' : ''}`}>
-            {failed ? status.last_error : lastRunLine(status)}
-          </div>
-        )}
+        {/* The last good run is the History's first row; only a failure earns a line here. */}
+        {failed && <div className="a3-last-sync bad">{status.last_error}</div>}
       </section>
       <section className="a3-block" data-od-id="bank-sync-rules">
         <div className="a3-block-h">How it books</div>

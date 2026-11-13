@@ -104,9 +104,8 @@ the new interval.
 
 **Sync now** runs it at once. GoCardless and Enable Banking banks usually allow only **4 reads
 per account per day**, and every read counts — scheduled, **Sync now**, or Lucius fetching the
-bank in chat. Each account shows how
-many reads it has left today. Once they're used, the account says when its next read is, **Sync
-now** waits, and so does the schedule.
+bank in chat. Once an account's reads
+are used, it says when its next read is, **Sync now** waits, and so does the schedule.
 
 If the bank refuses (its daily limit, expired access), the sync waits instead of retrying: until
 the limit resets, or a day for expired access. The connector page shows what the bank said.
