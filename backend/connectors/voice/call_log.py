@@ -48,6 +48,10 @@ class Task:
     )
     stopped: bool = False  # stopped on purpose, its words carrying on in the next
     answered: bool = False  # its answer has been heard
+    # What they added while it ran, sent to join its turn and not taken in yet: reference → request.
+    joining: dict[str, "Task"] = field(default_factory=dict)
+    finished: bool = False  # its turn is over: nothing more can join it
+    missed: bool = False  # said to join a turn that ended first: it runs on its own instead
 
     def absorb(self, earlier: "Task") -> None:
         """Take over from the request these words carry on from: same place in the chat."""

@@ -541,3 +541,4 @@ away**. To change a recorded decision, add a **new** ADR and flip the old one's 
 | [2026-11-07-a-spoken-answer-can-resolve-any-approval-card](2026-11-07-a-spoken-answer-can-resolve-any-approval-card.md) | A spoken answer can resolve any approval card | Accepted | 2026-11-07 |
 | [2026-11-07-running-in-the-background-is-separate-from-starting-at-login](2026-11-07-running-in-the-background-is-separate-from-starting-at-login.md) | Running in the background is separate from starting at login | Accepted | 2026-11-07 |
 | [2026-11-08-krisp-on-calls-runs-on-the-voice-worker](2026-11-08-krisp-on-calls-runs-on-the-voice-worker.md) | Krisp on calls runs on the voice worker, and the owner picks the filter | Accepted | 2026-11-08 |
+| [2026-11-09-what-the-owner-adds-on-a-call-joins-the-running-turn](2026-11-09-what-the-owner-adds-on-a-call-joins-the-running-turn.md) | What the owner adds on a call joins the turn Lucius is running | Accepted | 2026-11-09 |

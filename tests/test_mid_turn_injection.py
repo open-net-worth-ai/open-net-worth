@@ -338,6 +338,30 @@ async def test_message_arriving_as_the_turn_finishes_continues_the_turn_c3(monke
     assert history[3]["content"] == [{"type": "text", "text": "round2"}]
 
 
+@pytest.mark.parametrize(("surface", "joins"), [("chat:voice", True), ("chat:web", False)])
+async def test_a_call_turn_takes_what_the_owner_adds_whatever_the_chat_setting(
+    monkeypatch, surface, joins
+):
+    """On a call the owner can't wait for a quiet moment to type: the call's own turn always
+    takes in what they add (owner, 2026-11-09). Typed chat keeps its setting."""
+    monkeypatch.setattr(profile_service, "read_profile", lambda: {"chat_multi_turn_enabled": False})
+    monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: _TextThenTextProvider())
+
+    sid = f"test-inject-setting-{surface}"
+    _cleanup(sid)
+    pending_injection.enqueue(sid, "voice_t1", "and file them under Startup Costs")
+    try:
+        events = await _drain(
+            assistant.run(sid, [{"role": "user", "content": "hi"}], "s", surface=surface)
+        )
+    finally:
+        _cleanup(sid)
+    delivered = [e for e in events if e.get("type") == "message_delivered"]
+    assert bool(delivered) is joins
+    assert pending_injection.has_pending(sid) is not joins
+    pending_injection._reset_for_tests()
+
+
 async def test_delivery_order_matches_send_order_c4(monkeypatch):
     monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: _TextThenTextProvider())
 
