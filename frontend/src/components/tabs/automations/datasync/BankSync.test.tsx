@@ -262,6 +262,27 @@ describe('with bank_data_sync on', () => {
     )
   })
 
+  it('accounts are grouped under the bank each one is at', () => {
+    const base = status().accounts![0]!
+    render(
+      <BankSyncSettings
+        status={status({
+          mode: 'data',
+          stage: 'done',
+          accounts: [
+            { ...base, account_id: 'a1', name: 'ACME Current', bank: 'ACME Bank' },
+            { ...base, account_id: 'a2', name: 'ACME Savings', bank: 'ACME Bank' },
+            { ...base, account_id: 'a3', name: 'Other Card', bank: 'Other Bank' },
+          ],
+        })}
+      />,
+    )
+    const acme = screen.getByRole('group', { name: 'ACME Bank accounts to sync' })
+    expect(acme.querySelectorAll('input[type=checkbox]')).toHaveLength(2)
+    const other = screen.getByRole('group', { name: 'Other Bank accounts to sync' })
+    expect(other.textContent).toContain('Other Card')
+  })
+
   it('the schedule is a menu of what the bank allows, and picking one saves it', async () => {
     render(
       <BankSyncSettings status={status({ mode: 'data', stage: 'done', intervals: [6, 12, 24] })} />,

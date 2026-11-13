@@ -28,8 +28,8 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
    [Bank & brokerage connectors](../connectors/bank-brokerage.md).
 2. On the connector's page, under **Next: bring in transactions**, click **Set up sync**. It opens the bank's own page in
    **Automations → Data sync**, with three steps:
-   1. **Choose accounts.** Every linked account is ticked; its line says which bank account it's
-      from. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
+   1. **Choose accounts.** Every linked account is ticked, listed under the bank it's at (one
+      connector can hold several banks); its line says which bank account it's from. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
       (or **Link more accounts**) links a bank account here, as a new account or to one you have,
       without going back to the connector.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)

@@ -19,7 +19,8 @@ export function ActionError({ error }: { error: string | null }) {
   )
 }
 
-/** Each linked account with its Sync box. */
+/** Each linked account with its Sync box, under the bank it's at: one connector can hold
+ *  several banks (Enable Banking, GoCardless), and the account's own name doesn't say which. */
 export function AccountBoxes({
   status,
   busy,
@@ -30,22 +31,37 @@ export function AccountBoxes({
   act: Act
 }) {
   const p = status.provider
+  const banks = new Map<string, BankSyncAccount[]>()
+  for (const a of status.accounts ?? []) {
+    const bank = a.bank || 'Other'
+    banks.set(bank, [...(banks.get(bank) ?? []), a])
+  }
   return (
-    <div className="bs-accounts" role="group" aria-label="Accounts to sync">
-      {(status.accounts ?? []).map((a) => (
-        <Checkbox
-          key={a.account_id}
-          id={`bs-${p}-${a.account_id}`}
-          label={a.name}
-          description={readsLine(a, status.daily_reads)}
-          checked={a.sync}
-          disabled={busy !== null}
-          onChange={() =>
-            void act('account', () =>
-              bankSyncSend(`/${p}/accounts/${a.account_id}`, 'PUT', { sync: !a.sync }),
-            )
-          }
-        />
+    <div className="bs-banks">
+      {[...banks].map(([bank, accounts]) => (
+        <div
+          key={bank}
+          className="bs-accounts"
+          role="group"
+          aria-label={`${bank} accounts to sync`}
+        >
+          <div className="bs-bank-h">{bank}</div>
+          {accounts.map((a) => (
+            <Checkbox
+              key={a.account_id}
+              id={`bs-${p}-${a.account_id}`}
+              label={a.name}
+              description={readsLine(a, status.daily_reads)}
+              checked={a.sync}
+              disabled={busy !== null}
+              onChange={() =>
+                void act('account', () =>
+                  bankSyncSend(`/${p}/accounts/${a.account_id}`, 'PUT', { sync: !a.sync }),
+                )
+              }
+            />
+          ))}
+        </div>
       ))}
     </div>
   )

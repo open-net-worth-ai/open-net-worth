@@ -104,7 +104,7 @@ export function BankSyncSettings({ status }: { status: BankSyncStatus }) {
         <div className="a3-block-h">Schedule</div>
         <ScheduleMenu status={status} busy={busy} act={act} />
         {status.daily_reads !== null && (
-          <div className="a3-last-sync">{`Your bank allows ${status.daily_reads} reads a day per account.`}</div>
+          <div className="a3-last-sync">{`Banks allow ${status.daily_reads} reads a day per account.`}</div>
         )}
         {/* The last good run is the History's first row; only a failure earns a line here. */}
         {failed && <div className="a3-last-sync bad">{status.last_error}</div>}

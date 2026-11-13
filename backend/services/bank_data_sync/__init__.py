@@ -43,16 +43,19 @@ def _accounts(p, key: str) -> list[dict]:
     from backend.services import ledger as ledger_service
 
     excluded = set(settings.get(key)["excluded_account_ids"])
-    names = {r.get("id"): r.get("name") for r in accounts_service.all_account_rows()}
+    rows = {r.get("id"): r for r in accounts_service.all_account_rows()}
     imported = ledger_service.accounts_booked_from(key)
     out = []
     for a in accounts_service.linked_accounts_for_source(key):
         left, next_at = budget.reads_left(p, a.get("provider_account_id") or "")
+        row = rows.get(a.get("linked_account_id")) or {}
         out.append(
             {
                 "account_id": a.get("linked_account_id"),
                 # Your account's own name; the bank's name for it is the detail.
-                "name": names.get(a.get("linked_account_id")) or a.get("name") or "",
+                "name": row.get("name") or a.get("name") or "",
+                # The bank it's at (filled in when it was linked): one connector can hold several.
+                "bank": row.get("institution") or "",
                 "bank_name": a.get("name") or "",
                 "mask": a.get("mask") or "",
                 "sync": a.get("linked_account_id") not in excluded,

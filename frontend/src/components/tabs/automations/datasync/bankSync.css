@@ -28,10 +28,22 @@
 .bs-warn {
   color: var(--warn);
 }
+.bs-banks {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 .bs-accounts {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.bs-bank-h {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .bs-actions {
   display: flex;

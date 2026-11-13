@@ -15,6 +15,8 @@ export interface BankSyncAccount {
   account_id: string
   name: string
   /** What the bank calls the account. */
+  /** The bank it's at — one connector can hold several. */
+  bank?: string
   bank_name: string
   mask: string
   sync: boolean

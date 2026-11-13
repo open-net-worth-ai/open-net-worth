@@ -246,3 +246,12 @@ def test_a_schedule_the_bank_cant_afford_is_refused(bank):
     with pytest.raises(ValidationError, match="every 6, 12, 24 hours"):
         bank_data_sync.set_interval("gocardless", 1)
     assert bank_data_sync.status("gocardless")["interval_hours"] == 12
+
+
+def test_each_account_says_which_bank_it_is_at(bank):
+    from backend.services import accounts as accounts_service
+
+    account_id = bank_data_sync.status("gocardless")["accounts"][0]["account_id"]
+    accounts_service.update_account(account_id, {"institution": "ACME Bank"})
+    [acct] = bank_data_sync.status("gocardless")["accounts"]
+    assert acct["bank"] == "ACME Bank"
