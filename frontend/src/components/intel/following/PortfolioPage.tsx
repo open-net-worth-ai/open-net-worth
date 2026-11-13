@@ -128,7 +128,8 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // (owner, 2026-11-14): left on, it would run every week against a portfolio no longer followed.
   const [copies, setCopies] = useState<Automation[]>([])
   const [pauseCopies, setPauseCopies] = useState(true)
-  const portfolioName = portfolio.name
+  // The loaded page's own name: a portfolio opened from a link carries none in its address.
+  const portfolioName = page.data?.follow.name || portfolio.name
   useEffect(() => {
     if (!confirming || !portfolioName) return
     let live = true
