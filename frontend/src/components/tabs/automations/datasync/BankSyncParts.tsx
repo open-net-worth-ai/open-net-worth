@@ -94,6 +94,7 @@ export function AccountBoxes({
                 >
                   <Wallet size={13} aria-hidden="true" />
                   {a.name}
+                  {a.last_four && <span className="bs-acct-mask">{`•••${a.last_four}`}</span>}
                 </button>
               </li>
             ))}

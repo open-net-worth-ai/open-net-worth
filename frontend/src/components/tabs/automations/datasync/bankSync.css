@@ -160,6 +160,9 @@
   flex: none;
   color: var(--muted);
 }
+.bs-acct-book .bs-acct-mask {
+  margin-left: 2px;
+}
 .bs-acct-book:hover {
   text-decoration: underline;
 }

@@ -11,7 +11,12 @@ import {
 } from './BankSyncParts'
 import { outOfReads, useAct } from './bankSyncHelpers'
 import { Step } from './SyncSetupSteps'
-import { bankSyncSend, type BankSyncStatus, type ModeResult } from './bankSync'
+import {
+  bankSyncSend,
+  type BankSyncAccount,
+  type BankSyncStatus,
+  type ModeResult,
+} from './bankSync'
 
 // A bank's sync before it is on (ADR 2026-11-13), as the budget apps' setup reads: pick the
 // accounts, bring in the history, turn it on. Turning it on without step 2 is allowed — its first
@@ -34,7 +39,6 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   // A ticked account with no history yet (one linked after the import) is what Import is for.
   const missing = accounts.filter((a) => a.sync && !a.imported)
   const importing = status.running || busy === 'import'
-  const outcome = status.last_run?.outcome
   const noReads = outOfReads(status)
 
   return (
@@ -68,7 +72,7 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
           ) : imported && missing.length === 0 ? (
             <p className="bs-done">
               <Check size={14} aria-hidden="true" />
-              {`History imported${outcome ? `: ${outcome}` : ''}. Balances unchanged.`}
+              {`History imported: ${importedLine(accounts)}. Balances unchanged.`}
               {status.last_run && (
                 <button
                   type="button"
@@ -142,4 +146,14 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
       </ol>
     </>
   )
+}
+
+/** "3 transactions into 2 accounts", counted in the book (a run's own record can be gone). */
+function importedLine(accounts: BankSyncAccount[]): string {
+  const into = accounts.filter((a) => a.sync && a.imported)
+  const n = into.reduce((sum, a) => sum + (a.booked ?? 0), 0)
+  const txns = `${n} ${n === 1 ? 'transaction' : 'transactions'}`
+  return into.length === 1
+    ? `${txns} into ${into[0]!.name}`
+    : `${txns} into ${into.length} accounts`
 }
