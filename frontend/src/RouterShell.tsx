@@ -1858,17 +1858,22 @@ function RouterShellInner() {
                       })
                     }
                     onAuthChanged={onAuthChanged}
-                    onDone={() => {
+                    onDone={({ withModel }) => {
                       firstRunDoneThisSession.current = true
                       setOnboarding(false)
                       // A restored (or moved) book already has its history: Lucius's new-user
-                      // welcome would run onboarding over a full book.
-                      setJustFinishedFirstRun(!restorePending)
+                      // welcome would run onboarding over a full book. With no model there is
+                      // no Lucius to run it.
+                      setJustFinishedFirstRun(!restorePending && withModel)
                       // Lucius is the main tab, not a floating dock over Dashboard — the
                       // conversation that just onboarded the book should BE the screen you land
                       // on, not a panel over an empty net-worth chart with nothing in it yet.
-                      navigate({ to: '/lucius', search: { conversation: undefined } })
-                      setChatOpen(true)
+                      // Without a model ("Not now") that conversation can't happen: land on the
+                      // Dashboard, whose empty states route to accounts, imports and connectors.
+                      if (withModel) {
+                        navigate({ to: '/lucius', search: { conversation: undefined } })
+                        setChatOpen(true)
+                      } else navigate({ to: '/dashboard' }) // `/` lands on the Lucius tab
                       setProfileVersion((v) => v + 1)
                       checkFreshSetup()
                       refresh()

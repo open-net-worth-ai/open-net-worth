@@ -64,8 +64,9 @@ An export never contains AI provider keys or your password, so you set those aga
 
 ## Step 2: Connect Lucius
 
-Lucius needs an AI model. This step has no skip — every option below works, and one of them is
-free.
+Lucius needs an AI model. Every option below works, and one of them is free. Don't want AI?
+Click **Not now** (beside **Continue**): setup goes on without a model — see
+[Without a model](#without-a-model).
 
 **Use a subscription you already pay for (no API key).** Claude Code and Codex are listed even
 if you haven't installed them yet:
@@ -106,9 +107,18 @@ so — click **Finish**.
 background** and **Start at login**. Both are off unless you turn them on; change them later in
 **Settings → Desktop**.
 
+## Without a model
+
+**Not now** finishes setup with no AI model and opens the **Dashboard**, where **Add an account
+myself** starts your book by hand. Everything except Lucius works: accounts, the ledger,
+budgeting, investments, CSV/OFX/QIF import and, with it turned on,
+[bank sync without AI](../features/bank-data-sync.md). Chatting with Lucius says the AI provider
+isn't configured and links to **Settings → AI Models**; the **Set up Lucius** button in the
+corner goes there too. Add a model there any time.
+
 ## Then: Lucius sets up your book
 
-Setup drops you into a chat with Lucius. With an empty book, he leads, one question at a time,
+With a model, setup drops you into a chat with Lucius. With an empty book, he leads, one question at a time,
 and gets your money in before asking anything personal:
 
 1. Asks your name and what to call you.

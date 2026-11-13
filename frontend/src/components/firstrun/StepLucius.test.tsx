@@ -457,17 +457,29 @@ describe('StepLucius — going back', () => {
   })
 })
 
-describe('StepLucius — this step cannot be skipped', () => {
-  it('offers no way past without configuring a model', async () => {
+describe('StepLucius — Not now', () => {
+  it('is a plain choice beside Continue that goes on with no model saved', async () => {
     mockApi({ claude_cli: false })
     const onDone = vi.fn()
-    render(<StepLucius onDone={onDone} />)
+    const onSkip = vi.fn()
+    render(<StepLucius onDone={onDone} onSkip={onSkip} />)
 
     await page1()
-    expect(screen.queryByRole('button', { name: /not now/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: /skip/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: /set up later/i })).toBeNull()
+    expect(screen.getByText(/the rest of the app works without one/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^not now$/i }))
+    expect(onSkip).toHaveBeenCalledTimes(1)
     expect(onDone).not.toHaveBeenCalled()
+    const wrote = authFetch.mock.calls.filter(
+      (c) => String(c[0]).startsWith('/api/model-config') && c[1]?.method,
+    )
+    expect(wrote).toEqual([])
+  })
+
+  it('is not offered when the caller has no way to go on without a model', async () => {
+    mockApi({ claude_cli: false })
+    render(<StepLucius onDone={() => {}} />)
+    await page1()
+    expect(screen.queryByRole('button', { name: /not now/i })).toBeNull()
   })
 
   it('offers a retry, not a dead end, when the provider list cannot be read', async () => {
