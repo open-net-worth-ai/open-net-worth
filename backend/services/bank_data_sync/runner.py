@@ -79,8 +79,7 @@ def next_read_at(p: Provider, accounts: list[dict]):
 def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> str:
     pid, app_id = account["provider_account_id"], account["linked_account_id"]
     since, before, warning, first = connector_window.account_window(p, app_id)
-    if p.daily_reads is not None:
-        budget.note_read(p, pid)  # before the call: a read the bank counted is never forgotten
+    # connector_fetch counts the read against the daily limit before it calls the bank.
     result = connector_fetch.fetch_all(p.key, since=since, before=before, account=pid)
     status = result.get("status") or "error"
     name = account.get("name") or "An account"
@@ -144,30 +143,55 @@ def _outcome(counts: dict, status: str) -> str:
     return ", ".join(parts) or "Nothing new"
 
 
+def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: list) -> list:
+    """The one ledger write and what follows it. Returns the rows it booked. Raises only when
+    the write itself failed — then nothing was booked."""
+    result = booker.book(p.key, fetched.rows, run_id=run_id, batch_id=f"bank_sync:{run_id}")
+    counts["booked"] = len(result.created)
+    counts["already_booked"] += result.already_booked
+    counts["deleted_before"] = result.deleted_before
+    counts["to_review"] += result.to_review
+    counts["held"] = result.held
+    counts["linked"] = result.linked_refs
+    errors.extend({"item": "A row", "reason": e} for e in result.errors)
+    return result.created
+
+
+def _align(p: Provider, first_import: set[str], warnings: list[str]) -> None:
+    """Move each first-imported account's start back. Remembered until it has happened, so a
+    run that stopped after booking still aligns on the next one."""
+    pending = set(budget.state(p.key).get("pending_align") or []) | first_import
+    if not pending:
+        return
+    try:
+        done, notes = booker.align_first_imports(p.key, pending)
+        warnings.extend(notes)
+        pending -= done
+    except Exception:  # noqa: BLE001 — retried next run; the booking stands
+        logger.exception("bank_data_sync: %s alignment failed", p.key)
+        warnings.append("The account's start couldn't be moved back yet; the next run tries again.")
+    budget.update(p.key, pending_align=sorted(pending))
+
+
 def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
-    """Fetch, book and record one run. The run record is closed whatever happens."""
-    fetched = _fetch(p, accounts, run_id)
-    status = _run_status(fetched.statuses)
+    """Fetch, book and record one run. The run record is closed whatever happens; a failure
+    anywhere still schedules the next try after a backoff (``budget.record_outcome``)."""
+    fetched = _Fetched()
     counts = {**fetched.counts, "booked": 0, "deleted_before": 0, "held": 0, "errors": 0}
     errors: list[dict] = []
     created: list[dict] = []
+    status = "error"
     try:
-        result = booker.book(p.key, fetched.rows, run_id=run_id, batch_id=f"bank_sync:{run_id}")
-        created = result.created
-        counts["booked"] = len(created)
-        counts["already_booked"] += result.already_booked
-        counts["deleted_before"] = result.deleted_before
-        counts["to_review"] += result.to_review
-        counts["held"] = result.held
-        counts["linked"] = result.linked_refs
-        errors = [{"item": "A row", "reason": e} for e in result.errors]
-        fetched.warnings.extend(booker.align_first_imports(fetched.first_import, created))
+        fetched = _fetch(p, accounts, run_id)
+        counts.update(fetched.counts)
+        status = _run_status(fetched.statuses)
+        created = _book(p, fetched, run_id, counts, errors)
+        _align(p, fetched.first_import, fetched.warnings)
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
-        logger.exception("bank_data_sync: %s booking failed", p.key)
+        logger.exception("bank_data_sync: %s run failed", p.key)
         status = "error"
-        errors.append({"item": "The run", "reason": "Booking failed; nothing was booked."})
-        error_text = sanitize_untrusted(str(exc), max_len=300)
-        fetched.warnings.append(error_text)
+        errors.append({"item": "The run", "reason": "The run failed; nothing was booked."})
+        fetched.warnings.append(sanitize_untrusted(str(exc), max_len=300))
     counts["errors"] = len(errors)
     last_error = "; ".join(fetched.warnings)[:500] if status not in ("ok", "partial") else None
     budget.record_outcome(p, status, last_error)
@@ -221,7 +245,7 @@ def finish_in_background(p: Provider, run: dict, accounts: list[dict]) -> None:
             execute(p, accounts, run["id"])
         except Exception:  # noqa: BLE001
             logger.exception("bank_data_sync: %s run failed", p.key)
-            _fail(run["id"])
+            _fail(run["id"], p)
         finally:
             _lock(p.key).release()
 
@@ -234,13 +258,18 @@ def run_now(p: Provider, trigger: str, accounts: list[dict]) -> dict:
     try:
         return execute(p, accounts, run["id"])
     except Exception:
-        _fail(run["id"])
+        _fail(run["id"], p)
         raise
     finally:
         _lock(p.key).release()
 
 
-def _fail(run_id: str) -> None:
+def _fail(run_id: str, p: Provider | None = None) -> None:
+    if p is not None:
+        try:
+            budget.record_outcome(p, "error", "The sync could not run; see the server log.")
+        except Exception:  # noqa: BLE001
+            logger.exception("bank_data_sync: %s backoff could not be recorded", p.key)
     try:
         import_runs.finish(
             run_id, "failed", outcome="Failed", error="The sync could not run; see the server log."

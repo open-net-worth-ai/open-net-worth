@@ -75,6 +75,23 @@ _RAW_MAX_DEPTH = 8
 _ID_MAX_LEN = 512
 
 
+def _count_reads(provider: Provider, account: Optional[str]) -> None:
+    """Note a transaction read against the bank's daily limit BEFORE the call — every caller of
+    this seam, a Lucius fetch tool as much as the AI-free sync, spends the same per-account
+    budget (``bank_data_sync.budget``). A no-op for a provider with no app-side limit. Never
+    fails the fetch."""
+    if provider.daily_reads is None:
+        return
+    try:
+        from backend.services.bank_data_sync import budget
+
+        ids = [account] if account else list(_linked_accounts_by_provider_id(provider.key))
+        for pid in ids:
+            budget.note_read(provider, pid)
+    except Exception:  # noqa: BLE001 — bookkeeping only
+        logger.warning("connector_fetch: could not count a %s read", provider.key, exc_info=True)
+
+
 def _resolve_provider(provider_key: str) -> Provider:
     try:
         return providers.resolve([provider_key])[0]
@@ -343,8 +360,14 @@ def fetch_all(
     """The same fetch with every unbooked, posted row of the window in ONE provider read — no
     ``limit``/``offset`` slice, so no second read is spent paging (the bank data sync's caller:
     a GoCardless account may be read only 4 times a day). ``_MAX_FETCH_ROWS`` still caps it and
-    marks the window incomplete. Never handed to a model."""
-    return _fetch(provider_key, since=since, before=before, account=account, limit=None)
+    marks the window incomplete. Never handed to a model.
+
+    ``account`` here is a LINKED provider account id (from ``Account.external_ids``), never a
+    name, so the account-resolution probe is skipped: on Enable Banking that probe alone re-reads
+    every account's details and balance, against the bank's daily limit."""
+    return _fetch(
+        provider_key, since=since, before=before, account=account, limit=None, probe=False
+    )
 
 
 def _fetch(
@@ -358,6 +381,7 @@ def _fetch(
     limit: Optional[int] = _DEFAULT_LIMIT,
     offset: int = 0,
     plan_id: Optional[str] = None,
+    probe: bool = True,
 ) -> dict:
     """Fetch + normalize + stash + link + filter one provider's window (RFC §A). ``plan_id``
     is YNAB's only: which plan to read (omitted = the saved or only one). NEVER
@@ -385,7 +409,7 @@ def _fetch(
 
     # ── step 1b: resolve `account` (provider id OR name, RFC §A) before the real fetch ──
     resolved_account = account
-    if account:
+    if account and probe:
         try:
             accounts_probe = provider.fetch_window(
                 since=since_resolved,
@@ -411,6 +435,7 @@ def _fetch(
             )
 
     # ── step 2: fetch ────────────────────────────────────────────────────────────────────
+    _count_reads(provider, resolved_account)
     try:
         window: FetchWindow = provider.fetch_window(
             since=since_resolved, before=before_resolved, account=resolved_account, plan_id=plan_id

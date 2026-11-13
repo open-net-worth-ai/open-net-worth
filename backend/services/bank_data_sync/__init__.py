@@ -42,13 +42,16 @@ def _accounts(p, key: str) -> list[dict]:
     from backend.services import accounts as accounts_service
 
     excluded = set(settings.get(key)["excluded_account_ids"])
+    names = {r.get("id"): r.get("name") for r in accounts_service.all_account_rows()}
     out = []
     for a in accounts_service.linked_accounts_for_source(key):
         left, next_at = budget.reads_left(p, a.get("provider_account_id") or "")
         out.append(
             {
                 "account_id": a.get("linked_account_id"),
-                "name": a.get("name") or "",
+                # Your account's own name; the bank's name for it is the detail.
+                "name": names.get(a.get("linked_account_id")) or a.get("name") or "",
+                "bank_name": a.get("name") or "",
                 "mask": a.get("mask") or "",
                 "sync": a.get("linked_account_id") not in excluded,
                 "reads_left": left,
@@ -245,25 +248,28 @@ def list_reviews(provider: Optional[str] = None) -> list[dict]:
     ]
 
 
-def accept_review(item_id: str) -> dict:
+def accept_review(item_id: str, seen: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.accept(item_id)
+    return review_actions.accept(item_id, seen)
 
 
-def dismiss_review(item_id: str) -> dict:
+def dismiss_review(item_id: str, seen: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.dismiss(item_id)
+    return review_actions.dismiss(item_id, seen)
 
 
-def book_review(item_id: str) -> dict:
+def book_review(item_id: str, seen: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.book_separately(item_id)
+    return review_actions.book_separately(item_id, seen)
 
 
 async def run_followups() -> int:

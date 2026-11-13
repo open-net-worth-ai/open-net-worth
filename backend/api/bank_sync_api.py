@@ -40,6 +40,11 @@ class FollowupBody(BaseModel):
     enabled: bool
 
 
+class DecisionBody(BaseModel):
+    # The item's updated_at as the user saw it; a newer version of the item is refused (409).
+    updated_at: Optional[str] = None
+
+
 async def _call(fn, *args):
     try:
         return await asyncio.to_thread(fn, *args)
@@ -58,18 +63,18 @@ async def bank_sync_reviews(provider: Optional[str] = None):
 
 
 @router.post("/api/bank-sync/reviews/{item_id}/accept")
-async def bank_sync_review_accept(item_id: str):
-    return await _call(bank_data_sync.accept_review, item_id)
+async def bank_sync_review_accept(item_id: str, body: Optional[DecisionBody] = None):
+    return await _call(bank_data_sync.accept_review, item_id, body.updated_at if body else None)
 
 
 @router.post("/api/bank-sync/reviews/{item_id}/dismiss")
-async def bank_sync_review_dismiss(item_id: str):
-    return await _call(bank_data_sync.dismiss_review, item_id)
+async def bank_sync_review_dismiss(item_id: str, body: Optional[DecisionBody] = None):
+    return await _call(bank_data_sync.dismiss_review, item_id, body.updated_at if body else None)
 
 
 @router.post("/api/bank-sync/reviews/{item_id}/book")
-async def bank_sync_review_book(item_id: str):
-    return await _call(bank_data_sync.book_review, item_id)
+async def bank_sync_review_book(item_id: str, body: Optional[DecisionBody] = None):
+    return await _call(bank_data_sync.book_review, item_id, body.updated_at if body else None)
 
 
 @router.get("/api/bank-sync/{provider}")

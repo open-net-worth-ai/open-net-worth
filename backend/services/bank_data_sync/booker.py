@@ -87,6 +87,7 @@ def _with_categories(drafts: list[tuple[dict, dict]]) -> tuple[list[tuple[dict, 
     account_rows = ledger_service.accounts.all()
     base = ledger_service.base_currency()
     rates = load_fx_cache()
+    visible = [c for c in category_rows if not c.get("hidden")]
     kept, errors = [], []
     for row, draft in drafts:
         try:
@@ -104,7 +105,7 @@ def _with_categories(drafts: list[tuple[dict, dict]]) -> tuple[list[tuple[dict, 
             continue
         hint = row.get("category_hint")
         if not resolved.get("category") and isinstance(hint, str) and hint.strip():
-            category = categories_service.resolve_category_ref(hint.strip(), rows=category_rows)
+            category = categories_service.resolve_category_ref(hint.strip(), rows=visible)
             if category:
                 draft["category"] = category
         kept.append((row, draft))
@@ -120,6 +121,12 @@ def _settle_superseding(provider: str, row: dict, known: dict, run_id, out: Book
     txn_id = known.get((provider, old_ref)) if old_ref else None
     if not txn_id:
         return False
+    booked = ledger_service.transactions.find_by_id(txn_id) or {}
+    if row.get("linked_account_id") not in (
+        booked.get("from_account_id"),
+        booked.get("to_account_id"),
+    ):
+        return False  # a pending ref on another account is not this row's — book it normally
     current = ledger_service.booked_row_snapshot(
         txn_id, prefer_account_id=row.get("linked_account_id")
     )
@@ -180,9 +187,19 @@ def _classify_skipped(provider: str, skipped: list[dict], by_index: list, run_id
 
 
 def book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: str) -> Booked:
-    """Book ``rows`` (unbooked, posted, opted-in — the runner's job) in one ledger write."""
+    """Book ``rows`` (unbooked, posted, opted-in — the runner's job) in one ledger write. Every
+    write here — the one batch and any pending→posted link — runs under the audit surface
+    ``bank_data_sync``. Raises only when that write failed (then nothing was booked)."""
     from backend.core import audit_context
 
+    token = audit_context.set_audit_scope("system", SURFACE, note=f"run:{run_id}")
+    try:
+        return _book(provider, rows, run_id=run_id, batch_id=batch_id)
+    finally:
+        audit_context.clear_audit_scope(token)
+
+
+def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: str) -> Booked:
     out = Booked()
     held = reviews.held_refs(provider)
     known = ledger_service.known_external_refs(provider)
@@ -205,42 +222,51 @@ def book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: st
     out.errors.extend(errors)
     if not candidates:
         return out
-    token = audit_context.set_audit_scope("system", SURFACE, note=f"run:{run_id}")
-    try:
-        created, skipped = ledger_service.bulk_create_transactions(
-            [d for _, d in candidates], batch_id=batch_id, dedup_by_external_ref=True
-        )
-    finally:
-        audit_context.clear_audit_scope(token)
+    created, skipped = ledger_service.bulk_create_transactions(
+        [d for _, d in candidates], batch_id=batch_id, dedup_by_external_ref=True
+    )
     out.created = created
-    _classify_skipped(provider, skipped, candidates, run_id, out)
+    try:  # booked and committed: nothing after this may report it as unbooked
+        _classify_skipped(provider, skipped, candidates, run_id, out)
+    except Exception:  # noqa: BLE001
+        logger.exception("bank_data_sync: %s skipped rows could not be sorted", provider)
+        out.errors.append("Some rows the ledger refused couldn't be added to the review list.")
     return out
 
 
-def align_first_imports(account_ids: set[str], created: list[dict]) -> list[str]:
-    """Move each first-imported cash/card account's start back to its oldest booked row, so the
-    history counts and today's balance doesn't move (``tracking_start.align_tracking_start``,
-    which refuses anything that would move it). Returns warnings; never raises."""
+def align_first_imports(provider: str, account_ids: set[str]) -> tuple[set[str], list[str]]:
+    """Move each first-imported cash/card account's start back to its oldest row from
+    ``provider``, so the history counts and today's balance doesn't move
+    (``tracking_start.align_tracking_start``, which refuses anything that would move it). Read
+    from the ledger, so a run that stopped after booking aligns on the next one. Returns
+    ``(settled account ids, warnings)``; an account that can't be aligned (its type, a balance
+    that wouldn't hold) is settled with a warning, never retried forever."""
     from backend.core.errors import ValidationError
+    from backend.core.txn_sources import ext_ref_pairs
     from backend.services import tracking_start
 
-    warnings: list[str] = []
     txns = ledger_service.transactions.all()
+    settled: set[str] = set()
+    warnings: list[str] = []
     for account_id in sorted(account_ids):
-        dates = [
-            t["date"]
-            for t in created
-            if account_id in (t.get("from_account_id"), t.get("to_account_id"))
-        ]
         account = ledger_service.accounts.find_by_id(account_id)
-        if not dates or account is None:
+        if account is None:
+            settled.add(account_id)
             continue
-        oldest, start = min(dates), ledger_service.opening_date(account, txns)
-        if not start or oldest >= start:
+        dates = [
+            str(t.get("date"))[:10]
+            for t in txns
+            if not t.get("deleted")
+            and account_id in (t.get("from_account_id"), t.get("to_account_id"))
+            and any(pair[0] == provider for pair in ext_ref_pairs(t))
+        ]
+        start = ledger_service.opening_date(account, txns)
+        settled.add(account_id)
+        if not dates or not start or min(dates) >= start:
             continue
-        name = account.get("name") or "An account"
         try:
-            tracking_start.align_tracking_start(account_id, oldest)
+            tracking_start.align_tracking_start(account_id, min(dates))
         except ValidationError as exc:
+            name = account.get("name") or "An account"
             warnings.append(f"{name}: history before {start} is booked but not counted — {exc}")
-    return warnings
+    return settled, warnings

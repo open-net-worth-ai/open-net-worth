@@ -107,3 +107,17 @@ We will add a **data sync** for bank connectors, behind the flag `bank_data_sync
   (`account_value_sync`), GoCardless rate-limit docs
 - **Why this way (one line):** the ledger choke already makes booking safe without a model; what
   users lacked was a caller that doesn't need one.
+
+## Amendment 1 (2026-11-13, pre-ship security review)
+
+- **Enable Banking runs every 12 h**, not 6: each of its reads also reads every account's
+  details and balance, which PSD2 banks count against the same daily limit.
+- **The read budget is counted at the fetch seam** (`connector_fetch`), so a Lucius fetch in chat
+  spends the same per-account budget as the sync; the sync's own reads skip the account probe.
+- **A review decision is claimed before it writes** (one decision per item, the version you saw),
+  and **every failed run schedules its backoff**. A first-import alignment that didn't happen is
+  retried on the next run.
+- The `bulk_create_transactions` external-ref floor is checked BEFORE the write transaction, not
+  inside it (Context above says otherwise, quoting 2026-09-05). Within this feature one run per
+  connector at a time and the claimed decision close the gap; a Lucius booking racing a data-sync
+  run on the same rows is the remaining window — a follow-up for the ledger choke.

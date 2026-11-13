@@ -58,8 +58,15 @@ def after_run(p, result: dict) -> None:
         for t in result.get("created") or []
         if not t.get("category") and t.get("kind") in ("expense", "income")
     ][:MAX_ROWS]
-    if ids:
-        budget.update(p.key, pending_followup={"run_id": result.get("run_id"), "txn_ids": ids})
+    if not ids:
+        return
+
+    def queue(entry: dict) -> None:
+        queued = list(entry.get("pending_followups") or [])
+        queued.append({"run_id": result.get("run_id"), "txn_ids": ids})
+        entry["pending_followups"] = queued[-10:]
+
+    budget.mutate(p.key, queue)
 
 
 def _rows(txn_ids: list[str]) -> list[dict]:
@@ -109,7 +116,7 @@ def parse(reply: str) -> dict[str, str]:
     return {str(k): v.strip() for k, v in data.items() if isinstance(v, str) and v.strip()}
 
 
-def apply(picks: dict[str, str], txn_ids: list[str]) -> int:
+def apply(picks: dict[str, str], txn_ids: list[str], offered: list[str] | None = None) -> int:
     """Set each pick's category on a row of THIS run that is still Uncategorized. Returns how
     many changed. An unknown category or a row outside the run is ignored."""
     from backend.core import audit_context
@@ -118,7 +125,12 @@ def apply(picks: dict[str, str], txn_ids: list[str]) -> int:
     from backend.services.bank_data_sync.booker import SURFACE
 
     allowed = set(txn_ids)
-    rows = categories_service.all_category_rows()
+    offered_set = {label.lower() for label in (offered if offered is not None else _labels())}
+    rows = [
+        c
+        for c in categories_service.all_category_rows()
+        if (c.get("label") or "").strip().lower() in offered_set
+    ]
     changed = 0
     token = audit_context.set_audit_scope("agent", SURFACE, note="lucius follow-up")
     try:
@@ -156,8 +168,9 @@ async def categorise(p, pending: dict) -> int:
     if runner is None:
         _note(run_id, "Lucius couldn't categorise what's left: no AI model is set up.")
         return 0
+    labels = await asyncio.to_thread(_labels)
     prompt = _PROMPT.format(
-        categories=json.dumps(await asyncio.to_thread(_labels)),
+        categories=json.dumps(labels),
         rows=json.dumps(rows, default=str),
     )
     try:
@@ -169,19 +182,25 @@ async def categorise(p, pending: dict) -> int:
         logger.warning("bank_data_sync: follow-up for %s failed: %s", p.key, type(exc).__name__)
         _note(run_id, "Lucius couldn't categorise what's left this time.")
         return 0
-    changed = await asyncio.to_thread(apply, parse(reply), [r["id"] for r in rows])
+    changed = await asyncio.to_thread(apply, parse(reply), [r["id"] for r in rows], labels)
     _note(run_id, f"Lucius categorised {changed} of {len(rows)} uncategorised.")
     return changed
 
 
 async def run_pending() -> int:
-    """The scheduler tick's follow-up pass: each queued run once, then forgotten."""
+    """The scheduler tick's follow-up pass: each queued run once, then forgotten. The queue is
+    taken under the lock, so a run finishing meanwhile is kept for the next tick."""
     total = 0
     for p in settings.capable_providers():
-        pending = budget.state(p.key).get("pending_followup")
-        if not pending:
+
+        def take(entry: dict) -> list:
+            queued = list(entry.get("pending_followups") or [])
+            entry["pending_followups"] = []
+            return queued
+
+        queued = budget.mutate(p.key, take)
+        if not queued or not settings.get(p.key)["lucius_followup"]:
             continue
-        budget.update(p.key, pending_followup=None)
-        if settings.get(p.key)["lucius_followup"]:
+        for pending in queued:
             total += await categorise(p, pending)
     return total

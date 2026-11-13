@@ -148,7 +148,7 @@ function DataControls({
             <Checkbox
               key={a.account_id}
               id={`bs-${p}-${a.account_id}`}
-              label={a.mask ? `${a.name} ··${a.mask}` : a.name}
+              label={a.name}
               description={readsLine(a, status.daily_reads)}
               checked={a.sync}
               disabled={busy !== null}
@@ -209,6 +209,11 @@ function DataControls({
 }
 
 function readsLine(a: BankSyncAccount, daily: number | null): string {
+  const bank = [a.bank_name, a.mask ? `··${a.mask}` : ''].filter(Boolean).join(' ')
+  return bank ? `${bank} · ${syncLine(a, daily)}` : syncLine(a, daily)
+}
+
+function syncLine(a: BankSyncAccount, daily: number | null): string {
   if (!a.sync) return 'Not synced: never read or booked.'
   if (daily === null || a.reads_left === null) return 'Synced.'
   if (a.reads_left > 0) return `Synced. ${a.reads_left} of ${daily} bank reads left today.`

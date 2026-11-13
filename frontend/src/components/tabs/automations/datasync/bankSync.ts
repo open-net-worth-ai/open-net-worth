@@ -11,6 +11,8 @@ export type BankSyncMode = 'off' | 'data' | 'lucius'
 export interface BankSyncAccount {
   account_id: string
   name: string
+  /** What the bank calls the account. */
+  bank_name: string
   mask: string
   sync: boolean
   /** Reads left in the bank's rolling 24 h limit; null when the bank sets none. */
@@ -59,6 +61,8 @@ export interface BankReview {
   ref: string
   txn_id: string | null
   created_at: string
+  /** Sent back with a decision: a newer version of the item is refused. */
+  updated_at: string
   detail: {
     before?: BankRowView
     after?: BankRowView

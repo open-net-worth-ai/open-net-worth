@@ -53,7 +53,9 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
     setBusy(`${item.id}:${action}`)
     setError(null)
     try {
-      await bankSyncSend(`/reviews/${item.id}/${action}`, 'POST')
+      await bankSyncSend(`/reviews/${item.id}/${action}`, 'POST', {
+        updated_at: item.updated_at,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That didn’t work.')
     } finally {

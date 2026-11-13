@@ -60,6 +60,19 @@ def update(key: str, **fields) -> dict:
     return entry
 
 
+def mutate(key: str, fn) -> object:
+    """Read-modify-write one provider's state under the lock: ``fn(entry) -> result`` may change
+    ``entry`` in place. Returns what ``fn`` returned."""
+    with _lock:
+        store = _store()
+        doc = dict(store.get() or {})
+        entry = dict(doc.get(key) or {})
+        result = fn(entry)
+        doc[key] = entry
+        store.save(doc)
+    return result
+
+
 def _recent(stamps: list, at: datetime) -> list[datetime]:
     out = [d for d in (_parse(s) for s in stamps or []) if d is not None]
     return sorted(d for d in out if at - d < WINDOW)

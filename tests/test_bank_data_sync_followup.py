@@ -71,7 +71,7 @@ def test_off_nothing_is_queued_or_asked(bank):
     lucius = FakeLucius("{}")
     headless_turn.register_runner(lucius)
     runner.run_now(GC, "manual", runner.opted_accounts("gocardless"))
-    assert budget.state("gocardless").get("pending_followup") is None
+    assert not budget.state("gocardless").get("pending_followups")
     assert asyncio.run(bank_data_sync.run_followups()) == 0
     assert lucius.calls == []
 

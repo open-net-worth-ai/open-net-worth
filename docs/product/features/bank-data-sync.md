@@ -98,11 +98,12 @@ in the ledger changes until you choose.
 
 | Bank | Every |
 |---|---|
-| GoCardless | 12 hours |
-| Enable Banking, Plaid | 6 hours |
+| GoCardless, Enable Banking | 12 hours |
+| Plaid | 6 hours |
 
 **Sync now** runs it at once. GoCardless and Enable Banking banks usually allow only **4 reads
-per account per day**, and every read counts — scheduled or **Sync now**. Each account shows how
+per account per day**, and every read counts — scheduled, **Sync now**, or Lucius fetching the
+bank in chat. Each account shows how
 many reads it has left today. Once they're used, **Sync now** says when the next read is
 possible, and the schedule waits too.
 

@@ -40,6 +40,7 @@ function status(over: Partial<BankSyncStatus> = {}): BankSyncStatus {
       {
         account_id: 'acc_1',
         name: 'ACME Current',
+        bank_name: 'Current Account',
         mask: '0001',
         sync: true,
         reads_left: 3,
@@ -79,6 +80,7 @@ beforeEach(() => {
             ref: 'acc:h1',
             txn_id: 't1',
             created_at: '2026-11-13T10:00:00+00:00',
+            updated_at: '2026-11-13T10:00:00+00:00',
             detail: {
               current: { date: '2026-11-08', amount: -25, currency: 'GBP', description: 'ACME' },
               after: { date: '2026-11-08', amount: -27.5, currency: 'GBP', description: 'ACME' },
@@ -136,7 +138,7 @@ describe('with bank_data_sync on', () => {
   it('lists each linked account with its own Sync box and reads left', async () => {
     current = status({ mode: 'data' })
     render(<BankSyncSection provider="gocardless" />)
-    const box = await screen.findByRole('checkbox', { name: /ACME Current ··0001/ })
+    const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
     expect((box as HTMLInputElement).checked).toBe(true)
     expect(screen.getByText(/3 of 4 bank reads left today/)).toBeTruthy()
     fireEvent.click(box)

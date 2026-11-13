@@ -51,7 +51,7 @@ def _live(account_id: str) -> list[dict]:
 def test_the_config_is_all_that_differs():
     gc, eb, plaid = PROVIDERS["gocardless"], PROVIDERS["enable_banking"], PROVIDERS["plaid"]
     assert (gc.data_sync, gc.sync_interval_hours, gc.daily_reads) == (True, 12, 4)
-    assert (eb.data_sync, eb.sync_interval_hours, eb.daily_reads) == (True, 6, 4)
+    assert (eb.data_sync, eb.sync_interval_hours, eb.daily_reads) == (True, 12, 4)
     assert (plaid.data_sync, plaid.sync_interval_hours, plaid.daily_reads) == (True, 6, None)
     assert not any(
         PROVIDERS[k].data_sync for k in ("simplefin", "lunch_flow", "lunch_money", "ynab", "alpaca")
