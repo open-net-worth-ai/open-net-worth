@@ -157,7 +157,7 @@ describe('EnableBankingSection', () => {
   it('says the consent ran out when a fetch was refused after a link', async () => {
     serve({ ...linked, last_error: 'Enable Banking HTTP 401' })
     render(<EnableBankingSection />)
-    expect(await screen.findByText(/Access to a bank has expired/)).toBeTruthy()
+    expect(await screen.findByText(/Access to a bank has ended/)).toBeTruthy()
   })
 
   it('lists every linked bank and adds another with the picker', async () => {
@@ -207,5 +207,83 @@ describe('EnableBankingSection', () => {
         ),
       ).toBe(true),
     )
+  })
+})
+
+describe('EnableBankingSection after switching apps', () => {
+  // A bank's consent belongs to the app that created it; after another app is saved, every
+  // bank answered nothing while the form still said Connected (2026-11-13).
+  it('says each bank was linked under the previous app and offers Renew on it', async () => {
+    serve({
+      ...linked,
+      banks: [
+        { ...bankRow('ACME Bank', 'FI', 'k1'), access_ended: 'app_changed' },
+        { ...bankRow('Other Bank', 'SE', 'k2'), access_ended: 'app_changed' },
+      ],
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(
+      await screen.findByText(/Your banks were linked under your previous Enable Banking app/),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('Finland · linked under your previous app — renew to keep syncing'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/access until/)).toBeNull()
+  })
+
+  it('says only the bank from the previous app needs renewing when another is fine', async () => {
+    serve({
+      ...linked,
+      banks: [
+        bankRow('ACME Bank', 'FI', 'k1'),
+        { ...bankRow('Other Bank', 'SE', 'k2'), access_ended: 'app_changed' },
+      ],
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(
+      await screen.findByText(
+        'A bank was linked under your previous Enable Banking app. Click Renew next to it to keep it syncing.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('says a bank whose consent ended needs renewing', async () => {
+    serve({
+      ...linked,
+      banks: [{ ...bankRow('ACME Bank', 'FI', 'k1'), access_ended: 'ended' }],
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(await screen.findByText(/Access to a bank has ended/)).toBeTruthy()
+    expect(screen.getByText('Finland · access ended — renew to keep syncing')).toBeTruthy()
+  })
+
+  it('warns before saving another app while banks are linked', async () => {
+    serve(linked)
+    render(<EnableBankingSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.queryByText(/Saving another app ends their/)).toBeNull()
+    fireEvent.change(screen.getByLabelText(/Application ID/), {
+      target: { value: '424286e7-0000-4000-8000-000000000000' },
+    })
+    expect(screen.getByText(/Saving another app ends their\s+access/)).toBeTruthy()
+    expect(screen.getByText("Paste the new app's private key.")).toBeTruthy()
+  })
+
+  it("shows what the last fetch couldn't read, less what a bank row already says", async () => {
+    serve({
+      ...linked,
+      banks: [
+        bankRow('ACME Bank', 'FI', 'k1'),
+        { ...bankRow('Other Bank', 'SE', 'k2'), access_ended: 'ended' },
+      ],
+      last_caution:
+        "Other Bank: access ended — renew it in Connectors to keep it syncing; ACME Bank: couldn't be read (Enable Banking HTTP 503)",
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(
+      await screen.findByText(
+        /Last fetch couldn.t read everything — ACME Bank: couldn't be read \(Enable Banking HTTP 503\)$/,
+      ),
+    ).toBeTruthy()
   })
 })

@@ -590,4 +590,9 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     accounts.extend(
         a for a in _linked_only_accounts(linked) if a["provider_account_id"] not in seen
     )
-    return {"status": "ok", "provider_label": provider.label, "accounts": accounts}
+    result = {"status": "ok", "provider_label": provider.label, "accounts": accounts}
+    if window.warnings:
+        # A bank that couldn't be read is named, never an empty "ok" (its linked accounts
+        # still show above, from the linked view).
+        result["warnings"] = [sanitize_untrusted(w, max_len=300) for w in window.warnings]
+    return result

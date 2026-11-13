@@ -32,6 +32,7 @@ from pydantic import BaseModel
 from backend.core.errors import OpenNetWorthError, RedirectNotRegisteredError, to_http_status
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services.aggregation import enable_banking as enable_banking_service
+from backend.services.aggregation import enable_banking_app
 
 router = APIRouter()
 
@@ -79,8 +80,9 @@ async def enable_banking_institutions(country: str):
 @router.put("/api/enable-banking/config")
 def update_enable_banking_config(body: EnableBankingConfigUpdate):
     """Configure the connector — credentials, enable/disable. A blank ``private_key`` keeps
-    the saved one (write-only). Returns the public status."""
-    store = EnableBankingConfigStore()
+    the saved one (write-only). Another application ID while banks are linked is checked with
+    Enable Banking first (refused → 422, nothing saved), then each old consent is revoked and
+    every bank flagged to renew. Returns the public status."""
     changes: dict = {}
     if body.application_id is not None:
         changes["application_id"] = body.application_id
@@ -89,8 +91,11 @@ def update_enable_banking_config(body: EnableBankingConfigUpdate):
     if body.enabled is not None:
         changes["enabled"] = bool(body.enabled)
 
-    store.update(changes)
-    return store.public()
+    try:
+        enable_banking_app.save_credentials(changes)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    return EnableBankingConfigStore().public()
 
 
 @router.post("/api/enable-banking/link")
