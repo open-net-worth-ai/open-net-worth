@@ -46,6 +46,7 @@ def test_catalog_includes_keyfree_duckduckgo_first(store):
         "serper",
         "google_pse",
         "firecrawl",
+        "keirolabs",
     ]
     ddg = next(p for p in pub["providers"] if p["id"] == "duckduckgo")
     assert ddg["needs_api_key"] is False

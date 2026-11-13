@@ -107,7 +107,15 @@ def test_builtins_are_one_per_single_kind_and_one_per_search_provider():
     assert ids[: len(single)] == single
     assert [i for i in ids if i.startswith("web_search:")] == [
         f"web_search:{p}"
-        for p in ("duckduckgo", "tavily", "perplexity", "serper", "google_pse", "firecrawl")
+        for p in (
+            "duckduckgo",
+            "tavily",
+            "perplexity",
+            "serper",
+            "google_pse",
+            "firecrawl",
+            "keirolabs",
+        )
     ]
     assert "mcp" not in ids
 

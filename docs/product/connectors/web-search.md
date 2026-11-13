@@ -1,12 +1,12 @@
 ---
 title: Web search
-description: Let Lucius search the web and read pages — works out of the box with DuckDuckGo; add a Tavily, Perplexity, Serper, Google or Firecrawl key for better results.
+description: Let Lucius search the web and read pages — works out of the box with DuckDuckGo; add a Tavily, Perplexity, Serper, Google, Firecrawl or Keirolabs key.
 category: connectors
 order: 50
 audience: [user]
 status: stable
 related: [lucius/permissions, connectors/external-mcp, features/intel, connectors/web-search-reads-results]
-keywords: [web search, duckduckgo, tavily, perplexity, serper, google, programmable search, firecrawl, fetch page, api key, default provider, setup]
+keywords: [web search, duckduckgo, tavily, perplexity, serper, google, programmable search, firecrawl, keirolabs, fetch page, api key, default provider, setup]
 ---
 
 # Web search
@@ -28,6 +28,7 @@ only need this page if you want a different search provider.
 | **Serper** | Google's results, fast and low-cost. | [serper.dev/api-keys](https://serper.dev/api-keys) |
 | **Google Programmable Search** | Google's own search API. Needs an API key **and** a search engine ID. | See [Google Programmable Search](#google-programmable-search) |
 | **Firecrawl** | Search plus full-page reading, including pages that only render with JavaScript. Pick it if page reads come back empty or blocked. | [firecrawl.dev/app/api-keys](https://www.firecrawl.dev/app/api-keys) |
+| **Keirolabs** | Web results: titles, links and snippets. Pages are read with a plain fetch, like Serper. | [platform.keirolabs.cloud](https://platform.keirolabs.cloud/dashboard/keys) |
 
 The paid providers charge per search at their own rates; most have a free tier to start.
 

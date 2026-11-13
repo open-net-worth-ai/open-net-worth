@@ -37,10 +37,10 @@ def test_empty_state_has_builtin_transports_no_mcp():
     # Email + webhook + telegram + simplefin + plaid + lunch_money + lunch_flow + ynab +
     # enable_banking + yodlee + alpaca + ibkr + yahoo_finance + coingecko are always-present
     # built-in transports, and voice while its flag is on (the default); web search is ONE
-    # connector PER provider ("web_search:<id>", 6 of them: DuckDuckGo, Tavily, Perplexity,
-    # Serper, Google PSE, Firecrawl); no servers → no mcp connector.
+    # connector PER provider ("web_search:<id>", 7 of them: DuckDuckGo, Tavily, Perplexity,
+    # Serper, Google PSE, Firecrawl, Keirolabs); no servers → no mcp connector.
     web_search_ids = {i for i in ids if i.startswith("web_search:")}
-    assert len(web_search_ids) == 6
+    assert len(web_search_ids) == 7
     assert ids - web_search_ids == {
         "email",
         "voice",
@@ -1095,6 +1095,7 @@ def test_native_views_carry_descriptions_and_known_tool_names():
         "web_search:serper": ["serper_search", "serper_fetch_page"],
         "web_search:google_pse": ["google_pse_search", "google_pse_fetch_page"],
         "web_search:firecrawl": ["firecrawl_search", "firecrawl_fetch_page"],
+        "web_search:keirolabs": ["keirolabs_search", "keirolabs_fetch_page"],
         # Telegram/webhook each carry their own SEND tool (retired the shared, untagged
         # `notify` 2026-08-20) — RECEIVE stays transport-only, no tool.
         "telegram": ["telegram_send_message"],
@@ -1126,6 +1127,7 @@ def test_web_search_providers_each_get_their_own_description():
         "web_search:serper",
         "web_search:google_pse",
         "web_search:firecrawl",
+        "web_search:keirolabs",
     ]
     shorts = set()
     for pid in provider_ids:

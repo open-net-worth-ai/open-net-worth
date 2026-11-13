@@ -251,11 +251,11 @@ class WebSearchInput(ToolInput):
         "beyond the portfolio data. Run multiple targeted searches to cover a topic thoroughly. "
         "This is the 'just search, let the system pick' DEFAULT — it routes to whichever "
         "provider the user marked active in Connectors → Web search (Tavily, Perplexity, "
-        "Serper, Google, or the key-free DuckDuckGo fallback), so it works with zero "
+        "Serper, Google, Keirolabs, or the key-free DuckDuckGo fallback), so it works with zero "
         "configuration. To force a SPECIFIC named engine instead (the user says 'search with "
         "Perplexity' and means it literally, or you want a provider other than whichever is "
         "currently active), call that engine's own tool — tavily_search, "
-        "perplexity_search, serper_search, google_pse_search, "
+        "perplexity_search, serper_search, google_pse_search, keirolabs_search, "
         "duckduckgo_search — same result shape, one specific provider, no active-selection "
         "involved. There is still no `mcp__perplexity__*`/`mcp__tavily__*` tool for any of this."
     ),
@@ -331,7 +331,7 @@ class FetchPageInput(ToolInput):
         "or report in full. To force a SPECIFIC provider's own extraction (e.g. Tavily's "
         "richer article extract) regardless of which one is active, call its own tool "
         "instead — tavily_fetch_page, perplexity_fetch_page, "
-        "serper_fetch_page, google_pse_fetch_page, duckduckgo_fetch_page."
+        "serper_fetch_page, google_pse_fetch_page, keirolabs_fetch_page, duckduckgo_fetch_page."
     ),
     input_schema=schema_of(FetchPageInput, tool_name="fetch_page"),
 )

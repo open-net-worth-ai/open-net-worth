@@ -19,6 +19,7 @@ import backend.ai.search as search_pkg
 from backend.ai.search.base import PROVIDER_IDS, build_provider
 from backend.ai.search.duckduckgo_provider import DuckDuckGoProvider
 from backend.ai.search.google_pse_provider import GooglePseProvider
+from backend.ai.search.keirolabs_provider import KeirolabsProvider
 from backend.ai.search.perplexity_provider import PerplexityProvider
 from backend.ai.search.serper_provider import SerperProvider
 from backend.ai.search.tavily_provider import TavilyProvider
@@ -172,6 +173,30 @@ def test_serper_request_shape_and_mapping(monkeypatch):
     assert rows[0]["content"] == "sn"
 
 
+def test_keirolabs_request_shape_and_mapping(monkeypatch):
+    captured: dict = {}
+    _stub_client(
+        monkeypatch,
+        "backend.ai.search.keirolabs_provider",
+        captured,
+        {
+            "results": [
+                {"title": "KT", "url": "https://k.example", "snippet": "ks", "position": 1},
+                {"title": "no link", "url": "", "snippet": "dropped"},
+                {"title": None, "url": "https://bare.example", "snippet": None},
+            ],
+            "count": 3,
+        },
+    )
+    rows = asyncio.run(KeirolabsProvider(api_key="kk").search("q", max_results=5))
+    assert captured["url"] == "https://api.keirolabs.cloud/api/v2/search/lite"
+    assert captured["headers"]["Authorization"] == "Bearer kk"
+    assert captured["json"] == {"query": "q", "maxResults": 5}
+    assert [r["url"] for r in rows] == ["https://k.example", "https://bare.example"]
+    assert rows[0]["content"] == "ks"
+    assert rows[1]["title"] == "" and rows[1]["content"] == ""
+
+
 # ── Perplexity mapping (existing, kept) ──────────────────────────────────────────
 
 
@@ -218,7 +243,7 @@ def test_perplexity_falls_back_to_answer_when_no_sources(monkeypatch):
 
 
 def test_providers_require_key():
-    for cls in (TavilyProvider, PerplexityProvider, SerperProvider):
+    for cls in (TavilyProvider, PerplexityProvider, SerperProvider, KeirolabsProvider):
         with pytest.raises(ValueError):
             cls(api_key="")
 

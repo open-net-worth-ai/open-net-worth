@@ -126,6 +126,7 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
     url: 'https://developers.google.com/custom-search/v1/overview',
   },
   'web_search:firecrawl': { name: 'Firecrawl', url: 'https://docs.firecrawl.dev/' },
+  'web_search:keirolabs': { name: 'Keirolabs', url: 'https://keirolabs.cloud/' },
 }
 
 /** Tappable example prompts that seed the composer (spec §3). Presentational catalog
