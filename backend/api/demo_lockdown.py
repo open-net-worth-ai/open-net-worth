@@ -133,6 +133,7 @@ _LOCKED: tuple[_Rule, ...] = (
     *_rules(
         _ANY,
         r"^/api/logs$",
+        r"^/api/diagnostics/client$",
         r"^/api/qa(/.*)?$",
         r"^/api/setup-status/(data-location|inspect-path)$",
         r"^/api/checkpoints(/.*)?$",

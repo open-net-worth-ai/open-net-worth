@@ -109,6 +109,7 @@ from backend.api.chat import router as chat_router
 from backend.api.chat_pairing_api import router as chat_pairing_router
 from backend.api.chat_suggestions import router as chat_suggestions_router
 from backend.api.checkpoints import router as checkpoints_router
+from backend.api.client_diagnostics import router as client_diagnostics_router
 from backend.api.commitments_api import router as commitments_router
 from backend.api.config import router as config_router
 from backend.api.connector_secrets import router as connector_secrets_router
@@ -1268,6 +1269,7 @@ app.include_router(connector_secrets_router)
 app.include_router(connectors_router)
 app.include_router(demo_router)
 app.include_router(logs_router)
+app.include_router(client_diagnostics_router)
 app.include_router(problem_reports_router)
 app.include_router(product_docs_router)
 app.include_router(terminal_router)
