@@ -83,6 +83,8 @@ function fakeGoCardless() {
     reqSeq: 0,
     requisitions: new Map(), // id → {status, accounts, redirect, institution}
     failNextRequisition: false,
+    // transactionId → amount: the bank correcting a row it already served (GCL-DS-REVIEW).
+    amountOverrides: {},
   }
   const ACCOUNTS = {
     'gcl-acc-0001': { name: 'Current Account', iban: 'GB00MONZ00000000001234', type: 'CACC' },
@@ -277,7 +279,18 @@ function fakeGoCardless() {
         const d = (t.bookingDate ?? t.bookingDateTime ?? t.valueDate ?? '').slice(0, 10)
         return d >= from && d <= to
       }
-      const { booked, pending } = TRANSACTIONS[txm[1]]
+      const { pending } = TRANSACTIONS[txm[1]]
+      const booked = TRANSACTIONS[txm[1]].booked.map((t) =>
+        state.amountOverrides[t.transactionId]
+          ? {
+              ...t,
+              transactionAmount: {
+                ...t.transactionAmount,
+                amount: state.amountOverrides[t.transactionId],
+              },
+            }
+          : t,
+      )
       return json(res, 200, {
         transactions: { booked: booked.filter(inWindow), pending: pending.filter(inWindow) },
       })
@@ -319,7 +332,11 @@ function fakeGoCardless() {
 /** Lucius runs on the operator's Claude Code login (`claude` on PATH). The CLI reads its
  *  sign-in from the real home directory, so only this mode passes HOME through; every data,
  *  cache and log path stays in the throwaway root regardless. */
-const LUCIUS = process.env.GCL_LUCIUS !== '0' && spawnSync('claude', ['--version']).status === 0
+/** GCL_DATA_SYNC=1: the bank sync without AI (flag bank_data_sync, ADR 2026-11-13) books the
+ *  rows instead of Lucius — the Lucius steps skip and the GCL-DS-* steps run. */
+const DATA_SYNC = process.env.GCL_DATA_SYNC === '1'
+const LUCIUS =
+  !DATA_SYNC && process.env.GCL_LUCIUS !== '0' && spawnSync('claude', ['--version']).status === 0
 
 async function bootBackend(fakeApi) {
   const port = await reserveFreeLoopbackPort()
@@ -331,6 +348,7 @@ async function bootBackend(fakeApi) {
   }
   assertSafeBoot({ port, ...dirs })
   const env = { ...buildQaChildEnv({ ...dirs, demoMode: false, port }), GCL_FAKE_API: fakeApi }
+  if (DATA_SYNC) env.ONW_FLAG_BANK_DATA_SYNC = '1'
   if (LUCIUS) {
     // Claude Code finds its sign-in by home directory and, on macOS, by keychain user name.
     for (const k of ['HOME', 'USER', 'LOGNAME', 'SHELL'])
@@ -553,6 +571,177 @@ async function openGoCardlessForm(page, baseUrl) {
     await dialog.getByRole('button', { name: 'Edit configuration' }).click()
   }
   await form.waitFor({ state: 'visible', timeout: 15_000 })
+}
+
+/** The bank sync without AI, end to end (GCL_DATA_SYNC=1): chosen on the connector's page with
+ *  one account unticked, a first import of the bank's whole history that keeps today's balance,
+ *  a re-run that books nothing, a bank correction held for review, the 4-reads-a-day limit, the
+ *  one-mode rule against a Lucius sync, and the Data sync tab. */
+async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }) {
+  const syncNow = async () => {
+    const panel = bank.getByRole('region', { name: 'GoCardless sync' })
+    await panel.getByRole('button', { name: 'Sync now' }).click()
+    const deadline = Date.now() + 60_000
+    await new Promise((r) => setTimeout(r, 500))
+    while (Date.now() < deadline) {
+      const st = await api(baseUrl, '/api/bank-sync/gocardless')
+      if (!st.running && st.last_run && st.last_run.status !== 'running') return st
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    throw new Error('the sync did not finish within 60 s')
+  }
+  const rowsIn = async (name) =>
+    (await bookedAll()).filter(([acct]) => acct === name).map(([, r]) => r)
+  const reads = (acc) => fake.count(new RegExp(`^/accounts/${acc}/transactions/$`))
+
+  await step(
+    'GCL-DS-MODE',
+    async () => {
+      const panel = bank.getByRole('region', { name: 'GoCardless sync' })
+      await panel.waitFor({ timeout: 20_000 })
+      await panel.getByRole('tab', { name: 'Sync without AI' }).click()
+      await panel.getByRole('checkbox', { name: /CA_Monzo/ }).waitFor({ timeout: 15_000 })
+      const st = await api(baseUrl, '/api/bank-sync/gocardless')
+      assert.equal(st.mode, 'data')
+      assert.ok(
+        st.accounts.every((a) => a.sync),
+        'an account started unticked',
+      )
+    },
+    bank,
+  )
+
+  await step(
+    'GCL-DS-UNTICK',
+    async () => {
+      const panel = bank.getByRole('region', { name: 'GoCardless sync' })
+      const box = panel.getByRole('checkbox', { name: /Savings Pot/ })
+      await box.click()
+      await panel.getByText(/Not synced: never read or booked/).waitFor({ timeout: 15_000 })
+      assert.equal(await box.isChecked(), false)
+    },
+    bank,
+  )
+
+  await step(
+    'GCL-DS-FIRST-IMPORT',
+    async () => {
+      const savingsReads = reads('gcl-acc-0002')
+      const st = await syncNow()
+      assert.equal(
+        st.last_run.status,
+        'done',
+        `run ended ${st.last_run.status}: ${st.last_run.error}`,
+      )
+      const want = [...EXPECTED_BOOKED, ...EXPECTED_HISTORY]
+        .filter(([acct]) => acct === 'CA_Monzo')
+        .map(([, ago, amount]) => `${daysAgo(ago)} ${amount.toFixed(2)}`)
+        .sort()
+      const have = (await rowsIn('CA_Monzo')).map((r) => `${r.date} ${r.amount.toFixed(2)}`).sort()
+      assert.deepEqual(have, want, 'CA_Monzo does not hold exactly the bank’s booked history')
+      assert.deepEqual(await rowsIn('Savings Pot'), [], 'the unticked account was booked')
+      assert.equal(reads('gcl-acc-0002'), savingsReads, 'the unticked account was read')
+      const list = await api(baseUrl, '/api/accounts')
+      const ca = (Array.isArray(list) ? list : list.accounts).find((a) => a.name === 'CA_Monzo')
+      assert.ok(Math.abs(Number(ca.balance) - 1000) < 0.005, `balance moved to ${ca.balance}`)
+      assert.ok(
+        String(ca.initial_balance_date) <= daysAgo(75),
+        `CA_Monzo still starts ${ca.initial_balance_date}`,
+      )
+      const original = (await rowsIn('CA_Monzo')).find((r) => r.original)
+      assert.equal(original?.original, '48.00 EUR', 'the foreign charge lost its original amount')
+      const ids = accountIds.CA_Monzo
+      assert.ok(ids, 'no CA_Monzo id')
+    },
+    bank,
+  )
+
+  await step(
+    'GCL-DS-RERUN',
+    async () => {
+      const before = (await rowsIn('CA_Monzo')).length
+      const st = await syncNow()
+      assert.equal(st.last_run.outcome, 'Nothing new')
+      assert.equal((await rowsIn('CA_Monzo')).length, before, 'a re-run booked again')
+    },
+    bank,
+  )
+
+  await step(
+    'GCL-DS-REVIEW',
+    async () => {
+      fake.state.amountOverrides.tx_c6 = '-1.50'
+      await syncNow()
+      const parking = async () =>
+        (await rowsIn('CA_Monzo')).find((r) => r.refs.some((x) => x.endsWith(':tx_c6')))
+      assert.equal((await parking()).amount, -1, 'the bank’s change was applied without asking')
+      await app.goto(`${baseUrl}/automations?view=sync&sync=bank:gocardless`)
+      await dismissIntro(app)
+      await app
+        .getByText('GoCardless changed a transaction you have booked.')
+        .waitFor({ timeout: 20_000 })
+      await app.getByRole('button', { name: 'Use the bank’s version' }).click()
+      await app.getByText('Nothing to review').waitFor({ timeout: 15_000 })
+      assert.equal((await parking()).amount, -1.5, 'accepting did not apply the bank’s version')
+    },
+    app,
+  )
+
+  await step(
+    'GCL-DS-READ-LIMIT',
+    async () => {
+      await syncNow() // the fourth read of CA_Monzo today
+      const r = await fetch(`${baseUrl}/api/bank-sync/gocardless/run`, { method: 'POST' })
+      const body = await r.json()
+      assert.equal(r.status, 409, `a fifth Sync now answered ${r.status}`)
+      assert.match(body.detail, /read each account 4 times a day/)
+      await bank.goto(`${baseUrl}/connectors?connector=gocardless`)
+      const panel = bank.getByRole('region', { name: 'GoCardless sync' })
+      await panel.getByText('Every ticked account has used today’s bank reads.').waitFor({
+        timeout: 20_000,
+      })
+      assert.ok(
+        await panel.getByRole('button', { name: 'Sync now' }).isDisabled(),
+        'Sync now still offered with no reads left',
+      )
+      assert.ok(reads('gcl-acc-0001') <= 4, `CA_Monzo read ${reads('gcl-acc-0001')}× today`)
+    },
+    bank,
+  )
+
+  await step('GCL-DS-ONE-MODE', async () => {
+    const r = await fetch(`${baseUrl}/api/automations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Sync GoCardless',
+        instructions: goCardlessTemplate(),
+        trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+        execution: { kind: 'lucius' },
+        permission_mode: 'auto',
+      }),
+    })
+    const body = await r.json()
+    assert.equal(r.status, 409, `a Lucius sync beside it answered ${r.status}`)
+    assert.match(body.detail, /already syncs without AI/)
+    assert.match(body.detail, /choose Lucius on the GoCardless connector/)
+  })
+
+  await step(
+    'GCL-DS-DATA-SYNC-TAB',
+    async () => {
+      await app.goto(`${baseUrl}/automations?view=sync`)
+      await dismissIntro(app)
+      const card = app.getByRole('article', { name: 'GoCardless bank sync' })
+      await card.waitFor({ timeout: 20_000 })
+      await card.click()
+      await app.getByRole('list', { name: 'Sync history' }).waitFor({ timeout: 15_000 })
+      const rows = await app.locator('.bs-history-row').count()
+      assert.ok(rows >= 4, `history lists ${rows} runs`)
+      await app.screenshot({ path: join(OUT_DIR, 'data-sync-page.png'), fullPage: true })
+    },
+    app,
+  )
 }
 
 async function main() {
@@ -856,6 +1045,8 @@ async function main() {
         r,
       ]),
     ]
+
+    if (DATA_SYNC) await dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll })
 
     await step(
       'GCL-LUCIUS-FETCH',
@@ -1211,7 +1402,8 @@ async function main() {
       watchConsole(p, consoleErrors, 'mobile')
       await p.goto(`${baseUrl}/connectors?connector=gocardless`)
       await dismissIntro(p)
-      await p.getByText('Current Account').waitFor({ timeout: 20_000 })
+      // .first(): with the bank sync on, its panel names the bank's account too.
+      await p.getByText('Current Account').first().waitFor({ timeout: 20_000 })
       const overflow = await p.evaluate(
         () => document.documentElement.scrollWidth - window.innerWidth,
       )

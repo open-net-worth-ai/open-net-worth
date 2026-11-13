@@ -141,6 +141,52 @@ with real credentials; not automated (new signups are closed, and we hold no acc
 - THEN its Remove shows it is working while GoCardless revokes (seconds), then the bank leaves the
   list, its consent is deleted at GoCardless, and my other bank stays
 
+## Bank sync without AI (`GCL_DATA_SYNC=1`)
+
+`GCL_DATA_SYNC=1 npm run e2e:gocardless-bank-link` boots the backend with `bank_data_sync` on;
+the Lucius steps skip and these run after GCL-NAV-BACK (ADR
+`2026-11-13-a-bank-connector-can-book-its-rows-without-ai`). Run it beside the default mode: the
+default run proves nothing changed with the flag off.
+
+### GCL-DS-MODE
+- GIVEN both accounts are linked
+- WHEN I choose **Sync without AI** under **Sync** on the GoCardless connector
+- THEN each linked account shows a **Sync** box, ticked
+
+### GCL-DS-UNTICK
+- WHEN I untick Savings Pot
+- THEN it says it is never read or booked
+
+### GCL-DS-FIRST-IMPORT
+- WHEN I press **Sync now**
+- THEN CA_Monzo holds exactly the bank's booked rows, its 40- and 75-day history included, the
+  pending taxi fare excluded, both £3.00 coffees, the EUR charge with its original amount
+- AND its start moved back to the oldest row and its balance is still £1,000
+- AND Savings Pot was neither read from the bank nor booked
+
+### GCL-DS-RERUN
+- WHEN I press **Sync now** again
+- THEN the run says "Nothing new" and nothing more is booked
+
+### GCL-DS-REVIEW
+- GIVEN the bank changes a booked row's amount (£1.00 → £1.50)
+- WHEN the next run reads it
+- THEN the ledger still says £1.00 and the change waits under **To review**
+- AND after **Use the bank's version** the ledger says £1.50
+
+### GCL-DS-READ-LIMIT (third-party limits)
+- WHEN a fourth sync has read CA_Monzo today
+- THEN a fifth **Sync now** is refused with "read each account 4 times a day", the button is
+  disabled with the reason, and the bank was read at most 4 times
+
+### GCL-DS-ONE-MODE
+- WHEN a Lucius **Sync GoCardless** Automation is created while it syncs without AI
+- THEN it is refused, naming the switch: choose Lucius on the GoCardless connector
+
+### GCL-DS-DATA-SYNC-TAB
+- WHEN I open Automations → Data sync
+- THEN GoCardless is listed; its page shows the history of every run
+
 ## Non-functional
 
 ### GCL-NF-FEEDBACK (responsiveness)
