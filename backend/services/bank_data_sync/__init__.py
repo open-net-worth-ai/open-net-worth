@@ -225,3 +225,38 @@ def refuse_automation_beside_data_sync(automation: dict) -> None:
     """Called by the Automations choke before an Automation becomes active. No-op when off."""
     if is_on():
         settings.refuse_beside_data(automation)
+
+
+# ── the review list ─────────────────────────────────────────────────────────────────
+
+
+def list_reviews(provider: Optional[str] = None) -> list[dict]:
+    _require_on()
+    if provider:
+        settings.provider(provider)
+    labels = {p.key: p.label for p in settings.capable_providers()}
+    return [
+        {**r, "provider_label": labels.get(r.get("provider"), "")}
+        for r in reviews.open_items(provider)
+    ]
+
+
+def accept_review(item_id: str) -> dict:
+    _require_on()
+    from backend.services.bank_data_sync import review_actions
+
+    return review_actions.accept(item_id)
+
+
+def dismiss_review(item_id: str) -> dict:
+    _require_on()
+    from backend.services.bank_data_sync import review_actions
+
+    return review_actions.dismiss(item_id)
+
+
+def book_review(item_id: str) -> dict:
+    _require_on()
+    from backend.services.bank_data_sync import review_actions
+
+    return review_actions.book_separately(item_id)
