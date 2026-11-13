@@ -50,8 +50,8 @@ def _wait() -> None:
 @pytest.mark.flags(bank_data_sync=True)
 def test_the_whole_loop_over_http(client, bank):
     overview = client.get("/api/bank-sync").json()["connectors"]
-    assert [c["provider"] for c in overview] == ["gocardless"]
-    assert overview[0]["mode"] == "off"
+    [gc] = [c for c in overview if c["connected"]]
+    assert (gc["provider"], gc["mode"]) == ("gocardless", "off")
 
     status = client.put("/api/bank-sync/gocardless/mode", json={"mode": "data"}).json()
     assert status["mode"] == "data"
@@ -105,3 +105,12 @@ def test_no_secret_in_any_response(client, bank):
     )
     for secret in ("SKEY", "SID", "req-1", "secret"):
         assert secret not in text
+
+
+@pytest.mark.flags(bank_data_sync=True)
+def test_every_bank_that_can_sync_is_listed_set_up_or_not(client, bank):
+    listed = {
+        c["provider"]: c["connected"] for c in client.get("/api/bank-sync").json()["connectors"]
+    }
+    assert listed["gocardless"] is True
+    assert listed["enable_banking"] is False and listed["plaid"] is False

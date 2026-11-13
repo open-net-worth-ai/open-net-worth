@@ -24,10 +24,12 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
 
 ## Turn it on
 
-1. Set up the connector and link its accounts as usual — see
-   [Bank & brokerage connectors](../connectors/bank-brokerage.md).
-2. On the connector's page, under **Next: bring in transactions**, click **Set up sync**. It opens the bank's own page in
-   **Automations → Data sync**, with three steps:
+1. Open **Automations → Data sync**. GoCardless, Enable Banking and Plaid are there beside YNAB
+   and Actual: under **Add a data sync** until their connector is set up, then as a card. Or, on a
+   connector's page, click **Set up sync** under **Next: bring in transactions**.
+2. The bank's own page walks you through it. A bank not connected yet starts with **Connect
+   GoCardless…** (or Enable Banking, or Plaid), which opens the connector's setup form — see
+   [Bank & brokerage connectors](../connectors/bank-brokerage.md). Then three steps:
    1. **Choose accounts.** Every linked account is ticked, listed under the bank it's at (one
       connector can hold several banks); its line says which bank account it's from. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
       (or **Link more accounts**) links a bank account here, as a new account or to one you have,

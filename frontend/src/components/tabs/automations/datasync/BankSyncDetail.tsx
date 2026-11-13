@@ -4,6 +4,7 @@ import { fDateTime } from '../../../../utils/format'
 import { ErrorState, Loading } from '../../../ui'
 import { BankRunReport } from './BankRunReport'
 import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
+import { BankSyncTitle } from './BankSyncParts'
 import { BankSyncReviews } from './BankSyncReviews'
 import { BankSyncSetup } from './BankSyncSetup'
 import { useBankSync, useBankSyncRuns } from './bankSync'
@@ -70,10 +71,7 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
     <div className="a3-wrap" data-od-id="bank-sync-detail">
       {crumb}
       <div className="a3-detail-head">
-        <div className="a3-detail-title">
-          <h1>{label}</h1>
-          <div className="a3-detail-sub">Books new bank transactions on a schedule.</div>
-        </div>
+        <BankSyncTitle provider={provider} label={label} />
       </div>
       <BankSyncSetup status={status} />
     </div>

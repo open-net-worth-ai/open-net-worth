@@ -33,6 +33,8 @@ export interface BankSyncStatus {
   mode: BankSyncMode
   ready: boolean
   lucius_followup: boolean
+  /** Its connector is set up. A bank that isn't is offered under "Add a data sync". */
+  connected?: boolean
   interval_hours: number
   /** The schedules this bank may run on (a daily read limit rules out the frequent ones). */
   intervals?: number[]

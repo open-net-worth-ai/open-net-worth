@@ -4,6 +4,9 @@ import { fScheduleWhen } from '../../../../utils/format'
 import { Button, Checkbox, Modal } from '../../../ui'
 import { Clock3 } from 'lucide-react'
 import { ConnectorAccountsList } from '../../connectors/ConnectorAccountsList'
+import { ConnectorPanel } from '../../connectors/ConnectorPanel'
+import { useConnectors } from '../../connectors/useConnectors'
+import { connectorLogo } from '../../connectors/logos'
 import { SettingMenu } from './SyncBlocks'
 import { bankSyncSend, type BankSyncAccount, type BankSyncStatus } from './bankSync'
 import { everyLabel, type Act } from './bankSyncHelpers'
@@ -158,5 +161,60 @@ export function ScheduleMenu({
         )
       }
     />
+  )
+}
+
+/** The provider's mark on the white plate every brand logo gets (the budget apps' `a3-mark`),
+ *  or nothing when it has none or the file fails. Decorative: its name is always beside it.
+ *  `size`: `lg` for the page's title, `xs` inline beside a card's name. */
+const MARK_CLASS = { lg: 'a3-mark bs-mark-lg', md: 'a3-mark', xs: 'a3-mark bs-mark-xs' }
+
+export function BankLogo({ provider, size }: { provider: string; size?: 'lg' | 'xs' }) {
+  const src = connectorLogo(provider)
+  const [broken, setBroken] = useState(false)
+  if (!src || broken) return null
+  return (
+    <span className={MARK_CLASS[size ?? 'md']} aria-hidden="true">
+      <img className="a3-mark-logo" src={src} alt="" onError={() => setBroken(true)} />
+    </span>
+  )
+}
+
+/** The page's title: the provider's mark, its name, and what the page does. */
+export function BankSyncTitle({ provider, label }: { provider: string; label: string }) {
+  return (
+    <div className="a3-detail-title bs-title">
+      <BankLogo provider={provider} size="lg" />
+      <div>
+        <h1>{label}</h1>
+        <div className="a3-detail-sub">Syncs your bank transactions automatically.</div>
+      </div>
+    </div>
+  )
+}
+
+/** A bank whose connector isn't set up: open its setup in place, as the budget apps' page does
+ *  ("Connect YNAB…"). Closing it re-reads the sync, which then asks for its accounts. */
+export function ConnectBankButton({ status }: { status: BankSyncStatus }) {
+  useConnectors() // warm the connector list, so the panel opens at once
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <div>
+        <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
+          {`Connect ${status.label}…`}
+        </Button>
+      </div>
+      {open && (
+        <ConnectorPanel
+          connectorId={status.provider}
+          configureOnOpen
+          onClose={() => {
+            setOpen(false)
+            invalidateQueryCache((key) => key.startsWith('/api/bank-sync'))
+          }}
+        />
+      )}
+    </>
   )
 }

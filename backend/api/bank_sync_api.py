@@ -1,6 +1,7 @@
 """Bank sync without AI — REST over ``services.bank_data_sync`` (ADR 2026-11-13).
 
   * ``GET  /api/bank-sync``                           every bank connector that can sync without AI
+                                                       (``connected`` false: not set up yet)
   * ``GET  /api/bank-sync/{provider}``                its mode, accounts (+ Sync), last/next run
   * ``PUT  /api/bank-sync/{provider}/mode``           ``{mode: off|data|lucius}``
   * ``PUT  /api/bank-sync/{provider}/accounts/{id}``  ``{sync: bool}``

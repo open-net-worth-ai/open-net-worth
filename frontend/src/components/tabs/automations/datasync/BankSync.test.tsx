@@ -375,6 +375,32 @@ describe('with bank_data_sync on', () => {
     expect(await screen.findByText(/Set up an automation and Lucius/)).toBeTruthy()
   })
 
+  it('offers a bank whose connector is not set up, beside the budget apps', () => {
+    const onOpen = vi.fn()
+    render(
+      <DataSyncView
+        entries={[]}
+        banks={[
+          status({ mode: 'data', connected: true }),
+          status({ provider: 'plaid', label: 'Plaid', connected: false, interval_hours: 6 }),
+        ]}
+        onOpen={onOpen}
+      />,
+    )
+    expect(screen.getByRole('article', { name: 'GoCardless bank sync' })).toBeTruthy()
+    expect(screen.queryByRole('article', { name: 'Plaid bank sync' })).toBeNull()
+    const tile = screen.getByRole('button', { name: 'Set up Plaid' })
+    expect(tile.textContent).toContain('Every 6 hours')
+    fireEvent.click(tile)
+    expect(onOpen).toHaveBeenCalledWith('bank:plaid')
+  })
+
+  it('a bank not set up starts with Connect, the way the budget apps do', () => {
+    render(<BankSyncSetup status={status({ connected: false, stage: 'accounts', accounts: [] })} />)
+    expect(screen.getByRole('button', { name: 'Connect GoCardless…' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Link accounts' })).toBeNull()
+  })
+
   it('puts bank connectors in the Data sync view beside the budget apps', () => {
     const onOpen = vi.fn()
     render(

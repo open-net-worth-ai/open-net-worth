@@ -99,6 +99,7 @@ def _summary(p) -> dict:
         "label": p.label,
         "mode": mode,
         "ready": _connector_ready(p),
+        "connected": _set_up(p) or mode == "data",
         "lucius_followup": s["lucius_followup"],
         "interval_hours": settings.interval_hours(p),
         "intervals": settings.interval_choices(p),
@@ -124,12 +125,11 @@ def _set_up(p) -> bool:
 
 
 def overview() -> list[dict]:
-    """The data-sync-capable connectors that are set up (or already syncing) — the Automations →
-    Data sync list. A bank never connected has nothing to sync, so it isn't listed."""
+    """Every bank connector that can sync without AI — the Automations → Data sync list. One
+    whose connector isn't set up yet (``connected`` false) is offered under "Add a data sync",
+    as the budget apps are, so the sync is findable before its connector exists."""
     _require_on()
-    return [
-        _summary(p) for p in settings.capable_providers() if _set_up(p) or settings.is_data(p.key)
-    ]
+    return [_summary(p) for p in settings.capable_providers()]
 
 
 def status(key: str) -> dict:

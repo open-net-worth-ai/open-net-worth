@@ -3,6 +3,8 @@ import { Clock3 } from 'lucide-react'
 import { ErrorState, TabSkeleton } from '../../../ui'
 import { KeepAwakeBanner } from '../KeepAwakeBanner'
 import { BankSyncCard } from './BankSyncCard'
+import { BankLogo } from './BankSyncParts'
+import { everyLabel } from './bankSyncHelpers'
 import { DataSyncCard } from './DataSyncCard'
 import type { BankSyncStatus } from './bankSync'
 import type { DataSyncEntry } from './useDataSyncs'
@@ -43,6 +45,9 @@ export function DataSyncView({
   const healthy = entries.filter((e) => !e.sync.error)
   const adopted = healthy.filter((e) => e.sync.adopted)
   const offered = healthy.filter((e) => !e.sync.adopted)
+  // A bank whose connector isn't set up yet is offered, as a budget app not adopted is.
+  const connected = banks.filter((b) => b.connected !== false)
+  const bankOffers = banks.filter((b) => b.connected === false)
   return (
     <div className="a3-wrap" data-od-id="data-sync-list">
       <KeepAwakeBanner />
@@ -51,9 +56,9 @@ export function DataSyncView({
           {refusal}
         </div>
       )}
-      {banks.length > 0 && (
+      {connected.length > 0 && (
         <div className="a3-list" aria-label="Bank syncs">
-          {banks.map((b) => (
+          {connected.map((b) => (
             <BankSyncCard key={b.provider} status={b} onOpen={() => onOpen(`bank:${b.provider}`)} />
           ))}
         </div>
@@ -71,12 +76,12 @@ export function DataSyncView({
             />
           ))}
         </div>
-      ) : banks.length > 0 ? null : (
+      ) : connected.length > 0 ? null : (
         <div className="a3-empty">
           No data syncs yet. Pick one below to bring your history in and keep it in step.
         </div>
       )}
-      {offered.length > 0 && (
+      {offered.length + bankOffers.length > 0 && (
         <section className="a3-tpl-section" aria-labelledby="data-sync-available-heading">
           <div className="a3-sec-label" id="data-sync-available-heading">
             Add a data sync
@@ -97,6 +102,24 @@ export function DataSyncView({
                   <span className="a3-tpl-blurb">{app.blurb}</span>
                   <span className="a3-tpl-when">
                     <Clock3 size={11} aria-hidden="true" /> Every hour
+                  </span>
+                </span>
+              </button>
+            ))}
+            {bankOffers.map((b) => (
+              <button
+                key={b.provider}
+                type="button"
+                className="a3-tpl"
+                aria-label={`Set up ${b.label}`}
+                onClick={() => onOpen(`bank:${b.provider}`)}
+              >
+                <BankLogo provider={b.provider} />
+                <span className="a3-tpl-body">
+                  <span className="a3-tpl-title">{b.label}</span>
+                  <span className="a3-tpl-blurb">Syncs your bank transactions automatically.</span>
+                  <span className="a3-tpl-when">
+                    <Clock3 size={11} aria-hidden="true" /> {everyLabel(b.interval_hours)}
                   </span>
                 </span>
               </button>

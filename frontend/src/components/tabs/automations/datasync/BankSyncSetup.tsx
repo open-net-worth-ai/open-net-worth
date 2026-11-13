@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { Download, Play } from 'lucide-react'
 import { Button } from '../../../ui'
-import { AccountBoxes, ActionError, LinkAccountsButton, ScheduleMenu } from './BankSyncParts'
+import {
+  AccountBoxes,
+  ActionError,
+  ConnectBankButton,
+  LinkAccountsButton,
+  ScheduleMenu,
+} from './BankSyncParts'
 import { outOfReads, useAct } from './bankSyncHelpers'
 import { Step } from './SyncSetupSteps'
 import { bankSyncSend, type BankSyncStatus, type ModeResult } from './bankSync'
@@ -30,8 +36,14 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
     <>
       <ActionError error={error} />
       <ol className="a3-steps" data-od-id="bank-sync-setup">
-        <Step n={1} reached={reached} title="Choose accounts">
-          {accounts.length === 0 ? (
+        <Step
+          n={1}
+          reached={reached}
+          title={status.connected === false ? `Connect ${status.label}` : 'Choose accounts'}
+        >
+          {status.connected === false ? (
+            <ConnectBankButton status={status} />
+          ) : accounts.length === 0 ? (
             <LinkAccountsButton status={status} primary />
           ) : (
             <>

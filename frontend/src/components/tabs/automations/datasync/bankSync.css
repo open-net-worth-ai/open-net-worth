@@ -28,6 +28,28 @@
 .bs-warn {
   color: var(--warn);
 }
+.bs-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+/* The brand plate (a3-mark), larger in the title and small beside a card's name. */
+.a3-mark.bs-mark-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.a3-mark.bs-mark-lg .a3-mark-logo {
+  padding: 7px;
+}
+.a3-mark.bs-mark-xs {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+.a3-mark.bs-mark-xs .a3-mark-logo {
+  padding: 3px;
+}
 .bs-banks {
   display: flex;
   flex-direction: column;
