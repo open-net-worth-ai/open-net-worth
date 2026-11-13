@@ -1249,3 +1249,51 @@ def test_session_accounts_data_reads_a_closed_session(monkeypatch):
     assert svc.session_accounts_data("JWT", "SESS-1") == [
         {"uid": "UID-1", "identification_hash": "HASH-1"}
     ]
+
+
+# ── description when the bank sends little ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "fields, expected",
+    [
+        ({"remittance_information": ["CARD 1234", " ACME Grocery "]}, "CARD 1234 ACME Grocery"),
+        ({"remittance_information": [], "creditor": {"name": "ACME Taxi"}}, "ACME Taxi"),
+        ({"remittance_information": [""], "debtor": {"name": "ACME Corp"}}, "ACME Corp"),
+        (
+            {
+                "remittance_information": None,
+                "bank_transaction_code": {"description": "Card payment"},
+            },
+            "Card payment",
+        ),
+        (
+            {"bank_transaction_code": {"description": " "}, "reference_number": "RF18 5390"},
+            "RF18 5390",
+        ),
+        ({"creditor": {"name": None}, "bank_transaction_code": None}, "Enable Banking"),
+        ({"note": "my own note"}, "Enable Banking"),
+    ],
+)
+def test_the_description_comes_from_the_first_field_the_bank_filled(fields, expected):
+    """Reported 2026-11-13: a bank whose rows carry no remittance text and no counterparty
+    came out as a bare "Enable Banking" on every row, even when it named the kind of
+    transaction. ``note`` is the account holder's own, never the bank's description."""
+    assert svc._txn_description(fields) == expected
+
+
+def test_a_row_the_bank_names_only_by_its_code_is_booked_with_that_wording():
+    row = svc._txn_to_row(
+        {
+            "entry_reference": "T9",
+            "booking_date": "2026-11-12",
+            "status": "BOOK",
+            "transaction_amount": {"amount": "12.00", "currency": "EUR"},
+            "credit_debit_indicator": "DBIT",
+            "bank_transaction_code": {"description": "Card payment", "code": "PMNT"},
+        },
+        "EB-CHK",
+        "EUR",
+    )
+    assert row["description"] == "Card payment"
+    assert row.get("payee") is None

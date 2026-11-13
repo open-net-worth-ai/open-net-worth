@@ -207,6 +207,11 @@ instead of returning nothing. Each bank renews on its own; linking the same bank
 it rather than adding it twice. Renewing keeps everything as it was: each account stays linked to
 the same Open Net Worth account, and nothing already imported comes in again.
 
+Each transaction's description is the first of these your bank sends: its payment text, the
+other party's name, its own name for the kind of transaction (such as "Card payment"), or the
+payment reference. A transaction with none of them is described as **Enable Banking**: your bank
+didn't send any detail for it.
+
 ### Switching to another Enable Banking application
 
 A bank's access belongs to the application you linked it with, so another application can't read

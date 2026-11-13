@@ -688,18 +688,33 @@ def _txn_date(eb_txn: dict) -> str:
 
 
 def _txn_description(eb_txn: dict) -> str:
-    """Best human description: remittance info (string or list), then the counterparty name,
-    then a generic fallback."""
+    """Best human description, from the first of these the bank filled: remittance info
+    (string or list), the counterparty's name, the bank's own wording for the kind of
+    transaction (``bank_transaction_code.description``, e.g. "Card payment"), the creditor
+    reference (``reference_number``) — then a generic fallback. Some banks send only the
+    transaction code: reading just the first two left every such row a bare "Enable Banking"
+    (reported 2026-11-13). ``note`` is the account holder's own note, not the bank's, so it
+    is never the description."""
     info = eb_txn.get("remittance_information")
     if isinstance(info, list):
-        info = " ".join(str(x) for x in info if x)
-    if not info:
-        creditor = eb_txn.get("creditor") or {}
-        debtor = eb_txn.get("debtor") or {}
-        info = (creditor.get("name") if isinstance(creditor, dict) else None) or (
-            debtor.get("name") if isinstance(debtor, dict) else None
+        info = " ".join(str(x).strip() for x in info if x and str(x).strip())
+    if not (isinstance(info, str) and info.strip()):
+        info = (
+            _name_of(eb_txn.get("creditor"))
+            or _name_of(eb_txn.get("debtor"))
+            or _text_of((eb_txn.get("bank_transaction_code") or {}), "description")
+            or _text_of(eb_txn, "reference_number")
         )
-    return (str(info).strip() if info else "") or "Enable Banking"
+    return " ".join(str(info or "").split()) or "Enable Banking"
+
+
+def _name_of(party: object) -> str:
+    return _text_of(party, "name") if isinstance(party, dict) else ""
+
+
+def _text_of(obj: object, key: str) -> str:
+    value = obj.get(key) if isinstance(obj, dict) else None
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _txn_payee(eb_txn: dict, amount: float) -> Optional[str]:
