@@ -1,5 +1,5 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ActionMenu, Button, Checkbox, ConfirmDialog, ErrorState, PageTabs } from '../../ui'
 import { Bell } from '../../../ui/icons'
 import { Spark } from '../../../lucius/identity'
@@ -41,6 +41,9 @@ interface Props {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+/** The width below which the page lays out as on a phone (following.css: `fol-page` < 640px). */
+const NARROW_PAGE_PX = 640
+
 function scrollerOf(el: HTMLElement): HTMLElement {
   let node: HTMLElement | null = el.parentElement
   while (node && !/(auto|scroll)/.test(getComputedStyle(node).overflowY)) node = node.parentElement
@@ -50,6 +53,22 @@ function scrollerOf(el: HTMLElement): HTMLElement {
 export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Props) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  // The page is narrow when IT is, not only on a phone: Lucius's panel beside it narrows it on a
+  // wide screen too. Below this the header's Auto-copy hides (following.css, `fol-page` < 640px),
+  // so the ⋯ menu offers it instead; keyed on the phone alone, a narrowed page had no Auto-copy
+  // anywhere (found walking the flow, 2026-11-14).
+  const [narrow, setNarrow] = useState(false)
+  const pageObserver = useRef<ResizeObserver | null>(null)
+  const pageRef = useCallback((el: HTMLDivElement | null) => {
+    pageObserver.current?.disconnect()
+    pageObserver.current = null
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) =>
+      setNarrow((entry?.contentRect.width ?? el.clientWidth) < NARROW_PAGE_PX),
+    )
+    observer.observe(el)
+    pageObserver.current = observer
+  }, [])
   // Your own book: every table marks the stocks you hold.
   const { heldSet } = usePortfolioTickerMaps()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
@@ -256,7 +275,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   }
   const menu = [
     // On a phone the call to action lives here: the header keeps only the name.
-    ...(isMobile ? [{ label: COPY.copyCta, onSelect: () => void copyPortfolio() }] : []),
+    ...(narrow || isMobile ? [{ label: COPY.copyCta, onSelect: () => void copyPortfolio() }] : []),
     ...(onAskLucius
       ? [
           {
@@ -310,6 +329,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
 
   return (
     <div
+      ref={pageRef}
       className="fol-page"
       style={{ ['--fol-tabs-h' as string]: `${tabsHeight}px` } as React.CSSProperties}
     >
