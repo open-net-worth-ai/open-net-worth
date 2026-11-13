@@ -74,6 +74,24 @@ Two choices you made before this model existed keep working while it is on:
   Permissions** as a row marked *no longer available*, and **Reset** on that row takes it back.
   (External MCP tools never were covered by it.)
 
+## Reading a web page whose address Lucius wrote
+
+Lucius reads a web page without asking when its address was **given** to him: you typed it, or it
+came in a web search result, a page he read, or an email. When he wants to open an address he
+**wrote himself**, he asks first, even though reading a page normally just runs. The card says
+"Lucius wrote this web address itself".
+
+Why: a message or page can contain hidden instructions telling Lucius to put your balances or
+transactions into a link and open it, which would hand them to whoever runs that site. A link
+someone planted can't contain your data, because they wrote it before Lucius read anything. Your
+data can only end up in an address Lucius writes, so that's the one that asks.
+
+- In **Automatically approve**, the approval check decides, and it's told that Lucius wrote the
+  address. **Skip all approvals** opens it.
+- If you set the page-reading tool to **Always allow**, this check is off for that tool.
+- A small leak is still possible: a page full of planted links can get Lucius to pick one based on
+  something he read, which gives away a little each time. It can't send your transaction list.
+
 ## Choose how much Lucius asks in a conversation
 
 1. Open a conversation with Lucius.

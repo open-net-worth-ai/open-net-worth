@@ -961,8 +961,15 @@ async def dispatch(
         from backend.ai.tools._confirm_gate_v2 import gate_failed_result
 
         return gate_failed_result(name)
-    with pinned(gate):
-        return await _dispatch_call(name, input_data, tool_use_id, gate)
+    from backend.ai.tools import _given_urls
+
+    # Bound for the whole call, so both gates see that THIS fetch's URL was written by Lucius.
+    composed = _given_urls.bind_call(name, input_data)
+    try:
+        with pinned(gate):
+            return await _dispatch_call(name, input_data, tool_use_id, gate)
+    finally:
+        _given_urls.unbind_call(composed)
 
 
 async def _dispatch_call(
@@ -1048,6 +1055,7 @@ async def _dispatch_call(
     # merges) may ITSELF return a paused ``(None, change)`` pair — same sentinel, same
     # contract, produced from inside the handler rather than by ``_permission_gate`` above.
     text = _compact_json(text) if text is not None else None
+    _note_given_urls(name, input_data, text)
     _record_call(
         name,
         invoked,
@@ -1202,6 +1210,18 @@ def _permission_gate(
     except Exception:  # noqa: BLE001 — see docstring
         return _gate.gate_error(name, input_data)
     return None, input_data
+
+
+def _note_given_urls(name: str, input_data: dict, text: Optional[str]) -> None:
+    """Feed a source tool's result to ``_given_urls`` before the model sees it (best-effort: a
+    URL it misses only costs a card)."""
+    try:
+        from backend.ai.tools import _given_urls
+        from backend.core.chat_session import get_session_id
+
+        _given_urls.note_result(get_session_id(), name, input_data, text)
+    except Exception:  # noqa: BLE001
+        logger.warning("given urls: could not note %s", name, exc_info=True)
 
 
 def _record_call(

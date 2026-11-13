@@ -51,6 +51,7 @@ from backend.ai.auto_judge_prompt import (  # noqa: F401
     batch_ids,
     build_batch_prompt,
     build_prompt,
+    call_consequence,
     call_facts,
     owner_intent,
     recent_owner_messages,
@@ -325,7 +326,7 @@ async def judge_call(name: str, input_data: dict) -> JudgeVerdict:
             connector=connector,
             owner_messages=owner_intent(),
             external=external,
-            consequence=automation_consequence(name, input_data or {}),
+            consequence=call_consequence(name, input_data or {}),
         )
         text = await ask_model(prompt, _SYSTEM, target, JUDGE_MAX_TOKENS)
     except asyncio.TimeoutError:
@@ -372,7 +373,7 @@ async def judge_calls(calls: list[tuple[str, dict]]) -> list[JudgeVerdict]:
                     args or {},
                     connector,
                     external,
-                    automation_consequence(name, args or {}),
+                    call_consequence(name, args or {}),
                 )
             )
         prompt = build_batch_prompt(pending, owner_messages=owner_intent())
