@@ -181,9 +181,10 @@ appear in the one **Accounts** list, each labelled with its bank. **Remove** nex
 revokes its access at Enable Banking and stops its accounts syncing; transactions already
 imported stay, and your other banks are not affected.
 
-If the address from step 2 isn't registered, **Link bank** doesn't send you to your bank. The form
-shows **Add this address to your Enable Banking app first** with the address and a **Copy**
-button: add it to your application's redirect URLs, save, and click **Link bank** again.
+If the address from step 2 isn't registered, **Link bank** doesn't send you to your bank. Step
+**1 Register your app with Enable Banking** opens again on its **Redirect URL**, saying Enable
+Banking doesn't know this address yet: copy it, add it to your application's redirect URLs,
+save, and click **Link bank** again.
 
 **Can't add it? Link with a code instead** links without coming back to the app. It needs
 `https://localhost/connectors` in your application's redirect URLs. After you approve access,
@@ -537,8 +538,8 @@ the form.
 **"Could not start the bank link. Save your credentials first." (Plaid)** — the client ID or
 secret was rejected, or you haven't saved them yet.
 
-**Enable Banking: "Add this address to your Enable Banking app first"** — the app's address
-isn't in your application's redirect URLs. Copy the address the form shows (ending in
+**Enable Banking: "Enable Banking doesn't know this address yet"** — the app's address isn't in
+your application's redirect URLs. Copy the **Redirect URL** from step 1 (ending in
 `/connectors/callback/enable_banking`), add it in the Enable Banking control panel, save, and
 link again.
 

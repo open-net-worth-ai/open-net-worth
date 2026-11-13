@@ -122,11 +122,13 @@ describe('EnableBankingSection', () => {
     vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
     render(<EnableBankingSection />)
     fireEvent.click(await screen.findByRole('button', { name: 'Renew link' }))
-    expect(
-      await screen.findByText('Add this address to your Enable Banking app first'),
-    ).toBeTruthy()
+    // Step 1 reopens on its Redirect URL, saying what's wrong; step 2 points up to it.
+    expect(await screen.findByText(/doesn.t know this address yet/)).toBeTruthy()
     expect(screen.getByText(callback).tagName).toBe('CODE')
-    expect(screen.getByRole('button', { name: 'Copy the address' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy the redirect URL' })).toBeTruthy()
+    expect(screen.getByText(/Add the Redirect URL from step 1/)).toBeTruthy()
+    // Only the address: the saved keys stay folded away.
+    expect(screen.queryByLabelText(/Application ID/)).toBeNull()
     // Nobody went to the bank: the blank tab opened on the click is closed again.
     expect(tab.close).toHaveBeenCalled()
     expect(tab.location.href).toBe('')
@@ -138,7 +140,7 @@ describe('EnableBankingSection', () => {
     await waitFor(() => expect(screen.getByLabelText('Code from the address bar')).toBeTruthy())
     expect(linkBodies.map((b) => b.redirect)).toEqual([callback, ''])
     expect(screen.getByText(/shows an error page/)).toBeTruthy()
-    expect(screen.queryByText('Add this address to your Enable Banking app first')).toBeNull()
+    expect(screen.queryByText(/Add the Redirect URL from step 1/)).toBeNull()
   })
 
   it("keeps a failed bank return's reason on a linked connector while its banks load", async () => {
