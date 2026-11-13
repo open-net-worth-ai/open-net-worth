@@ -125,7 +125,7 @@ class ApproveTransactionsInput(ToolInput):
         "get_transactions needs_review=true. Correct any wrong field FIRST with "
         "update_transactions, then approve: "
         "approval means the user has seen the row as it now stands.\n\n"
-        "Asks the user to confirm on an interactive turn, listing the rows. An Automation run "
+        "If the call asks the user first, the card lists the rows. An Automation run "
         "can NEVER approve — it is refused and nothing changes; leave its rows flagged for the "
         "owner. Rows already reviewed, deleted or unknown are reported back, not errors.\n\n"
         "To REJECT a flagged row use delete_transactions — it also stops that same source event "

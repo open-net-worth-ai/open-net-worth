@@ -4579,15 +4579,16 @@
     z-index: calc(var(--z-toast) + 20);
     width: max-content;
     max-width: min(440px, calc(100vw - 32px));
-    padding: 10px 14px;
-    border-radius: 10px;
-    font-size: 12.5px;
+    padding: var(--toast-padding);
+    border-radius: var(--toast-radius);
+    font-size: var(--toast-font-size);
     line-height: 1.4;
     color: var(--toast-ink);
     background: var(--toast-bg);
     border: 1px solid var(--toast-bg);
     box-shadow: var(--shadow-toast);
     cursor: pointer;
+    font-weight: var(--toast-font-weight);
   }
   @media (prefers-reduced-motion: no-preference) {
     .mx-drag-toast {

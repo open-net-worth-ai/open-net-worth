@@ -65,7 +65,7 @@ def _resolve_net_worth(_ref: str) -> dict:
     nw = ledger.net_worth()
     bd = nw.get("breakdown", {})
     account_classes = bd.get("account_classes", {})
-    return {
+    out = {
         "base_currency": nw.get("base_currency"),
         "net_worth": nw.get("net_worth"),
         "assets": bd.get("accounts_asset"),
@@ -81,6 +81,11 @@ def _resolve_net_worth(_ref: str) -> dict:
         "property": account_classes.get("property"),
         "receivable": account_classes.get("receivable"),
     }
+    if "untracked_holdings" in account_classes:
+        # A Brokerage total account's holdings not entered (allow_brokerage_total_valuation) —
+        # invested, never cash. Absent with the flag off, so the old payload is unchanged.
+        out["untracked_holdings"] = account_classes["untracked_holdings"]
+    return out
 
 
 def _brief_context(instrument_id: str | None) -> dict:

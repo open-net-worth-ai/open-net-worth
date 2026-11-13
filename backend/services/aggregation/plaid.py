@@ -57,6 +57,9 @@ EXTERNAL_SOURCE = "plaid"
 _HTTP_TIMEOUT = 30.0
 # Plaid product + the country/language for the link token (US and Canada; the user re-classifies).
 _LINK_PRODUCTS = ["transactions"]
+# Plaid fetches 90 days of history at link unless asked for more, and an Item can never
+# fetch further back later. 730 is its maximum (Plaid's /link/token/create reference).
+_TRANSACTIONS_DAYS_REQUESTED = 730
 _LINK_COUNTRY_CODES = ["US", "CA"]
 _LINK_LANGUAGE = "en"
 _CLIENT_NAME = "Open Net Worth"
@@ -137,6 +140,7 @@ def create_link_token(redirect: str = "", *, bank: str = "", add_accounts: bool 
             payload["update"] = {"account_selection_enabled": True}
     else:
         payload["products"] = _LINK_PRODUCTS
+        payload["transactions"] = {"days_requested": _TRANSACTIONS_DAYS_REQUESTED}
     redirect_url = (redirect or "").strip()
     if redirect_url:
         payload["redirect_uri"] = redirect_url
@@ -460,6 +464,40 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
         "warnings": warnings,
         "complete": complete,
     }
+
+
+def fetch_balances(store: PlaidConfigStore) -> dict:
+    """Every linked bank's accounts with their balances, from ``/accounts/get`` — free, and the
+    one Plaid endpoint documented to list EVERY account type (``/transactions/*`` omits
+    investment accounts). Its balances are Plaid's cache, refreshed about once a day. A bank
+    that fails leaves its accounts out and marks the result incomplete; only when every bank
+    fails does this raise. Returns ``{accounts: [common shape], complete}``
+    (ADR 2026-11-10-an-investment-account-is-valued-by-its-brokerage-total-or-its-live-holdings)."""
+    items = store.items()
+    if not items:
+        raise ValidationError("Plaid is not linked (no access token)")
+    accounts: list[dict] = []
+    complete = True
+    first_error: Optional[ValidationError] = None
+    needed, answered = set(), set()
+    for item in items:
+        key = bank_key(item.get("item_id") or "")
+        try:
+            data = _post(store, "/accounts/get", {"access_token": item["access_token"]})
+        except ValidationError as exc:
+            first_error = first_error or exc
+            if exc.context.get("plaid_error_code") in _RECONNECT_CODES:
+                needed.add(key)
+            complete = False
+            continue
+        answered.add(key)
+        institution = item.get("institution_name") or bank_name(item)
+        for acct in data.get("accounts") or []:
+            accounts.append(_account_to_common({**acct, "_institution": institution}))
+    store.mark_reconnect(needed=needed, ok=answered)
+    if first_error is not None and not answered:
+        raise first_error
+    return {"accounts": accounts, "complete": complete}
 
 
 # ── normalize + fetch_window ─────────────────────────────────────────────────────────

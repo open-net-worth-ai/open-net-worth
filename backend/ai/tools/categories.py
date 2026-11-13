@@ -210,7 +210,7 @@ class RenameCategoryInput(ToolInput):
 @tool(
     "rename_categories",
     description=(
-        "Relabel a category, or merge it into another. Pass new_label to just rename it (figures untouched — a pure relabel, the id never changes). Pass merge_into (an existing, DIFFERENT category's id) to fold category_id's transactions/legacy budget cap/rules/envelope assignment into it and delete category_id — the destination's own label/target/budget win, nothing is silently overwritten. Checkpoint-covered (undoable). The structural category 'split' can never be renamed or merged. APPROVE-TIER when merging (it touches the ledger); a plain relabel is a direct config write. `renames` batches several renames/merges."
+        "Relabel a category, or merge it into another. Pass new_label to just rename it (figures untouched — a pure relabel, the id never changes). Pass merge_into (an existing, DIFFERENT category's id) to fold category_id's transactions/legacy budget cap/rules/envelope assignment into it and delete category_id — the destination's own label/target/budget win, nothing is silently overwritten. Checkpoint-covered (undoable). The structural category 'split' can never be renamed or merged. `renames` batches several renames/merges."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -300,7 +300,7 @@ class DeleteCategoryInput(ToolInput):
 @tool(
     "delete_categories",
     description=(
-        "Delete categories. The STRUCTURAL category 'split' cannot be deleted. Every other category — including built-in ones like Food & Dining, Transport, Tax — is user-deletable (pass its id from list_categories). If transactions still use it the deletion is REFUSED unless reassign=true — then those transactions are cleared to None (unclassified/Uncategorized) by default, or re-pointed to reassign_to if given. Also scrubs the category from budgets / Planning targets / envelope assignments / rules. Checkpoint-covered (undoable). APPROVE-TIER when reassign=true (it edits the ledger). `deletions` batches several."
+        "Delete categories. The STRUCTURAL category 'split' cannot be deleted. Every other category — including built-in ones like Food & Dining, Transport, Tax — is user-deletable (pass its id from list_categories). If transactions still use it the deletion is REFUSED unless reassign=true — then those transactions are cleared to None (unclassified/Uncategorized) by default, or re-pointed to reassign_to if given. Also scrubs the category from budgets / Planning targets / envelope assignments / rules. Checkpoint-covered (undoable). `deletions` batches several."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).

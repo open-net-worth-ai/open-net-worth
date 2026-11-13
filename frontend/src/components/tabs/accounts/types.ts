@@ -51,11 +51,51 @@ export interface ApiAccount {
   payoff_date?: string | null
   min_payment?: number | null
   apy?: number | null
+  /** Investment/retirement only, while `allow_brokerage_total_valuation` is on (ADR 2026-11-10):
+   *  Brokerage total (`total`) or Live holdings (`holdings`). Absent = the old valuation. */
+  value_source?: ValueSource
+  /** What a linked balance-reporting connector last said about this account. */
+  value_sync?: ApiValueSync | null
+  /** Other accounts at the same institution (a brokerage-wide total would count them twice). */
+  value_siblings?: string[]
+  /** Brokerage total only: tracked holdings + untracked == total, native, last-known prices. */
+  value_breakdown?: { tracked_holdings: number; untracked: number; total: number; currency: string }
   // server-computed, read-only
   balance: number
   balance_base: number
   cleared_balance: number
   cleared_balance_base: number
+}
+
+export type ValueSource = 'total' | 'holdings'
+
+/** `services/account_value_sync` statuses. */
+export type ValueSyncStatus =
+  | 'waiting'
+  | 'fresh'
+  | 'stale'
+  | 'kept'
+  | 'held_back'
+  | 'reconnect'
+  | 'error'
+  | 'currency_mismatch'
+  | 'no_balance'
+  | 'not_found'
+  | 'compare'
+
+export interface ApiValueSync {
+  status: ValueSyncStatus
+  source: string
+  provider_label: string
+  /** The total last applied (Brokerage total). */
+  total?: number
+  /** A suspicious reading waiting for the user (held_back). */
+  held_total?: number
+  /** Live holdings: the connector's figure, for comparison only. */
+  reported_total?: number
+  reported_currency?: string
+  changed_at?: string
+  error_code?: string
 }
 
 export interface ApiTxnSplit {
@@ -239,6 +279,9 @@ export interface Account {
   role: 'securities' | 'cash'
   /** Market value of this account's holdings in base currency (positions, from /api/portfolio). */
   holdingsBase: number
+  /** How an investment/retirement account is valued (ADR 2026-11-10); null when the old
+   *  valuation applies — every other type, or the `allow_brokerage_total_valuation` flag off. */
+  valuation?: import('./valuation').Valuation | null
 }
 
 export interface Category {
@@ -406,6 +449,8 @@ export interface BulkUpdateData {
 }
 
 export interface AccountCreate {
+  /** Investment/retirement only: how the account is valued (ADR 2026-11-10). */
+  value_source?: ValueSource
   name: string
   type: string
   institution?: string
@@ -430,7 +475,9 @@ export interface AccountCreate {
 export type AccountUpdate = Partial<Omit<AccountCreate, 'type' | 'currency'>>
 
 export interface ReconcileData {
-  real_balance: number
+  /** The balance — or, on a Brokerage total account, `real_total` instead. */
+  real_balance?: number
+  real_total?: number
   date?: string | null
   against?: 'cleared' | 'working'
   /** The balance the user was asked about — the server refuses (409) if the book has moved. */

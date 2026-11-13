@@ -66,6 +66,11 @@ Book it now. Nobody is watching this turn, so do not ask clarifying questions:
   how to book it), book it the way that entry says — it is what the owner agreed, and
   it wins over past transactions and a payee's default category — then close that entry
   with close_recent_items.
+- A payee's pinned default category replaces the category you pass. When a standing
+  instruction from the owner decides the category (e.g. a meal-by-time rule), pass that
+  category with override_payee_default=true. If the result says your category was replaced
+  and an instruction requires it, fix it with update_transactions BEFORE you reply — never
+  just describe the fix.
 - description is the merchant or bank string as the text gives it. Leave memo
   empty unless the text says something the row doesn't already show (items
   bought, what it was for) — never a retelling of the notification, its sender,

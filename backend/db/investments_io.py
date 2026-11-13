@@ -35,6 +35,8 @@ absorb) AND by task 6's portable-export bridge for these DB-backed stores.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from sqlalchemy import Connection, Table, insert, select
 
 from backend.core.io import fire_db_write_hook
@@ -47,6 +49,7 @@ from backend.db.tables import (
     option_contracts,
     positions,
     realized_events,
+    transactions,
     vest_events,
     watchlists,
 )
@@ -110,11 +113,19 @@ def import_payload_list(
     *,
     id_field: str = "id",
     store: str | None = None,
+    columns: Callable[[dict], dict] | None = None,
 ) -> int:
     _guard_money(store or table.name, raw)
     book = {} if table is asset_brief else {"book_id": DEFAULT_BOOK_ID}
     rows = [
-        {**book, "seq": seq, "id": row.get(id_field), "payload": row} for seq, row in enumerate(raw)
+        {
+            **book,
+            "seq": seq,
+            "id": row.get(id_field),
+            "payload": row,
+            **(columns(row) if columns else {}),
+        }
+        for seq, row in enumerate(raw)
     ]
     if rows:
         fire_db_write_hook(table.name, [(r["id"], None) for r in rows], conn=conn)
@@ -124,7 +135,26 @@ def import_payload_list(
 
 
 def export_payload_list(conn: Connection, table: Table) -> list[dict]:
-    return [r.payload for r in conn.execute(select(table).order_by(table.c.seq))]
+    return [r.payload for r in conn.execute(select(table.c.payload).order_by(table.c.seq))]
+
+
+def import_lots(conn: Connection, raw: list[dict]) -> int:
+    """A lot's ``txn_id`` is a real FK. A bundle is untrusted and may be partial, so a link to a
+    row this book doesn't hold imports as no link rather than failing the whole restore."""
+    known = set(conn.execute(select(transactions.c.id)).scalars())
+    items = [
+        {**row, "txn_id": row["txn_id"] if row.get("txn_id") in known else None} for row in raw
+    ]
+    return import_payload_list(
+        conn, lots, items, store="lots", columns=lambda row: {"txn_id": row["txn_id"]}
+    )
+
+
+def export_lots(conn: Connection) -> list[dict]:
+    return [
+        {**r.payload, "txn_id": r.txn_id}
+        for r in conn.execute(select(lots.c.payload, lots.c.txn_id).order_by(lots.c.seq))
+    ]
 
 
 # ── watchlists: one row per book, verbatim payload, keyed by book_id ────────────────

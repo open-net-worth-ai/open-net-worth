@@ -128,7 +128,7 @@ class ApplyOpenOptionInput(ToolInput):
         ),
     )
     allow_duplicate: Optional[bool] = Field(
-        default=None, description="Only if the user confirmed a same-signature second fill"
+        default=None, description="Only if the user said it is a genuine same-signature second fill"
     )
 
 
@@ -344,12 +344,7 @@ def _build_open_option_change(input_data: dict) -> tuple[Optional[dict], Optiona
     "open_option",
     description=(
         "Open an option contract (covered call, CSP, long call/put). Validates, pre-checks the "
-        "double-book guard, computes total premium + CSP collateral. On an interactive turn "
-        "this raises a confirm card (no write yet); the user's approval then runs it "
-        "server-side with exactly the values the card showed. Never call it again to confirm "
-        "and never restate the values — there is nothing for you to pass back. An "
-        "unattended/automated caller opens immediately, no card — pass idempotency_key so a "
-        "retry is a safe no-op. Optional premium cash leg books through the ledger."
+        "double-book guard, computes total premium + CSP collateral. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Pass idempotency_key so a retry is a safe no-op. Optional premium cash leg books through the ledger."
     ),
     input_schema=schema_of(ApplyOpenOptionInput, tool_name="open_option"),
     mutates=("options", "portfolio", "ledger"),
@@ -499,10 +494,7 @@ class ApplyCloseOptionInput(ToolInput):
     description=(
         "Close an open option contract. Optional close_premium_per_share + premium_account_id "
         "book the cash leg (short → buy-to-close expense; long → sell-to-close income); omitted "
-        "= status flip only. On an interactive turn this raises a confirm card (no write yet); "
-        "the user's approval then runs it server-side with exactly the values the card showed. "
-        "Never call it again to confirm and never restate the values — there is nothing for you "
-        "to pass back. An unattended/automated caller closes immediately, no card. Optional "
+        "= status flip only. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Optional "
         "cash leg books BEFORE the status flip; re-closing is an idempotent no-op (never "
         "double-books)."
     ),
@@ -644,7 +636,7 @@ class CancelOptionInput(ToolInput):
             "Default false — only an 'open' contract may be deleted, and a "
             "closed/expired/assigned/exercised one is refused with its status. Pass true to "
             "delete a non-open contract anyway, which discards settled history: do it only for "
-            "a genuinely mistaken entry the user has confirmed."
+            "an entry the user has said was a genuine mistake."
         ),
     )
 

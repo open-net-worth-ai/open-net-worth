@@ -18,9 +18,13 @@ const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
 const signInWithOAuth = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true, error: null })))
 vi.mock('./oauthSignIn', () => ({ signInWithOAuth }))
+const routerSearch = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  useRouterState: () => undefined,
+  // The connector page's Accounts list asks for the router; it copes with none.
+  useRouter: () => undefined,
+  useRouterState: (opts?: { select?: (st: unknown) => unknown }) =>
+    opts?.select ? opts.select({ location: { search: routerSearch.value } }) : undefined,
 }))
 
 const TELEGRAM: Connector = {
@@ -81,7 +85,10 @@ beforeEach(() => {
   })
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  routerSearch.value = {}
+})
 
 async function renderTab() {
   const view = render(<ConnectorsTab />)
@@ -453,8 +460,104 @@ describe('connectors.open_setup (Lucius) — opens a form, changes nothing', () 
     expect(setupTargetFor([PLAID_UNCONFIGURED], 'plaid')).toEqual({ kind: 'form', id: 'plaid' })
     expect(setupTargetFor([], 'mcp-ibkr')).toEqual({ kind: 'add', id: 'mcp-ibkr' })
     expect(setupTargetFor([], 'mcp-custom')).toEqual({ kind: 'unknown' })
-    // 'custom' is the Add custom server form — any MCP server the directory doesn't list.
+    // The REST API entry opens the form for a NEW API, however many are already added.
+    expect(setupTargetFor([], 'rest')).toEqual({ kind: 'form', id: 'rest' })
+    // 'custom' is the Add MCP server form — any MCP server the directory doesn't list.
     expect(setupTargetFor([], 'custom')).toEqual({ kind: 'add', id: 'mcp-custom' })
     expect(setupTargetFor([], 'zzz')).toEqual({ kind: 'unknown' })
+  })
+})
+
+// The bank's consent page returns to /connectors?connector=gocardless and may append its own
+// `?ref=…` to that URL — the connector must still open.
+describe('a link straight to one connector', () => {
+  it('opens it even with a query a bank appended to the id', async () => {
+    routerSearch.value = { connector: 'telegram?ref=abc-123' }
+    await renderTab()
+    expect(await screen.findByText('Tool permissions', {}, { timeout: 3000 })).toBeTruthy()
+  })
+})
+
+describe('coming back from a bank', () => {
+  it('asks GoCardless whether the consent finished before opening the connector page', async () => {
+    const gocardless: Connector = {
+      id: 'gocardless',
+      name: 'GoCardless',
+      kind: 'gocardless',
+      enabled: true,
+      config: {},
+      secrets_public: { has_secret_key: true },
+      status: 'error',
+      error: 'Bank link not finished — open the connector and select Check links',
+      pausable: true,
+      short_description: 'EU and UK bank accounts',
+      tools: [],
+    }
+    const fallback = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/connectors') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ connectors: [TELEGRAM, gocardless] }),
+        })
+      }
+      return fallback(url, init)
+    })
+    routerSearch.value = { connector: 'gocardless?ref=gcl-req-0001' }
+    await renderTab()
+    await waitFor(() =>
+      expect(
+        authFetch.mock.calls.some(
+          (c) => c[0] === '/api/gocardless/check-link' && c[1]?.method === 'POST',
+        ),
+      ).toBe(true),
+    )
+    // The connector page, not the credential form an unfinished-looking link would pick.
+    expect(await screen.findByText('Tool permissions', {}, { timeout: 3000 })).toBeTruthy()
+  })
+})
+
+describe('coming back from Enable Banking', () => {
+  it('finishes the link with the code and state the bank returned, no copy-paste', async () => {
+    routerSearch.value = { connector: 'enable_banking', state: 'state-123', code: 'code-456' }
+    await renderTab()
+    await waitFor(() => {
+      const call = authFetch.mock.calls.find((c) => c[0] === '/api/enable-banking/complete')
+      expect(call).toBeTruthy()
+      expect(JSON.parse(String(call![1]?.body))).toEqual({ code: 'code-456', state: 'state-123' })
+    })
+  })
+
+  it('does not call the server when the bank reports the consent was cancelled', async () => {
+    routerSearch.value = { connector: 'enable_banking', state: 'state-123', error: 'access_denied' }
+    await renderTab()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(authFetch.mock.calls.some((c) => c[0] === '/api/enable-banking/complete')).toBe(false)
+  })
+
+  it('never finishes a link from a bare state and code without the marker', async () => {
+    routerSearch.value = { state: 'state-123', code: 'code-456' }
+    await renderTab()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(authFetch.mock.calls.some((c) => c[0] === '/api/enable-banking/complete')).toBe(false)
+  })
+})
+
+describe('a failed return from Enable Banking', () => {
+  it('keeps the reason for the form instead of only a toast', async () => {
+    const fallback = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/enable-banking/complete')
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ detail: "This bank link doesn't match one started here" }),
+        })
+      return fallback(url, init)
+    })
+    routerSearch.value = { connector: 'enable_banking', state: 'stale', code: 'c' }
+    await renderTab()
+    await waitFor(() =>
+      expect(sessionStorage.getItem('onw:enable-banking:return-error')).toMatch(/doesn't match/),
+    )
   })
 })

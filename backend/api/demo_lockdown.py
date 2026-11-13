@@ -123,6 +123,9 @@ _LOCKED: tuple[_Rule, ...] = (
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
     # Actual reads a saved server on a GET too: a budget list signs in and answers with names.
     *_rules(_ANY, r"^/api/actual-budget(/.*)?$"),
+    # The REST connector's list shows each API's address (a credential), and reading an OpenAPI
+    # document is an outbound fetch.
+    *_rules(_ANY, r"^/api/rest-connector(/.*)?$"),
     # the host and other visitors
     *_rules(
         _ANY,

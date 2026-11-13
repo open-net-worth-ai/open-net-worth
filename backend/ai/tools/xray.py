@@ -66,7 +66,7 @@ class SetInstrumentConstituentsInput(ToolInput):
     description=(
         "Set (or clear) a fund's look-through breakdown so the X-ray can see inside it. This is "
         "a DIRECT config write, NOT a money action — it moves no funds and is reversible via a "
-        "turn checkpoint, so it is saved immediately (no confirm step needed), like creating a "
+        "turn checkpoint, so it is saved immediately, like creating a "
         "categorization rule. Identify the instrument by instrument_id (from get_portfolio or "
         "resolve_instruments). Pass constituents as a list of {weight (fraction 0–1), sector, "
         "region, label?}; weights should sum to ≤ 1 (any shortfall is reported as unmapped). "

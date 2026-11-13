@@ -15,7 +15,8 @@ Something broken or confusing? Send a report straight from the app. Open Net Wor
 anything about itself on its own — a report goes only when **you** open it, read it, and click
 **Send report**. Closing the window sends nothing.
 
-To close it without sending, press **Cancel**, the **×** in its corner or **Esc**. In the desktop
+To close it without sending, press **Cancel**, the **×** in its corner or **Esc**. On a phone it
+opens as a sheet with no Cancel: tap the **×**, tap outside it or drag it down. In the desktop
 app the report opens over the main window: clicking outside it, or choosing another menu command,
 closes it too.
 
@@ -33,17 +34,24 @@ closes it too.
      open or the app couldn't start.
 2. Under **What happened?**, describe what you did and what went wrong. This is the only
    required field.
-3. Optionally add your **Email**. We only use it to tell you when the fix is out.
-4. Leave **Include recent logs** ticked unless you'd rather not share them. Read the log lines
-   in the box below it — you can edit or delete any of them. With no logs yet, the box is greyed
-   out and there are no lines to show. **Show exactly what is sent**
-   displays the final report exactly as it will be posted.
+3. Optionally add your **Email**. We need it only to tell you when the fix is out — never for marketing, and it’s never shared.
+4. The line **Also sent: app details and recent logs (masked)** says what goes with your words.
+   Click it to see the version, platform and screen, and the log lines. Untick **Include recent
+   logs** if you'd rather not share them, or edit or delete any line. With no logs yet, the box
+   is greyed out. **Show exactly what is sent** displays the final report exactly as it will be
+   posted.
 5. Click **Send report**.
 
 When it's sent you'll see **Thank you. Your report was sent.** and a **Reference** — quote it if
 you write to us about the same problem. We aim to investigate and fix reports within 48 hours.
 
-Prefer to talk it through? The dialog also links to our [Discord](https://discord.gg/gRRsQRgwE8).
+Prefer to talk it through? Click **Post on Discord** instead of **Send report**. Discord can't
+fill in a message for you, so the app copies the report to your clipboard — what happened, the
+version, platform and screen, and the recent logs (masked) if they're ticked — and opens the
+#bugs channel on our [Discord](https://discord.gg/RTUMyHcUmN). The line above the buttons then
+tells you to paste it (⌘V on a Mac, Ctrl+V elsewhere). A long paste arrives as an attached text
+file. It never includes your email, because a Discord channel is public; untick the logs if you'd
+rather not post them.
 
 ## What a report contains
 

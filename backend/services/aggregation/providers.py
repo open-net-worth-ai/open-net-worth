@@ -120,6 +120,16 @@ class Provider:
     _fetch: tuple[str, str]
     _store: tuple[str, str]
     _classify: tuple[str, str]
+    # How far back an account's FIRST import reaches — the history the bank serves (GoCardless
+    # / PSD2: 90 days). 0 = a first import uses the ordinary lookback, as before.
+    history_days: int = 0
+    # Bank data sync (ADR 2026-11-13) — adapter config only, never per-provider booking code:
+    # whether the no-AI sync may book this provider's rows, how often it runs, and how many
+    # transaction reads per account a rolling 24 h allows (None = no app-side cap). PSD2 banks
+    # often allow 4 unattended reads a day; "Sync now" spends the same budget.
+    data_sync: bool = False
+    sync_interval_hours: int = 6
+    daily_reads: Optional[int] = None
 
     @property
     def disabled(self) -> bool:
@@ -152,6 +162,21 @@ class Provider:
             self.store(), since, before, account, accounts_only=accounts_only, **extra
         )
 
+    def account_balances(self) -> dict:
+        """The provider's accounts with their balances, no transactions — ``{accounts,
+        complete}``. A provider module may offer a cheaper ``fetch_balances(store)`` (Plaid's
+        free ``/accounts/get``); otherwise this is the accounts-only ``fetch_window`` the link
+        picker already uses. Raises like ``fetch_window``."""
+        module = importlib.import_module(self._fetch[0])
+        reader = getattr(module, "fetch_balances", None)
+        if reader is not None:
+            return reader(self.store())
+        from backend.core.user_time import user_today
+
+        today = user_today().isoformat()
+        window = self.fetch_window(since=today, before=today, account=None, accounts_only=True)
+        return {"accounts": list(window.accounts), "complete": bool(window.complete)}
+
     def classify_error(self, exc: Exception) -> str:
         """This provider's own exception → status taxonomy (``auth_error`` |
         ``rate_limited`` | ``connect_error`` | ``error`` | a provider-specific status like
@@ -173,6 +198,7 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["simplefin"].label,
             note="US/CA banks + cards; linked by claiming a one-time setup token.",
             lookback_days=14,
+            history_days=90,
             _fetch=("backend.services.aggregation.simplefin", "fetch_window"),
             _classify=("backend.services.aggregation.simplefin", "classify_error"),
             _store=("backend.db", "SimpleFinConfigStore"),
@@ -182,6 +208,7 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["plaid"].label,
             note="US/CA banks; credentials + a linked Item; sandbox or production.",
             lookback_days=14,
+            history_days=730,
             _fetch=("backend.services.aggregation.plaid", "fetch_window"),
             _classify=("backend.services.aggregation.plaid", "classify_error"),
             _store=("backend.db", "PlaidConfigStore"),
@@ -203,6 +230,7 @@ PROVIDERS: dict[str, Provider] = {
                 "plus a linked bank."
             ),
             lookback_days=14,
+            history_days=90,
             _fetch=("backend.services.aggregation.lunch_flow", "fetch_window"),
             _classify=("backend.services.aggregation.lunch_flow", "classify_error"),
             _store=("backend.db.lunch_flow_config_store", "LunchFlowConfigStore"),
@@ -221,6 +249,7 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["enable_banking"].label,
             note="EU PSD2; an application id + private key + a per-bank/country session.",
             lookback_days=14,
+            history_days=90,
             _fetch=("backend.services.aggregation.enable_banking", "fetch_window"),
             _classify=("backend.services.aggregation.enable_banking", "classify_error"),
             _store=("backend.db", "EnableBankingConfigStore"),
@@ -233,6 +262,10 @@ PROVIDERS: dict[str, Provider] = {
                 "account per day: on 'rate_limited', wait for the reset it names."
             ),
             lookback_days=14,
+            history_days=90,
+            data_sync=True,
+            sync_interval_hours=12,
+            daily_reads=4,
             _fetch=("backend.services.aggregation.gocardless", "fetch_window"),
             _classify=("backend.services.aggregation.gocardless", "classify_error"),
             _store=("backend.db", "GoCardlessConfigStore"),

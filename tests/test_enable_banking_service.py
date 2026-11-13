@@ -97,6 +97,8 @@ def _configure(monkeypatch, txns_by_account=None):
     feed = txns_by_account if txns_by_account is not None else _TXNS
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(_ACCOUNTS))
+    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    _store().update({"session_id": "SESS-1", "aspsp": "ACME Bank", "country": "FI"})
     monkeypatch.setattr(
         svc,
         "fetch_account_transactions",
@@ -181,6 +183,245 @@ def test_start_authorization_returns_url_and_persists(monkeypatch):
     assert cfg["aspsp"] == "Bank A" and cfg["country"] == "DE"
 
 
+class _JsonResp:
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def test_start_authorization_sends_the_required_state(monkeypatch):
+    """Issue #103: Enable Banking 422s an /auth body without `state` (verified on the
+    sandbox). The body carries state, aspsp {name, country} and access.valid_until."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = {}
+
+    def _post(url, json, **kw):
+        sent.update(json)
+        return _JsonResp(200, {"url": "https://bank.example/a", "authorization_id": "A"})
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    svc.start_authorization("Mock ASPSP", "fi", "")
+    assert sent["state"]
+    assert sent["aspsp"] == {"name": "Mock ASPSP", "country": "FI"}
+    assert sent["access"]["valid_until"]
+    assert sent["redirect_url"] == svc._DEFAULT_REDIRECT
+    assert "valid_until" not in sent
+
+
+def test_start_authorization_requires_a_country():
+    with pytest.raises(ValidationError):
+        svc.start_authorization("Mock ASPSP", "", "")
+
+
+def test_start_authorization_error_carries_enable_bankings_reason(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    body = {
+        "code": 422,
+        "message": "Wrong request parameters provided",
+        "error": "WRONG_REQUEST_PARAMETERS",
+        "detail": [{"loc": ["body", "state"], "msg": "Field required", "input": {"x": 1}}],
+    }
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _JsonResp(422, body))
+    with pytest.raises(ValidationError) as exc:
+        svc.start_authorization("Mock ASPSP", "FI", "")
+    msg = str(exc.value)
+    assert "Wrong request parameters provided" in msg and "WRONG_REQUEST_PARAMETERS" in msg
+    assert "state" in msg and "'x'" not in msg
+
+
+def test_start_authorization_unregistered_default_redirect_names_the_url(monkeypatch):
+    """Linking with a code (no app address sent) and the default URL isn't registered
+    either: Enable Banking's own reason, naming the URL to add."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    body = {"code": 400, "message": "Redirect URI not allowed", "error": "REDIRECT_URI_NOT_ALLOWED"}
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _JsonResp(400, body))
+    with pytest.raises(ValidationError) as exc:
+        svc.start_authorization("Mock ASPSP", "FI", "")
+    assert svc._DEFAULT_REDIRECT in str(exc.value)
+
+
+def test_api_error_survives_a_non_json_body():
+    class _Bad:
+        status_code = 502
+
+        @staticmethod
+        def json():
+            raise ValueError("not json")
+
+    assert str(svc._api_error(_Bad(), "listing banks")) == "listing banks failed: HTTP 502"
+
+
+def test_fetch_session_accounts_reads_uid_strings_and_details(monkeypatch):
+    """Issue #103 follow-up: GET /sessions/{id} lists `accounts` as bare uid strings (seen
+    on the sandbox); each is enriched from /accounts/{uid}/details, and a details failure
+    still keeps the uid so its transactions fetch."""
+    from backend.core.errors import ExternalServiceError
+
+    def _get(token, path, params):
+        if path == "/sessions/S1":
+            return _JsonResp(200, {"accounts": ["U1", "U2", "U1"], "accounts_data": []})
+        if path == "/accounts/U1/details":
+            return _JsonResp(200, {"uid": "U1", "name": "Main", "currency": "EUR"})
+        raise ExternalServiceError("Enable Banking HTTP 500")
+
+    monkeypatch.setattr(svc, "_safe_get", _get)
+    out = svc.fetch_session_accounts("JWT", "S1")
+    assert out == [{"uid": "U1", "name": "Main", "currency": "EUR"}, {"uid": "U2"}]
+
+
+def test_fetch_account_balance_prefers_the_booked_balance(monkeypatch):
+    body = {
+        "balances": [
+            {"balance_type": "ITAV", "balance_amount": {"amount": "11.12", "currency": "EUR"}},
+            {"balance_type": "CLBD", "balance_amount": {"amount": "-7.98", "currency": "EUR"}},
+        ]
+    }
+    monkeypatch.setattr(svc, "_safe_get", lambda *a: _JsonResp(200, body))
+    assert svc.fetch_account_balance("JWT", "U1") == -7.98
+
+
+def test_fetch_account_balance_failure_is_none(monkeypatch):
+    from backend.core.errors import ExternalServiceError
+
+    def _boom(*a):
+        raise ExternalServiceError("Enable Banking HTTP 429")
+
+    monkeypatch.setattr(svc, "_safe_get", _boom)
+    assert svc.fetch_account_balance("JWT", "U1") is None
+
+
+def test_account_to_common_suggests_type_and_mask():
+    card = {"uid": "U1", "name": "Card", "currency": "EUR", "cash_account_type": "CARD"}
+    current = {**card, "cash_account_type": "CACC", "account_id": {"iban": "FI0000001234"}}
+    assert svc._account_to_common(card, -50.0)["account_type"] == "credit"
+    assert svc._account_to_common(card, -50.0)["balance"] == -50.0
+    assert svc._account_to_common(current)["account_type"] == "cash"
+    assert svc._account_to_common(current)["mask"] == "1234"
+    assert svc._account_to_common({"uid": "U2"})["account_type"] is None
+    assert svc._account_to_common(card)["currency_inferred"] is False
+    assert svc._account_to_common({"uid": "U2"})["currency_inferred"] is True
+
+
+def test_transaction_status_decides_pending_or_dropped():
+    """Seen on the sandbox: every status comes back by default. Cancelled, rejected and
+    scheduled rows are not money that moved; pending and on-hold rows are not final."""
+    base = {
+        "entry_reference": "E1",
+        "booking_date": "2026-11-11",
+        "transaction_amount": {"amount": "9.50", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+    }
+
+    def row(status):
+        return svc._txn_to_row({**base, "status": status}, "U1", "EUR")
+
+    for gone in ("CNCL", "RJCT", "SCHD", "cncl"):
+        assert row(gone) is None
+    assert row("PDNG")["pending"] is True
+    assert row("HOLD")["pending"] is True
+    for final in ("BOOK", "OTHR", None):
+        assert row(final)["pending"] is False
+        assert row(final)["amount"] == -9.5
+
+
+def _pending(state, aspsp="ACME Bank", country="FI", age_minutes=0):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc) - timedelta(minutes=age_minutes)
+    _store().add_pending_link(state, aspsp=aspsp, country=country, now=now)
+
+
+def _refused():
+    return _JsonResp(
+        400,
+        {"code": 400, "message": "Redirect URI not allowed", "error": "REDIRECT_URI_NOT_ALLOWED"},
+    )
+
+
+def test_start_authorization_returns_to_the_app_when_its_url_is_registered(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = []
+
+    def _post(url, json, **kw):
+        sent.append(dict(json))
+        return _JsonResp(200, {"url": "https://bank.example/a", "authorization_id": "A"})
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    out = svc.start_authorization("Mock ASPSP", "FI", "http://localhost:8090/connectors")
+    assert [p["redirect_url"] for p in sent] == ["http://localhost:8090/connectors"]
+    assert out["returns_to_app"] is True
+    assert [p["state"] for p in _store().get()["pending_links"]] == [sent[0]["state"]]
+
+
+def test_start_authorization_stops_when_the_app_url_is_not_registered(monkeypatch):
+    """Enable Banking refuses an unregistered address before any bank page exists: the link
+    stops there, naming the address to add — never a silent switch to a URL whose return
+    lands on a page that cannot load. Nothing is remembered as a pending link."""
+    from backend.core.errors import RedirectNotRegisteredError
+
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = []
+
+    def _post(url, json, **kw):
+        sent.append(dict(json))
+        return _refused()
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    app_url = "http://localhost:8090/connectors/callback/enable_banking"
+    with pytest.raises(RedirectNotRegisteredError) as exc:
+        svc.start_authorization("Mock ASPSP", "FI", app_url)
+    assert [p["redirect_url"] for p in sent] == [app_url]
+    assert exc.value.context["redirect_url"] == app_url and app_url in exc.value.message
+    assert not _store().get()["pending_links"]
+
+
+def test_start_authorization_with_a_code_uses_the_default_redirect(monkeypatch):
+    """The user chose "Link with a code instead": no app address, the default one, and the
+    form is told the bank won't bring them back."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = []
+
+    def _post(url, json, **kw):
+        sent.append(dict(json))
+        return _JsonResp(200, {"url": "https://bank.example/a", "authorization_id": "A"})
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    out = svc.start_authorization("Mock ASPSP", "FI", "")
+    assert [p["redirect_url"] for p in sent] == [svc._DEFAULT_REDIRECT]
+    assert out["returns_to_app"] is False
+
+
+def test_start_authorization_refuses_a_non_http_redirect():
+    with pytest.raises(ValidationError):
+        svc.start_authorization("Mock ASPSP", "FI", "javascript:alert(1)")
+
+
+def test_create_session_refuses_a_state_it_did_not_send(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    _pending("S-1")
+    called = []
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: called.append(1))
+    with pytest.raises(ValidationError):
+        svc.create_session("code-xyz", "S-OTHER")
+    assert called == []
+
+
+def test_create_session_with_its_state_completes_and_clears_it(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    _pending("S-1")
+    monkeypatch.setattr(
+        svc.httpx, "post", lambda *a, **k: _JsonResp(200, {"session_id": "SESS-9", "accounts": []})
+    )
+    svc.create_session("code-xyz", "S-1")
+    assert [b["session_id"] for b in _store().banks()] == ["SESS-9"]
+    assert _store().get()["pending_links"] == []
+    with pytest.raises(ValidationError):
+        svc.create_session("code-xyz", "S-1")  # a replayed return is refused
+
+
 def test_create_session_persists_session_id(monkeypatch):
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
 
@@ -194,7 +435,7 @@ def test_create_session_persists_session_id(monkeypatch):
     monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _Resp())
     out = svc.create_session("code-xyz")
     assert out["session_id"] == "SESS-7"
-    assert _store().session_id() == "SESS-7"
+    assert [b["session_id"] for b in _store().banks()] == ["SESS-7"]
 
 
 def test_create_session_requires_code():
@@ -224,7 +465,7 @@ def test_fetch_window_normalizes_accounts_and_transactions(monkeypatch):
     assert by_ref["EB-CHK:T1"]["amount"] == -42.5  # DBIT → negative
     assert by_ref["EB-CHK:T2"]["amount"] == 2000.0  # CRDT → positive
     assert by_ref["EB-SAV:T3"]["amount"] == 100.0
-    assert all(row["external_refs"][0]["source"] == "enablebanking" for row in window.rows)
+    assert all(row["external_refs"][0]["source"] == "enable_banking" for row in window.rows)
 
 
 def test_fetch_window_filters_to_requested_account(monkeypatch):
@@ -314,7 +555,7 @@ def test_fetch_window_skips_rows_with_unrecognized_indicator(monkeypatch):
 
 
 def test_txn_to_row_falls_back_to_derived_ref_when_no_id():
-    """A transaction with no entry_reference/transaction_id gets the shared content-hash
+    """A transaction with no entry_reference gets the shared content-hash
     fallback ref (RFC §A step 3) — never a dropped row."""
     txn = {
         "booking_date": "2026-05-01",
@@ -324,8 +565,27 @@ def test_txn_to_row_falls_back_to_derived_ref_when_no_id():
     }
     row = svc._txn_to_row(txn, "EB-CHK", "EUR")
     expected_ref = derived_ref("EB-CHK", "2026-05-01", -10.0, "EUR", "No ID Merchant")
-    assert row["external_refs"] == [{"source": "enablebanking", "ref": expected_ref}]
+    assert row["external_refs"] == [{"source": "enable_banking", "ref": expected_ref}]
     assert row["raw"] is txn
+
+
+def test_a_relisted_row_keeps_its_ref_when_only_transaction_id_changes():
+    """Enable Banking's transaction_id "may change if the list of transactions is requested
+    again" (its docs). The same money listed twice with two transaction_ids must carry ONE
+    ref, or the second listing books it again; entry_reference, when sent, is the key."""
+    base = {
+        "booking_date": "2026-05-01",
+        "transaction_amount": {"amount": "10.00", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+        "remittance_information": "ACME Cafe",
+    }
+    first = svc._txn_to_row({**base, "transaction_id": "T-1"}, "EB-CHK", "EUR")
+    again = svc._txn_to_row({**base, "transaction_id": "T-99"}, "EB-CHK", "EUR")
+    assert first["external_refs"] == again["external_refs"]
+    keyed = svc._txn_to_row(
+        {**base, "transaction_id": "T-1", "entry_reference": "E-7"}, "EB-CHK", "EUR"
+    )
+    assert keyed["external_refs"] == [{"source": "enable_banking", "ref": "EB-CHK:E-7"}]
 
 
 # ── SECURITY (S-F1): the session id never leaks into an error message ────────────────
@@ -545,3 +805,309 @@ def test_classify_error_generic_http_error_is_connect_error():
 
 def test_classify_error_unknown_exception_is_error():
     assert svc.classify_error(RuntimeError("unexpected")) == "error"
+
+
+# ── several banks ───────────────────────────────────────────────────────────────────
+
+
+def _link(monkeypatch, session_id, aspsp, country="FI", accounts=None, deleted=None, sessions=None):
+    """Complete one bank link the way the app does: start (pending bank) → return → session.
+    ``sessions`` ({session_id: [accounts]}) is what Enable Banking lists for each session; a
+    renewal reads the old one before revoking it. Never the network."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    listed = sessions or {}
+    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(listed.get(sid, [])))
+    _pending("S", aspsp, country)
+    body = {
+        "session_id": session_id,
+        "accounts": accounts or [{"uid": f"{session_id}-A"}],
+        "access": {"valid_until": "2027-02-10T00:00:00+00:00"},
+    }
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _JsonResp(200, body))
+    if deleted is not None:
+        monkeypatch.setattr(
+            svc.httpx, "delete", lambda url, **k: deleted.append(url) or _JsonResp(200, {})
+        )
+    return svc.create_session("code", "S")
+
+
+def test_a_second_bank_is_added_beside_the_first(monkeypatch):
+    _link(monkeypatch, "SESS-A", "ACME Bank")
+    _link(monkeypatch, "SESS-B", "Other Bank", "SE")
+    banks = _store().banks()
+    assert [(b["aspsp"], b["country"]) for b in banks] == [
+        ("ACME Bank", "FI"),
+        ("Other Bank", "SE"),
+    ]
+    assert banks[0]["valid_until"] == "2027-02-10T00:00:00+00:00"
+    assert banks[1]["account_ids"] == ["SESS-B-A"]
+
+
+def test_linking_the_same_bank_again_renews_it_and_revokes_the_old_consent(monkeypatch):
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", deleted=deleted)
+    _link(monkeypatch, "SESS-B", "Other Bank", "SE", deleted=deleted)
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", deleted=deleted)
+    assert [b["session_id"] for b in _store().banks()] == ["SESS-B", "SESS-NEW"]
+    assert deleted == [f"{svc.API_BASE}/sessions/SESS-OLD"]
+
+
+def test_an_installs_single_session_becomes_its_first_bank(monkeypatch):
+    """Before several banks, one session_id + aspsp/country held the one bank. It must read
+    as a bank, survive the next link, and never need relinking."""
+    _store().update({"session_id": "SESS-LEGACY", "aspsp": "ACME Bank", "country": "FI"})
+    assert [(b["session_id"], b["aspsp"]) for b in _store().banks()] == [
+        ("SESS-LEGACY", "ACME Bank")
+    ]
+    _link(monkeypatch, "SESS-B", "Other Bank", "SE")
+    assert [b["session_id"] for b in _store().banks()] == ["SESS-LEGACY", "SESS-B"]
+    assert _store().get()["session_id"] == ""  # folded into the list
+
+
+def test_remove_bank_revokes_it_and_keeps_the_others(monkeypatch):
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-A", "ACME Bank", deleted=deleted)
+    _link(monkeypatch, "SESS-B", "Other Bank", "SE", deleted=deleted)
+    key = _store().banks()[0]["key"]
+    out = svc.remove_bank(key)
+    assert out == {"removed": True, "revoked": True, "banks_left": 1}
+    assert deleted == [f"{svc.API_BASE}/sessions/SESS-A"]
+    assert [b["aspsp"] for b in _store().banks()] == ["Other Bank"]
+    with pytest.raises(ValidationError):
+        svc.remove_bank(key)
+
+
+def test_public_names_each_bank_but_never_its_session(monkeypatch):
+    _link(monkeypatch, "SESS-SECRET-A", "ACME Bank")
+    pub = _store().public()
+    assert [(b["aspsp"], b["accounts"]) for b in pub["banks"]] == [("ACME Bank", 1)]
+    assert "SESS-SECRET-A" not in str(pub)
+
+
+def test_fetch_window_reads_every_bank_and_one_failure_hides_none(monkeypatch):
+    from backend.core.errors import ExternalServiceError
+
+    _link(monkeypatch, "SESS-A", "ACME Bank")
+    _link(monkeypatch, "SESS-B", "Other Bank", "SE")
+    _link(monkeypatch, "SESS-C", "Broken Bank", "DE")
+
+    def _accounts(token, sid):
+        if sid == "SESS-C":
+            raise ExternalServiceError("Enable Banking HTTP 401")
+        return [{"uid": f"{sid}-A", "name": f"{sid} main", "currency": "EUR"}]
+
+    monkeypatch.setattr(svc, "fetch_session_accounts", _accounts)
+    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: 10.0)
+    monkeypatch.setattr(
+        svc, "fetch_account_transactions", lambda token, uid, *, date_from, date_to: ([], True)
+    )
+    w = svc.fetch_window(_store(), "2026-10-01", "2026-11-13", None)
+    assert [(a["provider_account_id"], a["institution"]) for a in w.accounts] == [
+        ("SESS-A-A", "ACME Bank"),
+        ("SESS-B-A", "Other Bank"),
+    ]
+    assert w.complete is False
+
+
+def _window_with(monkeypatch, sessions, seen_uids):
+    """fetch_window over ``sessions`` ({session_id: [accounts]}), recording which uids the
+    Enable Banking endpoints were called with."""
+    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(sessions[sid]))
+
+    def _balance(token, uid):
+        seen_uids.append(("balance", uid))
+        return 10.0
+
+    def _txns(token, uid, *, date_from, date_to):
+        seen_uids.append(("transactions", uid))
+        return [
+            {
+                "transaction_id": "T1",
+                "booking_date": "2026-11-12",
+                "status": "BOOK",
+                "transaction_amount": {"amount": "45.20", "currency": "EUR"},
+                "credit_debit_indicator": "DBIT",
+                "remittance_information": ["GROCERY"],
+            }
+        ], True
+
+    monkeypatch.setattr(svc, "fetch_account_balance", _balance)
+    monkeypatch.setattr(svc, "fetch_account_transactions", _txns)
+    return svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+
+
+def test_renewing_a_bank_keeps_its_accounts_id_links_and_refs(monkeypatch):
+    """Enable Banking gives an account a NEW uid in every session (seen on the sandbox,
+    2026-11-13). Renewing must not change the account's id here: its app-account link and
+    every transaction ref are built from it, so a new id orphaned the link and re-imported
+    already-booked rows. The new uid is still the one the API is called with."""
+    old = [{"uid": "UID-OLD", "identification_hash": "HASH-1", "currency": "EUR"}]
+    new = [{"uid": "UID-NEW", "identification_hash": "HASH-1", "currency": "EUR"}]
+    sessions = {"SESS-OLD": old, "SESS-NEW": new}
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old, deleted=deleted, sessions=sessions)
+    calls: list = []
+    before = _window_with(monkeypatch, {"SESS-OLD": old}, calls)
+
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, deleted=deleted, sessions=sessions)
+    calls.clear()
+    after = _window_with(monkeypatch, {"SESS-NEW": new}, calls)
+
+    assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
+    assert [r["external_refs"] for r in after.rows] == [r["external_refs"] for r in before.rows]
+    assert [r["provider_account_id"] for r in after.rows] == ["UID-OLD"]
+    assert calls == [("balance", "UID-NEW"), ("transactions", "UID-NEW")]
+
+
+def test_a_renewal_keeps_ids_even_when_the_accounts_were_never_listed(monkeypatch):
+    """A book linked before this fix (0.1.48) has recorded no identities. Renewing reads the
+    old consent's accounts before revoking it, so the link it already holds survives."""
+    old = [{"uid": "UID-OLD", "identification_hash": "HASH-1"}]
+    new = [{"uid": "UID-NEW", "identification_hash": "HASH-1"}]
+    sessions = {"SESS-OLD": old, "SESS-NEW": new}
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old, deleted=deleted, sessions=sessions)
+    assert _store().get()["account_identities"] == {}  # nothing listed yet
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, deleted=deleted, sessions=sessions)
+    after = _window_with(monkeypatch, {"SESS-NEW": new}, [])
+    assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
+    assert deleted == [f"{svc.API_BASE}/sessions/SESS-OLD"]
+
+
+def test_the_same_account_hash_at_two_banks_stays_two_accounts(monkeypatch):
+    """The sandbox's mock banks in FI and NO expose one IBAN, so one identification_hash.
+    Two linked banks are two accounts here, whatever the hash says."""
+    fi = [{"uid": "UID-FI", "identification_hash": "HASH-1"}]
+    no = [{"uid": "UID-NO", "identification_hash": "HASH-1"}]
+    sessions = {"SESS-FI": fi, "SESS-NO": no}
+    _link(monkeypatch, "SESS-FI", "Mock ASPSP", "FI", accounts=fi, sessions=sessions)
+    _link(monkeypatch, "SESS-NO", "Mock ASPSP", "NO", accounts=no, sessions=sessions)
+    w = _window_with(monkeypatch, sessions, [])
+    assert sorted(a["provider_account_id"] for a in w.accounts) == ["UID-FI", "UID-NO"]
+
+
+def test_an_account_without_a_hash_keeps_its_session_uid(monkeypatch):
+    accounts = [{"uid": "UID-1"}]
+    _link(monkeypatch, "SESS-A", "ACME Bank", accounts=accounts, sessions={"SESS-A": accounts})
+    w = _window_with(monkeypatch, {"SESS-A": accounts}, [])
+    assert [a["provider_account_id"] for a in w.accounts] == ["UID-1"]
+    assert _store().get()["account_identities"] == {}
+
+
+def test_a_second_link_never_strands_the_first(monkeypatch):
+    """Two links started (a retry, or a second bank while the first bank's page is still
+    open): the FIRST bank's return still completes, and links the first bank."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    _pending("S-FI", "Mock Bank", "FI")
+    _pending("S-NO", "Mock Bank", "NO")
+    body = {"session_id": "SESS-FI", "accounts": []}
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _JsonResp(200, body))
+    svc.create_session("code", "S-FI")
+    assert [(b["aspsp"], b["country"]) for b in _store().banks()] == [("Mock Bank", "FI")]
+    assert [p["state"] for p in _store().get()["pending_links"]] == ["S-NO"]
+
+
+def test_a_stale_pending_link_is_refused(monkeypatch):
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    _pending("S-OLD", age_minutes=3 * 60)
+    monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: pytest.fail("no call for a stale link"))
+    with pytest.raises(ValidationError):
+        svc.create_session("code", "S-OLD")
+
+
+def test_only_the_newest_few_pending_links_are_kept():
+    for i in range(8):
+        _pending(f"S-{i}")
+    assert [p["state"] for p in _store().get()["pending_links"]] == [f"S-{i}" for i in range(3, 8)]
+
+
+def test_accounts_name_the_country_only_when_two_banks_share_a_name(monkeypatch):
+    _link(monkeypatch, "SESS-FI", "Nordea", "FI")
+    _link(monkeypatch, "SESS-SE", "Nordea", "SE")
+    _link(monkeypatch, "SESS-OP", "OP", "FI")
+    monkeypatch.setattr(
+        svc, "fetch_session_accounts", lambda token, sid: [{"uid": f"{sid}-A", "currency": "EUR"}]
+    )
+    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    w = svc.fetch_window(_store(), "2026-10-01", "2026-11-13", None, accounts_only=True)
+    assert [a["institution"] for a in w.accounts] == ["Nordea (FI)", "Nordea (SE)", "OP"]
+
+
+def test_rows_carry_the_counterparty_as_payee():
+    """Money out names who was paid (creditor); money in names who paid (debtor). The
+    description keeps the bank's own wording."""
+    out = {
+        "entry_reference": "E1",
+        "booking_date": "2026-11-11",
+        "transaction_amount": {"amount": "9.50", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+        "creditor": {"name": "ACME  Cafe"},
+        "remittance_information": ["ACME Cafe-DBIT-9.50-ref"],
+    }
+    row = svc._txn_to_row(out, "U1", "EUR")
+    assert row["payee"] == "ACME Cafe"
+    assert row["description"] == "ACME Cafe-DBIT-9.50-ref"
+    salary = {
+        **out,
+        "credit_debit_indicator": "CRDT",
+        "creditor": None,
+        "debtor": {"name": "ACME Corp"},
+    }
+    assert svc._txn_to_row(salary, "U1", "EUR")["payee"] == "ACME Corp"
+    assert svc._txn_to_row({**out, "creditor": None}, "U1", "EUR")["payee"] is None
+
+
+def test_every_provider_tags_its_rows_with_its_own_key():
+    """Every "already booked?" lookup (the fetch filter, its default window, the evidence
+    snapshots) and the dedup authority list (core.txn_sources) key a connector's rows by its
+    provider key. Enable Banking once tagged rows "enablebanking": nothing it booked was ever
+    seen as booked, and its bank ids lost their authority in dedup."""
+    import importlib
+
+    from backend.core.txn_sources import AUTHORITATIVE_ID_NAMESPACES
+    from backend.services.aggregation.providers import PROVIDERS
+
+    for provider in PROVIDERS.values():
+        module = importlib.import_module(provider._fetch[0])
+        assert getattr(module, "EXTERNAL_SOURCE", provider.key) == provider.key, provider.key
+    assert svc.EXTERNAL_SOURCE in AUTHORITATIVE_ID_NAMESPACES
+
+
+def test_fetch_counts_an_enable_banking_row_already_in_the_ledger_as_booked(monkeypatch):
+    from backend.services import connector_fetch
+    from backend.services import ledger as ledger_service
+    from backend.services.aggregation.providers import FetchWindow
+
+    _store().update(
+        {"application_id": "app", "private_key": "k", "enabled": True, "session_id": "S"}
+    )
+    ref = "ACC-1:E1"
+    row = {
+        "external_refs": [{"source": svc.EXTERNAL_SOURCE, "ref": ref}],
+        "raw": {},
+        "provider_account_id": "ACC-1",
+        "date": "2026-11-12",
+        "amount": -45.2,
+        "currency": "EUR",
+        "description": "ACME Grocery",
+        "payee": "ACME Grocery",
+        "memo": None,
+        "pending": False,
+        "supersedes_ref": None,
+    }
+    monkeypatch.setattr(
+        svc, "fetch_window", lambda *a, **k: FetchWindow(accounts=[], rows=[row], complete=True)
+    )
+    booked = {(svc.EXTERNAL_SOURCE, ref): "txn_1"}
+    monkeypatch.setattr(
+        ledger_service,
+        "known_external_refs",
+        lambda source: booked if source == "enable_banking" else {},
+    )
+    out = connector_fetch.fetch("enable_banking", since="2026-11-01", before="2026-11-13")
+    assert out["counts"]["already_booked"] == 1
+    assert out["transactions"] == []
+    with_booked = connector_fetch.fetch(
+        "enable_banking", since="2026-11-01", before="2026-11-13", include_booked=True
+    )
+    assert with_booked["transactions"][0]["booked_txn_id"] == "txn_1"

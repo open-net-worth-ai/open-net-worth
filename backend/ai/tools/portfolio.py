@@ -91,7 +91,7 @@ class GetPortfolioInput(ToolInput):
 @tool(
     "get_portfolio",
     description=(
-        "Get the user's portfolio — positions with label, category, asset_class, quantity, price, cost_basis, currency, ticker, vesting_state, and `thesis` (the user's own investment thesis read at today's price — role, reason, breaks_if, levels, stance; judge any move against it, never the move alone) when one exists.\n\nReturns EVERY position when called with no arguments (that is the right call for a portfolio total or an allocation breakdown). When you want one holding, filter instead: query='AAPL' matches symbol or name, or narrow with asset_class / account_id / vesting_state. asset_class, vesting_state and account_ids each accept a LIST as well as a single value (OR'd within the field) — 'what do I hold at IBKR or Binance' is ONE call with account_ids=[a,b], never one per account. The response reports `showing` and `total`, so a filtered read never looks like the whole book.\n\nVESTING_STATE MATTERS FOR ANY TOTAL: 'vested' rows are OWNED; 'unvested' rows are equity-grant units NOT owned yet (forfeited if the person leaves). NEVER sum an unvested row into a portfolio total, allocation breakdown, or 'what am I worth' answer. `summary.owned_base`/`summary.unvested_base` already do this split over whatever positions this call returned — use them instead of hand-summing price×quantity. get_net_worth / get_net_worth_history report the same split as `net_worth`/`unvested_base`.\n\nTODAY (unfiltered): `today` {pl_base, pct, top_movers} is the screens' figure; use it, never get_returns."
+        "Get the user's portfolio — positions with label, category, asset_class, quantity, price, cost_basis, currency, ticker, vesting_state, and `thesis` (the user's own investment thesis read at today's price — role, reason, breaks_if, levels, stance; judge any move against it, never the move alone) when one exists.\n\nReturns EVERY position when called with no arguments (that is the right call for a portfolio total or an allocation breakdown). When you want one holding, filter instead: query='AAPL' matches symbol or name, or narrow with asset_class / account_id / vesting_state. asset_class, vesting_state and account_ids each accept a LIST (OR'd) — 'what do I hold at IBKR or Binance' is ONE call with account_ids=[a,b]. The response reports `showing` and `total`, so a filtered read never looks like the whole book.\n\nVESTING_STATE MATTERS FOR ANY TOTAL: 'vested' rows are OWNED; 'unvested' rows are equity-grant units NOT owned yet (forfeited if the person leaves). NEVER sum an unvested row into a portfolio total, allocation breakdown, or 'what am I worth' answer. `summary.owned_base`/`summary.unvested_base` already do this split over whatever positions this call returned — use them instead of hand-summing price×quantity. get_net_worth / get_net_worth_history report the same split as `net_worth`/`unvested_base`.\n\nTODAY (unfiltered): `today` {pl_base, pct, top_movers} is the screens' figure; use it, never get_returns. `today.untracked_note`: money invested but not in positions."
     ),
     input_schema=schema_of(GetPortfolioInput, tool_name="get_portfolio"),
 )
@@ -166,7 +166,7 @@ def _book_today(base: str) -> dict:
     investments doing today", Lucius answered from get_returns' calendar window instead — since
     midnight, so US stocks read flat through a Singapore morning while the screens showed the
     last session's move (screens -S$250, Lucius +S$126; QA 2026-10-14)."""
-    from backend.services import investments_book, portfolio_rows
+    from backend.services import investments_book, portfolio_rows, untracked_holdings
 
     try:
         rows = portfolio_rows.projected_rows(base)["rows"]
@@ -178,7 +178,7 @@ def _book_today(base: str) -> dict:
     movers = sorted(
         (r for r in invested if r.get("daily_pl")), key=lambda r: abs(r["daily_pl"]), reverse=True
     )
-    return {
+    out = {
         "pl_base": move["pl"],
         "pct": move["pct"],
         "has_data": move["has_data"],
@@ -191,6 +191,17 @@ def _book_today(base: str) -> dict:
             for r in movers[:5]
         ],
     }
+    # A Brokerage total account's untracked part: invested at the brokerage, its holdings not
+    # entered — in no row above and left out of today's move. Said, so it is never read as
+    # cash or as nothing (ADR 2026-11-10, amendment 2). Absent while the flag is off.
+    excluded = untracked_holdings.untracked_excluded(rows)
+    if excluded and excluded["accounts"]:
+        out["untracked_excluded"] = excluded
+        out["untracked_note"] = (
+            untracked_holdings.note(excluded, base, action="track")
+            + " It is invested (counted in net worth), not cash; it is not in `positions`."
+        )
+    return out
 
 
 def _vesting_of(input_data: dict) -> str:
@@ -396,7 +407,7 @@ class GetNetWorthHistoryInput(ToolInput):
 @tool(
     "get_net_worth_history",
     description=(
-        "Get the user's NET WORTH OVER TIME — the monthly reconstructed series (cash + receivables + market positions − liabilities), each point in the base currency. Use this to answer 'how has my net worth changed?' / 'is my wealth growing?' and to read the trajectory. Each point: {date, net_worth, accounts (cash+settlement_cash+receivable+liabilities, the account-only basis), liabilities (raw-negative), classes (per-asset-class band), unvested_base (unvested equity, see below), market_tracked (whether market value is included yet)}. IMPORTANT: classes.cash is cash on hand (bank/e-wallet); classes.settlement_cash is brokerage/exchange settlement cash (negative when margin is drawn) and belongs to investments, not cash; classes.fixed_deposit / classes.retirement are locked. unvested_base (unvested RSU/option grant units, vesting_state=unvested) is EXCLUDED from net_worth and every classes band — forfeited if the person leaves the company, so not owned yet; mention it only as a separate, not-yet-owned figure, never as part of net worth. Periods: 1M | 3M | YTD | 1Y | ALL (default 1Y). This is the wealth TRAJECTORY, distinct from get_returns (investment PERFORMANCE/TWR). A young/empty book returns an empty history."
+        "Get the user's NET WORTH OVER TIME — the monthly reconstructed series (cash + receivables + market positions − liabilities), each point in the base currency. Use for 'how has my net worth changed?'. Each point: {date, net_worth, accounts (cash+settlement_cash+receivable+liabilities, the account-only basis), liabilities (raw-negative), classes (per-asset-class band), unvested_base (unvested equity, see below), market_tracked (whether market value is included yet)}. IMPORTANT: classes.cash is cash on hand (bank/e-wallet); classes.settlement_cash is brokerage/exchange settlement cash (negative when margin is drawn) and belongs to investments, not cash; classes.untracked_holdings is invested with holdings not entered, never cash; classes.fixed_deposit / classes.retirement are locked. unvested_base (unvested RSU/option grant units, vesting_state=unvested) is EXCLUDED from net_worth and every classes band — forfeited if the person leaves the company, so not owned yet; mention it only as a separate, not-yet-owned figure, never as part of net worth. Periods: 1M | 3M | YTD | 1Y | ALL (default 1Y). This is the wealth TRAJECTORY, distinct from get_returns (investment PERFORMANCE/TWR). A young/empty book returns an empty history."
     ),
     input_schema=schema_of(GetNetWorthHistoryInput, tool_name="get_net_worth_history"),
 )
@@ -500,7 +511,7 @@ class ResolveInstrumentItem(ToolInput):
     )
     unit: Optional[str] = Field(default=None, description="Holding unit for physical metal.")
     allow_duplicate_symbol: Optional[bool] = Field(
-        default=None, description="true only for a confirmed genuinely-different asset."
+        default=None, description="true only for an asset the user said is genuinely different."
     )
 
 
@@ -549,7 +560,7 @@ class ResolveInstrumentInput(ToolInput):
     allow_duplicate_symbol: Optional[bool] = Field(
         default=None,
         description=(
-            "Set true only after a prior call errored with 'symbol already exists' AND the user confirmed this is a genuinely different asset (e.g. same ticker, different exchange)."
+            "Set true only after a prior call errored with 'symbol already exists' AND the user said this is a genuinely different asset (e.g. same ticker, different exchange)."
         ),
     )
     queries: Optional[List[Union[str, ResolveInstrumentItem]]] = Field(
@@ -1161,7 +1172,7 @@ class ApplyPositionUpdateInput(ToolInput):
     updates: Optional[List[ApplyPositionUpdateItem]] = Field(
         default=None,
         description=(
-            "Batch form: [{position_id, changes}, …] — one call for several positions. One call covers them all, and raises ONE confirm card for the whole batch. Omit position_id/changes when using this."
+            "Batch form: [{position_id, changes}, …] — one call for several positions. One call covers them all. Omit position_id/changes when using this."
         ),
     )
 
@@ -1169,7 +1180,7 @@ class ApplyPositionUpdateInput(ToolInput):
 @tool(
     "update_positions",
     description=(
-        "Move an existing position to another account (account_id/account_name). quantity, cost_basis and cost_currency are DERIVED from the position's records and are always REFUSED — record a buy/sale instead (acquire_lots / dispose_lots), or correct a wrong lot's date/quantity/cost with update_lots. vesting_state belongs to the grant tools. Moving a position to another account moves its lots too. Identify the position by its position_id (from get_portfolio). To move a position to a different custodian, pass account_id (from list_accounts) or account_name inside changes. On an interactive turn this raises a confirm card (no write yet, shows from→to accounts if moving venues); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller applies immediately, no card. For several positions at once, pass `updates` (a list of {position_id, changes}) instead — one call, and ONE confirm card for the whole batch."
+        "Move an existing position to another account (account_id/account_name). quantity, cost_basis and cost_currency are DERIVED from the position's records and are always REFUSED — record a buy/sale instead (acquire_lots / dispose_lots), or correct a wrong lot's date/quantity/cost with update_lots. vesting_state belongs to the grant tools. Moving a position to another account moves its lots too. Identify the position by its position_id (from get_portfolio). To move a position to a different custodian, pass account_id (from list_accounts) or account_name inside changes. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. For several positions at once, pass `updates` (a list of {position_id, changes}) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1313,7 +1324,7 @@ class ApplyPositionAddInput(ToolInput):
         default=None,
         min_length=1,
         description=(
-            "Batch form: add MULTIPLE new holdings in ONE call (e.g. every position in a freshly-imported portfolio). Every item needs its OWN idempotency_key. One call covers them all, and raises ONE confirm card for the whole batch. Each is applied independently, so an instrument×account already holding an active position is refused alone (buy more via acquire_lots) while the rest still add."
+            "Batch form: add MULTIPLE new holdings in ONE call (e.g. every position in a freshly-imported portfolio). Every item needs its OWN idempotency_key. One call covers them all. Each is applied independently, so an instrument×account already holding an active position is refused alone (buy more via acquire_lots) while the rest still add."
         ),
     )
 
@@ -1321,7 +1332,7 @@ class ApplyPositionAddInput(ToolInput):
 @tool(
     "add_positions",
     description=(
-        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. On an interactive turn this raises a confirm card (no write yet); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller adds immediately, no card. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call, and ONE confirm card for the whole batch."
+        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1427,7 +1438,7 @@ class ApplyPositionRemoveInput(ToolInput):
     removals: Optional[List[str]] = Field(
         default=None,
         description=(
-            "Batch form: remove SEVERAL positions in ONE call — a list of position_ids. Each is removed independently; an unknown id is reported for that item only. One call covers them all, and raises ONE confirm card for the whole batch. Omit the single `position_id` field when using this."
+            "Batch form: remove SEVERAL positions in ONE call — a list of position_ids. Each is removed independently; an unknown id is reported for that item only. One call covers them all. Omit the single `position_id` field when using this."
         ),
     )
 
@@ -1435,7 +1446,7 @@ class ApplyPositionRemoveInput(ToolInput):
 @tool(
     "remove_positions",
     description=(
-        "Remove a position, identified by position_id (from get_portfolio). On an interactive turn this raises a confirm card (no write yet); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller (no user watching) removes immediately, no card. Removing several positions at once? Pass `removals` (a list of position_ids) instead of one call per position — one call, and ONE confirm card for the whole batch."
+        "Remove a position, identified by position_id (from get_portfolio). If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Removing several positions at once? Pass `removals` (a list of position_ids) instead of one call per position — one call."
     ),
     input_schema=schema_of(ApplyPositionRemoveInput, tool_name="remove_positions"),
     mutates=("portfolio",),

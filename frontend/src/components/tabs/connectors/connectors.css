@@ -89,6 +89,13 @@
    before it becomes the target). Skipped for `.xl`: that size's own `height` was never
    shrink-to-fit to begin with. */
 
+/* TYPE SIZES (2026-11-11). The prototype this sheet was ported from set its text in raw pixels.
+   Where a size IS a step of the app's scale (10, 11, 12, 13, 16) it now uses the `--text-*`
+   token. The half steps (9.5, 10.5, 11.5, 12.5, 13.5, 14.5) and 15 have no token and are kept
+   exactly as designed: moving them to a neighbour made this screen's text visibly larger, and
+   the owner asked for it to stay the same. They are this sheet's remaining raw sizes, with the
+   page title's 19px (the app-wide page title, raw there too). */
+
 /* ── page scaffold ────────────────────────────────────────────────────────── */
 .cn-page {
   display: flex;
@@ -179,14 +186,14 @@
 }
 /* Detail page: the server's reported version, and its AI instructions folded (ConnectorDetail). */
 .cn-page .cn-version {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 400;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 .cn-page .cn-fold > summary {
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--muted);
   width: fit-content;
 }
@@ -195,7 +202,7 @@
 }
 .cn-page .cn-fold > p {
   margin: 8px 0 0;
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.6;
   color: var(--muted);
   white-space: pre-wrap;
@@ -273,7 +280,7 @@
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   padding: 9px 13px;
   cursor: pointer;
@@ -446,7 +453,7 @@
   border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-base);
   padding: 8px 11px;
   outline: none;
   transition: border-color 0.12s ease;
@@ -473,6 +480,62 @@
   background-position: right 11px center;
   padding-right: 30px;
 }
+/* ── the REST API form (RestApiEditor) ─────────────────────────────────────
+   Built from the fields above. Only what is its own lives here; its layout classes with no
+   rival in this sheet (rows, groups, icons) are in index.css. Spacing is the app's tokens;
+   sizes follow the note at the top of this sheet. */
+.cn-page .rest-form {
+  align-content: start;
+}
+.cn-page .rest-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.cn-page .rest-inline--apart {
+  justify-content: space-between;
+}
+.cn-page .rest-ep-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.cn-page .rest-ep-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  background: var(--surface2);
+}
+/* The method picker reads like the method label in the list above it. */
+.cn-page .rd-select.rest-method-select {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.cn-page .rd-select.rest-method--get {
+  color: var(--good);
+}
+.cn-page .rd-select.rest-method--delete {
+  color: var(--bad);
+}
+.cn-page .rd-input.rest-path {
+  font-family: var(--font-mono);
+}
+/* A group of endpoints is headed as a group of tools is in the permission ladder. */
+.cn-page .rest-ep-groupname {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
 .cn-page .rd-field {
   display: flex;
   flex-direction: column;
@@ -492,7 +555,7 @@
   margin-left: 2px;
 }
 .cn-page .rd-help {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--faint);
 }
 .cn-page .rd-help--bad {
@@ -702,6 +765,15 @@
   overflow: hidden;
   box-sizing: border-box;
 }
+/* An initial in place of the glyph (a REST API the owner added). The tile's own weight and
+   tint apply; the size follows the tile. */
+.cn-page .cn-tile-letter {
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+.cn-page .cn-tile.lg .cn-tile-letter {
+  font-size: var(--text-2xl);
+}
 .cn-page .cn-tile svg {
   width: 17px;
   height: 17px;
@@ -744,7 +816,7 @@
   min-width: 0;
 }
 .cn-page .cn-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -763,7 +835,7 @@
   align-items: center;
   gap: 5px;
   color: var(--good);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 .cn-page .cn-statusgood svg {
@@ -808,7 +880,7 @@
   align-items: center;
   gap: 5px;
   color: var(--bad);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 .cn-page .cn-statuswarn {
@@ -816,7 +888,7 @@
 }
 .cn-page .cn-rowerror {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--bad);
   overflow: hidden;
@@ -830,7 +902,7 @@
   background: color-mix(in srgb, var(--bad) 8%, var(--bg));
 }
 .cn-page .cn-errorbox-text {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   line-height: 1.5;
   color: color-mix(in srgb, var(--bad) 75%, var(--ink));
@@ -901,7 +973,7 @@
   width: 100%;
   padding: 10px 14px 10px 36px;
   border-radius: var(--radius-lg);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 .cn-page .cn-dirsearch svg {
   position: absolute;
@@ -968,11 +1040,11 @@
   align-self: stretch;
   flex: none;
   padding: 0 28px 0 13px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   border-radius: var(--radius-lg);
 }
 .cn-page .cn-sublabel {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1057,21 +1129,29 @@
   min-width: 0;
 }
 .cn-page .cn-customrow-title {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--ink);
 }
 .cn-page .cn-customrow-sub {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin-top: 2px;
+}
+.cn-page .cn-customrow-actions {
+  flex: none;
+  display: flex;
+  gap: 8px;
 }
 @container cn-space (max-width: 520px) {
   .cn-page .cn-customrow {
     flex-wrap: wrap;
   }
-  .cn-page .cn-customrow > .rd-btn {
+  .cn-page .cn-customrow-actions {
     width: 100%;
+  }
+  .cn-page .cn-customrow-actions > .rd-btn {
+    flex: 1;
     justify-content: center;
   }
 }
@@ -1085,7 +1165,7 @@
   gap: 10px;
 }
 .cn-page .cn-dircard-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -1289,7 +1369,7 @@
   margin-top: 4px;
 }
 .cn-page .cn-suggest-h {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--muted);
 }
@@ -1381,7 +1461,7 @@
   display: inline-flex;
   align-items: center;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--muted);
   background: var(--bg-2);
@@ -1434,6 +1514,13 @@
   min-width: 0;
   overflow-wrap: anywhere;
   flex: 1;
+}
+/* A tool's second line: what it calls. One step under the name, in the help text's tone. */
+.cn-page .cn-permsub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--faint);
 }
 .cn-page .cn-permseg {
   display: inline-flex;
@@ -1588,7 +1675,7 @@
   border-width: 3.5px;
 }
 .cn-page .cn-connecting-status {
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--ink);
   max-width: 460px;
@@ -1817,10 +1904,14 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--muted);
   line-height: 1.55;
   overflow-y: auto;
+  /* A field's info tip is an absolutely placed box that exists (hidden) beside its label, and
+     on a narrow dialog it reaches past the right edge: without this the body scrolled
+     sideways under every form with one (owner, 2026-11-11). */
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
   scrollbar-width: thin;
@@ -1887,16 +1978,16 @@
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
   color: var(--toast-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 9px 18px;
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
+  padding: var(--toast-padding);
   box-shadow: var(--shadow-toast);
   /* Sized to its text, never squeezed: centred with left 50% + translate, a shrink-to-fit box
      only gets half the viewport, so a long message wrapped into a tall pill-shaped oval. */
   width: max-content;
   max-width: min(520px, calc(100vw - 32px));
   text-align: center;
-  border-radius: 14px;
+  border-radius: var(--toast-radius);
 }
 
 /* ── phone ────────────────────────────────────────────────────────────────── */
@@ -2051,8 +2142,23 @@
   .cn-page .rd-modal-foot .rd-btn:not(:only-child) {
     flex: 1;
   }
+  /* "Add your own" is a menu's trigger, wrapped in the menu's own span: the span takes the
+     button's share of the bar and the button fills it. */
+  .cn-page .rd-modal-foot .cn-foot-menu {
+    display: flex;
+  }
+  /* Halves by their outer box: `flex: 1` shares out what is left after each item's own
+     padding, and the span has none, so Close came out wider than the button beside it. */
+  .cn-page .rd-modal-foot .cn-foot-menu,
+  .cn-page .rd-modal-foot .cn-foot-menu + .rd-btn {
+    flex: 1 1 50%;
+  }
+  .cn-page .rd-modal-foot .cn-foot-menu > .rd-btn {
+    flex: 1;
+    justify-content: center;
+  }
   /* Every footer button on a phone is the large, thumb-sized one — the preview's own action
-     already was, so Close / Add custom server / Cancel / Connect sat shorter beside it
+     already was, so Close / Add MCP server / Cancel / Connect sat shorter beside it
      (owner, 2026-10-31). One size per place, never per button. */
   .cn-page .rd-modal-foot .rd-btn {
     height: 38px;

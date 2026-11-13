@@ -12,6 +12,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { StatementViewer, StatementsModal } from './StatementsSection'
 import { Button, FormField, TextField } from '../../ui'
+import { LinkBankAccountDialog } from './LinkBankAccountDialog'
 import { BalanceTermsInfo } from './BalanceTermsInfo'
 import { Spark } from '../../../lucius/identity'
 import {
@@ -25,6 +26,7 @@ import {
   Link2,
   MoreHorizontal,
   Pencil,
+  SquarePen,
   Tags,
   Trash2,
   Upload,
@@ -33,6 +35,8 @@ import {
 import type { Account, LinkStatus } from './types'
 import { fCur } from './data'
 import { ReviewStrip, TxnCount } from './ReviewStrip'
+import { AccountValueCard, AccountValueFooter, AccountValueNotice } from './AccountValuePanels'
+import { isWaiting } from './valuation'
 import { typeLabel } from './categories'
 import { fDate } from '../../../utils/format'
 import { daysSinceReconcile, isReconcileOverdue } from './reconcileCadence'
@@ -47,6 +51,7 @@ type MenuIconName =
   | 'export'
   | 'archive'
   | 'delete'
+  | 'link'
 
 function MenuIcon({ name }: { name: MenuIconName }) {
   const common = { size: 16, strokeWidth: 1.75, 'aria-hidden': true }
@@ -69,6 +74,8 @@ function MenuIcon({ name }: { name: MenuIconName }) {
       return <Archive {...common} />
     case 'delete':
       return <Trash2 {...common} />
+    case 'link':
+      return <Link2 {...common} />
   }
 }
 
@@ -162,11 +169,23 @@ export interface AccountStats {
 interface ReconcilePopoverProps {
   account: Account
   onReconcile: (account: Account, realBalance: number) => void
+  /** A Brokerage total account reconciles its TOTAL (ADR 2026-11-10), with the source named
+   *  beside it; `onReconcile` then receives the total. */
+  figure?: number
+  askNote?: string
+  inputNote?: string
 }
 
 /** Lives on the "Reconciled …" line under the balance — the action beside the status it
  *  changes, at every width (owner, 2026-10-26), instead of a header button + ⋯ menu entry. */
-function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
+function ReconcilePopover({
+  account,
+  onReconcile,
+  figure,
+  askNote,
+  inputNote,
+}: ReconcilePopoverProps) {
+  const asked = figure ?? account.clearedBalance
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'ask' | 'input'>('ask')
   const [val, setVal] = useState('')
@@ -198,7 +217,7 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
   const has = !Number.isNaN(real)
   // Reconcile diffs against the CLEARED balance (the backend default) — uncleared charges are
   // not yet on the statement, so they are neither asked about nor adjusted away.
-  const diff = has ? Math.round((real - account.clearedBalance) * 100) / 100 : 0
+  const diff = has ? Math.round((real - asked) * 100) / 100 : 0
 
   return (
     <div className="acct-pop-wrap acct-pop-wrap--line" ref={ref}>
@@ -216,13 +235,13 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
           {mode === 'ask' ? (
             <>
               <div className="acct-pop-q">
-                Is the real balance{' '}
-                <b className={'mask l' + (account.clearedBalance < 0 ? ' neg' : '')}>
-                  {fCur(account.clearedBalance, account.currency, { cents: true })}{' '}
-                  {account.currency}
+                {figure != null ? 'Is the account’s real total' : 'Is the real balance'}{' '}
+                <b className={'mask l' + (asked < 0 ? ' neg' : '')}>
+                  {fCur(asked, account.currency, { cents: true })} {account.currency}
                 </b>
                 ?
               </div>
+              {askNote && <div className="acct-pop-note">{askNote}</div>}
               <div className="acct-pop-actions">
                 <Button size="sm" variant="ghost" onClick={() => setMode('input')}>
                   No
@@ -231,7 +250,7 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
                   size="sm"
                   variant="primary"
                   onClick={() => {
-                    onReconcile(account, account.clearedBalance)
+                    onReconcile(account, asked)
                     close()
                   }}
                 >
@@ -241,11 +260,14 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
             </>
           ) : (
             <>
-              <FormField label={`Real balance (${account.currency})`}>
+              {inputNote && <div className="acct-pop-note acct-pop-note--lead">{inputNote}</div>}
+              <FormField
+                label={`${figure != null ? 'Real total' : 'Real balance'} (${account.currency})`}
+              >
                 <TextField
                   autoFocus
                   value={val}
-                  placeholder="actual"
+                  placeholder={figure != null ? String(Math.round(figure * 100) / 100) : 'actual'}
                   onChange={(e) => setVal(e.target.value)}
                 />
               </FormField>
@@ -313,6 +335,10 @@ export interface AccountHeaderProps {
   onExport: () => void
   /** Called with (account, realBalance) — orchestrator wires to hook's reconcile */
   onReconcile: (account: Account, realBalance: number) => void
+  /** A Brokerage total account's reconcile: (account, its real total, native currency). */
+  onReconcileTotal?: (account: Account, realTotal: number) => void
+  /** The user's answer to a connector total held back as suspicious. */
+  onConfirmHeldTotal?: (account: Account, accept: boolean) => void
   onReview: () => void
   onStartReview: () => void
 }
@@ -347,6 +373,8 @@ export function AccountHeader({
   onReviewStatement,
   onExport,
   onReconcile,
+  onReconcileTotal,
+  onConfirmHeldTotal,
   onReview,
   onStartReview,
 }: AccountHeaderProps) {
@@ -361,8 +389,30 @@ export function AccountHeader({
     if (router) void router.navigate({ to: '/connectors', search: { connector: source } as never })
     else window.location.assign(`/connectors?connector=${encodeURIComponent(source)}`)
   }
+  const openInvestments = () => {
+    if (router) void router.navigate({ to: '/investments' as never })
+    else window.location.assign('/investments')
+  }
+  // How the account is valued (ADR 2026-11-10). An unlinked one with no holdings keeps today's
+  // Cleared + Uncleared card — its balance IS its total; the value card takes over once it holds
+  // something or a connector keeps its total.
+  const valuation = account.valuation ?? null
+  const valueCard =
+    !!valuation && ((valuation.source === 'total' && !!valuation.sync) || account.holdingsBase > 0)
+  const totalFooter = valueCard && valuation?.source === 'total'
+  // Adding holdings is a conversation (tickers, quantities, a statement to read), so Lucius takes
+  // it: the request is pre-filled and the dock opens, but nothing is sent until the user does.
+  const askAddHolding = () => {
+    chatComposer?.setPendingText(
+      `Help me add the holdings in my ${account.name} account${
+        account.institution ? ` at ${account.institution}` : ''
+      }.`,
+    )
+    window.dispatchEvent(new Event('lx-dock-open'))
+  }
   const [viewStatement, setViewStatement] = useState(false)
   const [showStatements, setShowStatements] = useState(false)
+  const [linkingBank, setLinkingBank] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -402,8 +452,19 @@ export function AccountHeader({
             </button>
           )}
           <div>
-            <div className="acct-head-title" data-ctx-title={account.name}>
-              {account.name}
+            <div className="acct-head-name">
+              <div className="acct-head-title" data-ctx-title={account.name}>
+                {account.name}
+              </div>
+              <button
+                type="button"
+                className="acct-head-edit"
+                onClick={onEdit}
+                aria-label={`Edit ${account.name}`}
+                title="Edit account"
+              >
+                <SquarePen size={15} strokeWidth={1.75} aria-hidden="true" />
+              </button>
             </div>
             <div className="acct-head-sub">
               <span>{typeLabel(account.type)}</span>
@@ -527,6 +588,15 @@ export function AccountHeader({
                 </AccountMenuItem>
                 <AccountMenuItem icon="edit" onClick={onEdit}>
                   Edit account
+                </AccountMenuItem>
+                <AccountMenuItem
+                  icon="link"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setLinkingBank(true)
+                  }}
+                >
+                  Link to a bank account…
                 </AccountMenuItem>
                 <div className="sep" />
                 <AccountMenuItem icon="archive" danger onClick={onArchive}>
@@ -754,6 +824,17 @@ export function AccountHeader({
           onClose={() => setViewStatement(false)}
         />
       )}
+      {linkingBank && (
+        <LinkBankAccountDialog
+          account={account}
+          onClose={() => setLinkingBank(false)}
+          onConnectBank={() => {
+            setLinkingBank(false)
+            if (router) void router.navigate({ to: '/connectors' as never })
+            else window.location.assign('/connectors')
+          }}
+        />
+      )}
       {showStatements && (
         <StatementsModal
           accountId={account.id}
@@ -780,69 +861,109 @@ export function AccountHeader({
         />
       )}
 
+      {valuation && (
+        <AccountValueNotice
+          account={account}
+          onOpenConnector={() => openConnector(valuation.sourceId)}
+          onEdit={onEdit}
+          onReviewHoldings={openInvestments}
+          onConfirmHeld={(accept) => onConfirmHeldTotal?.(account, accept)}
+        />
+      )}
+
       {/* ── balance card ────────────────────────────────────────────────────── */}
       <div className="acct-bal">
         <div className="acct-bal-card">
-          <div className="acct-bal-k">
-            {account.kind === 'liability' ? 'Balance owed' : 'Balance'}
-            <BalanceTermsInfo total="Working balance" meaning="the two together." />
-          </div>
-          <div className="acct-bal-breakdown">
-            <div className="acct-bal-part">
-              <div className={'acct-bal-fig mask' + (account.clearedBalance > 0 ? ' pos' : '')}>
-                {fCur(account.clearedBalance, account.currency, { cents: true })}
+          {valueCard ? (
+            <AccountValueCard account={account} onAddHolding={askAddHolding} onSwitch={onEdit} />
+          ) : (
+            <>
+              <div className="acct-bal-k">
+                {account.kind === 'liability' ? 'Balance owed' : 'Balance'}
+                <BalanceTermsInfo total="Working balance" meaning="the two together." />
               </div>
-              <div className="acct-bal-lbl">Cleared</div>
-            </div>
-            <div className="acct-bal-grp">
-              <span className="acct-bal-op">+</span>
-              <div className="acct-bal-part">
-                <div className={'acct-bal-fig mask' + (pending > 0 ? ' pos' : '')}>
-                  {fCur(pending, account.currency, { cents: true })}
+              <div className="acct-bal-breakdown">
+                <div className="acct-bal-part">
+                  <div className={'acct-bal-fig mask' + (account.clearedBalance > 0 ? ' pos' : '')}>
+                    {fCur(account.clearedBalance, account.currency, { cents: true })}
+                  </div>
+                  <div className="acct-bal-lbl">Cleared</div>
                 </div>
-                <div className="acct-bal-lbl">Uncleared</div>
-              </div>
-            </div>
-            <div className="acct-bal-grp">
-              <span className="acct-bal-op">=</span>
-              <div className="acct-bal-part">
-                <div className={'acct-bal-fig work mask' + (account.balance > 0 ? ' pos' : '')}>
-                  {fCur(account.balance, account.currency, { cents: true })}
+                <div className="acct-bal-grp">
+                  <span className="acct-bal-op">+</span>
+                  <div className="acct-bal-part">
+                    <div className={'acct-bal-fig mask' + (pending > 0 ? ' pos' : '')}>
+                      {fCur(pending, account.currency, { cents: true })}
+                    </div>
+                    <div className="acct-bal-lbl">Uncleared</div>
+                  </div>
                 </div>
-                <div className="acct-bal-lbl">Working balance</div>
+                <div className="acct-bal-grp">
+                  <span className="acct-bal-op">=</span>
+                  <div className="acct-bal-part">
+                    <div className={'acct-bal-fig work mask' + (account.balance > 0 ? ' pos' : '')}>
+                      {fCur(account.balance, account.currency, { cents: true })}
+                    </div>
+                    <div className="acct-bal-lbl">Working balance</div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
 
           {/* reconcile line + stats */}
           <div className="acct-recon-line">
-            <span className="acct-recon-group">
-              <span className="acct-recon-stat">
-                {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
-                  <span
-                    className="acct-recon-stat"
-                    title="Reconcile at least once a month, so a gap is still easy to trace."
-                  >
-                    <ClockAlert size={14} className="warn" aria-hidden="true" />
-                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}{' '}
-                    <span className="warn">
-                      ({daysSinceReconcile(account.lastReconciled)} days ago)
-                    </span>
-                  </span>
-                ) : account.lastReconciled ? (
-                  <>
-                    <CircleCheck size={14} className="ok" aria-hidden="true" />
-                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}
-                  </>
-                ) : (
-                  <>
-                    <ClockAlert size={14} className="warn" aria-hidden="true" />
-                    Never reconciled
-                  </>
+            {totalFooter && valuation && (
+              <span className="acct-recon-group">
+                <AccountValueFooter account={account} />
+                {!isWaiting(valuation) && valuation.totalNative != null && (
+                  <ReconcilePopover
+                    account={account}
+                    figure={valuation.totalNative}
+                    askNote={
+                      valuation.sync && valuation.linkStatus === 'connected'
+                        ? `${account.institution || 'Your brokerage'}’s latest total.`
+                        : undefined
+                    }
+                    inputNote={
+                      valuation.sync && valuation.linkStatus === 'connected'
+                        ? `Replaced at ${account.institution || 'your brokerage'}’s next update.`
+                        : undefined
+                    }
+                    onReconcile={(a, total) => onReconcileTotal?.(a, total)}
+                  />
                 )}
               </span>
-              <ReconcilePopover account={account} onReconcile={onReconcile} />
-            </span>
+            )}
+            {!totalFooter && (
+              <span className="acct-recon-group">
+                <span className="acct-recon-stat">
+                  {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
+                    <span
+                      className="acct-recon-stat"
+                      title="Reconcile at least once a month, so a gap is still easy to trace."
+                    >
+                      <ClockAlert size={14} className="warn" aria-hidden="true" />
+                      Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}{' '}
+                      <span className="warn">
+                        ({daysSinceReconcile(account.lastReconciled)} days ago)
+                      </span>
+                    </span>
+                  ) : account.lastReconciled ? (
+                    <>
+                      <CircleCheck size={14} className="ok" aria-hidden="true" />
+                      Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}
+                    </>
+                  ) : (
+                    <>
+                      <ClockAlert size={14} className="warn" aria-hidden="true" />
+                      Never reconciled
+                    </>
+                  )}
+                </span>
+                <ReconcilePopover account={account} onReconcile={onReconcile} />
+              </span>
+            )}
             {/* Gated on `stats` existing, never on count, so the line doesn't disappear at 0 txns. */}
             {stats && (
               <>

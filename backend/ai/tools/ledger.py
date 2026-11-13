@@ -25,7 +25,7 @@ from backend.core.errors import (
     PreviouslyDeletedError,
 )
 from backend.core.user_time import user_today
-from backend.services import labels, ledger_preview, review_approval
+from backend.services import labels, ledger_preview, review_approval, transaction_links
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +242,28 @@ def _currency_conversion_warning(t: dict) -> dict | None:
             "conversion happened. If the stated currency was wrong — e.g. you meant this "
             "as the account's own native amount, not a foreign-currency figure — undo and "
             "re-add with the correct currency."
+        ),
+    }
+
+
+def _category_dropped_warning(derived: dict | None, labelled: dict) -> dict | None:
+    """The category you passed was replaced by the payee's pinned default (ADR 0010).
+
+    Silent until now: the result showed only the final category, so a model that had chosen
+    one for a reason (a standing instruction) could not tell it had been overwritten."""
+    dropped = (derived or {}).get("category_dropped")
+    if not dropped:
+        return None
+    applied = labelled.get("category_label") or labelled.get("category")
+    return {
+        "type": "category_replaced_by_payee_default",
+        "requested": dropped,
+        "applied": applied,
+        "message": (
+            f"Your category {dropped!r} was NOT used: this payee's pinned default "
+            f"({applied!r}) was applied instead. If a standing user instruction requires "
+            f"{dropped!r}, fix it with update_transactions or re-book with "
+            "override_payee_default=true. Otherwise leave it."
         ),
     }
 
@@ -491,6 +513,9 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
     derived_warning = _derived_leg_warning(derived_leg)
     if derived_warning:
         out.setdefault("warnings", []).append(derived_warning)
+    dropped_warning = _category_dropped_warning(derived_leg, labelled)
+    if dropped_warning:
+        out.setdefault("warnings", []).append(dropped_warning)
     equal_amount_warning = _unverified_equal_amount_warning(labelled)
     if equal_amount_warning:
         out.setdefault("warnings", []).append(equal_amount_warning)
@@ -527,9 +552,31 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
         )
         if flags:
             out.setdefault("warnings", []).extend(flags)
+            _add_align_next_step(out, flags, [new])
     except Exception:  # noqa: BLE001
         pass
     return json.dumps(out, ensure_ascii=False), None
+
+
+def _add_align_next_step(result: dict, warnings: list[dict], created: list[dict]) -> None:
+    """Name the fix for rows booked before their account's start, in the result itself. The
+    warning alone left a chat turn (no skill loaded) booking history that never counted."""
+    oldest: dict[str, str] = {}
+    by_id = {t.get("id"): t for t in created}
+    for w in warnings:
+        if w.get("type") != "before_tracking_start" or not w.get("account_id"):
+            continue
+        txn = by_id.get(w.get("txn_id")) or (created[0] if len(created) == 1 else None)
+        day = str((txn or {}).get("date") or "")
+        if day and (w["account_id"] not in oldest or day < oldest[w["account_id"]]):
+            oldest[w["account_id"]] = day
+    if oldest:
+        result["next_step"] = (
+            "Rows above are dated before their account's start, so they don't count. For a "
+            "cash or card account, call align_account_start with the date of its oldest row: "
+            + ", ".join(f"{aid} → {day}" for aid, day in sorted(oldest.items()))
+            + ". Today's balance does not move. Skip it only if the user wants them uncounted."
+        )
 
 
 class SimulateCashflowInput(ToolInput):
@@ -1132,7 +1179,7 @@ def _split_update_item(item: dict) -> tuple[Optional[str], dict, Optional[bool]]
 _APPROVE_VIA_UPDATE_REFUSAL = (
     "Refused: update_transactions does not approve. Approving is its own call — use "
     "approve_transactions with the transaction id(s) (load it with find_tools names="
-    '["approve_transactions"] if you do not have it); the user confirms it. NOTHING in this '
+    '["approve_transactions"] if you do not have it). NOTHING in this '
     "call was applied to the row. If the rest of your edit is still wanted, send it again "
     "WITHOUT needs_review. needs_review=true (re-flag) is still accepted here."
 )
@@ -1491,9 +1538,7 @@ async def _update_legacy_bulk(
         "transaction_id and no other field changes NOTHING — reported as a no-op, never "
         "silent success. To APPROVE flagged rows use approve_transactions, not this tool "
         "(needs_review=true here re-flags a row; false is refused).\n\n"
-        "Interactive turns PREVIEW first: ONE confirmation card (single edit or the whole "
-        "batch) showing the resolved before/after per field — including a category a spend "
-        "rule or payee default would silently change — and write nothing until confirmed.\n\n"
+        "If the call asks the user first, ONE card (single edit or the whole batch) shows them the resolved before/after per field — including a category a spend rule or payee default would silently change — and nothing is written until they answer.\n\n"
         "REFUSES an account's Starting Balance row (source='opening') for any field except "
         "`cleared=true` — change its opening balance/date via update_accounts instead."
     ),
@@ -1643,6 +1688,47 @@ async def update_transactions(input_data: dict):
     return json.dumps(result_body, ensure_ascii=False), None
 
 
+def _released_links_result(released: Optional[list[dict]]) -> dict:
+    if not released:
+        return {}
+    return {
+        "released_links": released,
+        "note": "Deleting these rows changed other records. Tell the user what each `effect` says.",
+    }
+
+
+class _DeleteTransactionsPreview:
+    """The card names what a delete would change, so the user sees it before confirming. A row
+    nothing points at keeps the plain card: None falls back to the literal arguments."""
+
+    def build(self, args: dict) -> Optional[dict]:
+        ids = args.get("transaction_ids") or [args.get("transaction_id")]
+        links = transaction_links.linked_to([tid for tid in ids if tid])
+        if not links:
+            return None
+        rows = [(tid, svc.transactions.find_by_id(tid) or {}) for tid in ids if tid]
+        items = [
+            {
+                "id": tid,
+                "name": f"{row.get('date', '')} {row.get('description', tid)}".strip(),
+                "changes": {"transaction": {"old": "In the ledger", "new": "Deleted"}},
+            }
+            for tid, row in rows
+        ]
+        items += [
+            {
+                "id": link["id"],
+                "name": link["label"],
+                "changes": {link["what"]: {"old": link["before"], "new": link["after"]}},
+            }
+            for link in links
+        ]
+        return {"kind": "field_diff", "data": {"items": items}, "raw_arguments": args}
+
+    def validate(self, preview: dict) -> Optional[str]:
+        return None
+
+
 class DeleteTransactionsInput(ToolInput):
     """Schema-of-record for ``delete_transactions`` (see ``schema_from_model``)."""
 
@@ -1661,6 +1747,7 @@ class DeleteTransactionsInput(ToolInput):
     ),
     input_schema=schema_of(DeleteTransactionsInput, tool_name="delete_transactions"),
     mutates=("ledger",),
+    preview_adapter=_DeleteTransactionsPreview(),
 )
 async def delete_transactions(input_data: dict):
     ids = [
@@ -1682,7 +1769,13 @@ async def delete_transactions(input_data: dict):
     if not_found:
         logger.warning("tool delete_transactions: not_found=%s", not_found)
     return json.dumps(
-        {"ok": True, "deleted": len(deleted), "deleted_ids": deleted, "not_found": not_found}
+        {
+            "ok": True,
+            "deleted": len(deleted),
+            "deleted_ids": deleted,
+            "not_found": not_found,
+            **_released_links_result(result.get("released_links")),
+        }
     ), None
 
 
@@ -1798,11 +1891,14 @@ async def delete_transactions_where(input_data: dict):
     # resolves a caller-supplied category label to its stored opaque id, REFUSING an
     # unknown/ambiguous one rather than silently deleting nothing.
     try:
-        deleted = svc.delete_transactions_where(**filters)
+        meta: dict = {}
+        deleted = svc.delete_transactions_where(**filters, meta_out=meta)
     except OpenNetWorthError as exc:
         return json.dumps({"ok": False, "error": exc.message or str(exc)}), None
     logger.info("tool delete_transactions_where: deleted=%d filters=%s", deleted, filters)
-    return json.dumps({"ok": True, "deleted": deleted}), None
+    return json.dumps(
+        {"ok": True, "deleted": deleted, **_released_links_result(meta.get("released_links"))}
+    ), None
 
 
 def _resolve_live_txn(existing_id: str | None) -> dict | None:
@@ -1825,9 +1921,7 @@ def _resolve_live_txn(existing_id: str | None) -> dict | None:
         "go to the currency wallet (e.g. 'IBKR USD'), not the securities account ('IBKR').\n\n"
         "Returns per-item `results` — {index, ok, id} or {index, error}. Never re-submit a row "
         "that reported an id.\n\n"
-        "Interactive turns PREVIEW first: ONE confirmation card (single entry or whole batch) "
-        "showing the RESOLVED outcome — the category and WHICH tier set it, the resolved "
-        "accounts, the base-currency value. Nothing is written until the user confirms.\n\n"
+        "If the call asks the user first, ONE card (single entry or whole batch) shows them the RESOLVED outcome — the category and WHICH tier set it, the resolved accounts, the base-currency value — and nothing is written until they answer.\n\n"
         "STATEMENT IMPORT: do NOT hand-parse statements into this tool. `import_transactions` "
         "is the single entrance for EVERY format and books through this same choke point. "
         "Use `add_transactions` for a statement ONLY as a fallback for rows the parser "
@@ -1855,7 +1949,7 @@ def _resolve_live_txn(existing_id: str | None) -> dict | None:
                 "type": "boolean",
                 "description": (
                     "Book every row even where it looks like a duplicate of one already in the "
-                    "ledger. Set this ONLY when the user has confirmed these are genuinely "
+                    "ledger. Set this ONLY when the user has said these are genuinely "
                     "separate charges — it does not make a re-run safe, it books the rows twice. "
                     "Duplicates are still reported back to you either way."
                 ),
@@ -2014,9 +2108,15 @@ async def add_transactions(input_data: dict):
     # If any item fails normalisation the whole call is aborted — no partial batches.
     normalised = []
     errors = []
+    dropped_by_index: dict[int, str] = {}
     for i, item in enumerate(raw):
         try:
-            normalised.append(_txn_data_from_ai(item, default_date=today_iso))
+            _row_meta: dict = {}
+            normalised.append(
+                _txn_data_from_ai(item, default_date=today_iso, derived_out=_row_meta)
+            )
+            if _row_meta.get("category_dropped"):
+                dropped_by_index[i] = _row_meta["category_dropped"]
         except (ValueError, KeyError) as e:
             _desc = item.get("description") or ""
             logger.warning(
@@ -2767,7 +2867,7 @@ async def add_transactions(input_data: dict):
         result["refused_note"] = (
             f"{len(refused)} row(s) were NOT written — each matches a transaction already in the "
             "ledger (see results[].error and results[].duplicate_of). Show the user the existing "
-            "row before doing anything else. If they confirm it is a genuinely separate charge, "
+            "row before doing anything else. If they say it is a genuinely separate charge, "
             "re-send ONLY that row with allow_duplicate=true. Do NOT re-send unchanged, and do NOT "
             "delete "
             "the existing row to make room."
@@ -2802,14 +2902,24 @@ async def add_transactions(input_data: dict):
             accounts_now = svc.accounts.query_accounts()
             all_txns = svc.transactions.all()
             warnings: list[dict] = []
+            index_by_txn = {tid: i for i, tid in created_by_index.items()}
+            category_labels = labels.label_maps(categories=True).get("categories") or {}
             for txn in created:
                 for flag in tracking_start.flags_for_txn(txn, accounts_now, all_txns) or []:
                     warnings.append({"txn_id": txn.get("id"), **flag})
+                dropped = dropped_by_index.get(index_by_txn.get(txn.get("id")))
+                replaced = _category_dropped_warning(
+                    {"category_dropped": dropped} if dropped else None,
+                    {"category_label": category_labels.get(txn.get("category"))},
+                )
+                if replaced:
+                    warnings.append({"txn_id": txn.get("id"), **replaced})
                 equal_amount_warning = _unverified_equal_amount_warning(txn)
                 if equal_amount_warning:
                     warnings.append({"txn_id": txn.get("id"), **equal_amount_warning})
             if warnings:
                 result["warnings"] = warnings
+                _add_align_next_step(result, warnings, created)
         except Exception:  # noqa: BLE001 — surfacing must never break a completed batch
             logger.exception(
                 "tool add_transactions: tracking-start pass failed for batch %s", batch_id

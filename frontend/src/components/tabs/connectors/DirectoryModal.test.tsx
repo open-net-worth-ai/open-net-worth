@@ -167,7 +167,7 @@ describe('Add on a NATIVE connector declares the intent to set it up', () => {
   it('leaves the MCP path alone — Add there starts the add flow and focuses nothing', () => {
     const onFocusConnector = vi.fn()
     const { container, getByText } = open({ onFocusConnector })
-    fireEvent.click(getByText('MCP'))
+    fireEvent.click(getByText('MCP servers'))
     fireEvent.click(card(container, 'Playwright MCP').querySelector('button[aria-label^="Add"]')!)
 
     expect(getByText('Connect')).toBeTruthy()
@@ -257,7 +257,7 @@ describe('Suggested (the Connectors list’s block, not a separate Popular row)'
 describe('opening a card resets .rd-modal-body scroll — it must never inherit the grid’s offset', () => {
   it('scrolls back to the top when a preview page opens, and again when it closes', () => {
     const { container, getByText } = open()
-    fireEvent.click(getByText('MCP'))
+    fireEvent.click(getByText('MCP servers'))
     const body = container.querySelector('.rd-modal-body') as HTMLElement
     body.scrollTop = 400
 
@@ -270,16 +270,60 @@ describe('opening a card resets .rd-modal-body scroll — it must never inherit 
   })
 })
 
+describe('the REST API entry', () => {
+  const rowText = (container: HTMLElement) =>
+    container.querySelector('.cn-customrow')?.textContent ?? ''
+
+  it('shares the "connect it yourself" row with the custom MCP server, each button named', () => {
+    const { container, getByText } = open()
+    // As one card among forty-seven the owner could not find it, and "Add custom server"
+    // alone never said it meant MCP, or that an API was the other way in.
+    expect(rowText(container)).toContain('Add MCP server')
+    expect(rowText(container)).toContain('Add REST API')
+    expect(container.querySelector('.cn-dirgrid')?.textContent).not.toContain('REST API')
+    fireEvent.click(getByText('MCP servers'))
+    expect(rowText(container)).toContain('Add MCP server')
+    expect(rowText(container)).not.toContain('Add REST API')
+  })
+
+  it('has its own APIs tab, whose row opens the form for a new API', () => {
+    const onFocusConnector = vi.fn()
+    const { container, getByText, queryByText, getAllByText } = open({ onFocusConnector })
+    fireEvent.click(getByText('REST APIs'))
+    expect(rowText(container)).toContain('Connect any REST API')
+    expect(rowText(container)).not.toContain('Add MCP server')
+    // The row IS the tab's content: an empty grid under it is not a failed search.
+    expect(queryByText('No matches')).toBeFalsy()
+
+    fireEvent.click(getAllByText('Add REST API')[0]!)
+    // A native connector's own page is its setup form: Add lands on it, form open.
+    expect(onFocusConnector).toHaveBeenCalledWith('rest', { configure: true })
+  })
+
+  it('is a card under its Custom API label and in a search, never under Data sources', () => {
+    const { container, getByText, getByLabelText } = open()
+    const grid = () => container.querySelector('.cn-dirgrid')?.textContent ?? ''
+    fireEvent.click(getByText('Data sources'))
+    expect(grid()).not.toContain('REST API')
+    expect(container.querySelector('.cn-customrow')).toBeFalsy()
+
+    fireEvent.click(getByText('All'))
+    fireEvent.change(getByLabelText('Search directory'), { target: { value: 'rest api' } })
+    expect(grid()).toContain('REST API')
+    expect(grid()).toContain('Custom API')
+  })
+})
+
 describe('the custom MCP server skips the preview', () => {
   it('is pinned above the grid, not a card in it, and goes straight to the add form', () => {
     const { container, getByText, getAllByText, queryByText } = open()
-    fireEvent.click(getByText('MCP'))
+    fireEvent.click(getByText('MCP servers'))
     // Its own row at the top AND a footer button beside Close — buried as one card among
     // thirty, people never found it.
     expect(container.querySelector('.cn-customrow')).toBeTruthy()
-    expect(container.querySelector('.rd-modal-foot')?.textContent).toContain('Add custom server')
+    expect(container.querySelector('.rd-modal-foot')?.textContent).toContain('Add MCP server')
     expect(container.querySelector('.cn-dirgrid')?.textContent).not.toContain('Custom MCP server')
-    fireEvent.click(getAllByText('Add custom server')[1]!)
+    fireEvent.click(getAllByText('Add MCP server')[1]!)
 
     // Step 1 of the add flow, not a preview page.
     expect(getByText('Connect')).toBeTruthy()
@@ -289,7 +333,7 @@ describe('the custom MCP server skips the preview', () => {
 
   it('previews a catalog MCP entry that HAS something to show', () => {
     const { container, getByText } = open()
-    fireEvent.click(getByText('MCP'))
+    fireEvent.click(getByText('MCP servers'))
     fireEvent.click(card(container, 'Playwright MCP'))
 
     expect(getByText('Categories')).toBeTruthy()
@@ -303,8 +347,8 @@ describe('the custom MCP server skips the preview', () => {
 describe('step 1 → step 2: an unreached server is never saved', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
-    fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    fireEvent.click(view.getByText('MCP servers'))
+    fireEvent.click(view.getAllByText('Add MCP server')[0]!)
     return view
   }
 
@@ -502,8 +546,8 @@ describe('step 1 → step 2: an unreached server is never saved', () => {
 describe('OAuth sign-in — the popup + poll lifecycle', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
-    fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    fireEvent.click(view.getByText('MCP servers'))
+    fireEvent.click(view.getAllByText('Add MCP server')[0]!)
     return view
   }
 
@@ -755,8 +799,8 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
 describe('abandoning the add flow after a completed sign-in deletes the dormant server row', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
-    fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    fireEvent.click(view.getByText('MCP servers'))
+    fireEvent.click(view.getAllByText('Add MCP server')[0]!)
     return view
   }
 
@@ -944,8 +988,8 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
 
   async function reviewCustomServer() {
     const view = open()
-    fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    fireEvent.click(view.getByText('MCP servers'))
+    fireEvent.click(view.getAllByText('Add MCP server')[0]!)
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.x.test' },
     })
@@ -1000,7 +1044,7 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
       endpoint: 'npx @playwright/mcp',
     })
     const view = open()
-    fireEvent.click(view.getByText('MCP'))
+    fireEvent.click(view.getByText('MCP servers'))
     fireEvent.click(card(view.container, 'Playwright MCP'))
     fireEvent.click(view.getByText('Add'))
     fireEvent.click(view.getByText('Connect'))
@@ -1021,8 +1065,8 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
 describe('paste is not a separate mode', () => {
   it('fills the very same fields typing would, and shares the same Test connect', () => {
     const view = open()
-    fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    fireEvent.click(view.getByText('MCP servers'))
+    fireEvent.click(view.getAllByText('Add MCP server')[0]!)
 
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), {
@@ -1044,8 +1088,8 @@ describe('paste is not a separate mode', () => {
 
   it('says so plainly when a snippet will not parse, without clearing the box', () => {
     const view = open()
-    fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    fireEvent.click(view.getByText('MCP servers'))
+    fireEvent.click(view.getAllByText('Add MCP server')[0]!)
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), { target: { value: '{ oops' } })
 
@@ -1073,6 +1117,41 @@ describe('an installed server merged into its catalog card', () => {
     const { container } = open({ connectors: [IBKR_SERVER], previewId: 'mcp:api-ibkr-com' })
     expect(container.querySelector('.cn-dirgrid')).toBeNull()
     expect(container.textContent).toContain('Interactive Brokers')
+  })
+})
+
+describe('the footer has ONE add button beside Close, at every width', () => {
+  const foot = (container: HTMLElement) =>
+    [...container.querySelectorAll('.rd-modal-foot button')].map((b) => b.textContent?.trim())
+
+  it('offers "Add your own", a menu of the two ways in', () => {
+    // Two add buttons filled a phone's bar edge to edge and competed on a desktop, and a page
+    // of its own for a two-way choice was mostly empty (owner, 2026-11-11).
+    const onFocusConnector = vi.fn()
+    const { container, getByText } = open({ onFocusConnector })
+    expect(foot(container)).toEqual(['Add your own', 'Close'])
+
+    fireEvent.click(getByText('Add your own'))
+    const items = [...document.querySelectorAll('[role="menuitem"]')]
+    expect(items.map((i) => i.textContent)).toEqual(['MCP server', 'REST API'])
+
+    fireEvent.click(items[1]!)
+    expect(onFocusConnector).toHaveBeenCalledWith('rest', { configure: true })
+  })
+
+  it('opens the custom MCP server form from the same menu', () => {
+    const { getByText } = open()
+    fireEvent.click(getByText('Add your own'))
+    fireEvent.click(document.querySelector('[role="menuitem"]') as HTMLElement)
+    expect(getByText('Paste from a config snippet')).toBeTruthy()
+  })
+
+  it('names the one thing a tab adds, with no menu', () => {
+    const { container, getByText } = open()
+    fireEvent.click(getByText('MCP servers'))
+    expect(foot(container)).toEqual(['Add MCP server', 'Close'])
+    fireEvent.click(getByText('REST APIs'))
+    expect(foot(container)).toEqual(['Add REST API', 'Close'])
   })
 })
 
@@ -1188,7 +1267,7 @@ describe("Lucius's Connect on a sign-in connector", () => {
 describe('Save without connecting', () => {
   function openCustomForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
-    fireEvent.click(view.getAllByText('Add custom server')[0]!)
+    fireEvent.click(view.getAllByText('Add MCP server')[0]!)
     return view
   }
 

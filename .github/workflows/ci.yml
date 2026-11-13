@@ -214,6 +214,12 @@ jobs:
           tests/test_price_monitor_instant_freshen.py tests/test_price_monitor_news_context.py
           tests/test_news_delivery.py tests/test_delivery_seam.py tests/test_delivery_decider.py
           tests/test_delivery_surfaces.py
+      # docs/FEATURE_FLAGS.md rule 3: the account, lot, position, reconcile and net-worth suites
+      # again with allow_brokerage_total_valuation on (ADR 2026-11-10). test_position_remove_lots is not
+      # in the list: it asserts the off-path result shape exactly, and the on path adds
+      # value_carve_out (covered by tests/test_account_value.py). Remove with the flag.
+      - name: pytest (allow_brokerage_total_valuation on)
+        run: python3 -m pytest -q -m "not integration" -n auto --flag allow_brokerage_total_valuation=on $(cat tests/allow_brokerage_total_valuation_on_files.txt)
 
   # --- test-windows: the backend imports and the Windows-ported areas pass on windows-latest.
   # The focused list is every area with platform-specific code (locks, process trees, anchored

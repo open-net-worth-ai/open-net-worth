@@ -138,6 +138,7 @@ def test_ok_result_has_the_full_rfc_shape(configured_store, monkeypatch):
     assert set(result["counts"]) == {
         "fetched",
         "already_booked",
+        "pending_skipped",
         "returned",
         "truncated",
         "changes",
@@ -356,7 +357,10 @@ def test_pending_rows_are_excluded_by_default_and_included_on_request(
     default = connector_fetch.fetch("simplefin")
     assert default["transactions"] == []
 
+    # Skipped on purpose, and counted as such — never read as a missing row.
+    assert default["counts"]["pending_skipped"] == 1
     included = connector_fetch.fetch("simplefin", include_pending=True)
+    assert included["counts"]["pending_skipped"] == 0
     assert len(included["transactions"]) == 1
     assert included["transactions"][0]["pending"] is True
 

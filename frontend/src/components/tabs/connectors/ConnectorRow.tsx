@@ -63,7 +63,7 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
       role="button"
       tabIndex={0}
     >
-      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} />
+      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} letter={entry.letter} />
       <div className="cn-main">
         <div className="cn-name">
           <b>{entry.name}</b>

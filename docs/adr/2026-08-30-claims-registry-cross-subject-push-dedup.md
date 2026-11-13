@@ -175,3 +175,21 @@ both already treat a day as that horizon.
   cross-tick duplicate-push incident with one new DB table and a two-line addition to the
   existing push-decision gate chain, while making the RFC's own conflation concern structurally
   impossible rather than merely discouraged.
+
+## Amendment (2026-11-12): the delivery decider judges repeats
+
+`news-fact:<instrument_id>` identifies a COMPANY, not a fact, so for 24 hours after one push every
+later push about the same company was suppressed as `duplicate_claim`, whatever it said. Live
+incident: an after-hours "board may oust the CEO" alert took the key, and the analysis that read
+the confirmed resignation the next session, during a −13% crash, was muted.
+
+With `intel_delivery_decider` on, `analyst._push_decision` skips this gate
+(`analyst._decider_judges_repeats`, reading `delivery.delivery_active`, the flag's one seam). The
+decider is shown what the person was told in the last 48 hours and is asked to treat several items
+about one event as one, so "same fact or new development" becomes its judgement, per ADR
+`2026-11-02-intel-decides-news-delivery-code-keeps-safety-rails`. The claim is still WRITTEN on
+every push, and with the flag off (or unreadable) the gate holds exactly as before. Alternative
+rejected: a content-overlap check on the claim's statement. That is still a guess at sameness,
+and the decider already has the told items in front of it.
+
+Driving artifact: `tests/test_crash_alert_news.py`.

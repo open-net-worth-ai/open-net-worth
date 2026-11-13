@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { invalidateQueryCache, useQueryCache } from '../../../state/queryCache'
-import { FormField, PasswordField, SegmentedControl, Stack, Text, TextField } from '../../ui'
+import {
+  Button,
+  FormField,
+  PasswordField,
+  SegmentedControl,
+  Stack,
+  Text,
+  TextArea,
+  TextField,
+} from '../../ui'
 import { ACTUAL_APP } from '../automations/datasync/budgetApps'
 import { PlanPicker } from '../imports/YnabImport'
 import { usePlans } from '../imports/plans'
@@ -25,6 +34,8 @@ interface ActualStatus {
   has_token: boolean
   has_encryption_password: boolean
   has_server_url: boolean
+  has_proxy_headers: boolean
+  proxy_header_names: string[]
   server_host: string | null
   server_scheme: string | null
   server_plain_http: boolean
@@ -52,6 +63,14 @@ const parsedUrl = (value: string) => {
 function isServerUrl(value: string) {
   const url = parsedUrl(value)
   return !!url && (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname
+}
+
+/** Each non-blank line is `Name: value`; the server checks the rest. */
+function headersWellFormed(value: string) {
+  return value
+    .split('\n')
+    .filter((line) => line.trim())
+    .every((line) => /^[^:\s]+\s*:\s*\S/.test(line.trim()))
 }
 
 /** Plain http to anything but this computer; the server applies the same rule to a saved one. */
@@ -107,6 +126,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   const [password, setPassword] = useState('')
   const [token, setToken] = useState('')
   const [encryption, setEncryption] = useState('')
+  const [headers, setHeaders] = useState('')
+  const [clearHeaders, setClearHeaders] = useState(false)
   // Only what was picked here: the rest follows the server, or a stale read would be saved back.
   const [pick, setPick] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -144,16 +165,21 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   const secretValid = !!secret.trim() || secretSaved
   const needsEncryption = !!picked?.encrypted && !cfg.has_encryption_password && !encryption.trim()
   const budgetChange = picked && budgetId !== cfg.budget_id ? budgetId : ''
+  const headersTyped = headers.trim()
+  const headersValid = !headersTyped || headersWellFormed(headersTyped)
+  const headersSaved = cfg.has_proxy_headers && !moved && !clearHeaders
   const plainHttp = urlTyped ? isPlainHttpRemote(urlTyped) : cfg.server_plain_http
 
   async function save(): Promise<boolean> {
     setSaving(true)
     setSaveErr(null)
     try {
-      const body: Record<string, string> = {}
+      const body: Record<string, string | boolean> = {}
       if (urlTyped) body.server_url = urlTyped
       if (secret.trim()) body[signIn] = secret.trim()
       if (encryption.trim()) body.encryption_password = encryption.trim()
+      if (headersTyped) body.proxy_headers = headersTyped
+      else if (clearHeaders) body.clear_proxy_headers = true
       if (budgetChange) body.budget_id = budgetChange
       const r = await authFetch('/api/actual-budget/config', {
         method: 'PUT',
@@ -168,6 +194,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
       setPassword('')
       setToken('')
       setEncryption('')
+      setHeaders('')
+      setClearHeaders(false)
       invalidateQueryCache('/api/actual-budget/budgets')
       return true
     } catch {
@@ -181,9 +209,23 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   }
 
   useConnectorSave({
-    ready: urlValid && secretValid && !needsEncryption,
-    values: { url: urlTyped, secret: secret.trim(), encryption: encryption.trim(), budgetChange },
-    baseline: { url: '', secret: '', encryption: '', budgetChange: '' },
+    ready: urlValid && secretValid && !needsEncryption && headersValid,
+    values: {
+      url: urlTyped,
+      secret: secret.trim(),
+      encryption: encryption.trim(),
+      headers: headersTyped,
+      clearHeaders,
+      budgetChange,
+    },
+    baseline: {
+      url: '',
+      secret: '',
+      encryption: '',
+      headers: '',
+      clearHeaders: false,
+      budgetChange: '',
+    },
     saving,
     error: saveErr,
     save,
@@ -225,8 +267,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           plainHttp ? (
             <Text size="sm" tone="warn">
               This address uses plain http, which isn&apos;t encrypted. Anyone on that network could
-              read your password or token and your budget, and change what this app reads and
-              writes. It still works; use https if you can.
+              read your password, token or proxy headers and your budget, and change what this app
+              reads and writes. It still works; use https if you can.
             </Text>
           ) : cfg.has_server_url ? (
             'Saved. Type a new address to replace it.'
@@ -348,6 +390,49 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           placeholder={cfg.has_encryption_password ? '••••••••' : undefined}
           autoComplete="new-password"
           onChange={(e) => setEncryption(e.target.value)}
+        />
+      </FormField>
+
+      <FormField
+        label="Proxy headers"
+        htmlFor="conn-actual-headers"
+        help={
+          moved && cfg.has_proxy_headers ? (
+            "A new address needs its headers again: the saved ones aren't sent to another server."
+          ) : clearHeaders ? (
+            <>
+              Removed when you save.{' '}
+              <Button size="sm" variant="ghost" onClick={() => setClearHeaders(false)}>
+                Keep them
+              </Button>
+            </>
+          ) : headersSaved ? (
+            <>
+              Saved: {cfg.proxy_header_names.join(', ')}. Type new ones to replace them.{' '}
+              <Button size="sm" variant="ghost" onClick={() => setClearHeaders(true)}>
+                Remove
+              </Button>
+            </>
+          ) : (
+            'Only if a sign-in proxy sits in front of Actual and accepts a header instead of its login page. One per line, as Name: value. They go with every request to this server.'
+          )
+        }
+        error={headersValid ? undefined : 'Write each header on its own line, as Name: value.'}
+      >
+        <TextArea
+          id="conn-actual-headers"
+          mono
+          rows={2}
+          value={headers}
+          placeholder={headersSaved ? '••••••••' : 'X-Example-Token: …'}
+          autoComplete="off"
+          spellCheck={false}
+          autoCapitalize="none"
+          invalid={!headersValid}
+          onChange={(e) => {
+            setHeaders(e.target.value)
+            if (e.target.value.trim()) setClearHeaders(false)
+          }}
         />
       </FormField>
 

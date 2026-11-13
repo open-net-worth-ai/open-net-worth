@@ -69,11 +69,10 @@ const logo = mark.replace(/<svg\b[^>]*>/, (tag) =>
     .replace('role="img"', 'class="brand-logo" aria-hidden="true"')
     .replace("<svg ", '<svg width="64" height="64" '),
 );
-// The app icon has its own artwork (the mark stays centred) and a BETA badge laid under it; the
+// The app icon is the official tile (`app-icon.svg`, identical to `logo.svg`); the
 // tray template follows the logo mark, drawn at 16 of the 20px menu-bar slot.
 const appIcon = await readFile(new URL("./app-icon.svg", import.meta.url), "utf8");
-const badge = fileURLToPath(new URL("./beta-badge.png", import.meta.url));
-await buildBrandAssets(mark, fileURLToPath(new URL("./", import.meta.url)), { appIcon, badge });
+await buildBrandAssets(mark, fileURLToPath(new URL("./", import.meta.url)), { appIcon });
 await writeFile(
   fileURLToPath(new URL("./onboarding.generated.json", import.meta.url)),
   JSON.stringify({ css, logo }),

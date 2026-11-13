@@ -37,6 +37,7 @@ from __future__ import annotations
 import logging
 
 from backend.core.fx import base_currency
+from backend.models.account import UNTRACKED_HOLDINGS_BAND
 from backend.services.ledger import row_base_value
 
 _log = logging.getLogger(__name__)
@@ -47,10 +48,14 @@ _log = logging.getLogger(__name__)
 # trade to a target, and targets are set on market classes only — "Trim Settlement cash by
 # S$43,234" against a 0% target was no one's trade. Everything else (equity, crypto,
 # commodity, bond, …) counts as an investment, so a new exposure type is included automatically.
+# `untracked_holdings` (a Brokerage total account's holdings not entered yet) IS invested, but in
+# no known class: counted, it would make every known class look underweight. It is left out
+# and reported beside the plan instead (`untracked_excluded`).
 NON_INVESTMENT_CLASSES = frozenset(
     {
         "cash",
         "settlement_cash",
+        UNTRACKED_HOLDINGS_BAND,
         "fixed_deposit",
         "retirement",
         "credit",
@@ -164,6 +169,7 @@ def rebalance_plan(
         "mode": mode,
         "new_cash": round(new_cash, 2),
         "current_total": round(current_total, 2),
+        **_untracked_fields(base),
     }
 
     if not targets:
@@ -200,6 +206,21 @@ def rebalance_plan(
         "target_total": round(target_total, 2),
         "allocations": allocations,
         "trades": trades,
+    }
+
+
+def _untracked_fields(base: str) -> dict:
+    """What the plan leaves out because it isn't broken into holdings, and the line that says
+    so (ADR 2026-11-10, amendment 2). Empty while allow_brokerage_total_valuation is off — the old
+    payload."""
+    from backend.services import untracked_holdings
+
+    excluded = untracked_holdings.untracked_excluded_now(base)
+    if excluded is None:
+        return {}
+    return {
+        "untracked_excluded": excluded,
+        "untracked_note": untracked_holdings.note(excluded, base, action="rebalance"),
     }
 
 

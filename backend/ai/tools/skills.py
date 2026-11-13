@@ -133,8 +133,7 @@ class ActivateSkillInput(ToolInput):
     description=(
         "Run a saved skill (a named playbook) by its id — get the id from list_skills. The host loads "
         "the skill's instructions as user-role context before your next response. Skills do not "
-        "change the ordinary tool offer or its security policy. It performs no write itself — "
-        "any change inside the skill still goes through its normal app-wide confirmation step."
+        "change the ordinary tool offer or its security policy. It performs no write itself — any change inside the skill goes through that tool's own permission, as usual."
     ),
     input_schema=schema_of(ActivateSkillInput, tool_name="activate_skill"),
 )
@@ -328,11 +327,9 @@ class CreateSkillInput(ToolInput):
 @tool(
     "create_skill",
     description=(
-        "Propose creating a new skill (a saved playbook). Provide a name, a markdown body of "
+        "Create a new skill (a saved playbook). Provide a name, a markdown body of "
         "instructions and, optionally, supporting files (references/, assets/). Skills use the "
-        "ordinary tool discovery surface and never alter tool policy. "
-        "This returns a change for the user to confirm; the "
-        "skill is saved only after they approve."
+        "ordinary tool discovery surface and never alter tool policy."
     ),
     input_schema=schema_of(CreateSkillInput, tool_name="create_skill"),
     mutates=("skills",),
@@ -386,9 +383,8 @@ class UpdateSkillInput(ToolInput):
 @tool(
     "update_skill",
     description=(
-        "Propose editing an existing skill (name, description, body, "
-        "or enabled). Identify it by skill_id (from list_skills). Returns a change for "
-        "the user to confirm before it is saved."
+        "Edit an existing skill (name, description, body, "
+        "or enabled). Identify it by skill_id (from list_skills)."
     ),
     input_schema=schema_of(UpdateSkillInput, tool_name="update_skill"),
     mutates=("skills",),
@@ -442,20 +438,12 @@ async def update_skill(input_data: dict):
 class DeleteSkillInput(ToolInput):
     """Schema-of-record for ``delete_skill`` (see ``schema_from_model``)."""
 
-    skill_id: str = Field(
-        description=(
-            "The skill to delete, by its stored id (from list_skills). Returns a proposal — "
-            "nothing is removed until the user confirms it."
-        )
-    )
+    skill_id: str = Field(description=("The skill to delete, by its stored id (from list_skills)."))
 
 
 @tool(
     "delete_skill",
-    description=(
-        "Propose deleting a saved skill. Identify it by skill_id (from list_skills). Returns a "
-        "change for the user to confirm — confirm before removing."
-    ),
+    description=("Delete a saved skill. Identify it by skill_id (from list_skills)."),
     input_schema=schema_of(DeleteSkillInput, tool_name="delete_skill"),
     mutates=("skills",),
 )

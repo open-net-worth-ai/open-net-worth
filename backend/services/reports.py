@@ -519,6 +519,7 @@ _ACCOUNT_CLASS_LABELS = {
     "settlement_cash": "Settlement cash",
     "retirement": "Retirement",
     "receivable": "Receivables",
+    "untracked_holdings": "Untracked holdings",
 }
 _LIABILITY_CLASS_LABELS = {"credit": "Credit", "loan": "Loans"}
 

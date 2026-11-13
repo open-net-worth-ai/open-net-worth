@@ -16,7 +16,12 @@ import {
 } from '../../../state/queryCache'
 import { getBaseCurrency } from '../../../utils/format'
 import { emitDataChanged } from '../../../lucius/bus'
-import { PORTFOLIO_KEY as SHARED_PORTFOLIO_KEY, useNetWorth } from '../../../hooks/serverState'
+import {
+  NET_WORTH_KEY,
+  NETWORTH_STATS_KEY,
+  PORTFOLIO_KEY as SHARED_PORTFOLIO_KEY,
+  useNetWorth,
+} from '../../../hooks/serverState'
 import { accountClearedValue, accountValue, fromApiAccount, fromApiTxn } from './data'
 import { retiredEnvelopeNotice } from './retiredPaymentEnvelope'
 import type { RetiredPaymentEnvelope } from './retiredPaymentEnvelope'
@@ -228,6 +233,8 @@ export interface AccountsLedgerState {
   restoreAccount: (id: string) => Promise<void>
   deleteAccount: (id: string, opts?: { force?: boolean }) => Promise<void>
   reconcile: (id: string, data: ReconcileData) => Promise<ReconcileResult>
+  /** Answer a connector total held back as suspicious: use it, or keep the account's value. */
+  confirmHeldTotal: (id: string, accept: boolean) => Promise<void>
   // refresh
   /** Returns a Promise so a caller that needs the refreshed data (e.g. a just-created category
    *  appearing in the categories list) can await it instead of racing a fire-and-forget reload. */
@@ -342,6 +349,9 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
   // tabs, Lucius). Kept in a ref so the mutation callbacks stay stable.
   const onMutateRef = useRef(onMutate)
   onMutateRef.current = onMutate
+  // Net worth is in the list because a REST write is never broadcast: the sidebar's figure kept
+  // the deleted account's balance until a reload (UAT, 2026-11-10). A data_changed emit would
+  // also do it, but it reloads this whole tab (RouterShell's coreDataV), on every edit.
   const fireMutate = () => {
     invalidateQueryCache(
       (key) =>
@@ -349,6 +359,8 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         key === CATEGORIES_KEY ||
         key === PAYEES_KEY ||
         key === PORTFOLIO_KEY ||
+        key === NET_WORTH_KEY ||
+        key === NETWORTH_STATS_KEY ||
         key.startsWith('/api/transactions?'),
     )
     onMutateRef.current?.()
@@ -914,6 +926,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       const raw: ApiAccount & {
         retired_payment_envelopes?: RetiredPaymentEnvelope[]
         payment_envelope_sync_warning?: { message: string; retryable: boolean }
+        value_switch?: { txn_id?: string | null }
       } = await res.json()
       // Changing `type` away from `credit` retires that card's payment envelope and zeroes its
       // assigned amount in every month, right now — and flipping back mints a new one, so the
@@ -930,10 +943,16 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       } else {
         setAccounts((prev) => [...prev, acct])
       }
+      // A switch to Live holdings may book one adjustment (ADR 2026-11-10) — show it now, and
+      // tell every screen: a REST write is not broadcast, so net worth would keep the old value.
+      if (raw.value_switch?.txn_id) {
+        await loadTxns(filters, 0, false)
+        emitDataChanged(['ledger'])
+      }
       fireMutate()
       return acct
     },
-    [],
+    [filters, loadTxns],
   )
 
   // Soft-archive (PUT archived:true) — keeps transactions. DELETE is REFUSED (409) by the backend
@@ -1060,6 +1079,32 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     [refreshAccount, filters, loadTxns],
   )
 
+  const confirmHeldTotal = useCallback(
+    async (id: string, accept: boolean): Promise<void> => {
+      const res = await authFetch(`/api/accounts/${id}/value-sync/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ accept }),
+      })
+      if (!res.ok) {
+        let detail: unknown
+        try {
+          detail = (await res.json())?.detail
+        } catch {
+          detail = undefined
+        }
+        throw new Error(typeof detail === 'string' && detail ? detail : `Failed (${res.status})`)
+      }
+      await refreshAccount(id)
+      if (accept) {
+        // Use books the held total: net worth moves on every screen, not just this one.
+        await loadTxns(filters, 0, false)
+        emitDataChanged(['ledger'])
+      }
+      fireMutate()
+    },
+    [refreshAccount, filters, loadTxns],
+  )
+
   const refresh = useCallback(async () => {
     invalidateQueryCache((key) => key.startsWith('/api/transactions?'))
     setOffset(0)
@@ -1115,6 +1160,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     restoreAccount,
     deleteAccount,
     reconcile,
+    confirmHeldTotal,
     refresh,
     refreshTxns,
   }

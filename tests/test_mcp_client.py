@@ -609,9 +609,13 @@ def _make_fake_urlopen(
     def fake_urlopen(request, timeout=None):
         if down:
             raise OSError("connection refused")
+        body = json.loads(request.data)
+        if "id" not in body:  # a JSON-RPC notification (notifications/initialized): 202, no body
+            captured.setdefault("notifications", []).append(body["method"])
+            return _FakeResp(b"")
         captured["url"] = request.full_url
         captured["headers"] = dict(request.headers)
-        captured["body"] = json.loads(request.data)
+        captured["body"] = body
         method = captured["body"]["method"]
         rid = captured["body"]["id"]
         if method == "initialize":
@@ -2034,8 +2038,11 @@ def test_accept_header_json_only_would_406_against_a_real_server(monkeypatch):
     )
     conn = McpClientConnection(McpServerConfig(id="deepwiki", url="https://mcp.deepwiki.com/mcp"))
     # Force the pre-fix header shape to prove the fake 406s on it, the same as the real vendors.
+    # On the CLASS: the handshake runs on a side connection that is swapped in on success.
     monkeypatch.setattr(
-        conn, "_headers", lambda: {"Content-Type": "application/json", "Accept": "application/json"}
+        McpClientConnection,
+        "_headers",
+        lambda self, *_a: {"Content-Type": "application/json", "Accept": "application/json"},
     )
     with pytest.raises(McpCallError, match="406"):
         conn.initialize()
@@ -2714,3 +2721,30 @@ def test_a_redirect_from_a_hostile_server_never_replays_a_custom_header_token():
         attacker_thread.join(timeout=2)
 
     assert stolen == []
+
+
+def test_a_server_that_rejects_initialize_still_gets_the_call(manager, monkeypatch):
+    """Before sessions, tools/call went out with no handshake; a non-spec server that errors on
+    ``initialize`` must not lose tools that used to work."""
+    import io
+    import urllib.error
+
+    mgr, s = manager
+    s.create(_cfg())
+    calls: list = []
+
+    def fake_urlopen(request, timeout=None):
+        body = json.loads(request.data) if request.data else {}
+        calls.append(body.get("method"))
+        if body.get("method") == "initialize":
+            raise urllib.error.HTTPError(request.full_url, 404, "nope", {}, io.BytesIO(b""))
+        return _FakeResp(
+            json.dumps(_rpc_envelope(body["method"], body["id"], call_text="ok")).encode()
+        )
+
+    monkeypatch.setattr("backend.mcp.client._urlopen", fake_urlopen)
+    s.record_discovery("drive", [{"name": "search_files", "inputSchema": {}}], "ok", None)
+    _allow("drive", "search_files")
+    text, _proposed, _images = asyncio.run(mgr.call_external_tool("mcp__drive__search_files", {}))
+    assert "ok" in text
+    assert calls == ["initialize", "tools/call"]

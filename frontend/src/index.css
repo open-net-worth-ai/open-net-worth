@@ -5902,6 +5902,14 @@ body.hide-amounts .mask * {
   /* The tallest a phone sheet may be RIGHT NOW: the shared ceiling, or — with the keyboard
      up — what is visible above it. iOS never shrinks the layout viewport for the keyboard;
      --visual-viewport-height is useVisualViewportVars' measurement of what is visible. */
+  /* One toast: the update notice's full pill. Every message toast reads these; the colours are
+     already shared (--toast-bg / --toast-ink). */
+  :root {
+    --toast-radius: var(--radius-pill);
+    --toast-font-size: 13px;
+    --toast-font-weight: 500;
+    --toast-padding: 10px 18px;
+  }
   :root {
     --sheet-visible-max-height: min(
       var(--sheet-max-height),
@@ -9256,6 +9264,66 @@ body.hide-amounts .mask * {
 
   /* Linked banks (connectors/PlaidBanksStep, GoCardlessBanks) — one row per bank with its own
      Remove. */
+  /* Accounts → Link to a bank account… (LinkBankAccountDialog) */
+  .link-bank-groups,
+  .link-bank-done,
+  .link-bank-empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+  .link-bank-groups > section {
+    align-self: stretch;
+  }
+  .link-bank-group-label {
+    color: var(--muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: var(--space-1);
+  }
+  .link-bank-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .link-bank-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .link-bank-row + .link-bank-row {
+    border-top: 1px solid var(--line);
+  }
+  .link-bank-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .link-bank-name {
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .link-bank-tag {
+    color: var(--good);
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+  .link-bank-sub {
+    color: var(--muted);
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
+  }
   .plaid-banks {
     margin: 0;
     padding: 0;
@@ -9347,6 +9415,31 @@ body.hide-amounts .mask * {
   .gc-bank-pick {
     flex: 1;
     min-width: 12rem;
+  }
+  /* A lone ghost button under a form row reads as a text link, flush with the fields' edge. */
+  .gc-form .ui-btn--ghost.eb-link {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  /* Enable Banking's Redirect URL: a value to copy, not a field — dashed, sunken, one click
+     selects it all, the 30px of the Copy button beside it. */
+  .eb-url {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 var(--space-3);
+    overflow-x: auto;
+    white-space: nowrap;
+    user-select: all;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--muted);
+    background: var(--bg-2);
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-md);
   }
 
   /* Connector setup steps (connectors/SetupStep) — ① keys → ② link a bank → ③ choose accounts.
@@ -9595,6 +9688,176 @@ body.hide-amounts .mask * {
   }
   .conn-acct-pick {
     min-width: 220px;
+  }
+  /* REST connector: the endpoint list and its inline editor (RestEndpointsEditor). */
+  .rest-method {
+    flex: none;
+    min-width: 52px;
+    color: var(--muted);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .rest-method--get {
+    color: var(--good);
+  }
+  .rest-method--delete {
+    color: var(--bad);
+  }
+  .rest-path {
+    font-family: var(--font-mono);
+  }
+  /* "Change the ID" under the Name field: a link inside the help line, not a button beside it. */
+  .rest-id-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+  }
+  .rest-id-link:hover {
+    text-decoration: underline;
+  }
+  .rest-ep-open + .conn-acct-row,
+  .conn-acct-row + .rest-ep-open,
+  .rest-ep-open + .rest-ep-open {
+    border-top: 1px solid var(--line);
+  }
+  /* A shared-kit select inside a connector's form (`.ui-select`): the browser draws its own arrow
+     hard against the right edge, whatever the padding. It gets this screen's arrow instead, set
+     in from the edge like `.rd-select`'s (owner, 2026-11-11). Here, not in connectors.css: that sheet may
+     only style a shared class if it re-declares everything else declared on it. */
+  .cn-page .ui-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa3b2' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  /* The endpoint list's two groups (read, write), headed like the permission ladder's. */
+  .rest-ep-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .rest-ep-grouphead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .rest-ep-chev {
+    display: inline-flex;
+    color: var(--faint);
+    transition: transform 0.15s;
+  }
+  .rest-ep-chev--open {
+    transform: rotate(90deg);
+  }
+  /* An endpoint's row: the endpoint itself is a button that opens its editor, and the
+     permission switch sits beside it on one line at every width, as an MCP tool's does. */
+  .rest-ep-row {
+    flex-wrap: nowrap;
+  }
+  .rest-ep-rowbtn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .rest-ep-rowbtn:hover .conn-acct-name {
+    color: var(--accent);
+  }
+  /* Edit and Remove: out of sight until the row is pointed at or tabbed into. Where rows
+     swipe instead (a touch screen) they are not drawn at all. */
+  .rest-ep-acts {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .rest-ep-row:hover .rest-ep-acts,
+  .rest-ep-row:focus-within .rest-ep-acts {
+    opacity: 1;
+  }
+  .rest-ep-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .rest-ep-icon:hover {
+    background: var(--surface2);
+    color: var(--ink);
+  }
+  .rest-ep-icon--remove:hover {
+    color: var(--bad);
+  }
+  /* Where rows swipe, each is wrapped, so the list's own row-after-row rule no longer sees
+     two rows side by side. */
+  .rest-ep-group .ui-swipe + .ui-swipe,
+  .rest-ep-group .ui-swipe + .rest-ep-open,
+  .rest-ep-group .rest-ep-open + .ui-swipe {
+    border-top: 1px solid var(--line);
+  }
+  .rest-ep-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .rest-ep-text > span {
+    display: block;
+  }
+  .rest-ep-line {
+    display: grid;
+    /* The method picker is as wide as its longest word, not a fixed 110px box around "GET". */
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+  .rest-param-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px minmax(0, 2fr) auto auto;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .rest-header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  /* On a phone a row's fields stack, and what is left (Required, the bin) shares the last
+     line instead of taking one each. */
+  @media (max-width: 640px) {
+    .rest-param-row,
+    .rest-header-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .rest-param-row > .rd-input,
+    .rest-param-row > .rd-select,
+    .rest-header-row > .rd-input {
+      grid-column: 1 / -1;
+    }
   }
   @media (max-width: 640px) {
     .conn-acct-row {
@@ -20077,10 +20340,29 @@ body.hide-amounts .mf-lbl-amt {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.report-problem__community {
-  margin: 0;
+/* One line above the footer: what Post on Discord does, then what to do after it. */
+.report-problem__discord {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+/* The Discord message, shown only when the browser refused to copy it. */
+.report-problem__discord-text {
+  max-height: 160px;
+  margin: var(--space-2) 0 0;
+  overflow: auto;
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.report-problem__included > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.report-problem__included-body {
+  margin-top: var(--space-4);
 }
 .report-problem__exact summary {
   cursor: pointer;

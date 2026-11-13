@@ -5,7 +5,7 @@
 // ConnectorAccountsList's "Create account…" flow.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 import { authFetch } from '../../../api/client'
@@ -15,6 +15,13 @@ import AccountModal from './AccountModal'
 import type { Account, AccountCreate, ExternalId } from './types'
 
 afterEach(cleanup)
+
+/** The account writes only — the modal also reads the feature-flag list. */
+function accountWrites(): Array<[string, RequestInit]> {
+  return (mockAuthFetch.mock.calls as Array<[string, RequestInit | undefined]>)
+    .filter(([u, init]) => u.startsWith('/api/accounts/') && init?.method === 'PUT')
+    .map(([u, init]) => [u, init as RequestInit])
+}
 
 function okJson(body: unknown): Response {
   return { ok: true, json: async () => body } as Response
@@ -84,7 +91,9 @@ describe('AccountModal "Linked to" list', () => {
     renderEdit(baseAccount({ externalIds: [plaidLink] }))
 
     expect(screen.getByText('Linked to')).toBeTruthy()
-    expect(screen.getByText('Plaid · Chase Checking ••1234')).toBeTruthy()
+    // The row names the provider account, then which connector carries it.
+    expect(screen.getByText('Chase Checking ••1234')).toBeTruthy()
+    expect(screen.getByText(/^Through Plaid/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Unlink' })).toBeTruthy()
     expect(screen.queryByText(/^Connected$/i)).toBeNull()
     expect(screen.queryByLabelText(/connected/i)).toBeNull()
@@ -97,7 +106,7 @@ describe('AccountModal "Linked to" list', () => {
     expect(screen.queryByRole('button', { name: 'Unlink' })).toBeNull()
   })
 
-  it('CDS-UI-15: Unlink PUTs the entry removed and the row disappears, modal stays open', async () => {
+  it('CDS-UI-15: Unlink asks first, then PUTs the entry removed; the modal stays open', async () => {
     mockAuthFetch.mockResolvedValue(okJson({}))
     const onSave = renderEdit(
       baseAccount({
@@ -106,17 +115,25 @@ describe('AccountModal "Linked to" list', () => {
     )
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Unlink' })[0]!)
+    // Unlinking asks first, inline on the row — nothing is written yet.
+    expect(screen.getByText(/^Unlink from Plaid\?/)).toBeTruthy()
+    expect(accountWrites()).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText(/^Unlink from Plaid\?/)).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Unlink' })[0]!)
+    const row = screen.getByText(/^Unlink from Plaid\?/).closest('.acct-link-row') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'Unlink' }))
 
-    await waitFor(() => expect(mockAuthFetch).toHaveBeenCalledTimes(1))
-    const [url, init] = mockAuthFetch.mock.calls[0] as [string, RequestInit]
+    await waitFor(() => expect(accountWrites()).toHaveLength(1))
+    const [url, init] = accountWrites()[0]!
     expect(url).toBe('/api/accounts/acc_1')
     expect(init.method).toBe('PUT')
     const body = JSON.parse(init.body as string) as { external_ids: Array<{ ref: string }> }
     expect(body.external_ids).toHaveLength(1)
     expect(body.external_ids[0]?.ref).toBe('plaid_acct_2')
 
-    await waitFor(() => expect(screen.getByText('Plaid · Chase Savings ••1234')).toBeTruthy())
-    expect(screen.queryByText('Plaid · Chase Checking ••1234')).toBeNull()
+    await waitFor(() => expect(screen.getByText('Chase Savings ••1234')).toBeTruthy())
+    expect(screen.queryByText('Chase Checking ••1234')).toBeNull()
     // No confirm dialog, no modal close, no save/toast side effect.
     expect(onSave).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeTruthy()

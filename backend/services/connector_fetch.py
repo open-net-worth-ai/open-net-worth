@@ -23,13 +23,13 @@ this module only shapes what a Lucius turn sees before it decides to call that c
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 from typing import Optional
 
 from backend.core.errors import ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.core.user_time import user_today
 from backend.models.account import AccountType
+from backend.services import connector_window
 from backend.services import ledger as ledger_service
 from backend.services.aggregation import providers
 from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
@@ -54,7 +54,14 @@ _MAX_FETCH_ROWS = 5000
 # (RFC §A step 4, AC9). Identity fields (external_refs/provider_account_id) are NOT in this
 # list: they are structural keys the ledger dedup floor and the snapshot store key off of,
 # never rendered as prose, and must stay byte-stable across re-fetches of the same row.
-_ROW_TEXT_FIELDS = ("description", "memo", "currency", "category_hint")
+_ROW_TEXT_FIELDS = (
+    "description",
+    "memo",
+    "currency",
+    "category_hint",
+    "payee",
+    "original_currency",
+)
 _ACCOUNT_TEXT_FIELDS = ("name", "mask", "currency", "institution")
 _POSITION_TEXT_FIELDS = ("symbol", "currency")
 # Cap on any single string leaf inside a stashed `raw` payload (S-F3) — generous enough for
@@ -73,15 +80,6 @@ def _resolve_provider(provider_key: str) -> Provider:
         return providers.resolve([provider_key])[0]
     except UnknownProvider:
         raise
-
-
-def _window_defaults(
-    provider: Provider, since: Optional[str], before: Optional[str]
-) -> tuple[str, str]:
-    today = user_today()
-    resolved_before = before or today.isoformat()
-    resolved_since = since or (today - timedelta(days=provider.lookback_days)).isoformat()
-    return resolved_since, resolved_before
 
 
 def _cap_identity_fields(out: dict) -> None:
@@ -299,6 +297,7 @@ def _empty_result(
         "counts": {
             "fetched": 0,
             "already_booked": 0,
+            "pending_skipped": 0,
             "returned": 0,
             "truncated": False,
             "changes": 0,
@@ -318,6 +317,48 @@ def fetch(
     offset: int = 0,
     plan_id: Optional[str] = None,
 ) -> dict:
+    """What a fetch TOOL returns: ``_fetch`` with its rows bounded to ``limit`` from ``offset``
+    (CLAUDE.md: tool results are bounded at the tool). See ``_fetch``."""
+    limit = max(1, min(_HARD_MAX_LIMIT, int(limit or _DEFAULT_LIMIT)))
+    return _fetch(
+        provider_key,
+        since=since,
+        before=before,
+        account=account,
+        include_booked=include_booked,
+        include_pending=include_pending,
+        limit=limit,
+        offset=offset,
+        plan_id=plan_id,
+    )
+
+
+def fetch_all(
+    provider_key: str,
+    *,
+    since: Optional[str] = None,
+    before: Optional[str] = None,
+    account: Optional[str] = None,
+) -> dict:
+    """The same fetch with every unbooked, posted row of the window in ONE provider read — no
+    ``limit``/``offset`` slice, so no second read is spent paging (the bank data sync's caller:
+    a GoCardless account may be read only 4 times a day). ``_MAX_FETCH_ROWS`` still caps it and
+    marks the window incomplete. Never handed to a model."""
+    return _fetch(provider_key, since=since, before=before, account=account, limit=None)
+
+
+def _fetch(
+    provider_key: str,
+    *,
+    since: Optional[str] = None,
+    before: Optional[str] = None,
+    account: Optional[str] = None,
+    include_booked: bool = False,
+    include_pending: bool = False,
+    limit: Optional[int] = _DEFAULT_LIMIT,
+    offset: int = 0,
+    plan_id: Optional[str] = None,
+) -> dict:
     """Fetch + normalize + stash + link + filter one provider's window (RFC §A). ``plan_id``
     is YNAB's only: which plan to read (omitted = the saved or only one). NEVER
     raises for a provider-side failure — a dormant connector, an auth/rate/connect error,
@@ -327,8 +368,9 @@ def fetch(
     valid one)."""
     provider = _resolve_provider(provider_key)
     store = provider.store()
-    since_resolved, before_resolved = _window_defaults(provider, since, before)
-    limit = max(1, min(_HARD_MAX_LIMIT, int(limit or _DEFAULT_LIMIT)))
+    since_resolved, before_resolved, window_warning = connector_window.default_window(
+        provider, since, before
+    )
     offset = max(0, int(offset or 0))
 
     # ── step 1: dormant gate ────────────────────────────────────────────────────────────
@@ -389,6 +431,7 @@ def fetch(
     # ── steps 3-4: normalize (already done by fetch_window) + sanitize ─────────────────
     accounts = [_sanitize_account(a) for a in window.accounts]
     rows = [_sanitize_row(r) for r in window.rows]
+    connector_window.number_repeated_refs(rows)
     rows_truncated = len(rows) > _MAX_FETCH_ROWS
     if rows_truncated:
         logger.warning(
@@ -432,6 +475,7 @@ def fetch(
     seen_refs = {_row_ref(r) for r in rows if _row_ref(r)}
     kept: list[dict] = []
     already_booked = 0
+    pending_skipped = 0
     for r in rows:
         ref = _row_ref(r)
         txn_id = known.get((provider_key, ref))
@@ -441,12 +485,16 @@ def fetch(
                 continue
             r["booked_txn_id"] = txn_id
         if not include_pending and r.get("pending"):
+            pending_skipped += 1
             continue
         kept.append(r)
 
     fetched_count = len(rows)
-    truncated = (offset + limit) < len(kept)
-    returned = kept[offset : offset + limit]
+    if limit is None:  # fetch_all: the whole window, one read
+        truncated, returned = False, kept[offset:]
+    else:
+        truncated = (offset + limit) < len(kept)
+        returned = kept[offset : offset + limit]
     window_complete = window.complete and not truncated and not rows_truncated
 
     # ── step 8: vanished check — only on a COMPLETE, non-truncated window ──────────────
@@ -483,10 +531,14 @@ def fetch(
         "changes": changes,
         # Part of the provider failed while the rest answered (one of several Plaid banks with
         # an expired login, say) — say so, so it is never a silent gap.
-        "warnings": [sanitize_untrusted(w, max_len=300) for w in window.warnings],
+        "warnings": [sanitize_untrusted(w, max_len=300) for w in window.warnings]
+        + ([window_warning] if window_warning else []),
         "counts": {
             "fetched": fetched_count,
             "already_booked": already_booked,
+            # Left out on purpose (not yet posted) — without it, fetched ≠ already_booked +
+            # returned reads as a missing row (a real model said so, 2026-11-13).
+            "pending_skipped": pending_skipped,
             "returned": len(public_rows),
             "truncated": truncated,
             "changes": len(changes),

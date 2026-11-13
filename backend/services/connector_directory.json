@@ -224,6 +224,23 @@
       }
     },
     {
+      "id": "rest",
+      "name": "REST API",
+      "families": [
+        "API"
+      ],
+      "categories": [
+        "Custom API"
+      ],
+      "publisher": "Open Net Worth",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
       "id": "web_search:duckduckgo",
       "name": "DuckDuckGo",
       "families": [

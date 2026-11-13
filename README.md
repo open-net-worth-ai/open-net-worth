@@ -15,6 +15,12 @@
 </p>
 
 <p align="center">
+  <a href="https://demo.opennetworth.ai"><img src="https://img.shields.io/badge/Try_the_live_demo-c9a15b?style=for-the-badge" alt="Try the live demo" height="36"></a>
+</p>
+
+<p align="center"><sub>If this is useful, a star helps others find it.</sub></p>
+
+<p align="center">
   <a href="https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest"><img src="https://img.shields.io/github/v/release/open-net-worth-ai/open-net-worth-releases?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
   <a href="https://docs.opennetworth.ai"><img src="https://img.shields.io/badge/docs-docs.opennetworth.ai-informational" alt="Documentation"></a>
@@ -52,6 +58,21 @@ Nothing leaves your machine except the calls you explicitly configure (an AI pro
 feed, an optional connector), and there is no telemetry.
 The one exception is a problem report you choose to send: you read it first, and it goes only when
 you press Send.
+
+## Compared with Claude and ChatGPT Personal Finance
+
+|  | Claude Personal Finance | ChatGPT Personal Finance | Open Net Worth |
+|---|---|---|---|
+| **Can it act?** | No, it reads your accounts | No, it can't change your accounts | Yes: books transactions, runs your budget, places trades through your broker (approval by default) |
+| **Comes to you first** | No, it waits for you to ask | No, it waits for you to ask | Daily briefings, weekly and monthly reports, Telegram pings when news hits what you hold |
+| **Investment advice** | Not meant to give it | Planning questions | Judges a ticker against your own investment thesis |
+| **Where it works** | US only, through Plaid (up to 16 accounts) | US only, through Plaid | Any country and currency: bank and broker connectors, or your bank emails and statements |
+| **Where your data lives** | Anthropic's cloud | OpenAI's cloud | Your own machine |
+| **Your AI** | Claude only | ChatGPT only | Your Claude Code or Codex subscription, an API key, or a local model |
+| **What it covers** | Spending, bills, balances | Spending, cash flow, investments, loans | Everything you own, including property, cars and RSUs |
+| **Who can get it** | Paid US plans, in beta | US ChatGPT Pro, in preview | Anyone: free and open source (AGPL-3.0) |
+
+<sub>Based on each launch's announcement and coverage as of November 2026.</sub>
 
 ## What's inside
 

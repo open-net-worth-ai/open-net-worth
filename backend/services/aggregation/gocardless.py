@@ -38,6 +38,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.gocardless_config_store import ENDED, LINKED, GoCardlessConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -138,10 +139,12 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
         )
     except ExternalServiceError as exc:
         if "HTTP 401" in str(exc) or "HTTP 403" in str(exc):
-            raise ValidationError(
+            message = (
                 "GoCardless rejected the secret ID / secret key — check them in "
                 "bankaccountdata.gocardless.com → User secrets"
-            ) from None
+            )
+            store.note_credentials(rejected_with=message)
+            raise ValidationError(message) from None
         raise
     data = _json(resp) or {}
     access = str(data.get("access") or "").strip()
@@ -152,6 +155,7 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
     except (TypeError, ValueError):
         lifetime = 0
     store.save_token(access, _iso(_now() + timedelta(seconds=lifetime)) if lifetime else None)
+    store.note_credentials(rejected_with=None)
     return access
 
 
@@ -503,6 +507,43 @@ def _txn_description(txn: dict) -> str:
     return (str(info).strip() if info else "") or "GoCardless"
 
 
+def _txn_payee(txn: dict, amount: float) -> Optional[str]:
+    """The counterparty's own name — who was paid (money out) or who paid (money in) — or
+    ``None`` when the bank names neither. It becomes the row's payee; the description keeps
+    the bank's wording, which payee matching learns from."""
+    keys = ("creditorName", "debtorName") if amount < 0 else ("debtorName", "creditorName")
+    for key in keys:
+        name = " ".join(str(txn.get(key) or "").split())
+        if name:
+            return name[:120]
+    return None
+
+
+def _original_charge(txn: dict) -> tuple[Optional[float], Optional[str]]:
+    """A purchase made in another currency: what the merchant charged (``instructedAmount``),
+    beside the converted amount the account was debited. ``(None, None)`` for a row in the
+    account's own currency. It goes in the row's ``original_amount``/``original_currency`` —
+    the ledger's own fields for it, which the duplicate check compares — never in the memo."""
+    booked_in = str((txn.get("transactionAmount") or {}).get("currency") or "").upper()
+    for fx in _currency_exchanges(txn):
+        paid = fx.get("instructedAmount") if isinstance(fx.get("instructedAmount"), dict) else {}
+        currency = str(paid.get("currency") or fx.get("sourceCurrency") or "").upper()
+        try:
+            amount = abs(float(paid.get("amount")))
+        except (TypeError, ValueError):
+            continue
+        if currency and currency != booked_in and amount:
+            return amount, currency
+    return None, None
+
+
+def _currency_exchanges(txn: dict) -> list[dict]:
+    raw = txn.get("currencyExchange")
+    if isinstance(raw, dict):
+        return [raw]
+    return [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
+
+
 def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool) -> Optional[dict]:
     """One GoCardless transaction → the common row. ``transactionAmount.amount`` is already
     signed, positive = money in. A row with no amount or no date is dropped."""
@@ -516,6 +557,7 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         return None
     currency = str(amount_obj.get("currency") or currency_hint).upper()
     description = _txn_description(txn)
+    original_amount, original_currency = _original_charge(txn)
     txn_id = _txn_id(txn)
     ref = (
         f"{account_id}:{txn_id}"
@@ -531,6 +573,10 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         "currency": currency,
         "description": description,
         "memo": None,
+        "payee": _txn_payee(txn, amount),
+        "original_amount": original_amount,
+        "original_currency": original_currency,
+        "category_hint": merchant_category(txn.get("merchantCategoryCode")),
         "pending": pending,
         "supersedes_ref": None,
     }

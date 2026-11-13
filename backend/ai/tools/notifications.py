@@ -96,9 +96,9 @@ async def _send_to_channel(channel: str, input_data: dict) -> tuple[str, None]:
 @tool(
     "telegram_send_message",
     description=(
-        "Send a message to the user's Telegram right now. APPROVE-TIER: confirm with the "
-        "user before sending — this reaches them out-of-band. The message is sent verbatim, "
-        "so include any currency symbols / formatting yourself. Pass artifact_id to deliver "
+        "Send a message to the user's Telegram right now — it reaches them out-of-band. The "
+        "message is sent verbatim, so include any currency symbols / formatting yourself. "
+        "Pass artifact_id to deliver "
         "a create_artifact document (a report) as a file, with the message as its caption."
     ),
     input_schema=schema_of(TelegramMessageInput, tool_name="telegram_send_message"),
@@ -113,9 +113,9 @@ async def telegram_send_message(input_data: dict):
 @tool(
     "webhook_send_message",
     description=(
-        "Send a message to the user's configured webhook right now. APPROVE-TIER: confirm "
-        "with the user before sending — this reaches them out-of-band. The message is sent "
-        "verbatim, so include any currency symbols / formatting yourself."
+        "Send a message to the user's configured webhook right now — it reaches them "
+        "out-of-band. The message is sent verbatim, so include any currency symbols / "
+        "formatting yourself."
     ),
     input_schema=schema_of(ChannelMessageInput, tool_name="webhook_send_message"),
     mutates=("notification_log",),

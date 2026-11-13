@@ -17,6 +17,7 @@ from backend.api._deps import _bearer_token
 from backend.api.upload import _MAX_UPLOAD_BYTES
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.services import document_preview, vault, vault_changes
+from backend.services.attachment_parse import UnsupportedFileError
 
 router = APIRouter()
 
@@ -69,7 +70,9 @@ async def add_vault_file(
     except OpenNetWorthError as exc:
         _http(exc)
     except ValueError as exc:  # the shared parser's "unsupported / unreadable file"
-        raise HTTPException(415 if "Unsupported" in str(exc) else 422, str(exc)) from exc
+        raise HTTPException(
+            415 if isinstance(exc, UnsupportedFileError) else 422, str(exc)
+        ) from exc
     return {"item": item}
 
 

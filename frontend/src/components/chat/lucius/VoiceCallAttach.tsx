@@ -20,7 +20,7 @@ export function VoiceCallAttach({ disabled, busy }: { disabled: boolean; busy: b
     if (!count || att.uploading.length || busy || !onCallConversation) return
     const toSend = toSendAttachments(att.attachments)
     if (toSend.length) void sendMessage('', toSend, effort, false, conversationModel)
-    setRefused(att.failed.map((a) => a.name).join(', '))
+    setRefused(att.failed.map((a) => `${a.name}. ${a.failReason ?? ''}`.trim()).join(' '))
     att.clear()
     // sendMessage and the rest belong to this render, which is what must be sent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -33,7 +33,7 @@ export function VoiceCallAttach({ disabled, busy }: { disabled: boolean; busy: b
     input.current?.click()
   }
 
-  const note = refused ? `Couldn't send ${refused}.` : count ? 'Sending your file…' : ''
+  const note = refused ? `Couldn't send ${refused}` : count ? 'Sending your file…' : ''
   return (
     <>
       <div className="lx-callstage-ctl lx-callstage-ctl--attach">

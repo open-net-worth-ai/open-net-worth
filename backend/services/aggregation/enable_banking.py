@@ -51,12 +51,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
-from backend.core.errors import ExternalServiceError, ValidationError
+from backend.core.errors import ExternalServiceError, RedirectNotRegisteredError, ValidationError
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services import ledger as ledger_service
 from backend.services.aggregation.providers import FetchWindow, derived_ref
@@ -64,7 +66,7 @@ from backend.services.aggregation.providers import FetchWindow, derived_ref
 logger = logging.getLogger(__name__)
 
 SOURCE_ID = "enable_banking"
-EXTERNAL_SOURCE = "enablebanking"
+EXTERNAL_SOURCE = "enable_banking"
 
 API_BASE = "https://api.enablebanking.com"
 _HTTP_TIMEOUT = 30.0
@@ -72,8 +74,8 @@ _HTTP_TIMEOUT = 30.0
 _JWT_TTL_SECONDS = 3600
 _JWT_ISS = "enablebanking.com"
 _JWT_AUD = "api.enablebanking.com"
-# A default redirect when the caller doesn't supply one (the link flow needs a redirect URI
-# registered with the application).
+# The redirect when the caller sends none: the user chose to link by pasting the code. The
+# setup docs have always asked for it, so an older setup has it registered.
 _DEFAULT_REDIRECT = "https://localhost/connectors"
 # Guard against a pathological never-terminating continuation_key page loop.
 _MAX_FETCH_PAGES = 50
@@ -136,6 +138,41 @@ def _auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}", "accept": "application/json"}
 
 
+def _api_error(resp: httpx.Response, what: str, *, redirect_url: str = "") -> ValidationError:
+    """A ``ValidationError`` carrying Enable Banking's own reason (``message`` + ``error``
+    code + the rejected field names), never only the status — a bare "HTTP 422" left issue
+    #103 undiagnosable. The request ``input`` echoed in ``detail`` is never repeated."""
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+    body = body if isinstance(body, dict) else {}
+    reason = str(body.get("message") or "").strip()[:200]
+    code = str(body.get("error") or "").strip()[:60]
+    fields = (
+        [
+            ".".join(str(p) for p in (d.get("loc") or [])[1:])
+            for d in body.get("detail") or []
+            if isinstance(d, dict)
+        ]
+        if isinstance(body.get("detail"), list)
+        else []
+    )
+    text = f"{what} failed: HTTP {resp.status_code}"
+    if reason:
+        text += f" — {reason}"
+    if code:
+        text += f" ({code})"
+    if fields:
+        text += f": {', '.join(f for f in fields if f)[:200]}"
+    if code == "REDIRECT_URI_NOT_ALLOWED" and redirect_url:
+        text += (
+            f". Add {redirect_url} to your application's allowed redirect URLs in the"
+            " Enable Banking control panel."
+        )
+    return ValidationError(text)
+
+
 # ── institution picker + consent link ────────────────────────────────────────────────
 
 
@@ -159,7 +196,7 @@ def list_institutions(country: str) -> list[dict]:
     except httpx.HTTPError as exc:
         raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
     if resp.status_code != 200:
-        raise ValidationError(f"listing banks failed: HTTP {resp.status_code}")
+        raise _api_error(resp, "listing banks")
 
     data = resp.json() or {}
     # TODO(enable-banking): confirm the response shape — documented as {"aspsps": [...]}.
@@ -184,66 +221,128 @@ def list_institutions(country: str) -> list[dict]:
     return out
 
 
+def _app_redirect(redirect: str) -> str:
+    """The caller's return URL (the app's own ``/connectors``), or "" for none. Only an
+    absolute http(s) URL is ever sent to Enable Banking."""
+    url = (redirect or "").strip()
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValidationError("redirect must be an http(s) URL")
+    return url
+
+
+def _post_auth(token: str, payload: dict) -> httpx.Response:
+    try:
+        return httpx.post(
+            f"{API_BASE}/auth", json=payload, headers=_auth_headers(token), timeout=_HTTP_TIMEOUT
+        )
+    except httpx.HTTPError as exc:
+        raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
+
+
+def _redirect_refused(resp: httpx.Response) -> bool:
+    try:
+        body = resp.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("error") == "REDIRECT_URI_NOT_ALLOWED"
+
+
 def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     """Start the bank-consent flow for ``aspsp`` (a bank name from ``list_institutions``).
 
-    POSTs ``/auth`` with the chosen bank + a redirect URI; Enable Banking returns a consent
-    ``url`` (the bank-auth URL the USER opens) and an ``authorization_id``/``state`` handle.
-    We persist the chosen bank + country so a later ``create_session`` + sync can read the
-    accounts the user consents to. Returns ``{url, authorization_id, aspsp}``. Raises
+    POSTs ``/auth``; Enable Banking returns the consent ``url`` the USER opens. The bank sends
+    them back to ``redirect`` (the app's own ``/connectors/callback/enable_banking`` — the path
+    is what tells the app the return is Enable Banking's; the control panel refuses a redirect
+    with a query string) with ``state`` and ``code`` added. Enable Banking accepts only a
+    redirect registered on the application, matched exactly, and says so at once
+    (``REDIRECT_URI_NOT_ALLOWED``) — before any bank page exists. That refusal raises
+    ``RedirectNotRegisteredError`` naming the address to add: nobody is sent to a bank whose
+    answer would land on a page that cannot load. No ``redirect`` at all is the user's own
+    choice to link by pasting the code; it uses ``_DEFAULT_REDIRECT``.
+
+    The ``state`` sent is remembered with its bank (``pending_links``) so ``create_session``
+    can tell the return belongs to a link started here, and which bank it linked. Returns
+    ``{url, authorization_id, aspsp, returns_to_app, redirect_url}``. Raises
     ``ValidationError`` on a bad bank / auth / transport failure."""
     bank = (aspsp or "").strip()
     if not bank:
         raise ValidationError("aspsp (bank) is required")
     code = (country or "").strip().upper()
-    redirect_url = (redirect or "").strip() or _DEFAULT_REDIRECT
+    if len(code) != 2:
+        raise ValidationError("country must be a 2-letter ISO code (e.g. FI, DE, FR)")
+    app_url = _app_redirect(redirect)
 
     store = EnableBankingConfigStore()
     token = _bearer(store)
     # Consent validity is capped at ~90 days for most banks; request the documented max.
     valid_until = (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(timespec="seconds")
+    state = str(uuid.uuid4())
+    # Verified against the sandbox (issue #103): `state` is required (422 without it) and
+    # `aspsp` needs both name and country.
     payload = {
-        # TODO(enable-banking): the documented body keys the ASPSP by {name, country}; confirm
-        # exact field names against the sandbox.
-        "aspsp": {"name": bank, "country": code} if code else {"name": bank},
-        "redirect_url": redirect_url,
-        "valid_until": valid_until,
         "access": {"valid_until": valid_until},
+        "aspsp": {"name": bank, "country": code},
+        "state": state,
+        "redirect_url": app_url or _DEFAULT_REDIRECT,
+        "psu_type": "personal",
     }
-    try:
-        resp = httpx.post(
-            f"{API_BASE}/auth",
-            json=payload,
-            headers=_auth_headers(token),
-            timeout=_HTTP_TIMEOUT,
+    resp = _post_auth(token, payload)
+    if app_url and _redirect_refused(resp):
+        raise RedirectNotRegisteredError(
+            f"Enable Banking doesn't know this address yet. Add {app_url} to your app's "
+            "redirect URLs at enablebanking.com, then try again.",
+            redirect_url=app_url,
         )
-    except httpx.HTTPError as exc:
-        raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
     if resp.status_code not in (200, 201):
-        raise ValidationError(f"starting the bank link failed: HTTP {resp.status_code}")
+        raise _api_error(resp, "starting the bank link", redirect_url=payload["redirect_url"])
 
     data = resp.json() or {}
     url = (data.get("url") or data.get("authorization_url") or "").strip()
-    authorization_id = (data.get("authorization_id") or data.get("state") or "").strip()
+    authorization_id = (data.get("authorization_id") or "").strip()
     if not url:
         raise ValidationError("Enable Banking did not return a consent URL")
 
     store.update({"aspsp": bank, "country": code})
-    return {"url": url, "authorization_id": authorization_id, "aspsp": bank}
+    store.add_pending_link(state, aspsp=bank, country=code, now=datetime.now(timezone.utc))
+    return {
+        "url": url,
+        "authorization_id": authorization_id,
+        "aspsp": bank,
+        "returns_to_app": payload["redirect_url"] == app_url,
+        "redirect_url": payload["redirect_url"],
+    }
 
 
-def create_session(code: str) -> dict:
+def create_session(code: str, state: str = "") -> dict:
     """Exchange the post-consent auth ``code`` for a session.
 
-    POSTs ``/sessions`` ``{code}``; Enable Banking returns ``{session_id, accounts[]}``. We
-    persist the ``session_id`` (the per-bank consent handle the accounts/transactions
-    endpoints need). Returns ``{session_id, accounts}``. Raises ``ValidationError`` on a bad
-    code / auth / transport failure."""
+    ``state`` comes with an automatic return to the app and must be the one the last
+    ``start_authorization`` sent: a return that isn't (a stale tab, a link started on another
+    install, a forged URL) is refused before any call. A hand-pasted code carries no state.
+
+    POSTs ``/sessions`` ``{code}``; Enable Banking returns ``{session_id, accounts[], access}``.
+    The session becomes one more linked bank, named by the bank the link was started for.
+    Linking a bank that is already listed renews it: the new session takes its place and the
+    old one is revoked at Enable Banking. Returns ``{session_id, accounts, bank_key}``. Raises
+    ``ValidationError`` on a bad code / state / auth / transport failure."""
     auth_code = (code or "").strip()
     if not auth_code:
         raise ValidationError("the authorization code is required")
 
     store = EnableBankingConfigStore()
+    now = datetime.now(timezone.utc)
+    returned = (state or "").strip()
+    pending = store.pending_link(returned, now=now) if returned else None
+    if returned and pending is None:
+        raise ValidationError(
+            "This bank link doesn't match one started here, or it was already completed or"
+            " has expired. Click Link bank to start again."
+        )
+    if pending is None:
+        pending = store.latest_pending_link(now=now) or {}
     token = _bearer(store)
     try:
         resp = httpx.post(
@@ -255,16 +354,84 @@ def create_session(code: str) -> dict:
     except httpx.HTTPError as exc:
         raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
     if resp.status_code not in (200, 201):
-        raise ValidationError(f"completing the bank link failed: HTTP {resp.status_code}")
+        raise _api_error(resp, "completing the bank link")
 
     data = resp.json() or {}
     session_id = (data.get("session_id") or data.get("id") or "").strip()
     if not session_id:
         raise ValidationError("Enable Banking did not return a session id")
 
-    store.update({"session_id": session_id})
+    cfg = store.get()
+    named = data.get("aspsp") if isinstance(data.get("aspsp"), dict) else {}
     accounts = data.get("accounts") or []
-    return {"session_id": session_id, "accounts": accounts}
+    key, replaced = store.add_bank(
+        session_id,
+        aspsp=str(pending.get("aspsp") or named.get("name") or cfg.get("aspsp") or ""),
+        country=str(pending.get("country") or named.get("country") or cfg.get("country") or ""),
+        valid_until=(data.get("access") or {}).get("valid_until"),
+        linked_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        account_ids=[_account_uid(a) for a in accounts if isinstance(a, dict)],
+    )
+    if pending.get("state"):
+        store.drop_pending_link(pending["state"])
+    for old_session in replaced:
+        # Renewal: remember the old consent's accounts first, so the new session's uids map
+        # back to them — even on a book that never listed its accounts since it was linked.
+        _remember_accounts(store, token, old_session, store.bank(key) or {})
+        _revoke_session(token, old_session)
+    return {"session_id": session_id, "accounts": accounts, "bank_key": key}
+
+
+def _remember_accounts(
+    store: EnableBankingConfigStore, token: str, session_id: str, bank: dict
+) -> None:
+    """Record a session's accounts' ids (``_stable_account_id``). Best effort: a session that
+    can't be read is one whose ids this book has most likely recorded already."""
+    try:
+        for account in fetch_session_accounts(token, session_id):
+            _stable_account_id(store, bank, account)
+    except (ExternalServiceError, httpx.HTTPError) as exc:
+        logger.warning("enable_banking: an old consent's accounts are unavailable: %s", exc)
+
+
+def _revoke_session(token: str, session_id: str) -> bool:
+    """Revoke a bank's consent at Enable Banking (``DELETE /sessions/{id}``). Best effort:
+    the bank is forgotten here either way, and a consent that can't be revoked still ends
+    by itself. Logs the status only — never the session id."""
+    try:
+        resp = httpx.delete(
+            f"{API_BASE}/sessions/{session_id}", headers=_auth_headers(token), timeout=_HTTP_TIMEOUT
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("enable_banking: revoking a session failed (%s)", type(exc).__name__)
+        return False
+    if resp.status_code not in (200, 204):
+        logger.warning("enable_banking: revoking a session failed (HTTP %s)", resp.status_code)
+        return False
+    return True
+
+
+def remove_all_banks(store: EnableBankingConfigStore) -> int:
+    """Revoke every linked bank's consent (the connector's Remove). Returns how many were
+    revoked; the caller then erases the row."""
+    banks = store.banks()
+    if not banks:
+        return 0
+    token = _bearer(store)
+    return sum(_revoke_session(token, b["session_id"]) for b in banks)
+
+
+def remove_bank(key: str) -> dict:
+    """Unlink one bank: revoke its consent at Enable Banking, then forget it here. Its
+    already-imported transactions and linked accounts stay. Returns ``{removed, revoked,
+    banks_left}``. Raises ``ValidationError`` for a bank that isn't listed."""
+    store = EnableBankingConfigStore()
+    bank = store.bank((key or "").strip())
+    if bank is None:
+        raise ValidationError("That bank isn't linked to Enable Banking.")
+    revoked = _revoke_session(_bearer(store), bank["session_id"])
+    store.drop_bank(bank["key"])
+    return {"removed": True, "revoked": revoked, "banks_left": len(store.banks())}
 
 
 # ── account / transaction fetch ──────────────────────────────────────────────────────
@@ -309,15 +476,30 @@ def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
 
 
 def fetch_session_accounts(token: str, session_id: str) -> list[dict]:
-    """GET ``/sessions/{id}`` → the list of consented Enable Banking accounts.
+    """GET ``/sessions/{id}`` → the consented accounts, each enriched from
+    ``/accounts/{uid}/details`` (name, currency, type).
 
-    Each account dict carries at least an ``uid``/``account_id`` + a currency + a name.
-    Raises ``ExternalServiceError`` (never the raw httpx exception — see ``_safe_get``) on
-    a transport/HTTP failure."""
+    Verified on the sandbox (issue #103): the session lists ``accounts`` as bare uid STRINGS
+    (``accounts_data`` holds only uid + hashes), so keeping only dicts dropped every account.
+    A details failure keeps ``{"uid": uid}`` so transactions still fetch. Raises
+    ``ExternalServiceError`` (never the raw httpx exception — see ``_safe_get``) when the
+    session itself can't be read."""
     resp = _safe_get(token, f"/sessions/{session_id}", {})
     data = resp.json() or {}
-    accounts = data.get("accounts") or []
-    return [a for a in accounts if isinstance(a, dict)]
+    uids: list[str] = []
+    for entry in data.get("accounts") or []:
+        uid = _account_uid(entry) if isinstance(entry, dict) else str(entry or "").strip()
+        if uid and uid not in uids:
+            uids.append(uid)
+    accounts: list[dict] = []
+    for uid in uids:
+        try:
+            details = _safe_get(token, f"/accounts/{uid}/details", {}).json()
+        except (ExternalServiceError, ValueError) as exc:
+            logger.warning("enable_banking account details failed: %s", exc)
+            details = None
+        accounts.append({**details, "uid": uid} if isinstance(details, dict) else {"uid": uid})
+    return accounts
 
 
 def fetch_account_transactions(
@@ -370,21 +552,65 @@ def _account_currency(eb_account: dict) -> str:
     return (eb_account.get("currency") or ledger_service.base_currency()).upper()
 
 
-def _account_to_common(eb_account: dict) -> dict:
+# ISO 20022 cash account type → the app's suggested account type (as GoCardless maps it).
+_ACCOUNT_TYPES = {"CARD": "credit", "LOAN": "loan", "CACC": "cash", "SVGS": "cash", "TRAN": "cash"}
+# Booked balances first (what the ledger should match), then the rest in a stable order.
+_BALANCE_PREFERENCE = ("CLBD", "ITBD", "XPCD", "ITAV", "CLAV", "OPBD", "PRCD", "INFO")
+
+
+def _account_mask(eb_account: dict) -> Optional[str]:
+    acct_id = eb_account.get("account_id")
+    iban = acct_id.get("iban") if isinstance(acct_id, dict) else None
+    return str(iban)[-4:] if iban else None
+
+
+def _account_to_common(eb_account: dict, balance: Optional[float] = None) -> dict:
     """An Enable Banking account → the common ``accounts[]`` shape (RFC §A)."""
+    kind = str(eb_account.get("cash_account_type") or "").upper()
     return {
         "provider_account_id": _account_uid(eb_account),
         "name": _account_name(eb_account),
-        "mask": None,
+        "mask": _account_mask(eb_account),
         "currency": _account_currency(eb_account),
-        "balance": None,
+        "balance": balance,
+        "account_type": _ACCOUNT_TYPES.get(kind),
+        "institution": eb_account.get("_institution"),
+        # No currency from the bank means _account_currency filled in the base: a balance must
+        # never be booked as if the bank had said so (account_value_sync fails closed on this).
+        "currency_inferred": not eb_account.get("currency"),
     }
 
 
+def fetch_account_balance(token: str, account_uid: str) -> Optional[float]:
+    """GET ``/accounts/{uid}/balances`` → one signed figure, booked balance preferred
+    (verified on the sandbox: ``[{balance_type: "CLBD", balance_amount: {amount, currency}}]``).
+    Never raises — a bank that won't give balances leaves the account without one."""
+    try:
+        data = _safe_get(token, f"/accounts/{account_uid}/balances", {}).json() or {}
+    except (ExternalServiceError, ValueError) as exc:
+        logger.warning("enable_banking balances unavailable: %s", exc)
+        return None
+    by_type: dict[str, float] = {}
+    for b in data.get("balances") or []:
+        if not isinstance(b, dict):
+            continue
+        try:
+            amount = float((b.get("balance_amount") or {}).get("amount"))
+        except (TypeError, ValueError):
+            continue
+        by_type.setdefault(str(b.get("balance_type") or "").upper(), amount)
+    for kind in _BALANCE_PREFERENCE:
+        if kind in by_type:
+            return by_type[kind]
+    return next(iter(by_type.values()), None)
+
+
 def _txn_id(eb_txn: dict) -> str:
-    """The stable Enable Banking transaction id (``entry_reference`` preferred, then
-    ``transaction_id``). Empty string if neither is present."""
-    return str(eb_txn.get("entry_reference") or eb_txn.get("transaction_id") or "").strip()
+    """The bank's immutable id for a transaction, ``entry_reference``, or "" without one.
+    Never ``transaction_id``: Enable Banking documents it as a fetch handle that "can not be
+    used to uniquely identify transactions and may change if the list of transactions is
+    requested again" — keyed on it, a re-listed row came back as new and booked twice."""
+    return str(eb_txn.get("entry_reference") or "").strip()
 
 
 def _txn_amount(eb_txn: dict) -> tuple[float | None, str]:
@@ -445,10 +671,34 @@ def _txn_description(eb_txn: dict) -> str:
     return (str(info).strip() if info else "") or "Enable Banking"
 
 
+def _txn_payee(eb_txn: dict, amount: float) -> Optional[str]:
+    """The counterparty's own name — who was paid (money out) or who paid (money in) — or
+    None when the bank names neither. It becomes the row's payee; the description keeps the
+    bank's wording, which payee matching learns from (as GoCardless does)."""
+    first, second = ("creditor", "debtor") if amount < 0 else ("debtor", "creditor")
+    for key in (first, second):
+        party = eb_txn.get(key)
+        name = " ".join(str(party.get("name") or "").split()) if isinstance(party, dict) else ""
+        if name:
+            return name[:120]
+    return None
+
+
+# Transaction `status` (verified on the sandbox: GET .../transactions returns EVERY status by
+# default). Money that never moved is dropped — a cancelled, rejected or scheduled row booked
+# as spending lowers the balance for nothing; one not yet final is pending. BOOK, OTHR and a
+# missing status are final.
+_NOT_MONEY_STATUSES = frozenset({"CNCL", "RJCT", "SCHD"})
+_PENDING_STATUSES = frozenset({"PDNG", "HOLD"})
+
+
 def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | None:
     """One Enable Banking transaction → the common normalized row shape (RFC §A step 3).
     Returns None for an unparseable/zero amount or an unrecognized credit/debit indicator
     (``_txn_amount`` already logs that case)."""
+    status = str(eb_txn.get("status") or "").upper()
+    if status in _NOT_MONEY_STATUSES:
+        return None
     amount, currency = _txn_amount(eb_txn)
     if amount is None:
         return None
@@ -469,10 +719,71 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "amount": amount,
         "currency": currency,
         "description": description,
+        "payee": _txn_payee(eb_txn, amount),
         "memo": None,
-        "pending": False,
+        "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,
     }
+
+
+def _bank_label(bank: dict, banks: list[dict]) -> Optional[str]:
+    """The bank an account is shown (and filed) under: its name, plus its country only when
+    another linked bank shares that name (Nordea FI and Nordea SE are two banks; a lone Nordea
+    stays "Nordea", which is also what Add files a new account under)."""
+    name = (bank.get("aspsp") or "").strip()
+    if not name:
+        return None
+    twins = [b for b in banks if (b.get("aspsp") or "").strip() == name]
+    country = (bank.get("country") or "").strip().upper()
+    return f"{name} ({country})" if len(twins) > 1 and country else name
+
+
+def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tuple[list[dict], bool]:
+    """Every linked bank's accounts, each tagged with its bank (``institution``). One bank
+    that can't be read (its consent ended, the bank is down) never hides the others: it is
+    skipped and the result is marked incomplete."""
+    out: list[dict] = []
+    complete = True
+    seen: set[str] = set()
+    banks = store.banks()
+    for bank in banks:
+        try:
+            accounts = fetch_session_accounts(token, bank["session_id"])
+        except (ExternalServiceError, httpx.HTTPError) as exc:
+            logger.warning("enable_banking: a bank's accounts are unavailable: %s", exc)
+            complete = False
+            continue
+        for a in accounts:
+            api_uid = _account_uid(a)
+            uid = _stable_account_id(store, bank, a)
+            if uid in seen:
+                continue
+            seen.add(uid)
+            out.append(
+                {**a, "uid": uid, "_api_uid": api_uid, "_institution": _bank_label(bank, banks)}
+            )
+    return out, complete
+
+
+def _stable_account_id(store: EnableBankingConfigStore, bank: dict, eb_account: dict) -> str:
+    """The account's id here for good (see ``account_identities``): its first uid, found again
+    through Enable Banking's ``identification_hash`` after a renewal hands it a new one. An
+    account without that hash keeps its session uid, as before."""
+    uid = _account_uid(eb_account)
+    identification = str(eb_account.get("identification_hash") or "").strip()
+    if not uid or not identification:
+        return uid
+    return store.account_id(
+        aspsp=str(bank.get("aspsp") or ""),
+        country=str(bank.get("country") or ""),
+        identification_hash=identification,
+        uid=uid,
+    )
+
+
+def _api_uid(eb_account: dict) -> str:
+    """The uid Enable Banking's own endpoints know this account by in its current session."""
+    return str(eb_account.get("_api_uid") or _account_uid(eb_account))
 
 
 def fetch_window(
@@ -490,20 +801,21 @@ def fetch_window(
     ``_MAX_FETCH_PAGES`` without exhausting its ``continuation_key`` — a truncated fetch must
     never look complete to the vanished-row check."""
     token = _bearer(store)
-    eb_accounts = fetch_session_accounts(token, store.session_id())
+    eb_accounts, complete = _accounts_of_every_bank(token, store)
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
-    accounts = [_account_to_common(a) for a in eb_accounts]
+    accounts = [
+        _account_to_common(a, fetch_account_balance(token, _api_uid(a))) for a in eb_accounts
+    ]
 
     rows: list[dict] = []
-    complete = True
     for eb_account in eb_accounts:
         account_uid = _account_uid(eb_account)
         if not account_uid or accounts_only:
             continue
         try:
             txns, account_complete = fetch_account_transactions(
-                token, account_uid, date_from=since, date_to=before
+                token, _api_uid(eb_account), date_from=since, date_to=before
             )
         except (ExternalServiceError, httpx.HTTPError) as exc:
             logger.warning("enable_banking account fetch failed (%s): %s", account_uid, exc)

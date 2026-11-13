@@ -137,6 +137,18 @@ export function reportText(report: ReportPayload): string {
   return `${lines.join('\n')}\n`;
 }
 
+// The message to paste in Discord: the report as plain lines, logs included when they are
+// ticked. Never the email — a channel is public. Discord turns a paste past 2,000 characters into
+// an attached text file, so long logs still arrive whole.
+export function discordText(report: ReportPayload): string {
+  const where = [report.app_version, report.platform, report.mode, report.screen].filter(Boolean);
+  const lines = ['Problem report', report.description];
+  if (report.error) lines.push('', 'Error', report.error);
+  lines.push('', where.join(' · '));
+  if (report.logs) lines.push('', 'Recent logs (masked)', report.logs);
+  return lines.join('\n');
+}
+
 // A mail draft carries the top of the report; the full text, logs included, is what goes on the clipboard.
 export function emailHref(report: ReportPayload): string {
   const subject = `Open Net Worth problem report (${report.app_version})`;

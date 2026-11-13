@@ -235,12 +235,7 @@ class ApplyRecordIncomeInput(ToolInput):
         "through the ledger, or acquires the DRP lot, and links the income event. Identify the "
         "position by position_id (from get_portfolio). A CASH dividend (is_drp=false) needs "
         "account_id (the cash account it lands in); a DRP / reinvestment (is_drp=true) needs "
-        "drp_quantity (units reinvested) and optionally drp_unit_cost, and books NO cash. On an "
-        "interactive turn this raises a confirm card (no write yet, net of tax in the proceeds "
-        "and base currency); the user's approval then runs it server-side with exactly the "
-        "values the card showed. Never call it again to confirm and never restate the values — "
-        "there is nothing for you to pass back. An unattended/automated caller records "
-        "immediately, no card — pass idempotency_key so a retry doesn't double-book."
+        "drp_quantity (units reinvested) and optionally drp_unit_cost, and books NO cash. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Pass idempotency_key so a retry doesn't double-book."
     ),
     input_schema=schema_of(ApplyRecordIncomeInput, tool_name="record_income"),
     mutates=("income", "ledger"),
@@ -299,8 +294,7 @@ class DeleteIncomeInput(ToolInput):
 @tool(
     "delete_income",
     description=(
-        "Delete a recorded income event by its event id. Confirm with the user first — this "
-        "removes the income annotation (the booked cash transaction / DRP lot stay; undo those "
+        "Delete a recorded income event by its event id. This removes the income annotation (the booked cash transaction / DRP lot stay; undo those "
         "via the ledger / lots if needed)."
     ),
     input_schema=schema_of(DeleteIncomeInput, tool_name="delete_income"),

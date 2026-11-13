@@ -14,7 +14,7 @@ This module stays thin: all cross-store logic lives in backend/services/ledger.p
 from __future__ import annotations
 
 import logging
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ from backend.core.user_time import user_today
 from backend.models.transaction import TxnKind
 from backend.services import audit as audit_svc
 from backend.services import categories as cat_svc
-from backend.services import connector_snapshots, email_snapshots, payee_registry
+from backend.services import connector_snapshots, email_snapshots, payee_registry, transaction_links
 from backend.services import institutions as institution_svc
 from backend.services import ledger as svc
 from backend.services.budgets import EXPENSE_CATEGORIES  # noqa: F401  (re-export for importers)
@@ -126,6 +126,9 @@ class AccountCreate(BaseModel):
     payoff_date: Optional[str] = None
     min_payment: Optional[float] = None
     apy: Optional[float] = None
+    # Investment/retirement only: "total" (Brokerage total, the default) | "holdings" (Live
+    # holdings). Refused while the `allow_brokerage_total_valuation` flag is off (ADR 2026-11-10).
+    value_source: Optional[Literal["total", "holdings"]] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -140,6 +143,8 @@ class AccountCreate(BaseModel):
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
+    # How an investment/retirement account is valued (services.account_value, ADR 2026-11-10).
+    value_source: Optional[Literal["total", "holdings"]] = None
     institution: Optional[str] = None
     initial_balance: Optional[float] = Field(default=None, allow_inf_nan=False)
     initial_balance_date: Optional[str] = None
@@ -186,10 +191,17 @@ class InstitutionRename(BaseModel):
 
 
 class ReconcileBody(BaseModel):
-    real_balance: float  # asserted native-currency balance
+    # asserted native-currency balance — or, on a Brokerage total account, `real_total`
+    real_balance: Optional[float] = None
+    # the account's real TOTAL (Brokerage total only); NaN/Infinity refused (UAT SB-16)
+    real_total: Optional[float] = Field(default=None, allow_inf_nan=False)
     date: Optional[str] = None
     against: str = "cleared"  # "cleared" (YNAB reconcile-to-cleared) | "working" (legacy true-up)
     expected_balance: Optional[float] = None  # the figure the user was shown; 409 if stale
+
+
+class HeldTotalBody(BaseModel):
+    accept: bool  # True: use the held-back total; False: keep the account's value
 
 
 class DescribeAccountBody(BaseModel):
@@ -345,6 +357,10 @@ class BulkTxnUpdateFlat(BaseModel):
 
 
 class BulkTxnDelete(BaseModel):
+    ids: List[str]
+
+
+class TxnDeletePreview(BaseModel):
     ids: List[str]
 
 
@@ -601,9 +617,10 @@ def update_account(account_id: str, body: AccountUpdate):
 
     # Routed through accounts_service.update_account, not the bare store, so the external_ids
     # uniqueness guard and link-time fill apply on this REST path too.
+    side_effects: dict = {}
     try:
         updated = (
-            accounts_service.update_account(account_id, changes)
+            accounts_service.update_account(account_id, changes, side_effects=side_effects)
             if changes
             else svc.accounts.find_by_id(account_id)
         )
@@ -615,7 +632,36 @@ def update_account(account_id: str, body: AccountUpdate):
     # Return the HYDRATED account (balance/cleared_balance + base) so a client editing an
     # account doesn't replace its row with a balance-less one that renders as "NaN".
     body_out = svc.account_with_balance(updated)
+    if side_effects.get("value_switch"):
+        body_out["value_switch"] = side_effects["value_switch"]
     return body_out
+
+
+@router.get("/api/accounts/{account_id}/value-switch")
+def preview_value_switch(account_id: str, to: Literal["total", "holdings"]):
+    """What switching this account's value source would do, without writing (ADR 2026-11-10):
+    its holdings, untracked part, total, the one adjustment it books and its value after."""
+    from backend.services import account_value
+
+    acct = svc.accounts.find_by_id(account_id)
+    if acct is None:
+        raise HTTPException(404, "Account not found")
+    try:
+        return account_value.preview_switch(acct, to)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
+@router.post("/api/accounts/{account_id}/value-sync/confirm")
+def confirm_held_total(account_id: str, body: HeldTotalBody):
+    """The user's answer to a connector total held back as suspicious (a 0, or a drop of
+    more than a quarter): use it, or keep the account's value (ADR 2026-11-10)."""
+    from backend.services import account_value_sync
+
+    try:
+        return account_value_sync.confirm_held(account_id, body.accept)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
 @router.delete("/api/accounts/{account_id}")
@@ -705,18 +751,31 @@ def reconcile_account(account_id: str, body: ReconcileBody):
     """Reconcile to an asserted real balance (cleared/reconcile MVP). Diffs it against the
     account's CLEARED balance (default), emits an auto-cleared `adjustment` on a mismatch,
     and locks the cleared set. ``against="working"`` diffs the full computed balance."""
-    if svc.accounts.find_by_id(account_id) is None:
+    from backend.services import account_value
+
+    acct_row = svc.accounts.find_by_id(account_id)
+    if acct_row is None:
         raise HTTPException(404, "Account not found")
     try:
+        real_balance = (
+            account_value.reconcile_target(acct_row, body.real_total)
+            if body.real_total is not None
+            else body.real_balance
+        )
+        if real_balance is None:
+            raise HTTPException(422, "real_balance (or real_total) is required")
         adjustment = svc.reconcile(
             account_id,
-            body.real_balance,
+            real_balance,
             body.date,
-            against=body.against,
+            # A total is holdings + the WHOLE ledger balance, so it diffs the working balance.
+            against="working" if body.real_total is not None else body.against,
             expected_balance=body.expected_balance,
         )
     except ConflictError as e:
         raise HTTPException(409, e.message) from e
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     acct = svc.accounts.find_by_id(account_id)
     txns = svc.transactions.all()
     cutoff = svc.opening_date(acct, txns)
@@ -1579,6 +1638,13 @@ def bulk_update_transactions_flat(body: BulkTxnUpdateFlat):
         len(result["skipped"]),
     )
     return result
+
+
+@router.post("/api/transactions/delete-preview")
+def preview_transaction_delete(body: TxnDeletePreview):
+    """What deleting these rows would change on the records that point at them. Writes nothing:
+    the register's confirm dialog shows it before the user decides."""
+    return {"links": transaction_links.linked_to(body.ids)}
 
 
 @router.post("/api/transactions/bulk-delete")

@@ -53,6 +53,9 @@ register(
             "settlement_cash": FieldSpec(
                 "Brokerage/exchange settlement cash (negative = margin)", "money"
             ),
+            "untracked_holdings": FieldSpec(
+                "Untracked holdings (invested, holdings not entered — not cash)", "money"
+            ),
             "fixed_deposit": FieldSpec("Fixed deposits", "money"),
             "retirement": FieldSpec("Retirement", "money"),
             "property": FieldSpec("Property", "money"),

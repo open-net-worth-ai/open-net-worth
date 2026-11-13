@@ -35,6 +35,12 @@ import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
 import { mcpAuthType, mcpNeedsSignIn, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
 import {
+  BANK_RETURN_CHECKS,
+  completeEnableBankingReturn,
+  enableBankingReturnOf,
+  keepEnableBankingReturnError,
+} from './bankPage'
+import {
   useRegisterScreenCommands,
   useRegisterScreenFacts,
 } from '../../../lucius/useScreenContract'
@@ -95,6 +101,7 @@ export function ConnectorsTab(): JSX.Element {
    *  already declared intent to set the connector up; re-decided on every `openConnector`,
    *  so it can never leak into the next connector focused. */
   const [configureOnOpen, setConfigureOnOpen] = useState(false)
+  const [formFirstOnOpen, setFormFirstOnOpen] = useState(false)
   const [toast, toastNode] = useToast()
   const composer = useChatComposerOptional()
   const navigate = useNavigate()
@@ -119,6 +126,8 @@ export function ConnectorsTab(): JSX.Element {
     const wire = editMcpId ? connectors.find((c) => c.id === editMcpId) : undefined
     return wire ? toMcpEditTarget(wire) : null
   }, [editMcpId, connectors])
+
+  const justCreated = useRef(false)
 
   const openDirectory = (family: FamilyTab) => {
     setDetailId(null)
@@ -151,6 +160,7 @@ export function ConnectorsTab(): JSX.Element {
     setBankPickerOpen(false)
     setRoutedCountry(opts?.country)
     setConfigureOnOpen(opts?.configure === true)
+    setFormFirstOnOpen(opts?.formFirst === true)
     setDetailId(connectorId)
   }
 
@@ -158,21 +168,73 @@ export function ConnectorsTab(): JSX.Element {
   // its settings, or its page in Browse & add when it is not a connector the app has yet.
   // Read from the router, not once at mount: the same link tapped while Connectors is already
   // open only changes the URL, and has to open the connector all the same.
+  const routerSearchAll = useRouterState({
+    select: (st) => st.location.search as Record<string, unknown>,
+  })
+  const ebReturn = enableBankingReturnOf(routerSearchAll ?? {})
   const linkedConnector = useRouterState({
     select: (st) => (st.location.search as { connector?: unknown }).connector,
   })
+  const linkedRef = useRouterState({
+    select: (st) => (st.location.search as { ref?: unknown }).ref,
+  })
   useEffect(() => {
     if (initialLoading || typeof linkedConnector !== 'string' || !linkedConnector) return
-    const id = linkedConnector
-    const raf = requestAnimationFrame(() => {
-      if (connectors.some((c) => c.id === id)) {
-        openConnector(id, { configure: !entries.some((e) => e.id === id) })
-      } else openLandingPage(id)
-      void navigate({ to: '/connectors', search: {}, replace: true } as never)
-    })
-    return () => cancelAnimationFrame(raf)
+    // Enable Banking's return carries `?connector=enable_banking` too; its own effect below
+    // finishes the link first, then opens the page.
+    if (ebReturn) return
+    // A bank's consent page sends the user back here with its own `ref=…` appended — after a
+    // `?` even when the URL already had one, so it can land inside the id. Keep only the id.
+    const raw = String(linkedConnector)
+    const id = raw.split('?')[0] ?? ''
+    const fromBank = raw.includes('ref=') || typeof linkedRef === 'string'
+    let live = true
+    let raf = 0
+    const open = () => {
+      if (!live) return
+      raf = requestAnimationFrame(() => {
+        if (connectors.some((c) => c.id === id)) {
+          // Back from a bank: the connector page, which lists the accounts to link — never the
+          // credential form, which a link still marked unfinished would otherwise pick.
+          openConnector(id, { configure: !fromBank && !entries.some((e) => e.id === id) })
+        } else openLandingPage(id)
+        void navigate({ to: '/connectors', search: {}, replace: true } as never)
+      })
+    }
+    // Ask the provider whether the consent finished BEFORE showing the page, so its badge and
+    // accounts read what the bank just did rather than the "waiting" left before it.
+    const check = fromBank ? BANK_RETURN_CHECKS[id] : undefined
+    if (check) void check().finally(() => void reload().finally(open))
+    else open()
+    return () => {
+      live = false
+      cancelAnimationFrame(raf)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
+
+  // Back from Enable Banking's consent (`?connector=enable_banking` + its own `state` + `code`).
+  // Finish the link here, so the user never copies a code, then show the connector's accounts.
+  // Once per return.
+  const ebHandled = useRef('')
+  useEffect(() => {
+    if (initialLoading || !ebReturn) return
+    const key = `${ebReturn.state}:${ebReturn.code}`
+    if (ebHandled.current === key) return
+    ebHandled.current = key
+    void navigate({ to: '/connectors', search: {}, replace: true } as never)
+    void completeEnableBankingReturn(ebReturn).then((res) => {
+      toast(res.message)
+      // Linked: the connector page, whose Accounts list is the next step. Not linked: the form,
+      // with the reason under Link bank and the pickers to try again.
+      if (!res.ok) keepEnableBankingReturnError(res.message)
+      // An already-linked connector opens its form too: the reason is shown there.
+      void reload().finally(() =>
+        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok }),
+      )
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLoading, ebReturn?.state, ebReturn?.code])
 
   // Lucius's `connectors.open_setup`: UI state only. It opens the same form a card's `+` (or an
   // installed row's settings) does; the user enters credentials and clicks Connect themselves.
@@ -501,12 +563,27 @@ export function ConnectorsTab(): JSX.Element {
           onSetGroupPermission={(tools, level) => persist(detail, tools, level)}
           configForm={
             detailWire && hasConfigForm(detailWire) ? (
-              <ConnectorConfig connector={detailWire} initialCountry={routedCountry} />
+              <ConnectorConfig
+                connector={detailWire}
+                initialCountry={routedCountry}
+                onCreated={(id, name) => {
+                  // The list has to hold the new connector before its page can open.
+                  void reload().then(() => openConnector(id))
+                  justCreated.current = true
+                  toast(`${name} added`)
+                }}
+                onSaveError={toast}
+              />
             ) : undefined
           }
           configureOnOpen={configureOnOpen}
+          formFirst={formFirstOnOpen}
           onConfigClosed={() => void reload()}
-          onSaved={() => toast('Configuration saved')}
+          onSaved={() => {
+            // A save that CREATED a connector has already said so, by name.
+            if (justCreated.current) justCreated.current = false
+            else toast('Configuration saved')
+          }}
         />
       ) : null}
 

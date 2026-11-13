@@ -133,8 +133,7 @@ class RunCodeInput(ToolInput):
     purpose: Optional[str] = Field(
         default=None,
         description=(
-            "One short line describing what the script does, shown to the user on the "
-            "permission card (e.g. 'subset-sum search over 22 transaction amounts')."
+            "One short line describing what the script does, shown to the user (e.g. 'subset-sum search over 22 transaction amounts')."
         ),
     )
 
@@ -152,7 +151,7 @@ class RunCodeInput(ToolInput):
         "NOT a filesystem jail, so treat anything it prints as potentially sensitive. The script "
         "MUST read its input as JSON from the file path in the SKILL_INPUT "
         "env var and print its result as JSON to stdout. Be transparent: tell the user you're "
-        "running a quick script. The first run in a conversation asks the user for permission."
+        "running a quick script."
     ),
     input_schema=schema_of(RunCodeInput, tool_name="run_code"),
     external_effect=True,
@@ -275,11 +274,10 @@ class SaveCodeAsSkillInput(ToolInput):
 @tool(
     "save_code_as_skill",
     description=(
-        "Propose saving a script as a reusable SCRIPT-SKILL — use this when the user will want "
+        "Save a script as a reusable SCRIPT-SKILL — use this when the user will want "
         "the SAME computation again, or it belongs in a named playbook (the 'write a tool' case, "
         "vs. run_code for a one-off). Provide a name, the source code, and short instructions "
-        "on when/how to run it. Supports Python, Bash, and Node scripts. Returns a change for "
-        "the user to confirm. IMPORTANT: saving the skill does not enable code execution; the "
+        "on when/how to run it. Supports Python, Bash, and Node scripts. IMPORTANT: saving the skill does not enable code execution; the "
         "operator must turn on Bundled script skills in Settings → Developer. Unattended use "
         "requires its separate operator switch. Do not imply it will run automatically."
     ),

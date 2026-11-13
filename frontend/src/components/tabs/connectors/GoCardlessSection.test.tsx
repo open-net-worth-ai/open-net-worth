@@ -14,6 +14,7 @@ vi.mock('../../../api/client', () => ({ authFetch }))
 afterEach(() => {
   cleanup()
   authFetch.mockReset()
+  vi.restoreAllMocks()
 })
 
 const bank = (over: Record<string, unknown> = {}) => ({
@@ -128,5 +129,62 @@ describe('GoCardlessSection fetch caution', () => {
       /Last fetch couldn.t read everything — ACME Savings \(ACME Bank\): GoCardless HTTP 429$/,
     )
     expect(screen.queryByText(/Other Bank: bank access expired/)).toBeNull()
+  })
+})
+
+describe('GoCardlessSection bank page', () => {
+  // Reported 2026-11-12: "Link bank" opened nothing. The link comes back after three GoCardless
+  // round trips — a window.open that late is outside the click and the browser blocks it.
+  it('opens the bank tab on the click, then points it at the bank and keeps the link', async () => {
+    const tab = { opener: {}, closed: false, location: { href: '' }, close: vi.fn() }
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    let resolveLink: (v: unknown) => void = () => {}
+    let current = status([])
+    authFetch.mockImplementation((url: string) => {
+      if (url === '/api/gocardless/status') return okJson(current)
+      if (url.startsWith('/api/gocardless/institutions'))
+        return okJson({ institutions: [{ id: 'ACME_BANK_GB', name: 'ACME Bank' }] })
+      if (url === '/api/gocardless/link')
+        return new Promise((r) => {
+          resolveLink = r
+        })
+      if (url === '/api/gocardless/check-link') return okJson(current)
+      if (url.startsWith('/api/connectors/')) return okJson({ status: 'ok', accounts: [] })
+      return okJson([])
+    })
+    render(<GoCardlessSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'List banks' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
+    expect(open).toHaveBeenCalledTimes(1) // before the server answered
+    const linkCall = authFetch.mock.calls.find((c) => c[0] === '/api/gocardless/link')
+    expect(JSON.parse(linkCall?.[1]?.body as string).redirect).toBe(
+      `${window.location.origin}/connectors?connector=gocardless`,
+    )
+    expect(tab.opener).toBeNull()
+    current = status([bank({ status: 'CR', accounts: 0 })])
+    resolveLink({ ok: true, json: () => Promise.resolve({ link: 'https://bank.example/consent' }) })
+    await waitFor(() => expect(tab.location.href).toBe('https://bank.example/consent'))
+    const fallback = await screen.findByRole('link', { name: /open your bank's page/ })
+    expect(fallback.getAttribute('href')).toBe('https://bank.example/consent')
+    expect(tab.close).not.toHaveBeenCalled()
+  })
+
+  it('closes the blank tab when the link could not be started', async () => {
+    const tab = { opener: {}, closed: false, location: { href: '' }, close: vi.fn() }
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    authFetch.mockImplementation((url: string) => {
+      if (url === '/api/gocardless/status') return okJson(status([]))
+      if (url.startsWith('/api/gocardless/institutions'))
+        return okJson({ institutions: [{ id: 'ACME_BANK_GB', name: 'ACME Bank' }] })
+      if (url === '/api/gocardless/link')
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({ detail: 'nope' }) })
+      if (url.startsWith('/api/connectors/')) return okJson({ status: 'ok', accounts: [] })
+      return okJson([])
+    })
+    render(<GoCardlessSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'List banks' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
+    await screen.findByText('nope')
+    expect(tab.close).toHaveBeenCalled()
   })
 })

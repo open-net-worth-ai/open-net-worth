@@ -41,6 +41,8 @@ import { useConnectorSaveHost } from './formSave'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
+import { ConnectorAccountsList } from './ConnectorAccountsList'
+import { cachedRestApi, getRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
   stampGroup,
@@ -120,6 +122,18 @@ export interface ConnectorDetailProps {
   onSaved?: () => void
 }
 
+/** Connectors whose `GET /api/connectors/{id}/accounts` lists accounts to link. */
+const ACCOUNT_CONNECTORS = new Set([
+  'plaid',
+  'gocardless',
+  'enable_banking',
+  'simplefin',
+  'lunch_flow',
+  'lunch_money',
+  'alpaca',
+  'ibkr',
+])
+
 export function ConnectorDetail({
   entry,
   onClose,
@@ -148,6 +162,26 @@ export function ConnectorDetail({
   // whenever the server's own view of the levels changes underneath us.
   const [perms, setPerms] = useState<PermissionMap>(entry.perms)
   useEffect(() => setPerms(entry.perms), [entry.id, entry.perms])
+  // A REST API's settings take a request to read: start it now, so Edit configuration opens on
+  // the whole form rather than a "Loading…" line it then replaces.
+  // The same read gives the page the API's Instructions for Lucius — a secret field, so not in
+  // the status feed MCP's handshake instructions arrive in.
+  const restSlug = restSlugOf(entry.id)
+  const [restNotes, setRestNotes] = useState<string>('')
+  useEffect(() => {
+    if (!restSlug) return
+    let live = true
+    getRestApi(restSlug)
+      .then((api) => live && setRestNotes(api.notes))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [restSlug])
+  // A save refreshes the cache, so the page shows the new text without another read.
+  const instructions = restSlug
+    ? (cachedRestApi(restSlug)?.notes ?? restNotes).trim()
+    : entry.instructions
 
   /**
    * Show the new level immediately — then ROLL IT BACK if the write did not land.
@@ -274,7 +308,10 @@ export function ConnectorDetail({
       : []
   const kebabItems: KebabItem[] = [
     ...phoneRunningItems,
-    { label: 'View details', onClick: onViewDetails },
+    // A directory landing page, which a REST API the owner added does not have: the directory
+    // lists only the entry that adds one, so this opened a plain Browse & add (owner,
+    // 2026-11-11). Its own page already shows everything about it.
+    ...(entry.kind === 'rest' ? [] : [{ label: 'View details', onClick: onViewDetails }]),
     ...(configForm
       ? [{ label: 'Edit configuration', onClick: () => setConfiguringId(entry.id) }]
       : entry.mcp
@@ -315,7 +352,14 @@ export function ConnectorDetail({
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Identity entry={entry} />
-        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--muted)',
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
           {entry.mcp ? (
             <>
               Remove <strong>{entry.name}</strong>? Lucius loses{' '}
@@ -358,7 +402,14 @@ export function ConnectorDetail({
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Identity entry={entry} />
-        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--muted)',
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
           Pause <strong>{entry.name}</strong>? {pauseVerb(entry)} until you resume. Your saved
           credentials and settings stay put — resuming won&apos;t ask for them again. To clear your
           saved credentials instead, use Remove connector from the menu.
@@ -500,7 +551,14 @@ export function ConnectorDetail({
           ) : null}
 
           {entry.desc ? (
-            <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+            <p
+              style={{
+                fontSize: 'var(--text-base)',
+                color: 'var(--muted)',
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
               <LinkedDesc desc={entry.desc} service={entry.service} />
             </p>
           ) : null}
@@ -526,7 +584,7 @@ export function ConnectorDetail({
             description) and in the Details footer's "Vendor" field, so nothing is hidden — this
             line just answers one question cleanly: did WE build this. */}
           {entry.developer ? (
-            <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink)' }}>
+            <div style={{ fontSize: 'var(--text-base)', fontWeight: 400, color: 'var(--ink)' }}>
               Developed by{' '}
               {entry.mcp ? (
                 entry.developerUrl ? (
@@ -540,10 +598,12 @@ export function ConnectorDetail({
             </div>
           ) : null}
 
-          {entry.instructions ? (
+          {instructions ? (
             <details className="cn-fold">
-              <summary>The server&rsquo;s instructions for AI</summary>
-              <p>{entry.instructions}</p>
+              <summary>
+                {restSlug ? 'Instructions for Lucius' : 'The server\u2019s instructions for AI'}
+              </summary>
+              <p>{instructions}</p>
             </details>
           ) : null}
 
@@ -553,6 +613,12 @@ export function ConnectorDetail({
               verification={entry.verification}
               url={entry.url}
             />
+          ) : null}
+
+          {/* Linking the synced accounts is the step that makes anything arrive, so a connected
+            bank or broker shows them here — not only behind Edit configuration. */}
+          {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured && entry.enabled ? (
+            <ConnectorAccountsList provider={entry.id} providerLabel={entry.name} />
           ) : null}
 
           {entry.prompts.length > 0 ? (
@@ -594,6 +660,8 @@ export function ConnectorDetail({
                   onSetGroup={(tools, level) =>
                     applyLevel(tools, level, onSetGroupPermission(tools, level))
                   }
+                  toolLabel={entry.kind === 'rest' ? restToolLabel : undefined}
+                  toolSub={entry.toolSubs ? (tool) => entry.toolSubs?.[tool] : undefined}
                 />
               </>
             ) : (
@@ -630,7 +698,7 @@ function Identity({
 }): JSX.Element {
   return (
     <div className={compact ? 'cn-idhead cn-idhead-compact' : 'cn-idhead'}>
-      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} size="lg" />
+      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} letter={entry.letter} size="lg" />
       <div className="cn-idhead-main">
         <div className="cn-idhead-name">
           {entry.name}

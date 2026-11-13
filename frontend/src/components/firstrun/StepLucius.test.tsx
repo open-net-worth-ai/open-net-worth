@@ -145,7 +145,7 @@ describe('StepLucius — the detected CLIs', () => {
     expect(await screen.findByText(/Codex comes with this Docker install/i, {}, T)).toBeTruthy()
     expect(screen.queryByText(/Found Codex/i)).toBeNull()
     expect(screen.getByText('Not signed in')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /^Sign in/ }))
+    // Signed out, the steps are already open — they are the one thing to do on this card.
     expect(
       screen.getByText('docker exec -it open-net-worth codex login --device-auth'),
     ).toBeTruthy()
@@ -178,6 +178,73 @@ describe('StepLucius — the detected CLIs', () => {
 
     expect(await screen.findByLabelText(/^model$/i, {}, T)).toBeTruthy()
     expect(screen.queryByText(/or use a provider/i)).toBeNull()
+  })
+})
+
+describe('StepLucius — a CLI that is installed but signed out', () => {
+  it('disables Use this and opens the sign-in steps while signed out', async () => {
+    mockApi({ codex_cli: true }, { codex_cli: '/usr/local/bin/codex' }, [], {
+      cli_in_container: true,
+      cli_sign_in: { codex_cli: 'not_signed_in' },
+    })
+    render(<StepLucius onDone={() => {}} />)
+
+    const useThis = (await firstUseThis()) as HTMLButtonElement
+    expect(useThis.disabled).toBe(true)
+    expect(
+      await screen.findByText('docker exec -it open-net-worth codex login --device-auth', {}, T),
+    ).toBeTruthy()
+  })
+
+  it('keeps Use this available when the sign-in state is unknown', async () => {
+    mockApi({ codex_cli: true }, {}, [], { cli_sign_in: { codex_cli: 'unknown' } })
+    render(<StepLucius onDone={() => {}} />)
+    expect(((await firstUseThis()) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  // Use this only proved the binary runs, so a signed-out Codex in a fresh Docker install
+  // finished setup and Lucius's first message failed (2026-11-11).
+  it('stays on the card and opens the docker sign-in steps instead of advancing', async () => {
+    // Opening the steps is the whole answer: no second "not signed in" line beside the card's.
+    authFetch.mockImplementation((url: string) => {
+      if (url === '/api/model-config/providers') {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              catalog: CATALOG,
+              detected_clis: { codex_cli: true },
+              detected_cli_paths: { codex_cli: '/usr/local/bin/codex' },
+              cli_host_platform: 'linux',
+              cli_in_container: true,
+              // The card's status hasn't caught up yet — the click-time check is the backstop.
+              cli_sign_in: { codex_cli: 'unknown' },
+            }),
+        })
+      }
+      if (url.endsWith('/validate')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              key_status: 'valid',
+              sign_in: 'not_signed_in',
+              models: ['gpt-6-luna'],
+              error: 'Codex CLI is installed but not signed in.',
+            }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+    render(<StepLucius onDone={() => {}} />)
+
+    fireEvent.click(await firstUseThis())
+
+    expect(
+      await screen.findByText('docker exec -it open-net-worth codex login --device-auth', {}, T),
+    ).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByLabelText(/^model$/i)).toBeNull()
   })
 })
 

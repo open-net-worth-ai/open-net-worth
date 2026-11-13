@@ -55,8 +55,11 @@ connection — see ``_call_via_server_connection``'s docstring for why the trans
 cannot safely handle concurrent callers. This changes ONLY the transport's process lifetime
 and its access serialization: the permission/confirm-gate decision above still runs on every
 single call, exactly as before — nothing about reuse short-circuits or caches around it.
-HTTP is untouched (still one connection per call — see ``_call_tool_blocking`` for why that
-transport doesn't share the bug).
+HTTP shares the pool (ADR ``2026-11-13-a-remote-mcp-server-keeps-one-session``): ONE
+``McpClientConnection`` per server holds the Streamable HTTP session (``Mcp-Session-Id``) that
+boot discovery opened, and every tool call and re-read reuses it, as Codex and Claude Code do.
+A stateful remote server (a broker's) keeps its state across calls; a session the server
+forgot is re-opened inside the connection and the request retried once.
 """
 
 from __future__ import annotations
@@ -66,7 +69,7 @@ import logging
 import threading
 import time
 import urllib.parse
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from backend.core import mcp_external
 from backend.core.chat_session import get_session_id
@@ -78,6 +81,8 @@ from backend.mcp import oauth_flow, probe_progress, site_identity
 from backend.mcp.client import (
     Deadline,
     McpCallError,
+    McpClientConnection,
+    McpToolError,
     make_connection,
     parse_server_info,
     probe_deadline,
@@ -118,6 +123,9 @@ _PROBE_FALLBACK_ID = "server"
 # again" from "queued behind a call that might not return for a while", and the caller gets a
 # clean, retryable tool-error instead of an unbounded wait.
 _CALL_LOCK_ACQUIRE_TIMEOUT_SECONDS = 5.0
+
+# What the app-lifetime pool holds per server: a stdio child, or an HTTP session.
+_PooledConnection = Union[StdioMcpClientConnection, McpClientConnection]
 
 # Scheduled re-reads in a row that may fail before a server's cached tools are dropped and its
 # card shows the error. Retried hourly, so this is about three hours of a real outage.
@@ -202,9 +210,9 @@ class McpClientManager:
         # (`connect_enabled`) or lazily on first use (`_get_or_spawn_connection_locked`),
         # reused by EVERY turn/session that calls that server afterward, and closed only on
         # death (detected + reconnected), a config change (`reconcile_pooled_connection`), or
-        # process shutdown (`close_all_pooled_connections`). HTTP is deliberately NOT pooled
-        # here — see `_call_tool_blocking`'s docstring.
-        self._server_conns: Dict[str, StdioMcpClientConnection] = {}
+        # process shutdown (`close_all_pooled_connections`). An HTTP server's entry is its one
+        # Streamable HTTP session, under the same lifecycle (see `_call_tool_blocking`).
+        self._server_conns: Dict[str, _PooledConnection] = {}
         # The (command, args, env) triple the currently pooled connection was ACTUALLY spawned
         # with, keyed the same as `_server_conns` (security review H3). Compared against the
         # server's CURRENT config on every connect-or-reuse (`_get_or_spawn_connection_locked`)
@@ -494,31 +502,39 @@ class McpClientManager:
     def _call_tool_blocking(
         self, server: McpServerConfig, tool: str, args: dict
     ) -> Tuple[str, list[dict]]:
-        """The blocking transport call ``_fire`` runs in a worker thread — where the
-        shared-connection decision actually happens.
+        """The blocking transport call ``_fire`` runs in a worker thread.
 
-        **HTTP keeps today's stateless-per-call shape, unchanged.** Two concrete reasons,
-        not an assumption: there is no process to reuse (the cost this fix targets —
-        spawning a fresh child on every call — simply doesn't exist for HTTP), and this
-        method never even calls ``initialize()`` on an HTTP connection before ``tools/call``
-        (it never has), so there is no negotiated ``Mcp-Session-Id`` a persistent connection
-        would preserve here either — reusing the client object would change nothing
-        observable. If a future HTTP server turns out to rely on session affinity, that is a
-        separate, currently-nonexistent gap (this method would need to start calling
-        ``initialize()`` at all first) — not something this fix should paper over by pooling
-        a connection whose session is never established in the first place.
-
-        **stdio reuses the ONE pooled connection to `server`** (Claude Desktop's
-        one-connection-per-server-for-the-whole-app shape) so a server whose state lives on
-        the client session — Playwright's open browser page/context, or a real trading
-        server's authenticated gateway session that needs continuous keep-alive to survive —
-        sees one continuous session across every turn and every conversation, not a blank one
-        on every call or every new chat message.
+        Both transports use the server's ONE pooled connection (Claude Desktop's, Codex's and
+        Claude Code's one-connection-per-server shape), so a server whose state lives on the
+        client session — Playwright's open page, a broker's signed-in session, an HTTP server's
+        ``Mcp-Session-Id`` — sees one continuous session across every turn and conversation.
+        Before 2026-11-13 an HTTP call opened a fresh session per call (and before that, none at
+        all: a stateful server answered every call "missing Mcp-Session-Id header").
         """
-        if server.transport != "stdio":
-            with make_connection(server) as conn:
-                return conn.call_tool(tool, args)
-        return self._call_via_server_connection(server, tool, args)
+        if server.transport == "stdio":
+            return self._call_via_server_connection(server, tool, args)
+        return self._http_session_for(server).call_tool(tool, args)
+
+    def _http_session_for(self, server: McpServerConfig) -> McpClientConnection:
+        """The server's pooled HTTP connection, opened (handshake included) if there is none.
+
+        The lock covers only connect-or-reuse. Unlike a stdio pipe, concurrent HTTP requests are
+        independent, so calls do not queue behind each other; the connection itself serializes
+        request ids and a session re-handshake. A call failure never evicts the session: a
+        network blip or a tool error leaves it usable, and a session the server forgot is
+        re-opened inside the connection (``McpSessionExpired``)."""
+        lock = self._rpc_lock_for(server.id)
+        if not lock.acquire(timeout=_CALL_LOCK_ACQUIRE_TIMEOUT_SECONDS):
+            raise McpCallError(f"mcp server '{server.id}' is busy connecting — try again shortly")
+        try:
+            conn = self._get_or_spawn_connection_locked(server)
+        finally:
+            lock.release()
+        assert isinstance(conn, McpClientConnection)
+        # Outside the pool lock: a slow handshake must not make concurrent calls "busy". The
+        # connection serializes its own handshake.
+        conn.ensure_session()
+        return conn
 
     def _call_via_server_connection(
         self, server: McpServerConfig, tool: str, args: dict
@@ -570,6 +586,8 @@ class McpClientManager:
             conn = self._get_or_spawn_connection_locked(server)
             try:
                 result = conn.call_tool(tool, args)
+            except McpToolError:
+                raise  # the tool said no; the child that said it is healthy
             except McpCallError:
                 self._close_locked(server.id)
                 raise
@@ -579,7 +597,7 @@ class McpClientManager:
         finally:
             lock.release()
 
-    def _relist_locked(self, server: McpServerConfig, conn: StdioMcpClientConnection) -> None:
+    def _relist_locked(self, server: McpServerConfig, conn: _PooledConnection) -> None:
         """Re-read ``tools/list`` after the server announced a change, on the SAME child.
 
         Caller holds the server's RPC lock. The call that carried the notice already
@@ -609,21 +627,22 @@ class McpClientManager:
 
     @staticmethod
     def _spawn_signature(server: McpServerConfig) -> tuple:
-        """The ``(command, args, env)`` triple that decides what a stdio child actually
-        RUNS AS — the pool's own connect-or-reuse identity check (security review H3). ``env``
-        is included deliberately: it is exactly where a stdio server's credentials live
-        (``McpServerConfig.env`` docstring), so a rotated key must evict a pooled child as
-        surely as a changed command/argv does. Order-independent on ``env`` (a dict has no
-        meaningful order) via a sorted-items tuple, so re-saving the same overlay in a
-        different key order is never mistaken for a real change.
-        """
+        """What a pooled connection was opened AS — the pool's connect-or-reuse identity check
+        (security review H3). For stdio, ``(command, args, env)``: ``env`` is where its
+        credentials live, so a rotated key evicts the child as surely as a changed argv. For
+        HTTP, the endpoint and a typed credential; NOT an OAuth access token, which rotates
+        hourly and is handed to the live session instead (``adopt_config``) — ending the
+        session on every refresh would throw away exactly the state the pool keeps.
+        Order-independent on ``env`` via a sorted-items tuple."""
+        if server.transport != "stdio":
+            return ("http", server.url, server.auth_type, server.auth_header, server.token)
         return (
             server.command,
             tuple(server.args or ()),
             tuple(sorted((server.env or {}).items())),
         )
 
-    def _get_or_spawn_connection_locked(self, server: McpServerConfig) -> StdioMcpClientConnection:
+    def _get_or_spawn_connection_locked(self, server: McpServerConfig) -> _PooledConnection:
         """Return ``server``'s pooled connection, spawning one if there isn't a live,
         still-current one.
 
@@ -646,7 +665,15 @@ class McpClientManager:
             self._close_locked(server.id)
             conn = None
         if conn is not None:
+            if isinstance(conn, McpClientConnection):
+                conn.adopt_config(server)
             return conn
+        if server.transport != "stdio":
+            http = McpClientConnection(server)
+            with self._conns_lock:
+                self._server_conns[server.id] = http
+                self._server_conn_sigs[server.id] = sig
+            return http
         fresh = make_connection(server)
         assert isinstance(fresh, StdioMcpClientConnection)  # transport already checked
         fresh.__enter__()  # spawns the child; can take SECONDS (cold npx/uvx)
@@ -1000,9 +1027,15 @@ class McpClientManager:
         """
         try:
             server = oauth_flow.ensure_fresh_token(server)
-            with make_connection(server, deadline=deadline) as conn:
-                handshake = conn.initialize()
-                tools = conn.list_tools()
+            if server.transport != "stdio" and deadline is None:
+                # Boot and the scheduled re-read open (or reuse) the session tool calls use.
+                pooled = self._http_session_for(server)
+                handshake = pooled.initialize()
+                tools = pooled.list_tools()
+            else:
+                with make_connection(server, deadline=deadline) as conn:
+                    handshake = conn.initialize()
+                    tools = conn.list_tools()
         except McpCallError as exc:
             logger.warning("mcp connect_error for '%s': %s", server.id, exc.safe_summary)
             self._record_failure(

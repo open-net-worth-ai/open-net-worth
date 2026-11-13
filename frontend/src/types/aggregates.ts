@@ -497,6 +497,17 @@ export interface InvestedBookRow {
   merged_count: number
 }
 
+/** What a book of broken-down holdings leaves out: each Brokerage total account's untracked
+ *  part (backend/services/untracked_holdings.py). Invested, in no known class — so it is NOT in
+ *  `grand`, the weights, concentration or today's move. Present only with the
+ *  `allow_brokerage_total_valuation` flag on. */
+export interface UntrackedExcluded {
+  total: number
+  /** Its share of everything invested (`grand` + `total`) — the "Not broken down" slice. */
+  pct_of_invested: number
+  accounts: Array<{ account_id: string; name: string; type: string; value: number }>
+}
+
 export interface InvestedBook {
   base_currency: string
   is_live: boolean
@@ -539,6 +550,7 @@ export interface InvestedBook {
     trade_base: number
     subtotal: number
   }>
+  untracked_excluded?: UntrackedExcluded
 }
 
 /** GET /api/cashflow/flow — one month's money-flow (Sankey) graph. Every amount and share is

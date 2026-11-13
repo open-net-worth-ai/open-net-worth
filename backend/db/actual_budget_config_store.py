@@ -1,10 +1,10 @@
 """ActualBudgetConfigStore — config + state for the Actual Budget connector.
 
 A facade over the ``actual_budget`` row of ``ConnectorStore`` (see ``AggregatorConfigStore``).
-All four of the server address, password, token and encryption password are secrets in
-``connector_secrets``: an address can carry credentials (``https://user:pw@host``), and an
-endpoint is one. ``connectors.config`` holds only the chosen budget's sync id; its name and
-currency are ``connectors.state``. Nothing here reads the environment.
+The server address, password, token, encryption password and proxy headers are all secrets in
+``connector_secrets``: an address can carry credentials (``https://user:pw@host``), an endpoint
+is one, and a header a sign-in proxy checks is a credential for that proxy. ``connectors.config``
+holds only the chosen budget's sync id; its name and currency are ``connectors.state``. Nothing here reads the environment.
 
 ``public()`` reports that each secret is set and shows the server's host with any userinfo
 stripped, never a value. Behind the gateway (a hosted instance) the connector is unavailable and
@@ -17,6 +17,7 @@ Data-only repository (import-linter: ``db`` may import ``core``/``models`` only)
 from __future__ import annotations
 
 import ipaddress
+import re
 from urllib.parse import urlsplit
 
 from backend.core import config
@@ -29,6 +30,7 @@ DEFAULTS: dict = {
     "password": "",  # WRITE-ONLY secret
     "token": "",  # WRITE-ONLY secret, for servers that do not take a password
     "encryption_password": "",  # WRITE-ONLY secret, for an end-to-end encrypted budget
+    "proxy_headers": "",  # WRITE-ONLY secret, "Name: value" lines for a sign-in proxy in front
     "budget_id": None,  # the budget's sync id
     "budget_name": None,
     "budget_currency": None,
@@ -37,7 +39,73 @@ DEFAULTS: dict = {
     "last_error": None,
 }
 
-SECRET_NAMES = ("server_url", "password", "token", "encryption_password")
+SECRET_NAMES = ("server_url", "password", "token", "encryption_password", "proxy_headers")
+
+MAX_PROXY_HEADERS = 10
+MAX_PROXY_HEADERS_CHARS = 4096
+_HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+_HEADER_VALUE = re.compile(r"[\x20-\x7e\t]+")
+# What the HTTP client or Actual's own sign-in sets: one of these from here would break the
+# request or stand in for the sign-in.
+_RESERVED_HEADERS = frozenset(
+    {
+        "connection",
+        "content-length",
+        "content-type",
+        "expect",
+        "host",
+        "keep-alive",
+        "proxy-connection",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+        "x-actual-file-id",
+        "x-actual-password",
+        "x-actual-token",
+    }
+)
+
+
+def parse_proxy_headers(text: str) -> dict[str, str]:
+    """``Name: value`` lines (blank lines skipped) as a header map. Refused with a message that
+    names the line or the header, never a value: a value is a credential."""
+    out: dict[str, str] = {}
+    if len(text) > MAX_PROXY_HEADERS_CHARS:
+        raise ValidationError("The proxy headers are too long.")
+    for number, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            continue
+        name, sep, value = line.partition(":")
+        name, value = name.strip(), value.strip()
+        if not sep or not _HEADER_NAME.fullmatch(name):
+            raise ValidationError(f"Proxy headers line {number} isn't written as Name: value.")
+        if not value or not _HEADER_VALUE.fullmatch(value):
+            raise ValidationError(
+                f"The {name} header needs a value of plain text (letters, digits, symbols)."
+            )
+        if name.lower() in _RESERVED_HEADERS:
+            raise ValidationError(f"The {name} header is set by the app and can't be added here.")
+        if any(k.lower() == name.lower() for k in out):
+            raise ValidationError(f"The {name} header is listed twice.")
+        out[name] = value
+        if len(out) > MAX_PROXY_HEADERS:
+            raise ValidationError(f"At most {MAX_PROXY_HEADERS} proxy headers can be saved.")
+    return out
+
+
+def _header_names(text: str) -> list[str]:
+    """Names aren't credentials, and the form shows which are saved. A saved value that no longer
+    reads (written some other way) shows none rather than breaking the status."""
+    try:
+        return list(parse_proxy_headers(text))
+    except ValidationError:
+        return []
+
+
+def format_proxy_headers(headers: dict[str, str]) -> str:
+    return "\n".join(f"{name}: {value}" for name, value in headers.items())
 
 
 def _parts(url: str):
@@ -120,19 +188,26 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
         ``budget_id`` reads a blank as "clear the pick" (it is not a secret), which also drops
         the cached name and currency. A new password or token replaces the other: a saved
         password would otherwise win over a token typed to replace it. A saved one doesn't follow
-        a new address either, or a mistyped host would be sent it at the next sign-in."""
+        a new address either, or a mistyped host would be sent it at the next sign-in, and nor do
+        saved proxy headers: they are a credential for the old address's proxy."""
         self.require_available()
         if "token" in clean and "password" not in clean:
             clean["password"] = None
         elif "password" in clean and "token" not in clean:
             clean["token"] = None
+        if "proxy_headers" in clean:
+            clean["proxy_headers"] = (
+                format_proxy_headers(parse_proxy_headers(clean["proxy_headers"])) or None
+            )
         if "server_url" in clean:
             if _parts(clean["server_url"]) is None:
                 raise ValidationError(
                     "The server address must start with http:// or https:// and name a host."
                 )
-            if "password" not in clean and "token" not in clean and self._moves(clean):
-                clean["password"] = clean["token"] = None
+            if self._moves(clean):
+                if "password" not in clean and "token" not in clean:
+                    clean["password"] = clean["token"] = None
+                clean.setdefault("proxy_headers", None)
         if "budget_id" in clean:
             new_id = str(clean["budget_id"]).strip() or None
             clean["budget_id"] = new_id
@@ -143,6 +218,13 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
     def _moves(self, clean: dict) -> bool:
         saved = self.credentials()["server_url"]
         return bool(saved) and server_origin(saved) != server_origin(clean["server_url"])
+
+    def clear_proxy_headers(self) -> None:
+        """The one way to remove saved proxy headers: a blank field keeps a saved secret."""
+        self.require_available()
+        with self._unit(None) as c:
+            self._ensure(c)
+            self._apply(c, {"proxy_headers": None})
 
     def note_sign_in(self, refused: bool) -> None:
         """What a read learned about the sign-in, as the status word alone: never the server's
@@ -155,7 +237,7 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
     # ── reads ────────────────────────────────────────────────────────────────────
 
     def credentials(self) -> dict:
-        """The four secrets, for server-side use only (never an API response or a model)."""
+        """The secrets, for server-side use only (never an API response or a model)."""
         cfg = self.get()
         return {name: (cfg.get(name) or "").strip() for name in SECRET_NAMES}
 
@@ -183,6 +265,8 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
             "has_token": bool(secret["token"]),
             "has_encryption_password": bool(secret["encryption_password"]),
             "has_server_url": bool(secret["server_url"]),
+            "has_proxy_headers": bool(secret["proxy_headers"]),
+            "proxy_header_names": _header_names(secret["proxy_headers"]),
             "server_host": display_host(secret["server_url"]),
             "server_scheme": server_scheme(secret["server_url"]),
             "server_plain_http": plain_http_remote(secret["server_url"]),

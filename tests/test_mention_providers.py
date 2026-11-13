@@ -862,9 +862,14 @@ def test_search_watchlist_no_match(watchlist_store):
 
 
 @pytest.fixture
-def skill_store():
+def skill_store(tmp_path, monkeypatch):
+    import backend.db.skill_store as skill_store_mod
     from backend.db.skill_store import SkillStore
 
+    # Its own folder: `budget-review` is also a starter skill, so on a worker where an earlier
+    # test installed the starters, the shared folder renamed this one `budget-review-2`.
+    monkeypatch.setattr(skill_store_mod, "SKILLS_DIR", tmp_path / "skills")
+    monkeypatch.setattr(skill_store_mod, "SKILLS_STATE_JSON", tmp_path / "skills_state.json")
     store = SkillStore()
     store.create(
         {
@@ -893,12 +898,7 @@ def skill_store():
             "trigger": "manual",
         }
     )
-    yield store
-    for sid in ("budget-review", "monthly-close", "disabled-skill"):
-        try:
-            store.delete(sid)
-        except Exception:
-            pass
+    return store
 
 
 def test_search_skill_verb_surface_enabled_only(skill_store):

@@ -79,6 +79,8 @@ class Capabilities:
     # Its connector holds a budget too: the one to import next. A sync moved to a budget points
     # the connector at it, or the page would warn about the budget the person just chose.
     connector_follows_sync: bool = False
+    # It has no tag field and keeps tags in the note as #name: they become the row's tags here.
+    memo_tags: bool = False
 
 
 @dataclass(frozen=True)

@@ -185,9 +185,21 @@ def _txn_date(lf_txn: dict) -> str:
 
 
 def _txn_description(lf_txn: dict) -> str:
-    """Best human description: merchant, then the free-text description, then a fallback."""
+    """The bank's own wording (``description``), then the merchant, then a fallback."""
+    info = lf_txn.get("description") or lf_txn.get("merchant")
+    return (str(info).strip() if info else "") or "Lunch Flow"
+
+
+def _ref_text(lf_txn: dict) -> str:
     info = lf_txn.get("merchant") or lf_txn.get("description")
     return (str(info).strip() if info else "") or "Lunch Flow"
+
+
+def _txn_payee(lf_txn: dict) -> str | None:
+    """The merchant Lunch Flow names, as the row's payee. It used to REPLACE the
+    description, so the bank's wording — what payee matching learns from — was lost."""
+    name = " ".join(str(lf_txn.get("merchant") or "").split())
+    return name[:120] or None
 
 
 def _txn_to_row(lf_txn: dict, account_id: str, currency_hint: str) -> dict | None:
@@ -210,7 +222,9 @@ def _txn_to_row(lf_txn: dict, account_id: str, currency_hint: str) -> dict | Non
     ref = (
         f"{account_id}:{txn_id}"
         if txn_id
-        else derived_ref(account_id, date_str, amount, currency, description)
+        # Hashed on the merchant-first text it always was: an id-less row booked before the
+        # description changed must keep its key, or the next fetch books it again.
+        else derived_ref(account_id, date_str, amount, currency, _ref_text(lf_txn))
     )
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
@@ -220,6 +234,7 @@ def _txn_to_row(lf_txn: dict, account_id: str, currency_hint: str) -> dict | Non
         "amount": amount,
         "currency": currency,
         "description": description,
+        "payee": _txn_payee(lf_txn),
         "memo": None,
         "pending": bool(lf_txn.get("isPending")),
         "supersedes_ref": None,

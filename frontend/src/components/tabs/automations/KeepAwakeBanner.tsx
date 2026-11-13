@@ -81,17 +81,19 @@ function KeepAwakeRow({
       <span className="a3-awake-text">
         {error ? 'Could not change Keep awake. Try again.' : text}
       </span>
-      <span className="a3-awake-label" aria-hidden="true">
-        <Sun className="a3-awake-ic" size={15} strokeWidth={1.7} />
-        Keep awake
+      <span className="a3-awake-ctl">
+        <span className="a3-awake-label" aria-hidden="true">
+          <Sun className="a3-awake-ic" size={15} strokeWidth={1.7} />
+          Keep awake
+        </span>
+        <Switch
+          className="a3-awake-switch"
+          aria-label="Keep computer awake"
+          checked={on}
+          disabled={busy}
+          onChange={(event) => void change(event.target.checked)}
+        />
       </span>
-      <Switch
-        className="a3-awake-switch"
-        aria-label="Keep computer awake"
-        checked={on}
-        disabled={busy}
-        onChange={(event) => void change(event.target.checked)}
-      />
     </div>
   )
 }

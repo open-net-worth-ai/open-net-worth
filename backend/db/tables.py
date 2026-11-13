@@ -682,6 +682,11 @@ actual_sync_mirror = book_payload_table("actual_sync_mirror")
 actual_sync_baselines = book_payload_table("actual_sync_baselines")
 actual_sync_conflicts = book_payload_table("actual_sync_conflicts")
 
+# Bank data sync (ADR 2026-11-13-a-bank-connector-can-book-its-rows-without-ai): a connector's
+# sync settings (id = provider key) and its review list. No credentials; not checkpointed.
+bank_sync_settings = book_payload_table("bank_sync_settings")
+bank_sync_reviews = book_payload_table("bank_sync_reviews")
+
 # owned_assets / owned_asset_categories: the Assets tab domain (ADR 2026-09-06-assets-tab-
 # faithful-port) — things you own that are valued by a dated manual mark, not a ledger balance
 # or a price feed (property, vehicles, watches, art, precious metals, cash-value policies, and
@@ -769,7 +774,14 @@ profile = Table(
 # (cost_basis, unit_cost, strike, proceeds, realized_gain, fmv) — exact via JSON round-trip, no
 # promoted decimal-Text column this wave (see money_io._money_text's payload rule).
 positions = book_payload_table("positions")
-lots = book_payload_table("lots")
+# The one exception to the loose coupling above: a lot's purchase cash row is a real FK. SET NULL
+# only fires on a true removal; a soft delete is an UPDATE, so the delete chokes clear the link
+# themselves (ADR 2026-11-06-a-lots-cash-link-is-a-real-foreign-key).
+lots = book_payload_table(
+    "lots",
+    Column("txn_id", Text, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True),
+    Index("ix_lots_txn_id", "txn_id"),
+)
 grants = book_payload_table("grants")
 vest_events = book_payload_table("vest_events")
 option_contracts = book_payload_table("option_contracts")

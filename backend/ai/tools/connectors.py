@@ -228,9 +228,7 @@ class SetConnectorEnabledInput(ToolInput):
         "'enable_banking', plus 'web_search:<provider>' and "
         "'mcp:<server_id>'. Returns the connector's id, name, kind, enabled flag and status — "
         "never its configuration (endpoints, hosts, commands and credentials are read by the "
-        "user in Connectors, not by you). "
-        "APPROVE-TIER: confirm with the user BEFORE toggling — this changes standing "
-        "configuration (e.g. turning on a bank/broker connector or a chat channel)."
+        "user in Connectors, not by you). This changes standing configuration (e.g. turning on a bank/broker connector or a chat channel)."
     ),
     input_schema=schema_of(SetConnectorEnabledInput, tool_name="set_connector_enabled"),
     mutates=("config",),
@@ -494,8 +492,9 @@ class SearchConnectorDirectoryInput(ToolInput):
         "exactly the ones they asked for: name three and each gets its own card; suggest one at "
         "a time only when YOU are proposing. To offer one, call run_screen_command connectors.open_setup with the exact id "
         ": it only opens the form, the user enters credentials and "
-        "clicks Connect; id 'custom' opens the Add custom server form for any MCP server we "
-        "don't list — the directory is curated, not the limit. You cannot add one or take "
+        "clicks Connect; id 'custom' opens the Add MCP server form for any MCP server we "
+        "don't list, and id 'rest' the Add REST API form for an app with a developer API — "
+        "the directory is curated, not the limit. You cannot add one or take "
         "keys. Afterwards call this again and read "
         "'installed'; never assume it worked."
     ),

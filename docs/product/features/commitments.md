@@ -68,7 +68,9 @@ With no floor set, the warning fires only when cash is projected to go below zer
 - **Needs your attention** lists payments overdue, payments that look paid, and actions coming
   due soon. Its **overdue** count and total are the same ones the Dashboard and the daily
   briefing quote: unpaid or not-done items dated before today, funding that hasn't arrived
-  excluded. **Mark paid** works straight from here.
+  excluded. **Mark paid** works straight from here. A payment that looks paid is offered for one
+  installment only, the one it is closest to by date and amount, so two installments of the same
+  amount never both claim the same payment.
 - Funding you have marked as arrived (or linked to the transaction that brought it in) counts as
   received: it no longer shows as late or as coming in on **Next 30 days**, in the daily briefing,
   or in the funding outlook, so the money is not counted twice.
@@ -98,6 +100,10 @@ for a goal), **Funding** and **Actions & events**.
 3. Confirm. Or click **Link txn** to tie the installment to the real transaction in your ledger
    — it has to be a transaction that exists there; a deleted or made-up one is refused.
    An overdue installment also offers **Reschedule**.
+
+If you delete a transaction linked to an installment, the installment goes back to unpaid, and you
+can link another payment or mark it paid again. Funding linked to a deleted transaction goes back
+to planned. Merging the transaction with a duplicate keeps it paid, linked to the row that's left.
 
 **Change the funding** — in **Funding**, click **Edit** on a funding source to change its amount
 or note. A source can be an account, an envelope in your budget, or income.

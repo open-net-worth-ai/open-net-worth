@@ -1,0 +1,54 @@
+# Spec: DS-UI-01 — what the delete confirmations say about linked records
+# Covers: docs/qa/acceptance/delete-safety.md (the [UI] cases; the rest run in
+# tests/test_uat_delete_safety.py)
+id: DS-UI-01
+acceptance_ids:
+  - DS-DUP-WARN
+  - DS-DUP-PLAIN
+  - DS-DUP-BULK
+title: "Delete confirmations name the lot a purchase belongs to"
+description: >
+  The register's delete confirmations say what a delete will change on records that point at the
+  transaction, before the user confirms. A transaction nothing points at keeps the plain wording.
+  Runs on a disposable QA clone, so the one confirmed delete changes nothing real.
+
+acceptance_criteria:
+  - AC1: Deleting a purchase linked to a lot shows a confirmation that names the lot ("shares bought") and says it keeps its shares and cost
+  - AC2: Deleting a transaction nothing points at shows only "… will be removed."
+  - AC3: Bulk-deleting a selection that includes a linked purchase names the lot in the confirmation
+  - AC4: After confirming the linked delete, the holding still shows the same quantity
+
+browser_use_task: |
+  Navigate to {app_url} and wait for the app to finish loading.
+
+  Open Investments, pick any holding with at least one lot, open it and go to the Position tab.
+  Note the holding's quantity and one lot's date and quantity.
+
+  Open Accounts and find that lot's purchase in the register: an investment transaction whose
+  description starts with "Bought" on that lot's date (search the register for "Bought" if it
+  helps). Open it and click Delete. Wait one second for the confirmation to settle.
+  Record WARN=pass only if the confirmation mentions "shares bought" and "keeps its shares and
+  cost". Click Delete in the confirmation to confirm.
+
+  Go back to the holding. Record AFTER=pass only if its quantity is unchanged.
+
+  In Accounts, open an ordinary expense (for example a grocery or dining purchase) and click
+  Delete. Record PLAIN=pass only if the confirmation says the transaction "will be removed." and
+  says nothing about shares, a lot, an installment or a sale. Click Cancel.
+
+  In the register, select another "Bought" investment transaction and one ordinary expense with
+  their checkboxes, then click the bulk-bar Delete. Wait one second. Record BULK=pass only if the
+  confirmation says "2 transaction(s)" and mentions "shares bought". Click Cancel.
+
+  Return exactly one of:
+  - "PASS: DS-UI-01 — WARN=<summary>; AFTER=<summary>; PLAIN=<summary>; BULK=<summary>"
+  - "FAIL: DS-UI-01 — <the failed check and what the confirmation said instead>"
+  If the book has no holding with a linked "Bought" transaction, return
+  "SKIP: DS-UI-01 — no linked purchase in this book".
+
+max_steps: 50
+timeout_seconds: 300
+
+expected:
+  pass_condition: "result contains 'PASS'"
+  screenshot_name: "DS-UI-01-delete-confirmations.png"

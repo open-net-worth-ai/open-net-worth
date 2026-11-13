@@ -30,6 +30,8 @@
     { "glob": "frontend/src/components/tabs/automations/datasync/**", "docs": ["docs/product/features/imports-and-sync.md", "docs/product/lucius/automations.md"] },
     { "glob": "backend/services/ynab_migration/**", "docs": ["docs/product/features/imports-and-sync.md", "docs/product/connectors/bank-brokerage.md"] },
     { "glob": "backend/*/import_runs*", "docs": ["docs/product/features/imports-and-sync.md"] },
+    { "glob": "backend/services/rest_api/**", "docs": ["docs/product/connectors/rest-api.md"] },
+    { "glob": "backend/*/rest_c*", "docs": ["docs/product/connectors/rest-api.md"] },
     { "glob": "frontend/src/components/tabs/connectors/**", "docs": ["docs/product/connectors"] },
     { "glob": "backend/connectors/**", "docs": ["docs/product/connectors"] },
     { "glob": "backend/connectors/voice/**", "docs": ["docs/product/connectors/voice-calls.md"] },

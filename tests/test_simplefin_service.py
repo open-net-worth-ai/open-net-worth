@@ -18,6 +18,7 @@ All HTTP is mocked with a fixture feed — there is no live-network call here.
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 
 import pytest
 
@@ -455,3 +456,108 @@ class TestClassifyError:
 
     def test_generic_exception_is_error(self):
         assert svc.classify_error(RuntimeError("boom")) == "error"
+
+
+# ── 2026-11-13 live findings: errors in a 200, 45-day ranges, local dates ─────────────
+
+
+def _capture_slices(monkeypatch, feed):
+    calls: list[dict] = []
+
+    def _fake(access_url, start_date=None, end_date=None, account=None):
+        calls.append({"start": start_date, "end": end_date})
+        return feed
+
+    monkeypatch.setattr(svc, "fetch_accounts", _fake)
+    return calls
+
+
+def test_an_error_inside_a_200_feed_is_a_warning_and_the_window_is_incomplete(monkeypatch):
+    """SimpleFIN puts a failed bank connection in ``errors``/``errlist`` of a normal 200
+    answer. Ignored, a feed missing a whole bank looked complete — and a complete window is
+    what lets the vanished-row check call booked rows gone."""
+    feed = {
+        "errors": ["Connection to ACME Bank may need attention"],
+        "errlist": [{"code": "con.auth", "msg": "Connection to ACME Bank may need attention"}],
+        "accounts": [],
+    }
+    _capture_slices(monkeypatch, feed)
+    window = svc.fetch_window(_configured_store(), "2026-01-01", "2026-01-10", None)
+    assert window.complete is False
+    assert window.warnings == [
+        "SimpleFIN: Connection to ACME Bank may need attention",
+        "SimpleFIN: con.auth Connection to ACME Bank may need attention",
+    ]
+
+
+def test_a_long_window_is_fetched_in_45_day_slices_that_include_the_last_day(monkeypatch):
+    """The bridge flags any range over 45 days (and says it may cap it), and its end-date
+    is exclusive — so slices cover every day through ``before`` and no slice is longer."""
+    monkeypatch.setattr(svc, "user_zone", lambda: timezone.utc)
+    calls = _capture_slices(monkeypatch, {"errors": [], "accounts": []})
+    svc.fetch_window(_configured_store(), "2026-01-01", "2026-03-31", None)
+    day = 86400
+    assert [(c["end"] - c["start"]) // day for c in calls] == [45, 45]
+    assert calls[0]["start"] == int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())
+    assert calls[-1]["end"] == int(datetime(2026, 4, 1, tzinfo=timezone.utc).timestamp())
+    assert all(a["end"] == b["start"] for a, b in zip(calls, calls[1:]))
+
+
+def test_a_row_seen_in_two_slices_is_returned_once(monkeypatch):
+    txn = {"id": "T1", "posted": 1767225600, "amount": "-5.00", "description": "ACME"}
+    feed = {"errors": [], "accounts": [{"id": "A1", "currency": "USD", "transactions": [txn]}]}
+    _capture_slices(monkeypatch, feed)
+    window = svc.fetch_window(_configured_store(), "2026-01-01", "2026-03-31", None)
+    assert [r["external_refs"][0]["ref"] for r in window.rows] == ["A1:T1"]
+
+
+def test_a_row_is_dated_in_the_users_zone_and_keeps_payee_memo_and_mcc(monkeypatch):
+    """23:30 on Jan 1 in Los Angeles is Jan 2 in UTC — the UTC date put an evening
+    purchase on the wrong day. The bridge's payee, memo and MCC each keep their own field."""
+    from zoneinfo import ZoneInfo
+
+    monkeypatch.setattr(svc, "user_zone", lambda: ZoneInfo("America/Los_Angeles"))
+    ts = int(datetime(2026, 1, 2, 7, 30, tzinfo=timezone.utc).timestamp())
+    txn = {
+        "id": "T9",
+        "posted": ts,
+        "amount": "-12.00",
+        "description": "ACME DINER 123",
+        "payee": "ACME Diner",
+        "memo": "CARD 0000",
+        "mcc": "5812",
+    }
+    row = svc._txn_to_row(txn, "A1", "USD")
+    assert row["date"] == "2026-01-01"
+    assert (row["payee"], row["memo"], row["description"]) == (
+        "ACME Diner",
+        "CARD 0000",
+        "ACME DINER 123",
+    )
+    assert row["category_hint"] == svc.merchant_category("5812")
+
+
+def test_a_pending_row_is_dated_by_transacted_at_and_an_undated_row_is_dropped(monkeypatch):
+    monkeypatch.setattr(svc, "user_zone", lambda: timezone.utc)
+    ts = int(datetime(2026, 1, 5, 12, tzinfo=timezone.utc).timestamp())
+    pending = {"id": "P1", "posted": 0, "transacted_at": ts, "amount": "-3.00", "pending": True}
+    row = svc._txn_to_row(pending, "A1", "USD")
+    assert (row["date"], row["pending"]) == ("2026-01-05", True)
+    assert svc._txn_to_row({"id": "X", "posted": 0, "amount": "-3.00"}, "A1", "USD") is None
+
+
+def test_the_feed_asks_for_pending_rows(monkeypatch):
+    seen: dict = {}
+
+    class _Resp:
+        def json(self):
+            return {"errors": [], "accounts": []}
+
+    def _get(url, params):
+        seen.update(params)
+        return _Resp()
+
+    monkeypatch.setattr(svc, "_safe_get", _get)
+    monkeypatch.setattr(svc, "assert_public_url", lambda u: u)
+    svc.fetch_accounts("https://user:pass@bridge.example/simplefin", start_date=1, end_date=2)
+    assert seen["pending"] == 1

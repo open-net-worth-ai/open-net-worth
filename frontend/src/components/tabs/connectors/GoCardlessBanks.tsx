@@ -7,6 +7,7 @@ import { emitDataChanged } from '../../../lucius/bus'
 import { Button, ConfirmDialog, Text } from '../../ui'
 import { fDate } from '../../../utils/format'
 import { ENDED, type GoCardlessBank } from './gocardlessBank'
+import { bankReturnUrl, openBankPageTab } from './bankPage'
 
 function bankLine(b: GoCardlessBank): { text: string; warn: boolean } {
   if (b.status === 'LN') {
@@ -27,17 +28,22 @@ function bankLine(b: GoCardlessBank): { text: string; warn: boolean } {
 export function GoCardlessBanks({
   banks,
   onChanged,
+  onLink,
 }: {
   banks: GoCardlessBank[]
   /** A bank was renewed or left the list — re-read the status. */
   onChanged: () => void
+  /** A relink started — the bank page's URL, kept on screen in case no tab opened. */
+  onLink: (url: string) => void
 }) {
   const [removing, setRemoving] = useState<GoCardlessBank | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function post(bank: GoCardlessBank, action: 'relink' | 'remove') {
-    setBusy(bank.key)
+    const tab = action === 'relink' ? openBankPageTab() : null
+    let opened = false
+    setBusy(`${action}:${bank.key}`)
     setError(null)
     const key = encodeURIComponent(bank.key)
     const url =
@@ -48,8 +54,7 @@ export function GoCardlessBanks({
       const r = await authFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:
-          action === 'relink' ? JSON.stringify({ redirect: window.location.origin }) : undefined,
+        body: action === 'relink' ? JSON.stringify({ redirect: bankReturnUrl() }) : undefined,
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) {
@@ -61,12 +66,16 @@ export function GoCardlessBanks({
         )
         return
       }
-      if (action === 'relink' && d.link) window.open(d.link, '_blank', 'noopener,noreferrer')
+      if (tab && d.link) {
+        opened = tab.go(d.link)
+        onLink(d.link)
+      }
       onChanged()
       emitDataChanged(['config'])
     } catch {
       setError('Could not reach the server.')
     } finally {
+      if (tab && !opened) tab.cancel()
       setBusy(null)
       setRemoving(null)
     }
@@ -94,7 +103,7 @@ export function GoCardlessBanks({
                 <Button
                   size="sm"
                   variant={ended ? 'primary' : 'secondary'}
-                  loading={busy === b.key}
+                  loading={busy === `relink:${b.key}`}
                   disabled={busy !== null}
                   aria-label={`${b.status === 'LN' ? 'Renew access to' : 'Link again'} ${name(b)}`}
                   onClick={() => void post(b, 'relink')}
@@ -106,6 +115,7 @@ export function GoCardlessBanks({
                 size="sm"
                 variant="ghost"
                 className="plaid-bank-remove"
+                loading={busy === `remove:${b.key}`}
                 disabled={busy !== null}
                 aria-label={`Remove ${name(b)}`}
                 onClick={() => setRemoving(b)}

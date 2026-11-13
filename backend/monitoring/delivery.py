@@ -16,6 +16,7 @@ sender's own push runs — a failure here falls back to today's behaviour, never
 Candidate fields: ``source`` (analysis | price_alert | crash_watch | watch_alert), ``route_key``
 (the ``notify_routes`` kind), ``channels`` (only when the alert owns them — price alerts),
 ``story_id``, ``subject``, ``ticker``, ``label``, ``headline``, ``why``, ``impact``, ``actions``,
+``news`` (a crash's cached headlines and, when run, a web search's findings),
 ``sources`` (server-built ``{url, title, domain}``), ``materiality``, ``user_set`` (a level the
 user set — price alerts, crash-watch), ``legacy_message`` (today's rendered text) and
 ``created_at``.
@@ -108,9 +109,16 @@ def analysis_candidate(
 
 
 def signal_candidate(
-    signal: dict, channels: list[str], *, crash_watch: bool, legacy_message: str
+    signal: dict,
+    channels: list[str],
+    *,
+    crash_watch: bool,
+    legacy_message: str,
+    news: str = "",
+    sources: list[dict] | None = None,
 ) -> dict:
-    """A fired price alert or crash-watch story. Its channels belong to the alert itself."""
+    """A fired price alert or crash-watch story. Its channels belong to the alert itself. ``news``
+    is what Intel has on the asset right now (a crash carries it); ``sources`` its links."""
     label = (signal.get("label") or "").replace(" — price alert", "")
     iid = signal.get("instrument_id") or ""
     return {
@@ -125,7 +133,8 @@ def signal_candidate(
         "why": signal.get("current_summary") or "",
         "impact": signal.get("portfolio_impact") or "",
         "actions": list(signal.get("action_items") or []),
-        "sources": [],
+        "news": news,
+        "sources": list(sources or []),
         "materiality": "",
         "user_set": True,
         "legacy_message": legacy_message,

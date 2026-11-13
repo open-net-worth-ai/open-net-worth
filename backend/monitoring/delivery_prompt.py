@@ -26,6 +26,7 @@ MAX_WAITING = 30
 MAX_TOLD = 40
 REASON_CHARS = 160
 MESSAGE_CHARS = 1500
+NEWS_CHARS = 2000
 
 
 class DeliveryDecision(BaseModel):
@@ -83,7 +84,9 @@ For each NEW ITEM choose one:
 - now: it changes how this person sees something they hold or watch, or a level they set was \
 crossed. For example a deal agreed or collapsing, a ruling, a CEO or CFO leaving, guidance or a \
 dividend cut, a takeover bid, a war or ceasefire, a surprise rate move. A price_alert item always \
-goes out now, whatever the hour: they asked to be told, so your only choice is how it reads.
+goes out now, whatever the hour: they asked to be told, so your only choice is how it reads. \
+When such an item comes with recent news about it, say what that news shows is behind the move \
+(a web search's findings are unverified, so say so) instead of telling them to go and check.
 - later: worth knowing but not worth an interruption: confirmed next steps of something they \
 already know, results in line with expectations, a single unconfirmed report. It waits for a \
 roundup.
@@ -144,6 +147,8 @@ def _item_lines(item: dict, *, new: bool) -> str:
         ("materiality", item.get("materiality")),
     ]
     body = [f"  {name}: {_clip(value, 400)}" for name, value in fields if value]
+    if item.get("news"):
+        body.append(f"  recent news about it: {_clip(item.get('news'), NEWS_CHARS)}")
     links = _source_links(item)
     if links:
         body.append(f"  sources: {links}")

@@ -124,6 +124,21 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 1),
     ),
     Flag(
+        name="allow_brokerage_total_valuation",
+        description=(
+            "Investment and retirement accounts are valued by Brokerage total or Live holdings "
+            "(Edit account → Value this account by). A typed balance is the account's total, "
+            "and holdings you add later are carved out of it instead of counting twice. A "
+            "Brokerage total account linked through Plaid, SimpleFIN, Yodlee, Alpaca or YNAB "
+            "follows the total that connector reports, read about every 6 hours without "
+            "Lucius. Off: the account is worth its holdings plus its balance, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 10),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
         name="actual_budget_sync",
         description=(
             "Connect an Actual server, import a whole budget and keep it and this book "
@@ -149,12 +164,27 @@ FLAGS: tuple[Flag, ...] = (
         name="price_alert_lucius_run",
         description=(
             "When a price alert fires, Lucius looks into it before you hear about it: it follows "
-            "the alert's instructions by searching the web and X. It can delay an alert by up to "
-            "two minutes and uses your search quota and AI model. Off: you get the quick alert only."
+            "the alert's instructions by searching the web and X. A crash-watch alert on a holding "
+            "gets the same search for why it fell. It can delay an alert by up to two minutes and "
+            "uses your search quota and AI model. Off: you get the quick alert only."
         ),
         default=False,
         owner="owner",
         added=date(2026, 11, 6),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
+        name="bank_data_sync",
+        description=(
+            "Book a bank connector's transactions without AI. On the GoCardless, Enable Banking "
+            "or Plaid connector, choose Sync without AI: each linked account you tick gets the "
+            "history the bank serves, then new rows on a schedule. Changes the bank makes "
+            "afterwards wait for you in a review list. Bank syncs join the Data sync tab in "
+            "Automations. Off: only a Lucius Automation books bank rows, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 13),
         remove_by=date(2027, 3, 1),
     ),
 )

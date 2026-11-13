@@ -116,7 +116,7 @@ def hidden_connector_tools() -> frozenset[str]:
     ``DISABLED_CONNECTORS``).
 
     Fails CLOSED on any lookup error — hides every connector-tagged tool rather than
-    guessing — matching this module's sibling gates (``catalog._external_sections``
+    guessing — matching this module's sibling gates (``catalog._external_names``
     returns nothing on a broken external-MCP manager; ``_groups._is_interactive_scope``
     returns False on any uncertainty). An enablement lookup failing must never WIDEN what
     gets offered; it may only narrow it further than intended, which is the safe
@@ -126,7 +126,11 @@ def hidden_connector_tools() -> frozenset[str]:
     ``registry.dispatch``).
     """
     from backend.ai.tools.registry import connector_tagged_tools
+    from backend.ai.tools.rest_api import sync_quietly
 
+    # A REST connector's tools exist only while the connector does. This runs once per offer,
+    # so it is where the registry catches up with one added or removed since the last turn.
+    sync_quietly()
     tagged = connector_tagged_tools()
     if not tagged:
         return frozenset()

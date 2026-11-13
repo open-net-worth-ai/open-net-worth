@@ -76,7 +76,8 @@ and instructions are removed before it searches, but it does read the rest of th
 private details out of them. What it finds is labelled *From a web search, unverified*. Your **Web
 search** setting for scans doesn't turn this off; the experiment switch does. If a run fails or
 times out, you get the quick alert. This doesn't run on the Antigravity or Codex CLIs, which have
-tools of their own that the app can't limit.
+tools of their own that the app can't limit. With this on, an automatic crash-watch alert on a
+holding is looked into the same way: Lucius searches for why it fell before it messages you.
 
 The **🔔 Mute** button next to the price on that screen silences the ticker: no price alerts and no
 news scans for it until you click it again (it then reads **Muted**). **Additional news sources**
@@ -353,7 +354,12 @@ Everything is still in the Intel tab either way. **A price alert you set always 
 away**, at any hour, and Lucius only chooses how the message reads. To stop one, mute the ticker or
 turn the alert off. Automatic crash-watch alerts are different: Lucius can hold them back, usually
 because you've already heard about the same slide, but they are still sent as written if Lucius
-cannot be reached.
+cannot be reached. A crash-watch alert reaches Lucius with the latest headlines Intel has on that
+holding, so its message says what is behind the drop rather than telling you to go and check.
+
+With the experiment on, Lucius also decides whether a new development about a company you were
+told about recently is worth another message. Without it, Intel holds back further news about the
+same company for 24 hours after it sends one.
 
 With the experiment on, **Settings → Intelligence → What Intel should tell me** takes your own
 words, for example *"Don't tell me about analyst upgrades. Not at night unless it's serious."*

@@ -16,11 +16,12 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { TabSkeleton } from '../../ui'
+import { AddYourOwnRow } from './AddYourOwnRow'
 import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
 import { Btn, Empty, Tabs } from './primitives'
 import { Icons } from './icons'
-import { ArrowUpDown, ListFilter, Share2 } from '../../../ui/icons'
+import { ArrowUpDown, ListFilter } from '../../../ui/icons'
 import { CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
 import {
   DIRECTORY_FAMILY_CHIPS,
@@ -29,6 +30,7 @@ import {
   type DirectoryFamilyFilter,
   type DirectorySort,
 } from './catalog'
+import { REST_LAUNCHER_ID } from './restApi'
 
 /** The shared floor for the results area AND every step of the MCP flow, so the dialog never
  *  jumps between them (spec §6 and §7 pin the same number). */
@@ -105,7 +107,14 @@ export function DirectoryBrowser({
   const custom = entries.find((e) => e.generic)
   const showCustom =
     !!custom && (family === 'all' || family === 'mcp') && category === 'all' && !query.trim()
-  const grid = shown.filter((d) => !d.generic)
+  // A REST API is the other thing the owner connects themselves, so it shares that row: on All
+  // one row offers both, and the MCP and APIs tabs each offer their own. As one card among
+  // forty-seven the owner could not find how to add one (2026-11-10).
+  const rest = entries.find((e) => e.id === REST_LAUNCHER_ID)
+  const showRest =
+    !!rest && (family === 'all' || family === 'apis') && category === 'all' && !query.trim()
+  const pinned = showCustom || showRest
+  const grid = shown.filter((d) => !d.generic && !(showRest && d.id === REST_LAUNCHER_ID))
   const suggested = pickSuggestions(entries, 'all')
   const showSuggested =
     !query.trim() && family === 'all' && category === 'all' && suggested.length > 0
@@ -251,7 +260,12 @@ export function DirectoryBrowser({
           <TabSkeleton variant="connectors" label="Loading connectors…" header={false} />
         ) : (
           <>
-            {showCustom && custom ? <CustomServerRow onAdd={() => onAdd(custom)} /> : null}
+            {pinned ? (
+              <AddYourOwnRow
+                onMcp={showCustom && custom ? () => onAdd(custom) : undefined}
+                onRest={showRest && rest ? () => onAdd(rest) : undefined}
+              />
+            ) : null}
 
             {showSuggested && (
               <div className="cn-suggest" aria-label="Suggested connectors">
@@ -287,12 +301,12 @@ export function DirectoryBrowser({
                 />
               ))}
             </div>
-            {grid.length === 0 ? (
+            {grid.length === 0 && !pinned ? (
               <Empty
                 title="No matches"
                 body={
-                  custom
-                    ? 'Try a different search or category — or connect it yourself as a custom MCP server.'
+                  custom || rest
+                    ? 'Try a different search or category — or connect it yourself, as a custom MCP server or a REST API.'
                     : 'Try a different search or category.'
                 }
               >
@@ -301,32 +315,16 @@ export function DirectoryBrowser({
                     <Icons.plus /> Add a custom MCP server
                   </Btn>
                 ) : null}
+                {rest ? (
+                  <Btn onClick={() => onAdd(rest)}>
+                    <Icons.plus /> Add a REST API
+                  </Btn>
+                ) : null}
               </Empty>
             ) : null}
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-/** "Don't see yours?" — the custom MCP server, as a row of its own at the top of the list. */
-function CustomServerRow({ onAdd }: { onAdd: () => void }): JSX.Element {
-  return (
-    <div className="cn-customrow">
-      {/* The Connectors screen's own nav icon — this row IS "add a connector". */}
-      <span className="cn-customrow-ic" aria-hidden>
-        <Share2 size={16} />
-      </span>
-      <div className="cn-customrow-text">
-        <div className="cn-customrow-title">Don’t see yours? Add a custom MCP server</div>
-        <div className="cn-customrow-sub">
-          Connect any MCP server by its URL or a command run on this machine.
-        </div>
-      </div>
-      <Btn variant="primary" onClick={onAdd}>
-        <Icons.plus /> Add custom server
-      </Btn>
     </div>
   )
 }

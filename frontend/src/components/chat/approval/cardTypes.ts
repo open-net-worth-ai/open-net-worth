@@ -244,6 +244,28 @@ export function isDestructive(change: ProposedChange): boolean {
 /** A card without a bespoke body is titled by the verb its backend staged it with —
  * `display.op` ("Record disposals", "Delete envelope") — not its kind id; a batch without
  * one falls back to the humanized kind. Null when there is no such verb. */
+/** A REST API tool's two parts: the API's id and the endpoint's (`rest__<api>__<endpoint>`). */
+function restToolParts(tool: string): { api: string; endpoint: string } | null {
+  const m = /^rest__([a-z0-9_]+?)__([a-z0-9_]+)$/.exec(tool)
+  return m ? { api: m[1]!, endpoint: m[2]! } : null
+}
+
+/** A permission card's title: what the tool does. A REST API's tool is named after its endpoint,
+ *  not `rest__<api>__…`, which read as "Rest swagger petstore add pet" (a live card,
+ *  2026-11-11); its API is the label beside the title (`permissionSubject`). */
+export function permissionTitle(change: ProposedChange): string {
+  const tool = change.type === 'tool_permission' && change.grant_tool ? change.grant_tool : ''
+  const rest = restToolParts(tool)
+  return humanizeType(rest ? rest.endpoint : tool || change.type)
+}
+
+/** What a permission card's tool belongs to, for the label beside its title: the REST API it
+ *  calls. Null for every other tool. */
+export function permissionSubject(change: ProposedChange): string | null {
+  const rest = restToolParts(change.grant_tool ?? '')
+  return rest ? humanizeType(rest.api) : null
+}
+
 export function stagedTitle(change: ProposedChange): string | null {
   const op = (change.display as { op?: unknown } | undefined)?.op
   if (typeof op === 'string' && op) return op

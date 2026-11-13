@@ -17,11 +17,13 @@ import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { GoCardlessBanks } from './GoCardlessBanks'
 import { isPending, type GoCardlessBank } from './gocardlessBank'
+import { bankReturnUrl, openBankPageTab } from './bankPage'
 
 // GoCardless Bank Account Data connector config over /api/gocardless/*. A blank secret-key
 // field keeps the saved key; the GET echoes only `has_credentials`. One connector holds any
 // number of banks (./GoCardlessBanks), like Plaid. Linking opens the bank page GoCardless
-// returns in a new tab; there is no code to paste — when the user comes back, Check links (run
+// returns in a new tab (./bankPage — opened on the click, so no popup blocker eats it) and keeps
+// the link on screen as a fallback; there is no code to paste — when the user comes back, Check links (run
 // automatically on open while a link is unfinished) re-reads every requisition. Fetching
 // transactions is Lucius's job (the connector page's Automate button); Save lives in the modal
 // footer — see ./formSave.
@@ -67,6 +69,7 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
   const [linkErr, setLinkErr] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [bankLink, setBankLink] = useState<string | null>(null)
   const autoChecked = useRef(false)
 
   const apply = useCallback((c: GoCardlessStatus) => {
@@ -164,8 +167,11 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
 
   async function linkBank() {
     if (!institutionId) return
+    const tab = openBankPageTab()
     setLinking(true)
     setLinkErr(null)
+    setBankLink(null)
+    let opened = false
     try {
       const r = await authFetch('/api/gocardless/link', {
         method: 'POST',
@@ -173,7 +179,7 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
         body: JSON.stringify({
           institution_id: institutionId,
           country,
-          redirect: window.location.origin,
+          redirect: bankReturnUrl(),
         }),
       })
       const d = await r.json().catch(() => ({}))
@@ -181,12 +187,16 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
         setLinkErr(d.detail || 'Could not start the bank link.')
         return
       }
-      if (d.link) window.open(d.link, '_blank', 'noopener,noreferrer')
+      if (d.link) {
+        opened = tab.go(d.link)
+        setBankLink(d.link)
+      }
       autoChecked.current = true
       load()
     } catch {
       setLinkErr('Could not start the bank link — could not reach the server.')
     } finally {
+      if (!opened) tab.cancel()
       setLinking(false)
     }
   }
@@ -310,7 +320,7 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
           <Text size="sm" tone="ink" weight={600}>
             Your banks
           </Text>
-          <GoCardlessBanks banks={banks} onChanged={load} />
+          <GoCardlessBanks banks={banks} onChanged={load} onLink={setBankLink} />
           {caution && (
             <Text size="xs" tone="warn">
               Last fetch couldn&apos;t read everything — {caution}
@@ -387,6 +397,16 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
           </Text>
         )}
       </Stack>
+
+      {bankLink && banks.some(isPending) && (
+        <Text size="xs" tone="faint" className="gc-section">
+          Finish at your bank, then come back and select Check links. If no new tab opened,{' '}
+          <a href={bankLink} target="_blank" rel="noopener noreferrer">
+            open your bank&apos;s page
+          </a>
+          .
+        </Text>
+      )}
 
       <div className="gc-section">
         <ConnectorAccountsList provider="gocardless" providerLabel="GoCardless" />

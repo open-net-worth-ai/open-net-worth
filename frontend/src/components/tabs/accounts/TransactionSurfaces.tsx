@@ -27,6 +27,7 @@ import {
   loadTransactionActivity,
   loadTransactionSourceEntries,
   loadTransactionStatementLinks,
+  previewDeleteEffects,
   resolveOrCreatePayeeId,
   setTransactionCleared,
   setTransactionHidden,
@@ -176,7 +177,7 @@ export function TransactionSurfacesProvider({
     hint?: string
     error?: string
   } | null>(null)
-  const [confirm, setConfirm] = useState<{ txn: Txn } | null>(null)
+  const [confirm, setConfirm] = useState<{ txn: Txn; effects?: string[] } | null>(null)
   const [catModal, setCatModal] = useState<{
     prefill: string
     kind: CatKind
@@ -332,7 +333,12 @@ export function TransactionSurfacesProvider({
           rates={fx}
           onClose={() => setDetail(null)}
           onSave={saveDetail}
-          onDelete={(txn) => setConfirm({ txn })}
+          onDelete={(txn) => {
+            setConfirm({ txn })
+            void previewDeleteEffects([txn.id]).then((effects) =>
+              setConfirm((c) => (c?.txn.id === txn.id ? { ...c, effects } : c)),
+            )
+          }}
           onMarkReviewed={(txn) => {
             clearDetailFailure()
             void updateTransaction(txn.id, { needs_review: false })
@@ -380,7 +386,10 @@ export function TransactionSurfacesProvider({
         <ConfirmModal
           open
           title="Delete transaction"
-          body={`“${payeeNames[confirm.txn.payeeId ?? ''] || confirm.txn.description || 'This transaction'}” will be removed.`}
+          body={[
+            `“${payeeNames[confirm.txn.payeeId ?? ''] || confirm.txn.description || 'This transaction'}” will be removed.`,
+            ...(confirm.effects ?? []),
+          ].join(' ')}
           confirmLabel="Delete"
           danger
           onConfirm={() => {

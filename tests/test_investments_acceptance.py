@@ -463,16 +463,19 @@ def test_IE_DISPOSE_UNDO(tmp_path, monkeypatch, db_isolated):
     from tests.conftest import seed_stub_accounts
 
     cash_ts = TransactionStore()
-    # from_account_id is a real FK now — "acc-1" was only ever a Position/Lot label
-    # here, never a created Account row.
-    seed_stub_accounts([{"from_account_id": "acc-1"}])
+    # to_account_id is a real FK now — "acc-1" was only ever a Position/Lot label
+    # here, never a created Account row. The row has the shape a sale books
+    # (`_book_deposit_proceeds`): the deposit sits on the TO leg. A row whose money leaves on
+    # the from leg is no longer the sale's own deposit, and the undo keeps it.
+    seed_stub_accounts([{"to_account_id": "acc-1"}])
     cash_txn = cash_ts.append(
         {
             "date": "2026-06-01",
-            "kind": "income",
-            "from_account_id": "acc-1",
-            "amount": 520.0,
-            "currency": "USD",
+            "kind": "investment",
+            "description": "Sale proceeds",
+            "to_account_id": "acc-1",
+            "to_amount": 520.0,
+            "to_currency": "USD",
         }
     )
     monkeypatch.setattr(ledger_svc, "transactions", cash_ts)

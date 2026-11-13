@@ -56,6 +56,7 @@ def test_empty_state_has_builtin_transports_no_mcp():
         "yodlee",
         "alpaca",
         "ibkr",
+        "rest",
         "yahoo_finance",
         "coingecko",
     }
@@ -89,7 +90,11 @@ def test_empty_state_has_builtin_transports_no_mcp():
     eb = next(v for v in views if v.id == "enable_banking")
     assert eb.kind == "enable_banking"
     assert eb.status == "not_configured"
-    assert eb.secrets_public == {"has_private_key": False, "has_session_id": False}
+    assert eb.secrets_public == {
+        "has_private_key": False,
+        "has_session_id": False,
+        "has_sessions": False,
+    }
     # The price sources are always present, always on, and cannot be paused.
     for cid in ("yahoo_finance", "coingecko"):
         view = next(v for v in views if v.id == cid)

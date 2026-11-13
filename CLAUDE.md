@@ -125,6 +125,11 @@ One line each — full reasoning and the scar behind each is in
 - A DELETED identity is remembered (`rejected_identities`, movement-scoped, written at the delete choke) and
   EVERY create choke refuses it as `previously_deleted` regardless of `force` — only `resurrect` / a `create`
   decision books it back. Rollback ≠ reject: `batch_id` rollback, trade undo and merge tombstones write nothing.
+- Deleting a transaction never leaves something unfixable: `services/transaction_links.py` is the one authority
+  every delete choke releases through (a merge moves links instead). A new field pointing at a transaction joins it,
+  or a guard test fails (ADR `2026-11-06-deleting-a-transaction-leaves-nothing-unfixable`).
+- `lots.txn_id` is a real FK column (`ON DELETE SET NULL`), and only the column counts. A soft delete never fires
+  it; never delete + re-insert a transaction, or the lot silently unlinks.
 - Payee normalization: `services/payees._normalize_payee()`, one source of truth.
 - Seven account types are the ONLY classification axis (`cash, fixed_deposit, investment,
   retirement, receivable, credit, loan`); `kind`, band, spendability and budget membership
@@ -132,6 +137,12 @@ One line each — full reasoning and the scar behind each is in
   settlement cash (margin included) belongs to `investment`, never netted into cash. Dashboard
   net worth includes retirement accounts; the Assets breakdown groups their cash and vested
   holdings together, and `net_worth_excl_retirement` subtracts both from the full total.
+- An investment/retirement account is still holdings + ledger balance; under `allow_brokerage_total_valuation`
+  a Brokerage total (`value_source=total`) account's balance is its UNTRACKED part, kept by the
+  carve-out around `apply_lot_change` and the linked-total sync — never read it as cash: it bands
+  as `untracked_holdings` (`ledger.account_kind_and_band(account, untracked)`), and book-level
+  figures leave it out and report `untracked_excluded` (ADR
+  `2026-11-10-an-investment-account-is-valued-by-its-brokerage-total-or-its-live-holdings`).
 - Unvested equity is EXCLUDED from net worth, reported separately as `unvested_base`.
 - A vest books NO ledger transaction, whatever the grant's `tax_event` — it is paid in SHARES,
   so only the FMV lot is written; an income leg into the custodian account counted the vest
@@ -318,6 +329,16 @@ One line each — full reasoning and the scar behind each is in
   a DERIVED snapshot of the frontend `catalog.ts` (`npm run sync:connector-directory`; a vitest fails on drift).
   Setup is the human-only screen command `connectors.open_setup`: it opens a form, never writes config or
   touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
+- The REST connector (`services/rest_api/`): each API is its own connector `rest:<slug>`, everything
+  it holds a secret, and its tools are ordinary registry tools REGISTERED AT RUNTIME
+  (`ai/tools/rest_api.py`: one per declared endpoint and nothing else, `rest__<slug>__<tool>`), so
+  permissions and cards work per API and per endpoint with no gate change. The registry is therefore
+  not fixed at import: a runtime tool must also be in `TOOL_SCHEMAS`, a name list that marks sends
+  asks `registry.is_rest_send`, and a test that adds an API clears them
+  (`reset_registered_for_tests`). `client.send` builds every URL from the saved base, refuses anything
+  that leaves it, adds the key itself and returns the body whole or fails (1 MB fuse) — never give a
+  REST tool a URL or header argument. ADR
+  `2026-11-10-generic-rest-connector-is-pinned-to-the-owners-host`.
 - The YNAB two-way sync (`services/ynab_sync/`) writes only through the chokes above, always under
   the audit surface `ynab_sync` (that is how its own writes are skipped on the next scan); its YNAB
   traffic is `aggregation.ynab._safe_send` and nothing else. A YNAB category pairs with one of OUR
@@ -443,8 +464,10 @@ frontend/src/
 - External MCP: `tool_permissions` is the SINGLE authority on whether a call fires — no
   unconfigurable floor, for every tool in the app. `discovered_tools` is what WE observed in a
   handshake, never a client-supplied value.
-- A stdio MCP connection persists for the app's LIFETIME, one child per server, serialized by a
-  per-server lock; its stderr is a pipe that MUST stay drained (`StderrTail`).
+- An MCP connection persists for the app's LIFETIME, one per server: a stdio child (serialized by
+  a per-server lock; its stderr is a pipe that MUST stay drained, `StderrTail`) or an HTTP
+  session (`Mcp-Session-Id`, opened by boot discovery, re-opened once on a 404). Only a config
+  change or shutdown ends it — never a tool error (`McpToolError`).
 - `always_allow` means allow everywhere, including unattended — never silently degraded.
 - A connector's `endpoint` is a credential — model-facing reads project `redact_endpoint`, never
   the raw field; every server-chosen string is sanitized.

@@ -41,6 +41,7 @@ _TEXT_CAPS = {
     "impact": 400,
     "route_key": 40,
     "materiality": 40,
+    "news": 2000,
 }
 _MAX_ACTIONS = 2
 _MAX_SOURCES = 3

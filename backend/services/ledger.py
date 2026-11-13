@@ -47,14 +47,14 @@ from backend.db.import_batch_store import ImportBatchStore
 from backend.db.merge_journal_store import MergeJournalStore
 from backend.db.statement_store import StatementStore
 from backend.db.tables import accounts as accounts_table
-from backend.db.tables import commitments as commitments_table
 from backend.db.tables import merge_journal as merge_journal_table
 from backend.db.tables import rejected_identities as rejected_identities_table
 from backend.db.tables import transactions as transactions_table
 from backend.db.tables import txn_audit as txn_audit_table
 from backend.db.transaction_store import TransactionStore
-from backend.models.account import ACCOUNT_BAND, band_of, kind_of
+from backend.models.account import ACCOUNT_BAND, UNTRACKED_HOLDINGS_BAND, band_of, kind_of
 from backend.models.transaction import SPLIT
+from backend.services import transaction_links
 from backend.services.review_approval import acting_as_automation, refuse_automation_approval
 
 # asset_classes that live in data.csv as genuine market-valued positions.
@@ -214,7 +214,7 @@ def _suppress_inner_create_audit():
 
 
 @contextlib.contextmanager
-def _txn_unit_of_work(conn: Connection | None):
+def _txn_unit_of_work(conn: Connection | None, *also_lock):
     """The composing half of the ledger choke's conn= contract (Task 4, storage plan 4b
     — extending Plan 3's own money-core chokes to accept a FOREIGN conn, which they did
     not yet support): reuse a caller's own open transaction when given — the caller MUST
@@ -227,12 +227,13 @@ def _txn_unit_of_work(conn: Connection | None):
     The standalone set also holds ``rejected_identities``: the delete choke remembers a deleted
     row's refs in the same transaction that deletes it, and a resurrecting create forgets them
     in the same transaction that books it. A composed caller (trade undo, vest) holds only the
-    two ledger locks — and passes ``reject_identities=False``, so it never writes that table."""
+    two ledger locks — and passes ``reject_identities=False``, so it never writes that table.
+    ``also_lock`` adds tables one standalone write also touches (a delete's linked records)."""
     if conn is not None:
         yield conn
         return
     with locked_unit_of_work(
-        transactions_table, txn_audit_table, rejected_identities_table
+        transactions_table, txn_audit_table, rejected_identities_table, *also_lock
     ) as owned:
         yield owned
 
@@ -568,7 +569,7 @@ def account_with_balance(
     cutoff = row.get("date") if row else None
     bal = account_balance(account, txns, cutoff)
     cleared = cleared_account_balance(account, txns, cutoff)
-    return _hydrate_account(account, row, bal, cleared)
+    return _decorate_value([_hydrate_account(account, row, bal, cleared)])[0]
 
 
 def accounts_with_balances(
@@ -582,9 +583,17 @@ def accounts_with_balances(
     cutoffs = {a["id"]: row.get("date") if row else None for a, row in zip(accts, rows)}
     bals = balances_by_account(accts, txns, cutoffs)
     cleared = cleared_balances_by_account(accts, txns, cutoffs)
-    return [
-        _hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)
-    ]
+    return _decorate_value(
+        [_hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)]
+    )
+
+
+def _decorate_value(rows: list[dict]) -> list[dict]:
+    """How each investment/retirement account is valued and what its connector last reported
+    (``services.account_value``, ADR 2026-11-10) — unchanged rows while the flag is off."""
+    from backend.services import account_value
+
+    return account_value.decorate(rows)
 
 
 def _hydrated_external_ids(ids: list[dict]) -> list[dict]:
@@ -611,7 +620,9 @@ def _hydrated_external_ids(ids: list[dict]) -> list[dict]:
 # ── Net worth ──────────────────────────────────────────────────────────────────
 
 
-def account_kind_and_band(account: dict) -> tuple[str, str]:
+def account_kind_and_band(
+    account: dict, untracked: frozenset[str] = frozenset()
+) -> tuple[str, str]:
     """``(kind, band)`` for a STORED account row, refusing a type this build cannot classify.
 
     A row typed outside the seven can only arrive by restoring a pre-2026-09-07 backup or by a
@@ -619,10 +630,14 @@ def account_kind_and_band(account: dict) -> tuple[str, str]:
     on it, which reached the client as an opaque 500 naming nothing, from whichever read
     happened to touch the row first. This names the account, so the person holding the broken
     book knows which row to fix. Every services-tier classification of a stored row goes through
-    here."""
+    here.
+
+    ``untracked`` (``untracked_holdings.account_ids``, empty while allow_brokerage_total_valuation is
+    off): a Brokerage total account's balance is its holdings not entered yet, so it bands as
+    ``untracked_holdings`` — never settlement or retirement cash."""
     type_ = account.get("type")
     try:
-        return kind_of(type_), band_of(type_)
+        kind, band = kind_of(type_), band_of(type_)
     except ValueError as exc:
         raise DataIntegrityError(
             f"account {account.get('id')!r} ({account.get('name') or 'unnamed'}) has unknown "
@@ -630,6 +645,9 @@ def account_kind_and_band(account: dict) -> tuple[str, str]:
             "predates the seven-type account schema (2026-09-07) — restore that backup on a "
             "build from before that date, let it upgrade, then export again."
         ) from exc
+    if account.get("id") in untracked:
+        return kind, UNTRACKED_HOLDINGS_BAND
+    return kind, band
 
 
 def row_base_value(
@@ -741,7 +759,7 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
     `account_classes` by band (property/commodity/other_asset) so `net_worth` moves
     with them for free; `breakdown.owned_assets` additionally surfaces their Σ so a
     caller can label that contribution on its own."""
-    from backend.services import owned_assets_valuation
+    from backend.services import owned_assets_valuation, untracked_holdings
     from backend.services.fx_cache import load_fx_cache
 
     base = (base or base_currency()).upper()
@@ -760,10 +778,12 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
     liabilities_rows: list[dict] = []
     liability_total = 0.0  # stored raw-negative; summed as-is
     retirement_base = 0.0
+    retirement_untracked = 0.0
+    untracked = untracked_holdings.account_ids(accts)
     native = balances_by_account(accts, txns, cutoffs)
     for a in accts:
         bal_base = to_base(native[a["id"]], a.get("currency", base), base, rates=rates)
-        kind, band = account_kind_and_band(a)
+        kind, band = account_kind_and_band(a, untracked)
         if kind == "liability":
             liability_total += bal_base
             liability_classes[band] = liability_classes.get(band, 0.0) + bal_base
@@ -780,6 +800,8 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
             account_classes[band] = account_classes.get(band, 0.0) + bal_base
             if band == "retirement":
                 retirement_base += bal_base
+            elif a.get("type") == "retirement":  # a Brokerage total retirement account
+                retirement_untracked += bal_base
     liabilities_rows.sort(key=lambda r: r["balance_base"])
 
     owned_assets_by_band = owned_assets_valuation.values_by_band(base, rates=rates)
@@ -793,24 +815,30 @@ def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dic
     options_mark = _compute_options_mark_base(base)
     unvested_base = _unvested_value_base(base, rates=rates)
     net = round(asset_total + liability_total + market_total + options_mark, 2)
-    retirement_base = round(retirement_base + retirement_positions, 2)
+    retirement_base = round(retirement_base + retirement_untracked + retirement_positions, 2)
+    breakdown = {
+        "accounts_asset": round(asset_total, 2),
+        "accounts_liability": round(liability_total, 2),
+        "account_classes": {k: round(v, 2) for k, v in account_classes.items()},
+        "liability_classes": {k: round(v, 2) for k, v in liability_classes.items()},
+        "liabilities": liabilities_rows,
+        "retirement_base": retirement_base,
+        "retirement_positions_base": retirement_positions,
+        "owned_assets": owned_assets_total,
+        "market_positions": market_total,
+        "options_mark": round(options_mark, 2),
+    }
+    if retirement_untracked:
+        # The part of `retirement_base` that bands as untracked_holdings, for a reader that
+        # splits Retirement from Investments (owned_assets_summary). Absent while
+        # allow_brokerage_total_valuation is off: the old payload, byte for byte.
+        breakdown["retirement_untracked_base"] = round(retirement_untracked, 2)
     return {
         "base_currency": base,
         "net_worth": net,
         "net_worth_excl_retirement": round(net - retirement_base, 2),
         "unvested_base": unvested_base,
-        "breakdown": {
-            "accounts_asset": round(asset_total, 2),
-            "accounts_liability": round(liability_total, 2),
-            "account_classes": {k: round(v, 2) for k, v in account_classes.items()},
-            "liability_classes": {k: round(v, 2) for k, v in liability_classes.items()},
-            "liabilities": liabilities_rows,
-            "retirement_base": retirement_base,
-            "retirement_positions_base": retirement_positions,
-            "owned_assets": owned_assets_total,
-            "market_positions": market_total,
-            "options_mark": round(options_mark, 2),
-        },
+        "breakdown": breakdown,
     }
 
 
@@ -2177,6 +2205,39 @@ def known_external_refs(source: str) -> dict[tuple[str | None, str], str]:
     return out
 
 
+def accounts_booked_from(source: str) -> set[str]:
+    """Ids of the accounts holding at least one LIVE transaction that carries a ``source``
+    ref — which linked accounts a connector has already imported into."""
+    out: set[str] = set()
+    for t in transactions.all():
+        if t.get("deleted") and not t.get("merged_into"):
+            continue
+        if any(pair[0] == source for pair in ext_ref_pairs(t)):
+            out.update(a for a in (t.get("from_account_id"), t.get("to_account_id")) if a)
+    return out
+
+
+def newest_booked_date(source: str, account_id: str | None = None) -> date | None:
+    """The date of the newest LIVE transaction carrying a ``source`` ref (a merged-away row
+    counts through its canonical one, as in ``known_external_refs``) — where the ledger's
+    record of that connector stops. ``account_id`` narrows it to rows on that account."""
+    newest: date | None = None
+    for t in transactions.all():
+        if t.get("deleted") and not t.get("merged_into"):
+            continue
+        if not any(pair[0] == source for pair in ext_ref_pairs(t)):
+            continue
+        if account_id and account_id not in (t.get("from_account_id"), t.get("to_account_id")):
+            continue
+        try:
+            d = date.fromisoformat(str(t.get("date"))[:10])
+        except ValueError:
+            continue
+        if newest is None or d > newest:
+            newest = d
+    return newest
+
+
 def _resolve_emitter(source: str | None, ref: str | None) -> str | None:
     """Dispatch an emitter lookup to the store that actually holds the snapshot: email keeps
     its own module (unchanged), every other source routes to the connector snapshot service
@@ -2926,6 +2987,7 @@ def update_transaction(
     preserve_base: bool = False,
     meta_out: dict | None = None,
     labels_as_given: bool = False,
+    conn: Connection | None = None,
 ) -> dict | None:
     """Update one transaction in place by id and return the rebuilt row (or None if it
     doesn't exist). ``changes`` is a partial field map (already filtered of unset fields).
@@ -2953,13 +3015,22 @@ def update_transaction(
     ``meta_out``, when given, is FILLED with ``declined_fields`` — every patched field whose
     stored value did not move (see ``_fields_the_write_declined``). A caller that does not pass
     it cannot tell a partly-applied patch from a fully-applied one, which is how an
-    append-only ``external_refs`` no-op reported success for years."""
+    append-only ``external_refs`` no-op reported success for years.
+
+    ``conn`` composes the edit into a caller's open transaction, so a lot or sale correction and
+    its cash row commit together. The caller holds the ``transactions`` and ``txn_audit`` locks;
+    everything that opens its own transaction waits for the outer commit."""
+    composed = conn is not None
     requested_fields = dict(changes)
-    existing = transactions.find_by_id(txn_id)
+    existing = (
+        transactions.find_by_id(txn_id, conn=conn) if composed else transactions.find_by_id(txn_id)
+    )
     if existing is None:
         return None
     refuse_automation_approval(txn_id, existing, changes)
     if _is_opening_txn(existing):
+        if composed:
+            raise ConflictError("a Starting Balance row can't change as part of another record")
         balance_before = _capture_automation_balance_snapshot()
         rebuilt = _apply_opening_txn_edit(existing, changes)
         if rebuilt is not None:
@@ -3037,15 +3108,22 @@ def update_transaction(
             meta_out=rebuild_meta,
             force_transfer_rate=not _leg_changed,
             labels_as_given=labels_as_given,
+            conn=conn,
         )
     # PLAN 3 TASK 4: the cleanup below (drop the appended dup, restamp the stable id, restore
     # the row in place) + the update audit event are now ONE transaction. The inner
     # create_transaction call above stays OUTSIDE it — it already committed its own money-core
     # write via its OWN locked_unit_of_work by the time it returns, so this is a SEQUENCE of
     # two independent transactions, never a nested one (locked_unit_of_work's per-table locks
-    # are non-reentrant; nesting would self-deadlock).
-    with locked_unit_of_work(transactions_table, txn_audit_table) as conn:
-        transactions.delete(rebuilt["id"], conn=conn)  # remove the appended dup
+    # are non-reentrant; nesting would self-deadlock). Composed, both steps ride the caller's.
+    with (
+        contextlib.nullcontext(conn)
+        if composed
+        else locked_unit_of_work(transactions_table, txn_audit_table)
+    ) as conn:
+        same_row = rebuilt["id"] == txn_id
+        if not same_row:
+            transactions.delete(rebuilt["id"], conn=conn)  # remove the appended dup
         rebuilt["id"] = txn_id
         # Re-attach the original provenance list so the dedup keys are preserved on the stored row.
         if original_external_refs:
@@ -3075,7 +3153,11 @@ def update_transaction(
             rebuilt["fx_rate"] = (
                 existing.get("fx_rate") if _leg_resolved_unchanged else rebuilt.get("fx_rate")
             )
-        transactions.upsert(rebuilt, conn=conn)  # replace original in place
+        if same_row:
+            # Never delete + re-insert: a true removal fires lots.txn_id's ON DELETE SET NULL.
+            transactions.replace_at_end(rebuilt, conn=conn)
+        else:
+            transactions.upsert(rebuilt, conn=conn)  # replace original in place
         # Provenance (transaction-provenance RFC): record the edit with a sparse before/after
         # field diff. Skip the no-op case (an edit that changed no meaningful field).
         from backend.services import audit as audit_service
@@ -3100,10 +3182,13 @@ def update_transaction(
     # be atomic with the ledger write (best-effort, exception-guarded).
     from backend.services.automations.transaction_events import record_committed_matches
 
-    record_committed_matches(
-        rebuild_meta.get("automation_matches") or [],
-        transaction_id=txn_id,
-        context="transaction_pre_commit",
+    _after_outer_commit(
+        composed,
+        lambda: record_committed_matches(
+            rebuild_meta.get("automation_matches") or [],
+            transaction_id=txn_id,
+            context="transaction_pre_commit",
+        ),
     )
     # Snapshot promote — MOVED out of the transaction above (storage plan 4e task 1 finding,
     # the identical class of bug the automation-match fix just above closed): both snapshot
@@ -3119,7 +3204,8 @@ def update_transaction(
     # harmless (promote is idempotent) but pointless work on every unrelated edit that merely
     # re-asserts its own refs.
     if "external_refs" in changes:
-        _promote_pairs(ext_ref_pairs(rebuilt) - ext_ref_pairs(existing))
+        new_pairs = ext_ref_pairs(rebuilt) - ext_ref_pairs(existing)
+        _after_outer_commit(composed, lambda: _promote_pairs(new_pairs))
     # Learn-from-corrections (P2-SP2): the single recorder. If this edit changed the category
     # of an expense/income txn, log a correction signal so the detector can later PROPOSE a
     # categorization rule. Best-effort — never blocks the edit. Moved out of the transaction
@@ -3133,10 +3219,12 @@ def update_transaction(
     # meant to be atomic with the ledger write anyway (checkpoint-excluded, best-effort).
     from backend.services import corrections as corrections_service
 
-    corrections_service.record_correction(existing, rebuilt)
+    _after_outer_commit(composed, lambda: corrections_service.record_correction(existing, rebuilt))
     # Moved out of the transaction above — see create_transaction's identical note.
     if after_diff is not None:
-        _publish_committed_transaction_events("update", [rebuilt], balance_before=balance_before)
+        _publish_transaction_events_after_commit(
+            composed, "update", [rebuilt], balance_before=balance_before
+        )
     if meta_out is not None:
         meta_out["declined_fields"] = _fields_the_write_declined(
             requested_fields, existing, rebuilt
@@ -3606,7 +3694,10 @@ def mark_batch_reviewed(batch_id: str) -> dict:
 
 
 def bulk_delete_transactions(
-    ids: list[str], *, conn: Connection | None = None, reject_identities: bool = True
+    ids: list[str],
+    *,
+    conn: Connection | None = None,
+    reject_identities: bool = True,
 ) -> dict:
     """Soft-delete many transactions by id, looping the per-txn soft-delete (so each write
     is checkpoint-captured). Returns ``{deleted: [ids], not_found: [ids], count: int,
@@ -3618,6 +3709,12 @@ def bulk_delete_transactions(
     same source event is refused at the create chokes rather than re-booked. ``reject_identities
     =False`` is for a caller undoing its OWN booking (a trade undo reversing a linked cash leg)
     — reversing is not rejecting. Batch rollback never reaches this choke at all.
+
+    Everything that pointed at a deleted row is released (``services.transaction_links``), in
+    this transaction, and returned as ``released_links`` (absent when nothing was). A soft delete
+    is an UPDATE, so no foreign key can do it. That holds for a trade undo too: its own record
+    isn't the only thing that can point at its cash. A composed caller must also hold
+    ``transaction_links.LOCK_TABLES``.
 
     Refuses OUTRIGHT (ConflictError) — before deleting anything — when ANY requested id is
     a Starting Balance transaction (ledger-tracking-start Phase 2): change the account's
@@ -3647,7 +3744,7 @@ def bulk_delete_transactions(
     # STORAGE PLAN 4B TASK 4: `_txn_unit_of_work` composes into a caller's conn when given.
     # `composed` is captured BEFORE that rebinding — see _publish_transaction_events_after_commit.
     composed = conn is not None
-    with _txn_unit_of_work(conn) as conn:
+    with _txn_unit_of_work(conn, *transaction_links.LOCK_TABLES) as conn:
         for txn_id in ids:
             row = transactions.soft_delete(txn_id, conn=conn)
             if row is None:
@@ -3664,6 +3761,7 @@ def bulk_delete_transactions(
             from backend.services import rejected_identities as _rejected
 
             rejected = _rejected.remember_deleted(deleted_rows, conn=conn)
+        released = transaction_links.release(deleted, conn=conn)
     # Same composed-conn handling as create_transaction's own publish call above — see
     # _publish_transaction_events_after_commit for why the composed case must defer.
     _publish_transaction_events_after_commit(
@@ -3674,6 +3772,7 @@ def bulk_delete_transactions(
         "not_found": not_found,
         "count": len(deleted),
         "rejected": len(rejected),
+        **({"released_links": released} if released else {}),
     }
 
 
@@ -3945,7 +4044,12 @@ def merge_transactions(
     # PLAN 3 TASK 4: the journal record, the canonical+absorbed patch, and both merge audit
     # events are now ONE transaction (the "4-store sequence becomes one BEGIN…COMMIT" promise
     # for the merge choke specifically — merge_journal + transactions + txn_audit).
-    with locked_unit_of_work(transactions_table, txn_audit_table, merge_journal_table) as conn:
+    with locked_unit_of_work(
+        transactions_table, txn_audit_table, merge_journal_table, *transaction_links.LOCK_TABLES
+    ) as conn:
+        journal_entry["moved_links"] = transaction_links.move(
+            {absorbed_id: canonical_id}, conn=conn
+        )
         merge_journal.record(journal_entry, conn=conn)
 
         # 4+5) Commit the canonical patch AND the absorbed tombstone in ONE atomic write so a crash
@@ -4092,11 +4196,14 @@ def unmerge_transactions(absorbed_id: str) -> dict | None:
     # The pop/re-record-on-refusal sequence ABOVE stays unwrapped/independent, exactly as
     # before — it is its own explicit compensating write (pop, then explicitly re-record on
     # a validation failure), not part of the "happy path" this choke's promise covers.
-    with locked_unit_of_work(transactions_table, txn_audit_table) as conn:
+    with locked_unit_of_work(
+        transactions_table, txn_audit_table, *transaction_links.LOCK_TABLES
+    ) as conn:
         transactions.upsert(
             canonical_before, conn=conn
         )  # restore canonical legs/external_refs/merged_from
         transactions.upsert(absorbed_before, conn=conn)  # un-tombstone the absorbed row
+        transaction_links.move_back(entry.get("moved_links") or [], conn=conn)
 
         # F23(c) — emit symmetric pair of unmerge events.
         from backend.services import audit as audit_service
@@ -4593,6 +4700,7 @@ def _breakdown_as_of(
     balances: dict[str, float] | None = None,
     rates: dict | None = None,
     market_fx_approximate: bool = False,
+    untracked: frozenset[str] | None = None,
 ) -> dict:
     """Net worth at a historical date, decomposed into positive asset-class bands plus a
     (raw-negative) liabilities figure — the data behind the stacked area chart.
@@ -4600,6 +4708,9 @@ def _breakdown_as_of(
     Accounts classify by `band_of(type)`: `cash` (bank/e-wallet) / `fixed_deposit` /
     `settlement_cash` (an `investment` account's brokerage/exchange cash, margin debit
     included) / `retirement` / `receivable` — `credit`/`loan` accounts are liabilities instead;
+    under allow_brokerage_total_valuation a Brokerage total investment or retirement account bands as
+    `untracked_holdings` (``untracked``: ``untracked_holdings.account_ids``, from each account's
+    CURRENT source, so every past point bands the way today's does; computed here if omitted);
     market positions add to `equity` / `crypto` / `commodity` / `property` (only when
     `market_tracked`). See ADR 2026-07-31-liquid-net-worth-bands: `cash` used to also catch
     brokerage/crypto settlement cash, mislabeling it as plain "cash" to callers (the AI, the
@@ -4641,6 +4752,10 @@ def _breakdown_as_of(
     classes: dict[str, float] = {}
     liabilities = 0.0
     fx_approximate = False
+    if untracked is None:
+        from backend.services import untracked_holdings
+
+        untracked = untracked_holdings.account_ids(accts)
     for a in accts:
         # `balances` (optional): this date's per-account fold, already computed for EVERY
         # charted date in one pass by account_balances_over_dates. Without it each account
@@ -4654,7 +4769,7 @@ def _breakdown_as_of(
         if raw and ccy != base:
             fx_approximate = True
         bal = to_base(raw, ccy, base, rates=rates)
-        kind, band = account_kind_and_band(a)
+        kind, band = account_kind_and_band(a, untracked)
         if kind == "liability":
             liabilities += bal  # stored raw-negative
         else:
@@ -4771,8 +4886,10 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
 
     `classes` maps asset-class band → value (cash [bank-only]/fixed_deposit/settlement_cash
     [an `investment` account's brokerage/exchange cash, margin debit included]/retirement/
-    receivable always; equity/crypto/commodity/property once price collection has begun
-    on/before that date — see ADR 2026-07-31-liquid-net-worth-bands). `market_tracked` flags
+    receivable always — plus untracked_holdings [a Brokerage total account's balance, banded by
+    the account's CURRENT source at every point] under allow_brokerage_total_valuation; equity/crypto/
+    commodity/property once price collection has begun on/before that date — see ADR
+    2026-07-31-liquid-net-worth-bands). `market_tracked` flags
     the point as including market value. `accounts` =
     cash+fixed_deposit+settlement_cash+retirement+receivable+liabilities (the account-only
     figure, before any market value — a consistent basis for the headline delta). `net_worth`
@@ -4791,7 +4908,7 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
     """
     from backend.db.owned_assets_store import OwnedAssetsStore
     from backend.db.price_history_store import PriceHistoryStore
-    from backend.services import owned_assets_valuation
+    from backend.services import owned_assets_valuation, untracked_holdings
     from backend.services import portfolio_history as ph
     from backend.services import positions as positions_service
 
@@ -4898,6 +5015,8 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
     # Compute current option mark once; injected only into the "today" data point (no historical
     # option feed in v1 — same limitation as computed-mark bonds on the rows path).
     options_mark = _compute_options_mark_base(base)
+    # Each account's CURRENT source bands every point (one read for the whole series).
+    untracked = untracked_holdings.account_ids(accts)
     result = []
     for as_of in as_ofs:
         tracked = bool(market_since and as_of >= market_since)
@@ -4924,6 +5043,7 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
             balances=balances_by_date[as_of],
             rates=rates,
             market_fx_approximate=overlay_fx_approximate if tracked else False,
+            untracked=untracked,
         )
         result.append({"date": as_of, "market_tracked": tracked, **bd})
     return _from_first_tracked_point(result)
@@ -5166,6 +5286,7 @@ def delete_transactions_where(
     kind: str | None = None,
     category: str | None = None,
     batch_id: str | None = None,
+    meta_out: dict | None = None,
 ) -> int:
     """Bulk soft-delete transactions matching filters — service twin of the AI
     ``delete_transactions_where`` tool and ``DELETE /api/transactions``. THE choke point:
@@ -5188,7 +5309,8 @@ def delete_transactions_where(
       asserting ``bulk_delete_where`` has exactly one caller.
     - The deleted rows' ref identities are remembered (``rejected_identities``) in the same
       transaction, as in ``bulk_delete_transactions`` — EXCEPT under a ``batch_id`` filter,
-      which is a rollback of an import, and rolling back is not rejecting."""
+      which is a rollback of an import, and rolling back is not rejecting. Links to the deleted
+      rows are released under the same rule, and reported in ``meta_out["released_links"]``."""
     filters = _resolve_bulk_delete_filters(
         date_from=date_from,
         date_to=date_to,
@@ -5200,12 +5322,17 @@ def delete_transactions_where(
     protected = opening_txn_ids()
     selected = transactions.select_where(**filters, protected_ids=protected)
     balance_before = _capture_automation_balance_snapshot()
-    with locked_unit_of_work(transactions_table, rejected_identities_table) as conn:
+    with locked_unit_of_work(
+        transactions_table, rejected_identities_table, *transaction_links.LOCK_TABLES
+    ) as conn:
         deleted = transactions.bulk_delete_where(**filters, protected_ids=protected, conn=conn)
         if deleted and batch_id is None:
             from backend.services import rejected_identities as _rejected
 
             _rejected.remember_deleted(selected, conn=conn)
+            released = transaction_links.release([row["id"] for row in selected], conn=conn)
+            if meta_out is not None:
+                meta_out["released_links"] = released
     if deleted:
         _publish_committed_transaction_events("delete", selected, balance_before=balance_before)
     return deleted
@@ -5770,7 +5897,10 @@ def _cascade_delete_account_transactions(
         _rejected.remember_deleted(deleted_rows, conn=conn)
 
     swept_ids = {row["id"] for row in deleted_rows}
-    for row in transactions.query_txns(account_id=account_id, include_deleted=True):
+    doomed = transactions.query_txns(account_id=account_id, include_deleted=True)
+    # Explicit, not left to ON DELETE SET NULL: this write is checkpointed, the FK's is not.
+    transaction_links.release([row["id"] for row in doomed], conn=conn)
+    for row in doomed:
         if row["id"] not in swept_ids:
             audit_service.record_txn_event(
                 "delete", row["id"], source=row.get("source"), before=row, after=None, conn=conn
@@ -5858,7 +5988,7 @@ def delete_account(account_id: str, *, force: bool = False) -> bool:
         accounts_table,
         txn_audit_table,
         rejected_identities_table,
-        commitments_table,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
         deleted_rows = _cascade_delete_account_transactions(account_id, refs, conn=conn)
         _unlink_account_from_commitments(account_id, conn=conn)

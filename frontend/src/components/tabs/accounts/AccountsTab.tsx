@@ -40,10 +40,11 @@ import {
   txnIsInflow,
   selectionTotal,
 } from './data'
+import { previewDeleteEffects } from './transactionApi'
 import { buildTxnView } from './txnView'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
 import type { Account, Txn, Category, TransactionUpdate, ApiAccount, ApiTxn } from './types'
-import { sym, toBase, fBase } from './format'
+import { sym, toBase, fBase, fCur } from './format'
 import { tokensToFilterPatch, combineDateRange, addFilterToken } from './tokenFilters'
 
 import { Sidebar } from './Sidebar'
@@ -1274,6 +1275,27 @@ export function AccountsTab({
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
   }
 
+  // A Brokerage total account reconciles its TOTAL; the server sets the untracked part to the
+  // total less the tracked holdings (ADR 2026-11-10). `expected_balance` guards a stale screen.
+  const onReconcileTotal = (account: Account, total: number) => {
+    void L.reconcile(account.id, { real_total: total, expected_balance: account.balance })
+      .then((r) => {
+        showToast(
+          r.adjustment
+            ? reconcileToastMessage(r.adjustment, r.balance, account.currency)
+            : `Total confirmed at ${fCur(total, account.currency, { cents: true })}`,
+        )
+        setReconcileBurst((n) => n + 1)
+      })
+      .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
+  }
+
+  const onConfirmHeldTotal = (account: Account, accept: boolean) => {
+    void L.confirmHeldTotal(account.id, accept)
+      .then(() => showToast(accept ? 'Total updated' : 'Kept the current value'))
+      .catch((e) => showToast(e instanceof Error ? e.message : 'Could not save that'))
+  }
+
   const archive = (a: Account) =>
     setConfirm({
       title: 'Archive account',
@@ -1482,10 +1504,12 @@ export function AccountsTab({
   const bulkExport = () => {
     exportCsv(selList)
   }
-  const bulkDelete = () =>
+  const bulkDelete = () => {
+    const title = 'Delete transactions'
+    const body = `${selectedIds.size} transaction(s) will be deleted from the register.`
     setConfirm({
-      title: 'Delete transactions',
-      body: `${selectedIds.size} transaction(s) will be deleted from the register.`,
+      title,
+      body,
       confirmLabel: 'Delete ' + selectedIds.size,
       danger: true,
       onConfirm: () => {
@@ -1496,6 +1520,11 @@ export function AccountsTab({
         setConfirm(null)
       },
     })
+    void previewDeleteEffects(ids()).then((effects) => {
+      if (effects.length === 0) return
+      setConfirm((c) => (c?.title === title ? { ...c, body: [body, ...effects].join(' ') } : c))
+    })
+  }
   const dupCreate = (t: Txn) => ({
     date: t.date,
     kind: t.kind,
@@ -2137,6 +2166,8 @@ export function AccountsTab({
                       exportCsv(filtered)
                     }}
                     onReconcile={onReconcile}
+                    onReconcileTotal={onReconcileTotal}
+                    onConfirmHeldTotal={onConfirmHeldTotal}
                     onReview={addReviewToken}
                     onStartReview={() => surfaces.openReview('all', selectedAccount.id)}
                   />

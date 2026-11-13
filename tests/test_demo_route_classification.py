@@ -66,6 +66,7 @@ REVIEWED_SAFE = frozenset(
     PUT /api/accounts/{account_id}
     POST /api/accounts/{account_id}/align-tracking-start
     POST /api/accounts/{account_id}/reconcile
+    POST /api/accounts/{account_id}/value-sync/confirm
     POST /api/action-status
     PATCH /api/actions/{action_id}/status
     POST /api/alerts
@@ -118,6 +119,7 @@ REVIEWED_SAFE = frozenset(
     POST /api/inbox/signals/{signal_id}/dismiss
     POST /api/income
     DELETE /api/income/{event_id}
+    PATCH /api/income/{event_id}
     DELETE /api/institutions/{institution_id}
     PATCH /api/institutions/{institution_id}
     POST /api/instruments/enrich-classification
@@ -220,6 +222,7 @@ REVIEWED_SAFE = frozenset(
     PATCH /api/transactions/bulk
     POST /api/transactions/bulk
     POST /api/transactions/bulk-delete
+    POST /api/transactions/delete-preview
     POST /api/transactions/bulk-update
     DELETE /api/transactions/{txn_id}
     PUT /api/transactions/{txn_id}

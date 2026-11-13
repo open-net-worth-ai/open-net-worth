@@ -268,6 +268,18 @@ def _clear_tier2_tables(engine) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_real_codex_catalog_fetch(monkeypatch):
+    """A test that probes a real `codex` on PATH must never make it fetch its model list from
+    OpenAI (network, and a write into the CLI's home). The fetch fails as an offline CLI's would;
+    a test of the refresh itself puts its own fake back."""
+    from backend.ai.models import codex_cli_catalog
+
+    monkeypatch.setattr(codex_cli_catalog, "_list_models", lambda binary, env: None)
+    monkeypatch.setattr(codex_cli_catalog, "_last_failure", None)
+    monkeypatch.setattr(codex_cli_catalog, "_fetched", None)
+
+
+@pytest.fixture(autouse=True)
 def _mention_corpus_per_test():
     """The mention picker's corpus memo is keyed on the data epoch, which a test that writes a
     store's file directly or swaps a module's path never moves — start every test empty."""
