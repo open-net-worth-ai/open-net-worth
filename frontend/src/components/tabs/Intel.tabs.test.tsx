@@ -11,6 +11,9 @@ const mockNavigate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
   useRouterState: () => ({ matches: [] }),
+  // Famous Portfolios reads where the router is heading when it unmounts.
+  useRouter: () => ({ latestLocation: { pathname: '/intel' } }),
+  useSearch: () => ({}),
 }))
 
 const mockAuthFetch = vi.fn()
@@ -208,7 +211,7 @@ const tabButton = (c: HTMLElement, label: string) =>
   )!
 
 describe('Intel tabs', () => {
-  it('offers Famous portfolios only while its flag is on, after Topics & macro', async () => {
+  it('offers Famous portfolios only while its flag is on, right after My holdings', async () => {
     const off = mount()
     await within(off.container).findByTestId('holdings-brief')
     expect(tabButton(off.container, 'Famous Portfolios')).toBeUndefined()
@@ -231,7 +234,7 @@ describe('Intel tabs', () => {
     const labels = [...on.container.querySelectorAll('.ui-page-tabs [role="tab"]')].map(
       (b) => b.textContent,
     )
-    expect(labels.at(-1)).toBe('Famous Portfolios')
+    expect(labels[1]).toBe('Famous Portfolios')
     expect(on.container.querySelector('.intel-layout')).toBeNull()
   })
 
@@ -242,7 +245,7 @@ describe('Intel tabs', () => {
     expect(tabButton(container, 'My holdings').getAttribute('aria-selected')).toBe('true')
   })
 
-  it('has one tab per watchlist: My holdings, your lists in order, Topics & macro', async () => {
+  it('has one tab per watchlist: My holdings, Topics & macro, then your lists in order', async () => {
     const { findByTestId, container } = mount()
     await findByTestId('holdings-brief')
     const labels = [
@@ -250,7 +253,8 @@ describe('Intel tabs', () => {
     ].map((b) => b.textContent)
     // Unread per tab — a story shows on every tab it belongs to, so they don't sum to the feed:
     // s-msft is on My holdings AND on Tech (you hold MSFT and it's on that list).
-    expect(labels).toEqual(['My holdings1', 'Tech2', 'Dividends', 'Topics & macro2'])
+    // The fixed tabs first, then your lists (owner, 2026-11-12; intelTabs.buildTabs).
+    expect(labels).toEqual(['My holdings1', 'Topics & macro2', 'Tech2', 'Dividends'])
   })
 
   it('opens on My holdings: one card with portfolio stories, then each holding with its own stories', async () => {
