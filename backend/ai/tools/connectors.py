@@ -123,7 +123,18 @@ def _status_row(view) -> dict:
     stdio = view.kind == "mcp" and view.config.get("transport") == "stdio"
     if view.error and not stdio:
         row["error"] = sanitize_untrusted(view.error, max_len=300)
+    if view.status == "error":
+        # Lucius used to answer an expired sign-in with "open Connectors yourself" and offered
+        # the card only when asked (owner, 2026-11-13): say here that the card is the fix.
+        row["fix"] = FIX_HINT.format(id=view.id)
     return row
+
+
+FIX_HINT = (
+    "Offer the card that fixes it: run_screen_command connectors.open_setup with id '{id}'. "
+    "Its button reconnects (opening the provider's sign-in) or opens the settings; the user "
+    "signs in or enters credentials themselves."
+)
 
 
 # What the user could ADD, not what is set up. The ready-made MCP servers in Browse & add (brokers,
@@ -175,9 +186,11 @@ class ConnectorStatusInput(ToolInput):
         "Is a connector set up and working? Reports every connector (or the ones named): "
         "enabled, status (not_configured/configured/active/error) and, when failing, the "
         "error. Check this instead of asking the user whether something is connected. Never "
-        "returns secrets or configuration. The user connects things in Connectors, never you; "
-        "fetching a feed's data is a separate tool (plaid_fetch_transactions, …). Lists only "
-        "what is already in the app — for what the user could add, use search_connector_directory."
+        "returns secrets or configuration. The user signs in and enters credentials, never "
+        "you — but a failing connector's row carries 'fix': offer its card (run_screen_command "
+        "connectors.open_setup with that id) rather than sending the user to find it. Fetching "
+        "a feed's data is a separate tool (plaid_fetch_transactions, …). Lists only what is "
+        "already in the app — for what the user could add, use search_connector_directory."
     ),
     input_schema=schema_of(ConnectorStatusInput, tool_name="get_connector_status"),
 )
@@ -487,7 +500,8 @@ class SearchConnectorDirectoryInput(ToolInput):
         "and ready-made MCP servers (brokers, exchanges, accounting). Each result: exact id, "
         "publisher, 'verification' (verified / unverified = listed by us, not the vendor's own "
         "server / unknown), categories, what the user needs ready, 'installed'. Use it only when the user asks "
-        "what they can connect, or a task needs data from an app they have not connected - never "
+        "what they can connect, or a task needs data from an app they have not connected (a "
+        "broker or exchange they name, onboarding included) - never "
         "for adjacent capabilities, broad recommendations, or a connector they ignored. Offer "
         "exactly the ones they asked for: name three and each gets its own card; suggest one at "
         "a time only when YOU are proposing. To offer one, call run_screen_command connectors.open_setup with the exact id "

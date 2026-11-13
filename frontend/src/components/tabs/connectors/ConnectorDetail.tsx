@@ -67,6 +67,12 @@ export interface ConnectorDetailProps {
   /** True while a Reconnect click is waiting on an OAuth sign-in — the button says so instead
    *  of sitting there with no feedback while the popup runs. */
   reconnecting?: boolean
+  /** Present only while Reconnect waits on an OAuth sign-in. Its window may have been closed
+   *  where the app can't see it (the desktop app's system browser), so the button stays live —
+   *  another click starts a fresh sign-in — and this drops the one that's waiting. */
+  onCancelSignIn?: () => void
+  /** Starts a fresh sign-in in place of the waiting one. */
+  onRestartSignIn?: () => void
   onViewDetails: () => void
   /** MCP only — reopens the setup drawer pre-filled. A connector with a `configForm`
    *  reopens THAT instead, and never reaches this. */
@@ -141,6 +147,8 @@ export function ConnectorDetail({
   onSetEnabled,
   onReconnect,
   reconnecting = false,
+  onCancelSignIn,
+  onRestartSignIn,
   onViewDetails,
   onEditConnection,
   onRefreshTools,
@@ -465,6 +473,15 @@ export function ConnectorDetail({
       <Btn size="lg" variant="primary" onClick={() => setConfiguringId(entry.id)}>
         Reconnect
       </Btn>
+    ) : onCancelSignIn ? (
+      <>
+        <Btn size="lg" variant="ghost" onClick={onCancelSignIn}>
+          Cancel
+        </Btn>
+        <Btn size="lg" variant="primary" onClick={onRestartSignIn ?? onReconnect}>
+          Open sign-in again
+        </Btn>
+      </>
     ) : (
       <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
         {!reconnecting

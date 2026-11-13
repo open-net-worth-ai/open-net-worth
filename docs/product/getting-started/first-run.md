@@ -130,7 +130,10 @@ and gets your money in before asking anything personal:
    **Connectors → Email** — he never asks for a password in chat — then he sets up the
    **Auto-log transactions from email** automation. See [Email](../connectors/email-ingestion.md).
 6. If you hold investments (you can skip this): reads them from a screenshot, a statement or a
-   list, and confirms each one before saving.
+   list, and confirms each one before saving. When you name a broker or exchange that has its own
+   connector (moomoo, Interactive Brokers, Webull, Coinbase and others), he first shows its card:
+   sign in on the broker's own page and he can read your holdings instead of you typing them.
+   See [External MCP servers](../connectors/external-mcp.md).
 7. Closes with two or three useful next steps — for example a daily briefing or a budget — and
    offers a 20-second tour of his own controls.
 

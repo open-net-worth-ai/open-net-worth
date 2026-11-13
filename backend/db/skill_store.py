@@ -1023,6 +1023,14 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "e67cce2de93f1c551792e15fd19b0133241af91cb5cecd8aa0569fcdce563de9",
             # 2026-10-11 (386d3faf6): before the Gotchas section and the trigger description.
             "bed09dd7c7e5af84c6b294a539e0af103656c97ddacf7f8e56b6de960f56c8e0",
+            # Three later rewrites that never added their old body here, so an install seeded
+            # before any of them still runs it: 7ef012ff, a655b1ca, 4c8f8177.
+            "9e12a52612159f657eee3fc72418b773422c9d5d0759ce049c7f9b4cce9e6e4f",
+            "d7a9e67ec096e582447c97002f496edf2d6cba4431ffde967b7764528904577f",
+            "f692a8a3418e03d6b6f20781404b549b98485d6d3e4fdf69b238f4fd09556fa1",
+            # 2026-11-13: never looked up the broker a new user named (a friend's moomoo went
+            # unmentioned); now its connector card is offered before they type holdings.
+            "66fcc3536112bef733be51d6af6f13ef3145f614a961fccc2f9ace28268ff94f",
         }
     ),
     # 2026-09-26: read the non-existent profile.monthly_budgets and wrote through
