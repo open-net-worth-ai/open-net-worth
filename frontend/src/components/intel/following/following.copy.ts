@@ -299,7 +299,17 @@ export const COPY = {
   compareWith: 'Compare with',
   // The menu changes only YOUR side, and says so: theirs is always their whole report.
   compareAll: 'All your investments',
-  compareBand: { equity: 'Stocks & ETFs', crypto: 'Crypto', commodity: 'Commodities' } as const,
+  // Your investments plus what you own (a home, a car): shown only when you own one.
+  compareAllAssets: 'All your assets',
+  compareBand: {
+    equity: 'Stocks & ETFs',
+    crypto: 'Crypto',
+    commodity: 'Commodities',
+    all_assets: 'Assets',
+  } as const,
+  // Under the risk table when your line includes what you own.
+  riskOwnedAssetsCaveat:
+    'Property and other assets are valued only when you record a value, so their swings look calmer than they are.',
   riskTitle: 'Risk over this range',
   riskSwings: 'Swings',
   riskSwingsTip:

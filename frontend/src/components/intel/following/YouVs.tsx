@@ -21,16 +21,18 @@ interface Props {
   name: string
   /** Your line's name: "Your portfolio", or the asset type you picked ("Your crypto"). */
   yourLabel: string
+  /** Your line includes owned assets, valued only when you record a value. */
+  ownedAssets?: boolean
 }
 
 /** Under the "You vs." chart: how each line swings, how much of theirs you hold, and how each
  *  book is spread. Built from this page's own parts (its key-figure row, its table) and the
  *  kit's Meter and Text, with no cards; every figure is the server's (compare.py). */
-export function YouVs({ data, name, yourLabel }: Props) {
+export function YouVs({ data, name, yourLabel, ownedAssets = false }: Props) {
   if (!data) return <YouVsSkeleton />
   return (
     <>
-      <RiskTable data={data} name={name} yourLabel={yourLabel} />
+      <RiskTable data={data} name={name} yourLabel={yourLabel} ownedAssets={ownedAssets} />
       <Overlap data={data} name={name} />
       <SpreadAndSectors data={data} name={name} yourLabel={yourLabel} />
     </>
@@ -149,10 +151,12 @@ function RiskTable({
   data,
   name,
   yourLabel,
+  ownedAssets,
 }: {
   data: PreviewCompare
   name: string
   yourLabel: string
+  ownedAssets: boolean
 }) {
   const { risk } = data
   // One row per measure, a column each for them, you and the benchmark: three figure columns
@@ -181,6 +185,7 @@ function RiskTable({
               cells: [m.label, ...lines.map((r) => riskFig(m.key, r))],
             }))}
           />
+          {ownedAssets && <p className="fol-foot">{COPY.riskOwnedAssetsCaveat}</p>}
           <p className="fol-foot">{COPY.riskExplain}</p>
         </>
       )}

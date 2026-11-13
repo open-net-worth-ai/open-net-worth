@@ -37,7 +37,7 @@ export async function fetchReturns(
   benchmark?: string,
   options?: {
     risk?: boolean
-    band?: 'equity' | 'crypto' | 'commodity' | null
+    band?: 'equity' | 'crypto' | 'commodity' | 'all_assets' | null
   },
 ): Promise<PortfolioReturns> {
   const q = new URLSearchParams({ period })

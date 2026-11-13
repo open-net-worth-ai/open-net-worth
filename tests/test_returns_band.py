@@ -71,3 +71,78 @@ def test_bands_held_lists_what_the_book_holds_largest_first(book):
 def test_an_unknown_asset_type_is_refused(book):
     with pytest.raises(ValidationError):
         r.portfolio_returns(date_from="2026-03-01", date_to="2026-03-03", band="bond")
+
+
+# ── All assets: the book plus owned assets ─────────────────────────────────────────────────
+# A house bought on day 2 for 1000 (cost), revalued to 1100 on day 3. The investments are flat.
+
+_FLAT = [
+    {"date": f"2026-03-0{d}", "value_base": 200.0, "classes": {"equity": 200.0}} for d in (1, 2, 3)
+]
+_HOUSE = {
+    "id": "asset_house",
+    "category": "property",
+    "currency": "USD",
+    "cost": 1000.0,
+    "cost_date": "2026-03-02",
+    "marks": [{"id": "m1", "date": "2026-03-03", "value": 1100.0}],
+}
+
+
+def _all_assets(monkeypatch, assets, series=_FLAT, rates=None):
+    monkeypatch.setattr(
+        ph, "portfolio_value_series", lambda *a, **k: {"series": series, "data_quality": {}}
+    )
+    monkeypatch.setattr(ph, "inception_date", lambda: "2026-03-01")
+    monkeypatch.setattr(r.PriceHistoryStore, "earliest_date", lambda self: "2026-03-01")
+    monkeypatch.setattr(r, "base_currency", lambda: "USD")
+    monkeypatch.setattr(r, "_load_rates_safe", lambda loader: dict(rates or {}))
+    monkeypatch.setattr(r, "cash_flows", lambda *a, **k: ([], False))
+    monkeypatch.setattr(
+        r.owned_assets, "OwnedAssetsStore", lambda: type("S", (), {"all": lambda s: assets})()
+    )
+    return r.portfolio_returns(date_from="2026-03-01", date_to="2026-03-03", band="all_assets")
+
+
+def test_a_purchase_is_neither_gain_nor_loss_and_a_revaluation_is_return(monkeypatch):
+    out = _all_assets(monkeypatch, [_HOUSE])
+    assert [p["value"] for p in out["_value_pts"]] == [200.0, 1200.0, 1300.0]
+    assert out["_flows"] == [("2026-03-02", -1000.0)]
+    # Only the +100 revaluation on 1200 is a return; the purchase day is flat.
+    assert out["twr"]["period_return"] == pytest.approx(100 / 1200, abs=1e-6)
+    assert out["period_gain_base"] == pytest.approx(100.0)
+    assert out["has_owned_assets"] is True
+
+
+def test_a_sold_asset_returns_its_proceeds_not_a_loss(monkeypatch):
+    sold = {**_HOUSE, "disposed_on": "2026-03-03", "disposal_proceeds": 1000.0}
+    out = _all_assets(monkeypatch, [sold])
+    assert [p["value"] for p in out["_value_pts"]] == [200.0, 1200.0, 200.0]
+    assert out["period_gain_base"] == pytest.approx(0.0)
+
+
+def test_a_foreign_sale_is_returned_in_base_currency(monkeypatch):
+    from backend.core.fx import to_base
+
+    rates = {"USD": 1.0, "EUR": 0.5}
+    eur = {**_HOUSE, "currency": "EUR", "disposed_on": "2026-03-03", "disposal_proceeds": 1000.0}
+    out = _all_assets(monkeypatch, [eur], rates=rates)
+    cost = to_base(1000.0, "EUR", "USD", rates)
+    assert cost != 1000.0
+    assert out["_flows"] == [("2026-03-02", -cost), ("2026-03-03", cost)]
+    # Sold for what it cost: no gain, whatever the currency.
+    assert out["period_gain_base"] == pytest.approx(0.0)
+
+
+def test_an_asset_nothing_values_is_left_out(monkeypatch):
+    out = _all_assets(monkeypatch, [{**_HOUSE, "marks": [], "cost": None}])
+    assert out["has_owned_assets"] is False
+    assert out["period_gain_base"] == pytest.approx(0.0)
+
+
+def test_other_bands_do_not_touch_owned_assets(book, monkeypatch):
+    monkeypatch.setattr(
+        r.owned_assets, "OwnedAssetsStore", lambda: type("S", (), {"all": lambda s: [_HOUSE]})()
+    )
+    out, ret = _twr("equity")
+    assert ret == pytest.approx(0.10, abs=1e-6)

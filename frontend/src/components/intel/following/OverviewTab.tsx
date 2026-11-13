@@ -48,6 +48,10 @@ export function OverviewTab({ perf, name, kind, sourceRef, onRetry, range, onRan
   const whole = useQueryCache('/api/returns?period=ALL', () => fetchReturns('ALL'))
   const compareOptions = [
     { value: 'all', label: COPY.compareAll },
+    // Your investments plus what you own: offered only when you own something it would add.
+    ...(whole.data?.has_owned_assets
+      ? [{ value: 'all_assets', label: COPY.compareAllAssets }]
+      : []),
     ...(whole.data?.bands_held ?? []).map((b) => ({
       value: b,
       label: COPY.yourBand(COPY.compareBand[b]),
@@ -260,7 +264,12 @@ export function OverviewTab({ perf, name, kind, sourceRef, onRetry, range, onRan
       {cmp.error != null && !cmp.data ? (
         <p className="fol-foot">{COPY.vsUnavailable}</p>
       ) : (
-        <YouVs data={cmp.data} name={name} yourLabel={yourLabel} />
+        <YouVs
+          data={cmp.data}
+          name={name}
+          yourLabel={yourLabel}
+          ownedAssets={band === 'all_assets'}
+        />
       )}
     </section>
   )
