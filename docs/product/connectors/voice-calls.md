@@ -212,11 +212,10 @@ Your own copy of Open Net Worth has none of these limits.
 ## Troubleshooting
 
 **The Call button isn't there.** Voice calls may be switched off: check **Settings → Developer →
-Experimental**. Or they aren't set up yet: until then the message box keeps **Send**, and the **Call** button
-on the floating Lucius button takes you to Voice calls in Connectors. It also gives way to **Send** as soon as you type.
+Experimental**. It also gives way to **Send** as soon as you type.
 
-**The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
-the Voice calls settings right where you are.
+**The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it takes
+you to Voice calls in Connectors.
 
 **"A call can't join an Automation's conversation."** An Automation's conversation continues on its
 own, so a call can't join it. Press **Start a new chat**, then **Call**. On a phone's other tabs,
