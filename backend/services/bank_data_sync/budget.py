@@ -100,7 +100,7 @@ def backoff(p: Provider, status: str, failures: int, error: Optional[str]) -> ti
     if status == "rate_limited":
         match = _MINUTES.search(error or "")
         return timedelta(minutes=int(match.group(1)) + 5) if match else timedelta(hours=12)
-    if status == "auth_error":
+    if status in ("auth_error", "reconnect_needed"):
         return timedelta(hours=24)
     return min(interval(p), timedelta(minutes=30) * (2 ** max(0, failures - 1)))
 

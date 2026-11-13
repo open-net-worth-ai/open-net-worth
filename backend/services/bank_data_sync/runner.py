@@ -118,7 +118,7 @@ def _run_status(statuses: list[str]) -> str:
         return "ok"
     if any(s == "ok" for s in statuses):
         return "partial"
-    for s in ("auth_error", "rate_limited", "connect_error"):
+    for s in ("auth_error", "reconnect_needed", "rate_limited", "connect_error"):
         if s in statuses:
             return s
     return "error"
