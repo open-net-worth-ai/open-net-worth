@@ -278,8 +278,9 @@ export const fetchPreviewSummary = (kind: FollowKind, ref: string) =>
   readJson<PreviewSummary>(previewSummaryKey(kind, ref))
 export const fetchPreviewPage = (kind: FollowKind, ref: string) =>
   readJson<PreviewPage>(previewPageKey(kind, ref))
-/** One asset type of your book (the server's market bands). */
-export type Band = 'equity' | 'crypto' | 'commodity'
+/** One asset type of your book (the server's market bands), or `all_assets`: your
+ *  investments plus every owned asset (a home, a car), cash left out. */
+export type Band = 'equity' | 'crypto' | 'commodity' | 'all_assets'
 
 export interface LineRisk {
   /** Annualised swings of the weekly return (0.12 = 12%). */

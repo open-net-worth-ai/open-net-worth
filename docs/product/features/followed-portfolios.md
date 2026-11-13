@@ -169,7 +169,11 @@ Point at the chart to read both figures for a day.
 The menu beside the range picks **your** side: **All your investments**, or one type you hold
 (**Your stocks & ETFs**, **Your crypto**, **Your commodities**). Theirs is always their whole report. A
 type counts only its own buys and sells, so money moved from crypto into stocks is neither a gain
-nor a loss of either. Bonds are not offered: they are not part of your investment return. Under
+nor a loss of either. Bonds are not offered: they are not part of your investment return. If you
+own at least one valued asset (a home, a car), **All your assets** adds them to your investments,
+cash left out: buying or selling an asset is neither a gain nor a loss, only its change in value
+counts. An asset is revalued only when you record a value, so its swings look calmer than they
+are; a note under the risk table says so. Under
 the chart, for the same range and the same choice:
 
 - **Risk over this range**: first, one sentence on how closely their line and yours move together

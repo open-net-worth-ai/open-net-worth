@@ -7,6 +7,8 @@ the risk figures from ``risk_metrics``' own functions applied to the lines the c
 
 ``band`` narrows the owner's side to one asset type (``equity``, ``crypto``, ``commodity``):
 their stocks against your stocks, or against your crypto, never a whole book with cash in it.
+``all_assets`` adds your owned assets to the RETURN line only: they have no tickers, so the
+holdings, overlap and sectors read your investments, as with no band.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ _TOP = 5
 # comparable. Fewer weeks than this is too short to call a swing (the row says so).
 _WEEKS_PER_YEAR = 52
 _MIN_WEEKS = 8
+_MARKET_BANDS = ("equity", "crypto", "commodity")
 _BAND_LABEL = {"crypto": "Crypto", "commodity": "Commodities", "fund": "Funds & ETFs"}
 
 
@@ -89,7 +92,7 @@ def _your_weights(
     across accounts counted once — ``concentration_by_name`` with every holding kept."""
     rows = positions_service.hydrated()
     projected, grand = investments_book.project_invested(rows, base_currency())
-    if band:
+    if band in _MARKET_BANDS:
         projected = [p for p in projected if (p.get("asset_class") or "") == band]
         grand = round(sum(float(p["base_value"]) for p in projected), 2)
     ranked = investments_book.concentration_by_name(projected, grand, 100.0, names_only=False)

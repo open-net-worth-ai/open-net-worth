@@ -9,7 +9,7 @@ the services layer, never here. Respects the dependency rule: imports only servi
 
 Routes:
     GET /api/returns?period={7D|1M|3M|YTD|1Y|ALL}[&benchmark=<roster key|id|symbol>][&risk=true]
-        [&band={equity|crypto|commodity}]
+        [&band={equity|crypto|commodity|all_assets}]
         Returns the period-returns payload. With `risk=true`, attaches a `risk` block from
         risk_metrics.portfolio_risk(period, benchmark). Existing callers (no `risk` param)
         are byte-for-byte unaffected — the `risk` key is simply absent.
@@ -46,11 +46,13 @@ class Period(str, Enum):
 
 
 class Band(str, Enum):
-    """One asset type of the book (``services.returns._MARKET_BANDS``)."""
+    """One asset type of the book (``services.returns._MARKET_BANDS``), or ``all_assets``: the
+    book plus every owned asset."""
 
     EQUITY = "equity"
     CRYPTO = "crypto"
     COMMODITY = "commodity"
+    ALL_ASSETS = "all_assets"
 
 
 @router.get("/api/returns/benchmarks")

@@ -93,7 +93,7 @@ def followed_portfolio_preview_compare(
     kind: Literal["fund_13f", "house_member", "etf_daily"],
     ref: str = Query(..., min_length=1, max_length=80),
     since: date | None = None,
-    band: Literal["equity", "crypto", "commodity"] | None = None,
+    band: Literal["equity", "crypto", "commodity", "all_assets"] | None = None,
 ):
     return _run(
         service.preview_compare,

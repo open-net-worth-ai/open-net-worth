@@ -269,7 +269,7 @@ def preview_compare(
     """The page's "You vs." section: overlap, spread, sectors and risk beside your book."""
     from backend.services.followed_portfolios import compare
 
-    if band is not None and band not in ("equity", "crypto", "commodity"):
+    if band is not None and band not in ("equity", "crypto", "commodity", "all_assets"):
         raise ValidationError(f"Unknown asset type '{band}'.")
     return compare.compare(kind, ref, since=since, band=band)
 
