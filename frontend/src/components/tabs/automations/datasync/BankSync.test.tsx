@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { overrideFlagsForTests } from '../../../../hooks/useFlag'
 import { clearQueryCache } from '../../../../state/queryCache'
-import { BankSyncSection } from './BankSyncPanel'
+import { BankSyncPanel } from './BankSyncPanel'
+import { BankSyncSetup } from './BankSyncSetup'
+import { BankSyncSection } from './BankSyncSummary'
 import { BankSyncReviews } from './BankSyncReviews'
 import { DataSyncView } from './DataSyncView'
 import type { BankSyncStatus } from './bankSync'
@@ -36,6 +38,8 @@ function status(over: Partial<BankSyncStatus> = {}): BankSyncStatus {
     running: false,
     to_review: 0,
     lucius_automations: [],
+    history_days: 90,
+    stage: 'history',
     accounts: [
       {
         account_id: 'acc_1',
@@ -45,6 +49,7 @@ function status(over: Partial<BankSyncStatus> = {}): BankSyncStatus {
         sync: true,
         reads_left: 3,
         next_read_at: null,
+        imported: false,
       },
     ],
     ...over,
@@ -89,6 +94,8 @@ beforeEach(() => {
         ],
       })
     if (url.startsWith('/api/bank-sync/reviews/')) return reply({ ok: true })
+    if (url === '/api/bank-sync/gocardless/import')
+      return reply({ run_id: 'r1', accounts: 1, skipped_for_limit: 0 })
     return reply({}, 404)
   })
 })
@@ -105,17 +112,28 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
   beforeEach(() => (restore = overrideFlagsForTests({ bank_data_sync: on })))
   afterEach(() => restore())
 
-  it(on ? 'shows the panel on the connector page' : 'shows nothing at all', async () => {
-    render(<BankSyncSection provider="gocardless" />)
-    if (!on) {
-      await new Promise((r) => setTimeout(r, 20))
-      expect(screen.queryByRole('region', { name: 'GoCardless sync' })).toBeNull()
-      expect(authFetch).not.toHaveBeenCalled()
-      return
-    }
-    expect(await screen.findByRole('region', { name: 'GoCardless sync' })).toBeTruthy()
-    expect(screen.getByText(/Nothing books GoCardless transactions/)).toBeTruthy()
-  })
+  it(
+    on ? 'shows one line and a way in on the connector page' : 'shows nothing at all',
+    async () => {
+      render(<BankSyncSection provider="gocardless" />)
+      if (!on) {
+        await new Promise((r) => setTimeout(r, 20))
+        expect(screen.queryByRole('region', { name: 'GoCardless sync' })).toBeNull()
+        expect(authFetch).not.toHaveBeenCalled()
+        return
+      }
+      expect(await screen.findByRole('region', { name: 'GoCardless sync' })).toBeTruthy()
+      expect(screen.getByText(/nothing books this bank’s transactions yet/)).toBeTruthy()
+      expect(screen.queryByRole('checkbox')).toBeNull() // the details live on the sync's own page
+      fireEvent.click(screen.getByRole('button', { name: 'Set up sync' }))
+      expect(navigate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: '/automations',
+          search: { view: 'sync', sync: 'bank:gocardless' },
+        }),
+      )
+    },
+  )
 })
 
 describe('with bank_data_sync on', () => {
@@ -124,7 +142,7 @@ describe('with bank_data_sync on', () => {
   afterEach(() => restore())
 
   it('choosing Sync without AI says which Automation it turned off', async () => {
-    render(<BankSyncSection provider="gocardless" />)
+    render(<BankSyncPanel status={status({ stage: 'done' })} />)
     fireEvent.click(await screen.findByRole('tab', { name: 'Sync without AI' }))
     expect(
       await screen.findByText(
@@ -136,8 +154,7 @@ describe('with bank_data_sync on', () => {
   })
 
   it('lists each linked account with its own Sync box and reads left', async () => {
-    current = status({ mode: 'data' })
-    render(<BankSyncSection provider="gocardless" />)
+    render(<BankSyncPanel status={status({ mode: 'data', stage: 'done' })} />)
     const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
     expect((box as HTMLInputElement).checked).toBe(true)
     expect(screen.getByText(/3 of 4 bank reads left today/)).toBeTruthy()
@@ -149,6 +166,27 @@ describe('with bank_data_sync on', () => {
       }),
     )
     expect(JSON.parse(sent.at(-1)!.body!)).toEqual({ sync: false })
+  })
+
+  it('setup brings the history in first, then turns the sync on', async () => {
+    const { rerender } = render(<BankSyncSetup status={status()} />)
+    expect(screen.getByText(/Your bank serves up to 90 days/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Import history' }))
+    await waitFor(() =>
+      expect(sent.at(-1)).toMatchObject({
+        url: '/api/bank-sync/gocardless/import',
+        method: 'POST',
+      }),
+    )
+    const imported = status({ stage: 'sync' })
+    imported.accounts![0]!.imported = true
+    rerender(<BankSyncSetup status={imported} />)
+    expect(screen.getByText(/Imported into ACME Current/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on sync without AI' }))
+    await waitFor(() =>
+      expect(sent.at(-1)).toMatchObject({ url: '/api/bank-sync/gocardless/mode', method: 'PUT' }),
+    )
+    expect(JSON.parse(sent.at(-1)!.body!)).toEqual({ mode: 'data' })
   })
 
   it('a review item changes nothing until you choose', async () => {

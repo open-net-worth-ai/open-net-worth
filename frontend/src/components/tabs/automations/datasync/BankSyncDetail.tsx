@@ -1,15 +1,21 @@
+import { useState } from 'react'
 import { fDateTime } from '../../../../utils/format'
 import { ErrorState, Loading } from '../../../ui'
 import { BankSyncPanel } from './BankSyncPanel'
 import { BankSyncReviews } from './BankSyncReviews'
+import { BankSyncSetup } from './BankSyncSetup'
 import { useBankSync, useBankSyncRuns } from './bankSync'
 import './bankSync.css'
 
-// A bank connector's Data sync page in Automations (ADR 2026-11-13): its controls, the review
-// list, and the run history.
+// A bank connector's Data sync page in Automations (ADR 2026-11-13): the setup steps until its
+// sync is on, then its controls, the review list and the run history.
 
 export function BankSyncDetail({ provider, onBack }: { provider: string; onBack: () => void }) {
-  const sync = useBankSync(provider)
+  // Re-read every two seconds only while a run is in progress.
+  const [poll, setPoll] = useState(false)
+  const sync = useBankSync(provider, true, poll)
+  const running = !!sync.data?.running
+  if (running !== poll) setPoll(running)
   const label = sync.data?.label ?? 'Bank sync'
   const crumb = (
     <nav className="a3-crumb" aria-label="Breadcrumb">
@@ -50,17 +56,24 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
           <h1>{label}</h1>
           <div className="a3-detail-sub">
             Bank transactions booked by fixed rules, no AI. Changes the bank makes afterwards wait
-            for you below.
+            for you to review.
           </div>
         </div>
       </div>
-      <div className="bs-detail">
-        <div className="a3-block">
-          <BankSyncPanel provider={provider} heading={false} />
+      {sync.data.stage === 'done' ? (
+        <div className="bs-detail">
+          <div className="a3-block">
+            <BankSyncPanel status={sync.data} />
+          </div>
+          <BankSyncReviews provider={provider} />
+          <BankSyncHistory provider={provider} />
         </div>
-        <BankSyncReviews provider={provider} />
-        <BankSyncHistory provider={provider} />
-      </div>
+      ) : (
+        <div className="bs-detail">
+          <BankSyncSetup status={sync.data} />
+          {sync.data.last_run && <BankSyncHistory provider={provider} />}
+        </div>
+      )}
     </div>
   )
 }

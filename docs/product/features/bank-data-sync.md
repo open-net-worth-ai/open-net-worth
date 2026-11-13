@@ -26,12 +26,20 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
 
 1. Set up the connector and link its accounts as usual — see
    [Bank & brokerage connectors](../connectors/bank-brokerage.md).
-2. On the connector's page, under **Sync**, choose **Sync without AI**.
-3. Each linked account has a **Sync** box, ticked by default. Untick an account to leave it
-   out: it's never read from the bank or booked.
+2. Under **Sync** on the connector's page, click **Set up sync**. It opens the bank's own page in
+   **Automations → Data sync**, with three steps:
+   1. **Choose the accounts to sync.** Every linked account is ticked. Untick one to leave it
+      out: it's never read from the bank or booked.
+   2. **Bring in your history.** **Import history** books the history your bank serves (90
+      days for most European banks) into the ticked accounts, and moves each account's Starting
+      Balance back to its oldest row, so today's balance doesn't change. It shows what came in.
+      Safe to run again.
+   3. **Keep it in sync.** **Turn on sync without AI** books new transactions on a schedule from
+      then on, or choose **Let Lucius sync it instead**.
 
-The first run starts within a minute. You'll also find the sync under **Automations → Data sync**,
-with its run history and anything waiting for your review.
+You can turn the sync on without step 2: its first run brings the history in. Afterwards the
+connector page shows one line — who books the bank's transactions, the next run, anything to
+review — and **Manage** opens the bank's page: the controls, **To review** and the run history.
 
 ## One way to sync at a time
 

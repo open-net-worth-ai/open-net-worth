@@ -5,6 +5,7 @@
   * ``PUT  /api/bank-sync/{provider}/mode``           ``{mode: off|data|lucius}``
   * ``PUT  /api/bank-sync/{provider}/accounts/{id}``  ``{sync: bool}``
   * ``PUT  /api/bank-sync/{provider}/followup``       ``{enabled: bool}``
+  * ``POST /api/bank-sync/{provider}/import``         bring in the history (setup step 2)
   * ``POST /api/bank-sync/{provider}/run``            Sync now (409 with the reason when refused)
   * ``GET  /api/bank-sync/{provider}/runs``           its run history
   * ``GET  /api/bank-sync/reviews``                   open review items (``?provider=``)
@@ -100,6 +101,11 @@ async def bank_sync_followup(provider: str, body: FollowupBody):
 @router.post("/api/bank-sync/{provider}/run")
 async def bank_sync_run(provider: str):
     return await _call(bank_data_sync.run_now, provider)
+
+
+@router.post("/api/bank-sync/{provider}/import")
+async def bank_sync_import(provider: str):
+    return await _call(bank_data_sync.import_history, provider)
 
 
 @router.get("/api/bank-sync/{provider}/runs")

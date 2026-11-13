@@ -2,6 +2,18 @@
    sync page, the review list and the run history. Built on the design-system primitives; only
    the layout around them lives here. */
 
+.bs-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bs-summary-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .bs-panel {
   display: flex;
   flex-direction: column;

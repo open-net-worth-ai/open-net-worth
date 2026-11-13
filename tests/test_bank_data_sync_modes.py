@@ -185,3 +185,32 @@ def test_an_auth_error_waits_a_day(bank):
         hours=24
     )
     assert "401" in (bank_data_sync.status("gocardless")["last_error"] or "")
+
+
+# ── setup: bring in the history before turning the sync on ───────────────────────────
+
+
+def test_setup_walks_accounts_then_history_then_sync(bank):
+    assert bank_data_sync.status("gocardless")["stage"] == "history"
+    started = bank_data_sync.import_history("gocardless")
+    assert started["accounts"] == 1
+    _wait_for_runs()
+    st = bank_data_sync.status("gocardless")
+    assert st["mode"] == "off"  # importing doesn't turn the sync on
+    assert st["accounts"][0]["imported"] is True
+    assert st["stage"] == "sync"
+    assert st["history_days"] == 90
+    bank_data_sync.set_mode("gocardless", "data")
+    assert bank_data_sync.status("gocardless")["stage"] == "done"
+
+
+def test_history_import_is_refused_while_lucius_syncs_the_bank(bank):
+    _automation()
+    with pytest.raises(ConflictError, match="Lucius Automation syncs GoCardless"):
+        bank_data_sync.import_history("gocardless")
+
+
+def test_no_ticked_account_is_the_accounts_step(bank):
+    account_id = bank_data_sync.status("gocardless")["accounts"][0]["account_id"]
+    bank_data_sync.set_account_sync("gocardless", account_id, False)
+    assert bank_data_sync.status("gocardless")["stage"] == "accounts"

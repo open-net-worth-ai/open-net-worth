@@ -40,9 +40,11 @@ def _iso(dt) -> Optional[str]:
 
 def _accounts(p, key: str) -> list[dict]:
     from backend.services import accounts as accounts_service
+    from backend.services import ledger as ledger_service
 
     excluded = set(settings.get(key)["excluded_account_ids"])
     names = {r.get("id"): r.get("name") for r in accounts_service.all_account_rows()}
+    imported = ledger_service.accounts_booked_from(key)
     out = []
     for a in accounts_service.linked_accounts_for_source(key):
         left, next_at = budget.reads_left(p, a.get("provider_account_id") or "")
@@ -56,9 +58,24 @@ def _accounts(p, key: str) -> list[dict]:
                 "sync": a.get("linked_account_id") not in excluded,
                 "reads_left": left,
                 "next_read_at": _iso(next_at),
+                # History brought in: whether anything from this bank is booked here yet.
+                "imported": a.get("linked_account_id") in imported,
             }
         )
     return out
+
+
+def _stage(mode: str, accounts: list[dict]) -> str:
+    """Where setup stands — the steps on the bank's Data sync page: ``accounts`` (nothing linked
+    or ticked yet) → ``history`` (bring the history in) → ``sync`` (turn the sync on) → ``done``
+    (Sync without AI or Lucius is on). Turning the sync on before importing is fine: its first
+    run brings the history in."""
+    if mode in ("data", "lucius"):
+        return "done"
+    ticked = [a for a in accounts if a["sync"]]
+    if not ticked:
+        return "accounts"
+    return "sync" if any(a["imported"] for a in ticked) else "history"
 
 
 def _connector_ready(p) -> bool:
@@ -113,7 +130,13 @@ def overview() -> list[dict]:
 def status(key: str) -> dict:
     _require_on()
     p = settings.provider(key)
-    return {**_summary(p), "accounts": _accounts(p, key)}
+    summary, accounts = _summary(p), _accounts(p, key)
+    return {
+        **summary,
+        "accounts": accounts,
+        "history_days": p.history_days or p.lookback_days,
+        "stage": _stage(summary["mode"], accounts),
+    }
 
 
 def set_mode(key: str, mode: str) -> dict:
@@ -171,13 +194,17 @@ def _when(dt) -> str:
     return (dt.astimezone(zone) if zone else dt).strftime("%H:%M")
 
 
-def run_now(key: str) -> dict:
-    """ "Sync now": refused (409, with the reason) unless data mode is on, the connector is set
-    up, and at least one ticked account has a read left today. Runs in the background."""
-    _require_on()
+def _start(key: str, *, needs_data: bool) -> dict:
+    """Start one run now, in the background — refused (409, with the reason) unless the
+    connector is set up and at least one ticked account has a read left today."""
     p = settings.provider(key)
-    if not settings.is_data(key):
+    if needs_data and not settings.is_data(key):
         raise ConflictError(f"{p.label} isn't set to Sync without AI.")
+    if not needs_data and settings.mode(key) == "lucius":
+        raise ConflictError(
+            f"A Lucius Automation syncs {p.label}. Choose Off or Sync without AI first, so its "
+            "rows aren't booked twice."
+        )
     runner.refuse_unless_ready(p)
     accounts = runner.opted_accounts(key)
     if not accounts:
@@ -192,6 +219,21 @@ def run_now(key: str) -> dict:
     run = runner.start(p, "manual", ready)
     runner.finish_in_background(p, run, ready)
     return {"run_id": run["id"], "accounts": len(ready), "skipped_for_limit": len(spent)}
+
+
+def run_now(key: str) -> dict:
+    """ "Sync now" — only while Sync without AI is on."""
+    _require_on()
+    return _start(key, needs_data=True)
+
+
+def import_history(key: str) -> dict:
+    """Setup step 2, "Bring in your history": one run now, before the sync is turned on. A
+    ticked account never imported gets everything the bank serves and its start moves back
+    (``booker.align_first_imports``); one imported before just catches up. Safe to run again.
+    Refused while a Lucius Automation syncs the bank."""
+    _require_on()
+    return _start(key, needs_data=False)
 
 
 def run_if_due() -> bool:

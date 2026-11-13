@@ -42,7 +42,7 @@ import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
-import { BankSyncSection } from '../automations/datasync/BankSyncPanel'
+import { BankSyncSection } from '../automations/datasync/BankSyncSummary'
 import { cachedRestApi, getRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {

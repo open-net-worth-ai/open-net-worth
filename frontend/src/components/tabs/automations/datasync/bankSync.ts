@@ -8,6 +8,9 @@ import { detailOf, type RunSummary } from '../../imports/runs'
 
 export type BankSyncMode = 'off' | 'data' | 'lucius'
 
+/** Where setup stands: tick accounts → bring in history → turn the sync on → done. */
+export type BankSyncStage = 'accounts' | 'history' | 'sync' | 'done'
+
 export interface BankSyncAccount {
   account_id: string
   name: string
@@ -18,6 +21,8 @@ export interface BankSyncAccount {
   /** Reads left in the bank's rolling 24 h limit; null when the bank sets none. */
   reads_left: number | null
   next_read_at: string | null
+  /** Anything from this bank is booked here yet (its history came in). */
+  imported: boolean
 }
 
 export interface BankSyncStatus {
@@ -36,6 +41,9 @@ export interface BankSyncStatus {
   to_review: number
   lucius_automations: { id: string; name: string; status: string }[]
   accounts?: BankSyncAccount[]
+  /** How far back a first import reaches (the history the bank serves). */
+  history_days?: number
+  stage?: BankSyncStage
 }
 
 export interface ModeResult extends BankSyncStatus {
@@ -168,6 +176,9 @@ export function modeNotice(result: ModeResult): string | null {
   if (result.mode === 'off') return 'Sync without AI is off. Nothing books this bank’s rows now.'
   return null
 }
+
+/** Where a bank's sync lives: its page in Automations → Data sync. */
+export const bankSyncSearch = (provider: string) => ({ view: 'sync', sync: `bank:${provider}` })
 
 export const MODE_LABELS: Record<BankSyncMode, string> = {
   off: 'Off',

@@ -148,21 +148,28 @@ the Lucius steps skip and these run after GCL-NAV-BACK (ADR
 `2026-11-13-a-bank-connector-can-book-its-rows-without-ai`). Run it beside the default mode: the
 default run proves nothing changed with the flag off.
 
-### GCL-DS-MODE
+### GCL-DS-SETUP
 - GIVEN both accounts are linked
-- WHEN I choose **Sync without AI** under **Sync** on the GoCardless connector
-- THEN each linked account shows a **Sync** box, ticked
+- THEN the GoCardless connector shows one **Sync** line ("Off — nothing books this bank's
+  transactions yet") and **Set up sync**, with no account boxes on the connector page
+- WHEN I click **Set up sync**
+- THEN its page in Automations → Data sync opens on the setup steps, each linked account ticked
 
 ### GCL-DS-UNTICK
 - WHEN I untick Savings Pot
 - THEN it says it is never read or booked
 
 ### GCL-DS-FIRST-IMPORT
-- WHEN I press **Sync now**
+- WHEN I press **Import history** (step 2)
 - THEN CA_Monzo holds exactly the bank's booked rows, its 40- and 75-day history included, the
   pending taxi fare excluded, both £3.00 coffees, the EUR charge with its original amount
 - AND its start moved back to the oldest row and its balance is still £1,000
 - AND Savings Pot was neither read from the bank nor booked
+- AND the sync is still off: importing doesn't turn it on
+
+### GCL-DS-TURN-ON
+- WHEN I press **Turn on sync without AI** (step 3)
+- THEN the page shows the sync's controls with **Sync now**
 
 ### GCL-DS-RERUN
 - WHEN I press **Sync now** again
