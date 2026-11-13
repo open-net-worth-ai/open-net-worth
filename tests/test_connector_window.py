@@ -192,7 +192,7 @@ def test_both_identical_rows_are_offered_and_the_second_after_the_first_is_booke
     assert _refs(second["transactions"]) == [_refs(first["transactions"])[1]]
 
 
-# ── a first import takes the bank's whole history ─────────────────────────────────────
+# ── history is asked for, never defaulted ─────────────────────────────────────────────
 
 
 def _link_gocardless(provider_account: str) -> str:
@@ -225,15 +225,18 @@ def _book_gocardless(on: str, account_id: str, ref: str) -> None:
     )
 
 
-def test_a_newly_linked_account_imports_the_banks_whole_history():
+def test_a_newly_linked_accounts_default_fetch_is_one_lookback_not_the_whole_history():
+    """A sync Automation runs on the default window. Pulling 90 days (2 years on Plaid) on
+    its first run made Lucius book hundreds of rows — a large model bill nobody asked for.
+    A backfill states its range; the default is the daily read."""
     gc = PROVIDERS["gocardless"]
     _link_gocardless("acc-new")
     since, _, warning = connector_window.default_window(gc, None, None)
-    assert since == _days_ago(gc.history_days) == _days_ago(90)
+    assert since == _days_ago(gc.lookback_days)
     assert warning is None
 
 
-def test_once_every_linked_account_has_imported_the_usual_catch_up_applies():
+def test_once_an_account_has_imported_the_usual_catch_up_applies():
     gc = PROVIDERS["gocardless"]
     account_id = _link_gocardless("acc-1")
     _book_gocardless(_days_ago(1), account_id, "acc-1:tx-1")
@@ -241,17 +244,8 @@ def test_once_every_linked_account_has_imported_the_usual_catch_up_applies():
     assert since == _days_ago(1 + gc.lookback_days)
 
 
-def test_linking_a_second_bank_later_brings_in_its_history_too():
-    gc = PROVIDERS["gocardless"]
-    first = _link_gocardless("acc-1")
-    _book_gocardless(_days_ago(1), first, "acc-1:tx-1")
-    _link_gocardless("acc-2")  # linked after the first was already importing
-    since, _, _ = connector_window.default_window(gc, None, None)
-    assert since == _days_ago(90)
-
-
-def test_a_provider_without_history_days_keeps_its_lookback_for_a_first_import():
-    sf = dataclasses.replace(PROVIDERS["simplefin"], history_days=0)
-    _account_id()  # linked to simplefin, nothing booked
-    since, _, _ = connector_window.default_window(sf, None, None)
-    assert since == _days_ago(sf.lookback_days)
+def test_a_backfill_asks_for_the_history_the_provider_serves():
+    assert connector_window.history_since(PROVIDERS["gocardless"]) == _days_ago(90)
+    assert connector_window.history_since(PROVIDERS["plaid"]) == _days_ago(730)
+    none = dataclasses.replace(PROVIDERS["simplefin"], history_days=0)
+    assert connector_window.history_since(none) == _days_ago(none.lookback_days)

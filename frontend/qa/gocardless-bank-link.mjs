@@ -54,8 +54,8 @@ function daysAgo(n) {
   return d.toISOString().slice(0, 10)
 }
 
-/** What must land in the book from the fake bank: [account name, date, amount]. The pending
- *  taxi fare must not. */
+/** What the daily sync must land in the book from the fake bank: [account name, date, amount].
+ *  The pending taxi fare must not, nor the history older than its two-week window. */
 const EXPECTED_BOOKED = [
   ['CA_Monzo', 2, -12.4],
   ['CA_Monzo', 3, 2500],
@@ -66,9 +66,13 @@ const EXPECTED_BOOKED = [
   ['CA_Monzo', 7, -24.99],
   ['CA_Monzo', 8, -850],
   ['CA_Monzo', 10, -60],
+  ['Savings Pot', 1, 0.42],
+]
+
+/** Older than the daily window: booked only when the user asks Lucius for that range. */
+const EXPECTED_HISTORY = [
   ['CA_Monzo', 40, -80],
   ['CA_Monzo', 75, -120],
-  ['Savings Pot', 1, 0.42],
 ]
 
 function fakeGoCardless() {
@@ -152,8 +156,8 @@ function fakeGoCardless() {
           creditorName: 'Acme University',
         },
         {
-          // History older than two weeks: only a first import that takes the bank's 90 days
-          // brings these in.
+          // History older than two weeks: the daily sync never fetches it (a large model
+          // bill nobody asked for); asking Lucius for the range does.
           transactionId: 'tx_c10',
           bookingDate: daysAgo(40),
           transactionAmount: { amount: '-80.00', currency: 'GBP' },
@@ -949,24 +953,6 @@ async function main() {
     )
 
     await step(
-      'GCL-FIRST-IMPORT-HISTORY',
-      async () => {
-        if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
-        // The 75-day-old row is in (asserted with the rest by GCL-LUCIUS-FETCH); here: it
-        // counts. The start moved back to the oldest imported row, and today's balance — the
-        // £1,000 the user typed — is unchanged.
-        const list = await api(baseUrl, '/api/accounts')
-        const ca = (Array.isArray(list) ? list : list.accounts).find((a) => a.name === 'CA_Monzo')
-        assert.ok(
-          String(ca.initial_balance_date) <= daysAgo(75),
-          `CA_Monzo still starts ${ca.initial_balance_date}, after its oldest imported row ${daysAgo(75)}`,
-        )
-        assert.ok(Math.abs(Number(ca.balance) - 1000) < 0.005, `balance moved to ${ca.balance}`)
-      },
-      bank,
-    )
-
-    await step(
       'GCL-LUCIUS-REFETCH',
       async () => {
         if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
@@ -979,6 +965,37 @@ async function main() {
         await runLuciusTurn(bank, null)
         const after = (await bookedAll()).length
         assert.equal(after, before, `a second fetch changed the book (${before} → ${after} rows)`)
+      },
+      bank,
+    )
+
+    await step(
+      'GCL-LUCIUS-RANGE',
+      async () => {
+        if (!LUCIUS) throw new Error('SKIP: no Claude Code CLI on PATH (or GCL_LUCIUS=0)')
+        // History is asked for, never defaulted: the user names the range, Lucius books the
+        // older rows, and the account's start moves back so they count — today's balance (the
+        // £1,000 the user typed) unchanged.
+        const before = await bookedAll()
+        await runLuciusTurn(
+          bank,
+          `Fetch my GoCardless transactions from ${daysAgo(90)} and book any that are missing.`,
+        )
+        const fresh = (await bookedAll())
+          .filter(([, r]) => !before.some(([, b]) => b.refs.join() === r.refs.join()))
+          .map(([acct, r]) => `${acct} ${r.date} ${r.amount.toFixed(2)}`)
+          .sort()
+        const want = EXPECTED_HISTORY.map(
+          ([acct, ago, amount]) => `${acct} ${daysAgo(ago)} ${amount.toFixed(2)}`,
+        ).sort()
+        assert.deepEqual(fresh, want, 'the asked-for range did not book exactly the older rows')
+        const list = await api(baseUrl, '/api/accounts')
+        const ca = (Array.isArray(list) ? list : list.accounts).find((a) => a.name === 'CA_Monzo')
+        assert.ok(
+          String(ca.initial_balance_date) <= daysAgo(75),
+          `CA_Monzo still starts ${ca.initial_balance_date}, after its oldest imported row ${daysAgo(75)}`,
+        )
+        assert.ok(Math.abs(Number(ca.balance) - 1000) < 0.005, `balance moved to ${ca.balance}`)
       },
       bank,
     )

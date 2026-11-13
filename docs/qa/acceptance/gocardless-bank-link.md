@@ -98,10 +98,13 @@ with real credentials; not automated (new signups are closed, and we hold no acc
   differs from its remittance text, a salary credit naming only the payer, two separate id-less
   £3.00 coffees on one day, a purchase paid in euros, a row dated only by its booking date-time,
   a life-insurance premium and a university tuition fee (no category in the book fits either),
-  an older direct debit, a pending taxi fare, and interest on the second account
+  an older direct debit, a pending taxi fare, interest on the second account, and two rows
+  40 and 75 days old
 - WHEN the GoCardless sync Automation — created from its template, word for word — runs
-- THEN the book holds exactly the bank's ten booked rows — each once, on the right account,
-  with the bank's date and amount — and not the pending fare; no two rows share a bank ref
+- THEN the book holds exactly the bank's ten booked rows of the last two weeks — each once, on
+  the right account, with the bank's date and amount — and not the pending fare, nor the two
+  older rows (a daily sync never pulls history: that is a model bill nobody asked for); no two
+  rows share a bank ref
 
 ### GCL-CATEGORISED
 - GIVEN that sync run, which books through the `book-transactions` skill
@@ -115,6 +118,12 @@ with real credentials; not automated (new signups are closed, and we hold no acc
 - GIVEN that sync was booked
 - WHEN I tap "Fetch my GoCardless transactions" on the connector page and send it
 - THEN nothing new is booked and nothing is duplicated
+
+### GCL-LUCIUS-RANGE
+- GIVEN that sync was booked, and the bank still holds the two older rows
+- WHEN I ask Lucius to fetch my GoCardless transactions from 90 days ago and book what's missing
+- THEN exactly those two rows are booked, CA_Monzo's start moves back to the oldest of them,
+  and its balance is still the £1,000 I set
 
 ### GCL-STATUS-AFTER
 - GIVEN the bank was approved in the other tab

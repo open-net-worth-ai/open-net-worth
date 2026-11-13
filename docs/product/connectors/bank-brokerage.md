@@ -444,11 +444,12 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 
 The schedule and the wording are yours to change. Each run:
 
-- **Brings in your bank's whole history the first time.** A newly linked account's first sync
-  reaches back as far as the bank allows (90 days for GoCardless, Enable Banking, SimpleFIN and
-  Lunch Flow; up to two years for a bank linked through Plaid), and the account's starting
-  point moves back to the oldest of those transactions so they count — in spending and reports —
-  while today's balance stays exactly what you set.
+- **Doesn't pull your bank's whole history.** A run is for keeping up day to day, so even the
+  first run reads the last 14 days — booking months of history through Lucius would cost a lot of
+  model use. To bring in older transactions, ask Lucius for the range ("fetch my Monzo
+  transactions since March 1"): it books them and moves the account's starting point back so
+  they count, while today's balance stays exactly what you set. Banks serve about 90 days (up to
+  two years for a bank linked through Plaid).
 - **Looks back 14 days from the newest transaction it already booked**, so a transaction your
   bank posts late is still caught — and after a pause (a holiday, an expired bank link, a paused
   automation) the next run picks up where the book stops instead of skipping the gap. Banks only
