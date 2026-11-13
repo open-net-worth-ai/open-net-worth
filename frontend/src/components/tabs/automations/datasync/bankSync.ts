@@ -25,6 +25,11 @@ export interface BankSyncAccount {
   next_read_at: string | null
   /** Anything from this bank is booked here yet (its history came in). */
   imported: boolean
+  /** When the bank's access for this app ends (European banks grant it for a set time). */
+  access_ends_at?: string | null
+  access_ended?: boolean
+  /** It ends within two weeks: the page asks for a renewal now (the server decides when). */
+  access_renew_soon?: boolean
 }
 
 export interface BankSyncStatus {

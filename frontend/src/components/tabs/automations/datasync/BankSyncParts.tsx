@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { invalidateQueryCache } from '../../../../state/queryCache'
-import { fScheduleWhen } from '../../../../utils/format'
+import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, Checkbox, Modal } from '../../../ui'
 import { Clock3 } from 'lucide-react'
 import { ConnectorAccountsList } from '../../connectors/ConnectorAccountsList'
@@ -49,6 +49,7 @@ export function AccountBoxes({
           aria-label={`${bank} accounts to sync`}
         >
           <div className="bs-bank-h">{bank}</div>
+          <BankStatusLine status={status} accounts={accounts} />
           {accounts.map((a) => (
             <Checkbox
               key={a.account_id}
@@ -193,18 +194,33 @@ export function BankSyncTitle({ provider, label }: { provider: string; label: st
   )
 }
 
-/** A bank whose connector isn't set up: open its setup in place, as the budget apps' page does
- *  ("Connect YNAB…"). Closing it re-reads the sync, which then asks for its accounts. */
-export function ConnectBankButton({ status }: { status: BankSyncStatus }) {
+/** The connector's own setup panel, opened in place as the budget apps' page does ("Connect
+ *  YNAB…"): connecting a bank, renewing its access, reconnecting it all live there. Closing it
+ *  re-reads the sync. `link`: a text button inside a line, not a primary button. */
+export function ConnectorSetupButton({
+  status,
+  label,
+  link = false,
+}: {
+  status: BankSyncStatus
+  label: string
+  link?: boolean
+}) {
   useConnectors() // warm the connector list, so the panel opens at once
   const [open, setOpen] = useState(false)
   return (
     <>
-      <div>
-        <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
-          {`Connect ${status.label}…`}
-        </Button>
-      </div>
+      {link ? (
+        <button type="button" className="a3-linkbtn" onClick={() => setOpen(true)}>
+          {label}
+        </button>
+      ) : (
+        <div>
+          <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
+            {label}
+          </Button>
+        </div>
+      )}
       {open && (
         <ConnectorPanel
           connectorId={status.provider}
@@ -216,5 +232,48 @@ export function ConnectBankButton({ status }: { status: BankSyncStatus }) {
         />
       )}
     </>
+  )
+}
+
+/** One line under a bank's name: when it last synced and until when the bank lets this app
+ *  read it — or, when something needs you, that thing in plain words with the one button that
+ *  fixes it. */
+function BankStatusLine({
+  status,
+  accounts,
+}: {
+  status: BankSyncStatus
+  accounts: BankSyncAccount[]
+}) {
+  const ended = accounts.some((a) => a.access_ended)
+  const ends = accounts
+    .map((a) => a.access_ends_at)
+    .filter((d): d is string => !!d)
+    .sort()[0]
+  const soon = accounts.some((a) => a.access_renew_soon)
+  const signIn = status.last_status === 'auth_error' || status.last_status === 'reconnect_needed'
+  const problem = ended
+    ? ['Access ended. Nothing syncs until you renew it.', 'Renew']
+    : signIn
+      ? ['The bank needs you to sign in again.', 'Reconnect']
+      : soon
+        ? [`Access ends ${fDate(ends!)}.`, 'Renew']
+        : null
+  if (problem)
+    return (
+      <p className="bs-bank-line warn">
+        {problem[0]} <ConnectorSetupButton status={status} label={problem[1]!} link />
+      </p>
+    )
+  const run = status.last_run
+  const synced = status.running
+    ? 'Syncing now…'
+    : run
+      ? `Synced ${timeAgo(run.finished_at || run.started_at)}`
+      : 'Not synced yet'
+  return (
+    <p className="bs-bank-line">
+      {[synced, ends && `access until ${fDate(ends)}`].filter(Boolean).join(' · ')}
+    </p>
   )
 }

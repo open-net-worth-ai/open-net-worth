@@ -4,7 +4,7 @@ import { Button } from '../../../ui'
 import {
   AccountBoxes,
   ActionError,
-  ConnectBankButton,
+  ConnectorSetupButton,
   LinkAccountsButton,
   ScheduleMenu,
 } from './BankSyncParts'
@@ -42,7 +42,7 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
           title={status.connected === false ? `Connect ${status.label}` : 'Choose accounts'}
         >
           {status.connected === false ? (
-            <ConnectBankButton status={status} />
+            <ConnectorSetupButton status={status} label={`Connect ${status.label}…`} />
           ) : accounts.length === 0 ? (
             <LinkAccountsButton status={status} primary />
           ) : (

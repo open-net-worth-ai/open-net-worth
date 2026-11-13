@@ -283,6 +283,31 @@ describe('with bank_data_sync on', () => {
     expect(other.textContent).toContain('Other Card')
   })
 
+  it.each([
+    [{ access_ends_at: '2099-02-11T00:00:00+00:00' }, /Not synced yet · access until /, null],
+    [
+      { access_ends_at: '2099-02-11T00:00:00+00:00', access_renew_soon: true },
+      /Access ends /,
+      'Renew',
+    ],
+    [{ access_ended: true }, /Access ended/, 'Renew'],
+  ] as const)('under each bank, one line: how it stands, and the one fix', (acc, line, fix) => {
+    const base = status().accounts![0]!
+    render(
+      <BankSyncSettings
+        status={status({
+          mode: 'data',
+          stage: 'done',
+          accounts: [{ ...base, bank: 'ACME Bank', ...acc }],
+        })}
+      />,
+    )
+    const group = screen.getByRole('group', { name: 'ACME Bank accounts to sync' })
+    expect(group.textContent).toMatch(line)
+    if (fix) expect(screen.getByRole('button', { name: fix })).toBeTruthy()
+    else expect(screen.queryByRole('button', { name: 'Renew' })).toBeNull()
+  })
+
   it('the schedule is a menu of what the bank allows, and picking one saves it', async () => {
     render(
       <BankSyncSettings status={status({ mode: 'data', stage: 'done', intervals: [6, 12, 24] })} />,

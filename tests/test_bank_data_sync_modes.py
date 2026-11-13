@@ -255,3 +255,24 @@ def test_each_account_says_which_bank_it_is_at(bank):
     accounts_service.update_account(account_id, {"institution": "ACME Bank"})
     [acct] = bank_data_sync.status("gocardless")["accounts"]
     assert acct["bank"] == "ACME Bank"
+
+
+def test_each_account_says_when_its_bank_access_ends_and_when_it_has(bank):
+    from backend.db.gocardless_config_store import GoCardlessConfigStore
+
+    store = GoCardlessConfigStore()
+    [b] = store.banks()
+    store.update_bank(b["key"], consent_expires_at="2099-02-11T00:00:00+00:00")
+    [acct] = bank_data_sync.status("gocardless")["accounts"]
+    assert acct["access_ends_at"].startswith("2099-02-11")
+    assert (acct["access_ended"], acct["access_renew_soon"]) == (False, False)
+
+    from datetime import datetime, timedelta, timezone
+
+    soon = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+    store.update_bank(b["key"], consent_expires_at=soon)
+    assert bank_data_sync.status("gocardless")["accounts"][0]["access_renew_soon"] is True
+
+    store.update_bank(b["key"], status="EX")
+    [acct] = bank_data_sync.status("gocardless")["accounts"]
+    assert acct["access_ended"] is True

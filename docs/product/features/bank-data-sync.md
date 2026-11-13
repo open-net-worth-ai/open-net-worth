@@ -43,6 +43,10 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
 
 Once it's set up, the page shows a switch to turn it on or off, the next sync and **Sync now**;
 below them, the accounts, the schedule, anything that needs your review, and the run history.
+Under each bank's name, one line says when it last synced and until when the bank lets the app
+read it. European banks grant that access for a set time (often 90 or 180 days); two weeks before
+it ends the line says so with **Renew**, and once it has ended, or the bank wants you to sign in
+again, it says that with **Renew** or **Reconnect**. Either opens the connector's own setup.
 Click a run in the history to see what it did: what it read from the bank, what it booked (each
 transaction, with its account and category), what it left pending or sent to review, and any
 problems. Click a transaction there to open its details, or **View in register** to see
