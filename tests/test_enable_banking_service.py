@@ -555,7 +555,7 @@ def test_fetch_window_skips_rows_with_unrecognized_indicator(monkeypatch):
 
 
 def test_txn_to_row_falls_back_to_derived_ref_when_no_id():
-    """A transaction with no entry_reference/transaction_id gets the shared content-hash
+    """A transaction with no entry_reference gets the shared content-hash
     fallback ref (RFC §A step 3) — never a dropped row."""
     txn = {
         "booking_date": "2026-05-01",
@@ -567,6 +567,25 @@ def test_txn_to_row_falls_back_to_derived_ref_when_no_id():
     expected_ref = derived_ref("EB-CHK", "2026-05-01", -10.0, "EUR", "No ID Merchant")
     assert row["external_refs"] == [{"source": "enable_banking", "ref": expected_ref}]
     assert row["raw"] is txn
+
+
+def test_a_relisted_row_keeps_its_ref_when_only_transaction_id_changes():
+    """Enable Banking's transaction_id "may change if the list of transactions is requested
+    again" (its docs). The same money listed twice with two transaction_ids must carry ONE
+    ref, or the second listing books it again; entry_reference, when sent, is the key."""
+    base = {
+        "booking_date": "2026-05-01",
+        "transaction_amount": {"amount": "10.00", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+        "remittance_information": "ACME Cafe",
+    }
+    first = svc._txn_to_row({**base, "transaction_id": "T-1"}, "EB-CHK", "EUR")
+    again = svc._txn_to_row({**base, "transaction_id": "T-99"}, "EB-CHK", "EUR")
+    assert first["external_refs"] == again["external_refs"]
+    keyed = svc._txn_to_row(
+        {**base, "transaction_id": "T-1", "entry_reference": "E-7"}, "EB-CHK", "EUR"
+    )
+    assert keyed["external_refs"] == [{"source": "enable_banking", "ref": "EB-CHK:E-7"}]
 
 
 # ── SECURITY (S-F1): the session id never leaks into an error message ────────────────

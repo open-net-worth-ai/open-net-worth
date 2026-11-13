@@ -160,9 +160,10 @@ def fetch_transactions(
     No ``debit_as_negative`` param — v2 removed it entirely and FIXED the sign convention
     instead (positive = debit/money-out, negative = credit/money-in, regardless of any
     per-user setting — see ``_txn_to_draft``'s docstring for the mapping this requires).
-    No ``include_split_parents``/``include_children``/``include_pending`` either: the
-    defaults (split parents excluded, their child rows included, pending excluded) already
-    match what this adapter wants — verified live against the v2 mock server 2026-08-17."""
+    ``include_group_children`` is asked for: by default Lunch Money returns a transaction
+    group as its parent alone, and its children are the real money movements, each in its
+    own account. The other defaults (split parents excluded, their children included,
+    pending excluded) already match what this adapter wants."""
     out: list[dict] = []
     offset = 0
     for _ in range(_MAX_FETCH_PAGES):
@@ -171,6 +172,7 @@ def fetch_transactions(
             "end_date": end_date,
             "limit": _PAGE_LIMIT,
             "offset": offset,
+            "include_group_children": "true",
         }
         resp = _safe_get(store, "/transactions", params)
         data = resp.json() or {}
@@ -269,6 +271,18 @@ def _txn_id(lm_txn: dict) -> str:
     return str(lm_txn.get("id") or "").strip()
 
 
+def _parents_with_children(txns: list[dict]) -> set:
+    """Ids of the group/split parents whose children are in this feed. Only those parents
+    are skipped — the children carry the money. A parent whose children did not come back
+    is booked itself; skipping it lost the whole group's money."""
+    out: set = set()
+    for t in txns:
+        for key in ("group_parent_id", "split_parent_id"):
+            if t.get(key) is not None:
+                out.add(t[key])
+    return out
+
+
 def _txn_to_row(lm_txn: dict, account_key: str, currency_hint: str) -> dict | None:
     """One Lunch Money transaction → the common normalized row shape (RFC §A step 3).
 
@@ -284,10 +298,8 @@ def _txn_to_row(lm_txn: dict, account_key: str, currency_hint: str) -> dict | No
 
     ``external_ref`` is the bare numeric Lunch Money transaction id — globally unique, so
     no account-scoping prefix is needed (unlike SimpleFIN/Plaid's per-account ids). Returns
-    None for a group/split parent (the caller already filters these; this is a defensive
-    second check) or an unparseable/non-finite/zero amount."""
-    if lm_txn.get("is_group_parent") or lm_txn.get("is_split_parent"):
-        return None
+    None for an unparseable/non-finite/zero amount. A group/split parent reaches here only
+    when the feed holds none of its children — then it is the only record of the money."""
     try:
         raw_amount = float(lm_txn.get("amount"))
     except (TypeError, ValueError):
@@ -367,6 +379,7 @@ def fetch_window(
     split_child_rows_seen = 0
     group_parent_rows_skipped = 0
     split_parent_rows_skipped = 0
+    parents_with_children = _parents_with_children(txns)
     for lm_txn in txns:
         account_key = _account_key(lm_txn)
         if account_key:
@@ -379,7 +392,7 @@ def fetch_window(
             split_child_rows_seen += 1
         is_group_parent = bool(lm_txn.get("is_group_parent"))
         is_split_parent = bool(lm_txn.get("is_split_parent"))
-        if is_group_parent or is_split_parent:
+        if (is_group_parent or is_split_parent) and lm_txn.get("id") in parents_with_children:
             if is_group_parent:
                 group_parent_rows_skipped += 1
             if is_split_parent:

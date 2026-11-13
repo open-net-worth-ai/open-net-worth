@@ -606,9 +606,11 @@ def fetch_account_balance(token: str, account_uid: str) -> Optional[float]:
 
 
 def _txn_id(eb_txn: dict) -> str:
-    """The stable Enable Banking transaction id (``entry_reference`` preferred, then
-    ``transaction_id``). Empty string if neither is present."""
-    return str(eb_txn.get("entry_reference") or eb_txn.get("transaction_id") or "").strip()
+    """The bank's immutable id for a transaction, ``entry_reference``, or "" without one.
+    Never ``transaction_id``: Enable Banking documents it as a fetch handle that "can not be
+    used to uniquely identify transactions and may change if the list of transactions is
+    requested again" — keyed on it, a re-listed row came back as new and booked twice."""
+    return str(eb_txn.get("entry_reference") or "").strip()
 
 
 def _txn_amount(eb_txn: dict) -> tuple[float | None, str]:

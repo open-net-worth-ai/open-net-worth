@@ -24,7 +24,7 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlsplit
 
@@ -32,8 +32,10 @@ import httpx
 
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.core.net_guard import UnsafeUrlError, assert_public_url
+from backend.core.user_time import user_zone
 from backend.db.simplefin_config_store import SimpleFinConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -185,6 +187,7 @@ def fetch_accounts(
         params["end-date"] = int(end_date)
     if account:
         params["account"] = account
+    params["pending"] = 1
     resp = _safe_get(url, params)
     return resp.json()
 
@@ -225,12 +228,9 @@ def _txn_to_row(sf_txn: dict, sf_account_id: str, currency: str) -> dict | None:
     if amount == 0:
         return None
 
-    posted = sf_txn.get("posted")
-    try:
-        date_str = datetime.fromtimestamp(int(posted), tz=timezone.utc).date().isoformat()
-    except (TypeError, ValueError, OSError):
-        date_str = datetime.now(timezone.utc).date().isoformat()
-
+    date_str = _txn_date(sf_txn)
+    if date_str is None:
+        return None
     description = (sf_txn.get("description") or sf_txn.get("payee") or "").strip() or "SimpleFIN"
     txn_id = str(sf_txn.get("id") or "").strip()
     ref = (
@@ -246,10 +246,82 @@ def _txn_to_row(sf_txn: dict, sf_account_id: str, currency: str) -> dict | None:
         "amount": amount,
         "currency": currency,
         "description": description,
-        "memo": None,
+        "payee": _text(sf_txn.get("payee")),
+        "memo": _text(sf_txn.get("memo")),
+        "category_hint": merchant_category(sf_txn.get("mcc")),
         "pending": bool(sf_txn.get("pending")),
         "supersedes_ref": None,
     }
+
+
+def _text(value: object) -> Optional[str]:
+    text = " ".join(str(value or "").split())
+    return text[:200] or None
+
+
+def _txn_date(sf_txn: dict) -> Optional[str]:
+    """The day the money moved, in the USER's zone — a UTC date put an evening purchase on
+    the next day. ``posted`` is 0 for a pending row, which carries ``transacted_at``
+    instead. None when neither is a timestamp: a row is never dated today by guesswork."""
+    zone = user_zone()  # None = the server's own zone, as user_today() reads it
+    for key in ("posted", "transacted_at"):
+        try:
+            ts = int(sf_txn.get(key) or 0)
+        except (TypeError, ValueError):
+            continue
+        if ts > 0:
+            try:
+                return datetime.fromtimestamp(ts, tz=zone).date().isoformat()
+            except (OverflowError, OSError, ValueError):
+                continue
+    return None
+
+
+# SimpleFIN Bridge answers a longer range with an error ("Requested date range exceeds
+# recommended range of 45 days. In the future, this may be capped.", seen 2026-11-13), so a
+# window is fetched in slices no longer than this.
+_MAX_SLICE_DAYS = 45
+
+
+def _slices(since: str, before: str) -> list[tuple[int, int]]:
+    """``[since, before]`` (inclusive days) as ``(start, end)`` unix-second pairs no longer
+    than ``_MAX_SLICE_DAYS``, at midnight in the user's zone. SimpleFIN's ``end-date`` is
+    exclusive, so the last slice ends at the midnight AFTER ``before`` — ending at
+    ``before`` itself dropped that whole day."""
+    zone = user_zone()  # None = the server's own zone, as user_today() reads it
+    first = datetime.fromisoformat(since).date()
+    last = datetime.fromisoformat(before).date()
+    out: list[tuple[int, int]] = []
+    day = first
+    while day <= last:
+        stop = min(day + timedelta(days=_MAX_SLICE_DAYS), last + timedelta(days=1))
+        out.append((_midnight(day, zone), _midnight(stop, zone)))
+        day = stop
+    return out
+
+
+def _midnight(day: date, zone) -> int:
+    return int(datetime(day.year, day.month, day.day, tzinfo=zone).timestamp())
+
+
+def _feed_errors(feed: dict, access_url: str) -> list[str]:
+    """SimpleFIN reports a failed bank connection INSIDE a 200 response: ``errors`` (strings)
+    and, from newer bridges, ``errlist`` (``{code, msg, ...}``). Ignoring them made a feed
+    missing a bank look complete. Server text, so scrubbed, flattened and capped."""
+    found: list[str] = []
+    for item in feed.get("errors") or []:
+        found.append(str(item))
+    for item in feed.get("errlist") or []:
+        if isinstance(item, dict):
+            found.append(" ".join(str(item.get(k) or "") for k in ("code", "msg")).strip())
+        else:
+            found.append(str(item))
+    out: list[str] = []
+    for text in found:
+        clean = " ".join(_scrub(text, access_url).split())[:300]
+        if clean and clean not in out:
+            out.append(f"SimpleFIN: {clean}")
+    return out
 
 
 def fetch_window(
@@ -262,29 +334,39 @@ def fetch_window(
 ) -> FetchWindow:
     """SimpleFIN's provider-side windowed fetch (RFC §B) — ``start-date``/``end-date``/
     ``account`` are all server-side SimpleFIN params, so the window and account filter
-    apply BEFORE the data ever reaches us. Always ``complete=True``: SimpleFIN's
-    ``/accounts`` feed is not paginated."""
+    apply BEFORE the data ever reaches us. The feed is not paginated; it is ``complete``
+    unless SimpleFIN reported an error for some connection, which leaves rows out."""
     access_url = store.access_url()
-    start_ts = int(datetime.fromisoformat(since).replace(tzinfo=timezone.utc).timestamp())
-    end_ts = int(datetime.fromisoformat(before).replace(tzinfo=timezone.utc).timestamp())
+    slices = _slices(since, before)
     if accounts_only:
-        end_ts = start_ts  # zero-width window — accounts still come back in full
-    try:
-        feed = fetch_accounts(access_url, start_date=start_ts, end_date=end_ts, account=account)
-    except Exception as exc:  # noqa: BLE001 — belt-and-braces scrub, see _scrub's docstring
-        raise type(exc)(_scrub(str(exc), access_url)) from exc
-    sf_accounts = feed.get("accounts") or []
-    accounts = [_account_to_common(a) for a in sf_accounts]
-    rows: list[dict] = []
-    if not accounts_only:
-        for sf_account in sf_accounts:
+        slices = [(slices[0][0], slices[0][0])]  # zero-width — accounts still come back in full
+    accounts_by_id: dict[str, dict] = {}
+    rows_by_ref: dict[str, dict] = {}
+    warnings: list[str] = []
+    for start_ts, end_ts in slices:
+        try:
+            feed = fetch_accounts(access_url, start_date=start_ts, end_date=end_ts, account=account)
+        except Exception as exc:  # noqa: BLE001 — belt-and-braces scrub, see _scrub's docstring
+            raise type(exc)(_scrub(str(exc), access_url)) from exc
+        warnings.extend(w for w in _feed_errors(feed, access_url) if w not in warnings)
+        for sf_account in feed.get("accounts") or []:
             sf_account_id = str(sf_account.get("id") or "")
+            accounts_by_id[sf_account_id] = sf_account
+            if accounts_only:
+                continue
             currency = (sf_account.get("currency") or ledger_service.base_currency()).upper()
             for sf_txn in sf_account.get("transactions") or []:
                 row = _txn_to_row(sf_txn, sf_account_id, currency)
                 if row is not None:
-                    rows.append(row)
-    return FetchWindow(accounts=accounts, rows=rows, complete=True)
+                    rows_by_ref.setdefault(row["external_refs"][0]["ref"], row)
+    for warning in warnings:
+        logger.warning("simplefin fetch: %s", warning)
+    return FetchWindow(
+        accounts=[_account_to_common(a) for a in accounts_by_id.values()],
+        rows=list(rows_by_ref.values()),
+        complete=not warnings,
+        warnings=warnings,
+    )
 
 
 def classify_error(exc: Exception) -> str:
