@@ -8,6 +8,8 @@ import { OverviewTab } from './OverviewTab'
 
 const fetchReturns = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/portfolio', () => ({ fetchReturns }))
+// You vs. opens a stock from a tapped row; these tests never tap one.
+vi.mock('../../../state/assetNav', () => ({ useAssetNav: () => ({ openAsset: vi.fn() }) }))
 const fetchPreviewCompare = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/followedPortfolios', async (orig) => ({
   ...(await orig<typeof import('../../../api/followedPortfolios')>()),
