@@ -24,9 +24,20 @@ from backend.services.followed_portfolios import (
     performance,
     share_classes,
 )
-from backend.services.followed_portfolios.model import build_model
+from backend.services.followed_portfolios.model import build_model, normalize_symbol
 
 _TTL_SECONDS = 12 * 3600
+# A fund's card reads the five newest quarters: a 1Y return copied report by report needs the
+# four filed in the year and the one in force when it began (owner, 2026-11-13). Its page reads
+# the full history. Same fetch, a shorter range; each filing is kept, so the page adds only the
+# older ones.
+CARD_QUARTERS = 5
+# Bumped when a summary's shape or meaning changes, so a cached one is rebuilt (2: the count
+# is every position, not the top N; 3: no Form 4 "NONE"
+# placeholder among its moves; 4: a fund counts every line of its filing,
+# 5: its ring weighs each holding against the whole portfolio; 6: the top 8, not 6;
+# 7: a newly featured portfolio's short name; 8: a fund's card reads its whole history).
+_SUMMARY_VERSION = 8
 _SPARK_POINTS = 48
 _SOURCES = {"fund_13f": edgar_13f, "house_member": house_ptr, "etf_daily": etf_daily}
 _NORMALIZE = {
@@ -107,6 +118,14 @@ def _read_as_now(row: dict) -> bool:
     )
 
 
+def _without_placeholder_trades(row: dict) -> dict:
+    """A row read back from before Form 4 placeholders ("NONE") were refused: a Form 4 trade
+    with no real ticker is left out (its next refresh drops it from the store too)."""
+    activity = row.get("activity") or []
+    kept = [t for t in activity if t.get("source") != "form4" or normalize_symbol(t.get("symbol"))]
+    return row if len(kept) == len(activity) else {**row, "activity": kept}
+
+
 def preview_row(kind: str, ref: str, *, full: bool = False) -> dict:
     """The follow-shaped row for (kind, ref): the stored one when followed, else a cached fetch.
     Raises what the source raises when it cannot be read."""
@@ -117,17 +136,23 @@ def preview_row(kind: str, ref: str, *, full: bool = False) -> dict:
     ref = _NORMALIZE[kind](ref)
     stored = FollowedPortfolioStore().find_by_source(kind, ref)
     if stored:
-        return stored
+        return _without_placeholder_trades(stored)
     key = (kind, ref)
     with _lock(key):
         hit = _cache.get(key)
         fresh = hit and time.monotonic() - hit[0] < _TTL_SECONDS and _read_as_now(hit[1])
-        # A card reads two quarters (fast, and Discover has 19 of them); the page, opened one at
-        # a time, reads the year of quarters its stock history needs.
-        if fresh and (not full or hit[1].get("full_history") or kind != "fund_13f"):
-            return hit[1]
+        wanted = edgar_13f.HISTORY_QUARTERS if full else CARD_QUARTERS
+        if fresh and (kind != "fund_13f" or _quarters_read(hit[1]) >= wanted):
+            # Its featured name is read now, not when it was cached: a portfolio featured after
+            # its row was fetched shows its short name at once.
+            return _without_placeholder_trades({**hit[1], **_featured(kind, ref)})
+        # A page opened after its card builds on the card's read: the five newest filings are
+        # kept on disk (a filed report never changes), so only the older ones download, and the
+        # tickers the card already matched are not asked about again.
         fetched = (
-            _SOURCES[kind].fetch(ref, None, edgar_13f.HISTORY_QUARTERS if full else 2)
+            _SOURCES[kind].fetch(
+                ref, {"cusip_map": (hit[1] if hit else {}).get("cusip_map")}, wanted
+            )
             if kind == "fund_13f"
             else _SOURCES[kind].fetch(ref)
         )
@@ -150,15 +175,91 @@ def preview_row(kind: str, ref: str, *, full: bool = False) -> dict:
                     "history",
                     "history_quarters",
                     "all_positions",
+                    "cusip_map",
                 )
             },
             "last_checked_at": datetime.now(timezone.utc).isoformat(),
             "last_error": None,
-            "full_history": full,
+            "quarters_read": wanted if kind == "fund_13f" else None,
         }
         _cache[key] = (time.monotonic(), row)
         _save_disk()
+        if kind == "fund_13f":
+            # The page opened on its largest holdings' tickers; the rest are looked up now, and
+            # once known the next open reads the (kept) filings again to name them, about 1 s.
+            edgar_13f.look_up_later(
+                ref, fetched.get("lookups_pending") or [], then=lambda: _forget(key)
+            )
         return row
+
+
+_extending: set[tuple[str, str]] = set()
+_extending_lock = threading.Lock()
+# When reading a fund's older filings last failed: the page stops asking, keeps its five
+# quarters, and a later open tries again, so a refusing SEC is never asked every few seconds.
+_extend_failed: dict[tuple[str, str], float] = {}
+_EXTEND_RETRY_SECONDS = 300
+
+
+def page_row(kind: str, ref: str) -> tuple[dict, bool]:
+    """The row a portfolio's page opens on, and whether it has the whole history. A fund read
+    only as far as its card (five quarters) opens on that at once, and its older filings are
+    read in the background: the page asks again until it has them (owner, 2026-11-13)."""
+    if kind != "fund_13f" or _has_history(kind, ref):
+        return preview_row(kind, ref, full=True), True
+    row = preview_row(kind, ref)
+    if FollowedPortfolioStore().find_by_source(kind, row["source_ref"]):
+        return row, True
+    failed = _extend_failed.get((kind, row["source_ref"]))
+    if failed and time.monotonic() - failed < _EXTEND_RETRY_SECONDS:
+        return row, True
+    _extend_later(kind, row["source_ref"])
+    return row, False
+
+
+def _has_history(kind: str, ref: str) -> bool:
+    hit = _cache.get((kind, _NORMALIZE[kind](ref)))
+    return bool(
+        hit
+        and time.monotonic() - hit[0] < _TTL_SECONDS
+        and _quarters_read(hit[1]) >= edgar_13f.HISTORY_QUARTERS
+    )
+
+
+def _extend_later(kind: str, ref: str) -> None:
+    """Read the page's whole history on a background thread, once per portfolio at a time."""
+    key = (kind, ref)
+    with _extending_lock:
+        if key in _extending:
+            return
+        _extending.add(key)
+
+    def run() -> None:
+        try:
+            preview_row(kind, ref, full=True)
+            _extend_failed.pop(key, None)
+        except Exception:  # the page keeps its five quarters; a later open asks again
+            _extend_failed[key] = time.monotonic()
+            logger.warning("followed portfolios: reading older filings failed", exc_info=True)
+        finally:
+            with _extending_lock:
+                _extending.discard(key)
+
+    threading.Thread(target=run, name=f"13f-history-{ref}", daemon=True).start()
+
+
+def _quarters_read(row: dict) -> int:
+    """How many quarters a cached row was read with; a row from before the count was kept
+    says only whether it was the page's full read."""
+    if row.get("quarters_read"):
+        return int(row["quarters_read"])
+    return edgar_13f.HISTORY_QUARTERS if row.get("full_history") else 2
+
+
+def _forget(key: tuple[str, str]) -> None:
+    with _lock(key):
+        _cache.pop(key, None)
+    _save_disk()
 
 
 def _downsample(series: list[dict], points: int) -> list[float]:
@@ -237,6 +338,30 @@ def latest_at(row: dict, model: dict | None) -> str | None:
     return max(days) if days else None
 
 
+def kept_summary(kind: str, ref: str) -> dict | None:
+    """Today's card, as kept: served as it is, with no call to the source. The scheduler's
+    refresh and any open page re-read the filings; a card shown within the day need not."""
+    hit = _summaries.get((kind, _NORMALIZE[kind](ref)))
+    today = f"{_SUMMARY_VERSION}|{user_today().isoformat()}|"
+    if hit and time.monotonic() - hit[0] < _TTL_SECONDS and str(hit[1]).startswith(today):
+        return hit[2]
+    return None
+
+
+def card_ready(kind: str, ref: str) -> bool:
+    """Whether this portfolio's card is answered from what is kept, with nothing to fetch: the
+    gallery says "loading" only for cards that really go to the SEC or the House."""
+    if kept_summary(kind, ref) is not None:
+        return True
+    hit = _cache.get((kind, ref))
+    return bool(
+        hit
+        and time.monotonic() - hit[0] < _TTL_SECONDS
+        and _read_as_now(hit[1])
+        and (kind != "fund_13f" or _quarters_read(hit[1]) >= CARD_QUARTERS)
+    )
+
+
 def cached_figures(kind: str, ref: str) -> dict:
     """What a sort needs from a card, if it was already priced — never fetches (the directory
     lists every portfolio at once). ``{}`` when nothing is cached yet."""
@@ -253,7 +378,7 @@ def summary(row: dict) -> dict:
     hit = _summaries.get(key)
     # A new dated trade (a Form 4) changes the card without a new quarterly filing.
     newest = max((str(t.get("filed_at")) for t in row.get("activity") or []), default="")
-    stamp = f"{today}|{(row.get('current') or {}).get('filing_id')}|{newest}"
+    stamp = f"{_SUMMARY_VERSION}|{today}|{(row.get('current') or {}).get('filing_id')}|{newest}"
     if hit and hit[1] == stamp and time.monotonic() - hit[0] < _TTL_SECONDS:
         return hit[2]
     out = _summary(row)
@@ -263,9 +388,32 @@ def summary(row: dict) -> dict:
     return out
 
 
-def _summary(row: dict) -> dict:
-    model = build_model(share_classes.grouped(row), user_today())
-    perf = performance.performance_for(row)
+def _position_count(row: dict, model: dict | None, holdings: list) -> int:
+    """Every holding in the filing, as the page counts them: two share classes of one company
+    are one, and a line whose ticker a card has not looked up yet still counts."""
+    lines = (row.get("current") or {}).get("positions") or []
+    if row["kind"] != "fund_13f" or not lines:
+        return (model or {}).get("positions") or len(holdings)
+    symbols = {normalize_symbol(p.get("symbol")) for p in lines}
+    return len(symbols - {""}) + sum(1 for p in lines if not normalize_symbol(p.get("symbol")))
+
+
+_RING_SLICES = 8
+
+
+def _ring(row: dict) -> list[dict]:
+    """The card's ring: the largest holdings, each with its real share of the WHOLE portfolio
+    (a slice's tooltip says it). The card sizes them against each other, so the ring shows a
+    fund's biggest bets relative to one another, full even for a fund of hundreds of stocks."""
+    every = build_model(row, user_today(), None) or {}
+    holdings = every.get("holdings", [])[:_RING_SLICES]
+    return [{"symbol": h["symbol"], "weight": h["weight"]} for h in holdings]
+
+
+def _summary(source: dict) -> dict:
+    row = share_classes.grouped(source)
+    model = build_model(row, user_today())
+    perf = performance.performance_for(source, every_holding=False)
     year = (perf.get("periods") or {}).get("12M") or {}
     ok = year.get("status") == "ok"
     holdings = (model or {}).get("holdings") or []
@@ -275,7 +423,9 @@ def _summary(row: dict) -> dict:
         "name": row["name"],
         "subtitle": row.get("subtitle") or "",
         "estimated": bool(model and model["estimated"]),
-        "holdings_count": len(holdings),
+        # Every position it holds: ``holdings`` is only the top N the model keeps, and a card
+        # looks up tickers for only its largest holdings, so a fund counts its filing's lines.
+        "holdings_count": _position_count(row, model, holdings),
         "top": [{"symbol": h["symbol"], "weight": h["weight"]} for h in holdings[:3]],
         "total_value": (row.get("current") or {}).get("total_value")
         if row["kind"] == "fund_13f"
@@ -288,7 +438,7 @@ def _summary(row: dict) -> dict:
         "benchmark_12m": year.get("benchmark_return") if ok else None,
         "spark": _downsample(year.get("series") or [], _SPARK_POINTS) if ok else [],
         "moves": latest_moves(row, model),
-        "weights": [{"symbol": h["symbol"], "weight": h["weight"]} for h in holdings[:6]],
+        "weights": _ring(row),
     }
 
 
@@ -297,7 +447,9 @@ def warm(entries: list[dict]) -> int:
     done = 0
     for entry in entries:
         try:
-            summary(preview_row(entry["kind"], entry["source_ref"]))
+            # The whole page, not only the card: a featured portfolio opens at once, its year of
+            # filings and every ticker read ahead of the visit.
+            summary(preview_row(entry["kind"], entry["source_ref"], full=True))
             done += 1
         except Exception:  # a source that is down must not stop the rest
             continue

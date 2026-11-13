@@ -7,17 +7,22 @@ or merely add rows and cannot be folded in safely, so it is skipped.
 
 from __future__ import annotations
 
+import logging
 import re
+import threading
+import time
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
 from backend.core.safe_xml import has_dtd
 from backend.core.untrusted import sanitize_untrusted
-from backend.services.followed_portfolios import figi, sec_tickers
+from backend.services.followed_portfolios import figi, filing_store, sec_tickers
 from backend.services.followed_portfolios.http import fetch_bytes, fetch_json
 
 SEC = "SEC EDGAR"
+logger = logging.getLogger(__name__)
 # Positions kept per snapshot: the largest top N plus what a change needs to see.
 # Four years of reports (fifteen filings): the period picker's 3Y, the chart's markers
 # and the report-by-report copy's return all read them. The two newest are also the model's.
@@ -25,6 +30,9 @@ HISTORY_QUARTERS = 15
 # A card (two quarters) matches its largest holdings only; the page matches every one.
 CARD_LOOKUPS = 25
 _INFO_TABLE_MAX_BYTES = 16 * 1024 * 1024
+# Filings not yet kept are read this many at once; every SEC request still waits its turn
+# under the shared fair-use pace (``http``), so this overlaps the waits, never exceeds the cap.
+_DOWNLOAD_WORKERS = 4
 _ACCESSION = re.compile(r"\d{10}-\d{2}-\d{6}")
 _NAME_MAX = 120
 _NAME_MAX = 120
@@ -62,6 +70,9 @@ FEATURED = (
     ("1541617", "Altimeter Capital", "Brad Gerstner"),
     ("1747057", "D1 Capital Partners", "Dan Sundheim"),
     ("1798849", "Durable Capital Partners", "Henry Ellenbogen"),
+    # Added 2026-11-12 (owner): Singapore's state investor files a 13F for its US-listed stakes;
+    # its Q3 2026 report was filed 2026-10-28.
+    ("1021944", "Temasek", "Singapore's state investor"),
     # A company, not a fund: NVIDIA reports its own stakes in other companies each quarter.
     ("1045810", "NVIDIA", "Its stakes in other companies"),
 )
@@ -93,50 +104,75 @@ def starts_a_word(query: str, name: str) -> bool:
     return any(w.startswith(q) for w in re.split(r"[^a-z0-9]+", name.lower()) if w)
 
 
+# A search answers from memory when it was asked within the hour, and whether a filer files 13Fs
+# is remembered for a day: those per-filer checks are what made a search take seconds.
+_SEARCH_TTL_SECONDS = 3600
+_FILER_TTL_SECONDS = 24 * 3600
+# Checks run side by side; every SEC request still waits its turn at the shared pace (http.py).
+_CHECK_WORKERS = 4
+_search_cache: dict[tuple[str, int], tuple[float, list[dict]]] = {}
+_filer_cache: dict[str, tuple[float, bool]] = {}
+_cache_lock = threading.Lock()
+
+
+def clear_search_cache() -> None:
+    with _cache_lock:
+        _search_cache.clear()
+        _filer_cache.clear()
+
+
+def _files_13f(cik: str) -> bool:
+    """Whether ``cik`` has a 13F on file, remembered for a day. A failed check is not remembered:
+    the filer is left out of this answer and asked about again next time."""
+    with _cache_lock:
+        hit = _filer_cache.get(cik)
+    if hit and time.monotonic() - hit[0] < _FILER_TTL_SECONDS:
+        return hit[1]
+    try:
+        _, filings = _recent_filings(cik, 1)
+    except ExternalServiceError:
+        return False
+    with _cache_lock:
+        _filer_cache[cik] = (time.monotonic(), bool(filings))
+    return bool(filings)
+
+
 def _by_name(query: str, limit: int) -> list[dict]:
     """Filers whose name starts with ``query`` (SEC's own name search, as its search box
-    suggests them) that have a 13F on file. Most names it knows file none: each is checked."""
+    suggests them) that have a 13F on file. Most names it knows file none: each is checked, the
+    checks side by side, in SEC's own order."""
     url = "https://efts.sec.gov/LATEST/search-index?keysTyped=" + quote(query.strip())
     hits = (fetch_json(url, what=SEC).get("hits") or {}).get("hits") or []
-    out: list[dict] = []
+    candidates = []
     for hit in hits[:_NAME_CANDIDATES]:
         cik = str(hit.get("_id") or "").lstrip("0")
         entity = str((hit.get("_source") or {}).get("entity") or "")
-        if not cik.isdigit() or not entity:
-            continue
-        try:
-            _, filings = _recent_filings(cik, 1)
-        except ExternalServiceError:
-            continue
-        if filings:
-            out.append(
-                {
-                    "kind": "fund_13f",
-                    "source_ref": cik,
-                    "name": _name(_TICKERS_IN_NAME.sub("", entity)),
-                    "subtitle": "",
-                }
-            )
-        if len(out) >= limit:
-            break
-    return out
+        if cik.isdigit() and entity:
+            candidates.append((cik, entity))
+    with ThreadPoolExecutor(max_workers=_CHECK_WORKERS) as pool:
+        files = list(pool.map(_files_13f, [cik for cik, _ in candidates]))
+    out = [
+        {
+            "kind": "fund_13f",
+            "source_ref": cik,
+            "name": _name(_TICKERS_IN_NAME.sub("", entity)),
+            "subtitle": "",
+        }
+        for (cik, entity), ok in zip(candidates, files)
+        if ok
+    ]
+    return out[:limit]
 
 
-def search(query: str, limit: int = 10) -> list[dict]:
-    """13F filers for ``query``: names that start with it first (NVIDIA for "nv"), then filers
-    whose filings mention it as a word (EDGAR full-text search, newest first)."""
-    seen: dict[str, dict] = {}
-    try:
-        for hit in _by_name(query, limit):
-            seen.setdefault(hit["source_ref"], hit)
-    except ExternalServiceError:
-        pass  # the full-text search below still answers
+def _by_text(query: str) -> list[dict]:
+    """Filers whose 13F filings mention ``query`` as a word (EDGAR full-text search, newest first)."""
     url = (
         "https://efts.sec.gov/LATEST/search-index?q="
         + quote(f'"{query.strip()}"')
         + "&forms=13F-HR"
     )
     hits = (fetch_json(url, what=SEC).get("hits") or {}).get("hits") or []
+    out: dict[str, dict] = {}
     for hit in hits:
         for display in (hit.get("_source") or {}).get("display_names") or []:
             match = _CIK_IN_NAME.match(str(display))
@@ -144,16 +180,34 @@ def search(query: str, limit: int = 10) -> list[dict]:
                 continue
             cik = match["cik"].lstrip("0")
             name = _name(match["name"])
-            if cik and name and cik not in seen and starts_a_word(query, name):
-                seen[cik] = {
-                    "kind": "fund_13f",
-                    "source_ref": cik,
-                    "name": name,
-                    "subtitle": "",
-                }
-        if len(seen) >= limit:
-            break
-    return list(seen.values())[:limit]
+            if cik and name and cik not in out and starts_a_word(query, name):
+                out[cik] = {"kind": "fund_13f", "source_ref": cik, "name": name, "subtitle": ""}
+    return list(out.values())
+
+
+def search(query: str, limit: int = 10) -> list[dict]:
+    """13F filers for ``query``: names that start with it first (NVIDIA for "nv"), then filers
+    whose filings mention it as a word. Both searches run at once; an answer is kept an hour."""
+    key = (" ".join(query.lower().split()), limit)
+    with _cache_lock:
+        hit = _search_cache.get(key)
+    if hit and time.monotonic() - hit[0] < _SEARCH_TTL_SECONDS:
+        return [dict(r) for r in hit[1]]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        named = pool.submit(_by_name, query, limit)
+        texted = pool.submit(_by_text, query)
+        seen: dict[str, dict] = {}
+        try:
+            for r in named.result():
+                seen.setdefault(r["source_ref"], r)
+        except ExternalServiceError:
+            pass  # the full-text search still answers
+        for r in texted.result():
+            seen.setdefault(r["source_ref"], r)
+    out = list(seen.values())[:limit]
+    with _cache_lock:
+        _search_cache[key] = (time.monotonic(), out)
+    return [dict(r) for r in out]
 
 
 def _recent_filings(cik: str, count: int = HISTORY_QUARTERS) -> tuple[str, list[dict]]:
@@ -267,11 +321,24 @@ def share_class(title: str) -> str | None:
 
 
 def _snapshot(cik: str, filing: dict) -> dict:
-    body = fetch_bytes(
-        _info_table_url(cik, filing["filing_id"]), what=SEC, max_bytes=_INFO_TABLE_MAX_BYTES
-    )
-    rows = parse_info_table(body.decode("utf-8", errors="replace"))
+    """The filing's holdings: kept from an earlier read, else downloaded once and kept."""
+    kept = filing_store.load("13f", cik, filing["filing_id"])
+    if kept is not None and isinstance(kept.get("positions"), list):
+        rows = kept["positions"]
+    else:
+        body = fetch_bytes(
+            _info_table_url(cik, filing["filing_id"]), what=SEC, max_bytes=_INFO_TABLE_MAX_BYTES
+        )
+        rows = parse_info_table(body.decode("utf-8", errors="replace"))
+        filing_store.save("13f", cik, filing["filing_id"], {"positions": rows})
     return {**filing, "total_value": sum(r["value"] for r in rows), "positions": rows}
+
+
+def _snapshots(cik: str, filings: list[dict]) -> list[dict]:
+    """Every filing's holdings, in order. A kept filing costs no request; the rest download
+    side by side (the first that fails fails the read, as one at a time did)."""
+    with ThreadPoolExecutor(max_workers=_DOWNLOAD_WORKERS) as pool:
+        return list(pool.map(lambda f: _snapshot(cik, f), filings))
 
 
 def quarter_history(snaps: list[dict]) -> list[dict]:
@@ -292,7 +359,62 @@ def quarter_history(snaps: list[dict]) -> list[dict]:
     return out
 
 
-def resolve_tickers(snaps: list[dict], known: dict, limit: int | None = None) -> dict[str, str]:
+# A page waits for the tickers it weighs and shows first: each quarter's largest holdings (the
+# copy's line reads them) and the newest quarter's largest. A fund of thousands of stocks has
+# thousands of codes at one lookup batch every 2.5 s: the rest are looked up after it opens.
+_PAGE_LOOKUPS_NEWEST = 40
+# The quarters a 1-year return copies (the year's reports and the one before it); older ones
+# only shape the 3-year chart, which names its stocks once the background lookups finish.
+_PAGE_LOOKUP_QUARTERS = 6
+_background: set[str] = set()
+_background_lock = threading.Lock()
+
+
+def _by_value(snap: dict) -> list[dict]:
+    return sorted(snap["positions"], key=lambda p: -float(p.get("value") or 0))
+
+
+def first_lookups(snaps: list[dict]) -> list[str]:
+    """The codes a page waits for, most important first."""
+    keys = [p["key"] for p in _by_value(snaps[0])[:_PAGE_LOOKUPS_NEWEST]] if snaps else []
+    for snap in snaps[:_PAGE_LOOKUP_QUARTERS]:
+        keys += [p["key"] for p in _by_value(snap)[:CARD_LOOKUPS]]
+    return list(dict.fromkeys(keys))
+
+
+def look_up_later(cik: str, keys: list[str], then=None) -> None:
+    """Look ``keys`` up on a background thread, as many calls as it takes (each caps its own
+    batches), then call ``then`` (the preview forgets its copy, so the next read names them).
+    One at a time per filer."""
+    if not keys:
+        return
+    with _background_lock:
+        if cik in _background:
+            return
+        _background.add(cik)
+
+    def run() -> None:
+        try:
+            todo = list(keys)
+            while todo:
+                answered = figi.tickers_for(todo, background=True)
+                if not answered:
+                    break  # the service is down or refusing: the next read asks again
+                todo = [k for k in todo if k not in answered]
+            if then is not None:
+                then()
+        except Exception:  # a background nicety; the next read asks again
+            logger.warning("followed portfolios: background ticker lookups stopped", exc_info=True)
+        finally:
+            with _background_lock:
+                _background.discard(cik)
+
+    threading.Thread(target=run, name=f"13f-lookups-{cik}", daemon=True).start()
+
+
+def resolve_tickers(
+    snaps: list[dict], known: dict, limit: int | None = None, only: list[str] | None = None
+) -> dict[str, str]:
     """The ``cusip_map`` for ``snaps``: every code still without a ticker is asked about again
     (a CINS was once asked as a CUSIP and cached as "none"), then matched by issuer name
     against SEC's own list. The owner's corrections are applied by the caller, never here."""
@@ -307,6 +429,9 @@ def resolve_tickers(snaps: list[dict], known: dict, limit: int | None = None) ->
     pending = [k for k in dict.fromkeys(names) if not cusip_map.get(k)]
     # A card shows only the top holdings: it asks about the largest ``limit`` codes, so a new
     # card waits seconds on the shared lookup pace, not minutes. The page asks about them all.
+    if only is not None:
+        wanted = set(only)
+        pending = [k for k in pending if k in wanted]
     if limit is not None:
         pending = pending[:limit]
     for key, ticker in (figi.tickers_for(pending) if pending else {}).items():
@@ -368,12 +493,15 @@ def fetch(cik: str, known: dict | None = None, quarters: int = HISTORY_QUARTERS)
     if stored.get("filing_id") == filings[0]["filing_id"] and complete:
         return _retry_lookups(known)
     # Every position the filing lists: nothing is cut (the page shows them all).
-    snaps = [_snapshot(cik, f) for f in filings]
-    cusip_map = resolve_tickers(snaps, known, CARD_LOOKUPS if quarters <= 2 else None)
+    snaps = _snapshots(cik, filings)
+    first = first_lookups(snaps)
+    cusip_map = resolve_tickers(
+        snaps, known, CARD_LOOKUPS if quarters <= 2 else None, None if quarters <= 2 else first
+    )
     overrides = known.get("ticker_overrides") or {}
     snaps = [{**stamp(s, cusip_map, overrides), "unread_reports": 0} for s in snaps]
     history = quarter_history(snaps)
-    snaps = snaps[:2]
+    snaps_all, snaps = snaps, snaps[:2]
     return {
         "name": name,
         "current": snaps[0],
@@ -384,4 +512,10 @@ def fetch(cik: str, known: dict | None = None, quarters: int = HISTORY_QUARTERS)
         # Every position the filing lists was kept (rows before this were cut at 60).
         "all_positions": True,
         "cusip_map": cusip_map,
+        # The codes still without an answer: the caller may look them up after it answers.
+        "lookups_pending": list(
+            dict.fromkeys(
+                p["key"] for s in snaps_all for p in s["positions"] if p["key"] not in cusip_map
+            )
+        ),
     }

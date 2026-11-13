@@ -40,6 +40,13 @@ import { useSignalActions } from '../intel/useSignalActions'
 import { useStoryFocus } from '../intel/useStoryFocus'
 import { useWatchlistRemoval } from '../intel/useWatchlistRemoval'
 
+/** Famous Portfolios sits right after My holdings, before the owner's own watchlists (owner,
+ *  2026-11-12); with no My holdings tab it leads. */
+function withFollowing<T extends { key: string }>(tabs: T[]): (T | typeof FOLLOWING_TAB)[] {
+  const at = tabs.findIndex((t) => t.key === 'holdings') + 1
+  return [...tabs.slice(0, at), FOLLOWING_TAB, ...tabs.slice(at)]
+}
+
 const HOLDINGS_MESSAGE =
   'Help me add my investments so Intel can follow them. Ask which brokers I use; I can send a ' +
   'screenshot or statement of my holdings instead of typing. Ask me one thing at a time.'
@@ -268,13 +275,13 @@ function IntelFeed({
           onScan={() => !scan.scanning && scan.askToScan()}
         />
 
-        {/* My holdings · your ticker watchlists · Topics & macro. */}
+        {/* My holdings · Famous Portfolios · Topics & macro · your ticker watchlists. */}
         <div className="intel-tabs-row">
           <PageTabs
             ariaLabel="Intelligence view"
             value={tab}
             onChange={nav.setTab}
-            tabs={followingOn ? [...tabs, FOLLOWING_TAB] : tabs}
+            tabs={followingOn ? withFollowing(tabs) : tabs}
           />
           <button
             type="button"
@@ -289,7 +296,7 @@ function IntelFeed({
 
         {/* Topics & macro is one column: topics are in no list, so there's no list pane. */}
         {tab === 'portfolios' && followingOn && (
-          <div role="tabpanel" aria-labelledby="ui-page-tab-following">
+          <div role="tabpanel" aria-labelledby="ui-page-tab-following" className="fol-shell">
             <FollowingTab onAskLucius={onChatSuggest} />
           </div>
         )}

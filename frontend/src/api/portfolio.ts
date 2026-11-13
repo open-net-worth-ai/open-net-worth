@@ -35,11 +35,16 @@ async function asJson<T>(r: Response): Promise<T> {
 export async function fetchReturns(
   period: ReturnPeriod = '1Y',
   benchmark?: string,
-  options?: { risk?: boolean },
+  options?: {
+    risk?: boolean
+    band?: 'equity' | 'crypto' | 'commodity' | null
+  },
 ): Promise<PortfolioReturns> {
   const q = new URLSearchParams({ period })
   if (benchmark) q.set('benchmark', benchmark)
   if (options?.risk) q.set('risk', 'true')
+  // One asset type of the book: its own value and its own buys and sells.
+  if (options?.band) q.set('band', options.band)
   return asJson<PortfolioReturns>(await authFetch(`/api/returns?${q.toString()}`))
 }
 

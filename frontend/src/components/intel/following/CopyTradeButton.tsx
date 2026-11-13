@@ -1,6 +1,5 @@
 import { Button } from '../../ui'
 import { Spark } from '../../../lucius/identity'
-import { sendNextPrefill } from '../../../state/luciusSendIntent'
 import { COPY, copyTradePrompt } from './following.copy'
 
 interface Props {
@@ -11,10 +10,10 @@ interface Props {
   onAskLucius?: (text: string) => void
 }
 
-/** Copy ONE trade now: hands it to Lucius, who sizes it and drafts the order at the broker.
- *  The message sends at once, in a fresh conversation — pressing the button is the request.
- *  The app's Lucius button (as "Copy with Lucius" above it), the same kit Button as its
- *  neighbour "Trade details", so the two share one shape and height. */
+/** Copy ONE trade: writes the request for Lucius (size it, draft the order at the broker) into
+ *  his message box, where you read it, change it if you like, and send it yourself. It never
+ *  sends on its own (owner, 2026-11-13), as every "Ask Lucius" in the app waits in the box.
+ *  The app's Lucius button, in Lucius's colour with its Spark. */
 export function CopyTradeButton({ who, what, onAskLucius }: Props) {
   if (!onAskLucius) return null
   return (
@@ -24,10 +23,7 @@ export function CopyTradeButton({ who, what, onAskLucius }: Props) {
       className="fi-lucius"
       iconLeft={<Spark size={15} ariaHidden />}
       aria-label={COPY.copyTradeLabel(what)}
-      onClick={() => {
-        sendNextPrefill()
-        onAskLucius(copyTradePrompt(who, what))
-      }}
+      onClick={() => onAskLucius(copyTradePrompt(who, what))}
     >
       {COPY.copyTrade}
     </Button>

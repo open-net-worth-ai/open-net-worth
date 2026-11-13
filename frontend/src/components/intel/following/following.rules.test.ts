@@ -72,9 +72,10 @@ describe('the holdings map', () => {
   it('sizes each sector by its weight and colours it by the shares they added or sold', () => {
     // Technology: ACME −500k × $30 and CRUX +100 × $1,000 against ACME's 1.5M × $30 before.
     expect(tiles()).toEqual([
-      { key: 'Technology', label: 'Technology', weight: 0.62, change: -0.331 },
-      { key: 'Industrials', label: 'Industrials', weight: 0.3, change: 1 },
-      { key: 'Energy', label: 'Energy', weight: 0.04, change: 0 },
+      { key: 'Technology', label: 'Technology', weight: 0.62, change: -0.331, fresh: false },
+      // Doubled, not new: it was held at the previous report.
+      { key: 'Industrials', label: 'Industrials', weight: 0.3, change: 1, fresh: false },
+      { key: 'Energy', label: 'Energy', weight: 0.04, change: 0, fresh: false },
     ])
   })
 

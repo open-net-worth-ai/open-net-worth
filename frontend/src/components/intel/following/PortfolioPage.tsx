@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useRef, useState } from 'react'
-import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs, TabSkeleton } from '../../ui'
-import { Bell, ChevronLeft } from '../../../ui/icons'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs } from '../../ui'
+import { Bell } from '../../../ui/icons'
 import { Spark } from '../../../lucius/identity'
 import { Tooltip } from '../../ui/Tooltip'
 import {
@@ -19,10 +19,16 @@ import { HoldingRows } from './HoldingRows'
 import { KeyFigures } from './KeyFigures'
 import { AboutPortfolio } from './AboutPortfolio'
 import { OverviewTab } from './OverviewTab'
-import { usePreviewPage } from './useFollowing'
+import { usePreviewPage, usePreviewReturns } from './useFollowing'
+import { useElapsed, useSlow } from './useSlow'
+import { useStickTop } from './useStickTop'
+import { FetchBanner, PageSkeleton } from './FirstLoad'
+import { Crumb } from './Crumb'
+import { Toast } from '../../tabs/accounts/Toast'
 import type { PortfolioRef } from './Discover'
 
-type Tab = 'activity' | 'holdings' | 'overview'
+type Tab = 'activity' | 'holdings' | 'compare'
+const DEFAULT_RANGE = '1Y'
 
 interface Props {
   portfolio: PortfolioRef
@@ -39,10 +45,43 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // Your own book: every table marks the stocks you hold.
   const { heldSet } = usePortfolioTickerMaps()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
+  const returns = usePreviewReturns(portfolio.kind, portfolio.source_ref, page.data != null)
+  const slow = useSlow(page.initialLoading)
+  const seconds = useElapsed(page.initialLoading)
+  // Opened on the five quarters its card read: ask again until the older ones are in, then
+  // price every holding against the whole history.
+  const extending = page.data?.history_complete === false
+  const { refresh: refreshPage } = page
+  const { refresh: refreshReturns } = returns
+  useEffect(() => {
+    if (!extending) return
+    const timer = setInterval(() => void refreshPage(), 3000)
+    return () => {
+      clearInterval(timer)
+      void refreshReturns()
+    }
+  }, [extending, refreshPage, refreshReturns])
   // The open tab lives in the address (?tab=), so a reload, Back and a shared link keep it.
-  const search = useSearch({ strict: false }) as { tab?: string }
-  // Overview was folded into Holdings: an old ?tab=overview link opens Holdings.
-  const tab: Tab = search.tab === 'holdings' || search.tab === 'overview' ? search.tab : 'activity'
+  const search = useSearch({ strict: false }) as { tab?: string; range?: string }
+  // One time range for every tab (?range=), 1Y by default: the same window as the card's return,
+  // so the page opens on the figure the card showed (owner, 2026-11-13).
+  const range = search.range ?? DEFAULT_RANGE
+  const setRange = (next: string) =>
+    void navigate({
+      to: '/intel',
+      search: ((prev: Record<string, unknown>) => ({
+        ...prev,
+        range: next === DEFAULT_RANGE ? undefined : next,
+      })) as never,
+      replace: true,
+    } as never)
+  // Overview became Comparison (owner, 2026-11-13): an old ?tab=overview link opens it.
+  const tab: Tab =
+    search.tab === 'holdings'
+      ? 'holdings'
+      : search.tab === 'compare' || search.tab === 'overview'
+        ? 'compare'
+        : 'activity'
   const setTab = (next: Tab) =>
     void navigate({
       to: '/intel',
@@ -55,10 +94,25 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  // What a tap on the bell just did: the app's toast, not a note in the page (owner,
+  // 2026-11-13). It dismisses itself.
+  const [notice, setNotice] = useState<string | null>(null)
   // Switching tabs from below the tab bar starts the new tab at its top, the tab bar in view:
   // a tab's height differs (Trading Activity is often twice Holdings), so keeping the old scroll
   // would land in the middle of the new one, or past its end.
   const tabsRef = useRef<HTMLDivElement>(null)
+  // The tabs stay in view while the page scrolls (owner, 2026-11-13): pinned under the app's
+  // top bar, and their height handed to what pins beneath them (Trading Activity's chart).
+  const tabsTop = useStickTop(tabsRef)
+  // After every render: the tabs do not exist while the page shows its skeleton, so a measure
+  // made once, on mount, read 0 and the chart pinned over them.
+  const [tabsHeight, setTabsHeight] = useState(0)
+  // No dependency list on purpose (every render), and no loop: it sets only a changed height.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const h = tabsRef.current?.offsetHeight ?? 0
+    if (h !== tabsHeight) setTabsHeight(h)
+  })
   const switchTab = (next: Tab) => {
     const bar = tabsRef.current
     if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start' })
@@ -66,17 +120,34 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   }
 
   if (page.initialLoading)
-    return <TabSkeleton variant="holdings" label={COPY.loadingPage} header={false} />
+    return (
+      <>
+        <PageSkeleton name={portfolio.name} onBack={onBack} />
+        {slow && (
+          <FetchBanner
+            title={COPY.fetchPageTitle(portfolio.kind, portfolio.name)}
+            sub={COPY.fetchPageSub(portfolio.kind, seconds)}
+          />
+        )}
+      </>
+    )
   if (!page.data)
     return (
-      <ErrorState
-        title={COPY.loadFailedTitle}
-        message={COPY.pageErrorBody}
-        onRetry={() => void page.refresh()}
-      />
+      <div className="fol-page">
+        {/* A page that failed still offers the way back: the address remembers it, so without
+            this a portfolio that cannot load was a dead end. */}
+        <Crumb name={portfolio.name || COPY.crumbThis(portfolio.kind)} onBack={onBack} />
+        <ErrorState
+          title={COPY.loadFailedTitle}
+          message={COPY.pageErrorBody}
+          onRetry={() => void page.refresh()}
+        />
+      </div>
     )
 
-  const { follow, follow_id: followId, performance, names = {}, sectors = {} } = page.data
+  const { follow, follow_id: followId, names = {}, sectors = {} } = page.data
+  // The page opens on the copy's line; every holding's own return replaces it when priced.
+  const performance = returns.data ?? page.data.performance
   const model = follow.model
   const member = follow.kind === 'house_member'
 
@@ -85,7 +156,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     setError(null)
     try {
       await fn()
-      await Promise.all([onChanged(), page.refresh()])
+      await Promise.all([onChanged(), page.refresh(), returns.refresh()])
       return true
     } catch (e) {
       setError(errorText(e))
@@ -100,7 +171,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   const setTicker = async (key: string, symbol: string) => {
     const id = followId ?? (await followPortfolio(portfolio.kind, portfolio.source_ref)).follow.id
     await setFollowTicker(id, key, symbol)
-    await Promise.all([onChanged(), page.refresh()])
+    await Promise.all([onChanged(), page.refresh(), returns.refresh()])
   }
   const copyPortfolio = async () => {
     if (!followId && !(await watch())) return
@@ -146,7 +217,8 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   const tabs: { key: Tab; label: string }[] = [
     ...(hasActivity ? [{ key: 'activity' as Tab, label: COPY.tabActivity }] : []),
     { key: 'holdings', label: COPY.tabHoldings },
-    { key: 'overview', label: COPY.tabOverview },
+    // Named for what it is: you beside them (owner, 2026-11-13).
+    { key: 'compare', label: COPY.vsTitle(follow.name) },
   ]
   const missed = follow.kind === 'fund_13f' && model ? missedQuarter(model.as_of) : null
   // The newest dated trade: for a fund only when it is newer than the snapshot (else the
@@ -163,21 +235,14 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   const shownTab: Tab = tab === 'activity' && !hasActivity ? 'holdings' : tab
 
   return (
-    <div className="fol-page">
+    <div
+      className="fol-page"
+      style={{ ['--fol-tabs-h' as string]: `${tabsHeight}px` } as React.CSSProperties}
+    >
+      <Crumb name={follow.name} onBack={onBack} />
       <header className="fol-head">
         <div className="fol-id">
           <h2 className="fol-title">
-            {/* The way back sits on the name's own line: no line of its own above it. */}
-            <Tooltip label={COPY.backToAllLabel}>
-              <button
-                type="button"
-                className="fol-back-icon"
-                aria-label={COPY.backToAllLabel}
-                onClick={onBack}
-              >
-                <ChevronLeft size={20} aria-hidden="true" />
-              </button>
-            </Tooltip>
             <span className="fol-title-name">{follow.name}</span>
             {/* Whose it is, quiet after the name; it gives way first on a narrow screen. */}
             {follow.subtitle && <span className="fol-title-by">{follow.subtitle}</span>}
@@ -191,12 +256,21 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
               size="sm"
               variant="ghost"
               loading={busy}
-              className={followId ? 'fol-watch is-on' : 'fol-watch'}
+              className={followId ? `fol-watch is-on${isMobile ? '' : ' has-label'}` : 'fol-watch'}
               aria-label={followId ? COPY.unwatchLabel : COPY.watchLabel}
               aria-pressed={!!followId}
               iconLeft={<Bell size={15} fill={followId ? 'currentColor' : 'none'} />}
-              onClick={() => (followId ? setConfirming(true) : void watch())}
-            />
+              onClick={() =>
+                followId
+                  ? setConfirming(true)
+                  : void watch().then(
+                      (ok) => ok && setNotice(COPY.watchedNotice(follow.kind, follow.name)),
+                    )
+              }
+            >
+              {/* Watched says so in words; unwatched stays a quiet bell. */}
+              {followId && !isMobile ? COPY.watching : null}
+            </Button>
           </Tooltip>
           <ActionMenu label={COPY.moreActions(follow.name)} title={follow.name} items={menu} />
         </div>
@@ -217,7 +291,8 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
         </div>
       </header>
       {error && <div className="fol-note fol-note--bad">{error}</div>}
-      <div ref={tabsRef}>
+      <Toast message={notice} onDone={() => setNotice(null)} />
+      <div ref={tabsRef} className="fol-tabs-sticky" style={{ top: tabsTop }}>
         <PageTabs
           tabs={tabs}
           value={shownTab}
@@ -234,30 +309,39 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
             names={names}
             held={heldSet}
             onAskLucius={onAskLucius}
+            range={range}
+            onRange={setRange}
           />
         )}
-        {/* One Holdings tab: what they hold and how it has done, then the holdings themselves. */}
+        {/* Holdings: who they are and their key figures, then what they hold (owner,
+            2026-11-13: the Overview's first half moved here). */}
         {shownTab === 'holdings' && model && (
-          <HoldingRows
-            model={model}
-            period="12M"
-            win={performance.periods['12M']}
-            names={names}
-            sectors={sectors}
-            watchesToo={!followId}
-            held={heldSet}
-            exchanges={performance.exchanges}
-            onSetTicker={follow.kind === 'fund_13f' ? setTicker : undefined}
-          />
-        )}
-        {/* What it is and how it has done: a few sentences, its key figures, its return. */}
-        {shownTab === 'overview' && model && (
           <div className="fol-sec">
             <AboutPortfolio follow={follow} model={model} names={names} sectors={sectors} />
             <KeyFigures follow={follow} model={model} latestTrade={latestTrade} missed={missed} />
+            <HoldingRows
+              model={model}
+              period="12M"
+              win={performance.periods['12M']}
+              names={names}
+              sectors={sectors}
+              watchesToo={!followId}
+              held={heldSet}
+              exchanges={performance.exchanges}
+              onSetTicker={follow.kind === 'fund_13f' ? setTicker : undefined}
+            />
+          </div>
+        )}
+        {/* Comparison: them beside your own book, nothing else. */}
+        {shownTab === 'compare' && model && (
+          <div className="fol-sec">
             <OverviewTab
               perf={performance}
               name={follow.name}
+              kind={follow.kind}
+              sourceRef={follow.source_ref}
+              range={range}
+              onRange={setRange}
               onRetry={() => void page.refresh()}
             />
           </div>
@@ -276,7 +360,10 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
         }
         onConfirm={() => {
           setConfirming(false)
-          if (followId) void act(() => unfollowPortfolio(followId))
+          if (followId)
+            void act(() => unfollowPortfolio(followId)).then(
+              (ok) => ok && setNotice(COPY.unwatchedNotice(follow.name)),
+            )
         }}
         onCancel={() => setConfirming(false)}
       />

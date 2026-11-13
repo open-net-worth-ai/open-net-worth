@@ -17,6 +17,7 @@ from backend.core.errors import ExternalServiceError
 from backend.core.safe_xml import has_dtd
 from backend.core.untrusted import sanitize_untrusted
 from backend.core.user_time import user_today
+from backend.services.followed_portfolios import filing_store
 from backend.services.followed_portfolios.http import fetch_bytes, fetch_json
 from backend.services.followed_portfolios.model import normalize_symbol
 
@@ -139,23 +140,33 @@ def scan(cik: str, known_ids: set[str], limit: int = 20) -> tuple[list[dict], li
     trades: list[dict] = []
     fetched: list[str] = []
     for filing in [f for f in _recent_form4s(cik) if f["accession"] not in known_ids][:limit]:
-        folder = (
-            f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
-            f"{filing['accession'].replace('-', '')}"
-        )
         try:
-            body = fetch_bytes(f"{folder}/{filing['document']}", what=SEC, max_bytes=_XML_MAX_BYTES)
-            trades += parse_ownership(
-                body.decode("utf-8", errors="replace"),
-                filed_at=filing["filed_at"],
-                accession=filing["accession"],
-                owner_cik=cik,
-            )
+            trades += _trades_in(cik, filing)
         except ExternalServiceError:
             logger.warning("followed portfolios: Form 4 %s unreadable", filing["accession"])
             continue
         fetched.append(filing["accession"])
     return trades, fetched
+
+
+def _trades_in(cik: str, filing: dict) -> list[dict]:
+    """The filing's trades: kept from an earlier read (a filed Form 4 never changes), else
+    downloaded once and kept."""
+    kept = filing_store.load("form4", cik, filing["accession"])
+    if kept is not None and isinstance(kept.get("trades"), list):
+        return kept["trades"]
+    folder = (
+        f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{filing['accession'].replace('-', '')}"
+    )
+    body = fetch_bytes(f"{folder}/{filing['document']}", what=SEC, max_bytes=_XML_MAX_BYTES)
+    trades = parse_ownership(
+        body.decode("utf-8", errors="replace"),
+        filed_at=filing["filed_at"],
+        accession=filing["accession"],
+        owner_cik=cik,
+    )
+    filing_store.save("form4", cik, filing["accession"], {"trades": trades})
+    return trades
 
 
 def recent_trades(cik: str, known_ids: set[str], limit: int = 20) -> list[dict]:
@@ -172,8 +183,15 @@ def refresh_activity(cik: str, known: dict | None = None) -> dict:
     # row starts over once, and every row it keeps from then on passed the check.
     fresh = known.get("form4_owner_checked") is True
     seen = [str(a) for a in known.get("form4_seen") or []] if fresh else []
+    # A stored trade whose "ticker" was a filer's placeholder ("NONE") is dropped here too.
     activity = (
-        [t for t in known.get("activity") or [] if t.get("source") == "form4"] if fresh else []
+        [
+            t
+            for t in known.get("activity") or []
+            if t.get("source") == "form4" and normalize_symbol(t.get("symbol"))
+        ]
+        if fresh
+        else []
     )
     try:
         trades, fetched = scan(cik, set(seen))

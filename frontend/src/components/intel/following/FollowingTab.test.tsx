@@ -37,6 +37,12 @@ vi.mock('@tanstack/react-router', async () => {
     useSearch: () => useSyncExternalStore(router.subscribe, router.get),
   }
 })
+/** Picks the page's time range from its menu (one range, shared by every tab). */
+function pickRange(key: string) {
+  const period = screen.getAllByRole('combobox', { name: COPY.periodLabel })[0] as HTMLSelectElement
+  fireEvent.change(period, { target: { value: key } })
+}
+
 function followRoutes() {
   navigate.mockImplementation((o: { to: string; search?: unknown; replace?: boolean }) => {
     if (o.to !== '/intel') return
@@ -154,10 +160,13 @@ describe('Discover', () => {
     expect(await screen.findByText(COPY.noMatch('zzz'))).toBeTruthy()
   })
 
-  it('opens a portfolio, and the back button returns to the list', async () => {
+  it('opens a portfolio, and the breadcrumb returns to the list', async () => {
     setup()
     await open('Acme Capital')
-    fireEvent.click(screen.getByRole('button', { name: COPY.backToAllLabel }))
+    // "Famous Portfolios / Acme Capital": its first part goes back (owner, 2026-11-13).
+    const crumb = screen.getByRole('navigation', { name: COPY.breadcrumbLabel })
+    expect(crumb.textContent).toContain('Acme Capital')
+    fireEvent.click(within(crumb).getByRole('button', { name: COPY.backToAll }))
     expect(await screen.findByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeTruthy()
   })
 })
@@ -169,8 +178,9 @@ describe('the header', () => {
     // The header: the name and whose it is, nothing else.
     expect(screen.getByText('Ada Acme')).toBeTruthy()
     expect(screen.queryByText(COPY.figFiled)).toBeNull()
-    tab('Acme Capital', COPY.tabOverview)
-    // Overview: a description written from the data, then the key figures.
+    // Overview (the Holdings tab's label since 2026-11-13): a description written from the data,
+    // then the key figures, then what they hold.
+    tab('Acme Capital', COPY.tabHoldings)
     expect(screen.getByRole('region', { name: COPY.aboutLabel('Acme Capital') })).toBeTruthy()
     expect(screen.getByText(COPY.figStocks)).toBeTruthy()
     const filed = screen.getByText(shortDate('2026-08-14'))
@@ -209,7 +219,7 @@ describe('the header', () => {
 })
 
 describe('Trading Activity', () => {
-  it('opens on the whole range with every move, and a filter narrows it', async () => {
+  it('opens on 1Y, the window the card shows; All lists every move, and a filter narrows it', async () => {
     setup()
     await open('Acme Capital')
     const period = screen.getByRole('combobox', { name: COPY.periodLabel }) as HTMLSelectElement
@@ -224,7 +234,9 @@ describe('Trading Activity', () => {
       '3Y',
       'All',
     ])
-    expect(period.selectedOptions[0]!.textContent).toBe('All')
+    // One range for the whole page, 1Y by default (owner, 2026-11-13).
+    expect(period.selectedOptions[0]!.textContent).toBe('1Y')
+    pickRange('ALL')
     const table = screen.getByRole('table', { name: 'All' })
     expect(symbols(table).sort()).toEqual(['ACME', 'BOLT', 'BOLT', 'CRUX', 'OXYZ'])
     fireEvent.click(within(filters()).getByRole('tab', { name: /^Sold out/ }))
@@ -266,6 +278,7 @@ describe('Trading Activity', () => {
   it('copies one picked move through Lucius, the trade spelled out', async () => {
     setup()
     await open('Acme Capital')
+    pickRange('ALL')
     const table = screen.getByRole('table', { name: 'All' })
     const bolt = within(table)
       .getAllByRole('row')
@@ -279,7 +292,7 @@ describe('Trading Activity', () => {
   it('offers a member Bought and Sold, newest first', async () => {
     setup()
     await open('Pat Placeholder')
-    tab('Pat Placeholder', COPY.tabOverview)
+    tab('Pat Placeholder', COPY.tabHoldings)
     // A member has no quarterly report: their latest trade is the date the figures rest on.
     expect(screen.queryByText(COPY.figFiled)).toBeNull()
     expect(screen.getByText(COPY.figLatestTrade)).toBeTruthy()
@@ -346,7 +359,7 @@ describe.skip('Latest moves', () => {
 })
 
 describe('Holdings', () => {
-  it('maps every sector by its share, and a tile names itself and narrows the table', async () => {
+  it('rings every sector by its share, and a legend row names itself and narrows the table', async () => {
     setup()
     await open('Acme Capital')
     tab('Acme Capital', COPY.tabHoldings)
@@ -401,7 +414,7 @@ describe('Overview: the return', () => {
   it('shows the return against the benchmark for the chosen window, on Overview', async () => {
     setup()
     await open('Acme Capital')
-    tab('Acme Capital', COPY.tabOverview)
+    tab('Acme Capital', COPY.vsTitle('Acme Capital'))
     expect(figure('SPY')).toBe('+10.8%')
     fireEvent.click(
       within(screen.getByRole('tablist', { name: COPY.perfPeriodLabel })).getByRole('tab', {
@@ -419,7 +432,7 @@ describe('Overview: the return', () => {
       { date: '2026-11-10', portfolio: 0.21, benchmark: null },
     ]
     await open('Acme Capital')
-    tab('Acme Capital', COPY.tabOverview)
+    tab('Acme Capital', COPY.vsTitle('Acme Capital'))
     // Rebased to its own first day: 1.21 / 1.10 - 1 = +10%. It used to vanish.
     expect((await screen.findAllByText(COPY.yourPortfolio)).length).toBeGreaterThan(0)
     expect(figure(COPY.yourPortfolio)).toBe('+10.0%')

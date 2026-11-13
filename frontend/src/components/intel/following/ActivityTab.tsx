@@ -1,12 +1,13 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Button, SegmentedControl } from '../../ui'
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useStickTop } from './useStickTop'
+import { SegmentedControl } from '../../ui'
 import { useAssetNav } from '../../../state/assetNav'
 import { FilterChips, ToolSelect } from './Controls'
 import { NameCell } from './NameCell'
 import { LatestMoves } from './LatestMoves'
 
 const SHOW_LATEST = false
-import { ArrowUpRight, ChevronLeft, ChevronRight } from '../../../ui/icons'
+import { ArrowUpRight, ChevronRight } from '../../../ui/icons'
 import { Tooltip } from '../../ui/Tooltip'
 import type { Follow, FollowPerformance } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
@@ -38,67 +39,53 @@ interface Props {
   /** The tickers in your own book, upper-cased. */
   held: Set<string>
   onAskLucius?: (text: string) => void
+  /** The page's one time range, shared with Comparison (owner, 2026-11-13). */
+  range: string
+  onRange: (key: string) => void
 }
 
 function Spotlight({
   row,
   follow,
   benchmark,
-  onAskLucius,
   from,
-  rangeWords,
 }: {
   row: ActivityRow
   follow: Follow
   benchmark: string
-  onAskLucius?: (t: string) => void
   /** The chosen period's first day: the stock's move is measured from it, as the chart is. */
   from: string
-  rangeWords: string
 }) {
   const since = useSinceFiled(row.symbol, benchmark, from)
   const trades = useMemo(() => exactTrades(follow, row.symbol), [follow, row.symbol])
   const [details, setDetails] = useState(false)
   return (
     <div className="fol-spot">
-      {/* The move's figures, as Performance shows its own (a small name over a large value).
-          The stock itself is the block's title. */}
+      {/* One headline figure (owner, 2026-11-13: three figures and two buttons were too busy):
+          the stock's move large, the benchmark and its price small beside it. The stock is the
+          block's title; Copy trade sits on that title's line. */}
       <div className="fol-spot-figrow">
         {since.stock == null ? (
           <p className="fol-spot-sub">{COPY.noPriceSince}</p>
         ) : (
-          <div className="fol-ret3">
-            {since.price != null && (
-              <div className="fol-ret3-item">
-                <span className="fol-ret3-l">{COPY.priceLabel}</span>
-                <span className="fol-ret3-v">${since.price.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="fol-ret3-item">
-              <span className="fol-ret3-l">{row.symbol}</span>
-              <span className={`fol-ret3-v ${toneOf(since.stock)}`}>{signedPct(since.stock)}</span>
-            </div>
-            <div className="fol-ret3-item">
-              <span className="fol-ret3-l">{benchmark}</span>
-              <span className={`fol-ret3-v ${toneOf(since.bench)}`}>{signedPct(since.bench)}</span>
-            </div>
+          // One line, as All Moves' own figure is one line, so picking a move never shifts the
+          // chart or the table below it: the move large, its context small beside it.
+          <div className="fol-spot-headline">
+            <span className={`fol-ret3-v ${toneOf(since.stock)}`}>{signedPct(since.stock)}</span>
+            <span className="fol-spot-context">
+              {row.symbol} · {benchmark} {signedPct(since.bench)}
+              {/* The latest close, not what they paid: the move runs from the range's start;
+                  their estimated price is in Trade details. */}
+              {since.price != null && ` · ${COPY.priceNow(`$${since.price.toFixed(2)}`)}`}
+            </span>
           </div>
         )}
       </div>
-      {/* What to do about the move: beside its figures on a wide card, under its chart on a
-          narrow one (one grid, see .fol-spot). */}
-      <div className="fol-spot-actions">
-        <Button size="sm" onClick={() => setDetails(true)}>
-          {COPY.tradeDetails}
-          <ChevronRight size={14} aria-hidden="true" />
-        </Button>
-        <CopyTradeButton
-          who={follow.name}
-          what={`${row.verb.toLowerCase()} ${row.symbol} (${row.name}), ${row.amountText}, ${row.detail}, made public ${shortDate(row.filedAt)}${since.stock != null ? `, ${signedPct(since.stock)} ${rangeWords}` : ''}`}
-          onAskLucius={onAskLucius}
-        />
-      </div>
       <TradeChart row={row} trades={trades} from={from} />
+      <button type="button" className="fol-spot-link" onClick={() => setDetails(true)}>
+        {COPY.tradeDetails}
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
       {details && (
         <TradeDetails
           row={row}
@@ -108,6 +95,34 @@ function Spotlight({
         />
       )}
     </div>
+  )
+}
+
+/** Copy trade for the picked move, on its title's line: the request names the move and its
+ *  return over the range, read from the same prices the headline shows. */
+function PickedCopy({
+  row,
+  follow,
+  benchmark,
+  from,
+  rangeWords,
+  onAskLucius,
+}: {
+  row: ActivityRow
+  follow: Follow
+  benchmark: string
+  from: string
+  rangeWords: string
+  onAskLucius?: (t: string) => void
+}) {
+  const since = useSinceFiled(row.symbol, benchmark, from)
+  const moved = since.stock != null ? `, ${signedPct(since.stock)} ${rangeWords}` : ''
+  return (
+    <CopyTradeButton
+      who={follow.name}
+      what={`${row.verb.toLowerCase()} ${row.symbol} (${row.name}), ${row.amountText}, ${row.detail}, made public ${shortDate(row.filedAt)}${moved}`}
+      onAskLucius={onAskLucius}
+    />
   )
 }
 
@@ -217,6 +232,7 @@ function Table({
   onPick,
   held,
   exchanges,
+  tools,
 }: {
   set: FilterSet
   rows: ActivityRow[]
@@ -226,6 +242,8 @@ function Table({
   onPick: (r: ActivityRow) => void
   held: Set<string>
   exchanges?: Record<string, string>
+  /** At the toolbar's right end, on the chips' line: the page's range (owner, 2026-11-13). */
+  tools?: ReactNode
 }) {
   const [filter, setFilter] = useState<ActivityFilter>('all')
   const options = filtersFor(set)
@@ -241,8 +259,8 @@ function Table({
     <div className="fol-sec">
       {/* Investments' filter pills, each with its count (they scroll on a phone). The period is
           with the block's title above the chart. */}
-      {options.length > 0 && (
-        <div className="fol-toolbar">
+      {(options.length > 0 || tools) && (
+        <div className="fol-toolbar fol-toolbar--range">
           <FilterChips
             label={COPY.filterLabel}
             value={filter}
@@ -253,6 +271,7 @@ function Table({
               count: rows.filter((r) => matches(set, r, o.value as ActivityFilter)).length,
             }))}
           />
+          {tools}
         </div>
       )}
       {rows.length === 0 && <p className="fol-empty">{COPY.noMovesInPeriod}</p>}
@@ -276,39 +295,15 @@ function Table({
   )
 }
 
-/** Where a pinned block's top sits: just under the app's top bar, measured from the block's own
- *  scroll area (the page on a desktop, the content pane on a phone), since the bar's height
- *  differs by platform (52px, 48px in the Mac app). */
-function useStickTop(ref: React.RefObject<HTMLElement | null>): number {
-  const [top, setTop] = useState(0)
-  useLayoutEffect(() => {
-    const measure = () => {
-      const el = ref.current
-      const bar = document.querySelector<HTMLElement>('.topbar')
-      if (!el || !bar) return setTop(0)
-      let scroller: HTMLElement | null = el.parentElement
-      while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY))
-        scroller = scroller.parentElement
-      const from = scroller ? scroller.getBoundingClientRect().top : 0
-      setTop(Math.max(0, Math.round(bar.getBoundingClientRect().bottom - from)))
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [ref])
-  return top
-}
-
 /** What they did: one move in focus with its chart (every move when none is picked), then
  *  the chosen period's moves as one table — a quarter's changes, or the dated trades since. */
-export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
+export function ActivityTab({ follow, perf, names, held, onAskLucius, range, onRange }: Props) {
   const member = follow.kind === 'house_member'
   const spans = useMemo(() => rangePeriods(follow), [follow])
   const { openAsset } = useAssetNav()
-  const [periodKey, setPeriodKey] = useState<string | null>(null)
-  // All by default; the ranges (1 week … 3 years) narrow it.
+  // The page's range; one this portfolio has no moves for (a short history) reads as All.
   const period =
-    spans.find((p) => p.key === periodKey) ?? spans.find((p) => p.key === 'ALL') ?? spans[0]
+    spans.find((p) => p.key === range) ?? spans.find((p) => p.key === 'ALL') ?? spans[0]
   const rows = period ? periodRows(follow, names, period) : []
   const [pickedKey, setPickedKey] = useState<string | null>(null)
   // Nothing is picked until the reader picks: the chart then shows every move. Picking the
@@ -337,29 +332,25 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
           held={held}
           onOpen={(_, rowKey) => {
             // All holds every move under the same key: show it there, picked.
-            setPeriodKey('ALL')
+            onRange('ALL')
             setPickedKey(rowKey)
           }}
         />
       )}
       {/* All moves: its title, period, return and chart are one raised card. */}
-      <div className="fol-panel fol-act-card" ref={panelRef} style={{ top: stickTop }}>
+      {/* Pinned under the page's sticky tabs (their height is --fol-tabs-h) with the same gap
+          it has before scrolling (the page's section gap), so sticking never moves it closer. */}
+      <div
+        className="fol-panel fol-act-card"
+        ref={panelRef}
+        style={{ top: `calc(${stickTop}px + var(--fol-tabs-h, 0px) + var(--space-6))` }}
+      >
         {/* The chart follows the table's period, so the two are one titled block. */}
         <div className="fol-sec-head">
           {/* The block's title is what it shows: every move, or the picked stock (its page one
-              click away) with the way back to every move before it. */}
+              click away). Clicking the picked row again goes back to every move. */}
           {picked ? (
             <h2 className="fol-sec-title fol-spot-titleline">
-              <Tooltip label={COPY.backToAllMoves}>
-                <button
-                  type="button"
-                  className="fol-sec-back"
-                  aria-label={COPY.backToAllMoves}
-                  onClick={() => setPickedKey(null)}
-                >
-                  <ChevronLeft size={16} aria-hidden="true" />
-                </button>
-              </Tooltip>
               <Tooltip label={COPY.openStock(picked.symbol)}>
                 <button
                   type="button"
@@ -376,32 +367,15 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
           ) : (
             <h2 className="fol-sec-title">{COPY.allMovesSection}</h2>
           )}
-          {/* The period sets the chart AND the table, so it sits with the block's title: the stock
-              page's own timeframe chips with room, its compact dropdown without (as it does). */}
-          {period && spans.length > 1 && (
-            <div className="fol-tf">
-              <div className="asd-tf-tabs">
-                <SegmentedControl
-                  ariaLabel={COPY.periodLabel}
-                  options={spans.map((p) => ({ value: p.key, label: p.label }))}
-                  value={period.key}
-                  onChange={(v) => {
-                    setPeriodKey(v)
-                    setPickedKey(null)
-                  }}
-                />
-              </div>
-              <ToolSelect
-                className="fol-tf-menu"
-                label={COPY.periodLabel}
-                value={period.key}
-                options={spans.map((p) => ({ value: p.key, label: p.label }))}
-                onChange={(v) => {
-                  setPeriodKey(v)
-                  setPickedKey(null)
-                }}
-              />
-            </div>
+          {picked && (
+            <PickedCopy
+              row={picked}
+              follow={follow}
+              benchmark={benchmark}
+              from={span?.from ?? historyStart(follow)}
+              rangeWords={COPY.rangeWords(period?.key ?? 'ALL')}
+              onAskLucius={onAskLucius}
+            />
           )}
         </div>
         {picked ? (
@@ -409,9 +383,7 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
             row={picked}
             follow={follow}
             benchmark={benchmark}
-            onAskLucius={onAskLucius}
             from={span?.from ?? historyStart(follow)}
-            rangeWords={COPY.rangeWords(period?.key ?? 'ALL')}
           />
         ) : (
           year?.status === 'ok' && (
@@ -419,16 +391,11 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
               {/* The same line as a picked move's figures, so picking one never moves the table. */}
               <div className="fol-spot-figrow">
                 {/* The holdings' return over the period, large: the chart draws only their line. */}
-                <div className="fol-ret3">
-                  <div className="fol-ret3-item">
-                    <span className="fol-ret3-l">
-                      <i className="fol-line fol-line--main" aria-hidden="true" />
-                      {follow.name}
-                    </span>
-                    <span className={`fol-ret3-v ${toneOf(shown?.portfolio)}`}>
-                      {signedPct(shown?.portfolio)}
-                    </span>
-                  </div>
+                {/* One line chart, so no label naming it (owner, 2026-11-13): just its return. */}
+                <div className="fol-spot-headline">
+                  <span className={`fol-ret3-v ${toneOf(shown?.portfolio)}`}>
+                    {signedPct(shown?.portfolio)}
+                  </span>
                 </div>
               </div>
               <PortfolioActivityChart follow={follow} win={year} range={span} />
@@ -438,6 +405,33 @@ export function ActivityTab({ follow, perf, names, held, onAskLucius }: Props) {
       </div>
       {period && (
         <Table
+          tools={
+            spans.length > 1 ? (
+              <div className="fol-tf">
+                <div className="asd-tf-tabs">
+                  <SegmentedControl
+                    ariaLabel={COPY.periodLabel}
+                    options={spans.map((p) => ({ value: p.key, label: p.label }))}
+                    value={period.key}
+                    onChange={(v) => {
+                      onRange(v)
+                      setPickedKey(null)
+                    }}
+                  />
+                </div>
+                <ToolSelect
+                  className="fol-tf-menu"
+                  label={COPY.periodLabel}
+                  value={period.key}
+                  options={spans.map((p) => ({ value: p.key, label: p.label }))}
+                  onChange={(v) => {
+                    onRange(v)
+                    setPickedKey(null)
+                  }}
+                />
+              </div>
+            ) : undefined
+          }
           key={period.key}
           set={member ? 'trades' : 'all'}
           rows={rows}

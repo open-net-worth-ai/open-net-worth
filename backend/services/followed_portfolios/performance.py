@@ -18,7 +18,7 @@ from datetime import date, timedelta
 
 from backend.core.user_time import user_today
 from backend.services import prices
-from backend.services.followed_portfolios import copier, share_classes
+from backend.services.followed_portfolios import closes_store, copier, share_classes
 from backend.services.followed_portfolios.model import build_model, normalize_symbol
 from backend.services.risk_metrics import BENCHMARK_ROSTER, preferred_benchmark
 
@@ -207,7 +207,14 @@ def closes(symbol: str) -> dict[str, float]:
     return dict(sorted(out.items()))
 
 
-_closes = closes
+def _closes(symbol: str) -> dict[str, float]:
+    """``closes``, read from the copy kept on disk when it is fresh enough."""
+    kept = closes_store.load(symbol)
+    if kept is not None:
+        return kept
+    out = closes(symbol)
+    closes_store.save(symbol, out)
+    return out
 
 
 def listing_exchanges(symbols: list[str]) -> dict[str, str]:
@@ -221,7 +228,13 @@ def listing_exchanges(symbols: list[str]) -> dict[str, str]:
     return {s: str(q["exchange"]) for s, q in quotes.items() if s in wanted and q.get("exchange")}
 
 
-def performance_for(follow: dict) -> dict:
+def performance_for(follow: dict, *, every_holding: bool = True, workers: int = 6) -> dict:
+    """The copy's return over every window, each listed holding's own return, and each
+    listing's exchange. ``every_holding=False`` prices only what the copy's line needs (the
+    newest top holdings and each report's): a card reads one figure, and a fund of thousands
+    of stocks cost a price fetch for each (130 s for one, 2026-11-13). ``workers``: how many
+    prices are fetched at once (the background warm-up asks for fewer, leaving room for a
+    person's page)."""
     follow = share_classes.grouped(follow)
     today = user_today()
     model = build_model(follow, today)
@@ -243,21 +256,26 @@ def performance_for(follow: dict) -> dict:
         filed,
         benchmark,
         today,
+        every_holding,
     )
     hit = _cache.get(cache_key)
     if hit and time.monotonic() - hit[0] < _CACHE_SECONDS:
         return hit[1]
-    traded = {normalize_symbol(t.get("symbol")) for t in follow.get("activity") or []}
+    traded = (
+        {normalize_symbol(t.get("symbol")) for t in follow.get("activity") or []}
+        if every_holding
+        else set()
+    )
     points = (
         copier.member_points(follow.get("activity") or [])
         if follow.get("kind") == "house_member"
         else copier.fund_points(follow.get("history") or [])
     )
     # Every holding the page lists gets its own return, not only the top ones the line weighs.
-    every = build_model(follow, today, None) or {}
+    every = (build_model(follow, today, None) or {}) if every_holding else {}
     listed = tuple(h["symbol"] for h in every.get("holdings") or [])
     symbols = sorted((set(weights) | traded | set(listed) | copier.symbols(points)) - {""})
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         fetched = dict(zip([benchmark, *symbols], pool.map(_closes, [benchmark, *symbols])))
     bench = fetched.pop(benchmark)
     if not bench:
@@ -275,7 +293,8 @@ def performance_for(follow: dict) -> dict:
             listed=listed,
             points=points,
         ),
-        "exchanges": listing_exchanges([*listed, *traded]),
+        "exchanges": listing_exchanges([*listed, *traded]) if every_holding else {},
+        "every_holding": every_holding,
     }
     _cache[cache_key] = (time.monotonic(), out)
     return out

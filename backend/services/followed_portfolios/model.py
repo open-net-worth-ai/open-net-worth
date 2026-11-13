@@ -16,13 +16,16 @@ MAX_TOP_N = 50
 STALE_DAYS = {"fund_13f": 200, "house_member": 365, "etf_daily": 7}
 _CHANGE_TOLERANCE = 0.01
 _SYMBOL = re.compile(r"[A-Z0-9][A-Z0-9\-]{0,11}")
+# What a filer writes where an issuer has no ticker (a Form 4 for a fund's own private vehicle
+# says "NONE"): a word, never a symbol to look up or copy.
+_NO_TICKER = frozenset({"NONE", "NA", "N-A"})
 
 
 def normalize_symbol(symbol: str) -> str:
     """Upper case, share-class dot as a dash. Anything that is not a plain ticker becomes ""
     — a symbol is copied into a broker order, so it is never free text."""
     cleaned = str(symbol or "").strip().upper().replace(".", "-")
-    return cleaned if _SYMBOL.fullmatch(cleaned) else ""
+    return cleaned if _SYMBOL.fullmatch(cleaned) and cleaned not in _NO_TICKER else ""
 
 
 def _merged(snapshot: dict | None) -> dict[str, dict]:

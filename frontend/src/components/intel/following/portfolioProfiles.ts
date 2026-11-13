@@ -28,6 +28,8 @@ export const PROFILES: Record<string, string> = {
     "Icahn Capital invests Carl Icahn's money. He is one of the best-known activist investors, taking large stakes and pushing companies for change.",
   'fund_13f:1709323':
     "Li Lu's Himalaya Capital is a concentrated value investor; Charlie Munger was one of its backers. Its US filings miss its holdings listed abroad.",
+  'fund_13f:1021944':
+    "Temasek is Singapore's state investment company, owned by its government; its US filings show only its US-listed stakes, a small part of what it owns worldwide.",
   'fund_13f:949509':
     'Howard Marks co-founded Oaktree Capital, a specialist in credit and distressed investing; its US stock holdings are a small part of what it manages.',
   'fund_13f:1037389':

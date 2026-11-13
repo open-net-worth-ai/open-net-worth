@@ -69,10 +69,10 @@ def test_discovers_every_write_choke_from_source():
     # `envelope_note` (2026-09-26 — update_envelopes' note rides the budget choke); 62 once
     # `owned_asset` dispatches everything but create/create_category/delete through its
     # `_ASSET_OPS` handler table, which the AST scan cannot see (so only those 3 are found
-    # now), and `lot` gained amend, dispose_amend and dispose_undo; 63 once `income`
-    # gained `amend` (a dividend corrected from its holding's Dividends table, 2026-11-11); 66 once
-    # `followed_portfolio` joined with follow/refresh/unfollow (2026-11-10).
-    assert sum(len(c.ops) for c in chokes) == 66
+    # now), and `lot` gained amend, dispose_amend and dispose_undo; 66 once
+    # `followed_portfolio` joined with follow/refresh/unfollow/set_ticker (2026-11-10); 67 once
+    # `income` gained `amend` (a dividend corrected from its holding's Dividends table, 2026-11-11).
+    assert sum(len(c.ops) for c in chokes) == 67
 
 
 def test_discriminator_split_is_eight_type_three_op():

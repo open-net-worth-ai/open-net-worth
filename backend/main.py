@@ -1459,7 +1459,14 @@ def _with_cache_policy(response, path: str):
         # never a version-mismatched pair to replay. The cost is one small local HTML fetch
         # per navigation; the hashed CSS/JS it points at stay cached for a year below.
         response.headers["Cache-Control"] = "no-store"
-    elif "_astro/" in path or "/assets/" in path or path.startswith("assets/"):
+    elif (
+        "_astro/" in path
+        or "/assets/" in path
+        or path.startswith(("assets/", "portfolio-photos/", "portfolio-logos/"))
+    ):
+        # Famous Portfolios' portraits and logos carry a content hash in their names
+        # (`<name>-<hash>.webp`), so a new picture is a new file: with no header the
+        # browser re-asked for every card's picture on each visit (owner, 2026-11-13).
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     elif path.startswith("connector-logos/"):
         # Brand marks keep their names when replaced, so not immutable — but left with no

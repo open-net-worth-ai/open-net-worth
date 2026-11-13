@@ -10,15 +10,19 @@ import pytest
 
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.services.followed_portfolios import (
+    closes_store,
     edgar_13f,
     etf_daily,
     figi,
+    filing_store,
     form4,
     house_ptr,
     performance,
     sec_tickers,
 )
 from backend.services.followed_portfolios.model import build_model, normalize_symbol, status_of
+
+_REAL_LOOK_UP_LATER = edgar_13f.look_up_later
 
 TODAY = date(2026, 11, 10)
 
@@ -161,6 +165,13 @@ def _no_sec_name_list(monkeypatch):
     monkeypatch.setattr(sec_tickers, "tickers_for_names", lambda names: {})
 
 
+@pytest.fixture(autouse=True)
+def _fresh_search_cache():
+    edgar_13f.clear_search_cache()
+    yield
+    edgar_13f.clear_search_cache()
+
+
 def test_a_foreign_issuer_is_asked_about_as_a_cins():
     assert figi.id_type("H1467J104") == "ID_CINS"
     assert figi.id_type("037833100") == "ID_CUSIP"
@@ -221,8 +232,18 @@ def test_the_sec_name_index_drops_suffixes_and_refuses_a_shared_name():
 
 
 @pytest.fixture(autouse=True)
-def _figi_fresh(monkeypatch):
+def _filings_kept_apart(monkeypatch, tmp_path):
+    """Each test keeps filings in its own folder: fake filings share accession numbers."""
+    monkeypatch.setattr(filing_store, "_DIR", tmp_path / "filings")
+    monkeypatch.setattr(closes_store, "_DIR", tmp_path / "closes")
+    # No test starts real background lookups (one that does uses ``_REAL_LOOK_UP_LATER``).
+    monkeypatch.setattr(edgar_13f, "look_up_later", lambda cik, keys, then=None: None)
+
+
+@pytest.fixture(autouse=True)
+def _figi_fresh(monkeypatch, tmp_path):
     figi._known.clear()
+    monkeypatch.setattr(figi, "_DISK", tmp_path / "tickers.json")
     monkeypatch.setattr(figi, "_MIN_GAP_SECONDS", 0)
 
 
@@ -586,6 +607,9 @@ def test_a_symbol_is_a_plain_ticker_or_nothing():
     assert normalize_symbol(" brk.b ") == "BRK-B"
     for bad in ("", "ACME; DROP", "AC ME", "ACME\nBUY 500 XYZ", "A" * 13, "-ACME"):
         assert normalize_symbol(bad) == ""
+    # A filer's "no ticker" placeholder is not a ticker (a fund's own private vehicle).
+    for placeholder in ("NONE", "none", "NA", "N/A"):
+        assert normalize_symbol(placeholder) == ""
 
 
 def test_a_position_with_a_bad_symbol_never_reaches_the_model():
@@ -928,6 +952,7 @@ def test_form4_drops_rows_with_no_valid_symbol_or_figures_and_refuses_a_doctype(
     accession = "0000000000-26-000010"
     for xml in (
         _owner_xml(("2026-11-03", "P", "100", "10"), symbol="A B;C"),
+        _owner_xml(("2026-11-03", "P", "100", "10"), symbol="NONE"),
         _owner_xml(("2026-11-03", "P", "abc", "10")),
         _owner_xml(("not a date", "P", "100", "10")),
         _owner_xml(("2026-11-03", "P", "100", "")),
@@ -1159,6 +1184,31 @@ def test_search_finds_a_filer_by_the_start_of_its_name_and_keeps_only_13f_filers
     assert not edgar_13f.starts_a_word("nv", "Invesco Acme Advisers")
 
 
+def test_a_repeated_search_answers_from_memory_and_a_filer_is_checked_once(monkeypatch):
+    asked: list[str] = []
+    checked: list[str] = []
+
+    def fake_fetch(url, what):
+        asked.append(url)
+        if "keysTyped=" in url:
+            return {"hits": {"hits": [{"_id": "0000000001", "_source": {"entity": "Acme Fund"}}]}}
+        return {"hits": {"hits": []}}
+
+    def fake_filings(cik, n):
+        checked.append(cik)
+        return "", [{"as_of": "2026-06-30"}]
+
+    monkeypatch.setattr(edgar_13f, "fetch_json", fake_fetch)
+    monkeypatch.setattr(edgar_13f, "_recent_filings", fake_filings)
+    first = edgar_13f.search("acme")
+    assert [r["name"] for r in first] == ["Acme Fund"] and len(asked) == 2
+    # The same words again: nothing is asked of the SEC.
+    assert edgar_13f.search("  ACME ") == first and len(asked) == 2
+    # A new search finds the same filer: its 13F check is remembered.
+    edgar_13f.search("acme f")
+    assert checked == ["1"]
+
+
 def test_a_card_asks_the_lookup_about_its_largest_holdings_only(monkeypatch):
     """A card shows the top holdings: it waits on the shared lookup pace for those, not for
     every code a filing lists. The page (no limit) asks about them all."""
@@ -1173,3 +1223,254 @@ def test_a_card_asks_the_lookup_about_its_largest_holdings_only(monkeypatch):
     asked.clear()
     edgar_13f.resolve_tickers(snaps, {})
     assert len(asked) == 40
+
+
+def test_form4_refresh_drops_a_stored_trade_whose_ticker_was_a_placeholder(monkeypatch):
+    monkeypatch.setattr(form4, "scan", lambda cik, seen: ([], []))
+    kept = {"date": "2026-11-03", "filed_at": "2026-11-05", "symbol": "ACME", "source": "form4"}
+    known = {
+        "form4_owner_checked": True,
+        "activity": [kept, {**kept, "symbol": "NONE", "name": "Acme Private Fund"}],
+    }
+    assert form4.refresh_activity("1067983", known)["activity"] == [kept]
+
+
+def test_a_card_counts_every_position_not_just_the_top_ones_the_model_keeps(monkeypatch):
+    from backend.services.followed_portfolios import performance, preview
+
+    monkeypatch.setattr(performance, "performance_for", lambda row, **kw: {"periods": {}})
+    positions = [
+        {"symbol": f"AC{i:02d}", "name": f"Acme {i}", "value": 100 - i, "qty": 1} for i in range(30)
+    ]
+    row = {
+        "kind": "fund_13f",
+        "source_ref": "777",
+        "name": "Acme Capital",
+        "current": {"as_of": "2026-09-30", "filed_at": "2026-11-14", "positions": positions},
+        "activity": [],
+    }
+    card = preview._summary(row)
+    assert card["holdings_count"] == 30 and len(card["weights"]) == 8
+    # A card looks up tickers for its largest holdings only: one not yet matched still counts.
+    unmatched = [{**p, "symbol": None} for p in positions[25:]]
+    row["current"]["positions"] = positions[:25] + unmatched
+    assert preview._summary(row)["holdings_count"] == 30
+    # The ring weighs each holding against the whole portfolio, not within the top N.
+    whole = sum(p["value"] for p in positions)
+    assert preview._summary(row)["weights"][0]["weight"] == pytest.approx(100 / whole)
+
+
+def test_a_row_read_back_leaves_out_a_stored_placeholder_trade():
+    from backend.services.followed_portfolios import preview
+
+    kept = {"symbol": "ACME", "source": "form4"}
+    member = {"symbol": "", "source": "house_ptr"}
+    row = {"activity": [kept, {"symbol": "NONE", "source": "form4"}, member]}
+    assert preview._without_placeholder_trades(row)["activity"] == [kept, member]
+
+
+# ── Filings are kept: each is downloaded once ────────────────────────────────
+
+
+def _two_filings(monkeypatch, filings, tables, got):
+    monkeypatch.setattr(
+        edgar_13f, "_recent_filings", lambda cik, count=5: ("Acme Capital Lp", filings)
+    )
+    monkeypatch.setattr(edgar_13f, "_info_table_url", lambda cik, accession: accession)
+
+    def fake_bytes(url, **kw):
+        got.append(url)
+        return tables[url].encode()
+
+    monkeypatch.setattr(edgar_13f, "fetch_bytes", fake_bytes)
+    monkeypatch.setattr(figi, "tickers_for", lambda cusips: {"000000101": "ACME"})
+    monkeypatch.setattr(sec_tickers, "tickers_for_names", lambda names: {})
+
+
+def test_a_filing_read_once_is_never_downloaded_again(monkeypatch):
+    q2 = {"filing_id": "0000000000-26-000002", "as_of": "2026-06-30", "filed_at": "2026-08-14"}
+    q1 = {"filing_id": "0000000000-26-000001", "as_of": "2026-03-31", "filed_at": "2026-05-15"}
+    q3 = {"filing_id": "0000000000-26-000003", "as_of": "2026-09-30", "filed_at": "2026-11-14"}
+    tables = {
+        q1["filing_id"]: _info_table(_info_row("ACME CORP", "000000101", 400, 40)),
+        q2["filing_id"]: _info_table(_info_row("ACME CORP", "000000101", 600, 60)),
+        q3["filing_id"]: _info_table(_info_row("ACME CORP", "000000101", 900, 90)),
+    }
+    got: list[str] = []
+    _two_filings(monkeypatch, [q2, q1], tables, got)
+    first = edgar_13f.fetch("12345")
+    assert sorted(got) == [q1["filing_id"], q2["filing_id"]]
+    # A preview read again (nothing stored to compare with) downloads no filing at all.
+    got.clear()
+    again = edgar_13f.fetch("12345")
+    assert got == [] and again["current"] == first["current"]
+    # A new quarter costs that one filing.
+    _two_filings(monkeypatch, [q3, q2, q1], tables, got)
+    newer = edgar_13f.fetch("12345")
+    assert got == [q3["filing_id"]]
+    assert newer["current"]["total_value"] == 900 and newer["previous"]["total_value"] == 600
+
+
+def test_a_kept_filing_that_cannot_be_read_is_downloaded_again(monkeypatch):
+    q = {"filing_id": "0000000000-26-000002", "as_of": "2026-06-30", "filed_at": "2026-08-14"}
+    tables = {q["filing_id"]: _info_table(_info_row("ACME CORP", "000000101", 600, 60))}
+    got: list[str] = []
+    _two_filings(monkeypatch, [q], tables, got)
+    edgar_13f.fetch("12345")
+    path = filing_store._path("13f", "12345", q["filing_id"])
+    path.write_bytes(b"not gzip")
+    got.clear()
+    assert edgar_13f.fetch("12345")["current"]["total_value"] == 600
+    assert got == [q["filing_id"]]
+    # Kept in an older shape: read from SEC again, not trusted.
+    monkeypatch.setattr(filing_store, "FORMAT", filing_store.FORMAT + 1)
+    got.clear()
+    edgar_13f.fetch("12345")
+    assert got == [q["filing_id"]]
+
+
+def test_a_filing_store_refuses_a_name_that_is_not_an_accession(tmp_path):
+    filing_store.save("13f", "12345", "../../escape", {"positions": []})
+    filing_store.save("13f", "not-a-cik", "0000000000-26-000002", {"positions": []})
+    assert filing_store.load("13f", "12345", "../../escape") is None
+    assert not any((tmp_path / "filings").rglob("*"))
+
+
+def test_a_form4_read_once_is_never_downloaded_again(monkeypatch):
+    day = date.today().isoformat()
+    recent = {
+        "form": ["4"],
+        "accessionNumber": ["0000000000-26-000001"],
+        "filingDate": [day],
+        "primaryDocument": ["x/ok.xml"],
+    }
+    monkeypatch.setattr(form4, "fetch_json", lambda url, **k: {"filings": {"recent": recent}})
+    got = []
+
+    def fake_bytes(url, **k):
+        got.append(url)
+        return _owner_xml((day, "P", "1", "2")).encode()
+
+    monkeypatch.setattr(form4, "fetch_bytes", fake_bytes)
+    first = form4.refresh_activity("1067983")
+    assert len(got) == 1 and len(first["activity"]) == 1
+    # A preview starts from nothing stored, yet the filing it read before costs no download.
+    again = form4.refresh_activity("1067983")
+    assert len(got) == 1 and again["activity"] == first["activity"]
+
+
+# ── Prices: a card prices only its line; closes are kept for hours ────────────
+
+
+def test_closes_are_kept_on_disk_an_empty_answer_for_less_time(monkeypatch):
+    asked = []
+
+    def fake(symbol, timeframe):
+        asked.append((symbol, timeframe))
+        return [] if symbol == "GONE" else [{"date": "2026-11-12", "price": 10.0}]
+
+    monkeypatch.setattr(performance.prices, "fetch_history", fake)
+    assert performance._closes("ACME") == {"2026-11-12": 10.0}
+    assert performance._closes("ACME") == {"2026-11-12": 10.0}
+    assert [s for s, _ in asked] == ["ACME", "ACME"]  # one read: its two windows
+    assert performance._closes("GONE") == {} and performance._closes("GONE") == {}
+    assert [s for s, _ in asked].count("GONE") == 2
+    monkeypatch.setattr(closes_store, "EMPTY_KEEP_SECONDS", 0)
+    performance._closes("GONE")
+    assert [s for s, _ in asked].count("GONE") == 4
+    # Kept past its hours: read again.
+    monkeypatch.setattr(closes_store, "KEEP_SECONDS", 0)
+    performance._closes("ACME")
+    assert [s for s, _ in asked].count("ACME") == 4
+
+
+def test_a_card_prices_only_what_its_line_needs(monkeypatch):
+    positions = [
+        {"key": f"00000{i:04d}", "symbol": f"S{i}", "name": f"S{i}", "value": 1000 - i, "qty": 1}
+        for i in range(60)
+    ]
+    quarter = {"filing_id": "0000000000-26-000002", "as_of": "2026-06-30"}
+    row = {
+        "id": "preview_x",
+        "kind": "fund_13f",
+        "source_ref": "1",
+        "name": "Acme Capital",
+        "current": {**quarter, "filed_at": "2026-08-14", "positions": positions},
+        "previous": None,
+        "history": [
+            {
+                "as_of": "2026-06-30",
+                "filed_at": "2026-08-14",
+                "qty": {p["symbol"]: 1 for p in positions},
+                "value": {p["symbol"]: p["value"] for p in positions},
+            }
+        ],
+        "activity": [],
+    }
+    asked: set[str] = set()
+
+    def fake(symbol):
+        asked.add(symbol)
+        return {"2026-08-14": 10.0, "2026-11-12": 11.0}
+
+    monkeypatch.setattr(performance, "closes", fake)
+    monkeypatch.setattr(performance, "listing_exchanges", lambda symbols: {})
+    monkeypatch.setattr(performance, "preferred_benchmark", lambda: "SPY")
+    performance._cache.clear()
+    card = performance.performance_for(row, every_holding=False)
+    # The newest top holdings and each report's top ones, never all 60.
+    assert len(asked - {"SPY"}) <= 25 and card["exchanges"] == {}
+    page = performance.performance_for(row)
+    # The page prices every holding (the card's are already kept on disk).
+    assert {f"S{i}" for i in range(60)} <= asked
+    assert page["every_holding"] is True and card["every_holding"] is False
+
+
+def test_a_page_waits_only_for_its_largest_holdings_tickers(monkeypatch):
+    positions = "".join(_info_row(f"CO {i}", f"{i:09d}", 1000 - i, 1) for i in range(150))
+    q = {"filing_id": "0000000000-26-000002", "as_of": "2026-06-30", "filed_at": "2026-08-14"}
+    monkeypatch.setattr(edgar_13f, "_recent_filings", lambda cik, count=5: ("Acme Lp", [q]))
+    monkeypatch.setattr(edgar_13f, "_info_table_url", lambda cik, accession: accession)
+    monkeypatch.setattr(edgar_13f, "fetch_bytes", lambda url, **kw: _info_table(positions).encode())
+    monkeypatch.setattr(sec_tickers, "tickers_for_names", lambda names: {})
+    asked: list[list[str]] = []
+    monkeypatch.setattr(
+        figi, "tickers_for", lambda keys: asked.append(list(keys)) or {k: "" for k in keys}
+    )
+    later: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(
+        edgar_13f, "look_up_later", lambda cik, keys, then=None: later.append((cik, keys))
+    )
+    out = edgar_13f.fetch("12345")
+    assert len(asked) == 1 and len(asked[0]) == edgar_13f._PAGE_LOOKUPS_NEWEST
+    assert asked[0][0] == f"{0:09d}"  # the largest first
+    assert len(out["lookups_pending"]) == 150 - edgar_13f._PAGE_LOOKUPS_NEWEST
+
+
+def test_background_lookups_ask_until_done_then_say_so(monkeypatch):
+    import threading
+
+    calls: list[list[str]] = []
+
+    def fake(keys, background=False):
+        assert background  # it steps aside for a page's own lookups
+        calls.append(list(keys))
+        return {k: "" for k in keys[:2]}  # two answers a call, as a capped call gives
+
+    monkeypatch.setattr(figi, "tickers_for", fake)
+    done = threading.Event()
+    _REAL_LOOK_UP_LATER("12345", ["a", "b", "c", "d", "e"], then=done.set)
+    assert done.wait(5)
+    assert [len(c) for c in calls] == [5, 3, 1]
+
+
+def test_a_background_lookup_waits_while_a_page_is_waiting(monkeypatch):
+    monkeypatch.setattr(figi, "_MIN_GAP_SECONDS", 0.01)
+    figi._waiting[0] = 1
+    import threading
+
+    went = threading.Event()
+    threading.Thread(target=lambda: (figi._wait_turn(True), went.set()), daemon=True).start()
+    assert not went.wait(0.1)
+    figi._waiting[0] = 0
+    assert went.wait(2)

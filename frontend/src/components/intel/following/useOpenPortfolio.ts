@@ -62,10 +62,18 @@ function remember(p: PortfolioRef | null) {
   }
 }
 
+// The address carries only kind and id; the name a card or row opened it with is kept here, so
+// the page can say what it is loading before its data arrives.
+const known = new Map<string, Pick<PortfolioRef, 'name' | 'subtitle'>>()
+const withName = (p: PortfolioRef | null): PortfolioRef | null => {
+  const k = p && known.get(portfolioParam(p))
+  return p && k && !p.name ? { ...p, ...k } : p
+}
+
 export function useOpenPortfolio() {
   const navigate = useNavigate()
   const search = useSearch({ strict: false }) as { portfolio?: string }
-  const open = parsePortfolioParam(search.portfolio)
+  const open = withName(parsePortfolioParam(search.portfolio))
   // Set when THIS screen opened the portfolio (a history entry it added): closing it then steps
   // back to the list instead of adding another entry.
   const pushed = useRef(false)
@@ -79,6 +87,7 @@ export function useOpenPortfolio() {
           ...prev,
           portfolio: value,
           tab: undefined,
+          range: undefined,
         })) as never,
         replace,
       } as never),
@@ -89,18 +98,21 @@ export function useOpenPortfolio() {
   // into the address (no new history entry), and the page follows the address from there.
   useEffect(() => {
     const saved = window.location.search.includes('portfolio=') ? null : remembered()
+    if (saved?.name)
+      known.set(portfolioParam(saved), { name: saved.name, subtitle: saved.subtitle })
     if (saved) write(portfolioParam(saved), true)
   }, [write])
 
   // Remember the address's portfolio whenever it changes (Back and Forward included).
   const param = search.portfolio
   useEffect(() => {
-    remember(parsePortfolioParam(param))
+    remember(withName(parsePortfolioParam(param)))
   }, [param])
 
   const setOpen = useCallback(
     (next: PortfolioRef | null) => {
       if (next) {
+        if (next.name) known.set(portfolioParam(next), { name: next.name, subtitle: next.subtitle })
         pushed.current = true
         write(portfolioParam(next), false)
       } else if (pushed.current) {

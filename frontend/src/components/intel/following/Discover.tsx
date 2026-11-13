@@ -1,10 +1,13 @@
-import { useState } from 'react'
-import { ErrorState } from '../../ui'
+import { useCallback, useEffect, useState } from 'react'
+import { ErrorState, Skeleton } from '../../ui'
 import { FilterChips, SearchBox, ToolSelect } from './Controls'
 import type { DirectoryEntry } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { PortfolioCard } from './PortfolioCard'
+import { preloadPortfolioPictures } from './portfolioPhotos'
 import { useDirectory } from './useFollowing'
+import { useSlow } from './useSlow'
+import { FetchBanner } from './FirstLoad'
 
 export type PortfolioRef = Pick<DirectoryEntry, 'kind' | 'source_ref' | 'name' | 'subtitle'>
 
@@ -39,18 +42,52 @@ function bySort(sort: Sort) {
 
 const keyOf = (e: PortfolioRef) => `${e.kind}:${e.source_ref}`
 
+/** The server's rule, in the browser: a word of the name (or whose it is) starts with what was
+ *  typed — "nv" is NVIDIA, never "Investment". */
+function matches(term: string, e: PortfolioRef): boolean {
+  const q = term.toLowerCase()
+  return `${e.name} ${e.subtitle}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some((w) => w && w.startsWith(q))
+}
+
 /** Famous portfolios, as cards to browse. Search sits in place; there is no dialog. */
 export function Discover({ watched, onOpen }: Props) {
   const [filter, setFilter] = useState<Filter>('All')
   const [typed, setTyped] = useState('')
   const [sort, setSort] = useState<Sort>('featured')
+  useEffect(preloadPortfolioPictures, [])
+  // The cards still waiting long, so one banner says why instead of every card.
+  const [slowCards, setSlowCards] = useState<ReadonlySet<string>>(new Set())
+  const markSlow = useCallback((key: string, slow: boolean) => {
+    setSlowCards((prev) => {
+      if (prev.has(key) === slow) return prev
+      const next = new Set(prev)
+      if (slow) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+  // The featured list is always on hand, so a search shows its matches the moment you type; the
+  // live search (SEC's filers, House members, ETFs) answers seconds later and adds what it finds.
+  const featured = useDirectory('')
   const directory = useDirectory(typed)
-  const searching = directory.q.length >= 2
-  const listed = directory.data ?? []
+  const term = typed.trim()
+  const searching = term.length >= 2
+  const local = searching ? (featured.data ?? []).filter((e) => matches(term, e)) : []
+  const live = searching && directory.q === term ? (directory.data ?? []) : []
+  // Still looking: the typing has not settled, or the live search has not answered it yet.
+  const looking =
+    searching && (directory.q !== term || (!directory.data && directory.error == null))
+  const slowSearch = useSlow(looking)
+  const listed = searching
+    ? [...local, ...live.filter((e) => !local.some((l) => keyOf(l) === keyOf(e)))]
+    : (featured.data ?? [])
   const watchedKeys = new Set(watched.map(keyOf))
   const extraWatched = watched
     .filter((w) => !listed.some((e) => keyOf(e) === keyOf(w)))
-    .map((w) => ({ ...w, featured: false, followed: true }) as DirectoryEntry)
+    .map((w) => ({ ...w, featured: false, followed: true, ready: true }) as DirectoryEntry)
   const all = searching ? listed : [...extraWatched, ...listed]
   const shown = all
     .filter((e) =>
@@ -105,21 +142,58 @@ export function Discover({ watched, onOpen }: Props) {
         onChange={setFilter}
         options={filters.map((f) => ({ value: f, label: f, count: countOf(f) }))}
       />
-      {!directory.data && directory.error != null && (
+      {!featured.data && featured.error != null && !searching && (
+        <ErrorState
+          title={COPY.searchErrorTitle}
+          message={COPY.searchErrorBody}
+          onRetry={() => void featured.refresh()}
+        />
+      )}
+      {searching && !looking && directory.error != null && local.length === 0 && (
         <ErrorState
           title={COPY.searchErrorTitle}
           message={COPY.searchErrorBody}
           onRetry={() => void directory.refresh()}
         />
       )}
-      {searching && directory.data && shown.length === 0 && (
-        <p className="fol-by">{COPY.noMatch(directory.q)}</p>
+      {searching && !looking && directory.error == null && shown.length === 0 && (
+        <p className="fol-by">{COPY.noMatch(term)}</p>
       )}
       <div className="fol-cards">
         {shown.map((entry) => (
-          <PortfolioCard key={keyOf(entry)} entry={entry} onOpen={() => onOpen(entry)} />
+          <PortfolioCard
+            key={keyOf(entry)}
+            entry={entry}
+            onOpen={() => onOpen(entry)}
+            onSlow={(slow) => markSlow(keyOf(entry), slow)}
+          />
         ))}
+        {/* What the live search may still add: cards to come, not an empty page. */}
+        {looking &&
+          [0, 1].map((i) => (
+            <div key={`skel-${i}`} className="fol-card fol-card--skel" aria-hidden="true">
+              <div className="fol-card-main">
+                <Skeleton height={18} width="45%" />
+                <Skeleton height={12} width="30%" />
+                <div className="fol-card-skel">
+                  <Skeleton height={28} width="55%" />
+                  <Skeleton height={14} width="70%" />
+                  <Skeleton height={14} width="60%" />
+                </div>
+              </div>
+              <div className="fol-card-ring">
+                <Skeleton circle width={160} height={160} />
+              </div>
+            </div>
+          ))}
       </div>
+      {slowSearch ? (
+        <FetchBanner title={COPY.searchSlowTitle} sub={COPY.searchSlowSub} />
+      ) : (
+        slowCards.size > 0 && (
+          <FetchBanner title={COPY.fetchCardsTitle(slowCards.size)} sub={COPY.fetchCardsSub} />
+        )
+      )}
     </section>
   )
 }

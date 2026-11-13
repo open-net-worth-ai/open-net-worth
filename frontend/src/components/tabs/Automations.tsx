@@ -119,7 +119,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   useEffect(() => {
     if (!templateKey) return
     const template = ALL_TEMPLATES.find((t) => t.key === templateKey)
-    // Opened for something (Copy with Lucius on a portfolio): its name fills `[name]`, so the
+    // Opened for something (Auto-copy on a portfolio): its name fills `[name]`, so the
     // owner is not asked again what they just clicked.
     if (template)
       setEditor({

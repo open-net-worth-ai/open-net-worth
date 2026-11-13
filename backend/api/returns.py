@@ -9,6 +9,7 @@ the services layer, never here. Respects the dependency rule: imports only servi
 
 Routes:
     GET /api/returns?period={7D|1M|3M|YTD|1Y|ALL}[&benchmark=<roster key|id|symbol>][&risk=true]
+        [&band={equity|crypto|commodity}]
         Returns the period-returns payload. With `risk=true`, attaches a `risk` block from
         risk_metrics.portfolio_risk(period, benchmark). Existing callers (no `risk` param)
         are byte-for-byte unaffected — the `risk` key is simply absent.
@@ -44,6 +45,14 @@ class Period(str, Enum):
     ALL = "ALL"
 
 
+class Band(str, Enum):
+    """One asset type of the book (``services.returns._MARKET_BANDS``)."""
+
+    EQUITY = "equity"
+    CRYPTO = "crypto"
+    COMMODITY = "commodity"
+
+
 @router.get("/api/returns/benchmarks")
 def get_benchmarks():
     """The curated benchmark roster — server-authoritative so the FE never hard-codes it.
@@ -58,6 +67,7 @@ def get_returns(
     period: Period = Period.Y1,
     benchmark: Optional[str] = None,
     risk: bool = False,
+    band: Optional[Band] = None,
 ):
     """Whole-investment-book TWR + MWR/XIRR + period $ gain over the window.
 
@@ -75,7 +85,7 @@ def get_returns(
         resolved_benchmark = risk_metrics.BENCHMARK_ROSTER[benchmark] or None
 
     out = returns_service.portfolio_returns_with_benchmark(
-        period.value, benchmark=resolved_benchmark
+        period.value, benchmark=resolved_benchmark, band=band.value if band else None
     )
 
     if risk:

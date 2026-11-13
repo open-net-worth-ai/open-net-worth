@@ -66,12 +66,12 @@ const WATCHED = new Set(['NVDA', 'AMD'])
 const ids = (xs: StoryArc[] | undefined) => (xs ?? []).map((s) => s.id)
 
 describe('buildTabs', () => {
-  it('is My holdings, your lists in their order, then Macro & topics', () => {
+  it('is My holdings, then Topics & macro, then your lists in their order', () => {
     expect(buildTabs(LISTS).map((t) => t.key)).toEqual([
       'holdings',
+      'macro',
       'list:wl-tech',
       'list:wl-div',
-      'macro',
     ])
   })
 

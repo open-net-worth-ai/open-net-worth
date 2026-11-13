@@ -14,6 +14,8 @@ import {
 import { useTheme } from '../../../theme'
 import { formatAxisPrice, hexAlpha, niceTicks, tipPlacement, toTime } from '../assetPriceChartLwc'
 
+// Half an axis label's height: a label whose middle is closer to the plot's edge sticks out.
+const AXIS_LABEL_HALF = 6
 export const CHART_HEIGHT = 200
 const BARS_HEIGHT = 80
 const LABEL_GAP_PX = 60
@@ -244,10 +246,15 @@ export function ActivityChart({
       label()
       const range = line.priceScale().getVisibleRange()
       if (!range) return
+      // A round value just past the line's high or low maps outside the plot: its label was drawn
+      // over the figures above the chart ("140.00" under a $83 price). Only labels inside it.
+      const height = el.clientHeight
       setTicks(
         niceTicks(range.from, range.to, 4).flatMap((value) => {
           const y = line.priceToCoordinate(value)
-          return y == null ? [] : [{ y, label: fmt(value) }]
+          return y == null || y < AXIS_LABEL_HALF || y > height - AXIS_LABEL_HALF
+            ? []
+            : [{ y, label: fmt(value) }]
         }),
       )
       const y = refLine ? line.priceToCoordinate(refLine.value) : null

@@ -8,10 +8,12 @@ import {
   fetchFollowList,
   fetchPerformance,
   fetchPreviewPage,
+  fetchPreviewReturns,
   fetchPreviewSummary,
   fetchPriceHistory,
   performanceKey,
   previewPageKey,
+  previewReturnsKey,
   previewSummaryKey,
   priceHistoryKey,
   type DirectoryEntry,
@@ -64,6 +66,21 @@ export function usePreviewPage(kind: FollowKind, ref: string): QueryCacheResult<
   return useQueryCache(previewPageKey(kind, ref), () => fetchPreviewPage(kind, ref), {
     staleTime: PREVIEW_STALE_MS,
     version,
+  })
+}
+
+/** The page's every-holding returns, asked for once the page itself has arrived (the page
+ *  opens on the copy's line; each row's own return fills in when this lands). */
+export function usePreviewReturns(
+  kind: FollowKind,
+  ref: string,
+  ready: boolean,
+): QueryCacheResult<FollowPerformance> {
+  const version = useDataVersion(['portfolio'])
+  return useQueryCache(previewReturnsKey(kind, ref), () => fetchPreviewReturns(kind, ref), {
+    staleTime: PREVIEW_STALE_MS,
+    version,
+    enabled: ready,
   })
 }
 

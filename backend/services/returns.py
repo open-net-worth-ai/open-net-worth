@@ -955,12 +955,31 @@ def _rebase_series(
 # ── Public entrypoint ──────────────────────────────────────────────────────────────
 
 
+def _instrument_bands() -> dict[str, str]:
+    """{instrument_id: band}, by the same asset-class rule the value series files each
+    holding's value under (``portfolio_history._ASSET_CLASS_TO_BAND``)."""
+    return {
+        i["id"]: band
+        for i in InstrumentStore().all()
+        if i.get("id") and (band := _ASSET_CLASS_TO_BAND.get(i.get("asset_class") or ""))
+    }
+
+
+def _bands_held(raw_series: list[dict]) -> list[str]:
+    """The market bands the book holds at the window's end, largest first: what a "compare
+    by asset type" picker offers."""
+    last = (raw_series[-1].get("classes") or {}) if raw_series else {}
+    held = [(b, float(last.get(b) or 0)) for b in _MARKET_BANDS]
+    return [b for b, v in sorted(held, key=lambda x: -x[1]) if v > 0]
+
+
 def portfolio_returns(
     period: str = "1Y",
     today: date | None = None,
     *,
     date_from: str | None = None,
     date_to: str | None = None,
+    band: str | None = None,
 ) -> dict:
     """Whole-investment-book TWR + MWR/XIRR + period $ gain over the requested window.
 
@@ -976,7 +995,14 @@ def portfolio_returns(
 
     When data_quality.sufficient is False (< MIN_VALUE_POINTS effective value points),
     twr/mwr come back as null — NEVER a fabricated number.
+
+    ``band`` (one of ``_MARKET_BANDS``) narrows the book to one asset type: its value is that
+    band's subtotal on each day and its flows are only that band's buys and sells, so money
+    moved from crypto into stocks is a withdrawal from one slice and a deposit into the other,
+    never a gain or a loss of either (owner, 2026-11-13).
     """
+    if band is not None and band not in _MARKET_BANDS:
+        raise ValidationError(f"Unknown asset type '{band}'.")
     from backend.services import portfolio_history as ph
     from backend.services.fx_cache import load_fx_cache
 
@@ -999,10 +1025,18 @@ def portfolio_returns(
     dq_prim = ph_result.get("data_quality") or {}
 
     # Map portfolio_value_series points → the {date, value} shape used by twr/period_gain.
-    series = [{"date": p["date"], "value": p["value_base"]} for p in raw_series]
-
-    # Cash flows: still (effective_start, end] (start-exclusive) — matching the value series.
-    flows, has_unknown_cost = cash_flows(effective_start, end, base, rates=rates)
+    if band is None:
+        series = [{"date": p["date"], "value": p["value_base"]} for p in raw_series]
+        # Cash flows: still (effective_start, end] (start-exclusive) — matching the series.
+        flows, has_unknown_cost = cash_flows(effective_start, end, base, rates=rates)
+    else:
+        series = [
+            {"date": p["date"], "value": round(float((p.get("classes") or {}).get(band) or 0), 2)}
+            for p in raw_series
+        ]
+        bands = _instrument_bands()
+        tagged, has_unknown_cost = tagged_cash_flows(effective_start, end, base, rates=rates)
+        flows = [(when, amount) for when, amount, iid in tagged if bands.get(iid) == band]
 
     # ── Effective span → metric tier selection ─────────────────────────────────────
     value_points = len(series)
@@ -1051,6 +1085,8 @@ def portfolio_returns(
 
     return {
         "period": period.upper(),
+        "band": band,
+        "bands_held": _bands_held(raw_series),
         "start": requested_start,
         "end": end,
         "effective_start": effective_start,
@@ -1089,6 +1125,7 @@ def portfolio_returns_with_benchmark(
     date_from: str | None = None,
     date_to: str | None = None,
     by_holding: bool = False,
+    band: str | None = None,
 ) -> dict:
     """portfolio_returns() plus an optional `benchmark` comparison block and chart series.
 
@@ -1101,7 +1138,7 @@ def portfolio_returns_with_benchmark(
     An unresolvable / insufficient benchmark yields comparison=null (key is present) rather
     than a fabricated figure or an error. With no benchmark, comparison is omitted.
     """
-    out = portfolio_returns(period, today=today, date_from=date_from, date_to=date_to)
+    out = portfolio_returns(period, today=today, date_from=date_from, date_to=date_to, band=band)
     period = out.get("period") or period
 
     # The value series + flows were already built inside portfolio_returns and are threaded

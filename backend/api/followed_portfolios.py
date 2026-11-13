@@ -7,6 +7,10 @@ POST   /api/followed-portfolios/{id}/refresh    — re-read the source now
 GET    /api/followed-portfolios/price-history   — ?symbol=: a year of closes for the trade chart
 GET    /api/followed-portfolios/preview         — ?kind=&ref=&full=: a portfolio before following
                                                   it, as a card (default) or its whole page
+GET    /api/followed-portfolios/preview/returns — ?kind=&ref=: every holding's own return and
+                                                  exchange, asked for once the page is open
+GET    /api/followed-portfolios/preview/compare — ?kind=&ref=&since=&band=: the page's "You vs."
+                                                  section (overlap, spread, sectors, risk)
 GET    /api/followed-portfolios/{id}/performance — its current holdings' price return against
                                                   the benchmark, by window (not the fund's own return)
 
@@ -16,6 +20,7 @@ in ``services.followed_portfolios.service.apply_followed_portfolio_change``.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -73,6 +78,30 @@ def followed_portfolio_preview(
     full: bool = False,
 ):
     return _run(service.preview_page if full else service.preview_summary, kind, ref)
+
+
+@router.get("/api/followed-portfolios/preview/returns")
+def followed_portfolio_preview_returns(
+    kind: Literal["fund_13f", "house_member", "etf_daily"],
+    ref: str = Query(..., min_length=1, max_length=80),
+):
+    return _run(service.preview_returns, kind, ref)
+
+
+@router.get("/api/followed-portfolios/preview/compare")
+def followed_portfolio_preview_compare(
+    kind: Literal["fund_13f", "house_member", "etf_daily"],
+    ref: str = Query(..., min_length=1, max_length=80),
+    since: date | None = None,
+    band: Literal["equity", "crypto", "commodity"] | None = None,
+):
+    return _run(
+        service.preview_compare,
+        kind,
+        ref,
+        since=since.isoformat() if since else None,
+        band=band,
+    )
 
 
 @router.post("/api/followed-portfolios")

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { fCompact, fPct } from '../../../utils/format'
 import { ActionMenu, Button, type SwipeAction } from '../../ui'
 import { Pencil } from '../../../ui/icons'
-import { SearchBox } from './Controls'
+import { FilterChips, SearchBox } from './Controls'
 import type {
   FollowModel,
   OptionContract,
@@ -11,7 +11,7 @@ import type {
 } from '../../../api/followedPortfolios'
 import { COPY } from './following.copy'
 import { companyName, nameClasses, signedPct, toneOf, tradeLine } from './following.format'
-import { SectorMap } from './SectorMap'
+import { SectorPie } from './SectorPie'
 import { NameCell } from './NameCell'
 import { useAssetNav } from '../../../state/assetNav'
 import { tilesOf, UNCHANGED } from './sectorTiles'
@@ -119,11 +119,17 @@ export function HoldingRows({
   const [fixing, setFixing] = useState<Row | null>(null)
   const [query, setQuery] = useState('')
   const [tile, setTile] = useState<string | null>(null)
+  // Theirs, or only what you hold too (owner, 2026-11-13): the rows' "You own" badge, as a filter.
+  const [ownedOnly, setOwnedOnly] = useState(false)
+  const isHeld = (r: Row) => !!r.symbol && held.has(r.symbol)
+  const ownedCount = rows.filter(isHeld).length
   const pickedTile = tiles.find((t) => t.key === tile) ?? null
   const q = query.trim().toLowerCase()
   const shown = rows.filter(
     (r) =>
-      (!tile || r.tile === tile) && (!q || `${r.symbol ?? ''} ${r.name}`.toLowerCase().includes(q)),
+      (!tile || r.tile === tile) &&
+      (!ownedOnly || isHeld(r)) &&
+      (!q || `${r.symbol ?? ''} ${r.name}`.toLowerCase().includes(q)),
   )
   const member = model.estimated
   const columns: Column<Row>[] = [
@@ -152,8 +158,7 @@ export function HoldingRows({
     {
       key: 'shares',
       label: member ? COPY.colLastTrade : COPY.colSharesHeld,
-      wide: true,
-      className: () => 'muted',
+      // Ink like the other figures, and on a phone's card too (a labelled line under the name).
       cell: (r) => r.shares,
     },
     {
@@ -211,10 +216,11 @@ export function HoldingRows({
       {tiles.length > 1 && (
         <div className="fol-panel">
           <h2 className="fol-sec-title">{bySector ? COPY.bySectorTitle : COPY.bySizeTitle}</h2>
-          <SectorMap
+          <SectorPie
             tiles={tiles}
             picked={tile}
             onPick={setTile}
+            bySector={bySector}
             label={bySector ? COPY.mapBySector : COPY.mapByStock}
           />
         </div>
@@ -234,15 +240,25 @@ export function HoldingRows({
             placeholder={`${COPY.holdingsSearch}…`}
           />
         </div>
+        {ownedCount > 0 && (
+          <FilterChips
+            label={COPY.holdingsFilterLabel}
+            value={ownedOnly ? 'owned' : 'all'}
+            onChange={(v) => setOwnedOnly(v === 'owned')}
+            options={[
+              { value: 'all', label: COPY.filterAllHoldings, count: rows.length },
+              { value: 'owned', label: COPY.filterOwned, count: ownedCount },
+            ]}
+          />
+        )}
         {/* A picked tile, however small, is named here with its share and change. */}
         {pickedTile && (
           <div className="fol-picked">
             <span className="fol-picked-name">{pickedTile.label}</span>
             <span className="fol-picked-fig">{(pickedTile.weight * 100).toFixed(1)}%</span>
+            {/* Plain ink, as in the legend: shares bought or sold, not a gain or a loss. */}
             {pickedTile.change != null && Math.abs(pickedTile.change) >= UNCHANGED && (
-              <span className={pickedTile.change > 0 ? 'up' : 'down'}>
-                {signedPct(pickedTile.change)}
-              </span>
+              <span>{pickedTile.fresh ? COPY.legendNew : signedPct(pickedTile.change)}</span>
             )}
             <Button size="sm" variant="ghost" onClick={() => setTile(null)}>
               {COPY.showAll}

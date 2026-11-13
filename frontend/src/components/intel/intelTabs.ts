@@ -37,11 +37,13 @@ export function listIdOf(key: IntelTabKey): string | null {
 const ownLists = (watchlists: Watchlist[]) =>
   watchlists.filter((w) => !w.is_auto_sync).sort((a, b) => a.order - b.order)
 
+/** The fixed tabs first (My holdings, then Topics & macro), the owner's own lists after them
+ *  (owner, 2026-11-12); Famous Portfolios, behind its flag, goes in right after My holdings. */
 export function buildTabs(watchlists: Watchlist[]): IntelTab[] {
   return [
     { key: 'holdings', label: 'My holdings' },
-    ...ownLists(watchlists).map((w) => ({ key: listTabKey(w.id), label: w.name, listId: w.id })),
     { key: 'macro', label: TOPICS_TAB_LABEL },
+    ...ownLists(watchlists).map((w) => ({ key: listTabKey(w.id), label: w.name, listId: w.id })),
   ]
 }
 

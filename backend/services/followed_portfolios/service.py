@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 
 from backend.core.errors import (
@@ -190,7 +191,14 @@ def resolve(ref: str) -> dict:
 
 
 def preview_summary(kind: str, ref: str) -> dict:
-    """A Discover card's figures for any portfolio, followed or not (read-only, cached)."""
+    """A Discover card's figures for any portfolio, followed or not (read-only, cached). A 1Y
+    return copied report by report needs a year of reports: two quarters gave a wrong figure
+    (2026-11-12), so a fund's card reads the five a year needs (``preview.CARD_QUARTERS``),
+    never the page's whole history."""
+    kept = preview.kept_summary(kind, ref) if kind in preview.KINDS else None
+    if kept is not None:
+        followed = FollowedPortfolioStore().find_by_source(kept["kind"], kept["source_ref"])
+        return {**kept, "follow_id": followed["id"] if followed else None}
     row = preview.preview_row(kind, ref)
     followed = FollowedPortfolioStore().find_by_source(row["kind"], row["source_ref"])
     return {**preview.summary(row), "follow_id": followed["id"] if followed else None}
@@ -231,7 +239,7 @@ def _lookups(follow_view: dict) -> None:
 
 def preview_page(kind: str, ref: str) -> dict:
     """Everything a portfolio's page shows, before following it (read-only, cached)."""
-    row = preview.preview_row(kind, ref, full=True)
+    row, complete = preview.page_row(kind, ref)
     followed = FollowedPortfolioStore().find_by_source(row["kind"], row["source_ref"])
     # The page lists every holding the filing has, each as its share of the whole portfolio.
     shown = view(row, None)
@@ -246,8 +254,30 @@ def preview_page(kind: str, ref: str) -> dict:
         "names": names,
         "sectors": sectors,
         "follow_id": followed["id"] if followed else None,
-        "performance": performance.performance_for(row),
+        # False while a fund's older filings are still being read: the page opened on the five
+        # its card read and asks again for the rest of its history.
+        "history_complete": complete,
+        # The copy's line now; every holding's own return follows from ``preview_returns``
+        # (a fund of thousands of stocks prices each one).
+        "performance": performance.performance_for(row, every_holding=False),
     }
+
+
+def preview_compare(
+    kind: str, ref: str, *, since: str | None = None, band: str | None = None
+) -> dict:
+    """The page's "You vs." section: overlap, spread, sectors and risk beside your book."""
+    from backend.services.followed_portfolios import compare
+
+    if band is not None and band not in ("equity", "crypto", "commodity"):
+        raise ValidationError(f"Unknown asset type '{band}'.")
+    return compare.compare(kind, ref, since=since, band=band)
+
+
+def preview_returns(kind: str, ref: str) -> dict:
+    """The page's performance with every listed holding's own return and exchange (read-only,
+    cached): asked for after the page opens."""
+    return performance.performance_for(preview.page_row(kind, ref)[0])
 
 
 def _missing_names(follow_view: dict, names: dict) -> bool:
@@ -255,12 +285,22 @@ def _missing_names(follow_view: dict, names: dict) -> bool:
     return any(h["symbol"] not in names for h in held)
 
 
+_WARM_RETURNS_MAX = 300
+
+
 def warm_featured() -> int:
     """Price every featured card and look up its company names ahead of a visit."""
     done = preview.warm(_featured_all())
     for entry in _featured_all():
         try:
-            _lookups(view(preview.preview_row(entry["kind"], entry["source_ref"])))
+            row = preview.preview_row(entry["kind"], entry["source_ref"])
+            shown = view(row, None)
+            _lookups(shown)
+            # Every holding's price, kept on disk, so its page's returns arrive at once — for a
+            # fund of at most a few hundred stocks, two at a time: warming Citadel's thousands
+            # crowded out a person's own page for minutes (2026-11-13).
+            if len((shown.get("model") or {}).get("holdings") or []) <= _WARM_RETURNS_MAX:
+                performance.performance_for(row, workers=2)
         except Exception:  # a source that is down must not stop the rest
             continue
     return done
@@ -297,9 +337,12 @@ def directory(query: str = "") -> dict:
             # A word must start with what was typed: "nv" is NVIDIA, never "Investment".
             if edgar_13f.starts_a_word(query, f"{r['name']} {r['subtitle']}")
         }
-        for source in (edgar_13f, house_ptr, etf_daily):
+        # The three sources are asked at once; each answers on its own time.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            asked = [pool.submit(s.search, query) for s in (edgar_13f, house_ptr, etf_daily)]
+        for job in asked:
             try:
-                found = source.search(query)
+                found = job.result()
             except ExternalServiceError:
                 continue
             for r in found:
@@ -311,6 +354,9 @@ def directory(query: str = "") -> dict:
             {
                 **r,
                 "followed": (r["kind"], r["source_ref"]) in followed,
+                # A followed one is read from the database; a kept one from the cache.
+                "ready": (r["kind"], r["source_ref"]) in followed
+                or preview.card_ready(r["kind"], r["source_ref"]),
                 **preview.cached_figures(r["kind"], r["source_ref"]),
             }
             for r in results
@@ -318,8 +364,41 @@ def directory(query: str = "") -> dict:
     }
 
 
+# The gallery's order: the best-known names first, whatever their source (owner, 2026-11-13) —
+# a household-name politician before a niche fund. Anything featured but not listed here
+# follows, in its source's own order.
+_FAME_ORDER = (
+    ("fund_13f", "1067983"),  # Berkshire Hathaway
+    ("house_member", "pelosi|nancy"),
+    ("fund_13f", "1697748"),  # ARK Invest
+    ("fund_13f", "1350694"),  # Bridgewater
+    ("fund_13f", "1336528"),  # Pershing Square
+    ("fund_13f", "1029160"),  # Soros Fund Management
+    ("fund_13f", "1423053"),  # Citadel
+    ("fund_13f", "1037389"),  # Renaissance Technologies
+    ("fund_13f", "921669"),  # Icahn Capital
+    ("fund_13f", "1536411"),  # Duquesne
+    ("fund_13f", "1166559"),  # Gates Foundation Trust
+    ("fund_13f", "1045810"),  # NVIDIA
+    ("fund_13f", "949509"),  # Oaktree
+    ("fund_13f", "1656456"),  # Appaloosa
+    ("fund_13f", "1167483"),  # Tiger Global
+    ("fund_13f", "1040273"),  # Third Point
+    ("fund_13f", "1791786"),  # Elliott
+    ("fund_13f", "1061768"),  # Baupost
+    ("etf_daily", "ARKK"),
+    ("fund_13f", "1709323"),  # Himalaya Capital
+    ("fund_13f", "1021944"),  # Temasek
+    ("house_member", "wasserman schultz|debbie"),
+    ("house_member", "gottheimer|josh"),
+)
+
+
 def _featured_all() -> list[dict]:
-    return edgar_13f.featured() + house_ptr.featured() + etf_daily.featured()
+    every = edgar_13f.featured() + house_ptr.featured() + etf_daily.featured()
+    rank = {key: i for i, key in enumerate(_FAME_ORDER)}
+    # A stable sort: the unlisted keep their source order, after every listed one.
+    return sorted(every, key=lambda r: rank.get((r["kind"], r["source_ref"]), len(rank)))
 
 
 def _featured_name(kind: str, source_ref: str) -> dict:

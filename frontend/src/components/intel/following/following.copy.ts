@@ -8,6 +8,9 @@ export const COPY = {
   filterTitle: 'Filter',
   showLabel: 'Show',
   sortTitle: 'Sort by',
+  holdingsFilterLabel: 'Show holdings',
+  filterAllHoldings: 'All',
+  filterOwned: 'Owned by you',
   holdingsSearch: 'Search holdings',
   noHoldingMatch: (q: string) => `No holding matches "${q}".`,
   periodLabel: 'Period',
@@ -25,6 +28,13 @@ export const COPY = {
   allMovesSection: 'All Moves',
   backToAllMoves: 'Back to all moves',
   bySectorTitle: 'By Sector',
+  legendSector: 'Sector',
+  legendStock: 'Stock',
+  legendWeight: 'Weight',
+  // The change in shares held since the previous report, across the slice's holdings.
+  legendChange: 'vs last qtr',
+  /** A sector (or stock) held for the first time this quarter. */
+  legendNew: 'New',
   bySizeTitle: 'By Size',
   allHoldingsTitle: (n: number) => `All Holdings (${n})`,
   returnTitle: 'Performance',
@@ -88,6 +98,8 @@ export const COPY = {
   kpiValue: 'Holdings value',
   kpiCount: 'Stocks held',
   priceLabel: 'Price',
+  /** A picked move's latest close, said as such: not the price they paid. */
+  priceNow: (price: string) => `now ${price}`,
   stocksCount: (n: number) => `${n} ${n === 1 ? 'stock' : 'stocks'}`,
   kpiReturn: '1Y return',
   kpiSincePrevious: (change: string) => `${change} since the previous filing`,
@@ -103,8 +115,29 @@ export const COPY = {
   oneYear: '1Y return',
   cardUnavailable: 'No figures yet',
   backToAll: 'Famous Portfolios',
+  crumbThis: (kind: FollowKind) =>
+    kind === 'house_member' ? 'This member' : kind === 'etf_daily' ? 'This ETF' : 'This fund',
   backToAllLabel: 'Back to Famous Portfolios',
   loadingPage: 'Loading the portfolio…',
+  /** A first look is slow because the app reads the source itself; the floating banner says
+   *  so once the wait is real (the asset page's pattern). */
+  fetchPageTitle: (kind: FollowKind, given: string) =>
+    `Loading ${
+      // Opened from its address alone, a page may not know the name until it loads.
+      given.trim() ||
+      (kind === 'house_member' ? 'this member' : kind === 'etf_daily' ? 'this ETF' : 'this fund')
+    }`,
+  fetchPageSub: (kind: FollowKind, seconds: number) =>
+    kind === 'fund_13f'
+      ? `Reading its reports from the SEC and pricing every holding · ${seconds}s`
+      : kind === 'house_member'
+        ? `Reading their disclosures from the House Clerk and pricing every trade · ${seconds}s`
+        : `Reading the fund's holdings file and pricing every holding · ${seconds}s`,
+  fetchCardsTitle: (n: number) => (n === 1 ? 'Loading 1 portfolio' : `Loading ${n} portfolios`),
+  fetchCardsSub:
+    'Reading their reports from the SEC or the House and pricing them. A portfolio opened before loads faster.',
+  searchSlowTitle: 'Searching the SEC and the House',
+  searchSlowSub: 'A new search takes a couple of seconds. The same one again is instant.',
   pageErrorBody: "The filing didn't load. Try again.",
   /** The date line names the source too: what was published, and when. */
   updated: (kind: FollowKind, day: string) =>
@@ -114,6 +147,8 @@ export const COPY = {
         ? `Daily holdings ${day}`
         : `Disclosed ${day}`,
   latestTrade: (day: string) => `Latest trade ${day}`,
+  /** A Discover card's date line: one word for every source, as Moomoo's cards say it. */
+  cardUpdated: (day: string) => `Updated ${day}`,
   /** The snapshot every tab but Trading Activity is built on. */
   holdingsOn: (day: string) => `Holdings on ${day}`,
   /** A fund's snapshot, named by the filing it comes from (hover: the day it describes). */
@@ -129,9 +164,22 @@ export const COPY = {
   watchLabel: 'Watch: get an Intel story when they file',
   unwatchLabel: 'Stop watching',
   unwatch: 'Stop watching',
+  /** Said once after the bell is tapped, so the tap is never silent. */
+  watchedNotice: (kind: FollowKind, name: string) =>
+    `Watching ${name}. You'll get an Intel story ${
+      kind === 'house_member'
+        ? 'each time they disclose a trade'
+        : kind === 'etf_daily'
+          ? 'on days its holdings change'
+          : 'each time they file a new quarterly report'
+    }.`,
+  unwatchedNotice: (name: string) =>
+    `Stopped watching ${name}. You won't get stories about it any more.`,
   tabActivity: 'Trading Activity',
-  tabHoldings: 'Holdings',
+  // The tab with who they are, their key figures and what they hold (owner, 2026-11-13).
+  tabHoldings: 'Overview',
   tabOverview: 'Overview',
+  tabCompare: 'Comparison',
   aboutLabel: (name: string) => `About ${name}`,
   aboutMore: 'More',
   aboutLess: 'Less',
@@ -159,6 +207,7 @@ export const COPY = {
   searching: 'Searching…',
   searchErrorTitle: "Couldn't search",
   searchErrorBody: "The directory didn't answer. Try again.",
+  searchingFilings: 'Searching SEC filings…',
   noMatch: (q: string) => `No match for “${q}”. Try the name as it appears on the filing.`,
   close: 'Close',
   fund: 'Fund',
@@ -214,7 +263,7 @@ export const COPY = {
   unreadReports: (n: number) => `${n} reports could not be read and are left out.`,
   unmatched: (n: number) =>
     `${n} ${n === 1 ? 'holding has' : 'holdings have'} no ticker we could match and are left out:`,
-  copyCta: 'Copy with Lucius',
+  copyCta: 'Auto-copy',
   copyPitch:
     'Lucius buys and sells in your broker account to match this portfolio, every week. You set the amount and your rules, and you can have it ask before every order.',
   askLucius: 'Ask Lucius',
@@ -242,6 +291,69 @@ export const COPY = {
       }[range] ?? 'all time'
     }`,
   yourPortfolio: 'Your portfolio',
+  /** The Overview's "You vs." section: everything that compares them with your book. */
+  vsTitle: (name: string) => `You vs. ${name}`,
+  vsLoading: 'Comparing with your portfolio',
+  vsUnavailable: "The comparison with your portfolio didn't load. Try again later.",
+  yourBand: (band: string) => `Your ${band.replace(/^\w/, (c) => c.toLowerCase())}`,
+  compareWith: 'Compare with',
+  // The menu changes only YOUR side, and says so: theirs is always their whole report.
+  compareAll: 'All your investments',
+  compareBand: { equity: 'Stocks & ETFs', crypto: 'Crypto', commodity: 'Commodities' } as const,
+  riskTitle: 'Risk over this range',
+  riskSwings: 'Swings',
+  riskSwingsTip:
+    'How much the line moves up and down in a typical year (annualised volatility of its weekly returns). Lower is steadier.',
+  riskWorstFall: 'Worst fall',
+  riskWorstFallTip: 'The deepest drop from a high to a later low within this range.',
+  riskBeta: 'Moves with market',
+  riskBetaTip:
+    'How much the line tends to move when the benchmark moves 1%. 1.00 moves in step; below 1 moves less.',
+  riskExplain:
+    'Swings: how much it moves up and down in a typical year. Worst fall: the deepest drop from a high. Moves with market: 1.00 moves in step with the benchmark. Return per risk: the yearly return for each unit of swing (Sharpe); higher is better.',
+  riskSharpe: 'Return per risk',
+  riskYou: 'You',
+  riskThem: 'Them',
+  /** How your line and theirs move together, read as a sentence (Pearson, weekly). */
+  riskCorrelation: (name: string, yours: string, c: number) => {
+    const how =
+      c >= 0.7
+        ? 'closely, so adding their stocks would barely spread your risk'
+        : c >= 0.3
+          ? 'partly, so adding their stocks would spread your risk a little'
+          : c > -0.3
+            ? 'almost independently, so adding their stocks would spread your risk'
+            : 'in opposite directions, so adding their stocks would offset some of your risk'
+    return `${name} and ${yours.replace(/^Your/, 'your')} move ${how} (correlation ${c.toFixed(2)}).`
+  },
+  riskTooShort: 'Pick a longer range: under two months is too short to judge swings.',
+  overlapTitle: 'What you share',
+  overlapLead: (shared: number, total: number, heldPct: string) =>
+    `You hold ${shared} of their ${total} stocks: ${heldPct} of their portfolio.`,
+  overlapNone: (name: string) => `You don't hold any of ${name}'s stocks.`,
+  overlapSame: 'Overlap',
+  overlapShared: 'Shared stocks',
+  overlapTotal: 'Total',
+  overlapUnmatched: (n: number, pct: string) =>
+    `${n.toLocaleString('en-US')} of their holdings (${pct} of the portfolio) don't have a ticker yet, so they can't be compared with yours. They're matched over time.`,
+  overlapOfTheirs: 'Shared, as % of theirs',
+  overlapOfYours: 'Shared, as % of yours',
+  overlapBoth: 'You both own',
+  overlapTheirs: 'Theirs',
+  overlapYours: 'Yours',
+  overlapMissing: (list: string) => `Their biggest you don't own: ${list}`,
+  spreadTitle: 'How each is spread',
+  sectorsTitle: 'Sectors',
+  topFiveTitle: 'Top 5 holdings',
+  topFiveOf: (who: string) => `${who}'s top 5 holdings`,
+  spreadCount: 'Holdings',
+  spreadTop5: 'Top 5',
+  spreadLargest: 'Largest',
+  spreadLargestOf: (symbol: string) => `Largest: ${symbol}`,
+  sectorsOf: (who: string) => `${who} by sector`,
+  sectorsRest: 'Rest',
+  sectorsMore: (n: number) => `${n} more`,
+  sectorsLess: 'Show fewer',
   loadingYours: 'Loading your return',
   /** Your line starts after the range does: from your history's first day. */
   yourSince: (day: string) => `From ${day}, where your history in this app starts`,
@@ -258,7 +370,8 @@ export const COPY = {
     '12M': 'These holdings over the past 12 months',
     FILING: 'These holdings since the filing',
   },
-  perfColumn: { '1M': '1 month', '6M': '6 months', '12M': '12 months', FILING: 'Since filing' },
+  // Each stock's own price return over the window (not the fund's gain on it).
+  perfColumn: { '1M': '1M return', '6M': '6M return', '12M': '1Y return', FILING: 'Since filing' },
   perfInfo: {
     '1M': PAST_WINDOW('the past month'),
     '6M': PAST_WINDOW('the past 6 months'),

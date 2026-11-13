@@ -20,7 +20,13 @@ from backend.core.errors import (
 )
 from backend.db.followed_portfolio_store import MAX_FOLLOWS, FollowedPortfolioStore
 from backend.db.intel_stories_store import IntelStoriesStore
-from backend.services.followed_portfolios import service, signals
+from backend.services.followed_portfolios import (
+    closes_store,
+    edgar_13f,
+    filing_store,
+    service,
+    signals,
+)
 
 pytestmark = pytest.mark.flags(followed_portfolios=True)
 
@@ -71,6 +77,12 @@ class FakeSource:
                 "subtitle": "13F filer",
             }
         ]
+
+
+@pytest.fixture(autouse=True)
+def _filings_kept_apart(monkeypatch, tmp_path):
+    monkeypatch.setattr(filing_store, "_DIR", tmp_path / "filings")
+    monkeypatch.setattr(closes_store, "_DIR", tmp_path / "closes")
 
 
 @pytest.fixture
@@ -271,26 +283,38 @@ def test_preview_reads_an_unfollowed_portfolio_once_and_follows_reuse_the_stored
     fetched = []
     real = source.fetch
 
-    def counting(ref, known=None, *_):
+    quarters: list[int] = []
+
+    def counting(ref, known=None, q=None, *_):
         fetched.append(ref)
+        quarters.append(q)
         return real(ref, known)
 
     monkeypatch.setattr(source, "fetch", counting)
+    # The page's older filings are read on a background thread; here, at once, so the test
+    # sees every read in order.
+    monkeypatch.setattr(
+        preview, "_extend_later", lambda kind, ref: preview.preview_row(kind, ref, full=True)
+    )
+    priced: list[bool] = []
     monkeypatch.setattr(
         service.performance,
         "performance_for",
-        lambda row: {
-            "benchmark": "SPY",
-            "periods": {
-                "12M": {
-                    "status": "ok",
-                    "return": 0.12,
-                    "benchmark_return": 0.08,
-                    "series": [{"portfolio": i / 100} for i in range(100)],
-                }
-            },
-            "trade_returns": {},
-        },
+        lambda row, every_holding=True: (
+            priced.append(every_holding)
+            or {
+                "benchmark": "SPY",
+                "periods": {
+                    "12M": {
+                        "status": "ok",
+                        "return": 0.12,
+                        "benchmark_return": 0.08,
+                        "series": [{"portfolio": i / 100} for i in range(100)],
+                    }
+                },
+                "trade_returns": {},
+            }
+        ),
     )
     card = service.preview_summary("fund_13f", "777")
     assert card["follow_id"] is None and card["name"] == "Acme Capital"
@@ -301,14 +325,20 @@ def test_preview_reads_an_unfollowed_portfolio_once_and_follows_reuse_the_stored
     assert page["names"]["ACME"] == "Acme Incorporated"
     assert page["sectors"]["ACME"] == "Technology"
     assert page["follow"]["model"]["holdings"] and page["follow_id"] is None
-    # The card read two quarters; the page reads the year once (then both come from cache).
-    assert fetched == ["777", "777"]
-    service.preview_page("fund_13f", "777")
-    assert fetched == ["777", "777"]
+    # The card reads the five quarters a year's return needs; the page opens on that read and
+    # extends it once to the whole history (its kept filings are not downloaded again).
+    assert quarters == [preview.CARD_QUARTERS, edgar_13f.HISTORY_QUARTERS]
+    assert page["history_complete"] is False
+    again = service.preview_page("fund_13f", "777")
+    assert again["history_complete"] is True and len(fetched) == 2
+    # The card and the page price only the copy's line; every holding's return is its own ask.
+    assert set(priced) == {False}
+    service.preview_returns("fund_13f", "777")
+    assert priced[-1] is True and len(fetched) == 2
     assert FollowedPortfolioStore().all() == []
     fid = _follow()["id"]
     assert service.preview_summary("fund_13f", "777")["follow_id"] == fid
-    assert fetched == ["777", "777", "777"]
+    assert len(fetched) == 3
     # A priced card's figures ride on the directory, so the whole list can sort without fetching.
     listed = service.directory("acme")["results"][0]
     assert (listed["return_12m"], listed["latest_at"]) == (0.12, card["latest_at"])
@@ -457,6 +487,12 @@ def test_preview_route_and_its_demo_lock(client, monkeypatch):
     bad = client.get("/api/followed-portfolios/preview", params={"kind": "senator", "ref": "7"})
     assert bad.status_code == 422
     assert is_demo_locked("GET", "/api/followed-portfolios/preview")
+    monkeypatch.setattr(service, "preview_returns", lambda kind, ref: {"returns": ref})
+    got = client.get(
+        "/api/followed-portfolios/preview/returns", params={"kind": "fund_13f", "ref": "7"}
+    )
+    assert got.json() == {"returns": "7"}
+    assert is_demo_locked("GET", "/api/followed-portfolios/preview/returns")
 
 
 def test_unfollow_deletes(source):
@@ -481,6 +517,8 @@ def test_directory_lists_featured_then_searches_and_marks_followed(source):
             "subtitle": "13F filer",
             "featured": False,
             "followed": True,
+            # A followed portfolio's card is read from the database: nothing to fetch.
+            "ready": True,
         }
     ]
 

@@ -8,6 +8,8 @@ export interface Tile {
   /** The quarter's change in what they hold of it, in shares valued at the quarter-end price
    *  (0.45 = 45% more). Null when the source gives no share counts (a member's estimate). */
   change: number | null
+  /** Nothing of it was held at the previous report: new this quarter (shown as New, not +100%). */
+  fresh?: boolean
 }
 
 /** A change under 1% is no change: the holding did not move. */
@@ -38,6 +40,7 @@ export function tilesOf(
       label: key,
       weight: t.weight,
       change: t.known ? (t.before > 0 ? t.moved / t.before : t.moved > 0 ? 1 : 0) : null,
+      fresh: t.known && t.before <= 0 && t.moved > 0,
     }))
     .sort((a, b) => b.weight - a.weight)
 }

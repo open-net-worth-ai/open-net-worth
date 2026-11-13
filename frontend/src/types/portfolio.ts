@@ -312,6 +312,10 @@ export interface ReturnSeriesPoint {
 
 export interface PortfolioReturns {
   period: ReturnPeriod
+  /** The one asset type these figures cover, or null for the whole invested book. */
+  band?: 'equity' | 'crypto' | 'commodity' | null
+  /** The asset types the book holds at the window's end, largest first. */
+  bands_held?: ('equity' | 'crypto' | 'commodity')[]
   start: string // requested window start (original, pre-clamp)
   end: string
   effective_start: string // actual window start after clamping to inception / price_floor

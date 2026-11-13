@@ -470,7 +470,7 @@ describe('Automations', () => {
     })
   })
 
-  // Copy with Lucius on a followed portfolio: the template opens already naming it, so the
+  // Auto-copy on a followed portfolio: the template opens already naming it, so the
   // owner is not asked again what they just clicked.
   it("fills a template's [name] from ?for=, and clears both params", async () => {
     route.search = { template: 'copy-followed-portfolio', for: 'Acme Capital' }

@@ -6,8 +6,8 @@ import { ArrowUpRight } from '../../../ui/icons'
 import type { OptionContract } from '../../../api/followedPortfolios'
 import { contractLabel, contractWords, exchangeLabel } from './following.format'
 
-/** A stock in any of these tables: ticker, company, and "You own" when it is in your book,
- *  so how a famous portfolio touches yours is visible on every row. */
+/** A stock in any of these tables: the company in full, and under it its ticker · exchange and
+ *  "You own" when it is in your book, so how a famous portfolio touches yours shows on every row. */
 export function NameCell({
   symbol,
   name,
@@ -30,15 +30,9 @@ export function NameCell({
   const { openAsset } = useAssetNav()
   return (
     <span className="mk-hcell fol-name">
-      {/* The stock itself: on a phone card this line truncates; its tags go on the next. */}
+      {/* The company in full (it wraps rather than truncates), the way to its page beside it. */}
       <span className="fol-name-line">
-        {symbol ? (
-          <span className="mk-hsym">{symbol}</span>
-        ) : (
-          <span className="fol-noticker">{COPY.noTicker}</span>
-        )}
-        <span className="mk-hnm">{name}</span>
-        {symbol && market && <span className="fol-exch">{market}</span>}
+        <span className="fol-name-full">{name}</span>
         {/* The stock's own page, right beside its name (the row's own click shows the move). */}
         {symbol && linkTicker && (
           <span className="fol-open-inline" onClick={(e) => e.stopPropagation()}>
@@ -55,24 +49,31 @@ export function NameCell({
           </span>
         )}
       </span>
-      {(contracts?.length || held) && (
-        <span className="fol-name-tags">
-          {contracts?.map((c) => (
-            <span key={`${c.right}${c.strike}${c.expiry}`} className="fol-own">
-              <Tooltip label={contractWords(c)}>
-                <span tabIndex={0}>
-                  <Tag tone="muted">{contractLabel(c)}</Tag>
-                </span>
-              </Tooltip>
-            </span>
-          ))}
-          {held && (
-            <span className="fol-own">
-              <Tag tone="accent">{COPY.youOwn}</Tag>
-            </span>
-          )}
-        </span>
-      )}
+      {/* Under it: the ticker and where it trades, then its option contracts and "You own". */}
+      <span className="fol-name-sub">
+        {symbol ? (
+          <span className="mk-hsym">
+            {symbol}
+            {market && <span className="fol-exch"> · {market}</span>}
+          </span>
+        ) : (
+          <span className="fol-noticker">{COPY.noTicker}</span>
+        )}
+        {contracts?.map((c) => (
+          <span key={`${c.right}${c.strike}${c.expiry}`} className="fol-own">
+            <Tooltip label={contractWords(c)}>
+              <span tabIndex={0}>
+                <Tag tone="muted">{contractLabel(c)}</Tag>
+              </span>
+            </Tooltip>
+          </span>
+        ))}
+        {held && (
+          <span className="fol-own">
+            <Tag tone="accent">{COPY.youOwn}</Tag>
+          </span>
+        )}
+      </span>
     </span>
   )
 }

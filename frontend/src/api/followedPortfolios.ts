@@ -133,6 +133,9 @@ export interface DirectoryEntry {
   subtitle: string
   featured: boolean
   followed: boolean
+  /** True when the card is answered from what the server keeps: only a card that is not goes
+   *  to its source, and only those count as "loading" in the gallery's banner. */
+  ready?: boolean
   /** Present once the card has been priced — what Discover sorts by. */
   return_12m?: number | null
   latest_at?: string | null
@@ -261,6 +264,9 @@ export interface PreviewPage {
   names: Record<string, string>
   /** Each holding's sector, where known (the Holdings ring groups by it). */
   sectors?: Record<string, string>
+  /** False while a fund's older filings are still being read in the background: the page
+   *  opened on the newest five quarters and asks again until this is true. */
+  history_complete?: boolean
 }
 
 const previewQuery = (kind: FollowKind, ref: string, full: boolean) =>
@@ -272,6 +278,80 @@ export const fetchPreviewSummary = (kind: FollowKind, ref: string) =>
   readJson<PreviewSummary>(previewSummaryKey(kind, ref))
 export const fetchPreviewPage = (kind: FollowKind, ref: string) =>
   readJson<PreviewPage>(previewPageKey(kind, ref))
+/** One asset type of your book (the server's market bands). */
+export type Band = 'equity' | 'crypto' | 'commodity'
+
+export interface LineRisk {
+  /** Annualised swings of the weekly return (0.12 = 12%). */
+  volatility: number | null
+  /** The deepest fall from a high over the range (≤ 0). */
+  max_drawdown: number | null
+  /** How much the line moves with the benchmark (1 = in step). */
+  beta: number | null
+  /** Return per unit of swing (Sharpe): higher is more return for the ride. */
+  sharpe: number | null
+}
+
+export interface PreviewCompare {
+  band: Band | null
+  /** The asset types you hold today, largest first: what "Compare with" offers. */
+  bands_held: Band[]
+  overlap: {
+    /** How much of one you would trade to turn it into the other (0 same, 1 nothing shared). */
+    active_share: number
+    shared_count: number
+    their_count: number
+    their_weight_held: number
+    your_weight_shared: number
+    shared: { symbol: string; theirs: number; yours: number }[]
+    /** Their positions with no ticker yet, and their share of the portfolio: counted in
+     *  their_count, but not comparable with yours until matched. */
+    unmatched_count: number
+    unmatched_weight: number
+  }
+  spread: Record<'theirs' | 'yours', Spread>
+  sectors: Record<'theirs' | 'yours', { sector: string; weight: number }[]>
+  risk: {
+    since: string
+    benchmark: string | null
+    theirs: LineRisk | null
+    yours: LineRisk | null
+    spy: LineRisk | null
+    yours_since: string | null
+    /** Your weekly returns against theirs: 1 moves in step with you, 0 unrelated. */
+    correlation: number | null
+  }
+}
+
+export interface Spread {
+  count: number
+  top5: number
+  largest: { symbol: string; weight: number } | null
+  /** The five largest holdings, each with its share: the side-by-side table. */
+  top: { symbol: string; weight: number; sector: string }[]
+}
+
+export const previewCompareKey = (
+  kind: FollowKind,
+  ref: string,
+  since: string | null,
+  band: Band | null,
+) =>
+  `${FOLLOWING_KEY}/preview/compare?kind=${kind}&ref=${encodeURIComponent(ref)}` +
+  `${since ? `&since=${since}` : ''}${band ? `&band=${band}` : ''}`
+export const fetchPreviewCompare = (
+  kind: FollowKind,
+  ref: string,
+  since: string | null,
+  band: Band | null,
+) => readJson<PreviewCompare>(previewCompareKey(kind, ref, since, band))
+
+/** Every listed holding's own return and exchange: priced after the page opens, since a fund
+ *  of thousands of stocks costs a price fetch for each. */
+export const previewReturnsKey = (kind: FollowKind, ref: string) =>
+  `${FOLLOWING_KEY}/preview/returns?kind=${kind}&ref=${encodeURIComponent(ref)}`
+export const fetchPreviewReturns = (kind: FollowKind, ref: string) =>
+  readJson<FollowPerformance>(previewReturnsKey(kind, ref))
 
 export interface PriceHistory {
   symbol: string
