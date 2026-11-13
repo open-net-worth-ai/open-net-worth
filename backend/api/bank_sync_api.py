@@ -5,6 +5,7 @@
   * ``PUT  /api/bank-sync/{provider}/mode``           ``{mode: off|data|lucius}``
   * ``PUT  /api/bank-sync/{provider}/accounts/{id}``  ``{sync: bool}``
   * ``PUT  /api/bank-sync/{provider}/followup``       ``{enabled: bool}``
+  * ``PUT  /api/bank-sync/{provider}/schedule``       ``{interval_hours: int}``
   * ``POST /api/bank-sync/{provider}/import``         bring in the history (setup step 2)
   * ``POST /api/bank-sync/{provider}/run``            Sync now (409 with the reason when refused)
   * ``GET  /api/bank-sync/{provider}/runs``           its run history
@@ -39,6 +40,10 @@ class AccountSyncBody(BaseModel):
 
 class FollowupBody(BaseModel):
     enabled: bool
+
+
+class ScheduleBody(BaseModel):
+    interval_hours: int
 
 
 class DecisionBody(BaseModel):
@@ -91,6 +96,11 @@ async def bank_sync_mode(provider: str, body: ModeBody):
 @router.put("/api/bank-sync/{provider}/accounts/{account_id}")
 async def bank_sync_account(provider: str, account_id: str, body: AccountSyncBody):
     return await _call(bank_data_sync.set_account_sync, provider, account_id, body.sync)
+
+
+@router.put("/api/bank-sync/{provider}/schedule")
+async def bank_sync_schedule(provider: str, body: ScheduleBody):
+    return await _call(bank_data_sync.set_interval, provider, body.interval_hours)
 
 
 @router.put("/api/bank-sync/{provider}/followup")

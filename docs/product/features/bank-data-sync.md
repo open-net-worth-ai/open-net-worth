@@ -28,16 +28,22 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
    [Bank & brokerage connectors](../connectors/bank-brokerage.md).
 2. On the connector's page, under **Next: bring in transactions**, click **Set up sync**. It opens the bank's own page in
    **Automations → Data sync**, with three steps:
-   1. **Choose accounts.** Every linked account is ticked. Untick one to leave it out: it's never
-      read from the bank or booked.
+   1. **Choose accounts.** Every linked account is ticked; its line says which bank account it's
+      from. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
+      (or **Link more accounts**) links a bank account here, as a new account or to one you have,
+      without going back to the connector.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
       so today's balance doesn't change. Safe to run again. **Skip for now** goes straight to step
       3: the first sync brings the history in anyway.
-   3. **Turn on.** New transactions are booked on a schedule from then on.
+   3. **Turn on.** Pick how often it runs, then **Turn on**: new transactions are booked on that
+      schedule from then on.
 
 Once it's set up, the page shows a switch to turn it on or off, the next sync and **Sync now**;
 below them, the accounts, the schedule, anything that needs your review, and the run history.
+Click a run in the history to see what it did: what it read from the bank, what it booked (each
+transaction, with its account and category), what it left pending or sent to review, and any
+problems.
 The connector page shows one line (on or off, and the next sync) and **Manage**, which opens
 that page.
 
@@ -87,10 +93,14 @@ in the ledger changes until you choose.
 
 ## How often it runs
 
-| Bank | Every |
-|---|---|
-| GoCardless, Enable Banking | 12 hours |
-| Plaid | 6 hours |
+| Bank | Default | You can choose |
+|---|---|---|
+| GoCardless, Enable Banking | Every 12 hours | Every 6 or 12 hours, or once a day |
+| Plaid | Every 6 hours | Every hour, every 6 or 12 hours, or once a day |
+
+Change it under **Schedule** on the sync's page (or in step 3 of setup). A bank that allows 4
+reads a day is never offered more than 4 runs a day. The next run moves to your last sync plus
+the new interval.
 
 **Sync now** runs it at once. GoCardless and Enable Banking banks usually allow only **4 reads
 per account per day**, and every read counts — scheduled, **Sync now**, or Lucius fetching the

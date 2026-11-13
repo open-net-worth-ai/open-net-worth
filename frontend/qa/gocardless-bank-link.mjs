@@ -765,9 +765,21 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
       const card = app.getByRole('article', { name: 'GoCardless bank sync' })
       await card.waitFor({ timeout: 20_000 })
       await card.click()
-      await app.getByRole('list', { name: 'Sync history' }).waitFor({ timeout: 15_000 })
-      const rows = await app.locator('.bs-history-row').count()
+      const history = app.getByRole('list', { name: 'Sync history' })
+      await history.waitFor({ timeout: 15_000 })
+      const rows = await history.getByRole('listitem').count()
       assert.ok(rows >= 4, `history lists ${rows} runs`)
+      // A row opens that run's report: what it did, and the transactions it booked.
+      await history
+        .getByRole('listitem')
+        .filter({ hasText: /\d+ booked/ })
+        .last()
+        .click()
+      const report = app.getByRole('dialog')
+      await report.getByText(/^Booked \(\d+\)$/).waitFor({ timeout: 15_000 })
+      await report.getByText('Still pending at the bank, booked once they clear').waitFor()
+      await report.locator('.bs-run-table tr').first().waitFor({ timeout: 15_000 })
+      await app.keyboard.press('Escape')
       await app.screenshot({ path: join(OUT_DIR, 'data-sync-page.png'), fullPage: true })
     },
     app,

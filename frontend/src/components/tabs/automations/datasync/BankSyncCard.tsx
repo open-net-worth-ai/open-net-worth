@@ -1,6 +1,7 @@
 import { Clock3, Landmark } from 'lucide-react'
 import { fScheduleWhen } from '../../../../utils/format'
 import type { BankSyncStatus } from './bankSync'
+import { everyLabel } from './bankSyncHelpers'
 
 // A bank connector in the Data sync view: the same row as a budget app's sync, opening the
 // bank's own sync page.
@@ -11,8 +12,8 @@ export function BankSyncCard({ status, onOpen }: { status: BankSyncStatus; onOpe
     ? 'Syncing now…'
     : on
       ? status.next_run_at
-        ? `Every ${status.interval_hours} hours · next ${fScheduleWhen(status.next_run_at)}`
-        : `Every ${status.interval_hours} hours`
+        ? `${everyLabel(status.interval_hours)} · next ${fScheduleWhen(status.next_run_at)}`
+        : everyLabel(status.interval_hours)
       : status.mode === 'lucius'
         ? 'A Lucius Automation syncs it'
         : 'Off'

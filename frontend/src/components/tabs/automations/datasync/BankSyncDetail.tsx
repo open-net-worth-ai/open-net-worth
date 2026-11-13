@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { fDateTime } from '../../../../utils/format'
 import { ErrorState, Loading } from '../../../ui'
+import { BankRunReport } from './BankRunReport'
 import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
 import { BankSyncReviews } from './BankSyncReviews'
 import { BankSyncSetup } from './BankSyncSetup'
@@ -80,9 +82,11 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
 
 function BankSyncHistory({ provider }: { provider: string }) {
   const runs = useBankSyncRuns(provider)
+  const [open, setOpen] = useState<string | null>(null)
   const list = runs.data ?? []
   return (
     <div className="a3-block a3-col-history" data-od-id="bank-sync-history">
+      {open && <BankRunReport runId={open} onClose={() => setOpen(null)} />}
       <div className="a3-block-h">
         History
         <span className="count">
@@ -94,27 +98,33 @@ function BankSyncHistory({ provider }: { provider: string }) {
       ) : list.length === 0 ? (
         <div className="a3-history-empty">No runs yet.</div>
       ) : (
-        <ul className="bs-history" aria-label="Sync history">
+        <div className="a3-hist" role="list" aria-label="Sync history">
           {list.map((run) => {
             const bad = run.status === 'failed' || run.status === 'interrupted'
             return (
-              <li key={run.id} className="bs-history-row">
+              <button
+                key={run.id}
+                type="button"
+                role="listitem"
+                className="a3-hist-row"
+                onClick={() => setOpen(run.id)}
+              >
                 <span
                   className={`rd-dot ${bad ? 'bad' : run.status === 'running' ? 'run' : 'good'}`}
                   aria-hidden="true"
                 />
-                <span className="bs-history-when">
-                  {fDateTime(run.started_at, 'short', 'always')}
-                </span>
-                <span className="bs-history-what">
+                <span className="when">{fDateTime(run.started_at, 'short', 'always')}</span>
+                <span className="note">
                   {run.trigger === 'scheduled' ? 'Scheduled' : 'By you'}
                   {' — '}
                   {run.status === 'running' ? 'Syncing…' : run.outcome || run.error || ''}
                 </span>
-              </li>
+                {run.status === 'running' && <span className="a3-live" title="Running now" />}
+                <ChevronRight size={13} className="a3-hist-chevron" aria-hidden="true" />
+              </button>
             )
           })}
-        </ul>
+        </div>
       )}
     </div>
   )

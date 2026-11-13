@@ -97,7 +97,8 @@ def _summary(p) -> dict:
         "mode": mode,
         "ready": _connector_ready(p),
         "lucius_followup": s["lucius_followup"],
-        "interval_hours": p.sync_interval_hours,
+        "interval_hours": settings.interval_hours(p),
+        "intervals": settings.interval_choices(p),
         "daily_reads": p.daily_reads,
         "last_run": import_runs.summary(last) if last else None,
         "next_run_at": st.get("next_due_at") if mode == "data" else None,
@@ -165,6 +166,18 @@ def set_mode(key: str, mode: str) -> dict:
         "resumed_automation": resumed,
         "needs_template": needs_template,
     }
+
+
+def set_interval(key: str, hours: int) -> dict:
+    """How often the sync runs. A bank with a daily read limit offers only what it allows."""
+    _require_on()
+    p = settings.provider(key)
+    if hours not in settings.interval_choices(p):
+        choices = ", ".join(str(h) for h in settings.interval_choices(p))
+        raise ValidationError(f"{p.label} can sync every {choices} hours.")
+    settings.save(key, interval_hours=hours)
+    budget.reschedule(p)
+    return status(key)
 
 
 def set_account_sync(key: str, account_id: str, sync: bool) -> dict:

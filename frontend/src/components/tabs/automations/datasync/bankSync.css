@@ -39,8 +39,7 @@
   align-items: center;
   gap: 8px;
 }
-.bs-reviews,
-.bs-history {
+.bs-reviews {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -76,27 +75,70 @@
   color: var(--ink);
   overflow-wrap: anywhere;
 }
-.bs-history-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 12.5px;
-  color: var(--ink);
-}
-.bs-history-when {
-  flex: none;
-  color: var(--muted);
-}
-.bs-history-what {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 
 @media (max-width: 640px) {
   .bs-review-rows {
     grid-template-columns: 1fr;
   }
-  .bs-history-row {
-    flex-wrap: wrap;
-  }
+}
+
+/* A run's report (BankRunReport). */
+.bs-run-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.bs-run-counts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+}
+.bs-run-counts dt {
+  color: var(--fg-3);
+}
+.bs-run-counts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.bs-run-problems {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--warn);
+}
+.bs-run-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.bs-run-table td {
+  padding: 7px 12px 7px 0;
+  text-align: left;
+  border-bottom: 0;
+  white-space: normal;
+  border-top: 1px solid var(--line);
+  vertical-align: top;
+}
+.bs-run-table tr:first-child td {
+  border-top: 0;
+}
+.bs-run-table .when {
+  width: 96px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.bs-run-table .sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.bs-run-table .amt {
+  padding-right: 0;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.bs-run-table .amt.in {
+  color: var(--pos);
 }

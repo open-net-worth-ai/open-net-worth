@@ -105,7 +105,9 @@ def note_read(p: Provider, provider_account_id: str, at: Optional[datetime] = No
 
 
 def interval(p: Provider) -> timedelta:
-    return timedelta(hours=p.sync_interval_hours)
+    from backend.services.bank_data_sync import settings
+
+    return timedelta(hours=settings.interval_hours(p))
 
 
 def backoff(p: Provider, status: str, failures: int, error: Optional[str]) -> timedelta:
@@ -146,3 +148,13 @@ def record_outcome(p: Provider, status: str, error: Optional[str], at: Optional[
 def schedule_from_now(p: Provider, at: Optional[datetime] = None) -> None:
     """Turning data sync on: the first run is due now."""
     update(p.key, next_due_at=_iso(at or now()), failures=0)
+
+
+def reschedule(p: Provider) -> None:
+    """A new schedule: the next run is the last good one plus the new interval (due at once if
+    that has passed). A failure's backoff, or a sync that never ran, is left as it is."""
+    st = state(p.key)
+    last = _parse(st.get("last_run_at"))
+    if last is None or int(st.get("failures") or 0) > 0:
+        return
+    update(p.key, next_due_at=_iso(last + interval(p)))

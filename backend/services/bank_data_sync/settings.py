@@ -3,7 +3,8 @@
 Stored per connector in ``bank_sync_settings`` (id = provider key): ``mode`` (``off`` | ``data``),
 ``excluded_account_ids`` (the app accounts the user unticked — Sync is on by default, so only the
 opt-outs are kept, keyed by app account id because that survives a provider relink),
-``lucius_followup`` (built, hidden in the UI for now) and ``set_up`` (turned on at least once). "Lucius" is never stored: a connector is in Lucius mode when an active Lucius
+``lucius_followup`` (built, hidden in the UI for now), ``set_up`` (turned on at least once) and
+``interval_hours`` (the schedule the user chose; absent = the provider's default). "Lucius" is never stored: a connector is in Lucius mode when an active Lucius
 Automation syncs it, a fact the Automations table already holds (ADR 2026-11-13)."""
 
 from __future__ import annotations
@@ -47,8 +48,28 @@ def get(key: str) -> dict:
         "lucius_followup": bool(row.get("lucius_followup")),
         # Turned on at least once: its page shows the set-up sync from then on, on or off.
         "set_up": bool(row.get("set_up")) or row.get("mode") == "data",
+        # How often it runs, when the user chose; None keeps the provider's default.
+        "interval_hours": row.get("interval_hours")
+        if isinstance(row.get("interval_hours"), int)
+        else None,
         "updated_at": row.get("updated_at"),
     }
+
+
+_INTERVALS = (1, 6, 12, 24)
+
+
+def interval_choices(p) -> list[int]:
+    """The schedules a bank may run on. A bank with a daily read limit is never offered one
+    that would need more reads than it allows (4 a day → every 6 hours at the most)."""
+    floor = 24 // p.daily_reads if p.daily_reads else 1
+    return [h for h in _INTERVALS if h >= floor]
+
+
+def interval_hours(p) -> int:
+    """How often a bank's sync runs: the user's choice, else the provider's default."""
+    chosen = get(p.key)["interval_hours"]
+    return chosen if chosen in interval_choices(p) else p.sync_interval_hours
 
 
 def save(key: str, **changes) -> dict:

@@ -10,6 +10,7 @@ import { overrideFlagsForTests } from '../../../../hooks/useFlag'
 import { clearQueryCache } from '../../../../state/queryCache'
 import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
 import { BankSyncSetup } from './BankSyncSetup'
+import { BankRunReport } from './BankRunReport'
 import { BankSyncSection } from './BankSyncSummary'
 import { BankSyncReviews } from './BankSyncReviews'
 import { DataSyncView } from './DataSyncView'
@@ -80,6 +81,44 @@ beforeEach(() => {
     }
     if (url === '/api/bank-sync/gocardless') return reply(current)
     if (url === '/api/bank-sync') return reply({ connectors: [current] })
+    if (url === '/api/bank-sync/gocardless/schedule') {
+      current = status({ ...current, interval_hours: JSON.parse(init!.body!).interval_hours })
+      return reply(current)
+    }
+    if (url === '/api/imports/runs/r1')
+      return reply({
+        id: 'r1',
+        provider: 'gocardless',
+        kind: 'sync',
+        trigger: 'scheduled',
+        status: 'done',
+        started_at: '2026-11-13T10:00:00+00:00',
+        finished_at: '2026-11-13T10:00:05+00:00',
+        outcome: '1 booked',
+        counts: { fetched: 3, booked: 1, pending_skipped: 1, already_booked: 1, errors: 0 },
+        errors: [],
+        warnings: [],
+        log: [],
+        problems: [],
+        progress: { done: 0, total: 0 },
+      })
+    if (url.startsWith('/api/transactions?batch_id=bank_sync%3Ar1'))
+      return reply([
+        {
+          id: 't1',
+          date: '2026-11-12',
+          description: 'ACME GROCERY',
+          payee_name: 'ACME Grocery',
+          category: null,
+          from_account_id: 'acc_1',
+          from_amount: 45.2,
+          from_currency: 'EUR',
+          from_account_name: 'ACME Current',
+          to_amount: null,
+          to_currency: null,
+        },
+      ])
+    if (url === '/api/categories') return reply([])
     if (url.startsWith('/api/bank-sync/reviews?'))
       return reply({
         items: [
@@ -220,6 +259,39 @@ describe('with bank_data_sync on', () => {
     await waitFor(() =>
       expect(sent.at(-1)).toMatchObject({ url: '/api/bank-sync/reviews/bsr_1/accept' }),
     )
+  })
+
+  it('the schedule is a menu of what the bank allows, and picking one saves it', async () => {
+    render(
+      <BankSyncSettings status={status({ mode: 'data', stage: 'done', intervals: [6, 12, 24] })} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'How often to sync' }))
+    expect(screen.queryByRole('menuitem', { name: 'Every hour' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Once a day' }))
+    await waitFor(() =>
+      expect(sent.at(-1)).toMatchObject({
+        url: '/api/bank-sync/gocardless/schedule',
+        method: 'PUT',
+      }),
+    )
+    expect(JSON.parse(sent.at(-1)!.body!)).toEqual({ interval_hours: 24 })
+  })
+
+  it('accounts can be linked without leaving the page', async () => {
+    render(<BankSyncSetup status={status({ stage: 'accounts', accounts: [] })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Link accounts' }))
+    expect(await screen.findByRole('dialog', { name: /Link GoCardless accounts/ })).toBeTruthy()
+  })
+
+  it('a run report says what it did and lists what it booked', async () => {
+    render(<BankRunReport runId="r1" onClose={() => {}} />)
+    expect(
+      await screen.findByText('Still pending at the bank, booked once they clear'),
+    ).toBeTruthy()
+    expect(screen.getByText('Already in your book')).toBeTruthy()
+    expect(await screen.findByText('ACME Grocery')).toBeTruthy()
+    expect(screen.getByText(/ACME Current · Uncategorized/)).toBeTruthy()
+    expect(screen.getByText('Booked (1)')).toBeTruthy()
   })
 
   it('step 2 can be skipped: Skip for now moves on to Turn on, importing nothing', () => {

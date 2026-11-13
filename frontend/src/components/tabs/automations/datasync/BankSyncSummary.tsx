@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Button, Text } from '../../../ui'
 import { useFlag } from '../../../../hooks/useFlag'
-import { nextRunLine } from './bankSyncHelpers'
+import { everyLabel, nextRunLine } from './bankSyncHelpers'
 import { bankSyncSearch, useBankSync, type BankSyncStatus } from './bankSync'
 import './bankSync.css'
 
@@ -31,7 +31,7 @@ function BankSyncSummary({ provider }: { provider: string }) {
           Next: bring in transactions
         </Text>
         <Text size="xs" tone="muted">
-          {`Linking doesn’t import anything yet. Sync brings in your history, then new transactions every ${status.interval_hours} hours.`}
+          {`Linking doesn’t import anything yet. Sync brings in your history, then new transactions ${everyLabel(status.interval_hours).toLowerCase()}.`}
         </Text>
         <div className="conn-next-actions">
           <Button size="sm" variant="primary" onClick={open}>

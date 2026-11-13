@@ -41,6 +41,13 @@ export function nextRunLine(status: BankSyncStatus): string {
   return `Next sync: ${fScheduleWhen(status.next_run_at)}`
 }
 
+/** "Every hour" / "Every 6 hours" / "Once a day". */
+export function everyLabel(hours: number): string {
+  if (hours === 1) return 'Every hour'
+  if (hours === 24) return 'Once a day'
+  return `Every ${hours} hours`
+}
+
 /** Every ticked account has used today's bank reads. */
 export function outOfReads(status: BankSyncStatus): boolean {
   const ticked = (status.accounts ?? []).filter((a) => a.sync)

@@ -193,6 +193,8 @@ default run proves nothing changed with the flag off.
 ### GCL-DS-DATA-SYNC-TAB
 - WHEN I open Automations → Data sync
 - THEN GoCardless is listed; its page shows the history of every run
+- WHEN I click the first import's run
+- THEN its report lists the transactions it booked and how many stayed pending at the bank
 
 ## Non-functional
 

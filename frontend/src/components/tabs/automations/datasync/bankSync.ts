@@ -32,6 +32,8 @@ export interface BankSyncStatus {
   ready: boolean
   lucius_followup: boolean
   interval_hours: number
+  /** The schedules this bank may run on (a daily read limit rules out the frequent ones). */
+  intervals?: number[]
   daily_reads: number | null
   last_run: RunSummary | null
   next_run_at: string | null

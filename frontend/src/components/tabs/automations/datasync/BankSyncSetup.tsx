@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { Download, Play } from 'lucide-react'
 import { Button } from '../../../ui'
-import { AccountBoxes, ActionError } from './BankSyncParts'
+import { AccountBoxes, ActionError, LinkAccountsButton, ScheduleMenu } from './BankSyncParts'
 import { outOfReads, useAct } from './bankSyncHelpers'
 import { Step } from './SyncSetupSteps'
 import { bankSyncSend, type BankSyncStatus, type ModeResult } from './bankSync'
@@ -15,7 +14,6 @@ import { bankSyncSend, type BankSyncStatus, type ModeResult } from './bankSync'
 const REACHED = { accounts: 1, history: 2, sync: 3, done: 4 } as const
 
 export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
-  const navigate = useNavigate()
   const { busy, error, act } = useAct()
   const p = status.provider
   // Skip for now: step 2 is optional — the first sync brings the history in anyway. Kept on
@@ -34,19 +32,12 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
       <ol className="a3-steps" data-od-id="bank-sync-setup">
         <Step n={1} reached={reached} title="Choose accounts">
           {accounts.length === 0 ? (
-            <div>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() =>
-                  void navigate({ to: '/connectors', search: { connector: p } as never } as never)
-                }
-              >
-                {`Link accounts in ${status.label}`}
-              </Button>
-            </div>
+            <LinkAccountsButton status={status} primary />
           ) : (
-            <AccountBoxes status={status} busy={busy} act={act} />
+            <>
+              <AccountBoxes status={status} busy={busy} act={act} />
+              <LinkAccountsButton status={status} />
+            </>
           )}
         </Step>
         <Step n={2} reached={reached} title="Import history">
@@ -83,11 +74,10 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
         <Step n={3} reached={reached} title="Turn on">
           {reached < 2 ? null : (
             <>
-              <p>
-                {status.mode === 'lucius'
-                  ? `Every ${status.interval_hours} hours. Pauses the Lucius Automation that syncs it now.`
-                  : `Every ${status.interval_hours} hours.`}
-              </p>
+              <ScheduleMenu status={status} busy={busy} act={act} />
+              {status.mode === 'lucius' && (
+                <p className="bs-note">Pauses the Lucius Automation that syncs it now.</p>
+              )}
               <div className="bs-actions">
                 <Button
                   size="sm"
