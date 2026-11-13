@@ -9423,11 +9423,10 @@ body.hide-amounts .mask * {
   }
   /* Enable Banking refused this app's address: what to add, before anyone goes to a bank. */
   .eb-unregistered {
-    padding: var(--space-3);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--warn);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line));
     border-radius: var(--radius-md);
-    background: var(--surface);
+    background: color-mix(in srgb, var(--warn) 6%, var(--surface));
   }
   /* Enable Banking's Redirect URL: a value to copy, not a field — dashed, sunken, one click
      selects it all, the 30px of the Copy button beside it. */
