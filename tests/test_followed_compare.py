@@ -113,7 +113,25 @@ def test_a_foreign_share_uses_its_own_recorded_sector_never_other(monkeypatch):
     monkeypatch.setattr(compare.prices, "company_sectors", lambda syms, **k: {})
     monkeypatch.setattr(compare.threading, "Thread", _NoThread)
     out = compare._sectors({"ACME": 1.0}, {"ACME": "equity"}, {"ACME": "Consumer Cyclical"})
-    assert out == [{"sector": "Consumer Cyclical", "weight": 1.0}]
+    assert out == [
+        {
+            "sector": "Consumer Cyclical",
+            "weight": 1.0,
+            "holdings": [{"symbol": "ACME", "weight": 1.0}],
+        }
+    ]
+
+
+def test_each_sector_lists_every_stock_in_it_largest_first(monkeypatch):
+    monkeypatch.setattr(
+        compare.prices,
+        "company_sectors",
+        lambda syms, **k: {"ACME": "Technology", "BETA": "Technology", "GAMMA": "Energy"},
+    )
+    out = compare._sectors({"ACME": 0.2, "BETA": 0.5, "GAMMA": 0.3}, {})
+    tech = next(s for s in out if s["sector"] == "Technology")
+    assert [h["symbol"] for h in tech["holdings"]] == ["BETA", "ACME"]
+    assert round(sum(h["weight"] for h in tech["holdings"]), 6) == tech["weight"]
 
 
 def test_every_shared_stock_is_listed_none_cut():

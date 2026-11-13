@@ -292,6 +292,12 @@ export interface LineRisk {
   sharpe: number | null
 }
 
+export interface SectorShare {
+  sector: string
+  weight: number
+  holdings?: { symbol: string; weight: number }[]
+}
+
 export interface PreviewCompare {
   band: Band | null
   /** The asset types you hold today, largest first: what "Compare with" offers. */
@@ -310,7 +316,8 @@ export interface PreviewCompare {
     unmatched_weight: number
   }
   spread: Record<'theirs' | 'yours', Spread>
-  sectors: Record<'theirs' | 'yours', { sector: string; weight: number }[]>
+  /** Each sector's share, largest first, with every stock in it (largest first). */
+  sectors: Record<'theirs' | 'yours', SectorShare[]>
   risk: {
     since: string
     benchmark: string | null

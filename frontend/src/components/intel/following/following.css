@@ -2274,3 +2274,43 @@ div.fol-row-main {
     text-align: left;
   }
 }
+
+/* A sector opens to list its stocks; its chevron turns when open. */
+.fol-vs-chev {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.fol-vs-chev.is-open {
+  transform: rotate(180deg);
+}
+.fol-vs-rest:disabled {
+  cursor: default;
+}
+
+/* The stocks in an opened sector: one plain line each, indented under its bar. */
+.fol-vs-members {
+  display: grid;
+  margin: var(--space-2) 0 0;
+  padding: 0 0 0 var(--space-4);
+  list-style: none;
+}
+.fol-vs-member {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .fol-vs-member:hover .fol-vs-top-sym,
+  .fol-vs-rest:not(:disabled):hover .fol-vs-top-sym {
+    color: var(--ink);
+  }
+}

@@ -207,11 +207,20 @@ def _sectors(
             daemon=True,
         ).start()
     by: dict[str, float] = {}
+    members: dict[str, list[dict]] = {}
     for sym, w in weights.items():
         sector = _sector_label(sym, classes, known)
         by[sector] = by.get(sector, 0.0) + w
+        members.setdefault(sector, []).append({"symbol": sym, "weight": round(w, 6)})
+    # Each sector names every stock in it, largest first: a share alone left "which stocks are
+    # these?" unanswered (owner, 2026-11-14).
     return [
-        {"sector": s, "weight": round(w, 6)} for s, w in sorted(by.items(), key=lambda x: -x[1])
+        {
+            "sector": s,
+            "weight": round(w, 6),
+            "holdings": sorted(members[s], key=lambda h: -h["weight"]),
+        }
+        for s, w in sorted(by.items(), key=lambda x: -x[1])
     ]
 
 

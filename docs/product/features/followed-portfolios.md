@@ -185,11 +185,12 @@ the chart, for the same range and the same choice:
   own**, then every stock you both own with its share of their portfolio and of yours, and a
   **Total** row for all of them. **N of their stocks you don't own** opens the full list of the
   rest, largest first. Nothing is cut from either list.
-- **How each is spread**: first their five largest holdings next to your five largest, rank by
-  rank, each with its share (a stock you both hold is in blue). Then, for each side, how many holdings, the top five's share and the largest,
-  then its sectors. A sector has the same colour in both columns. Crypto, commodities and
-  diversified funds are slices of their own; a stock whose sector isn't known yet is **Other**
-  until it is looked up.
+- **How each is spread**: a column for them and one for you. Each shows how many holdings, the
+  top five's share and the largest, then **Sectors** and then **Top 5 holdings**. A sector has the
+  same colour in both columns, and each top holding's bar takes its sector's colour. Tap a sector
+  to list the stocks in it, largest first (the first ten, then **Show all**). Tap a stock there,
+  or a top holding, to open its page. Crypto, commodities and diversified funds are slices of
+  their own; a stock whose sector isn't known yet is **Other** until it is looked up.
 
 ### When it updates
 

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Meter, Skeleton, Text } from '../../ui'
-import { ChevronDown } from '../../../ui/icons'
-import type { LineRisk, PreviewCompare, Spread } from '../../../api/followedPortfolios'
+import { ChevronDown, ChevronRight } from '../../../ui/icons'
+import { useAssetNav } from '../../../state/assetNav'
+import type { LineRisk, PreviewCompare, SectorShare, Spread } from '../../../api/followedPortfolios'
 import { sliceColor } from './donutParts'
 import { roundToWhole } from './roundToWhole'
 import { COPY } from './following.copy'
@@ -11,6 +12,8 @@ import { COPY } from './following.copy'
 const share = (w: number) =>
   `${(w * 100).toFixed((w > 0 && w < 0.1) || (w > 0.99 && w < 1) ? 1 : 0)}%`
 const SECTORS_SHOWN = 5
+// An opened sector lists this many stocks, then "Show all N" lists every one.
+const MEMBERS_SHOWN = 10
 
 interface Props {
   data: PreviewCompare | undefined
@@ -276,11 +279,21 @@ function SpreadColumn({
 }: {
   label: string
   spread: Spread
-  sectors: { sector: string; weight: number }[]
+  sectors: SectorShare[]
   colorOf: Map<string, string>
 }) {
   // The largest five, then "Rest": tapping it lists the sectors it holds (owner, 2026-11-13).
   const [open, setOpen] = useState(false)
+  const { openAsset } = useAssetNav()
+  // Which sectors are opened to list their stocks (owner, 2026-11-14: "what stocks are these?").
+  const [openSectors, setOpenSectors] = useState<Set<string>>(new Set())
+  const toggleSector = (name: string) =>
+    setOpenSectors((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
   const restOf = sectors.slice(SECTORS_SHOWN)
   const rest = restOf.reduce((sum, s) => sum + s.weight, 0)
   // Folding one sector behind "Rest" saves nothing: it folds only two or more.
@@ -325,23 +338,52 @@ function SpreadColumn({
           (owner, 2026-11-13). */}
       <div className="fol-vs-subhead">{COPY.sectorsTitle}</div>
       <ul className="fol-vs-sectors" aria-label={COPY.sectorsOf(label)}>
-        {listed.map((s, i) => (
-          <li key={s.sector}>
-            <div className="fol-vs-sector-head">
-              <Text size="sm" tone="muted" truncate>
-                {s.sector}
-              </Text>
-              <Text size="sm">{pctOf(i)}</Text>
-            </div>
-            <Meter
-              size="sm"
-              value={s.weight * 100}
-              color={colorOf.get(s.sector)}
-              tone={colorOf.has(s.sector) ? undefined : 'neutral'}
-              ariaLabel={`${s.sector} ${pctOf(i)}`}
-            />
-          </li>
-        ))}
+        {listed.map((s, i) => {
+          const isOpen = openSectors.has(s.sector)
+          const members = s.holdings ?? []
+          return (
+            <li key={s.sector}>
+              {/* Tap a sector to list the stocks in it; tap a stock to open it. */}
+              <button
+                type="button"
+                className="fol-vs-rest"
+                aria-expanded={isOpen}
+                disabled={members.length === 0}
+                onClick={() => toggleSector(s.sector)}
+              >
+                <div className="fol-vs-sector-head">
+                  <span className="fol-vs-rest-l">
+                    <Text size="sm" tone="muted" truncate>
+                      {s.sector}
+                    </Text>
+                    {members.length > 0 && (
+                      <ChevronDown
+                        size={14}
+                        aria-hidden="true"
+                        className={isOpen ? 'fol-vs-chev is-open' : 'fol-vs-chev'}
+                      />
+                    )}
+                  </span>
+                  <Text size="sm">{pctOf(i)}</Text>
+                </div>
+                <Meter
+                  size="sm"
+                  value={s.weight * 100}
+                  color={colorOf.get(s.sector)}
+                  tone={colorOf.has(s.sector) ? undefined : 'neutral'}
+                  ariaLabel={`${s.sector} ${pctOf(i)}`}
+                />
+              </button>
+              {isOpen && (
+                <SectorMembers
+                  sector={s.sector}
+                  members={members}
+                  onOpen={(sym) => openAsset({ ticker: sym, label: sym })}
+                />
+              )}
+            </li>
+          )
+        })}
         {folded && (
           <li>
             <button
@@ -386,23 +428,73 @@ function SpreadColumn({
           <ul className="fol-vs-sectors" aria-label={COPY.topFiveOf(label)}>
             {spread.top.map((t) => (
               <li key={t.symbol}>
-                <div className="fol-vs-sector-head">
-                  <span className="fol-vs-top-sym">{t.symbol}</span>
-                  <Text size="sm">{share(t.weight)}</Text>
-                </div>
-                <Meter
-                  size="sm"
-                  value={t.weight * 100}
-                  // Its sector's colour, as in the sector list above: no stock singled out.
-                  color={colorOf.get(t.sector)}
-                  tone={colorOf.has(t.sector) ? undefined : 'neutral'}
-                  ariaLabel={`${t.symbol} ${share(t.weight)}`}
-                />
+                {/* Tap a holding to open its asset page. */}
+                <button
+                  type="button"
+                  className="fol-vs-rest"
+                  aria-label={COPY.openStock(t.symbol)}
+                  onClick={() => openAsset({ ticker: t.symbol, label: t.symbol })}
+                >
+                  <div className="fol-vs-sector-head">
+                    <span className="fol-vs-rest-l">
+                      <span className="fol-vs-top-sym">{t.symbol}</span>
+                      <ChevronRight size={14} aria-hidden="true" className="fol-vs-chev" />
+                    </span>
+                    <Text size="sm">{share(t.weight)}</Text>
+                  </div>
+                  <Meter
+                    size="sm"
+                    value={t.weight * 100}
+                    // Its sector's colour, as in the sector list above: no stock singled out.
+                    color={colorOf.get(t.sector)}
+                    tone={colorOf.has(t.sector) ? undefined : 'neutral'}
+                    ariaLabel={`${t.symbol} ${share(t.weight)}`}
+                  />
+                </button>
               </li>
             ))}
           </ul>
         </>
       )}
     </div>
+  )
+}
+
+/** The stocks in one opened sector, largest first, each opening its asset page. The first ten,
+ *  then "Show all N" lists every one: nothing is hidden without saying so. */
+function SectorMembers({
+  sector,
+  members,
+  onOpen,
+}: {
+  sector: string
+  members: { symbol: string; weight: number }[]
+  onOpen: (symbol: string) => void
+}) {
+  const [all, setAll] = useState(false)
+  const shown = all ? members : members.slice(0, MEMBERS_SHOWN)
+  return (
+    <>
+      <ul className="fol-vs-members" aria-label={COPY.sectorStocks(sector)}>
+        {shown.map((m) => (
+          <li key={m.symbol}>
+            <button
+              type="button"
+              className="fol-vs-member"
+              aria-label={COPY.openStock(m.symbol)}
+              onClick={() => onOpen(m.symbol)}
+            >
+              <span className="fol-vs-top-sym">{m.symbol}</span>
+              <Text size="sm">{share(m.weight)}</Text>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {members.length > MEMBERS_SHOWN && (
+        <button type="button" className="fol-spot-link" onClick={() => setAll(!all)}>
+          {all ? COPY.sectorsLess : COPY.sectorShowAll(members.length)}
+        </button>
+      )}
+    </>
   )
 }

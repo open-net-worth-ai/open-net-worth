@@ -354,6 +354,8 @@ export const COPY = {
   sectorsRest: 'Rest',
   sectorsMore: (n: number) => `${n} more`,
   sectorsLess: 'Show fewer',
+  sectorStocks: (sector: string) => `Stocks in ${sector}`,
+  sectorShowAll: (n: number) => `Show all ${n.toLocaleString()}`,
   loadingYours: 'Loading your return',
   /** Your line starts after the range does: from your history's first day. */
   yourSince: (day: string) => `From ${day}, where your history in this app starts`,
