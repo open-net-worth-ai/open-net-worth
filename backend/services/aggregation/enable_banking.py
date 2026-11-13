@@ -375,8 +375,23 @@ def create_session(code: str, state: str = "") -> dict:
     if pending.get("state"):
         store.drop_pending_link(pending["state"])
     for old_session in replaced:
+        # Renewal: remember the old consent's accounts first, so the new session's uids map
+        # back to them — even on a book that never listed its accounts since it was linked.
+        _remember_accounts(store, token, old_session, store.bank(key) or {})
         _revoke_session(token, old_session)
     return {"session_id": session_id, "accounts": accounts, "bank_key": key}
+
+
+def _remember_accounts(
+    store: EnableBankingConfigStore, token: str, session_id: str, bank: dict
+) -> None:
+    """Record a session's accounts' ids (``_stable_account_id``). Best effort: a session that
+    can't be read is one whose ids this book has most likely recorded already."""
+    try:
+        for account in fetch_session_accounts(token, session_id):
+            _stable_account_id(store, bank, account)
+    except (ExternalServiceError, httpx.HTTPError) as exc:
+        logger.warning("enable_banking: an old consent's accounts are unavailable: %s", exc)
 
 
 def _revoke_session(token: str, session_id: str) -> bool:
@@ -737,12 +752,36 @@ def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tupl
             complete = False
             continue
         for a in accounts:
-            uid = _account_uid(a)
+            api_uid = _account_uid(a)
+            uid = _stable_account_id(store, bank, a)
             if uid in seen:
                 continue
             seen.add(uid)
-            out.append({**a, "_institution": _bank_label(bank, banks)})
+            out.append(
+                {**a, "uid": uid, "_api_uid": api_uid, "_institution": _bank_label(bank, banks)}
+            )
     return out, complete
+
+
+def _stable_account_id(store: EnableBankingConfigStore, bank: dict, eb_account: dict) -> str:
+    """The account's id here for good (see ``account_identities``): its first uid, found again
+    through Enable Banking's ``identification_hash`` after a renewal hands it a new one. An
+    account without that hash keeps its session uid, as before."""
+    uid = _account_uid(eb_account)
+    identification = str(eb_account.get("identification_hash") or "").strip()
+    if not uid or not identification:
+        return uid
+    return store.account_id(
+        aspsp=str(bank.get("aspsp") or ""),
+        country=str(bank.get("country") or ""),
+        identification_hash=identification,
+        uid=uid,
+    )
+
+
+def _api_uid(eb_account: dict) -> str:
+    """The uid Enable Banking's own endpoints know this account by in its current session."""
+    return str(eb_account.get("_api_uid") or _account_uid(eb_account))
 
 
 def fetch_window(
@@ -764,7 +803,7 @@ def fetch_window(
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
     accounts = [
-        _account_to_common(a, fetch_account_balance(token, _account_uid(a))) for a in eb_accounts
+        _account_to_common(a, fetch_account_balance(token, _api_uid(a))) for a in eb_accounts
     ]
 
     rows: list[dict] = []
@@ -774,7 +813,7 @@ def fetch_window(
             continue
         try:
             txns, account_complete = fetch_account_transactions(
-                token, account_uid, date_from=since, date_to=before
+                token, _api_uid(eb_account), date_from=since, date_to=before
             )
         except (ExternalServiceError, httpx.HTTPError) as exc:
             logger.warning("enable_banking account fetch failed (%s): %s", account_uid, exc)

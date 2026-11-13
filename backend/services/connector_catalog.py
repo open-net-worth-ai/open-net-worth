@@ -619,10 +619,10 @@ _KINDS: tuple[ConnectorKind, ...] = (
         _enable_banking_configured,
         secret_fields=_secrets("private_key", minted=("session_id", "sessions")),
         config_keys=("application_id", "aspsp", "country"),
-        private_state=("banks", "pending_links"),
+        private_state=("banks", "pending_links", "account_identities"),
         # The moved sessions are still consented at Enable Banking; without each bank's name the
         # receiver would list unnamed banks.
-        moved_state=("banks",),
+        moved_state=("banks", "account_identities"),
         remove=_remove_enable_banking,
     ),
     _kind(
