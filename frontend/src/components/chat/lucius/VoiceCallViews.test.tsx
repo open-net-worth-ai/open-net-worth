@@ -322,6 +322,19 @@ describe("the phone's round button", () => {
     fab()
     expect(screen.getByRole('alert').textContent).toContain('It did not start.')
   })
+
+  it("says it for a call into another conversation than the one last open: it's the only place", () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    localStorage.setItem('lucius_active_conversation', 's-open')
+    act(() =>
+      setVoiceCallForTests({
+        problem: { kind: 'dropped', message: 'The call dropped.', sessionId: 's-call' },
+      }),
+    )
+    fab()
+    expect(screen.getByRole('alert').textContent).toContain('The call dropped.')
+    localStorage.removeItem('lucius_active_conversation')
+  })
 })
 
 describe('VoiceCallPill', () => {

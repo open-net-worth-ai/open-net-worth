@@ -1689,6 +1689,49 @@ def test_going_on_after_mm_hm_isnt_cut_off_by_the_timer():
     asyncio.run(run())
 
 
+def test_a_breath_after_a_finished_sounding_sentence_waits_for_the_rest():
+    """Owner's call, 2026-11-09: "Oh, I asked you to categorize | before, and now you don't
+    remember", said at normal speed, became two requests: they were talking again before the
+    voice had decided anything. It waits, says nothing over them, and sends the whole sentence."""
+    import asyncio
+
+    agent, desk_ = _desk(said := [])
+    desk_._session.user_state = "speaking"
+
+    async def run():
+        desk_.heard("Oh, I asked you to categorize")
+        assert desk_.submit("Did I ask you to categorize them?", "question", "Okay.") is None
+        assert desk_._queue.empty() and said == []  # held, and no "Mm-hm?" over them
+        desk_.heard("before, and now you don't remember.")
+        desk_._session.user_state = "listening"
+        desk_.submit("I asked you before and you don't remember", "question", "Sorry.")
+        task = desk_._queue.get_nowait()
+        assert task.said == "Oh, I asked you to categorize before, and now you don't remember."
+
+    asyncio.run(run())
+
+
+def test_words_that_end_once_they_stop_still_go_when_nothing_follows():
+    import asyncio
+
+    agent, desk_ = _desk([])
+    desk_._session.user_state = "speaking"
+    agent.MID_THOUGHT_WAIT_S, was = 0.01, agent.MID_THOUGHT_WAIT_S
+
+    async def run():
+        desk_.heard("What did I spend yesterday?")
+        desk_.submit("What did I spend yesterday?", "question", "Okay.")
+        desk_._session.user_state = "listening"  # it was a cough, and no words came
+        desk_._owner_sound_at = 0.0
+        await asyncio.sleep(0.05)
+        assert desk_._queue.qsize() == 1
+
+    try:
+        asyncio.run(run())
+    finally:
+        agent.MID_THOUGHT_WAIT_S = was
+
+
 def test_a_breath_doesnt_date_the_answer_after_it():
     """Re-check: a stray sound with no words could refuse every answer after it."""
     import asyncio

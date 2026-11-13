@@ -18,6 +18,7 @@ import {
   takeReloadNotice,
   watchPolicyBlock,
 } from './voicePagePolicy'
+import { clearCallOn, markCallOn, watchForCutOff } from './voiceCallCutOff'
 import { playMuteTone } from './voiceCallSounds'
 import { keepScreenOn } from './voiceWakeLock'
 
@@ -118,6 +119,16 @@ let state: CallState = takeReloadNotice()
   ? { ...IDLE, problem: { kind: 'ready', message: 'Calls are ready.' } }
   : IDLE
 const listeners = new Set<() => void>()
+watchForCutOff((sessionId) => {
+  if (state.phase !== 'idle' || state.problem) return
+  set({
+    problem: {
+      kind: 'dropped',
+      message: 'Your call ended when the app closed or reloaded. Call again to keep going.',
+      sessionId,
+    },
+  })
+})
 let room: Room | null = null
 let stopRing: () => void = () => {}
 let audioEls: HTMLElement[] = []
@@ -622,6 +633,7 @@ function teardown() {
   lineOpen = false
   inSegment = false
   window.clearInterval(followTimer)
+  clearCallOn()
   window.clearInterval(healthTimer)
   window.clearInterval(micTimer)
   window.clearTimeout(leftTimer)
@@ -791,7 +803,11 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     // while a call is on, the open chat checks its conversation's revision (a few bytes when
     // nothing changed) and the live poll looks, every 1.5s. Polled from here, not pushed over
     // the room: a data message from the in-app worker crashed LiveKit's native layer (2026-11-03).
-    followTimer = window.setInterval(() => emitConversationChanged(grant.session_id), FOLLOW_MS)
+    markCallOn(grant.session_id)
+    followTimer = window.setInterval(() => {
+      emitConversationChanged(grant.session_id)
+      markCallOn(grant.session_id)
+    }, FOLLOW_MS)
     watchLuciusLine(grant.room)
     watchDeviceNetwork()
     await next.localParticipant.publishTrack(mic)

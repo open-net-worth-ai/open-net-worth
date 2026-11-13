@@ -46,9 +46,11 @@ question, he includes whatever you still need in the reply, and if it was only a
 he says the answer a moment later. An answer you never heard any of stays in the chat, marked
 *"Not read aloud"*. Add to a request (*"…and Uber"*) and he says what he caught (*"Got it, Uber
 too."*). Cut him off partway and he knows how far he got; if it was only a
-cough or an *"mm"*, he picks up again from that sentence. Asking something different
-keeps the first answer, in order. A change can't be taken back this way: if the first request did
-change something, you always hear how it went, then he gets to your correction.
+cough or an *"mm"*, he picks up again from that sentence. Whatever you say while he's still
+working goes into that same piece of work, the way a message typed mid-answer does: he reads it
+at his next step and gives one answer that covers all of it, whether you were adding to it,
+correcting it, or asking something else. Nothing he has started is stopped, so a change is never
+left half done; if it already changed something, he tells you how it went along with the rest.
 Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its
 name, and on a line of its own you don't hear it at all.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
@@ -149,7 +151,7 @@ happens next is read out.
 
 **It learns your merchants.** The names you spend with most, up to 20, are passed to the speech-to-text service as word hints on each call, so it hears them correctly.
 
-**Carrying on, correcting, or changing the subject.** Say more after you've asked something and the call decides which it is. If you're finishing the same question, Lucius's current attempt is stopped and he starts again on the whole of it, and your words stay one message in the chat. If you correct yourself, the old attempt is stopped and its answer is dropped. A different question waits its turn. A change he has already started, or a task, always runs to the end first, and he tells you what it did. Nothing waits before Lucius starts: stopping is what saves the wasted work.
+**Carrying on, correcting, or changing the subject.** Say more while Lucius is still working and it joins what he's doing, as a message typed mid-answer does, whether or not **Settings → Chat → Multi-turn chat** is on for typed messages: your words appear in the chat as their own message, he takes them in at his next step, and one answer covers everything you asked. Nothing is stopped or restarted, so a change he has begun is never left half done. If he finishes just before your words reach him, they become your next request instead, never lost and never sent twice: after his first answer he tells you he's on what you added now, then answers it. Nothing waits before Lucius starts.
 
 **Lucius answers out loud.** He keeps it to a few sentences: the answer, then what matters most about
 it. Ask for a list and he says the top few and how many there are. He only uses the screen for changes waiting on your approval, or when you ask to
@@ -210,16 +212,20 @@ Your own copy of Open Net Worth has none of these limits.
 ## Troubleshooting
 
 **The Call button isn't there.** Voice calls may be switched off: check **Settings → Developer →
-Experimental**. Or they aren't set up yet: until then the message box keeps **Send**, and the **Call** button
-on the floating Lucius button takes you to Voice calls in Connectors. It also gives way to **Send** as soon as you type.
+Experimental**. It also gives way to **Send** as soon as you type.
 
-**The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
-the Voice calls settings right where you are.
+**The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it takes
+you to Voice calls in Connectors.
 
 **"A call can't join an Automation's conversation."** An Automation's conversation continues on its
 own, so a call can't join it. Press **Start a new chat**, then **Call**. On a phone's other tabs,
-**Open Lucius** takes you to the chat first. The message stays with that conversation: it doesn't
-follow you to another one.
+**Open Lucius** takes you to the chat first. In the chat, the message stays with that conversation:
+it doesn't follow you to another one. On a phone's other tabs, the round call button shows it
+whichever conversation it is about.
+
+**"Your call ended when the app closed or reloaded."** The page was reloaded, or your phone closed
+the app, while a call was on. That ends the call, so the app says so when it opens again. Press
+**Call again** to call back into the same conversation.
 
 **"Calls are ready."** The page had to reload before it could reach your voice server, for example
 because it was already open when calls were set up on another device. Press **Call**.
