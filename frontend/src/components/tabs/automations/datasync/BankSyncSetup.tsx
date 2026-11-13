@@ -73,11 +73,7 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
           ) : imported && missing.length === 0 ? (
             <p className="bs-done">
               <Check size={14} aria-hidden="true" />
-              {`History imported: ${importedLine(accounts)}.${
-                accounts.every((a) => !a.sync || a.balance_state !== 'differs')
-                  ? ' Balances match your bank.'
-                  : ''
-              }`}
+              {importedLine(accounts)}
               {status.last_run && (
                 <button
                   type="button"
@@ -156,11 +152,12 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   )
 }
 
-/** "3 transactions from Nov 5 to Nov 12, into 2 accounts at 2 banks" — counted in the book (a
- *  run's own record can be gone): how many, over which dates, and where they went. */
+/** "6 transactions imported, Nov 5 – Nov 13 · 3 pending" — counted in the book (a run's own
+ *  record can be gone). */
 function importedLine(accounts: BankSyncAccount[]): string {
   const into = accounts.filter((a) => a.sync && a.imported)
   const n = into.reduce((sum, a) => sum + (a.booked ?? 0), 0)
+  const pend = into.reduce((sum, a) => sum + (a.booked_pending ?? 0), 0)
   const firsts = into
     .map((a) => a.booked_from)
     .filter((d): d is string => !!d)
@@ -169,18 +166,14 @@ function importedLine(accounts: BankSyncAccount[]): string {
     .map((a) => a.booked_to)
     .filter((d): d is string => !!d)
     .sort()
-  const banks = new Set(into.map((a) => a.bank || '')).size
-  const pend = into.reduce((sum, a) => sum + (a.booked_pending ?? 0), 0)
-  const txns = `${n} ${n === 1 ? 'transaction' : 'transactions'}${pend ? ` (${pend} pending)` : ''}`
+  const first = firsts[0]
+  const last = lasts[lasts.length - 1]
   const span =
-    firsts.length && lasts.length
-      ? firsts[0] === lasts[lasts.length - 1]
-        ? ` on ${fDate(firsts[0]!)}`
-        : ` from ${fDate(firsts[0]!)} to ${fDate(lasts[lasts.length - 1]!)}`
-      : ''
-  const where =
-    into.length === 1
-      ? into[0]!.name
-      : `${into.length} accounts${banks > 1 ? ` at ${banks} banks` : ''}`
-  return `${txns}${span}, into ${where}`
+    first && last ? (first === last ? fDate(first) : `${fDate(first)} – ${fDate(last)}`) : ''
+  return [
+    `${n} ${n === 1 ? 'transaction' : 'transactions'} imported${span ? `, ${span}` : ''}`,
+    pend ? `${pend} pending` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }

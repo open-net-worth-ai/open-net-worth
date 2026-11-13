@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fScheduleWhen, getBaseCurrency, timeAgo } from '../../../../utils/format'
 import { fCur } from '../../accounts/format'
-import { Button, Checkbox, Modal } from '../../../ui'
+import { Button, Checkbox, ConfirmDialog, Modal } from '../../../ui'
 import { useNavigate } from '@tanstack/react-router'
 import { Clock3, Wallet } from 'lucide-react'
 import { ConnectorAccountsList } from '../../connectors/ConnectorAccountsList'
@@ -325,8 +325,9 @@ function syncedAgo(iso: string): string {
   return /^\d+s ago$/.test(ago) ? 'just now' : ago
 }
 
-/** The account's book disagrees with its bank: both figures, and the one fix — which moves its
- *  Starting Balance so the cleared balance is the bank's. Never applied without the click. */
+/** The account's book disagrees with its bank: a small pill saying by how much; clicking it
+ *  shows both figures and the one fix, which moves the Starting Balance so the cleared balance
+ *  is the bank's. Never applied without that click. */
 function BalanceGap({
   account: a,
   status,
@@ -338,23 +339,39 @@ function BalanceGap({
   busy: string | null
   act: Act
 }) {
-  // As the Accounts list writes an amount: its currency's symbol, cents, a real minus.
+  const [open, setOpen] = useState(false)
   const money = (n: number) => fCur(n, a.currency || getBaseCurrency(), { cents: true })
+  const bank = a.bank_balance ?? 0
+  const book = a.cleared_balance ?? 0
   return (
-    <span className="bs-gap">
-      {`Bank ${money(a.bank_balance ?? 0)} · Your book ${money(a.cleared_balance ?? 0)}`}
+    <>
       <button
         type="button"
-        className="a3-linkbtn"
+        className="bs-gap"
         disabled={busy !== null}
-        onClick={() =>
+        title={`Bank ${money(bank)} · Your book ${money(book)}`}
+        onClick={() => setOpen(true)}
+      >
+        {`${money(Math.abs(bank - book))} off the bank`}
+      </button>
+      <ConfirmDialog
+        data={
+          open
+            ? {
+                title: 'Use the bank’s balance?',
+                body: `The bank says ${money(bank)}; your book’s cleared balance is ${money(book)}. Your Starting Balance moves by the difference, so they match. Your transactions don’t change.`,
+                confirmLabel: 'Use the bank’s balance',
+              }
+            : null
+        }
+        onCancel={() => setOpen(false)}
+        onConfirm={() => {
+          setOpen(false)
           void act('balance', () =>
             bankSyncSend(`/${status.provider}/accounts/${a.account_id}/use-bank-balance`, 'POST'),
           )
-        }
-      >
-        Use the bank’s balance
-      </button>
-    </span>
+        }}
+      />
+    </>
   )
 }
