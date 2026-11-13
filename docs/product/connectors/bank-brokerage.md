@@ -160,11 +160,10 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 1. Sign up at [Enable Banking](https://enablebanking.com) and register an application. Note its
    **application ID** and download its **private key** (a `.pem` file).
 2. In the application's allowed redirect URLs, add the address you open Open Net Worth at,
-   followed by `/connectors/enable-banking` — for example
-   `http://localhost:8080/connectors/enable-banking`. Enable Banking compares it exactly, so
-   copy it from **Redirect URL** at the top of the Enable Banking form in step 4 (or copy the
-   start from your browser's address bar, with no trailing `/`). Also add
-   `https://localhost/connectors` as a fallback.
+   followed by `/connectors/callback/enable_banking` — for example
+   `http://localhost:8080/connectors/callback/enable_banking`. Enable Banking compares it
+   exactly, so copy it from **Redirect URL** at the top of the Enable Banking form in step 4 (or
+   copy the start from your browser's address bar, with no trailing `/`).
 3. In Open Net Worth: **Connectors → Browse & add → Enable Banking → Add connector**.
 4. Under **1 Register your app with Enable Banking**, paste the **Application ID**, and paste the
    whole contents of the `.pem` file — including its first "BEGIN PRIVATE KEY" line and last
@@ -182,11 +181,19 @@ appear in the one **Accounts** list, each labelled with its bank. **Remove** nex
 revokes its access at Enable Banking and stops its accounts syncing; transactions already
 imported stay, and your other banks are not affected.
 
-If the address from step 2 isn't registered, the link still works, the old way: the form says so
-under **Link bank**, and after you approve access the browser goes to
-`https://localhost/connectors?…&code=…`, a page that won't load. Copy the value after `code=` (up
-to the next `&`) from the address bar, paste it into **Code from the address bar**, and click
-**Complete link**. (**Bank didn't bring you back? Enter its code** opens that field any time.)
+If the address from step 2 isn't registered, **Link bank** doesn't send you to your bank. The form
+shows **Add this address to your Enable Banking app first** with the address and a **Copy**
+button: add it to your application's redirect URLs, save, and click **Link bank** again.
+
+**Can't add it? Link with a code instead** links without coming back to the app. It needs
+`https://localhost/connectors` in your application's redirect URLs. After you approve access,
+the bank tab shows an error page — that's expected. Copy the value after `code=` (up to the next
+`&`) from its address bar, paste it into **Code from the address bar**, and click **Complete
+link**. (**Bank didn't bring you back? Enter its code** opens that field any time.)
+
+**Set up on version 0.1.48?** That version used `…/connectors` as the address. Banks you linked
+then keep syncing; the next time you link or renew one, the form asks you to add the new
+address.
 
 If **Link bank** or **Complete link** fails, the message gives Enable Banking's own reason. For
 example, `REDIRECT_URI_NOT_ALLOWED` names the URL to add to your application's allowed redirect
@@ -530,10 +537,14 @@ the form.
 **"Could not start the bank link. Save your credentials first." (Plaid)** — the client ID or
 secret was rejected, or you haven't saved them yet.
 
-**Enable Banking: "starting the bank link failed: HTTP 4xx"** — usually the redirect URL isn't
-registered. Add the **Redirect URL** the form shows (ending in `/connectors/enable-banking`) to
-your application's allowed redirect URLs. If you registered `…/connectors` for version 0.1.48,
-add the new one: the bank now brings you back only to `…/connectors/enable-banking`.
+**Enable Banking: "Add this address to your Enable Banking app first"** — the app's address
+isn't in your application's redirect URLs. Copy the address the form shows (ending in
+`/connectors/callback/enable_banking`), add it in the Enable Banking control panel, save, and
+link again.
+
+**Enable Banking: "starting the bank link failed: HTTP 4xx"** — Enable Banking's own reason
+follows. `REDIRECT_URI_NOT_ALLOWED` after **Link with a code instead** means
+`https://localhost/connectors` isn't in your application's redirect URLs.
 
 **Enable Banking: "the Enable Banking private key is not a valid PEM RSA key"** — paste the whole
 `.pem` file, including the BEGIN and END lines.

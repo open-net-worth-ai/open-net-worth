@@ -58,7 +58,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from backend.core.errors import ExternalServiceError, ValidationError
+from backend.core.errors import ExternalServiceError, RedirectNotRegisteredError, ValidationError
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services import ledger as ledger_service
 from backend.services.aggregation.providers import FetchWindow, derived_ref
@@ -74,8 +74,8 @@ _HTTP_TIMEOUT = 30.0
 _JWT_TTL_SECONDS = 3600
 _JWT_ISS = "enablebanking.com"
 _JWT_AUD = "api.enablebanking.com"
-# A default redirect when the caller doesn't supply one (the link flow needs a redirect URI
-# registered with the application).
+# The redirect when the caller sends none: the user chose to link by pasting the code. The
+# setup docs have always asked for it, so an older setup has it registered.
 _DEFAULT_REDIRECT = "https://localhost/connectors"
 # Guard against a pathological never-terminating continuation_key page loop.
 _MAX_FETCH_PAGES = 50
@@ -254,18 +254,19 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
     """Start the bank-consent flow for ``aspsp`` (a bank name from ``list_institutions``).
 
     POSTs ``/auth``; Enable Banking returns the consent ``url`` the USER opens. The bank sends
-    them back to ``redirect`` (the app's own ``/connectors/enable-banking`` — the path is
-    what tells the app the return is Enable Banking's; the control panel refuses a redirect
-    with a query string) with ``state`` and ``code`` added. Enable Banking
-    accepts only a redirect registered on the application, matched exactly (verified on the
-    sandbox): when the app's own URL is refused, the link falls back to ``_DEFAULT_REDIRECT``,
-    the URL the setup docs have always asked for, where the user pastes the code by hand —
-    so an existing setup keeps working. ``returns_to_app`` says which one was used.
+    them back to ``redirect`` (the app's own ``/connectors/callback/enable_banking`` — the path
+    is what tells the app the return is Enable Banking's; the control panel refuses a redirect
+    with a query string) with ``state`` and ``code`` added. Enable Banking accepts only a
+    redirect registered on the application, matched exactly, and says so at once
+    (``REDIRECT_URI_NOT_ALLOWED``) — before any bank page exists. That refusal raises
+    ``RedirectNotRegisteredError`` naming the address to add: nobody is sent to a bank whose
+    answer would land on a page that cannot load. No ``redirect`` at all is the user's own
+    choice to link by pasting the code; it uses ``_DEFAULT_REDIRECT``.
 
     The ``state`` sent is remembered with its bank (``pending_links``) so ``create_session``
-    can tell the return belongs to a link started here, and which bank it linked. Returns ``{url, authorization_id, aspsp,
-    returns_to_app, redirect_url}``. Raises ``ValidationError`` on a bad bank / auth /
-    transport failure."""
+    can tell the return belongs to a link started here, and which bank it linked. Returns
+    ``{url, authorization_id, aspsp, returns_to_app, redirect_url}``. Raises
+    ``ValidationError`` on a bad bank / auth / transport failure."""
     bank = (aspsp or "").strip()
     if not bank:
         raise ValidationError("aspsp (bank) is required")
@@ -289,13 +290,14 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
         "psu_type": "personal",
     }
     resp = _post_auth(token, payload)
-    if app_url and app_url != _DEFAULT_REDIRECT and _redirect_refused(resp):
-        payload["redirect_url"] = _DEFAULT_REDIRECT
-        resp = _post_auth(token, payload)
+    if app_url and _redirect_refused(resp):
+        raise RedirectNotRegisteredError(
+            f"Enable Banking doesn't know this address yet. Add {app_url} to your app's "
+            "redirect URLs at enablebanking.com, then try again.",
+            redirect_url=app_url,
+        )
     if resp.status_code not in (200, 201):
-        # Neither URL is registered: name the app's own, the one that brings the user back.
-        shown = app_url or payload["redirect_url"]
-        raise _api_error(resp, "starting the bank link", redirect_url=shown)
+        raise _api_error(resp, "starting the bank link", redirect_url=payload["redirect_url"])
 
     data = resp.json() or {}
     url = (data.get("url") or data.get("authorization_url") or "").strip()

@@ -185,22 +185,22 @@ const connectorsRoute = createRoute({
   // URL, not the tab id — see SLUG_ALIASES's own comment).
   path: '/connectors',
 })
-// Enable Banking's return. Its control panel refuses a redirect URL with a query string, so the
-// marker lives in the path; this turns it into /connectors?connector=enable_banking&state=…,
-// which ConnectorsTab finishes. A bare state + code on /connectors is never taken as one.
-export function enableBankingReturnSearch(search: Record<string, unknown>) {
-  return { ...search, connector: 'enable_banking' }
+// A provider's return after consent: /connectors/callback/<connector id>. The path says whose
+// return it is — Enable Banking refuses a redirect URL with a query string — and this hands it
+// on as /connectors?connector=<id>&…, which ConnectorsTab finishes. A bare state + code on
+// /connectors is never taken as a provider's return.
+export function connectorCallbackSearch(connector: string, search: Record<string, unknown>) {
+  return { ...search, connector }
 }
-const enableBankingReturnRoute = createRoute({
+const connectorCallbackRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/connectors/enable-banking',
-  beforeLoad: ({ location }) => {
-    throw redirect({
-      to: '/connectors',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      search: enableBankingReturnSearch(location.search as Record<string, unknown>) as any,
-      replace: true,
-    })
+  path: '/connectors/callback/$connector',
+  beforeLoad: ({ params, location }) => {
+    const search = connectorCallbackSearch(
+      params.connector,
+      location.search as Record<string, unknown>,
+    )
+    throw redirect({ to: '/connectors', search: search as never, replace: true })
   },
 })
 const settingsRoute = createRoute({
@@ -308,7 +308,7 @@ const routeTree = rootRoute.addChildren([
   buildRoute,
   profileRoute,
   // Drill-in before parent
-  enableBankingReturnRoute,
+  connectorCallbackRoute,
   connectorsRoute,
   settingsRoute,
   helpIndexRoute,

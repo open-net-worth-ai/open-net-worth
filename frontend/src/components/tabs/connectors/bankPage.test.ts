@@ -44,6 +44,8 @@ describe('enableBankingReturnOf', () => {
   })
 
   it('returns to a path of its own: Enable Banking refuses a redirect URL with a query', () => {
-    expect(enableBankingReturnUrl()).toBe(`${window.location.origin}/connectors/enable-banking`)
+    expect(enableBankingReturnUrl()).toBe(
+      `${window.location.origin}/connectors/callback/enable_banking`,
+    )
   })
 })

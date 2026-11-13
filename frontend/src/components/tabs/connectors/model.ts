@@ -465,6 +465,9 @@ export interface FocusConnectorOptions {
    *  have. Ignored when there is nothing to set up — a connector with no form (MCP, or
    *  `.env`-managed) or one that already holds credentials. */
   configure?: boolean
+  /** With `configure`: open on the form even when the connector is already set up — for a
+   *  caller whose message lives in the form (a bank return that failed). */
+  formFirst?: boolean
   /** Seeds a form that would otherwise ask for a country the user has already typed — the
    *  institution search resolves country → provider and hands the country on. */
   country?: string

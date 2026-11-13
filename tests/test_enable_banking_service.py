@@ -232,13 +232,15 @@ def test_start_authorization_error_carries_enable_bankings_reason(monkeypatch):
     assert "state" in msg and "'x'" not in msg
 
 
-def test_start_authorization_unregistered_redirect_names_the_url(monkeypatch):
+def test_start_authorization_unregistered_default_redirect_names_the_url(monkeypatch):
+    """Linking with a code (no app address sent) and the default URL isn't registered
+    either: Enable Banking's own reason, naming the URL to add."""
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     body = {"code": 400, "message": "Redirect URI not allowed", "error": "REDIRECT_URI_NOT_ALLOWED"}
     monkeypatch.setattr(svc.httpx, "post", lambda *a, **k: _JsonResp(400, body))
     with pytest.raises(ValidationError) as exc:
-        svc.start_authorization("Mock ASPSP", "FI", "https://app.example/connectors")
-    assert "https://app.example/connectors" in str(exc.value)
+        svc.start_authorization("Mock ASPSP", "FI", "")
+    assert svc._DEFAULT_REDIRECT in str(exc.value)
 
 
 def test_api_error_survives_a_non_json_body():
@@ -354,25 +356,42 @@ def test_start_authorization_returns_to_the_app_when_its_url_is_registered(monke
     assert [p["state"] for p in _store().get()["pending_links"]] == [sent[0]["state"]]
 
 
-def test_start_authorization_falls_back_when_the_app_url_is_not_registered(monkeypatch):
-    """An install set up from the old docs registered only the default URL: the link must
-    still start (the user pastes the code), not fail with REDIRECT_URI_NOT_ALLOWED."""
+def test_start_authorization_stops_when_the_app_url_is_not_registered(monkeypatch):
+    """Enable Banking refuses an unregistered address before any bank page exists: the link
+    stops there, naming the address to add — never a silent switch to a URL whose return
+    lands on a page that cannot load. Nothing is remembered as a pending link."""
+    from backend.core.errors import RedirectNotRegisteredError
+
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     sent = []
 
     def _post(url, json, **kw):
         sent.append(dict(json))
-        if json["redirect_url"] != svc._DEFAULT_REDIRECT:
-            return _refused()
+        return _refused()
+
+    monkeypatch.setattr(svc.httpx, "post", _post)
+    app_url = "http://localhost:8090/connectors/callback/enable_banking"
+    with pytest.raises(RedirectNotRegisteredError) as exc:
+        svc.start_authorization("Mock ASPSP", "FI", app_url)
+    assert [p["redirect_url"] for p in sent] == [app_url]
+    assert exc.value.context["redirect_url"] == app_url and app_url in exc.value.message
+    assert not _store().get()["pending_links"]
+
+
+def test_start_authorization_with_a_code_uses_the_default_redirect(monkeypatch):
+    """The user chose "Link with a code instead": no app address, the default one, and the
+    form is told the bank won't bring them back."""
+    monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
+    sent = []
+
+    def _post(url, json, **kw):
+        sent.append(dict(json))
         return _JsonResp(200, {"url": "https://bank.example/a", "authorization_id": "A"})
 
     monkeypatch.setattr(svc.httpx, "post", _post)
-    out = svc.start_authorization("Mock ASPSP", "FI", "http://localhost:8090/connectors")
-    assert [p["redirect_url"] for p in sent] == [
-        "http://localhost:8090/connectors",
-        svc._DEFAULT_REDIRECT,
-    ]
-    assert out["returns_to_app"] is False and out["redirect_url"] == svc._DEFAULT_REDIRECT
+    out = svc.start_authorization("Mock ASPSP", "FI", "")
+    assert [p["redirect_url"] for p in sent] == [svc._DEFAULT_REDIRECT]
+    assert out["returns_to_app"] is False
 
 
 def test_start_authorization_refuses_a_non_http_redirect():

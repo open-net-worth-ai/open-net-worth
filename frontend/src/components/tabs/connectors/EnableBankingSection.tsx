@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { enableBankingReturnUrl, openBankPageTab, takeEnableBankingReturnError } from './bankPage'
+import {
+  clearEnableBankingReturnError,
+  enableBankingReturnUrl,
+  openBankPageTab,
+  peekEnableBankingReturnError,
+} from './bankPage'
 import {
   Stack,
   Cluster,
@@ -130,11 +135,21 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const [aspsp, setAspsp] = useState('')
   const [loadingBanks, setLoadingBanks] = useState(false)
   // A failed return from the bank lands here with its reason (ConnectorsTab keeps it).
-  const [linkErr, setLinkErr] = useState<string | null>(takeEnableBankingReturnError)
+  const [linkErr, setLinkErr] = useState<string | null>(peekEnableBankingReturnError)
+  // Listing a country's banks has its own line: loading them on open must not wipe the reason
+  // a bank return failed.
+  const [banksErr, setBanksErr] = useState<string | null>(null)
+  // Shown once: the reason from a failed bank return stays in this form, not the next one.
+  useEffect(() => clearEnableBankingReturnError(), [])
   const [linking, setLinking] = useState(false)
   // After Link bank: whether the bank will bring the user back here (the app's URL is
   // registered), or to the old https://localhost/connectors page they copy the code from.
   const [returnsToApp, setReturnsToApp] = useState<boolean | null>(null)
+  // Enable Banking refused this app's address: the address to add, and the bank to retry.
+  const [unregistered, setUnregistered] = useState<{
+    url: string
+    target?: EnableBankingBank
+  } | null>(null)
   const [copied, setCopied] = useState(false)
   const [showPaste, setShowPaste] = useState(false)
   const [editingSetup, setEditingSetup] = useState(false)
@@ -192,7 +207,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
 
   async function loadBanks(code: string, keep?: string) {
     setLoadingBanks(true)
-    setLinkErr(null)
+    setBanksErr(null)
     setInstitutions([])
     setAspsp('')
     try {
@@ -201,7 +216,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       )
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
-        setLinkErr(d.detail || 'Could not list banks.')
+        setBanksErr(d.detail || 'Could not list banks.')
         return
       }
       const data = (await r.json()) as { institutions: Institution[] }
@@ -219,8 +234,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     if (cfg?.has_credentials) void loadBanks(code)
   }
 
-  /** Start a consent: for the picked bank, or — Renew on a listed one — for that bank. */
-  async function linkBank(target?: EnableBankingBank) {
+  /** Start a consent: for the picked bank, or — Renew on a listed one — for that bank.
+   *  `withCode`: the user chose to link by pasting the code (no address of ours is sent). */
+  async function linkBank(target?: EnableBankingBank, withCode = false) {
     const bank = target ? target.aspsp : aspsp
     const code = target ? target.country : country
     if (!bank) return
@@ -229,15 +245,27 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     setLinking(true)
     setRenewingKey(target?.key ?? null)
     setLinkErr(null)
+    setUnregistered(null)
     try {
       const r = await authFetch('/api/enable-banking/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aspsp: bank, country: code, redirect: enableBankingReturnUrl() }),
+        body: JSON.stringify({
+          aspsp: bank,
+          country: code,
+          redirect: withCode ? '' : enableBankingReturnUrl(),
+        }),
       })
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
-        setLinkErr(d.detail || 'Could not start the bank link.')
+        if (d.detail?.code === 'redirect_not_registered') {
+          setUnregistered({ url: d.detail.redirect_url || enableBankingReturnUrl(), target })
+          return
+        }
+        setLinkErr(
+          (typeof d.detail === 'string' ? d.detail : d.detail?.message) ||
+            'Could not start the bank link.',
+        )
         return
       }
       const data = (await r.json()) as { url: string; returns_to_app?: boolean }
@@ -316,7 +344,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     )
   }
 
-  // The paste fallback stays folded away unless asked for, or unless this link fell back to it.
+  // The paste fallback stays folded away unless asked for, or unless this link chose it.
   const pasteOpen = showPaste || returnsToApp === false
   const banks = cfg.banks ?? []
   // Picking a bank that is already listed renews it (the server swaps the consent in).
@@ -325,9 +353,8 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const consentExpired =
     banks.some((b) => accessEnded(b)) ||
     (cfg.has_session && /401|403|expired|unauthori[sz]ed|consent/i.test(cfg.last_error || ''))
-  // Step 1 stays open until its keys are saved, while being edited, or when a link fell back
-  // to pasting a code (its Redirect URL is the fix).
-  const setupOpen = !cfg.has_credentials || editingSetup || returnsToApp === false
+  // Step 1 stays open until its keys are saved, or while being edited.
+  const setupOpen = !cfg.has_credentials || editingSetup
   const keysState: SetupStepState = cfg.has_credentials ? 'done' : 'current'
   const linkState: SetupStepState = cfg.has_session
     ? 'done'
@@ -335,9 +362,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       ? 'current'
       : 'todo'
   const redirectUrl = enableBankingReturnUrl()
-  function copyRedirect() {
+  function copyRedirect(url: string = redirectUrl) {
     // Absent over plain http on another host: the value is on screen and selectable anyway.
-    navigator.clipboard?.writeText(redirectUrl).catch(() => {})
+    navigator.clipboard?.writeText(url).catch(() => {})
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
   }
@@ -391,7 +418,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
             >
               <Cluster gap="--space-2" align="center" wrap={false}>
                 <code className="eb-url">{redirectUrl}</code>
-                <Button size="sm" aria-label="Copy the redirect URL" onClick={copyRedirect}>
+                <Button size="sm" aria-label="Copy the redirect URL" onClick={() => copyRedirect()}>
                   {copied ? <Icons.check /> : <Icons.copy />}
                   {copied ? 'Copied' : 'Copy'}
                 </Button>
@@ -542,6 +569,11 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
             </Button>
           </Cluster>
 
+          {banksErr && (
+            <Text size="xs" tone="bad">
+              {banksErr}
+            </Text>
+          )}
           {linkErr && (
             <Text size="xs" tone="bad">
               {linkErr}
@@ -553,11 +585,51 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
               link finishes by itself.
             </Text>
           )}
+          {unregistered && (
+            <div className="eb-unregistered" role="alert">
+              <Stack gap="--space-2">
+                <Text size="sm" weight={600}>
+                  Add this address to your Enable Banking app first
+                </Text>
+                <Cluster gap="--space-2" align="center" wrap={false}>
+                  <code className="eb-url">{unregistered.url}</code>
+                  <Button
+                    size="sm"
+                    aria-label="Copy the address"
+                    onClick={() => copyRedirect(unregistered.url)}
+                  >
+                    {copied ? <Icons.check /> : <Icons.copy />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                </Cluster>
+                <Text size="xs" tone="muted">
+                  Paste it under Redirect URLs in your app at{' '}
+                  <a
+                    href="https://enablebanking.com/cp/applications"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    enablebanking.com
+                  </a>
+                  , save, then link again. Your bank will bring you straight back here.
+                </Text>
+                <div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="eb-link"
+                    onClick={() => void linkBank(unregistered.target, true)}
+                  >
+                    Can&apos;t add it? Link with a code instead
+                  </Button>
+                </div>
+              </Stack>
+            </div>
+          )}
           {returnsToApp === false && (
             <Text size="xs" tone="warn">
-              Your bank will send you to a page that won&apos;t load. Copy the code from its address
-              bar (the part after code=) and paste it below. To skip this next time, add the
-              Redirect URL from step 1 to your Enable Banking app.
+              After you approve, the bank tab shows an error page. That&apos;s expected: copy the
+              code from its address bar (the part after code=) and paste it below.
             </Text>
           )}
 

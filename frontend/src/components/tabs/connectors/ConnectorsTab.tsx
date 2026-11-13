@@ -101,6 +101,7 @@ export function ConnectorsTab(): JSX.Element {
    *  already declared intent to set the connector up; re-decided on every `openConnector`,
    *  so it can never leak into the next connector focused. */
   const [configureOnOpen, setConfigureOnOpen] = useState(false)
+  const [formFirstOnOpen, setFormFirstOnOpen] = useState(false)
   const [toast, toastNode] = useToast()
   const composer = useChatComposerOptional()
   const navigate = useNavigate()
@@ -159,6 +160,7 @@ export function ConnectorsTab(): JSX.Element {
     setBankPickerOpen(false)
     setRoutedCountry(opts?.country)
     setConfigureOnOpen(opts?.configure === true)
+    setFormFirstOnOpen(opts?.formFirst === true)
     setDetailId(connectorId)
   }
 
@@ -226,7 +228,10 @@ export function ConnectorsTab(): JSX.Element {
       // Linked: the connector page, whose Accounts list is the next step. Not linked: the form,
       // with the reason under Link bank and the pickers to try again.
       if (!res.ok) keepEnableBankingReturnError(res.message)
-      void reload().finally(() => openConnector('enable_banking', { configure: !res.ok }))
+      // An already-linked connector opens its form too: the reason is shown there.
+      void reload().finally(() =>
+        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok }),
+      )
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, ebReturn?.state, ebReturn?.code])
@@ -572,6 +577,7 @@ export function ConnectorsTab(): JSX.Element {
             ) : undefined
           }
           configureOnOpen={configureOnOpen}
+          formFirst={formFirstOnOpen}
           onConfigClosed={() => void reload()}
           onSaved={() => {
             // A save that CREATED a connector has already said so, by name.

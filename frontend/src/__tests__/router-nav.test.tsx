@@ -24,7 +24,7 @@ import {
 } from '@tanstack/react-router'
 import { TABS } from '../tabs'
 import { tabToSlug, slugToTab, SLUG_MAP, SLUG_ALIASES } from '../routeSlug'
-import { defaultLandingTab, enableBankingReturnSearch, validateAccountsSearch } from '../router'
+import { defaultLandingTab, connectorCallbackSearch, validateAccountsSearch } from '../router'
 import { enableBankingReturnOf } from '../components/tabs/connectors/bankPage'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -55,8 +55,8 @@ it('preserves the transaction-review route command and rejects unknown values', 
   expect(validateAccountsSearch({ review: 'anything-else' }).review).toBeUndefined()
 })
 
-it('hands an Enable Banking return on to /connectors with the marker it needs', () => {
-  const search = enableBankingReturnSearch({ state: 's', code: 'c' })
+it('hands a connector callback on to /connectors with the marker it needs', () => {
+  const search = connectorCallbackSearch('enable_banking', { state: 's', code: 'c' })
   expect(search).toEqual({ state: 's', code: 'c', connector: 'enable_banking' })
   expect(enableBankingReturnOf(search)).toEqual({ state: 's', code: 'c', error: '' })
 })

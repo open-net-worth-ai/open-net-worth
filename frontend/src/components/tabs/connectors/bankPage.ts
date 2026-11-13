@@ -78,7 +78,7 @@ export const BANK_RETURN_CHECKS: Record<string, () => Promise<unknown>> = {
  *  not a query: Enable Banking refuses to register a redirect URL with query parameters, and
  *  compares the one it holds exactly — so this is the URL the setup form shows to register. */
 export function enableBankingReturnUrl(): string {
-  return `${window.location.origin}/connectors/enable-banking`
+  return `${window.location.origin}/connectors/callback/${ENABLE_BANKING}`
 }
 
 const ENABLE_BANKING = 'enable_banking'
@@ -89,7 +89,7 @@ export interface EnableBankingReturn {
   error: string
 }
 
-/** An Enable Banking return, as the `/connectors/enable-banking` route hands it on:
+/** An Enable Banking return, as the `/connectors/callback/enable_banking` route hands it on:
  *  `?connector=enable_banking&state=…&code=…` after consent, or `…&state=…&error=…` when the
  *  user cancelled or the bank refused. Null for anything else — including a `state` + `code`
  *  without the marker. A `?…` appended after one already there lands inside `connector`, so
@@ -139,13 +139,20 @@ export function keepEnableBankingReturnError(message: string): void {
   }
 }
 
-/** The failed return's message, once: reading it clears it. */
-export function takeEnableBankingReturnError(): string | null {
+/** The failed return's message, if one is waiting. Reading never clears it (a render may run
+ *  twice); `clearEnableBankingReturnError` does, once the form has shown it. */
+export function peekEnableBankingReturnError(): string | null {
   try {
-    const message = sessionStorage.getItem(EB_RETURN_ERROR)
-    sessionStorage.removeItem(EB_RETURN_ERROR)
-    return message
+    return sessionStorage.getItem(EB_RETURN_ERROR)
   } catch {
     return null
+  }
+}
+
+export function clearEnableBankingReturnError(): void {
+  try {
+    sessionStorage.removeItem(EB_RETURN_ERROR)
+  } catch {
+    // storage unavailable — nothing was kept
   }
 }
