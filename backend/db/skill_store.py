@@ -1031,6 +1031,9 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             # 2026-11-13: never looked up the broker a new user named (a friend's moomoo went
             # unmentioned); now its connector card is offered before they type holdings.
             "66fcc3536112bef733be51d6af6f13ef3145f614a961fccc2f9ace28268ff94f",
+            # 2026-11-13 (543e39ea): an unlisted broker was dropped; now the official-server
+            # check of `beyond_directory` runs and the custom-server card is offered.
+            "e5ba7eaabb5d1a8be37fa5c74d1735d3d9388ccf69b762621bfdcff7c32be663",
         }
     ),
     # 2026-09-26: read the non-existent profile.monthly_budgets and wrote through
