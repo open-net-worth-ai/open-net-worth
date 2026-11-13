@@ -1202,7 +1202,7 @@
   border-bottom: 1px solid var(--line);
 }
 .acct-side-nw-k {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
@@ -1302,7 +1302,7 @@
 }
 /* The total beneath is the accounts' own sum, so it must not read as a second net worth. */
 .acct-all-sub {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 400;
   color: var(--faint);
   margin-top: 1px;
@@ -1330,7 +1330,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 4px 12px 6px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
@@ -1397,7 +1397,7 @@
   gap: 6px;
 }
 .acct-row-sub {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 1px;
   white-space: nowrap;
@@ -1427,7 +1427,7 @@
 }
 .acct-row-cur {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 1px;
 }
@@ -1454,7 +1454,7 @@
 }
 .acct-venue-sub {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   white-space: nowrap;
 }
@@ -1871,7 +1871,7 @@
   min-width: 0;
 }
 .acct-sumstat .k {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   display: flex;
   align-items: center;
@@ -1943,7 +1943,7 @@
   justify-content: space-between;
 }
 .acct-ov-k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--faint);
@@ -2088,7 +2088,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--faint);
@@ -2245,7 +2245,7 @@
     font-size: 13px;
   }
   .acct-bal-lbl {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     white-space: nowrap;
   }
   .acct-bal-op {
@@ -2294,7 +2294,7 @@
   min-width: 8px;
 }
 .acct-recon-month {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-weight: 700;
@@ -2910,7 +2910,7 @@
   }
 }
 .acct-advbadge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   min-width: 16px;
   height: 16px;
@@ -3021,7 +3021,7 @@
   gap: 8px;
 }
 .acct-advsec {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -3462,7 +3462,7 @@
   height: 100%;
 }
 .acct-reg-head > span {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -3607,7 +3607,7 @@
   cursor: pointer;
   color: transparent;
   justify-self: center;
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .acct-cb.on {
   background: var(--ink);
@@ -3627,7 +3627,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .acct-clr .o {
   color: var(--fg-3);
@@ -3699,7 +3699,7 @@
   margin-left: 0;
 }
 .acct-tag {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--muted);
   background: var(--bg-2);
   border-radius: var(--radius-xs);
@@ -3780,7 +3780,7 @@
 }
 .acct-splitline-note {
   color: var(--faint);
-  font-size: 0.92em;
+  font-size: max(var(--text-2xs), 0.92em);
   overflow-wrap: anywhere;
 }
 .acct-splitline-amt {
@@ -3801,7 +3801,7 @@
   justify-content: flex-start;
 }
 .acct-src-badge {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--muted);
   width: 22px;
@@ -4105,7 +4105,7 @@ select.acct-addin {
   margin-top: 0;
 }
 .acct-acctsel-h {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -4230,7 +4230,7 @@ select.acct-addin {
 }
 .acct-datef-dow span {
   text-align: center;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--faint);
   padding: 4px 0;
@@ -4325,7 +4325,7 @@ select.acct-addin {
   padding: 6px;
 }
 .acct-payf-h {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -4650,7 +4650,7 @@ select.acct-addin {
   background: var(--warn, #e0a032);
 }
 .acct-amt-orig {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   color: var(--faint);
 }
@@ -4672,7 +4672,7 @@ select.acct-addin {
   color: var(--violet);
 }
 .acct-td-amt .ccy {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-left: 3px;
   font-weight: 500;
@@ -4989,7 +4989,7 @@ select.acct-addin {
   cursor: default;
 }
 .acct-selmenu-h {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -5231,7 +5231,7 @@ select.acct-addin {
   border-top-color: var(--modal-bg);
 }
 .acct-bm-lbl {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -5305,7 +5305,7 @@ select.acct-addin {
 }
 .acct-bm-kbd {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--faint);
   background: var(--bg-2);
@@ -5611,7 +5611,7 @@ select.acct-addin {
   text-transform: none;
   letter-spacing: 0;
   font-weight: 400;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   font-style: italic;
   margin-left: 2px;
@@ -6873,7 +6873,7 @@ select.acct-addin {
 }
 .pm-item-sub {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 2px;
   white-space: nowrap;
@@ -6964,7 +6964,7 @@ select.acct-addin {
 }
 .pm-label {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -6999,7 +6999,7 @@ select.acct-addin {
   margin-bottom: 22px;
 }
 .pm-sec-title {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -7036,7 +7036,7 @@ select.acct-addin {
 }
 .pm-chip-rule .pm-chip-type {
   font-family: inherit;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -7205,7 +7205,7 @@ select.acct-addin {
 }
 .pm-danger-head {
   padding: 9px 14px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--bad);
@@ -7532,7 +7532,7 @@ select.acct-addin {
   font-size: 13px;
 }
 .acct-review-pill {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -7684,7 +7684,7 @@ select.acct-addin {
   padding: 14px 18px 0;
 }
 .acct-detail-kicker {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
@@ -7813,7 +7813,7 @@ select.acct-addin {
 }
 .acct-detail-sec {
   padding: 16px 18px 4px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -8488,14 +8488,14 @@ select.acct-addin {
   gap: 6px;
 }
 .acct-edit-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
   font-weight: 700;
 }
 .acct-edit-hint {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
 }
 .acct-edit-grid2 {
@@ -8713,7 +8713,7 @@ select.acct-addin {
   border-color: var(--accent);
 }
 .acct-edit-splitccy {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--faint);
   letter-spacing: 0.04em;
@@ -8833,7 +8833,7 @@ select.acct-addin {
   color: var(--agent, #2fa6a0);
 }
 .acct-detail-badge {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -8959,7 +8959,7 @@ select.acct-addin {
   color: var(--ink);
 }
 .acct-detail-tl-time {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 3px;
   font-variant-numeric: tabular-nums;
@@ -9103,7 +9103,7 @@ select.acct-addin {
   min-width: 0;
 }
 .imp-srcfmt {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -9367,7 +9367,7 @@ select.acct-addin {
   display: inline-block;
   margin-top: 4px;
   margin-right: 5px;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -9567,7 +9567,7 @@ select.acct-addin {
 }
 .acct-stmt-err-caret {
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   display: inline-flex;
   align-items: center;
 }
@@ -9647,7 +9647,7 @@ select.acct-addin {
 .imp-offby {
   flex: none;
   align-self: center;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 650;
   padding: 2px 7px;
   border-radius: 999px;
@@ -9931,7 +9931,7 @@ button.acct-alert-src {
 }
 .acct-stmtview-check-group {
   padding: 7px 12px 3px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;

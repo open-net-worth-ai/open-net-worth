@@ -11,12 +11,9 @@
    scrolled content too early). Pinned offsets read the MEASURED mast height. */
 /* Contrast floor for the whole Planning page (owner ask, 2026-09-15: "not enough contrast,
    hard to read" — table headers, zero figures, hints and chip labels all read as disabled).
-   This page leans hard on the two LIGHTEST text tiers, and neither of them is actually
-   readable: on the light theme `--faint` (#969aa1) lands at ~2.8:1 against the page and
-   `--fg-3` (#a4a7ad) at ~2.4:1 — both below WCAG's 4.5:1 for body text; the dark theme's
-   #646c7c / #4a515f are worse. `--muted` clears it in every theme (~5.9:1 light). Rather than
-   chase ~130 individual `color:` declarations — and re-chase every new one — both failing
-   tiers are aliased up to `--muted` at the page root, so the page keeps exactly TWO text
+   This page leans hard on the two LIGHTEST text tiers. Both now clear 4.5:1 globally
+   (2026-11-13 audit), but the page still wants exactly two tones, so both
+   are aliased up to `--muted` at the page root, so the page keeps exactly TWO text
    tones: `--ink` for content and `--muted` for everything supporting. Scoped to `.pl-page`;
    the tokens themselves and every other tab are untouched. Two non-text uses of `--fg-3` on
    this page (the .cfx-dot) just gets marginally more visible. */
@@ -1064,7 +1061,7 @@
   background: color-mix(in srgb, var(--warn) 12%, transparent);
 }
 .pl-sum-stat .k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--faint);
@@ -1300,7 +1297,7 @@
   color: var(--good);
 }
 .pl-sum-stat .s {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
 }
 /* 3-up tile row (path / outcomes) — same fixed-grid-overflows-on-a-phone shape as
@@ -1576,7 +1573,7 @@
   z-index: 70; /* z-local: dropdown menu above sticky headers */
 }
 .pl-menu-lbl {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--faint);
@@ -1709,7 +1706,7 @@
 .pl-thead > span {
   /* 9.5px + 0.07em tracking + the lightest ink was three legibility problems stacked; the
      colour is fixed at the page root now, and this is the size half (owner ask, 2026-09-15). */
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -1736,7 +1733,7 @@
   align-items: center;
   gap: 5px;
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -1827,7 +1824,7 @@
   align-items: center;
 }
 .pl-gcount {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   font-weight: 600;
   background: var(--bg-2);
@@ -2220,7 +2217,7 @@
   gap: 2px;
 }
 .pl-paycell-label {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -2582,7 +2579,7 @@
   text-align: left;
 }
 .pl-mnum-lbl {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -2763,7 +2760,7 @@
 }
 .pl-actpop-thead {
   padding: 9px 2px 8px;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -3531,7 +3528,7 @@
   padding: 12px 14px;
 }
 .pl-tiles--out .pl-tile-k {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
 }
 .pl-tiles--out .pl-tile-v {
   font-size: 20px;
@@ -3731,7 +3728,7 @@
   }
 }
 .pl-lever-sub {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 7px;
 }
@@ -3885,7 +3882,7 @@
   border-bottom: 1px solid var(--line);
 }
 .pl-acc-head > div {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--faint);
@@ -4166,7 +4163,7 @@
   margin-top: 10px;
   padding: 3px 8px;
   border-radius: var(--radius-pill);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--good);
@@ -4209,7 +4206,7 @@
   z-index: 8; /* z-local: hover tooltip — must win over every other in-chart overlay (event chips, retire pill, markers) since it's reporting on the exact point under the cursor */
 }
 .pl-chart-tip .d {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-bottom: 6px;
   font-variant-numeric: tabular-nums;
@@ -4242,7 +4239,7 @@
   align-items: center;
   white-space: nowrap;
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.02em;
   padding: 3px 10px;
@@ -4504,7 +4501,7 @@
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--ink);
   cursor: ew-resize;
@@ -4548,7 +4545,7 @@
   gap: 2px;
   pointer-events: none;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--good);
   transition: opacity 0.15s;
@@ -4573,7 +4570,7 @@
   transform: translateX(-50%);
   pointer-events: none;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--bad);
   transition: opacity 0.15s;
@@ -4590,7 +4587,7 @@
   transform: translateX(3px);
   pointer-events: none;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--bad);
   background: var(--surface);
@@ -4994,7 +4991,7 @@
   font-weight: 700;
 }
 .pl-needle .pl-lever-sub {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   margin-top: 6px;
   line-height: 1.35;
 }
@@ -5092,7 +5089,7 @@
   color: var(--faint);
 }
 .pl-scenrow-tag {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -5281,7 +5278,7 @@
   height: 22px;
   border-radius: 6px;
   overflow: hidden;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -5311,7 +5308,7 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: none;
@@ -5384,7 +5381,7 @@
   border: 1px solid var(--line-strong);
   color: var(--fg-3);
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   font-style: italic;
   text-transform: none;
@@ -5415,7 +5412,7 @@
     system-ui,
     sans-serif;
   font-style: normal;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   width: 13px;
   height: 13px;
   color: currentColor;
@@ -5636,7 +5633,7 @@
   color: var(--bad);
 }
 .cfx-eyebrow {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--faint);
@@ -5673,7 +5670,7 @@
 .cfx-sim {
   display: inline-block;
   margin-left: 4px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -5888,7 +5885,7 @@
   font-variant-numeric: tabular-nums;
 }
 .fire-formula-k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -6047,7 +6044,7 @@
   pointer-events: none;
 }
 .cfx-tip-m {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--faint);
   letter-spacing: 0.01em;
@@ -6080,7 +6077,7 @@
   position: absolute;
   transform: translate(-50%, calc(-100% - 9px));
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 14%, var(--surface));
@@ -6111,7 +6108,7 @@
 }
 .cfx-thr-key {
   color: var(--fg-3);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
 }
 
 /* Hero stat strip */
@@ -6129,7 +6126,7 @@
   gap: 5px;
 }
 .cfx-stat .k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--faint);
@@ -6341,7 +6338,7 @@
   background: var(--bg-2);
 }
 .cfx-colhead span {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -6388,7 +6385,7 @@
   transform: rotate(-90deg);
 }
 .cfx-year-count {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--fg-3);
@@ -6485,7 +6482,7 @@
   font-weight: 500;
 }
 .cfx-tag {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -6623,7 +6620,7 @@
   gap: 3px;
 }
 .cfx-flow .k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--faint);
@@ -6655,7 +6652,7 @@
   gap: 9px;
 }
 .cfx-events-h {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -6669,7 +6666,7 @@
   font-size: 12.5px;
 }
 .cfx-ev-cat {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -7262,7 +7259,7 @@
   border: none;
   padding: 2px 4px;
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--faint);
   cursor: pointer;
@@ -7368,7 +7365,7 @@
 }
 .pl-tgt-grid .pl-modal-label {
   margin-bottom: 0;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
 }
 .pl-tgt-cad {
   justify-self: start;
@@ -7895,7 +7892,7 @@
   align-items: center;
   gap: 3px;
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--faint);
   background: var(--bg-2);
@@ -7905,7 +7902,7 @@
 }
 .pl-envcats--btn {
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   border: 1px solid transparent;
   cursor: pointer;
@@ -8677,7 +8674,7 @@
 .pl-gsynced {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -9059,7 +9056,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   border: none;
   color: var(--faint);
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   padding: 0 0 0 2px;
   line-height: 1;
   display: inline-flex;
@@ -9174,7 +9171,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
 /* Kind pill (Kind column) */
 .pl-kindpill {
   display: inline-flex;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: capitalize;
@@ -9272,7 +9269,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
     gap: 8px;
   }
   .pl-sum-eyebrow {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.1em;
   }
   .pl-mnav {
@@ -9742,7 +9739,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
     gap: 10px;
   }
   .mf-kpi .k {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.04em;
   }
   .mf-kpi .v {

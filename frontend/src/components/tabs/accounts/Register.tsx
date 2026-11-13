@@ -24,6 +24,7 @@ import { Button, Cluster, EmptyState, Loading } from '../../ui'
 import { Receipt } from '../../../ui/icons'
 import { LuciusCta } from '../../intro/LuciusCta'
 import { fDate } from '../../../utils/format'
+import { keyActivate } from '../../../utils/keyActivate'
 
 export type { RowPatch }
 
@@ -470,7 +471,9 @@ export function Register({
                     (c.sortable ? ' sortable' : '') +
                     (sort.key === c.key ? ' sorted' : '')
                   }
-                  onClick={c.sortable ? () => toggleSort(c.key) : undefined}
+                  {...(c.sortable
+                    ? { role: 'button', ...keyActivate(() => toggleSort(c.key)) }
+                    : {})}
                 >
                   {c.key === 'cb' ? (
                     <span className="acct-cbwrap">

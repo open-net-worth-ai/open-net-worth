@@ -11,6 +11,7 @@ import { ASSET_CLASS_COLOR, paletteColor } from '../../../utils/constants'
 import { EntityRow } from '../../../lucius/EntityRow'
 import { KebabMenu } from '../planning/KebabMenu'
 import { usePointerResize } from '../../../hooks/usePointerResize'
+import { keyActivate } from '../../../utils/keyActivate'
 
 const WRAP: Record<string, string> = {
   etf: 'ETF',
@@ -324,7 +325,7 @@ export function FeedTable({
                       <tr
                         key={r.rowKey}
                         className="data drill"
-                        onClick={() => onOpenAssetDetail?.(r)}
+                        {...keyActivate(() => onOpenAssetDetail?.(r))}
                       >
                         {cells}
                       </tr>

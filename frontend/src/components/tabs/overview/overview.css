@@ -739,7 +739,7 @@
   border-radius: var(--radius-pill, 999px);
   box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.3));
   padding: 3px 9px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -1269,7 +1269,7 @@
 .ov-tl-tick {
   position: absolute;
   bottom: 0;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   line-height: 1;
   color: var(--faint);
 }

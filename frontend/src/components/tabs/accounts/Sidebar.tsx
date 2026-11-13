@@ -16,6 +16,7 @@ import { TYPE_ORDER, typeLabel } from './categories'
 import { ChevronRight, Link2 } from '../../../ui/icons'
 import { countNeedsReconciling, needReconcilingLabel, needsReconciling } from './reconcileDue'
 import { sidebarLine } from './valuation'
+import { keyActivate } from '../../../utils/keyActivate'
 
 // ── Local icon helpers (SVG, pixel-centered) ─────────────────────────────────
 
@@ -287,7 +288,9 @@ export function Sidebar({
         {/* "All accounts" row */}
         <div
           className={'acct-all' + (selectedId === null ? ' sel' : '')}
-          onClick={() => onSelect(null)}
+          role="button"
+          aria-pressed={selectedId === null}
+          {...keyActivate(() => onSelect(null))}
           title="The accounts below added together, debts included. Net worth also counts what you own on the Assets page, so the two differ."
         >
           <span className="acct-all-name">
@@ -348,7 +351,9 @@ export function Sidebar({
                   <div key={p}>
                     <div
                       className="acct-row acct-row--venue"
-                      onClick={() => setOpenVenues((v) => ({ ...v, [p]: !v[p] }))}
+                      role="button"
+                      aria-expanded={!!openVenues[p]}
+                      {...keyActivate(() => setOpenVenues((v) => ({ ...v, [p]: !v[p] })))}
                     >
                       <span className="acct-row-id">
                         <span className="acct-row-name">

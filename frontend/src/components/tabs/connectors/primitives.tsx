@@ -118,7 +118,13 @@ export function Mono({ icon: iconKey, hue, logo, letter, size }: MonoProps): JSX
       {showLogo ? (
         // `alt=""` on purpose: the connector's name is always beside the tile, so a screen
         // reader announcing the mark again would only repeat it.
-        <img className="cn-tile-logo" src={logo} alt="" onError={() => setBroken(logo)} />
+        <img
+          loading="lazy"
+          className="cn-tile-logo"
+          src={logo}
+          alt=""
+          onError={() => setBroken(logo)}
+        />
       ) : letter ? (
         // Decorative, like the glyph it stands in for: the name is always beside the tile.
         <span className="cn-tile-letter" aria-hidden>

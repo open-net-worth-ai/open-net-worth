@@ -228,7 +228,7 @@ function Tip({ text }: { text: string }) {
           border: '1px solid var(--line-strong)',
           background: 'var(--surface2)',
           color: 'var(--faint)',
-          fontSize: 9.5,
+          fontSize: 11,
           fontWeight: 700,
           cursor: 'pointer',
           display: 'inline-flex',

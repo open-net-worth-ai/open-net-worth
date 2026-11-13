@@ -105,7 +105,7 @@
   display: contents;
 }
 .mk-k {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -256,7 +256,7 @@
   padding: 2px 15px 9px 17px;
 }
 .mk-cardhead > span {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -396,7 +396,7 @@
   z-index: 1;
   background: var(--surface);
   text-align: right;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -518,7 +518,7 @@
 }
 .mk-caret {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   width: 12px;
   display: inline-block;
 }
@@ -563,7 +563,7 @@
   text-overflow: ellipsis;
 }
 .mk-wrap-badge {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.03em;
   color: var(--muted);
@@ -624,7 +624,7 @@
 }
 .mk-lots th {
   text-align: right;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -645,7 +645,7 @@
   text-align: left;
 }
 .mk-term {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
@@ -660,7 +660,7 @@
 }
 .mk-lots-note {
   margin-top: 9px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
 }
 
@@ -891,7 +891,7 @@
   color: var(--warn);
   flex: none;
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .mk-stress b {
   color: var(--warn);
@@ -935,7 +935,7 @@
 .brief-tag {
   display: inline-flex;
   align-items: center;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-weight: 700;
@@ -971,7 +971,7 @@
   border-radius: 4px;
 }
 .brief-more-caret {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: var(--fg-3);
   transition: transform 0.14s;
   display: inline-flex;
@@ -1021,7 +1021,7 @@
 }
 .eq-table thead th {
   text-align: right;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -1077,7 +1077,7 @@
   color: var(--faint);
 }
 .eq-drawer-h {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -1091,7 +1091,7 @@
 }
 .eq-sub th {
   text-align: left;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -1184,7 +1184,7 @@
   text-align: right;
 }
 .eq-dr-meta-k {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -1452,7 +1452,7 @@
   padding: 13px 14px;
 }
 .eq-preview-h {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -1540,7 +1540,7 @@
   align-items: center;
   gap: 12px;
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -1661,7 +1661,7 @@
 }
 .mk-rb-act {
   grid-row: 1 / 3;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-align: center;
@@ -1756,7 +1756,7 @@
 }
 .mk-sum-bench {
   color: var(--faint);
-  font-size: 0.72em;
+  font-size: max(var(--text-2xs), 0.72em);
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -1801,7 +1801,7 @@
   border: 1px solid var(--line-strong);
   color: var(--fg-3);
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   font-style: italic;
   text-transform: none;
@@ -1915,7 +1915,7 @@
 }
 .act-tbl thead th {
   text-align: left;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -1966,7 +1966,7 @@
 .act-pill {
   display: inline-flex;
   align-items: center;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 6px;
@@ -2101,7 +2101,7 @@
   gap: 2px;
 }
 .mk-spark-cap {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--faint);
@@ -2117,7 +2117,7 @@
     gap: 0;
   }
   .mk-sum--4 .mk-sum-label {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.04em;
     white-space: nowrap;
     overflow: hidden;
@@ -2132,11 +2132,11 @@
     font-size: 17px;
   }
   .mk-sum--4 .mk-sum-bench {
-    font-size: 0.64em;
+    font-size: max(var(--text-2xs), 0.64em);
   }
   .mk-sum--4 .mk-sum-sub {
     margin-top: 7px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -2156,7 +2156,7 @@
     gap: 0;
   }
   .mk-sum--4 .mk-sum-label {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.04em;
     white-space: nowrap;
     overflow: hidden;
@@ -2171,11 +2171,11 @@
     font-size: 17px;
   }
   .mk-sum--4 .mk-sum-bench {
-    font-size: 0.64em;
+    font-size: max(var(--text-2xs), 0.64em);
   }
   .mk-sum--4 .mk-sum-sub {
     margin-top: 7px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -2274,7 +2274,7 @@
   color: var(--line-strong);
 }
 .mk-sum-meta-k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   font-weight: 600;
@@ -2313,7 +2313,7 @@
   flex-wrap: wrap;
 }
 .mvr-label {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -2381,7 +2381,7 @@
 .mk-bond-meta {
   display: inline-block;
   margin-left: 7px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--bond);
   background: color-mix(in srgb, var(--bond) 15%, transparent);
@@ -2397,7 +2397,7 @@
 }
 .opt-tbl thead th {
   text-align: left;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -2431,7 +2431,7 @@
   margin-left: 7px;
 }
 .opt-note {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 3px;
   line-height: 1.4;
@@ -2443,7 +2443,7 @@
 .opt-dte {
   display: inline-block;
   margin-left: 7px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -2778,7 +2778,7 @@
 }
 .mk-filter-group-title {
   padding: 4px 4px 6px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -2922,7 +2922,7 @@
 }
 
 .mk-plpct {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
   margin-top: 1px;
 }
@@ -3113,7 +3113,7 @@
   position: absolute;
   left: 2px;
   transform: translateY(-50%);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   background: var(--surface);
   padding: 0 4px;
@@ -3171,7 +3171,7 @@
   z-index: 3;
 }
 .mk-chart-tip-d {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-bottom: 6px;
   font-variant-numeric: tabular-nums;
@@ -3269,7 +3269,7 @@
   padding: 10px 2px;
 }
 .mk-rows-head {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -3378,7 +3378,7 @@
   border-radius: 50%;
   border: 1px solid var(--line-strong);
   color: var(--fg-3);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   font-style: italic;
   cursor: help;
@@ -3515,7 +3515,7 @@
   border-top: 1px solid var(--line);
 }
 .inc-legend-h {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -3560,7 +3560,7 @@
   gap: 3px;
 }
 .inc-next-tag {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--accent);
@@ -3604,7 +3604,7 @@
   padding: 11px 2px;
 }
 .inc-pay-head {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -3643,7 +3643,7 @@
   justify-content: flex-end;
 }
 .inc-soon {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -4408,7 +4408,7 @@ button.inc-src-row--agg {
   padding: 2px 17px 2px;
 }
 .mk-wcardhead > span {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -4468,7 +4468,7 @@ button.inc-src-row--agg {
   min-width: 0;
 }
 .mk-wexch {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   color: var(--faint);
   letter-spacing: 0.02em;

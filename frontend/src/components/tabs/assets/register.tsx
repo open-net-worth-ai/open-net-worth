@@ -151,6 +151,7 @@ export function Thumb({ a, cats, size, editable, onPhoto }: ThumbProps) {
           HEIC bug) stays invisible forever after, even once replaced with a working one,
           until a full page reload mounts a clean node. */}
       <img
+        loading="lazy"
         key={photoSrc}
         src={photoSrc}
         alt=""

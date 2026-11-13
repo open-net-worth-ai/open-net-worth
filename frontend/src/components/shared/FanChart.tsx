@@ -95,7 +95,7 @@ export function FanChart({
       {
         label: 'Median (p50)',
         data: p50,
-        borderColor: '#34b08a',
+        borderColor: cssToken('--good'),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,

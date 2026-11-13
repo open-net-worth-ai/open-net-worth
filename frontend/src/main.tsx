@@ -23,12 +23,14 @@ import { onwDataSource, readEmbeddedDescriptors } from './lucius/onwDataSource'
 import { refreshFromAdapter, seedEntityRegistry } from './lucius/entityRegistry'
 import { relayoutAfterRotation, stampPwaDisplayMode } from './utils/pwa'
 import { watchStatusBarTint } from './utils/statusBarTint'
+import { watchInputModality } from './utils/inputModality'
 
 // CSS must know whether browser chrome exists before the mobile shell renders. The iOS
 // navigator.standalone fallback is more reliable than the display-mode query by itself.
 stampPwaDisplayMode()
 relayoutAfterRotation()
 watchStatusBarTint()
+watchInputModality()
 
 // Wire the ONW DataSourceAdapter — the seam between the core mention engine and
 // the FastAPI backend (GET /api/mentionables, POST /api/mentions/resolve,

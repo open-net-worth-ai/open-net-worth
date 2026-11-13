@@ -14,7 +14,7 @@
 }
 .opt-tbl thead th {
   text-align: left;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -50,7 +50,7 @@
   margin-left: 7px;
 }
 .opt-note {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 3px;
   line-height: 1.4;
@@ -64,7 +64,7 @@
 .opt-dte {
   display: inline-block;
   margin-left: 7px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);

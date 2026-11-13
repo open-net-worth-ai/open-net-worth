@@ -251,6 +251,7 @@ function SearchCallItem({ s }: { s: SearchCall }) {
             >
               <span className="msg-search-result-favicon">
                 <img
+                  loading="lazy"
                   src={`https://www.google.com/s2/favicons?domain=${safeHost(r.url)}&sz=16`}
                   alt=""
                   width={12}
@@ -927,7 +928,12 @@ function AttachmentThumb({ a, onOpen }: { a: Attachment; onOpen: (a: Attachment)
       onClick={() => onOpen(a)}
       title={a.summary}
     >
-      <img src={`/api/uploads/${a.ref_id}/image`} alt={a.summary} onError={() => setBroken(true)} />
+      <img
+        loading="lazy"
+        src={`/api/uploads/${a.ref_id}/image`}
+        alt={a.summary}
+        onError={() => setBroken(true)}
+      />
     </button>
   )
 }

@@ -289,7 +289,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-file-badge {
   flex: none;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--muted);
@@ -405,7 +405,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-achip em {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--lucius);
 }
@@ -413,7 +413,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   background: none;
   border: none;
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   cursor: pointer;
   padding: 2px;
   border-radius: 4px;
@@ -455,7 +455,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-acct-ccy {
   margin-left: auto;
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
 }
 .imp3-cache-hint {
@@ -925,7 +925,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-routed .x {
   color: var(--faint);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   cursor: pointer;
   padding: 0 2px;
 }
@@ -975,7 +975,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-filter button i {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--faint);
   background: var(--surface2);
@@ -1031,7 +1031,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   color: var(--ink);
 }
 .imp3-filter button .x {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: var(--faint);
 }
 /* The kind filter (Expense/Income/Transfer) — a second, independent dimension, pushed to the
@@ -1108,7 +1108,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-kindfilter-group {
   padding: 7px 9px 3px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1165,7 +1165,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-kindfilter-pop button i {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--faint);
   background: var(--surface2);
@@ -1222,7 +1222,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   flex-wrap: wrap;
 }
 .imp3-qn {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   color: var(--faint);
   letter-spacing: 0.05em;
@@ -1340,7 +1340,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   gap: 3px;
 }
 .imp3-cmp-h {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1412,7 +1412,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   color: var(--warn);
 }
 .imp3-orig {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
 }
 /* The boundary bucket's amount cell is a plain inline span, not the flex-column
@@ -1508,7 +1508,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-qchip {
   flex: none;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1557,7 +1557,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-dchip {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 2px 9px;
   border-radius: 20px;
@@ -1774,7 +1774,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   flex: 0 1 auto;
 }
 .imp3-arow-desc {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--fg-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1861,12 +1861,12 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-arow-match-ic {
   flex: none;
   color: var(--fg-3);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   margin-top: 2px;
 }
 .imp3-arow-match-tag {
   flex: none;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1895,7 +1895,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-arow-match-facts {
   display: flex;
   gap: 7px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--fg-3);
   font-variant-numeric: tabular-nums;
 }
@@ -1907,7 +1907,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
    a sentence, and the handoff's own rule is that nothing hides its facts — so this line WRAPS
    instead of clipping. Same quiet type scale either way. */
 .imp3-arow-match-src {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--fg-3);
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -1941,7 +1941,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-arow-match-amt .imp3-orig {
   display: block;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
 }
 .imp3-arow-match-amt.drift {
   color: var(--warn);
@@ -2005,7 +2005,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-arow-maybe-tag {
   flex: none;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2046,7 +2046,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-arow-maybe-amt .imp3-orig {
   display: block;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
 }
 .imp3-arow-body {
   padding: 4px 14px 12px;
@@ -2076,7 +2076,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-cat em {
   font-style: normal;
   color: var(--lucius);
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .imp3-cat.none {
   color: var(--fg-3);
@@ -2142,7 +2142,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   border: 1px dashed var(--line-strong);
 }
 .imp3-after-l {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -2165,7 +2165,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 }
 .imp3-after-rec em {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--muted);
   background: var(--surface2);

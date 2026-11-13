@@ -47,8 +47,9 @@ export const tokenGroups = [
       ['panel', '#171a21', '#f5f3ec', '#ffffff'],
       ['line', '#1f242d', '#ddd8cc', '#e2e2e2'],
       ['ink', '#f3f5f9', '#2d2a24', '#202124'],
-      ['muted', '#9aa3b2', '#6d675c', '#656970'],
-      ['faint', '#646c7c', '#999387', '#969aa1'],
+      ['muted', '#9aa3b2', '#57524a', '#505358'],
+      // ≥4.5:1 on --bg in every theme — it is used as text, not only as decoration.
+      ['faint', '#757d8d', '#6d685e', '#71747a'],
       ['liquid', '#34b08a', '#177a5c'],
       ['contingent', '#e0a032', '#96690a'],
       ['locked', '#6b7484', '#77808f'],
@@ -77,7 +78,8 @@ export const tokenGroups = [
     tokens: [
       ['bg-2', '#15181f', '#e6e2d8', '#f5f5f4'],
       ['line-strong', '#2c323f', '#c8c2b3', '#d2d2d2'],
-      ['fg-3', '#4a515f', '#afaba2', '#a4a7ad'],
+      // Same text floor as --faint (was 2.4–2.9:1).
+      ['fg-3', '#757d8d', '#6d685e', '#71747a'],
     ],
   },
   {
@@ -194,7 +196,8 @@ export const tokenGroups = [
     label: 'Type scale (px)',
     category: 'text',
     tokens: [
-      ['text-2xs', '10px'],
+      // 11px is the legibility floor; 2xs keeps its name for the tighter line-height/tracking uses.
+      ['text-2xs', '11px'],
       ['text-xs', '11px'],
       ['text-sm', '12px'],
       ['text-base', '13px'],

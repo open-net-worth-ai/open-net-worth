@@ -234,7 +234,7 @@
   text-align: left;
 }
 .c2-stat .k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--faint);
@@ -346,7 +346,7 @@
 .c2-chart-zero,
 .c2-chart-floor {
   position: absolute;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -363,7 +363,7 @@
   margin-top: 4px;
 }
 .c2-chart-x span {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -437,7 +437,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   border-top: 1px solid var(--line);
   margin-top: 6px;
@@ -628,7 +628,7 @@
      names the three series, so the title only needs to state the chart's subject, not repeat
      them; letting it truncate rather than wrap keeps the row to one line. */
   .c2-chart-title {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     white-space: nowrap;
     flex: none;
   }
@@ -648,7 +648,7 @@
     gap: 10px;
   }
   .c2-leg {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
   }
   .c2-leg-rest {
     display: none;
@@ -705,7 +705,7 @@
     border-top: none;
   }
   .c2-sum-metrics .c2-stat .k {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     white-space: nowrap;
   }
   .c2-sum-metrics .c2-stat .v {
@@ -769,7 +769,7 @@
   color: var(--faint);
 }
 .c2-needs-count {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: #1b1200;
   background: var(--warn);
@@ -954,7 +954,7 @@
   box-shadow: var(--shadow-sm);
 }
 .c2-seg .pill {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 0 5px;
   border-radius: 999px;
@@ -1051,7 +1051,7 @@
   border-bottom: 1px solid var(--line);
 }
 .c2-thead span {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1138,7 +1138,7 @@
   gap: 5px;
 }
 .c2-row-prog .lbl {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1165,7 +1165,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 2.5px 8px;
   border-radius: 999px;
@@ -1194,7 +1194,7 @@
   white-space: nowrap;
 }
 .c2-row-amt .u {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 1px;
 }
@@ -1290,7 +1290,7 @@
   align-items: center;
 }
 .c2-exp-sec-t {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1436,7 +1436,7 @@
   font-weight: 600;
 }
 .c2-si-badge {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1495,7 +1495,7 @@
 .c2-fund-scale {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 12px;
   font-variant-numeric: tabular-nums;
@@ -1634,7 +1634,7 @@
 .c2-fund-pop-row .lbl .sub {
   display: block;
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 400;
 }
 .c2-fund-pop-row .amt {
@@ -1676,7 +1676,7 @@
   height: 9px;
 }
 .c2-fund-type {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
 }
 .c2-fund-tagline {
@@ -1694,7 +1694,7 @@
   font-variant-numeric: tabular-nums;
 }
 .c2-fund-when .cad {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--liquid);
 }
@@ -1791,7 +1791,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -1848,7 +1848,7 @@
   background: var(--warn);
 }
 .c2-target-figs {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1940,7 +1940,7 @@
   align-items: center;
 }
 .c2-act-cat {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2081,7 +2081,7 @@
   color: var(--ink);
 }
 .c2-kindopt-d {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 1px;
 }
@@ -2235,7 +2235,7 @@
 
 /* ── v3 row/detail additions ── */
 .c3-ccy {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--faint);
@@ -2260,7 +2260,7 @@
   background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 .c3-si-base {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -2315,7 +2315,7 @@
 }
 .c3-txn-m {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 1px;
 }
@@ -2327,7 +2327,7 @@
   white-space: nowrap;
 }
 .c3-startby {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 11%, transparent);
@@ -2489,7 +2489,7 @@
   font-weight: 600;
 }
 .c3-menu-label {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2545,7 +2545,7 @@
    understated text link, not a bordered pill; the impact explanation rides the native title=
    tooltip instead of a permanently-rendered hint line. */
 .c3-act-load {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2565,7 +2565,7 @@
   text-decoration-color: color-mix(in srgb, var(--bad) 45%, transparent);
 }
 .c3-missbadge {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2679,7 +2679,7 @@
 .c3-fundby-cap {
   font-weight: 500;
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
 }
 .c3-fundby-chips {
   display: flex;
@@ -2719,7 +2719,7 @@
 }
 .c3-fundby-guard {
   margin-top: 7px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   line-height: 1.45;
 }
@@ -2730,7 +2730,7 @@
 /* envelope vs one-time-draw tags */
 .c3-fund-tag {
   display: inline-block;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2789,7 +2789,7 @@
   gap: 7px;
 }
 .c3-tabn {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
@@ -2816,7 +2816,7 @@
     justify-content: center;
     gap: 3px;
     padding: 0 5px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
   }
   .c3-dettabs .c3-tabn,
   .c3-dettabs .c3-tabdot {
@@ -3113,7 +3113,7 @@
   flex-wrap: wrap;
 }
 .c2-tag {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3488,7 +3488,7 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -3501,7 +3501,7 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--good);
   white-space: nowrap;
@@ -3528,7 +3528,7 @@
 .c2-strip-months span {
   position: absolute;
   transform: translateX(-50%);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

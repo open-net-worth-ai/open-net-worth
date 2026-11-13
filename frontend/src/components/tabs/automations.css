@@ -317,7 +317,7 @@
   font-size: 13px;
 }
 .a3-sec-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -452,7 +452,7 @@
   align-items: center;
   gap: 5px;
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.01em;
   padding: 2px 8px;
@@ -979,7 +979,7 @@
 }
 .a3-cost-num .k,
 .a3-costgrid .k {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -992,7 +992,7 @@
   letter-spacing: -0.01em;
 }
 .a3-cost-num .s {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   white-space: nowrap;
   overflow: hidden;
@@ -1036,7 +1036,7 @@
 .a3-bars-x {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--fg-3);
 }
 .a3-bars-note {
@@ -1089,7 +1089,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 800;
   letter-spacing: 0.01em;
 }
@@ -1215,7 +1215,7 @@
   gap: 6px;
 }
 .a3-runcard .ctxk {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1239,7 +1239,7 @@
   align-items: center;
   justify-content: center;
   margin-top: 1px;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
 }
 .a3-step.done .box {
   background: var(--ink);
@@ -1354,7 +1354,7 @@
   align-items: center;
   justify-content: center;
   font-style: normal;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--muted);
   background: var(--surface2);
