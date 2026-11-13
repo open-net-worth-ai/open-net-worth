@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Download, Play } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { Check, Download, Play } from 'lucide-react'
 import { Button } from '../../../ui'
 import {
   AccountBoxes,
@@ -20,6 +21,7 @@ import { bankSyncSend, type BankSyncStatus, type ModeResult } from './bankSync'
 const REACHED = { accounts: 1, history: 2, sync: 3, done: 4 } as const
 
 export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
+  const navigate = useNavigate()
   const { busy, error, act } = useAct()
   const p = status.provider
   // Skip for now: step 2 is optional — the first sync brings the history in anyway. Kept on
@@ -29,6 +31,9 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   const reached = skipped && stage === 2 ? 3 : stage
   const accounts = status.accounts ?? []
   const imported = accounts.some((a) => a.sync && a.imported)
+  // A ticked account with no history yet (one linked after the import) is what Import is for.
+  const missing = accounts.filter((a) => a.sync && !a.imported)
+  const importing = status.running || busy === 'import'
   const outcome = status.last_run?.outcome
   const noReads = outOfReads(status)
 
@@ -53,13 +58,39 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
           )}
         </Step>
         <Step n={2} reached={reached} title="Import history">
-          {reached < 2 ? null : (
+          {reached < 2 ? null : importing ? (
+            <div className="bs-actions">
+              <Button size="sm" variant="primary" loading disabled>
+                Importing…
+              </Button>
+              <span className="bs-note">Reading your history from the bank.</span>
+            </div>
+          ) : imported && missing.length === 0 ? (
+            <p className="bs-done">
+              <Check size={14} aria-hidden="true" />
+              {`History imported${outcome ? `: ${outcome}` : ''}. Balances unchanged.`}
+              {status.last_run && (
+                <button
+                  type="button"
+                  className="a3-linkbtn"
+                  onClick={() =>
+                    void navigate({
+                      to: '/accounts',
+                      search: { batch: `bank_sync:${status.last_run!.id}` } as never,
+                    } as never)
+                  }
+                >
+                  View in register
+                </button>
+              )}
+            </p>
+          ) : (
             <>
               <p>
-                {imported
-                  ? `Imported${outcome ? `: ${outcome}` : ''}. Balances unchanged.`
-                  : skipped
-                    ? 'Skipped. The first sync brings it in.'
+                {skipped
+                  ? 'Skipped. The first sync brings it in.'
+                  : imported
+                    ? `${missing.map((a) => a.name).join(', ')}: no history yet.`
                     : `Up to ${status.history_days ?? 90} days. Today’s balances stay the same.`}
               </p>
               <div className="bs-actions">
@@ -67,13 +98,12 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
                   size="sm"
                   variant={reached === 2 ? 'primary' : 'secondary'}
                   iconLeft={<Download size={12} aria-hidden="true" />}
-                  loading={status.running || busy === 'import'}
-                  disabled={!status.ready || noReads || status.running}
+                  disabled={!status.ready || noReads}
                   onClick={() => void act('import', () => bankSyncSend(`/${p}/import`, 'POST'))}
                 >
-                  {imported ? 'Import again' : 'Import history'}
+                  Import history
                 </Button>
-                {reached === 2 && (
+                {reached === 2 && !skipped && (
                   <Button size="sm" variant="ghost" onClick={() => setSkipped(true)}>
                     Skip for now
                   </Button>

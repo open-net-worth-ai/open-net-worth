@@ -646,7 +646,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
       const st = await waitRun()
       assert.equal(st.mode, 'off', 'importing the history turned the sync on')
       assert.equal(st.stage, 'sync')
-      await bank.getByText(/^Imported: .*Balances unchanged\./).waitFor({ timeout: 15_000 })
+      await bank.getByText(/History imported: .*Balances unchanged\./).waitFor({ timeout: 15_000 })
       assert.equal(
         st.last_run.status,
         'done',

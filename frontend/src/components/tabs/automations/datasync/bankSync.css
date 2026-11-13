@@ -50,6 +50,18 @@
 .a3-mark.bs-mark-xs .a3-mark-logo {
   padding: 3px;
 }
+/* Scoped under the step body, whose own paragraph colour would otherwise win. */
+.a3-step-body .bs-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  color: var(--good);
+}
+.a3-step-body .bs-done svg {
+  flex: none;
+}
 .bs-banks {
   display: flex;
   flex-direction: column;
@@ -116,10 +128,40 @@
   padding: 2px 14px;
 }
 .bs-acct {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 16px;
   padding: 9px 0;
+}
+.bs-acct-cols {
+  padding: 8px 14px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.bs-acct-book {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bs-acct-book svg {
+  flex: none;
+  color: var(--muted);
+}
+.bs-acct-book:hover {
+  text-decoration: underline;
 }
 .bs-acct + .bs-acct {
   border-top: 1px solid var(--line);
@@ -129,14 +171,6 @@
   font-size: 12px;
   font-weight: 400;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.bs-acct-meta {
-  margin-left: 10px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--muted);
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .bs-actions {

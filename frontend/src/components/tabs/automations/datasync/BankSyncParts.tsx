@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, Checkbox, Modal } from '../../../ui'
-import { Clock3 } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { Clock3, Wallet } from 'lucide-react'
 import { ConnectorAccountsList } from '../../connectors/ConnectorAccountsList'
 import { ConnectorPanel } from '../../connectors/ConnectorPanel'
 import { useConnectors } from '../../connectors/useConnectors'
@@ -23,10 +24,10 @@ export function ActionError({ error }: { error: string | null }) {
 }
 
 /** One card per bank — one connector can hold several (Enable Banking, GoCardless), and an
- *  account's own name doesn't say which: the bank and how it stands on top, then each linked
- *  account with its Sync box, read as "the bank's account •••0785 → the account in your book"
- *  (both always shown: an account added from the connector has the same name, and showing it
- *  once hid which side was which). */
+ *  account's own name doesn't say which: the bank and how it stands on top, then two labelled
+ *  columns, the bank's account (with its Sync box) and the account in your book it books into.
+ *  Both are always shown: one added from the connector has the same name, and a row naming it
+ *  once left no telling which side was which. */
 export function AccountBoxes({
   status,
   busy,
@@ -36,6 +37,7 @@ export function AccountBoxes({
   busy: string | null
   act: Act
 }) {
+  const navigate = useNavigate()
   const p = status.provider
   const banks = new Map<string, BankSyncAccount[]>()
   for (const a of status.accounts ?? []) {
@@ -55,6 +57,10 @@ export function AccountBoxes({
             <span className="bs-bank-name">{bank}</span>
             <BankStatus status={status} accounts={accounts} />
           </header>
+          <div className="bs-acct bs-acct-cols" aria-hidden="true">
+            <span>At the bank</span>
+            <span>In your book</span>
+          </div>
           <ul className="bs-bank-accts">
             {accounts.map((a) => (
               <li key={a.account_id} className="bs-acct">
@@ -64,13 +70,9 @@ export function AccountBoxes({
                     <>
                       {a.bank_name || a.name}
                       {a.mask && <span className="bs-acct-mask">{`•••${a.mask}`}</span>}
-                      <span className="bs-acct-meta">
-                        {[`→ ${a.name}`, syncLine(a, status.daily_reads)]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
                     </>
                   }
+                  description={syncLine(a, status.daily_reads) || undefined}
                   checked={a.sync}
                   disabled={busy !== null}
                   onChange={() =>
@@ -79,6 +81,20 @@ export function AccountBoxes({
                     )
                   }
                 />
+                <button
+                  type="button"
+                  className="bs-acct-book"
+                  title="Open it in Accounts"
+                  onClick={() =>
+                    void navigate({
+                      to: '/accounts',
+                      search: { account: a.account_id } as never,
+                    } as never)
+                  }
+                >
+                  <Wallet size={13} aria-hidden="true" />
+                  {a.name}
+                </button>
               </li>
             ))}
           </ul>

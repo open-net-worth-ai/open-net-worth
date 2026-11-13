@@ -30,14 +30,16 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
 2. The bank's own page walks you through it. A bank not connected yet starts with **Connect
    GoCardless…** (or Enable Banking, or Plaid), which opens the connector's setup form — see
    [Bank & brokerage connectors](../connectors/bank-brokerage.md). Then three steps:
-   1. **Choose accounts.** Every linked account is ticked, listed under the bank it's at (one
-      connector can hold several banks); its line says which bank account it's from. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
+   1. **Choose accounts.** Each bank has a card listing its accounts in two columns: **At the bank**
+      (the bank's account and its last digits) and **In your book** (the account it books into;
+      click it to open it). Every one is ticked. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
       (or **Link more accounts**) links a bank account here, as a new account or to one you have,
       without going back to the connector.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
-      so today's balance doesn't change. Safe to run again. **Skip for now** goes straight to step
-      3: the first sync brings the history in anyway.
+      so today's balance doesn't change. Once it's in, the step says so (with **View in register**);
+      **Import history** comes back only for an account that has no history yet. **Skip for now**
+      goes straight to step 3: the first sync brings the history in anyway.
    3. **Turn on.** Pick how often it runs, then **Turn on**: new transactions are booked on that
       schedule from then on.
 
