@@ -68,7 +68,7 @@ describe('EnableBankingSection', () => {
     serve(status())
     render(<EnableBankingSection />)
     expect(await screen.findByText('Register your app with Enable Banking')).toBeTruthy()
-    const url = screen.getByText(`${window.location.origin}/connectors`)
+    const url = screen.getByText(`${window.location.origin}/connectors/callback/enable_banking`)
     expect(url.tagName).toBe('CODE') // a value to copy, never an editable field
     expect(screen.getByRole('button', { name: 'Copy the redirect URL' })).toBeTruthy()
     expect(screen.getByText('Save your application ID and private key first.')).toBeTruthy()
@@ -81,7 +81,9 @@ describe('EnableBankingSection', () => {
     serve(linked)
     render(<EnableBankingSection />)
     expect(await screen.findByText(/Application ID 96bb32ba… · private key saved/)).toBeTruthy()
-    expect(screen.queryByText(`${window.location.origin}/connectors`)).toBeNull()
+    expect(
+      screen.queryByText(`${window.location.origin}/connectors/callback/enable_banking`),
+    ).toBeNull()
     expect(screen.getByRole('list', { name: 'Linked banks' }).textContent).toContain('ACME Bank')
     expect(screen.getByText(/Finland · 2 accounts · access until/)).toBeTruthy()
     expect(await screen.findByRole('button', { name: 'Renew link' })).toBeTruthy()
@@ -91,14 +93,65 @@ describe('EnableBankingSection', () => {
     expect(screen.getByLabelText('Code from the address bar')).toBeTruthy()
   })
 
-  it('opens the paste row and step 1 when the link fell back to the old redirect', async () => {
-    serve(linked, { url: 'https://bank.example/consent', returns_to_app: false })
-    vi.spyOn(window, 'open').mockReturnValue(null)
+  it('stops before the bank when Enable Banking refuses the address, and names it', async () => {
+    const callback = `${window.location.origin}/connectors/callback/enable_banking`
+    serve(linked)
+    const fallback = authFetch.getMockImplementation()!
+    const linkBodies: { redirect: string }[] = []
+    authFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/enable-banking/link') {
+        const body = JSON.parse(String(init?.body))
+        linkBodies.push(body)
+        if (body.redirect)
+          return Promise.resolve({
+            ok: false,
+            json: () =>
+              Promise.resolve({
+                detail: {
+                  code: 'redirect_not_registered',
+                  message: 'add it',
+                  redirect_url: body.redirect,
+                },
+              }),
+          })
+        return okJson({ url: 'https://bank.example/consent', returns_to_app: false })
+      }
+      return fallback(url, init)
+    })
+    const tab = { opener: {}, closed: false, location: { href: '' }, close: vi.fn() }
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
     render(<EnableBankingSection />)
     fireEvent.click(await screen.findByRole('button', { name: 'Renew link' }))
+    // Step 1 reopens on its Redirect URL, saying what's wrong; step 2 points up to it.
+    expect(await screen.findByText(/doesn.t know this address yet/)).toBeTruthy()
+    expect(screen.getByText(callback).tagName).toBe('CODE')
+    expect(screen.getByRole('button', { name: 'Copy the redirect URL' })).toBeTruthy()
+    expect(screen.getByText(/Add the Redirect URL from step 1/)).toBeTruthy()
+    // Only the address: the saved keys stay folded away.
+    expect(screen.queryByLabelText(/Application ID/)).toBeNull()
+    // One way round, not two: the "enter its code" link waits until this is resolved.
+    expect(screen.queryByRole('button', { name: /Bank didn't bring you back/ })).toBeNull()
+    // Nobody went to the bank: the blank tab opened on the click is closed again.
+    expect(tab.close).toHaveBeenCalled()
+    expect(tab.location.href).toBe('')
+    expect(screen.queryByLabelText('Code from the address bar')).toBeNull()
+    expect(linkBodies.map((b) => b.redirect)).toEqual([callback])
+
+    // The user can't add it: link with a code — no address of ours is sent.
+    fireEvent.click(screen.getByRole('button', { name: /Link with a code instead/ }))
     await waitFor(() => expect(screen.getByLabelText('Code from the address bar')).toBeTruthy())
-    expect(screen.getByText(/won't load/)).toBeTruthy()
-    expect(screen.getByText(`${window.location.origin}/connectors`)).toBeTruthy()
+    expect(linkBodies.map((b) => b.redirect)).toEqual([callback, ''])
+    expect(screen.getByText(/shows an error page/)).toBeTruthy()
+    expect(screen.queryByText(/Add the Redirect URL from step 1/)).toBeNull()
+  })
+
+  it("keeps a failed bank return's reason on a linked connector while its banks load", async () => {
+    sessionStorage.setItem('onw:enable-banking:return-error', "This bank link doesn't match")
+    serve(linked)
+    render(<EnableBankingSection />)
+    await screen.findByRole('button', { name: 'Renew link' }) // banks listed
+    expect(screen.getByText("This bank link doesn't match")).toBeTruthy()
+    expect(sessionStorage.getItem('onw:enable-banking:return-error')).toBeNull()
   })
 
   it('says the consent ran out when a fetch was refused after a link', async () => {

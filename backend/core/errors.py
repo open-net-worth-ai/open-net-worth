@@ -222,6 +222,14 @@ class ConfigurationError(OpenNetWorthError):
     code = "config"
 
 
+class RedirectNotRegisteredError(ConfigurationError):
+    """A provider refused the address it was asked to send the user back to, because the
+    user has not added it to their own app's allowed list. ``redirect_url`` (context) is the
+    address to add."""
+
+    code = "redirect_not_registered"
+
+
 class ProviderDisabledError(ConfigurationError):
     """The requested AI provider is disabled in Settings.
 
@@ -280,6 +288,7 @@ _STATUS_BY_CODE: dict[str, int] = {
     "unsupported_modality": 502,
     "config": 500,
     "provider_disabled": 409,
+    "redirect_not_registered": 409,
     "mention_error": 422,
     "data_integrity": 500,
     "missing_filter": 400,

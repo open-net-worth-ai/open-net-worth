@@ -185,6 +185,24 @@ const connectorsRoute = createRoute({
   // URL, not the tab id — see SLUG_ALIASES's own comment).
   path: '/connectors',
 })
+// A provider's return after consent: /connectors/callback/<connector id>. The path says whose
+// return it is — Enable Banking refuses a redirect URL with a query string — and this hands it
+// on as /connectors?connector=<id>&…, which ConnectorsTab finishes. A bare state + code on
+// /connectors is never taken as a provider's return.
+export function connectorCallbackSearch(connector: string, search: Record<string, unknown>) {
+  return { ...search, connector }
+}
+const connectorCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/connectors/callback/$connector',
+  beforeLoad: ({ params, location }) => {
+    const search = connectorCallbackSearch(
+      params.connector,
+      location.search as Record<string, unknown>,
+    )
+    throw redirect({ to: '/connectors', search: search as never, replace: true })
+  },
+})
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -289,6 +307,8 @@ const routeTree = rootRoute.addChildren([
   automationsRoute,
   buildRoute,
   profileRoute,
+  // Drill-in before parent
+  connectorCallbackRoute,
   connectorsRoute,
   settingsRoute,
   helpIndexRoute,
