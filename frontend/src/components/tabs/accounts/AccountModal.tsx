@@ -195,15 +195,24 @@ export default function AccountModal({
     }, 700)
   }
 
+  // Which opening the form was filled for (mode + account). The form fills when the dialog
+  // opens, or opens on another account — never because a caller re-rendered: every write
+  // refreshes open screens, and a rebuilt `prefill` or re-read `account` wiped a name being
+  // typed (2026-11-13).
+  const filledFor = useRef<string | null>(null)
+
   useEffect(() => {
+    const opening = open ? `${mode}:${account?.id ?? ''}` : null
+    if (opening !== null && opening === filledFor.current) return
+    filledFor.current = opening
     if (scrollbarIdleTimer.current !== null) {
       window.clearTimeout(scrollbarIdleTimer.current)
       scrollbarIdleTimer.current = null
     }
     // A newly opened modal is a new editing session; discard transient state from the last one.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setScrollbarActive(false)
     if (!open) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNameTouched(false)
     setSaving(false)
     setSaveErr('')
