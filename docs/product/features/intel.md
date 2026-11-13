@@ -73,8 +73,11 @@ two minutes (usually much less), so the message can arrive a little later, and i
 and search quota, up to 20 runs a day. The search can only search: it can't change your data, send
 anything or place an order, and it never sees your position or profile. Digits in the alert's name
 and instructions are removed before it searches, but it does read the rest of the wording, so keep
-private details out of them. What it finds is labelled *From a web search, unverified*. Your **Web
-search** setting for scans doesn't turn this off; the experiment switch does. If a run fails or
+private details out of them. The message says which outlet reported what ("Reuters reports …")
+and links the search results it relied on. Only links the search actually returned are kept, never
+one copied out of a page's text. When the cause rests on a single report, Lucius may say it's worth
+double-checking. Your **Web search** setting for scans doesn't turn this off; the experiment switch
+does. If a run fails or
 times out, you get the quick alert. This doesn't run on the Antigravity or Codex CLIs, which have
 tools of their own that the app can't limit. With this on, an automatic crash-watch alert on a
 holding is looked into the same way: Lucius searches for why it fell before it messages you.
@@ -361,7 +364,10 @@ away**, at any hour, and Lucius only chooses how the message reads. To stop one,
 turn the alert off. Automatic crash-watch alerts are different: Lucius can hold them back, usually
 because you've already heard about the same slide, but they are still sent as written if Lucius
 cannot be reached. A crash-watch alert reaches Lucius with the latest headlines Intel has on that
-holding, so its message says what is behind the drop rather than telling you to go and check.
+holding, so its message says what is behind the drop rather than telling you to go and check. If
+those headlines are about the company but don't explain the drop (a stake filing, say), the message
+names them instead of saying there was no news. It links what it cites by outlet name, and it never
+calls a crash-watch alert a level you set.
 
 With the experiment on, Lucius also decides whether a new development about a company you were
 told about recently is worth another message. Without it, Intel holds back further news about the

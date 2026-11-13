@@ -30,8 +30,8 @@ function mockApi() {
         ok: true,
         json: () =>
           Promise.resolve({
-            // A detected CLI, so the flow tests can enrol and move on. There is no skip any
-            // more: every way past this step configures a model.
+            // A detected CLI, so the flow tests can enrol and move on (Not now is the other
+            // way past, tested on its own).
             catalog: [{ key: 'claude_cli', label: 'Claude Code', transport: 'claude_cli' }],
             detected_clis: { claude_cli: true },
             detected_cli_paths: { claude_cli: '/usr/local/bin/claude' },
@@ -125,6 +125,22 @@ describe('FirstRun', () => {
 
     await waitFor(() => expect(called('/api/setup-status/complete', 'POST')).toBe(true))
     await waitFor(() => expect(onDone).toHaveBeenCalled())
+  })
+
+  it('Not now finishes setup with no model, and tells the caller so', async () => {
+    mockApi()
+    const onDone = vi.fn()
+    render(<FirstRun onDone={onDone} />)
+
+    await enterSetup()
+    fireEvent.click(await screen.findByRole('button', { name: /continue/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^not now$/i }, { timeout: 4000 }))
+    expect(await screen.findByText(/step 3 of 3/i)).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: /skip/i })) // password
+
+    await waitFor(() => expect(called('/api/setup-status/complete', 'POST')).toBe(true))
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ withModel: false }))
+    expect(called('/api/model-config', 'PUT')).toBe(false)
   })
 
   it('never writes the retired per-browser dismissal flag', async () => {

@@ -8,7 +8,7 @@ import { AddAccountSelect } from '../accounts/pickers'
 import type { Account } from '../accounts/types'
 import { fCur } from '../accounts/format'
 import { TYPE_COLOR, TYPE_ICON } from '../accounts/categories'
-import { isOwed, type ProviderAccountRow } from './accountRows'
+import { isOwed, shownBalance, type ProviderAccountRow } from './accountRows'
 
 interface Props {
   row: ProviderAccountRow
@@ -58,9 +58,9 @@ export function ConnectorAccountRow({
           )}
         </div>
       </div>
-      {row.balance != null && (
+      {shownBalance(row) != null && (
         <div className="conn-acct-bal">
-          {fCur(row.balance, row.currency, { cents: true })}
+          {fCur(shownBalance(row) as number, row.currency, { cents: true })}
           {isOwed(row) && <span className="conn-acct-owed"> owed</span>}
         </div>
       )}

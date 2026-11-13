@@ -501,6 +501,8 @@ def test_get_connector_accounts_returns_the_linked_block_even_when_not_configure
             "mask": "4242",
             "currency": None,
             "balance": None,
+            "cleared_balance": None,
+            "available_to_spend": None,
             "account_type": None,
             "institution": None,
             "linked_account_id": "acc_1",

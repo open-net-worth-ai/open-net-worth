@@ -55,12 +55,22 @@ def env(db_isolated, monkeypatch):
     monkeypatch.setattr(pm, "_fresh_evidence", fresh)
 
 
+_CITED = [
+    {
+        "url": "https://wire.example.net/acme-ceo",
+        "title": "Acme CEO out",
+        "domain": "wire.example.net",
+        "outlet": "wire.example.net",
+    }
+]
+
+
 def _deliver(active: bool, monkeypatch, found: str | None = None) -> dict:
     monkeypatch.setattr(price_alert_run, "active", lambda: active)
 
     async def search(prompt, *, model):
         assert "Acme Corp (ACME) fell" in prompt
-        return found
+        return price_alert_run.Findings(found, list(_CITED)) if found else None
 
     monkeypatch.setattr(price_alert_run, "search", search)
 
@@ -83,26 +93,54 @@ def test_a_crash_candidate_carries_the_cached_headlines_and_their_sources(env, m
         "https://news.example.com/acme-ceo-resigns",
         "https://markets.example.org/acme-slides",
     ]
+    assert [s["outlet"] for s in row["sources"]] == ["Example Wire", "Market Daily"]
 
 
 def test_lucius_is_shown_the_news_and_told_to_use_it(env, monkeypatch):
     row = _deliver(False, monkeypatch)
     user, system = delivery_prompt.build_prompt([row], [], {"nickname": "Sam"})
-    assert "recent news about it: Acme CEO resigns, board names interim chief" in user
-    assert "news.example.com/acme-ceo-resigns" in user
+    assert "news in Intel's feed: Acme CEO resigns, board names interim chief" in user
+    assert "[Example Wire](https://news.example.com/acme-ceo-resigns)" in user
     assert "instead of telling them to go and check" in system
 
 
-def test_with_the_run_on_the_search_findings_join_the_news(env, monkeypatch):
-    row = _deliver(True, monkeypatch, found="Outlets report Acme's CEO resigned today.")
+def test_a_crash_is_never_framed_as_a_level_they_set(env, monkeypatch):
+    row = _deliver(False, monkeypatch)
+    user, system = delivery_prompt.build_prompt([row], [], {"nickname": "Sam"})
+    assert "automatic sharp-drop alert" in user
+    assert "a level the user set" not in user
+    assert "never say they set it" in system
+
+
+def test_lucius_is_never_told_to_call_findings_unverified(env, monkeypatch):
+    """Owner, 2026-11-13: "unverified web search" in every crash push read as boilerplate and
+    undercut the message. Claims are attributed to their outlet instead, with citations."""
+    _, system = delivery_prompt.build_prompt([], [], {})
+    assert "unverified, so say so" not in system
+    assert 'Never call anything "unverified"' in system
+    assert "naming the outlet that reported it" in system
+
+
+def test_with_the_run_on_the_findings_stay_apart_from_the_feed_and_are_cited(env, monkeypatch):
+    row = _deliver(True, monkeypatch, found="Example Wire reports Acme's CEO resigned today.")
     assert "Acme CEO resigns" in row["news"]
-    assert "a web search just now found (unverified): Outlets report Acme's CEO" in row["news"]
+    assert "Example Wire reports" not in row["news"]
+    assert row["search"] == "Example Wire reports Acme's CEO resigned today."
+    assert "unverified" not in row["news"] + row["search"]
+    assert [s["url"] for s in row["sources"]] == [
+        "https://news.example.com/acme-ceo-resigns",
+        "https://markets.example.org/acme-slides",
+        "https://wire.example.net/acme-ceo",
+    ]
+    user, _ = delivery_prompt.build_prompt([row], [], {"nickname": "Sam"})
+    assert "what outlets reported just now: Example Wire reports" in user
+    assert "[wire.example.net](https://wire.example.net/acme-ceo)" in user
 
 
 def test_a_failed_search_still_sends_the_crash_with_its_headlines(env, monkeypatch):
     row = _deliver(True, monkeypatch, found=None)
     assert "Acme CEO resigns" in row["news"]
-    assert "web search" not in row["news"]
+    assert row["search"] == ""
 
 
 def test_no_cached_news_still_sends_the_crash(db_isolated, monkeypatch):

@@ -9549,6 +9549,14 @@ body.hide-amounts .mask * {
   .acct-row-linked--off {
     color: var(--faint);
   }
+  /* The bank sync's mark on an account it keeps (bankSyncMarks): amber when the bank's access
+     ends soon, red when the sync has stopped. Green is the plain linked colour above. */
+  .acct-row-linked.acct-sync-warn {
+    color: var(--warn);
+  }
+  .acct-row-linked.acct-sync-bad {
+    color: var(--bad);
+  }
 
   .conn-acct-head {
     display: flex;

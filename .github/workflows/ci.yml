@@ -221,6 +221,12 @@ jobs:
       - name: pytest (allow_brokerage_total_valuation on)
         run: python3 -m pytest -q -m "not integration" -n auto --flag allow_brokerage_total_valuation=on $(cat tests/allow_brokerage_total_valuation_on_files.txt)
 
+      # docs/FEATURE_FLAGS.md rule 3: the connector fetch, Automations and scheduler suites again
+      # with bank_data_sync on (ADR 2026-11-13); the bank-sync tests mark their own flag state.
+      # Remove with the flag.
+      - name: pytest (bank_data_sync on)
+        run: python3 -m pytest -q -m "not integration" -n auto --flag bank_data_sync=on $(cat tests/bank_data_sync_on_files.txt)
+
   # --- test-windows: the backend imports and the Windows-ported areas pass on windows-latest.
   # The focused list is every area with platform-specific code (locks, process trees, anchored
   # directory access, the sandbox, autostart, self-upgrade, instance claim, desktop bootstrap). The full suite

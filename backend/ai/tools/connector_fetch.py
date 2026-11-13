@@ -179,9 +179,11 @@ def _register_list_accounts_tool(
     """Register one ``<provider>_list_accounts`` tool — the provider's accounts, no rows."""
     provider = PROVIDERS[provider_key]
     description = (
-        f"List the {provider.label} accounts (balance, suggested account_type, "
-        "linked_account_id or null) — no transactions. Link one via update_accounts "
-        f"external_ids source='{provider_key}', ref=provider_account_id."
+        f"List the {provider.label} accounts — no transactions. Balances, as the bank reports "
+        "them, use the book's names (null when the bank doesn't send one): cleared_balance "
+        "(settled only), balance (settled + pending), available_to_spend (overdraft/credit "
+        "included). Also suggested account_type and linked_account_id or null. Link one via "
+        f"update_accounts external_ids source='{provider_key}', ref=provider_account_id."
     )
 
     async def handler(input_data: dict):

@@ -131,8 +131,17 @@ CORE_TOOL_NAMES: frozenset[str] = frozenset(
 # a find_tools round (15–20s of a new user's first minutes) on create_account, show_guide
 # or the skill's references before its first real step. Seeded into the session's loaded
 # set, so they stay offered once the book fills mid-conversation (assistant.run).
+# The connector three let the skill offer a named broker's card without a find_tools round:
+# a friend's moomoo went unmentioned through a whole onboarding (owner, 2026-11-13).
 ONBOARDING_TOOL_NAMES: frozenset[str] = frozenset(
-    {"create_account", "show_guide", "read_skill_file"}
+    {
+        "create_account",
+        "show_guide",
+        "read_skill_file",
+        "get_connector_status",
+        "search_connector_directory",
+        "run_screen_command",
+    }
 )
 
 # ---------------------------------------------------------------------------

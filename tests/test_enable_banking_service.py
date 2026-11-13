@@ -97,7 +97,7 @@ def _configure(monkeypatch, txns_by_account=None):
     feed = txns_by_account if txns_by_account is not None else _TXNS
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(_ACCOUNTS))
-    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
     _store().update({"session_id": "SESS-1", "aspsp": "ACME Bank", "country": "FI"})
     monkeypatch.setattr(
         svc,
@@ -280,7 +280,10 @@ def test_fetch_account_balance_prefers_the_booked_balance(monkeypatch):
         ]
     }
     monkeypatch.setattr(svc, "_safe_get", lambda *a: _JsonResp(200, body))
-    assert svc.fetch_account_balance("JWT", "U1") == -7.98
+    assert svc.fetch_account_balances("JWT", "U1") == (
+        -7.98,
+        {"cleared_balance": -7.98, "working_balance": None, "available_to_spend": 11.12},
+    )
 
 
 def test_fetch_account_balance_failure_is_none(monkeypatch):
@@ -290,7 +293,7 @@ def test_fetch_account_balance_failure_is_none(monkeypatch):
         raise ExternalServiceError("Enable Banking HTTP 429")
 
     monkeypatch.setattr(svc, "_safe_get", _boom)
-    assert svc.fetch_account_balance("JWT", "U1") is None
+    assert svc.fetch_account_balances("JWT", "U1")[0] is None
 
 
 def test_account_to_common_suggests_type_and_mask():
@@ -817,6 +820,7 @@ def _link(monkeypatch, session_id, aspsp, country="FI", accounts=None, deleted=N
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     listed = sessions or {}
     monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(listed.get(sid, [])))
+    monkeypatch.setattr(svc, "session_accounts_data", lambda token, sid: list(listed.get(sid, [])))
     _pending("S", aspsp, country)
     body = {
         "session_id": session_id,
@@ -897,7 +901,7 @@ def test_fetch_window_reads_every_bank_and_one_failure_hides_none(monkeypatch):
         return [{"uid": f"{sid}-A", "name": f"{sid} main", "currency": "EUR"}]
 
     monkeypatch.setattr(svc, "fetch_session_accounts", _accounts)
-    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: 10.0)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (10.0, {}))
     monkeypatch.setattr(
         svc, "fetch_account_transactions", lambda token, uid, *, date_from, date_to: ([], True)
     )
@@ -907,6 +911,103 @@ def test_fetch_window_reads_every_bank_and_one_failure_hides_none(monkeypatch):
         ("SESS-B-A", "Other Bank"),
     ]
     assert w.complete is False
+    assert w.warnings == ["Broken Bank: couldn't be read (Enable Banking HTTP 401)"]
+    assert [b["access_ended"] for b in _store().banks()] == [None, None, None]
+
+
+# ── a consent that no longer answers ────────────────────────────────────────────────
+
+
+def test_a_closed_consent_is_an_ended_one_not_an_empty_bank(monkeypatch):
+    """Verified on the sandbox (2026-11-13): a revoked consent still answers GET /sessions
+    with 200 and its accounts, status CLOSED; only its transactions refuse. Reading it as a
+    bank with accounts made every fetch an "ok" with nothing in it."""
+    body = {"status": "CLOSED", "accounts": ["UID-1"]}
+    monkeypatch.setattr(
+        svc.httpx,
+        "get",
+        lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("GET", "https://x")),
+    )
+    with pytest.raises(svc.ConsentEndedError, match="closed"):
+        svc.fetch_session_accounts("JWT", "SESS-1")
+
+
+def test_another_apps_consent_is_an_ended_one(monkeypatch):
+    def _404(url, **k):
+        request = httpx.Request("GET", url)
+        raise httpx.HTTPStatusError(
+            "404", request=request, response=httpx.Response(404, request=request)
+        )
+
+    monkeypatch.setattr(svc.httpx, "get", _404)
+    with pytest.raises(svc.ConsentEndedError):
+        svc.fetch_session_accounts("JWT", "SESS-1")
+
+
+def _two_banks(monkeypatch, ended_sid):
+    _link(monkeypatch, "SESS-A", "ACME Bank")
+    _link(monkeypatch, "SESS-B", "Other Bank", "SE")
+
+    def _accounts(token, sid):
+        if sid == ended_sid:
+            raise svc.ConsentEndedError("Enable Banking says this consent is closed")
+        return [{"uid": f"{sid}-A", "currency": "EUR"}]
+
+    monkeypatch.setattr(svc, "fetch_session_accounts", _accounts)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
+    monkeypatch.setattr(
+        svc, "fetch_account_transactions", lambda token, uid, *, date_from, date_to: ([], True)
+    )
+
+
+def test_a_bank_whose_consent_ended_is_named_and_flagged_to_renew(monkeypatch):
+    _two_banks(monkeypatch, "SESS-B")
+    w = svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert [a["provider_account_id"] for a in w.accounts] == ["SESS-A-A"]
+    assert w.complete is False
+    assert w.warnings == ["Other Bank: access ended — renew it in Connectors to keep it syncing"]
+    assert [b["access_ended"] for b in _store().banks()] == [None, "ended"]
+    assert [b["access_ended"] for b in _store().public()["banks"]] == [None, "ended"]
+
+
+def test_no_bank_answering_is_an_error_never_an_empty_ok(monkeypatch):
+    _link(monkeypatch, "SESS-A", "ACME Bank")
+
+    def _ended(token, sid):
+        raise svc.ConsentEndedError("Enable Banking no longer knows this consent (HTTP 404)")
+
+    monkeypatch.setattr(svc, "fetch_session_accounts", _ended)
+    with pytest.raises(ValidationError, match="No bank could be read. ACME Bank: access ended"):
+        svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert svc.classify_error(ValidationError("x")) == "auth_error"
+
+
+def test_a_bank_from_the_previous_app_is_named_without_a_call(monkeypatch):
+    _two_banks(monkeypatch, None)
+    store = _store()
+    store.mark_access_ended([store.banks()[0]["key"]], "app_changed")
+    read: list[str] = []
+    monkeypatch.setattr(
+        svc, "fetch_session_accounts", lambda token, sid: read.append(sid) or [{"uid": f"{sid}-A"}]
+    )
+    w = svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert read == ["SESS-B"]
+    assert w.warnings == [
+        "ACME Bank: linked under your previous Enable Banking app — renew it in Connectors to"
+        " keep it syncing"
+    ]
+
+
+def test_renewing_a_bank_from_the_previous_app_leaves_its_old_consent_alone(monkeypatch):
+    """The previous app's key remembered and revoked it at the switch; this app can't read
+    it: no read, no revoke with the wrong key."""
+    deleted: list[str] = []
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", deleted=deleted)
+    store = _store()
+    store.mark_access_ended([store.banks()[0]["key"]], "app_changed")
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", deleted=deleted)
+    assert [(b["session_id"], b["access_ended"]) for b in _store().banks()] == [("SESS-NEW", None)]
+    assert deleted == []
 
 
 def _window_with(monkeypatch, sessions, seen_uids):
@@ -916,7 +1017,7 @@ def _window_with(monkeypatch, sessions, seen_uids):
 
     def _balance(token, uid):
         seen_uids.append(("balance", uid))
-        return 10.0
+        return 10.0, {}
 
     def _txns(token, uid, *, date_from, date_to):
         seen_uids.append(("transactions", uid))
@@ -931,7 +1032,7 @@ def _window_with(monkeypatch, sessions, seen_uids):
             }
         ], True
 
-    monkeypatch.setattr(svc, "fetch_account_balance", _balance)
+    monkeypatch.setattr(svc, "fetch_account_balances", _balance)
     monkeypatch.setattr(svc, "fetch_account_transactions", _txns)
     return svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
 
@@ -1028,7 +1129,7 @@ def test_accounts_name_the_country_only_when_two_banks_share_a_name(monkeypatch)
     monkeypatch.setattr(
         svc, "fetch_session_accounts", lambda token, sid: [{"uid": f"{sid}-A", "currency": "EUR"}]
     )
-    monkeypatch.setattr(svc, "fetch_account_balance", lambda token, uid: None)
+    monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
     w = svc.fetch_window(_store(), "2026-10-01", "2026-11-13", None, accounts_only=True)
     assert [a["institution"] for a in w.accounts] == ["Nordea (FI)", "Nordea (SE)", "OP"]
 
@@ -1111,3 +1212,91 @@ def test_fetch_counts_an_enable_banking_row_already_in_the_ledger_as_booked(monk
         "enable_banking", since="2026-11-01", before="2026-11-13", include_booked=True
     )
     assert with_booked["transactions"][0]["booked_txn_id"] == "txn_1"
+
+
+def test_a_flagged_bank_that_answers_again_is_unflagged(monkeypatch):
+    """Switching back to the app a bank was linked under: its consent answers again."""
+    _two_banks(monkeypatch, None)
+    store = _store()
+    store.mark_access_ended([store.banks()[1]["key"]], "ended")
+    w = svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert w.warnings == []
+    assert [b["access_ended"] for b in _store().banks()] == [None, None]
+
+
+def test_renewing_a_closed_consent_still_keeps_its_accounts_ids(monkeypatch):
+    """A 0.1.48 book recorded no identities, and its consent ran out: the account endpoints
+    refuse, but the session's accounts_data still carries each uid and hash."""
+    old = [{"uid": "UID-OLD", "identification_hash": "HASH-1"}]
+    new = [{"uid": "UID-NEW", "identification_hash": "HASH-1"}]
+    _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old)
+    store = _store()
+    store.mark_access_ended([store.banks()[0]["key"]], "ended")
+    assert store.get()["account_identities"] == {}
+    _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, sessions={"SESS-OLD": old})
+    after = _window_with(monkeypatch, {"SESS-NEW": new}, [])
+    assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
+
+
+def test_session_accounts_data_reads_a_closed_session(monkeypatch):
+    body = {
+        "status": "CLOSED",
+        "accounts": ["UID-1"],
+        "accounts_data": [{"uid": "UID-1", "identification_hash": "HASH-1"}],
+    }
+    monkeypatch.setattr(
+        svc.httpx,
+        "get",
+        lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("GET", "https://x")),
+    )
+    assert svc.session_accounts_data("JWT", "SESS-1") == [
+        {"uid": "UID-1", "identification_hash": "HASH-1"}
+    ]
+
+
+# ── description when the bank sends little ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "fields, expected",
+    [
+        ({"remittance_information": ["CARD 1234", " ACME Grocery "]}, "CARD 1234 ACME Grocery"),
+        ({"remittance_information": [], "creditor": {"name": "ACME Taxi"}}, "ACME Taxi"),
+        ({"remittance_information": [""], "debtor": {"name": "ACME Corp"}}, "ACME Corp"),
+        (
+            {
+                "remittance_information": None,
+                "bank_transaction_code": {"description": "Card payment"},
+            },
+            "Card payment",
+        ),
+        (
+            {"bank_transaction_code": {"description": " "}, "reference_number": "RF18 5390"},
+            "RF18 5390",
+        ),
+        ({"creditor": {"name": None}, "bank_transaction_code": None}, "Enable Banking"),
+        ({"note": "my own note"}, "Enable Banking"),
+    ],
+)
+def test_the_description_comes_from_the_first_field_the_bank_filled(fields, expected):
+    """Reported 2026-11-13: a bank whose rows carry no remittance text and no counterparty
+    came out as a bare "Enable Banking" on every row, even when it named the kind of
+    transaction. ``note`` is the account holder's own, never the bank's description."""
+    assert svc._txn_description(fields) == expected
+
+
+def test_a_row_the_bank_names_only_by_its_code_is_booked_with_that_wording():
+    row = svc._txn_to_row(
+        {
+            "entry_reference": "T9",
+            "booking_date": "2026-11-12",
+            "status": "BOOK",
+            "transaction_amount": {"amount": "12.00", "currency": "EUR"},
+            "credit_debit_indicator": "DBIT",
+            "bank_transaction_code": {"description": "Card payment", "code": "PMNT"},
+        },
+        "EB-CHK",
+        "EUR",
+    )
+    assert row["description"] == "Card payment"
+    assert row.get("payee") is None

@@ -40,22 +40,80 @@ def _iso(dt) -> Optional[str]:
 
 def _accounts(p, key: str) -> list[dict]:
     from backend.services import accounts as accounts_service
+    from backend.services import ledger as ledger_service
 
     excluded = set(settings.get(key)["excluded_account_ids"])
+    rows = {r.get("id"): r for r in accounts_service.all_account_rows()}
+    booked = ledger_service.booked_from(key)
+    from backend.services.bank_data_sync import access
+
+    granted = access.by_account(p)
+    from backend.services.bank_data_sync import balances
+
+    bank_said = balances.stored(key)
+    from backend.services.bank_data_sync import pending as pending_rows
+
+    pending_now = pending_rows.tracked(key)
     out = []
     for a in accounts_service.linked_accounts_for_source(key):
         left, next_at = budget.reads_left(p, a.get("provider_account_id") or "")
+        row = rows.get(a.get("linked_account_id")) or {}
+        bank = granted.get(str(a.get("provider_account_id") or "")) or {}
         out.append(
             {
                 "account_id": a.get("linked_account_id"),
-                "name": a.get("name") or "",
+                # Your account's own name; the bank's name for it is the detail.
+                "name": row.get("name") or a.get("name") or "",
+                # The book account's own last digits (filled from the bank's at link time).
+                "last_four": row.get("last_four") or "",
+                "currency": row.get("currency") or "",
+                # The bank it's at (filled in when it was linked): one connector can hold several.
+                "bank": row.get("institution") or "",
+                "bank_name": a.get("name") or "",
                 "mask": a.get("mask") or "",
                 "sync": a.get("linked_account_id") not in excluded,
                 "reads_left": left,
                 "next_read_at": _iso(next_at),
+                # History brought in: whether anything from this bank is booked here yet.
+                "imported": a.get("linked_account_id") in booked,
+                # What came from this bank, counted in the book: the import step's line.
+                "booked": (booked.get(a.get("linked_account_id") or "") or {}).get("count", 0),
+                # Of those, the ones still pending at the bank (booked uncleared, pending.py).
+                "booked_pending": sum(
+                    1
+                    for e in pending_now.values()
+                    if not e.get("settled") and e.get("account_id") == a.get("linked_account_id")
+                ),
+                "booked_from": (booked.get(a.get("linked_account_id") or "") or {}).get("first"),
+                "booked_to": (booked.get(a.get("linked_account_id") or "") or {}).get("last"),
+                # When the bank's access for this app ends (a European bank grants it for a set
+                # time), and whether it has: the page warns before the sync quietly stops.
+                "access_ends_at": bank.get("ends_at"),
+                "access_ended": bool(bank.get("ended")),
+                "access_renew_soon": bool(bank.get("renew_soon")),
+                # The bank's balance from the last read beside the book's cleared balance.
+                **(
+                    balances.compare(row, bank_said.get(a.get("linked_account_id") or ""))
+                    if row
+                    else {}
+                ),
             }
         )
     return out
+
+
+def _stage(mode: str, accounts: list[dict], set_up: bool = False) -> str:
+    """Where setup stands — the steps on the bank's Data sync page: ``accounts`` (nothing linked
+    or ticked yet) → ``history`` (bring the history in) → ``sync`` (turn the sync on) → ``done``
+    (the sync is on, a Lucius Automation syncs the bank, or the sync was turned on once — turning
+    it off again leaves a set-up sync, as a budget app's does). Turning the sync on before
+    importing is fine: its first run brings the history in."""
+    if mode in ("data", "lucius") or set_up:
+        return "done"
+    ticked = [a for a in accounts if a["sync"]]
+    if not ticked:
+        return "accounts"
+    return "sync" if any(a["imported"] for a in ticked) else "history"
 
 
 def _connector_ready(p) -> bool:
@@ -75,8 +133,10 @@ def _summary(p) -> dict:
         "label": p.label,
         "mode": mode,
         "ready": _connector_ready(p),
+        "connected": _set_up(p) or mode == "data",
         "lucius_followup": s["lucius_followup"],
-        "interval_hours": p.sync_interval_hours,
+        "interval_hours": settings.interval_hours(p),
+        "intervals": settings.interval_choices(p),
         "daily_reads": p.daily_reads,
         "last_run": import_runs.summary(last) if last else None,
         "next_run_at": st.get("next_due_at") if mode == "data" else None,
@@ -91,16 +151,40 @@ def _summary(p) -> dict:
     }
 
 
+def _set_up(p) -> bool:
+    try:
+        return bool(p.store().is_configured())
+    except Exception:  # noqa: BLE001 — a broken config is not "set up"
+        return False
+
+
 def overview() -> list[dict]:
-    """Every data-sync-capable connector — the Automations → Data sync list."""
+    """Every bank connector that can sync without AI — the Automations → Data sync list. One
+    whose connector isn't set up yet (``connected`` false) is offered under "Add a data sync",
+    as the budget apps are, so the sync is findable before its connector exists."""
     _require_on()
-    return [_summary(p) for p in settings.capable_providers()]
+    out = []
+    for p in settings.capable_providers():
+        s = _summary(p)
+        # A connected bank's accounts ride along, so the Accounts list can mark each synced one.
+        accounts = _accounts(p, p.key) if s["connected"] else []
+        # Its setup stage too: the list shows a card only for a sync that's set up, as for the
+        # budget apps; one connected but never set up is still offered under "Add a data sync".
+        stage = _stage(s["mode"], accounts, settings.get(p.key)["set_up"])
+        out.append({**s, "accounts": accounts, "stage": stage})
+    return out
 
 
 def status(key: str) -> dict:
     _require_on()
     p = settings.provider(key)
-    return {**_summary(p), "accounts": _accounts(p, key)}
+    summary, accounts = _summary(p), _accounts(p, key)
+    return {
+        **summary,
+        "accounts": accounts,
+        "history_days": p.history_days or p.lookback_days,
+        "stage": _stage(summary["mode"], accounts, settings.get(key)["set_up"]),
+    }
 
 
 def set_mode(key: str, mode: str) -> dict:
@@ -113,7 +197,7 @@ def set_mode(key: str, mode: str) -> dict:
     resumed: Optional[str] = None
     if mode == "data":
         paused = settings.pause_lucius_syncs(key)
-        settings.save(key, mode="data")
+        settings.save(key, mode="data", set_up=True)
         budget.schedule_from_now(p)
     else:
         settings.save(key, mode="off")
@@ -128,6 +212,32 @@ def set_mode(key: str, mode: str) -> dict:
         "resumed_automation": resumed,
         "needs_template": needs_template,
     }
+
+
+def set_interval(key: str, hours: int) -> dict:
+    """How often the sync runs. A bank with a daily read limit offers only what it allows."""
+    _require_on()
+    p = settings.provider(key)
+    if hours not in settings.interval_choices(p):
+        choices = ", ".join(str(h) for h in settings.interval_choices(p))
+        raise ValidationError(f"{p.label} can sync every {choices} hours.")
+    settings.save(key, interval_hours=hours)
+    budget.reschedule(p)
+    return status(key)
+
+
+def use_bank_balance(key: str, account_id: str) -> dict:
+    """ "Use the bank's balance": move the account's Starting Balance by the difference, so its
+    cleared balance is what the bank last said. Only on the user's click."""
+    _require_on()
+    from backend.services.bank_data_sync import balances
+
+    settings.provider(key)
+    bank = balances.stored(key).get(account_id)
+    if not bank:
+        raise ConflictError("There's no balance from the bank for this account yet.")
+    balances.use_bank(account_id, bank)
+    return status(key)
 
 
 def set_account_sync(key: str, account_id: str, sync: bool) -> dict:
@@ -149,12 +259,6 @@ def set_followup(key: str, enabled: bool) -> dict:
     return status(key)
 
 
-def _after_run(p, result: dict) -> None:
-    from backend.services.bank_data_sync import followup
-
-    followup.after_run(p, result)
-
-
 def _when(dt) -> str:
     from backend.core.user_time import user_zone
 
@@ -164,13 +268,16 @@ def _when(dt) -> str:
     return (dt.astimezone(zone) if zone else dt).strftime("%H:%M")
 
 
-def run_now(key: str) -> dict:
-    """ "Sync now": refused (409, with the reason) unless data mode is on, the connector is set
-    up, and at least one ticked account has a read left today. Runs in the background."""
-    _require_on()
+def _start(key: str, *, needs_data: bool) -> dict:
+    """Start one run now, in the background — refused (409, with the reason) unless the
+    connector is set up and at least one ticked account has a read left today."""
     p = settings.provider(key)
-    if not settings.is_data(key):
-        raise ConflictError(f"{p.label} isn't set to Sync without AI.")
+    if needs_data and not settings.is_data(key):
+        raise ConflictError(f"The {p.label} sync is off.")
+    if not needs_data and settings.mode(key) == "lucius":
+        raise ConflictError(
+            f"A Lucius Automation syncs {p.label}. Pause it first, so its rows aren't booked twice."
+        )
     runner.refuse_unless_ready(p)
     accounts = runner.opted_accounts(key)
     if not accounts:
@@ -183,8 +290,23 @@ def run_now(key: str) -> dict:
             f"those reads are used. The next one is possible at about {_when(at)}."
         )
     run = runner.start(p, "manual", ready)
-    runner.finish_in_background(p, run, ready, after=_after_run)
+    runner.finish_in_background(p, run, ready)
     return {"run_id": run["id"], "accounts": len(ready), "skipped_for_limit": len(spent)}
+
+
+def run_now(key: str) -> dict:
+    """ "Sync now" — only while Sync without AI is on."""
+    _require_on()
+    return _start(key, needs_data=True)
+
+
+def import_history(key: str) -> dict:
+    """Setup step 2, "Bring in your history": one run now, before the sync is turned on. A
+    ticked account never imported gets everything the bank serves and its start moves back
+    (``booker.align_first_imports``); one imported before just catches up. Safe to run again.
+    Refused while a Lucius Automation syncs the bank."""
+    _require_on()
+    return _start(key, needs_data=False)
 
 
 def run_if_due() -> bool:
@@ -211,7 +333,7 @@ def _tick(p) -> bool:
         at = runner.next_read_at(p, spent) or budget.now() + budget.interval(p)
         budget.update(p.key, next_due_at=_iso(at))
         return False
-    runner.run_now(p, "scheduled", ready, after=_after_run)
+    runner.run_now(p, "scheduled", ready)
     return True
 
 
@@ -241,22 +363,35 @@ def list_reviews(provider: Optional[str] = None) -> list[dict]:
     ]
 
 
-def accept_review(item_id: str) -> dict:
+def accept_review(item_id: str, seen: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.accept(item_id)
+    return review_actions.accept(item_id, seen)
 
 
-def dismiss_review(item_id: str) -> dict:
+def dismiss_review(item_id: str, seen: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.dismiss(item_id)
+    return review_actions.dismiss(item_id, seen)
 
 
-def book_review(item_id: str) -> dict:
+def book_review(item_id: str, seen: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.book_separately(item_id)
+    return review_actions.book_separately(item_id, seen)
+
+
+async def run_followups() -> int:
+    """The scheduler tick's async half: the queued "Let Lucius categorise what's left" turns,
+    on the main event loop. Nothing while the flag is off or no switch is on."""
+    if not is_on():
+        return 0
+    from backend.services.bank_data_sync import followup
+
+    return await followup.run_pending()

@@ -15,7 +15,7 @@ dismissed, also holds its ref back from booking, so a re-run neither re-asks nor
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from backend.core.untrusted import sanitize_untrusted
@@ -116,13 +116,37 @@ def held_refs(provider: str) -> set[str]:
     return {
         r["ref"]
         for r in BankSyncReviewStore().for_provider(provider)
-        if r.get("kind") in HOLDING_KINDS and r.get("status") in ("open", "dismissed")
+        if r.get("kind") in HOLDING_KINDS and r.get("status") in ("open", "applying", "dismissed")
     }
 
 
+STALE_CLAIM = timedelta(minutes=10)
+
+
+def _release_stale_claims(store: BankSyncReviewStore, provider: Optional[str]) -> None:
+    """A decision cut short (the server stopped mid-write) leaves its item ``applying``; after
+    ``STALE_CLAIM`` it is open again rather than lost from the list."""
+    cutoff = (datetime.now(timezone.utc) - STALE_CLAIM).isoformat(timespec="seconds")
+    for r in store.for_provider(provider, "applying"):
+        if (r.get("claimed_at") or "") < cutoff:
+            store.update_by_id(r["id"], {"status": "open"})
+
+
 def open_items(provider: Optional[str] = None) -> list[dict]:
-    items = BankSyncReviewStore().for_provider(provider, "open")
-    return sorted(items, key=lambda r: r.get("created_at") or "", reverse=True)
+    """Open items, newest first, each with ``current`` re-read from the ledger now — what you
+    decide on is the booked row as it is, not as it was when the bank's change arrived."""
+    from backend.services.ledger import booked_row_snapshot
+
+    store = BankSyncReviewStore()
+    _release_stale_claims(store, provider)
+    items = sorted(
+        store.for_provider(provider, "open"), key=lambda r: r.get("created_at") or "", reverse=True
+    )
+    for item in items:
+        if item.get("txn_id"):
+            fresh = booked_row_snapshot(item["txn_id"], prefer_account_id=item.get("account_id"))
+            item["detail"] = {**(item.get("detail") or {}), "current": _clean(fresh)}
+    return items
 
 
 def open_count(provider: Optional[str] = None) -> int:

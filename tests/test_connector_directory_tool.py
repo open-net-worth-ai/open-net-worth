@@ -156,13 +156,28 @@ def test_snapshot_skips_the_custom_launcher():
     assert "mcp-custom" not in connector_directory.entry_ids()
 
 
-def test_open_setup_refuses_an_id_the_directory_does_not_have():
+def test_open_setup_refuses_an_id_the_directory_does_not_have(db):
     from backend.ai.tools.screen import _validate_command_semantics
 
     assert _validate_command_semantics("connectors.open_setup", {"id": "mcp-ibkr"}) is None
     msg = _validate_command_semantics("connectors.open_setup", {"id": "mcp-ibk"})
     assert msg and "search_connector_directory" in msg and "mcp-ibkr" in msg
     assert _validate_command_semantics("plan.reset", {}) is None
+
+
+def test_open_setup_accepts_an_installed_connector_so_its_card_can_fix_it(db, monkeypatch):
+    # An expired IBKR sign-in is fixed from the card of the server the user already has
+    # (owner, 2026-11-13); an id nothing lists is still refused.
+    from types import SimpleNamespace
+
+    from backend.ai.tools.screen import _validate_command_semantics
+    from backend.services import connectors as connectors_service
+
+    monkeypatch.setattr(
+        connectors_service, "list_connectors", lambda: [SimpleNamespace(id="mcp:acme-broker")]
+    )
+    assert _validate_command_semantics("connectors.open_setup", {"id": "mcp:acme-broker"}) is None
+    assert _validate_command_semantics("connectors.open_setup", {"id": "mcp:nobody"})
 
 
 def test_open_setup_without_an_interactive_screen_does_not_pretend(db):

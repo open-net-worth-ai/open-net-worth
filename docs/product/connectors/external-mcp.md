@@ -43,7 +43,10 @@ one that needs an API key or runs on this machine, **Set up** opens its form in 
 its details already filled in. **Lucius never adds a connector, never sees or types your keys, and
 nothing is saved until you finish the sign-in or click Connect yourself.** After you finish he
 re-checks that it is connected rather than assuming it worked. For a connector you already have,
-the card opens its settings instead. Unattended runs (an Automation, for instance) can't open
+the card shows its state: **Reconnect** (or **Authenticate**) while it needs attention, going
+straight on to the sign-in when that is what expired, and **Open** once it works. When a
+connector you have stops working, Lucius offers its card himself rather than sending you to find
+it in Connectors. Unattended runs (an Automation, for instance) can't open
 anything; Lucius just tells you what to set up.
 
 The directory is a curated list, not everything you can connect. Ask about an app that isn't in
@@ -220,7 +223,10 @@ Open the server under **Connectors**:
 - **Reconnect** — appears when a connection stops working. If the sign-in expired, the status is an
   amber **Authentication issue** and it opens the sign-in window. If the server stopped answering, the
   status is a red **Error** and it tries the connection again: a network problem never makes you
-  link the account again. A dot on **Connectors** in the navigation tells you a connector needs one
+  link the account again. While a sign-in is waiting, the page shows **Open sign-in again** and
+  **Cancel**: if you closed the sign-in window or browser tab without finishing, start a fresh one
+  or drop it. (The desktop app signs in through your browser, so it can't tell the tab was closed.)
+  A dot on **Connectors** in the navigation tells you a connector needs one
   of these (amber if every problem is an expired sign-in), the **Attention** filter lists which
   ones, and the reason is written on its row and at the top of its page. Lucius is told too: each turn it sees which connectors have a problem, so it can say
   why a tool is missing.

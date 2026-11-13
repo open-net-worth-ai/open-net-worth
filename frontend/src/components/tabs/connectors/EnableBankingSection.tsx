@@ -50,6 +50,7 @@ interface EnableBankingStatus {
   last_synced_at: string | null
   last_status: string
   last_error: string | null
+  last_caution?: string | null
 }
 
 interface Institution {
@@ -145,6 +146,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   // After Link bank: whether the bank will bring the user back here (the app's URL is
   // registered), or to the old https://localhost/connectors page they copy the code from.
   const [returnsToApp, setReturnsToApp] = useState<boolean | null>(null)
+  // The bank's consent page, kept on screen once a link starts: a blocked tab, a mini-window
+  // browser or an iOS home-screen app leaves no tab, so the link is the way to the bank.
+  const [bankLink, setBankLink] = useState<{ url: string; opened: boolean } | null>(null)
   // Enable Banking refused this app's address. Step 1 holds the address to add; this keeps the
   // bank to retry with a code.
   const [unregistered, setUnregistered] = useState<{ target?: EnableBankingBank } | null>(null)
@@ -248,6 +252,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
     setRenewingKey(target?.key ?? null)
     setLinkErr(null)
     setUnregistered(null)
+    setBankLink(null)
     try {
       const r = await authFetch('/api/enable-banking/link', {
         method: 'POST',
@@ -277,7 +282,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       setReturnsToApp(data.returns_to_app === true)
       if (data.url) {
         opened = tab.go(data.url)
-        if (!opened) window.open(data.url, '_blank', 'noopener,noreferrer')
+        setBankLink({ url: data.url, opened })
       }
       load()
     } finally {
@@ -358,6 +363,20 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const consentExpired =
     banks.some((b) => accessEnded(b)) ||
     (cfg.has_session && /401|403|expired|unauthori[sz]ed|consent/i.test(cfg.last_error || ''))
+  const appChanged = banks.filter((b) => b.access_ended === 'app_changed').length
+  // Typing another app's ID while banks are linked under this one: say what Save will do.
+  const switchingApp =
+    !!form &&
+    !!cfg.application_id &&
+    !!form.application_id.trim() &&
+    form.application_id.trim() !== cfg.application_id &&
+    banks.some((b) => !b.access_ended)
+  // What the last fetch couldn't read, less what a bank row below already says.
+  const flagged = banks.filter((b) => accessEnded(b)).map((b) => b.aspsp)
+  const caution = (cfg.last_caution ?? '')
+    .split('; ')
+    .filter((part) => part && !flagged.some((name) => name && part.startsWith(name)))
+    .join('; ')
   // Step 1 stays open until its keys are saved, while being edited, or when Enable Banking
   // refused its Redirect URL (then only that field shows, unless the keys are being edited).
   const setupOpen = !cfg.has_credentials || editingSetup || Boolean(unregistered)
@@ -427,6 +446,11 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           Last error: {cfg.last_error}
         </Text>
       )}
+      {caution && (
+        <Text size="xs" tone="warn">
+          Last fetch couldn&apos;t read everything — {caution}
+        </Text>
+      )}
 
       <SetupStep
         n={1}
@@ -470,15 +494,23 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
                 onBlur={applicationIdTouched.onBlur}
               />
             </FormField>
+            {switchingApp && (
+              <Text size="xs" tone="warn">
+                Your banks are linked under your current app. Saving another app ends their access,
+                and you&apos;ll renew each bank after.
+              </Text>
+            )}
             <FormField
               label="Private key"
               htmlFor="conn-eb-key"
               required
               help={
                 privateKeyReveal.caption ||
-                (cfg.has_credentials
-                  ? 'Saved. Leave blank to keep it.'
-                  : 'Paste the whole .pem file, first and last lines included.')
+                (switchingApp
+                  ? "Paste the new app's private key."
+                  : cfg.has_credentials
+                    ? 'Saved. Leave blank to keep it.'
+                    : 'Paste the whole .pem file, first and last lines included.')
               }
               error={
                 privateKeyReveal.error ||
@@ -533,7 +565,11 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
         <Stack gap="--space-3">
           {consentExpired && (
             <Text size="xs" tone="warn">
-              Access to a bank has expired. Click Renew next to it to keep it syncing.
+              {appChanged > 1 && appChanged === banks.length
+                ? 'Your banks were linked under your previous Enable Banking app. Click Renew next to each one to keep it syncing.'
+                : appChanged
+                  ? `${appChanged === 1 ? 'A bank was' : 'Some banks were'} linked under your previous Enable Banking app. Click Renew next to ${appChanged === 1 ? 'it' : 'each one'} to keep it syncing.`
+                  : 'Access to a bank has ended. Click Renew next to it to keep it syncing.'}
             </Text>
           )}
           {banks.length > 0 ? (
@@ -609,8 +645,13 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           )}
           {returnsToApp === true && (
             <Text size="xs" tone="muted">
-              Approve access in the tab that just opened. Your bank brings you back here and the
-              link finishes by itself.
+              {bankLink?.opened === false ? (
+                <BankPageLink url={bankLink.url} lead />
+              ) : (
+                'Approve access in the tab that just opened.'
+              )}{' '}
+              Your bank brings you back here and the link finishes by itself.
+              {bankLink?.opened && <BankPageLink url={bankLink.url} />}
             </Text>
           )}
           {unregistered && (
@@ -620,8 +661,14 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
           )}
           {returnsToApp === false && (
             <Text size="xs" tone="warn">
+              {bankLink?.opened === false && (
+                <>
+                  <BankPageLink url={bankLink.url} lead />{' '}
+                </>
+              )}
               After you approve, the bank tab shows an error page. That&apos;s expected: copy the
               code from its address bar (the part after code=) and paste it below.
+              {bankLink?.opened && <BankPageLink url={bankLink.url} />}
             </Text>
           )}
 
@@ -685,4 +732,16 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       />
     </Stack>
   )
+}
+
+/** The bank's consent page as a link. `lead`: no tab opened, so this IS the instruction;
+ *  otherwise a fallback after it, for a tab that opened somewhere the user can't see. */
+function BankPageLink({ url, lead = false }: { url: string; lead?: boolean }) {
+  const link = (
+    <a href={url} target="_blank" rel="noopener noreferrer">
+      {lead ? 'Open your bank’s page' : 'open your bank’s page'}
+    </a>
+  )
+  if (lead) return <>{link} to approve access.</>
+  return <> If no tab opened, {link}.</>
 }

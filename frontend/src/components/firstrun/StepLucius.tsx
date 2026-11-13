@@ -81,6 +81,9 @@ function firstKeyedEntry(catalog: CatalogEntry[]): CatalogEntry | null {
 
 export interface StepLuciusProps {
   onDone: () => void
+  /** "Not now": go on without a model. The app works without Lucius (accounts, the ledger,
+   *  budgets, imports, bank sync without AI); Settings → AI adds one later. */
+  onSkip?: () => void
   /** Which half of this step is showing. Lifted so the topbar's Back can unwind the model
    *  page before leaving the step — otherwise Back skipped the provider page entirely. */
   stage?: 'provider' | 'model'
@@ -113,6 +116,7 @@ async function savedModelConfig(): Promise<{
 
 export function StepLucius({
   onDone,
+  onSkip,
   stage: stageProp,
   onStageChange,
   gatewayMode = false,
@@ -336,8 +340,8 @@ export function StepLucius({
       // the model page, with no field there to correct it in. This same call returns the live
       // model list, so proving the key and learning what it can run is one round trip.
       // Wrapped: an unreachable provider must not abort the advance. The catalogue's hints
-      // are a working fallback, and this step has no skip — being stranded here is worse than
-      // a slightly stale list.
+      // are a working fallback — being stranded on the model page is worse than a slightly
+      // stale list.
       let data: {
         key_status?: string
         models?: string[]
@@ -498,8 +502,11 @@ export function StepLucius({
     <Stack gap="--space-6">
       <Text as="p" tone="muted" className="firstrun-lead">
         {gatewayMode
-          ? 'Lucius needs a model to think with — a provider’s API key. To use a Claude Code or Codex subscription instead, finish setup and open Settings → Terminal. Change it any time in Settings.'
-          : 'Lucius needs a model to think with — a subscription you already pay for, a provider’s key, or one running on this machine. Change it any time in Settings.'}
+          ? 'Lucius needs a model to think with — a provider’s API key. To use a Claude Code or Codex subscription instead, finish setup and open Settings → Terminal.'
+          : 'Lucius needs a model to think with — a subscription you already pay for, a provider’s key, or one running on this machine.'}{' '}
+        {onSkip
+          ? 'Not now skips it: the rest of the app works without one.'
+          : 'Change it any time in Settings.'}
       </Text>
       {gatewayMode && (
         <Text as="p" size="sm" tone="muted">
@@ -720,6 +727,11 @@ export function StepLucius({
                     </>
                   )
                 )}
+                {onSkip && (
+                  <Button variant="ghost" onClick={onSkip} disabled={busy}>
+                    Not now
+                  </Button>
+                )}
                 <Button
                   variant="primary"
                   loading={busyKey === keyedChosen?.key}
@@ -738,6 +750,15 @@ export function StepLucius({
                 </Button>
               </div>
             </>
+          )}
+          {/* No provider form to sit beside (only CLIs offered, or the list didn't load): Not
+              now still has to be reachable. */}
+          {keyedOptions.length === 0 && onSkip && (
+            <div className="firstrun-actions">
+              <Button variant="ghost" onClick={onSkip} disabled={busy}>
+                Not now
+              </Button>
+            </div>
           )}
         </>
       )}
@@ -863,10 +884,10 @@ export function StepLucius({
         </>
       )}
 
-      {/* NO SKIP. The app is an agent harness — an install with no model is the product with
-          its point removed, and "Not now" was the easiest button on the screen to press.
-          Every path out of here enrols something: a subscription you already have, a
-          provider's key, or a model running locally. */}
+      {/* "Not now" is a real, equally plain choice beside Continue, as the password step's Skip
+          is (ADR 2026-08-22 ruling 2, restored 2026-11-14): bank sync without AI and manual
+          bookkeeping need no model, and a first run that demanded one locked those users out
+          of the whole app. The dock then reads "Set up Lucius" (ruling 6). */}
     </Stack>
   )
 }

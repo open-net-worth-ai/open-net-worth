@@ -25,6 +25,9 @@ import { ALL_TEMPLATES } from './automations/automationTemplates'
 import { DataSyncView } from './automations/datasync/DataSyncView'
 import { YnabSyncDetail } from './automations/datasync/YnabSyncDetail'
 import { useDataSyncs } from './automations/datasync/useDataSyncs'
+import { BankSyncDetail } from './automations/datasync/BankSyncDetail'
+import { useBankSyncs } from './automations/datasync/bankSync'
+import { useFlag } from '../../hooks/useFlag'
 import {
   EMPTY_AUTOMATION_OPTIONS,
   missingTriggerFields,
@@ -69,12 +72,23 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   // budget app, whose page `?sync=<app>` opens (`report` = one of its runs). Each behind its own
   // flag: all off (or still loading), only the Lucius list, as before.
   const dataSyncs = useDataSyncs()
-  const syncOn = dataSyncs.length > 0
+  // Bank connectors that sync without AI (ADR 2026-11-13) sit beside the budget apps; their
+  // page is `?sync=bank:<provider>`.
+  const banksOn = useFlag('bank_data_sync') === true
+  const bankSyncs = useBankSyncs(banksOn).data ?? []
+  const syncOn = dataSyncs.length > 0 || bankSyncs.length > 0
   const syncEntry = dataSyncs.find((e) => e.app.key === search.sync) ?? null
+  const bankKey =
+    banksOn && typeof search.sync === 'string' && search.sync.startsWith('bank:')
+      ? search.sync.slice('bank:'.length)
+      : null
   const syncKey = syncEntry?.app.key ?? null
-  const view: AutomationsView = syncOn && (syncKey || search.view === 'sync') ? 'sync' : 'lucius'
+  const view: AutomationsView =
+    syncOn && (syncKey || bankKey || search.view === 'sync') ? 'sync' : 'lucius'
   const reportId = syncKey && typeof search.report === 'string' ? search.report : null
-  const toReview = dataSyncs.reduce((total, e) => total + e.sync.toReview, 0)
+  const toReview =
+    dataSyncs.reduce((total, e) => total + e.sync.toReview, 0) +
+    bankSyncs.reduce((total, b) => total + b.to_review, 0)
   const [automations, setAutomations] = useState<Automation[]>([])
   const automationsRef = useRef(automations)
   useEffect(() => {
@@ -517,7 +531,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           title, and the detail's breadcrumb (desktop only — a phone backs out by swipe or
           the tab bar) is the way back, so repeating "Automations" here is redundancy. */}
       {/* Up while the list loads too — only the data is a skeleton; the title never pops in. */}
-      {!selectedAutomationId && !syncKey && (
+      {!selectedAutomationId && !syncKey && !bankKey && (
         <div
           className={syncOn ? 'rd-masthead a3-masthead--tabs' : 'rd-masthead'}
           data-od-id="automations-masthead"
@@ -546,7 +560,9 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           {actionError}
         </div>
       )}
-      {syncEntry ? (
+      {bankKey ? (
+        <BankSyncDetail provider={bankKey} onBack={() => openSync(null)} />
+      ) : syncEntry ? (
         <YnabSyncDetail
           app={syncEntry.app}
           reportId={reportId}
@@ -556,6 +572,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
       ) : view === 'sync' ? (
         <DataSyncView
           entries={dataSyncs}
+          banks={bankSyncs}
           onOpen={(key) => {
             rememberScroll()
             openSync(key)

@@ -569,7 +569,10 @@ def _account_to_common(account: dict) -> dict:
         "name": str(name),
         "mask": account.get("mask"),
         "currency": currency,
+        # Plaid's "current" doesn't say whether pending is in it, so it stays the one undivided
+        # ``balance`` and is never called cleared (balance_kinds).
         "balance": balances.get("current"),
+        "available_to_spend": balances.get("available"),
         "account_type": _suggested_account_type(account),
         # Which linked bank the account sits at — several banks share one Plaid connector.
         "institution": account.get("_institution") or None,

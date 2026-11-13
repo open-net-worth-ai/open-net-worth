@@ -31,7 +31,7 @@ from backend.core.user_time import user_today
 from backend.models.account import AccountType
 from backend.services import connector_window
 from backend.services import ledger as ledger_service
-from backend.services.aggregation import providers
+from backend.services.aggregation import balance_kinds, providers
 from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,23 @@ _RAW_MAX_DEPTH = 8
 # email_snapshots.py capping raw_message_id the same way. Never sanitized (RFC §A step 4's
 # own carve-out: these are structural keys, not prose), only bounded.
 _ID_MAX_LEN = 512
+
+
+def _count_reads(provider: Provider, account: Optional[str]) -> None:
+    """Note a transaction read against the bank's daily limit BEFORE the call — every caller of
+    this seam, a Lucius fetch tool as much as the AI-free sync, spends the same per-account
+    budget (``bank_data_sync.budget``). A no-op for a provider with no app-side limit. Never
+    fails the fetch."""
+    if provider.daily_reads is None:
+        return
+    try:
+        from backend.services.bank_data_sync import budget
+
+        ids = [account] if account else list(_linked_accounts_by_provider_id(provider.key))
+        for pid in ids:
+            budget.note_read(provider, pid)
+    except Exception:  # noqa: BLE001 — bookkeeping only
+        logger.warning("connector_fetch: could not count a %s read", provider.key, exc_info=True)
 
 
 def _resolve_provider(provider_key: str) -> Provider:
@@ -229,6 +246,15 @@ def _linked_account_ids(provider_key: str) -> dict[str, str]:
     }
 
 
+def _balance_fields(account: dict) -> dict:
+    """The account's balances under the book's own names (``balance_kinds.book_terms``):
+    ``balance`` (working: settled + pending), ``cleared_balance`` (settled only),
+    ``available_to_spend`` (overdraft or credit included) — each None when the bank didn't
+    send it."""
+    shown = balance_kinds.book_terms(account)
+    return {k: shown.get(k) for k in ("balance", "cleared_balance", "available_to_spend")}
+
+
 def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
     """The LINKED-only account view (``currency``/``balance`` always ``None`` — no live
     provider call backs them) — what ``provider_accounts()`` returns when the provider call
@@ -241,7 +267,7 @@ def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
                 "name": info.get("name") or "",
                 "mask": info.get("mask") or "",
                 "currency": None,
-                "balance": None,
+                **_balance_fields({}),
             }
         )
         | {
@@ -339,12 +365,27 @@ def fetch_all(
     since: Optional[str] = None,
     before: Optional[str] = None,
     account: Optional[str] = None,
+    include_booked: bool = False,
+    include_pending: bool = False,
 ) -> dict:
     """The same fetch with every unbooked, posted row of the window in ONE provider read — no
     ``limit``/``offset`` slice, so no second read is spent paging (the bank data sync's caller:
     a GoCardless account may be read only 4 times a day). ``_MAX_FETCH_ROWS`` still caps it and
-    marks the window incomplete. Never handed to a model."""
-    return _fetch(provider_key, since=since, before=before, account=account, limit=None)
+    marks the window incomplete. Never handed to a model.
+
+    ``account`` here is a LINKED provider account id (from ``Account.external_ids``), never a
+    name, so the account-resolution probe is skipped: on Enable Banking that probe alone re-reads
+    every account's details and balance, against the bank's daily limit."""
+    return _fetch(
+        provider_key,
+        since=since,
+        before=before,
+        account=account,
+        include_booked=include_booked,
+        include_pending=include_pending,
+        limit=None,
+        probe=False,
+    )
 
 
 def _fetch(
@@ -358,6 +399,7 @@ def _fetch(
     limit: Optional[int] = _DEFAULT_LIMIT,
     offset: int = 0,
     plan_id: Optional[str] = None,
+    probe: bool = True,
 ) -> dict:
     """Fetch + normalize + stash + link + filter one provider's window (RFC §A). ``plan_id``
     is YNAB's only: which plan to read (omitted = the saved or only one). NEVER
@@ -385,7 +427,7 @@ def _fetch(
 
     # ── step 1b: resolve `account` (provider id OR name, RFC §A) before the real fetch ──
     resolved_account = account
-    if account:
+    if account and probe:
         try:
             accounts_probe = provider.fetch_window(
                 since=since_resolved,
@@ -411,6 +453,7 @@ def _fetch(
             )
 
     # ── step 2: fetch ────────────────────────────────────────────────────────────────────
+    _count_reads(provider, resolved_account)
     try:
         window: FetchWindow = provider.fetch_window(
             since=since_resolved, before=before_resolved, account=resolved_account, plan_id=plan_id
@@ -557,8 +600,8 @@ def _fetch(
 def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     """The account list ONLY, no transaction fetch — ``GET /api/connectors/{id}/accounts``
     (``api/connectors_api.py``, L1) calls this directly. Returns ``{status, provider_label,
-    accounts: [{provider_account_id, name, mask, currency, balance, account_type,
-    linked_account_id}]}`` — ``account_type`` is the provider's suggested app type, or None.
+    accounts: [{provider_account_id, name, mask, currency, balance, cleared_balance,
+    available_to_spend, account_type, linked_account_id}]}`` (balances: ``_balance_fields``) — ``account_type`` is the provider's suggested app type, or None.
 
     A pure READ (C-B2/S-F7): unlike ``fetch()``, this NEVER calls ``store.record_status``
     or publishes a sync event — opening the Connectors tab's link picker must not look like
@@ -625,7 +668,7 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
                 "name": clean.get("name"),
                 "mask": clean.get("mask"),
                 "currency": clean.get("currency"),
-                "balance": clean.get("balance"),
+                **_balance_fields(clean),
                 "account_type": _known_account_type(clean.get("account_type")),
                 "institution": clean.get("institution"),
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
@@ -634,4 +677,9 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     accounts.extend(
         a for a in _linked_only_accounts(linked) if a["provider_account_id"] not in seen
     )
-    return {"status": "ok", "provider_label": provider.label, "accounts": accounts}
+    result = {"status": "ok", "provider_label": provider.label, "accounts": accounts}
+    if window.warnings:
+        # A bank that couldn't be read is named, never an empty "ok" (its linked accounts
+        # still show above, from the linked view).
+        result["warnings"] = [sanitize_untrusted(w, max_len=300) for w in window.warnings]
+    return result

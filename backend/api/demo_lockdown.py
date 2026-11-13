@@ -111,7 +111,7 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/cost/(budget|log)$",
         r"^/api/intel/(scan|sources)(/.*)?$",
         r"^/api/(alpaca|ibkr|plaid|enable-banking|gocardless|lunch-flow|lunch-money|simplefin|yodlee|ynab"
-        r"|telegram|email|market-data|integrations|account-linking)(/.*)?$",
+        r"|telegram|email|market-data|integrations|account-linking|bank-sync)(/.*)?$",
         # Voice calls: a visitor may START one (``_WRITABLE``), capped by ``services.demo_calls``;
         # the LiveKit project, its keys and the call settings stay the operator's.
         r"^/api/voice(?!/call$)(/.*)?$",

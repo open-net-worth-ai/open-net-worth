@@ -559,8 +559,9 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
 
 
 def _add_align_next_step(result: dict, warnings: list[dict], created: list[dict]) -> None:
-    """Name the fix for rows booked before their account's start, in the result itself. The
-    warning alone left a chat turn (no skill loaded) booking history that never counted."""
+    """Say what rows booked before their account's start mean, in the result itself: they
+    don't count until the USER chooses to count them — never moved on a model's own call,
+    since nothing here can tell whether the rows are right."""
     oldest: dict[str, str] = {}
     by_id = {t.get("id"): t for t in created}
     for w in warnings:
@@ -572,10 +573,11 @@ def _add_align_next_step(result: dict, warnings: list[dict], created: list[dict]
             oldest[w["account_id"]] = day
     if oldest:
         result["next_step"] = (
-            "Rows above are dated before their account's start, so they don't count. For a "
-            "cash or card account, call align_account_start with the date of its oldest row: "
+            "Rows above are dated before their account's start, so they don't count — a normal "
+            "state. Mention it once; call align_account_start only if the user asks to count "
+            "them (only they know whether the rows are right). Oldest row per account: "
             + ", ".join(f"{aid} → {day}" for aid, day in sorted(oldest.items()))
-            + ". Today's balance does not move. Skip it only if the user wants them uncounted."
+            + "."
         )
 
 

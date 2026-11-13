@@ -209,6 +209,7 @@ PROVIDERS: dict[str, Provider] = {
             note="US/CA banks; credentials + a linked Item; sandbox or production.",
             lookback_days=14,
             history_days=730,
+            data_sync=True,
             _fetch=("backend.services.aggregation.plaid", "fetch_window"),
             _classify=("backend.services.aggregation.plaid", "classify_error"),
             _store=("backend.db", "PlaidConfigStore"),
@@ -250,6 +251,11 @@ PROVIDERS: dict[str, Provider] = {
             note="EU PSD2; an application id + private key + a per-bank/country session.",
             lookback_days=14,
             history_days=90,
+            data_sync=True,
+            # 12 h, not 6: every Enable Banking read also reads each account's details and
+            # balance, which PSD2 banks count against the same 4-a-day limit.
+            sync_interval_hours=12,
+            daily_reads=4,
             _fetch=("backend.services.aggregation.enable_banking", "fetch_window"),
             _classify=("backend.services.aggregation.enable_banking", "classify_error"),
             _store=("backend.db", "EnableBankingConfigStore"),

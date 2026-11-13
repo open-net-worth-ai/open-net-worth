@@ -4344,7 +4344,11 @@ async def _run_turn(
         # always empty anyway — read once per turn as a redundant backstop.
         from backend.services.profile import read_profile as _read_profile_for_injection
 
-        _multi_turn_enabled = bool(
+        # A voice call's turn always takes what the owner adds while it runs: on a call they
+        # can't wait for a quiet moment to type, and a follow-up queued behind the turn got an
+        # answer that asked for what they'd just said (owner's call, 2026-11-09). Only the call
+        # enqueues for its own turns (``voice.desk.join_turn``).
+        _multi_turn_enabled = surface == "chat:voice" or bool(
             _read_profile_for_injection().get("chat_multi_turn_enabled", False)
         )
 

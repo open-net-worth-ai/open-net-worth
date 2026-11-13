@@ -107,3 +107,79 @@ We will add a **data sync** for bank connectors, behind the flag `bank_data_sync
   (`account_value_sync`), GoCardless rate-limit docs
 - **Why this way (one line):** the ledger choke already makes booking safe without a model; what
   users lacked was a caller that doesn't need one.
+
+## Amendment 1 (2026-11-13, pre-ship security review)
+
+- **Enable Banking runs every 12 h**, not 6: each of its reads also reads every account's
+  details and balance, which PSD2 banks count against the same daily limit.
+- **The read budget is counted at the fetch seam** (`connector_fetch`), so a Lucius fetch in chat
+  spends the same per-account budget as the sync; the sync's own reads skip the account probe.
+- **A review decision is claimed before it writes** (one decision per item, the version you saw),
+  and **every failed run schedules its backoff**. A first-import alignment that didn't happen is
+  retried on the next run.
+- The `bulk_create_transactions` external-ref floor is checked BEFORE the write transaction, not
+  inside it (Context above says otherwise, quoting 2026-09-05). Within this feature one run per
+  connector at a time and the claimed decision close the gap; a Lucius booking racing a data-sync
+  run on the same rows is the remaining window — a follow-up for the ledger choke.
+
+## Amendment 2 (2026-11-14, owner: the data sync page offers no AI)
+
+Data sync IS the no-AI path. Its page offers no Lucius choice: no Off / Sync without AI / Lucius
+control, no "Let Lucius sync it instead", and no "Let Lucius categorise what's left". It is one
+on/off switch, laid out as the budget apps' sync page. Someone who wants Lucius to sync a bank uses
+a Lucius Automation. The one-mode rule is unchanged: turning this sync on pauses that bank's Lucius
+sync Automation, an Automation that would sync a bank already on is refused (its message now
+points at Automations → Data sync), and the page says when a Lucius Automation syncs the bank.
+
+The categorising follow-up stays built (its setting, queue, route and tests) but is HIDDEN: the
+owner wants to see what the sync categorises on its own first. It is off by default, so nothing
+runs while the UI doesn't offer it.
+
+A sync turned on once stays set up (`bank_sync_settings.set_up`): switching it off keeps its page
+on the set-up view, as a budget app's does, instead of dropping back into the setup steps.
+
+## Amendment 3 (2026-11-14, owner: cleared means settled; pending is synced; the bank's balance)
+
+Cleared means settled at the bank, whoever entered the row. The sync now reads the whole window,
+pending rows included (still one read: `fetch_all(include_pending, include_booked)`), and:
+
+- books a settled row CLEARED and a pending row UNCLEARED, so the account's Cleared balance is
+  the bank's booked balance and the working balance includes what's pending;
+- remembers each pending row it booked (`runtime_state` `bank_data_sync.<provider>.pending`) and,
+  when the bank settles it, clears that same booking (same ref, Plaid's `supersedes_ref`, or —
+  Enable Banking gives neither — same amount on the same account within -3/+14 days). A changed
+  settled amount replaces the pending booking, carrying the user's labels; a pending row the bank
+  stops listing inside the read window is taken out as the sync's own booking (no rejected
+  identity). A settled row's old pending ref is remembered 60 days so its leaving the bank's list
+  is never a "vanished" review (`bank_data_sync/pending.py`). This reverses the 2026-11-13
+  "pending rows are not booked" line; bank changes to SETTLED rows stay review-only.
+
+The bank's own balance comes back with every read and is kept per account
+(`runtime_state` `...balances`), GoCardless's from its balances endpoint (limited by banks
+separately, read only alongside transactions). It is compared with the CLEARED balance (a
+liability's taken as owed, so negative; a figure equal to the working balance also counts as in
+step, for a bank whose balance includes pending). An account holding only its Starting Balance
+when first imported is set to the bank's figure (YNAB does the same); any other account is never
+changed silently — its row offers "Use the bank's balance", which moves the Starting Balance by
+the difference (`bank_data_sync/balances.py`). For a provider whose figure may hold pending
+(Plaid's "current"), the automatic set waits for a moment with nothing pending.
+
+## Amendment 4 (2026-11-14, owner: a bank's balances use the book's names)
+
+A bank reports several balance types, and "balance" meant a different one per provider (booked
+for GoCardless and Enable Banking, Plaid's "current"), while in the book `balance` is the working
+balance and `cleared_balance` the settled one. One word now means one thing everywhere: the
+account listing (`connector_fetch.provider_accounts`, behind the connector page and Lucius's
+`<bank>_list_accounts`) gives `cleared_balance` (booked: interim, else closing), `balance`
+(expected: booked + pending) and `available_to_spend` (interim/closing available — overdraft or
+credit included, so never called a balance), each null when the bank doesn't send that type —
+never filled in from another (`aggregation/balance_kinds.py`). Plaid's "current" doesn't say
+whether pending is in it, so it stays the one undivided `balance` and is never called cleared;
+its "available" is `available_to_spend`. The providers' internal single `balance` (booked
+preferred) is unchanged, since `account_value_sync` reads it. "Add" pre-fills a new account's
+Starting Balance with `cleared_balance`, falling back to `balance`, because the bank sync books
+pending rows on top, uncleared. The sync keeps the settled (`cleared`) and expected (`working`)
+figures it reads: when the bank names a settled figure, that alone is compared with the cleared
+balance and used by "Use the bank's balance" and the first-import set; the undivided figure keeps
+Amendment 3's rule (cleared or working counts as in step; the automatic set waits for nothing
+pending).

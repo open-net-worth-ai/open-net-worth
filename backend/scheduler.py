@@ -588,6 +588,21 @@ async def _run_followed_portfolios() -> None:
         logger.exception("scheduler: followed_portfolios error: %s", exc)
 
 
+async def _run_bank_data_sync() -> None:
+    """Tick of the AI-free bank sync (ADR 2026-11-13): runs each connector in "Sync without AI"
+    mode when its own schedule says it is due. Nothing at all while ``bank_data_sync`` is off."""
+    try:
+        from backend.services import bank_data_sync
+
+        if await asyncio.to_thread(bank_data_sync.run_if_due):
+            logger.info("scheduler: bank_data_sync ran")
+        # The opt-in Lucius follow-up runs here, on the loop, never inside the booking run.
+        if await bank_data_sync.run_followups():
+            logger.info("scheduler: bank_data_sync follow-up categorised rows")
+    except Exception as exc:
+        logger.exception("scheduler: bank_data_sync error: %s", exc)
+
+
 def _outward_jobs_allowed() -> bool:
     """False on a QA/isolated run (ONW_QA_MODE) unless it opts in with ONW_QA_RUN_SCHEDULES=1.
 
@@ -678,6 +693,16 @@ def start() -> None:
             _run_linked_account_totals,
             trigger=IntervalTrigger(seconds=60),
             id="linked_account_totals",  # a balance read, not an ingest poll
+            replace_existing=True,
+            misfire_grace_time=120,
+            max_instances=1,
+        )
+        # Bank sync without AI — one tick a minute; each connector's cadence (GoCardless 12 h,
+        # others 6 h) and read budget live in its own state. No-op while the flag is off.
+        _scheduler.add_job(
+            _run_bank_data_sync,
+            trigger=IntervalTrigger(seconds=60),
+            id="bank_data_sync",  # one generic tick, opt-in per connector — not an ingest:<provider> poll
             replace_existing=True,
             misfire_grace_time=120,
             max_instances=1,

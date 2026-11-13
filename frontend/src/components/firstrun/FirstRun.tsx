@@ -75,7 +75,9 @@ function pad2(n: number): string {
 }
 
 export interface FirstRunProps {
-  onDone: () => void
+  /** `withModel` false: setup finished with no AI model ("Not now"), so there is no Lucius to
+   *  hand off to — the caller lands somewhere else instead of an empty chat. */
+  onDone: (opts: { withModel: boolean }) => void
   onAuthChanged?: () => void
   /** The url segment currently showing — needed because step 2 has two halves. */
   currentStage?: string
@@ -209,7 +211,9 @@ export function FirstRun({
       // The stamp is a convenience signal, never a gate. If it fails the user still gets into
       // the app; first run may reappear once, which is far better than being stuck in it.
     }
-    onDone()
+    // Asked of the server, not remembered from a click: "Not now" after a model was saved
+    // earlier still leaves a working Lucius.
+    onDone({ withModel: await hasSavedModel() })
   }
 
   async function goBack() {
@@ -329,6 +333,7 @@ export function FirstRun({
                 onStageChange={setLuciusStage}
                 gatewayMode={gatewayMode}
                 onDone={() => (gatewayMode ? void finish() : setStep(2))}
+                onSkip={() => (gatewayMode ? void finish() : setStep(2))}
               />
             )}
             {step === 2 && (

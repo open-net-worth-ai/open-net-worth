@@ -65,6 +65,8 @@ DEFAULTS: dict = {
     "last_synced_at": None,  # "Last fetched" in the UI
     "last_status": "never_run",  # never_run | ok | auth_error | connect_error | error
     "last_error": None,
+    # What the last fetch couldn't read while the rest answered (a bank whose access ended).
+    "last_caution": None,
 }
 
 
@@ -72,7 +74,10 @@ DEFAULTS: dict = {
 _PENDING_MAX = 5
 _PENDING_TTL = timedelta(hours=2)
 
-_BANK_FIELDS = ("aspsp", "country", "valid_until", "linked_at", "account_ids")
+# ``access_ended``: why a bank's consent no longer answers, until it is renewed — "app_changed"
+# (linked under the application this book used before; that app's consents were revoked at
+# the switch) or "ended" (Enable Banking says the consent is closed, expired or gone).
+_BANK_FIELDS = ("aspsp", "country", "valid_until", "linked_at", "account_ids", "access_ended")
 
 
 def bank_key(session_id: str) -> str:
@@ -91,6 +96,7 @@ class EnableBankingConfigStore(AggregatorConfigStore):
         "last_synced_at",
         "last_status",
         "last_error",
+        "last_caution",
         "pending_links",
         "banks",
         "account_identities",
@@ -198,6 +204,38 @@ class EnableBankingConfigStore(AggregatorConfigStore):
             self._write(c, [b for b in banks if b["key"] != key])
         return gone["session_id"]
 
+    def mark_access_ended(self, keys: list[str], reason: Optional[str], *, conn=None) -> None:
+        """Flag banks whose consent no longer answers (``None`` clears it — the bank answered
+        again); renewing one replaces it unflagged."""
+        with self._unit(conn) as c:
+            banks = self.banks(conn=c)
+            if not any(b["key"] in keys for b in banks):
+                return
+            self._write(
+                c, [{**b, "access_ended": reason} if b["key"] in keys else b for b in banks]
+            )
+
+    def switch_application(self, changes: dict) -> None:
+        """Save another application's credentials. Every bank linked so far belongs to the
+        old application — Enable Banking won't show its consent to the new one — so each is
+        flagged to renew, in the same write."""
+        with self._unit(None) as c:
+            live = [b["key"] for b in self.banks(conn=c) if not b.get("access_ended")]
+            self.update(changes, conn=c)
+            self.mark_access_ended(live, "app_changed", conn=c)
+
+    def record_status(self, status: str, *, error: Optional[str] = None) -> None:
+        """A fetch's outcome — and it clears the previous run's caution (a fetch with
+        per-bank failures sets a fresh one right after, ``connector_fetch.fetch``)."""
+        self._record(
+            {
+                "last_synced_at": self._now(),
+                "last_status": status,
+                "last_error": error,
+                "last_caution": None,
+            }
+        )
+
     def account_id(self, *, aspsp: str, country: str, identification_hash: str, uid: str) -> str:
         """The account's id here: the first uid ever seen for this account, whatever session
         ``uid`` comes from. Records ``uid`` when the account is new."""
@@ -285,10 +323,12 @@ class EnableBankingConfigStore(AggregatorConfigStore):
                     "valid_until": b["valid_until"],
                     "linked_at": b["linked_at"],
                     "accounts": len(b["account_ids"]),
+                    "access_ended": b["access_ended"],
                 }
                 for b in self.banks()
             ],
             "last_synced_at": cfg["last_synced_at"],
             "last_status": cfg["last_status"],
             "last_error": cfg["last_error"],
+            "last_caution": cfg.get("last_caution"),
         }

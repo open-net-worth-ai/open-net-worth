@@ -60,6 +60,19 @@ def update(key: str, **fields) -> dict:
     return entry
 
 
+def mutate(key: str, fn) -> object:
+    """Read-modify-write one provider's state under the lock: ``fn(entry) -> result`` may change
+    ``entry`` in place. Returns what ``fn`` returned."""
+    with _lock:
+        store = _store()
+        doc = dict(store.get() or {})
+        entry = dict(doc.get(key) or {})
+        result = fn(entry)
+        doc[key] = entry
+        store.save(doc)
+    return result
+
+
 def _recent(stamps: list, at: datetime) -> list[datetime]:
     out = [d for d in (_parse(s) for s in stamps or []) if d is not None]
     return sorted(d for d in out if at - d < WINDOW)
@@ -92,7 +105,9 @@ def note_read(p: Provider, provider_account_id: str, at: Optional[datetime] = No
 
 
 def interval(p: Provider) -> timedelta:
-    return timedelta(hours=p.sync_interval_hours)
+    from backend.services.bank_data_sync import settings
+
+    return timedelta(hours=settings.interval_hours(p))
 
 
 def backoff(p: Provider, status: str, failures: int, error: Optional[str]) -> timedelta:
@@ -100,7 +115,7 @@ def backoff(p: Provider, status: str, failures: int, error: Optional[str]) -> ti
     if status == "rate_limited":
         match = _MINUTES.search(error or "")
         return timedelta(minutes=int(match.group(1)) + 5) if match else timedelta(hours=12)
-    if status == "auth_error":
+    if status in ("auth_error", "reconnect_needed"):
         return timedelta(hours=24)
     return min(interval(p), timedelta(minutes=30) * (2 ** max(0, failures - 1)))
 
@@ -131,5 +146,22 @@ def record_outcome(p: Provider, status: str, error: Optional[str], at: Optional[
 
 
 def schedule_from_now(p: Provider, at: Optional[datetime] = None) -> None:
-    """Turning data sync on: the first run is due now."""
+    """Turning data sync on: the first run is due now — unless a good run just read the bank
+    (the history import right before Turn on), when it is due one interval after that run.
+    Reading again at once would book nothing and spend one of the bank's few daily reads."""
+    st = state(p.key)
+    last = _parse(st.get("last_run_at"))
+    if last is not None and st.get("last_status") in ("ok", "partial"):
+        update(p.key, next_due_at=_iso(last + interval(p)), failures=0)
+        return
     update(p.key, next_due_at=_iso(at or now()), failures=0)
+
+
+def reschedule(p: Provider) -> None:
+    """A new schedule: the next run is the last good one plus the new interval (due at once if
+    that has passed). A failure's backoff, or a sync that never ran, is left as it is."""
+    st = state(p.key)
+    last = _parse(st.get("last_run_at"))
+    if last is None or int(st.get("failures") or 0) > 0:
+        return
+    update(p.key, next_due_at=_iso(last + interval(p)))

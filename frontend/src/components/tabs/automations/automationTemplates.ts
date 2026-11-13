@@ -247,7 +247,8 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     instructions:
       'Fetch new Enable Banking transactions and book them using the book-transactions ' +
       'skill. Message me only when something was booked or something went wrong.',
-    trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
+    // Twice a day, like GoCardless: PSD2 banks allow about 4 unattended reads per account a day.
+    trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
   },

@@ -16,6 +16,11 @@ import { TYPE_ORDER, typeLabel } from './categories'
 import { ChevronRight, Link2 } from '../../../ui/icons'
 import { countNeedsReconciling, needReconcilingLabel, needsReconciling } from './reconcileDue'
 import { sidebarLine } from './valuation'
+import {
+  useBankSyncMarks,
+  type SyncMark,
+  type SyncTone,
+} from '../automations/datasync/bankSyncMarks'
 
 // ── Local icon helpers (SVG, pixel-centered) ─────────────────────────────────
 
@@ -93,9 +98,17 @@ interface AccountRowProps {
   a: Account
   sel: boolean
   onSelect: (id: string) => void
+  /** Set when the bank sync keeps this account: the link icon becomes its sync mark. */
+  mark?: SyncMark
 }
 
-function AccountRow({ a, sel, onSelect }: AccountRowProps) {
+const MARK_CLASS: Record<SyncTone, string> = {
+  ok: 'acct-row-linked',
+  warn: 'acct-row-linked acct-sync-warn',
+  bad: 'acct-row-linked acct-sync-bad',
+}
+
+function AccountRow({ a, sel, onSelect, mark }: AccountRowProps) {
   const isSec = a.role === 'securities'
   const neg = a.balance < 0
   const base = getBaseCurrency()
@@ -138,13 +151,19 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
         {(a.lastFour || due || linked || valueLine) && (
           <span className="acct-row-sub">
             {a.lastFour && '•••' + a.lastFour}
-            {linked && (
-              <span
-                className={linkLive ? 'acct-row-linked' : 'acct-row-linked acct-row-linked--off'}
-                title={linkLive ? `Linked to ${linked}` : `Linked to ${linked} — not syncing`}
-              >
-                <Link2 size={11} aria-label={`Linked to ${linked}`} />
+            {mark ? (
+              <span className={MARK_CLASS[mark.tone]} title={mark.text}>
+                <Link2 size={11} aria-label={mark.text} />
               </span>
+            ) : (
+              linked && (
+                <span
+                  className={linkLive ? 'acct-row-linked' : 'acct-row-linked acct-row-linked--off'}
+                  title={linkLive ? `Linked to ${linked}` : `Linked to ${linked} — not syncing`}
+                >
+                  <Link2 size={11} aria-label={`Linked to ${linked}`} />
+                </span>
+              )
             )}
             {a.lastFour && due && ' · '}
             {due && <span className="acct-due">Needs reconciling</span>}
@@ -192,6 +211,7 @@ export function Sidebar({
   onAdd,
   onManagePayees,
 }: SidebarProps) {
+  const marks = useBankSyncMarks()
   const [openVenues, setOpenVenues] = useState<Record<string, boolean>>({})
 
   // `assets` is deliberately DEFINED from `netWorth` (assets − debts = net worth, rearranged),
@@ -337,7 +357,13 @@ export function Sidebar({
               </div>
 
               {flat.map((a) => (
-                <AccountRow key={a.id} a={a} sel={selectedId === a.id} onSelect={onSelect} />
+                <AccountRow
+                  key={a.id}
+                  a={a}
+                  sel={selectedId === a.id}
+                  onSelect={onSelect}
+                  mark={marks.get(a.id)}
+                />
               ))}
 
               {venues.map(([p, arr]) => {
@@ -378,6 +404,7 @@ export function Sidebar({
                             a={a}
                             sel={selectedId === a.id}
                             onSelect={onSelect}
+                            mark={marks.get(a.id)}
                           />
                         ))}
                       </div>

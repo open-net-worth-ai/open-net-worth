@@ -64,8 +64,9 @@ An export never contains AI provider keys or your password, so you set those aga
 
 ## Step 2: Connect Lucius
 
-Lucius needs an AI model. This step has no skip — every option below works, and one of them is
-free.
+Lucius needs an AI model. Every option below works, and one of them is free. Don't want AI?
+Click **Not now** (beside **Continue**): setup goes on without a model — see
+[Without a model](#without-a-model).
 
 **Use a subscription you already pay for (no API key).** Claude Code and Codex are listed even
 if you haven't installed them yet:
@@ -106,9 +107,18 @@ so — click **Finish**.
 background** and **Start at login**. Both are off unless you turn them on; change them later in
 **Settings → Desktop**.
 
+## Without a model
+
+**Not now** finishes setup with no AI model and opens the **Dashboard**, where **Add an account
+myself** starts your book by hand. Everything except Lucius works: accounts, the ledger,
+budgeting, investments, CSV/OFX/QIF import and, with it turned on,
+[bank sync without AI](../features/bank-data-sync.md). Chatting with Lucius says the AI provider
+isn't configured and links to **Settings → AI Models**; the **Set up Lucius** button in the
+corner goes there too. Add a model there any time.
+
 ## Then: Lucius sets up your book
 
-Setup drops you into a chat with Lucius. With an empty book, he leads, one question at a time,
+With a model, setup drops you into a chat with Lucius. With an empty book, he leads, one question at a time,
 and gets your money in before asking anything personal:
 
 1. Asks your name and what to call you.
@@ -130,7 +140,12 @@ and gets your money in before asking anything personal:
    **Connectors → Email** — he never asks for a password in chat — then he sets up the
    **Auto-log transactions from email** automation. See [Email](../connectors/email-ingestion.md).
 6. If you hold investments (you can skip this): reads them from a screenshot, a statement or a
-   list, and confirms each one before saving.
+   list, and confirms each one before saving. When you name a broker or exchange that has its own
+   connector (moomoo, Interactive Brokers, Webull, Coinbase and others), he first shows its card:
+   sign in on the broker's own page and he can read your holdings instead of you typing them.
+   One that isn't in the directory, he checks for an official MCP server on the broker's own site
+   and, if there is one, offers to add it as a custom server. See
+   [External MCP servers](../connectors/external-mcp.md).
 7. Closes with two or three useful next steps — for example a daily briefing or a budget — and
    offers a 20-second tour of his own controls.
 

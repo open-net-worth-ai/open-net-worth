@@ -160,3 +160,17 @@ populated instances retain their setup status. The ordinary empty-book setup pat
   finding from the same audit: the default `DATA_DIR` is `backend/data`, *inside the repo
   checkout*, which is why `.gitignore` carries 58 hand-maintained entries for it. Split into its
   own plan as a distinct subsystem; screen 1 renders the path read-only until then.
+
+## Amendment (2026-11-14): "Not now" is back on the AI step
+
+Ruling 2 asked for a plain "Not now" on the AI step; a later change removed it ("an install with
+no model is the product with its point removed"), so the model step had no way past. That locked
+out the users bank sync without AI exists for (ADR
+`2026-11-13-a-bank-connector-can-book-its-rows-without-ai`) and anyone keeping the book by hand:
+first run owns the viewport, so no model meant no app. "Not now" is restored as ruling 2 framed
+it, a ghost button beside Continue (the password step's Skip, same weight), with the step's lead
+saying the rest of the app works without one. Setup then finishes and lands on the Dashboard, not
+the Lucius tab: with no model there is no onboarding conversation to hand off to (FirstRun's
+`onDone({withModel})`, read from `GET /api/model-config`, not from the click). Ruling 6 already
+covers what follows: the dock reads "Set up Lucius", and a chat turn says the provider isn't
+configured with a link to Settings.

@@ -38,6 +38,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.gocardless_config_store import ENDED, LINKED, GoCardlessConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation import balance_kinds
 from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
@@ -436,24 +437,32 @@ def _linked_banks(store: GoCardlessConfigStore) -> tuple[list[dict], list[str]]:
 # ── accounts + transactions ──────────────────────────────────────────────────────────
 
 
-def _account_meta(store: GoCardlessConfigStore, account_id: str, bank: dict, cache: dict) -> dict:
-    """Name/currency/type for one account — cached, because ``/details/`` is rate-limited."""
-    if account_id in cache:
+def _account_meta(
+    store: GoCardlessConfigStore, account_id: str, bank: dict, cache: dict, *, fresh: bool = False
+) -> dict:
+    """Name/currency/type for one account. ``fresh`` (listing the accounts): always read from
+    GoCardless, the stored copy only when the bank refuses. Otherwise (a sync) the stored copy
+    is used, so a sync never spends a ``/details/`` read (rate-limited like transactions)."""
+    if account_id in cache and not fresh:
         return cache[account_id]
-    fallback = f"{_bank_name(bank)} account {account_id[-4:]}"
+    fallback = cache.get(account_id) or {
+        "name": f"{_bank_name(bank)} account {account_id[-4:]}",
+        "currency": None,
+        "mask": None,
+    }
     try:
         details = (_json(_authed(store, "GET", f"/accounts/{account_id}/details/")) or {}).get(
             "account"
         ) or {}
     except ExternalServiceError as exc:
         logger.warning("gocardless: account details unavailable (%s)", exc)
-        return {"name": fallback, "currency": None, "mask": None}
+        return fallback
     iban = str(details.get("iban") or details.get("bban") or details.get("maskedPan") or "")
     meta = {
         "name": str(
             details.get("name") or details.get("displayName") or details.get("product") or ""
         ).strip()
-        or fallback,
+        or fallback["name"],
         "currency": (str(details.get("currency") or "").upper() or None),
         "mask": iban[-4:] or None,
         "account_type": _ACCOUNT_TYPES.get(str(details.get("cashAccountType") or "").upper()),
@@ -472,6 +481,39 @@ def _account_to_common(account_id: str, meta: dict) -> dict:
         "balance": None,
         "account_type": meta.get("account_type"),
     }
+
+
+# Booked balances first (what the ledger's cleared balance should match), then the rest.
+_BALANCE_PREFERENCE = (
+    "closingBooked",
+    "interimBooked",
+    "expected",
+    "interimAvailable",
+    "openingBooked",
+)
+
+
+def _account_balance(store: GoCardlessConfigStore, account_id: str) -> dict:
+    """``{balance, cleared_balance, working_balance, available_to_spend}`` (``balance_kinds``;
+    ``balance`` the one figure, booked preferred). The account's balance from ``/accounts/{id}/balances/`` — read with its transactions, so
+    the bank sync can compare it with the book. The bank limits this endpoint on its own (often
+    4 a day, like transactions), and a sync never calls it more often than transactions; a
+    refused or failed read is just no figure this time, never a failed fetch."""
+    try:
+        data = _json(_authed(store, "GET", f"/accounts/{account_id}/balances/")) or {}
+    except ExternalServiceError:
+        return {"balance": None, **balance_kinds.split({})}
+    by_type: dict[str, float] = {}
+    for b in data.get("balances") or []:
+        try:
+            amount = float(((b or {}).get("balanceAmount") or {}).get("amount"))
+        except (TypeError, ValueError):
+            continue
+        by_type.setdefault(str((b or {}).get("balanceType") or ""), amount)
+    best = next((by_type[k] for k in _BALANCE_PREFERENCE if k in by_type), None)
+    if best is None:
+        best = next(iter(by_type.values()), None)
+    return {"balance": best, **balance_kinds.split(by_type)}
 
 
 def _txn_id(txn: dict) -> str:
@@ -612,13 +654,18 @@ def fetch_window(
     banks, warnings = _linked_banks(store)
     owned = [(b, a) for b in banks for a in b["account_ids"] if not account or a == account]
     cache = store.accounts_meta()
-    metas = {a: _account_meta(store, a, b, cache) for b, a in owned}
+    # Listing the accounts (the connector page, Lucius's list tool) reads them from GoCardless:
+    # details and balance, live. A sync reads the balance beside its transactions, below.
+    metas = {a: _account_meta(store, a, b, cache, fresh=accounts_only) for b, a in owned}
     accounts = [_account_to_common(a, metas[a]) for _, a in owned]
     if accounts_only:
+        for acc in accounts:
+            acc.update(_account_balance(store, acc["provider_account_id"]))
         return FetchWindow(accounts=accounts, rows=[], complete=not warnings, warnings=warnings)
 
     rows: list[dict] = []
     failures: list[ExternalServiceError] = []
+    by_id = {a["provider_account_id"]: a for a in accounts}
     for bank, account_id in owned:
         currency = metas[account_id].get("currency") or ledger_service.base_currency()
         try:
@@ -626,6 +673,8 @@ def fetch_window(
         except ExternalServiceError as exc:
             failures.append(exc)
             warnings.append(f"{metas[account_id].get('name')} ({_bank_name(bank)}): {exc}")
+            continue
+        by_id[account_id].update(_account_balance(store, account_id))
     if owned and len(failures) == len(owned):
         raise failures[-1]
     return FetchWindow(accounts=accounts, rows=rows, complete=not warnings, warnings=warnings)
