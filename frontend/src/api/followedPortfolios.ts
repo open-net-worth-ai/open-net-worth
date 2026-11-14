@@ -237,6 +237,8 @@ export const fetchPerformance = (id: string) => readJson<FollowPerformance>(perf
 
 /** One Discover card: how it has done, what it just did, what is inside. */
 export interface PreviewSummary {
+  /** Its last figures, shown while the server makes a fresh card: ask again shortly. */
+  stale?: boolean
   kind: FollowKind
   source_ref: string
   name: string
