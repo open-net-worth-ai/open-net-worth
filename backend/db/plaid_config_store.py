@@ -56,8 +56,9 @@ DEFAULTS: dict = {
     "access_token": "",
     "item_id": "",
     # Every linked bank (a Plaid Item), write-only: ``[{item_id, access_token, institution_id,
-    # institution_name, custom_name, linked_at}]``. ``custom_name`` is the user's own name for
-    # the bank (wins over Plaid's). Set only through ``add_item``/``update_item``/``remove_item``.
+    # institution_name, custom_name, linked_at, accounts, account_ids}]``. ``custom_name`` is the user's own name for the bank (wins over Plaid's);
+    # ``account_ids`` are the provider accounts it holds. Set only through
+    # ``add_item``/``update_item``/``remove_item``.
     "items": [],
     # The Hosted Link session in flight (write-only): Hosted Link never shows the user a public
     # token, so the app reads it back from ``/link/token/get`` with this token.

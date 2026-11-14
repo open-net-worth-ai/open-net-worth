@@ -189,7 +189,8 @@ transactions stay on your book, and its history isn't marked as imported. Its ca
 **Sign-in needed** (with **Reconnect**) or **Last sync failed** (hover for why), and so does the
 mark beside its accounts. When one connector holds several banks, the others still sync, and
 the run says how many accounts it couldn't read; one bank's problem never shows on another's
-accounts.
+accounts. With several Plaid banks failing at once, each account shows the reason of its own
+bank.
 
 An account the bank no longer lists (it was closed, or the bank was linked again and its
 accounts have new identities) isn't read either. Its card says **Account not at the bank** with

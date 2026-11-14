@@ -221,8 +221,8 @@ def _complete_update_mode(store: PlaidConfigStore, bank: str, data: dict) -> dic
         message = error.get("display_message") or error.get("error_message") or "Plaid ended it"
         raise ValidationError(f"The bank wasn't reconnected: {message}")
     store.mark_reconnect(needed=set(), ok={bank})
-    _wake_sync()
     item = store.item_by_key(bank) or {}
+    _wake_sync()
     return {
         "status": "linked",
         "mode": "update",
@@ -253,6 +253,7 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
     inst = institution or {}
     name = str(inst.get("name") or "").strip()
     inst_id = str(inst.get("institution_id") or "").strip()
+    listed = _listed_accounts(store, access_token)
     entry = {
         "item_id": item_id,
         "access_token": access_token,
@@ -260,7 +261,9 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
         "institution_name": name,
         # Which accounts this sign-in covers (mask + subtype, nothing secret): how a later link
         # at the same bank tells a renewal from a second sign-in, even once this one has expired.
-        "accounts": _account_marks(store, access_token),
+        "accounts": _account_marks(listed),
+        # Plaid's own ids for them: which bank an account's failed read belongs to.
+        "account_ids": _account_ids(listed),
     }
     store.add_item(entry)
     if not name:
@@ -280,7 +283,10 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
                 continue
             theirs = {
                 _mark_key(m)
-                for m in (old.get("accounts") or _account_marks(store, old["access_token"]))
+                for m in (
+                    old.get("accounts")
+                    or _account_marks(_listed_accounts(store, old["access_token"]))
+                )
             }
             if mine and theirs and mine & theirs:
                 _retire_item(store, old)
@@ -313,19 +319,28 @@ def _wake_sync() -> None:
     budget.access_renewed("plaid")
 
 
-def _account_marks(store: PlaidConfigStore, access_token: str) -> list[dict]:
-    """An Item's accounts as ``{mask, subtype}`` (``/accounts/get``). ``[]`` when they can't be
+def _listed_accounts(store: PlaidConfigStore, access_token: str) -> list[dict]:
+    """An Item's accounts as Plaid lists them (``/accounts/get``). ``[]`` when they can't be
     read (an expired sign-in): then nothing is compared and nothing is revoked."""
     try:
         data = _post(store, "/accounts/get", {"access_token": access_token})
     except Exception as exc:  # noqa: BLE001 — best effort: recording accounts never fails a link
         logger.info("plaid: an Item's accounts couldn't be read to compare: %s", type(exc).__name__)
         return []
+    return [a for a in data.get("accounts") or [] if isinstance(a, dict)]
+
+
+def _account_marks(accounts: list[dict]) -> list[dict]:
+    """``{mask, subtype}`` of each account that has a mask."""
     return [
         {"mask": str(a.get("mask") or ""), "subtype": str(a.get("subtype") or "")}
-        for a in data.get("accounts") or []
-        if isinstance(a, dict) and a.get("mask")
+        for a in accounts
+        if a.get("mask")
     ]
+
+
+def _account_ids(accounts: list[dict]) -> list[str]:
+    return sorted({str(a["account_id"]) for a in accounts if a.get("account_id")})
 
 
 def _mark_key(mark: dict) -> tuple[str, str]:
@@ -503,12 +518,24 @@ def _fetch_item(
     }
 
 
-def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date: str) -> dict:
+def _record_item(store: PlaidConfigStore, item: dict, account_ids: list[str]) -> None:
+    """Keep which accounts an Item holds on the Item itself, written only when it changed (no
+    call of its own: it rides on the ``/transactions/get`` answer)."""
+    if item.get("account_ids") != account_ids:
+        store.update_item(item.get("item_id") or "", {"account_ids": account_ids})
+
+
+def fetch_transactions_get(
+    store: PlaidConfigStore, *, start_date: str, end_date: str, raise_if_all_fail: bool = True
+) -> dict:
     """``/transactions/get`` for EVERY linked bank, merged. Each account carries its bank's
     name (``_institution``). One bank failing (an expired login, say) never sinks the others:
     its error becomes a warning naming the bank and the result is marked incomplete; only when
-    every bank fails does this raise. Returns ``{transactions[], accounts{id: account},
-    warnings[], complete, error}`` (``error``: the first bank's failure, or None)."""
+    every bank fails does this raise (unless ``raise_if_all_fail`` is off, which leaves that
+    to the caller).
+    Returns ``{transactions[], accounts{id: account}, warnings[], complete, cut_short,
+    errors{bank_key: error}, holders{bank_key: [account ids]}, error}`` (``error``: the first
+    bank's failure, or None)."""
     items = store.items()
     if not items:
         raise ValidationError("Plaid is not linked (no access token)")
@@ -520,19 +547,25 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
     first_error: Optional[ValidationError] = None
     needed, answered = set(), set()
     cut_short: set[str] = set()
+    errors: dict[str, ValidationError] = {}
+    holders: dict[str, list[str]] = {}
     for item in items:
         bank = item.get("institution_name") or "a linked bank"
         key = bank_key(item.get("item_id") or "")
+        holders[key] = list(item.get("account_ids") or [])
         try:
             got = _fetch_item(store, item["access_token"], start_date=start_date, end_date=end_date)
         except ValidationError as exc:
             first_error = first_error or exc
+            errors[key] = exc
             if exc.context.get("plaid_error_code") in _UPDATE_MODE_CODES:
                 needed.add(key)
             warnings.append(f"{bank}: {_plain(exc)}")
             complete = False
             continue
         answered.add(key)
+        holders[key] = sorted(got["accounts"])
+        _record_item(store, item, holders[key])
         item = name_bank(store, item, got.get("item") or {})
         transactions.extend(got["transactions"])
         for acct_id, acct in got["accounts"].items():
@@ -547,16 +580,18 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
         if got["truncated"]:
             cut_short.update(got["accounts"])
     store.mark_reconnect(needed=needed, ok=answered)
-    if first_error is not None and len(warnings) == len(items):
+    if raise_if_all_fail and first_error is not None and len(errors) == len(items):
         raise first_error
     return {
         "transactions": transactions,
         "accounts": accounts,
         "warnings": warnings,
         "complete": complete,
-        # Accounts at a bank whose read hit the page cap: one account's read is whole unless
-        # it is one of these (another bank failing doesn't cut THIS account's read short).
+        # Accounts at a bank whose read hit the page cap: one account's read is whole unless it
+        # is one of these (another bank failing doesn't cut THIS account's read short).
         "cut_short": cut_short,
+        "errors": errors,
+        "holders": holders,
         "error": first_error,
     }
 
@@ -586,6 +621,7 @@ def fetch_balances(store: PlaidConfigStore) -> dict:
             complete = False
             continue
         answered.add(key)
+        _record_item(store, item, _account_ids(data.get("accounts") or []))
         institution = item.get("institution_name") or bank_name(item)
         for acct in data.get("accounts") or []:
             accounts.append(_account_to_common({**acct, "_institution": institution}))
@@ -792,6 +828,18 @@ def _txn_to_row(plaid_txn: dict, account: dict, account_id: str) -> dict | None:
     }
 
 
+def _error_of(fetched: dict, account: str) -> Optional[ValidationError]:
+    """The failure of the bank holding ``account``, from a read that didn't list it. The bank
+    that recorded the account is the one; a failed bank that never recorded its accounts might
+    hold it, so its error stands in. ``None`` when no failed bank can hold it — every bank that
+    could answered without it, so the account is gone from Plaid."""
+    errors, holders = fetched.get("errors") or {}, fetched.get("holders") or {}
+    for key, error in errors.items():
+        if account in holders.get(key, ()):
+            return error
+    return next((e for k, e in errors.items() if not holders.get(k)), None)
+
+
 def fetch_window(
     store: PlaidConfigStore,
     since: str,
@@ -813,17 +861,19 @@ def fetch_window(
         # accounts-only endpoint) the transaction rows an accounts-only caller pays for.
         fetched = fetch_transactions_get(store, start_date=before, end_date=before)
     else:
-        fetched = fetch_transactions_get(store, start_date=since, end_date=before)
+        fetched = fetch_transactions_get(
+            store, start_date=since, end_date=before, raise_if_all_fail=not account
+        )
     accounts_by_id = fetched["accounts"]
     accounts = [_account_to_common(a) for a in accounts_by_id.values()]
 
     warnings = fetched.get("warnings") or []
     if account and not accounts_only:
-        # ONE account asked for (the bank data sync reads one at a time): its own bank failing
-        # is this read's failure, never an "ok" with nothing in it — that dropped its pending
+        # ONE account asked for (the bank data sync reads one at a time): ITS bank failing is
+        # this read's failure, never an "ok" with nothing in it — that dropped its pending
         # rows and showed it synced (UAT 2026-11-14). Another bank's trouble isn't its own.
         if account not in accounts_by_id:
-            error = fetched.get("error")
+            error = _error_of(fetched, account)
             if error is not None:
                 raise ValidationError(_plain(error), **error.context) from None
         else:
