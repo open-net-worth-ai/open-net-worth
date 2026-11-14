@@ -693,6 +693,11 @@ def looks_like_an_unfenced_tool_call(text: str) -> bool:
     return bool(name) and isinstance(name, str)
 
 
+# Copies of one identical call that make a reply a loop. Two is a correction (the wrong dialect,
+# then the right one); three is the model repeating itself.
+_LOOP_REPEATS = 3
+
+
 class ToolCallScanner:
     """Incremental splitter: user-visible text out, ``<tool_call>`` blocks captured.
 
@@ -716,6 +721,12 @@ class ToolCallScanner:
         # with arguments later in the reply supersedes it; otherwise it is released, in
         # order, before the next call or at flush (a genuine zero-argument read).
         self.held: list[dict] = []
+        # A reply that writes the SAME call again and again is a loop, not work: live
+        # 2026-11-14 (chat, claude_cli:sonnet) wrote `<invoke name="run_screen_command">
+        # </invoke>` ~2,200 times in 300 s. Each call is counted; at _LOOP_REPEATS copies the
+        # reply is `looping` and the provider ends the round at once (its calls still run).
+        self._seen: dict[str, int] = {}
+        self.looping = False
         # A block that fails to parse is where a reply derails: the model gets no result to
         # continue from (dispatch never happened), so on live evidence (2026-08-10,
         # claude_cli:haiku, an Automation run) it starts reading its OWN transcript rendering
@@ -758,10 +769,22 @@ class ToolCallScanner:
         return True
 
     def _take(self, call: dict, *, xml_dialect: bool) -> None:
+        key = json.dumps(call, sort_keys=True, default=str)
+        self._seen[key] = self._seen.get(key, 0) + 1
+        if self._seen[key] >= _LOOP_REPEATS:
+            self.looping = True
+        # The same empty XML call again: not a first stab about to be corrected (that comes
+        # with arguments) but the call the model means — or a loop. Holding it on would keep
+        # every repeat waiting on a result that never comes, so it runs now; its result (an
+        # error, if it needs arguments) is what the model can correct against.
+        if call in self.held:
+            self.held.remove(call)
+            self.calls.append(call)
+            return
         # A model that writes a call in the wrong dialect and then corrects itself emits the
         # SAME call twice in one reply; running both would double a write. An identical
         # repeat is the correction, not a new call.
-        if call in self.calls or call in self.held:
+        if call in self.calls:
             return
         if xml_dialect and not call.get("input"):
             self.held.append(call)

@@ -689,12 +689,19 @@ class ClaudeCliProvider(AIProvider):
                 if watch.cut:
                     # No result event will come, so this round's usage is unknown; the CLI
                     # session was retired above (mid-reply, it cannot take the next send).
-                    log.warning(
-                        "claude_cli: round wrote its tool call(s) but no result event "
-                        "followed within %.0fs — running them (%s)",
-                        watch.grace,
-                        watch.summary(),
-                    )
+                    if scanner.looping:
+                        log.warning(
+                            "claude_cli: round repeated one tool call (a loop) — cut at "
+                            "once, running its call(s) (%s)",
+                            watch.summary(),
+                        )
+                    else:
+                        log.warning(
+                            "claude_cli: round wrote its tool call(s) but no result event "
+                            "followed within %.0fs — running them (%s)",
+                            watch.grace,
+                            watch.summary(),
+                        )
                     usage_event = _usage_event(
                         {}, model, ttft_ms, t0, api_key_source, peak_prompt_tokens
                     )
@@ -1297,7 +1304,9 @@ async def _until_call_grace(
     try:
         while True:
             wait = watch.remaining(scanner.mid_block)
-            if wait is not None and wait <= 0:
+            # A reply repeating one call (ToolCallScanner.looping) has nothing more to say:
+            # end the round now rather than after the grace — or, held, the 300 s ceiling.
+            if scanner.looping or (wait is not None and wait <= 0):
                 watch.cut = True
                 return
             pending = source.__anext__()
