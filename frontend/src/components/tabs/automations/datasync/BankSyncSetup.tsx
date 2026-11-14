@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Check, Download, Play } from 'lucide-react'
+import { Check, Download, Loader2, Play } from 'lucide-react'
 import { fDate } from '../../../../utils/format'
 import { Button } from '../../../ui'
 import {
@@ -39,7 +39,12 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   const imported = accounts.some((a) => a.sync && a.imported)
   // A ticked account with no history yet (one linked after the import) is what Import is for.
   const missing = accounts.filter((a) => a.sync && !a.imported)
-  const importing = status.running || busy === 'import'
+  // The server only STARTS the import and answers at once; until the status names that run,
+  // the screen would fall back to the button for a moment. So it stays "importing" from the
+  // tap until the status catches up.
+  const [startedRun, setStartedRun] = useState<string | null>(null)
+  const awaitingRun = startedRun !== null && status.last_run?.id !== startedRun
+  const importing = status.running || busy === 'import' || awaitingRun
   const noReads = outOfReads(status)
 
   return (
@@ -64,12 +69,7 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
         </Step>
         <Step n={2} reached={reached} title="Import history">
           {reached < 2 ? null : importing ? (
-            <div className="bs-actions">
-              <Button size="sm" variant="primary" loading disabled>
-                Importing…
-              </Button>
-              <span className="bs-note">Reading your history from the bank.</span>
-            </div>
+            <ImportProgress run={status.running ? status.last_run : null} />
           ) : imported && missing.length === 0 ? (
             <p className="bs-done">
               <Check size={14} aria-hidden="true" />
@@ -107,7 +107,13 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
                   variant={reached === 2 ? 'primary' : 'secondary'}
                   iconLeft={<Download size={12} aria-hidden="true" />}
                   disabled={!status.ready || noReads}
-                  onClick={() => void act('import', () => bankSyncSend(`/${p}/import`, 'POST'))}
+                  onClick={() =>
+                    void act('import', async () => {
+                      const r = await bankSyncSend<{ run_id?: string }>(`/${p}/import`, 'POST')
+                      if (r?.run_id) setStartedRun(r.run_id)
+                      return r
+                    })
+                  }
                 >
                   Import history
                 </Button>
@@ -176,4 +182,30 @@ function importedLine(accounts: BankSyncAccount[]): string {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+/** What the import is doing, from its run record: the account being read (and how many of
+ *  how many), then the booking. A bank can take a minute to send a long history. */
+function ImportProgress({ run }: { run: BankSyncStatus['last_run'] }) {
+  const progress = run?.progress
+  const total = progress?.total ?? 0
+  let line = 'Starting…'
+  if (run?.phase === 'reading') {
+    const of = total > 1 ? ` · ${(progress?.done ?? 0) + 1} of ${total}` : ''
+    line = `Reading ${progress?.label || 'your account'} from the bank${of}`
+  } else if (run?.phase === 'booking') {
+    line = total ? `Booking ${total} ${total === 1 ? 'transaction' : 'transactions'}…` : 'Booking…'
+  }
+  return (
+    <div className="bs-progress" role="status" aria-live="polite">
+      <p className="bs-progress-line">
+        <Loader2 size={13} className="bs-progress-spin" aria-hidden="true" />
+        {line}
+      </p>
+      <div className="bs-progress-bar" aria-hidden="true">
+        <span />
+      </div>
+      <p className="bs-note">A bank can take a minute to send a long history.</p>
+    </div>
+  )
 }

@@ -301,3 +301,59 @@
 .bs-run-row .amt.in {
   color: var(--pos);
 }
+
+/* The import's live progress: what it is on, and a bar that keeps moving while the bank
+   answers (how long a bank takes isn't known, so the bar shows motion, not a percentage). */
+.bs-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 420px;
+}
+.bs-progress-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+.bs-progress-spin {
+  flex: none;
+  color: var(--accent);
+  animation: bs-spin 0.9s linear infinite;
+}
+.bs-progress-bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.bs-progress-bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: bs-sweep 1.4s ease-in-out infinite;
+}
+@keyframes bs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes bs-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-progress-spin,
+  .bs-progress-bar span {
+    animation: none;
+  }
+}

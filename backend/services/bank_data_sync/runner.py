@@ -13,6 +13,7 @@ import logging
 import threading
 from dataclasses import dataclass, field
 
+from backend.core import data_events
 from backend.core.errors import ConflictError, ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.services import connector_fetch, connector_window, import_runs
@@ -121,9 +122,23 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     return "ok"
 
 
+def _progress(run_id: str, phase: str, done: int, total: int, label: str) -> None:
+    """What the run is doing, for the screen that watches it: ``reading`` an account (``label``
+    its name, ``done`` of ``total`` accounts read) or ``booking`` (``total`` rows). Never fails
+    the run."""
+    try:
+        import_runs.update(
+            run_id, phase=phase, progress={"done": done, "total": total, "label": label}
+        )
+        data_events.publish(["*"])
+    except Exception:  # noqa: BLE001 — progress is a courtesy, the run is the work
+        logger.debug("bank_data_sync: progress not recorded", exc_info=True)
+
+
 def _fetch(p: Provider, accounts: list[dict], run_id: str) -> _Fetched:
     out = _Fetched()
-    for account in accounts:
+    for i, account in enumerate(accounts):
+        _progress(run_id, "reading", i, len(accounts), account.get("name") or "")
         status = _fetch_account(p, account, run_id, out)
         out.statuses.append(status)
         out.counts["accounts"] += 1
@@ -241,6 +256,7 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         # Read BEFORE booking: an account holding only its Starting Balance is set to the
         # bank's balance once its history is in (balances.py).
         empty = balances.only_opening(fetched.first_import)
+        _progress(run_id, "booking", 0, len(fetched.rows), "")
         created = _book(p, fetched, run_id, counts, errors)
         _align(p, fetched.first_import, fetched.warnings)
         _record_balances(p, fetched, empty, run_id)
