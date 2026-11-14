@@ -28,6 +28,9 @@ saved, so you can come back to its report whenever you like, from any device.
 
 This is separate from [importing a statement](importing.md), which reads one bank or card file, and
 from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transactions on a schedule.
+Lucius can still read a synced plan's transactions, since reading changes nothing. Rows already
+in your book, including each account's Starting Balance (which the import put into the account's
+opening balance), show as already booked, so Lucius isn't offered them again.
 
 Coming from Actual Budget instead? Once it's turned on in **Settings → Developer → Experimental**, it
 has its own card under **Data Sync**, and works the same way,

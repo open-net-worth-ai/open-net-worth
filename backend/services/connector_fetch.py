@@ -331,6 +331,20 @@ def _empty_result(
     }
 
 
+def _openings_of_linked(rows: list[dict]) -> dict[str, str]:
+    """Linked account id -> its Starting Balance transaction, for the rows a provider marked
+    ``is_opening`` (a balance the account's opening already holds, carrying no ref of its own)."""
+    wanted = {r.get("linked_account_id") for r in rows if r.get("is_opening")}
+    wanted.discard(None)
+    if not wanted:
+        return {}
+    return {
+        a["id"]: a["opening_txn_id"]
+        for a in ledger_service.accounts.all()
+        if a["id"] in wanted and a.get("opening_txn_id")
+    }
+
+
 def fetch(
     provider_key: str,
     *,
@@ -515,6 +529,7 @@ def _fetch(
 
     # ── step 7: filter already-booked rows unless include_booked ───────────────────────
     known = ledger_service.known_external_refs(provider_key)
+    openings = _openings_of_linked(rows)
     seen_refs = {_row_ref(r) for r in rows if _row_ref(r)}
     kept: list[dict] = []
     already_booked = 0
@@ -522,6 +537,8 @@ def _fetch(
     for r in rows:
         ref = _row_ref(r)
         txn_id = known.get((provider_key, ref))
+        if r.pop("is_opening", False) and txn_id is None:
+            txn_id = openings.get(r.get("linked_account_id"))
         if txn_id is not None:
             already_booked += 1
             if not include_booked:
