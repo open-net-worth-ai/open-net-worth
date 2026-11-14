@@ -1,5 +1,5 @@
 // One provider account in the connector "Accounts" list: what it is (type icon, name, last four,
-// balance) and its next step — Add it as a new account or Link… it to an existing one, or, once
+// balance) and its next step — Add it as a new account or Link it to an existing one, or, once
 // linked, show where it lands with a quiet Unlink.
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -14,7 +14,7 @@ import { isOwed, shownBalance, type ProviderAccountRow } from './accountRows'
 interface Props {
   row: ProviderAccountRow
   linkedName: string
-  // The app's own accounts, for Link… — the same searchable, type-grouped picker as the ledger.
+  // The app's own accounts, for Link — the same searchable, type-grouped picker as the ledger.
   accounts: Account[]
   // False when the connector isn't answering — a linked row is then a leftover, shown muted.
   live?: boolean
@@ -117,7 +117,7 @@ export function ConnectorAccountRow({
                 aria-label={`Link ${row.name} to an existing account`}
                 onClick={() => setPicking(true)}
               >
-                Link…
+                Link
               </Button>
             )}
           </>

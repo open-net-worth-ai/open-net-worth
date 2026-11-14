@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlparse
@@ -38,7 +39,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.gocardless_config_store import ENDED, LINKED, GoCardlessConfigStore
 from backend.services import ledger as ledger_service
-from backend.services.aggregation import balance_kinds
+from backend.services.aggregation import balance_kinds, parallel
 from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
@@ -467,9 +468,13 @@ def _account_meta(
         "mask": iban[-4:] or None,
         "account_type": _ACCOUNT_TYPES.get(str(details.get("cashAccountType") or "").upper()),
     }
-    store.cache_account_meta(account_id, meta)
-    cache[account_id] = meta
+    with _META_LOCK:  # accounts are read side by side; the stored copy is one shared map
+        store.cache_account_meta(account_id, meta)
+        cache[account_id] = meta
     return meta
+
+
+_META_LOCK = threading.Lock()
 
 
 def _account_to_common(account_id: str, meta: dict) -> dict:
@@ -656,11 +661,18 @@ def fetch_window(
     cache = store.accounts_meta()
     # Listing the accounts (the connector page, Lucius's list tool) reads them from GoCardless:
     # details and balance, live. A sync reads the balance beside its transactions, below.
-    metas = {a: _account_meta(store, a, b, cache, fresh=accounts_only) for b, a in owned}
+    # Every account at once (parallel.each): one request per account, a second or more each.
+    found = parallel.each(
+        lambda ba: _account_meta(store, ba[1], ba[0], cache, fresh=accounts_only), owned
+    )
+    metas = {a: meta for (_, a), meta in zip(owned, found)}
     accounts = [_account_to_common(a, metas[a]) for _, a in owned]
     if accounts_only:
-        for acc in accounts:
-            acc.update(_account_balance(store, acc["provider_account_id"]))
+        figures = parallel.each(
+            lambda acc: _account_balance(store, acc["provider_account_id"]), accounts
+        )
+        for acc, figure in zip(accounts, figures):
+            acc.update(figure)
         return FetchWindow(accounts=accounts, rows=[], complete=not warnings, warnings=warnings)
 
     rows: list[dict] = []

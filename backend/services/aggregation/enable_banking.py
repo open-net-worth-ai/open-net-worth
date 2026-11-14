@@ -61,7 +61,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, RedirectNotRegisteredError, ValidationError
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services import ledger as ledger_service
-from backend.services.aggregation import balance_kinds
+from backend.services.aggregation import balance_kinds, parallel
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -523,15 +523,16 @@ def fetch_session_accounts(token: str, session_id: str) -> list[dict]:
         uid = _account_uid(entry) if isinstance(entry, dict) else str(entry or "").strip()
         if uid and uid not in uids:
             uids.append(uid)
-    accounts: list[dict] = []
-    for uid in uids:
+
+    def with_details(uid: str) -> dict:
         try:
             details = _safe_get(token, f"/accounts/{uid}/details", {}).json()
         except (ExternalServiceError, ValueError) as exc:
             logger.warning("enable_banking account details failed: %s", exc)
             details = None
-        accounts.append({**details, "uid": uid} if isinstance(details, dict) else {"uid": uid})
-    return accounts
+        return {**details, "uid": uid} if isinstance(details, dict) else {"uid": uid}
+
+    return parallel.each(with_details, uids)
 
 
 def fetch_account_transactions(
@@ -883,9 +884,8 @@ def fetch_window(
     eb_accounts, complete, warnings = _accounts_of_every_bank(token, store)
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
-    accounts = [
-        _account_to_common(a, *fetch_account_balances(token, _api_uid(a))) for a in eb_accounts
-    ]
+    balances = parallel.each(lambda a: fetch_account_balances(token, _api_uid(a)), eb_accounts)
+    accounts = [_account_to_common(a, *b) for a, b in zip(eb_accounts, balances)]
 
     rows: list[dict] = []
     for eb_account in eb_accounts:
