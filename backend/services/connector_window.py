@@ -27,12 +27,11 @@ from typing import Optional
 
 from backend.core.user_time import user_today
 from backend.services import ledger as ledger_service
-from backend.services.aggregation.providers import Provider
+from backend.services.aggregation.providers import DERIVED_PREFIX, Provider
 
 #: How far back a catch-up may reach — what PSD2 banks serve once consent is older than a few
 #: minutes. An explicit ``since`` is never capped.
 MAX_CATCH_UP_DAYS = 90
-_DERIVED_PREFIX = "derived:"
 
 
 def default_window(
@@ -102,14 +101,27 @@ def history_since(provider: Provider) -> str:
 def number_repeated_refs(rows: list[dict]) -> None:
     """Give each repeat of a content-derived ref an occurrence suffix, in place. Pending and
     booked rows are numbered apart: a booked row's key must not depend on whether a pending
-    twin is still listed, or it would change when that twin clears and be offered twice."""
+    twin is still listed, or it would change when that twin clears and be offered twice.
+    A row's ``ref_aliases`` (the refs an earlier version keyed it on) are numbered the same
+    way among themselves, as that version numbered them."""
     seen: dict[tuple[str, bool], int] = {}
+    seen_aliases: dict[tuple[str, bool], int] = {}
     for row in rows:
+        pending = bool(row.get("pending"))
         for entry in row.get("external_refs") or []:
             ref = entry.get("ref") if isinstance(entry, dict) else None
-            if not isinstance(ref, str) or not ref.startswith(_DERIVED_PREFIX):
-                continue
-            key = (ref, bool(row.get("pending")))
-            seen[key] = seen.get(key, 0) + 1
-            if seen[key] > 1:
-                entry["ref"] = f"{ref}#{seen[key]}"
+            if isinstance(ref, str):
+                entry["ref"] = _numbered(ref, pending, seen)
+        aliases = row.get("ref_aliases")
+        if isinstance(aliases, list):
+            row["ref_aliases"] = [
+                _numbered(a, pending, seen_aliases) if isinstance(a, str) else a for a in aliases
+            ]
+
+
+def _numbered(ref: str, pending: bool, seen: dict[tuple[str, bool], int]) -> str:
+    if not ref.startswith(DERIVED_PREFIX):
+        return ref
+    key = (ref, pending)
+    seen[key] = seen.get(key, 0) + 1
+    return f"{ref}#{seen[key]}" if seen[key] > 1 else ref

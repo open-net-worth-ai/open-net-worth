@@ -283,6 +283,11 @@ def _parents_with_children(txns: list[dict]) -> set:
     return out
 
 
+def _ref_text(lm_txn: dict) -> str:
+    """The text an id-less row's ref hashes. FROZEN: an id-less row's ref hashes it, so a change here books every such row again."""
+    return (lm_txn.get("payee") or lm_txn.get("original_name") or "").strip() or "Lunch Money"
+
+
 def _txn_to_row(lm_txn: dict, account_key: str, currency_hint: str) -> dict | None:
     """One Lunch Money transaction → the common normalized row shape (RFC §A step 3).
 
@@ -326,9 +331,7 @@ def _txn_to_row(lm_txn: dict, account_key: str, currency_hint: str) -> dict | No
     description = (lm_txn.get("payee") or lm_txn.get("original_name") or "").strip()
     currency = (lm_txn.get("currency") or currency_hint).upper()
     txn_id = _txn_id(lm_txn)
-    ref = txn_id or derived_ref(
-        account_key, date_str, amount, currency, description or "Lunch Money"
-    )
+    ref = txn_id or derived_ref(account_key, date_str, amount, currency, _ref_text(lm_txn))
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
         "raw": lm_txn,

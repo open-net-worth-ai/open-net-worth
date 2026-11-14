@@ -214,6 +214,11 @@ def _account_to_common(sf_account: dict) -> dict:
     }
 
 
+def _ref_text(sf_txn: dict) -> str:
+    """The text an id-less row's ref hashes. FROZEN: an id-less row's ref hashes it, so a change here books every such row again."""
+    return (sf_txn.get("description") or sf_txn.get("payee") or "").strip() or "SimpleFIN"
+
+
 def _txn_to_row(sf_txn: dict, sf_account_id: str, currency: str) -> dict | None:
     """One SimpleFIN transaction → the common normalized row shape (RFC §A step 3).
 
@@ -236,7 +241,7 @@ def _txn_to_row(sf_txn: dict, sf_account_id: str, currency: str) -> dict | None:
     ref = (
         f"{sf_account_id}:{txn_id}"
         if txn_id
-        else derived_ref(sf_account_id, date_str, amount, currency, description or "SimpleFIN")
+        else derived_ref(sf_account_id, date_str, amount, currency, _ref_text(sf_txn))
     )
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],

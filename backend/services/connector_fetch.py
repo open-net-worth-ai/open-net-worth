@@ -32,7 +32,12 @@ from backend.models.account import AccountType
 from backend.services import connector_window
 from backend.services import ledger as ledger_service
 from backend.services.aggregation import balance_kinds, providers
-from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
+from backend.services.aggregation.providers import (
+    DERIVED_PREFIX,
+    FetchWindow,
+    Provider,
+    UnknownProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +78,11 @@ _RAW_MAX_DEPTH = 8
 # email_snapshots.py capping raw_message_id the same way. Never sanitized (RFC §A step 4's
 # own carve-out: these are structural keys, not prose), only bounded.
 _ID_MAX_LEN = 512
+# Row keys that never leave this service: the raw evidence (in the snapshot store) and the
+# refs an earlier version keyed a row on (only step 7 reads them).
+_PRIVATE_ROW_KEYS = frozenset({"raw", "ref_aliases"})
+# How close a booked row's amount must be for a provider-handle alias to count (step 7).
+_SAME_AMOUNT_TOL = 0.005
 
 
 def _count_reads(provider: Provider, account: Optional[str]) -> None:
@@ -116,6 +126,9 @@ def _cap_identity_fields(out: dict) -> None:
                 entry = {**entry, "ref": entry["ref"][:_ID_MAX_LEN]}
             capped.append(entry)
         out["external_refs"] = capped
+    aliases = out.get("ref_aliases")
+    if isinstance(aliases, list):
+        out["ref_aliases"] = [a[:_ID_MAX_LEN] for a in aliases if isinstance(a, str) and a]
 
 
 def _sanitize_row(row: dict) -> dict:
@@ -194,6 +207,39 @@ def _sanitize_raw(value: object, *, _depth: int = 0) -> object:
 def _row_ref(row: dict) -> str:
     refs = row.get("external_refs") or []
     return str(refs[0]["ref"]) if refs and isinstance(refs[0], dict) else ""
+
+
+def _row_aliases(row: dict) -> list[str]:
+    return [a for a in row.get("ref_aliases") or [] if isinstance(a, str) and a]
+
+
+def _booked_under_alias(provider_key: str, row: dict, known: dict) -> Optional[str]:
+    """The booked transaction an earlier version filed this row under (its ``ref_aliases``),
+    or None. An alias that hashes the row's content is the row itself. One that is a provider
+    handle (Enable Banking's old ``transaction_id``, which may be handed to another row on a
+    later listing) counts only when the booked row has the same date and amount — a stale
+    handle must never hide a new transaction."""
+    for alias in _row_aliases(row):
+        txn_id = known.get((provider_key, alias))
+        if txn_id is None:
+            continue
+        if alias.startswith(DERIVED_PREFIX) or _same_date_and_amount(txn_id, row):
+            return txn_id
+    return None
+
+
+def _same_date_and_amount(txn_id: str, row: dict) -> bool:
+    booked = ledger_service.booked_row_snapshot(
+        txn_id, prefer_account_id=row.get("linked_account_id")
+    )
+    try:
+        return (
+            booked is not None
+            and str(booked.get("date") or "")[:10] == str(row.get("date") or "")[:10]
+            and abs(float(booked["amount"]) - float(row["amount"])) <= _SAME_AMOUNT_TOL
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def _resolve_account_ref(account: str, accounts: list[dict]) -> tuple[Optional[str], Optional[str]]:
@@ -530,13 +576,17 @@ def _fetch(
     # ── step 7: filter already-booked rows unless include_booked ───────────────────────
     known = ledger_service.known_external_refs(provider_key)
     openings = _openings_of_linked(rows)
+    # A row's aliases are refs it was stashed under too: never "vanished" for a new key.
     seen_refs = {_row_ref(r) for r in rows if _row_ref(r)}
+    seen_refs |= {a for r in rows for a in _row_aliases(r)}
     kept: list[dict] = []
     already_booked = 0
     pending_skipped = 0
     for r in rows:
         ref = _row_ref(r)
         txn_id = known.get((provider_key, ref))
+        if txn_id is None:
+            txn_id = _booked_under_alias(provider_key, r, known)
         if r.pop("is_opening", False) and txn_id is None:
             txn_id = openings.get(r.get("linked_account_id"))
         if txn_id is not None:
@@ -576,7 +626,7 @@ def _fetch(
         store.update(sanitized_extra)
 
     # ── step 11: bound + return (never leaks "raw" — that lives only in the snapshot store) ──
-    public_rows = [{k: v for k, v in r.items() if k != "raw"} for r in returned]
+    public_rows = [{k: v for k, v in r.items() if k not in _PRIVATE_ROW_KEYS} for r in returned]
     result = {
         "status": "ok",
         "error": None,

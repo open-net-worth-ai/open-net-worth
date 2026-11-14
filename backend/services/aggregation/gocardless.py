@@ -554,6 +554,26 @@ def _txn_description(txn: dict) -> str:
     return str(info).strip() if info else ""
 
 
+def _ref_text(txn: dict) -> str:
+    """The text an id-less row's ref hashes. FROZEN: an id-less row's ref hashes it, so a change here books every such row again.
+    Improve ``_txn_description`` instead, which nothing keys on."""
+    info = txn.get("remittanceInformationUnstructured")
+    if not info:
+        for key in (
+            "remittanceInformationUnstructuredArray",
+            "remittanceInformationStructuredArray",
+        ):
+            arr = txn.get(key)
+            if isinstance(arr, list) and arr:
+                info = " ".join(str(x) for x in arr if x)
+                break
+    info = info or txn.get("remittanceInformationStructured")
+    info = (
+        info or txn.get("creditorName") or txn.get("debtorName") or txn.get("additionalInformation")
+    )
+    return (str(info).strip() if info else "") or "GoCardless"
+
+
 def _txn_payee(txn: dict, amount: float) -> Optional[str]:
     """The counterparty's own name — who was paid (money out) or who paid (money in) — or
     ``None`` when the bank names neither. It becomes the row's payee; the description keeps
@@ -609,7 +629,7 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
     ref = (
         f"{account_id}:{txn_id}"
         if txn_id
-        else derived_ref(account_id, date_str, amount, currency, description or "GoCardless")
+        else derived_ref(account_id, date_str, amount, currency, _ref_text(txn))
     )
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],

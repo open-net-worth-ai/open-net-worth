@@ -717,8 +717,8 @@ def _txn_description(eb_txn: dict) -> str:
     code: reading just the first two left every such row a bare "Enable Banking" (reported
     2026-11-13). Empty, never a placeholder: a shared placeholder reads as the bank's own
     words and lets one rule or payee catch unrelated rows. ``note`` is the account holder's
-    own note, not the bank's, so it is never the description. A row with no id keeps
-    the placeholder in its ref text, so its ref is unchanged."""
+    own note, not the bank's, so it is never the description. A row's ref never reads it
+    (``_ref_text``): improving it re-keys nothing."""
     info = eb_txn.get("remittance_information")
     if isinstance(info, list):
         info = " ".join(str(x).strip() for x in info if x and str(x).strip())
@@ -739,6 +739,63 @@ def _name_of(party: object) -> str:
 def _text_of(obj: object, key: str) -> str:
     value = obj.get(key) if isinstance(obj, dict) else None
     return value.strip() if isinstance(value, str) else ""
+
+
+# ── the key of a row the bank gives no entry_reference ─────────────────────────────────
+# Such a row is keyed by a hash of its content, text included. That text is FROZEN apart
+# from the description: when 0.1.50 improved the description, the text moved with it, and
+# every id-less row booked under 0.1.49 came back as new and was booked a second time.
+
+_REF_PLACEHOLDER = "Enable Banking"
+
+
+def _frozen_text(obj: object, key: str) -> str:
+    value = obj.get(key) if isinstance(obj, dict) else None
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _ref_text(eb_txn: dict) -> str:
+    """The text an id-less row's ref hashes, FROZEN at the rules of 0.1.50: the remittance
+    parts, each stripped, blanks skipped; else the creditor's name, the debtor's, the bank's
+    wording for the kind of transaction, the reference number; whitespace collapsed; else the
+    placeholder. Never change it — change ``_txn_description``, which nothing keys on."""
+    info = eb_txn.get("remittance_information")
+    if isinstance(info, list):
+        info = " ".join(str(x).strip() for x in info if x and str(x).strip())
+    if not (isinstance(info, str) and info.strip()):
+        creditor, debtor = eb_txn.get("creditor"), eb_txn.get("debtor")
+        info = (
+            (_frozen_text(creditor, "name") if isinstance(creditor, dict) else "")
+            or (_frozen_text(debtor, "name") if isinstance(debtor, dict) else "")
+            or _frozen_text(eb_txn.get("bank_transaction_code") or {}, "description")
+            or _frozen_text(eb_txn, "reference_number")
+        )
+    return " ".join(str(info or "").split()) or _REF_PLACEHOLDER
+
+
+def _ref_text_0149(eb_txn: dict) -> str:
+    """The text 0.1.49 hashed: the remittance parts joined as sent, else the creditor's or the
+    debtor's name; stripped; else the placeholder. Frozen too: it only recognises old rows."""
+    info = eb_txn.get("remittance_information")
+    if isinstance(info, list):
+        info = " ".join(str(x) for x in info if x)
+    if not info:
+        creditor = eb_txn.get("creditor") or {}
+        debtor = eb_txn.get("debtor") or {}
+        info = (creditor.get("name") if isinstance(creditor, dict) else None) or (
+            debtor.get("name") if isinstance(debtor, dict) else None
+        )
+    return (str(info).strip() if info else "") or _REF_PLACEHOLDER
+
+
+def _ref_0149(eb_txn: dict, account_uid: str, date_str: str, amount: float, currency: str) -> str:
+    """The ref 0.1.49 booked this row under: its ``entry_reference``, else its
+    ``transaction_id`` (a fetch handle, dropped in 0.1.50 as unstable), else the hash of
+    ``_ref_text_0149``."""
+    handle = str(eb_txn.get("entry_reference") or eb_txn.get("transaction_id") or "").strip()
+    if handle:
+        return f"{account_uid}:{handle}"
+    return derived_ref(account_uid, date_str, amount, currency, _ref_text_0149(eb_txn))
 
 
 def _txn_payee(eb_txn: dict, amount: float) -> Optional[str]:
@@ -796,8 +853,10 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
     ref = (
         f"{account_uid}:{txn_id}"
         if txn_id
-        else derived_ref(account_uid, date_str, amount, currency, description or "Enable Banking")
+        else derived_ref(account_uid, date_str, amount, currency, _ref_text(eb_txn))
     )
+    # A row booked under 0.1.49 carries the ref it had then; the fetch still knows it by it.
+    old_ref = _ref_0149(eb_txn, account_uid, date_str, amount, currency)
     original_amount, original_currency = _original_charge(eb_txn, currency)
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
@@ -813,6 +872,7 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "original_currency": original_currency,
         "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,
+        "ref_aliases": [old_ref] if old_ref != ref else [],
     }
 
 

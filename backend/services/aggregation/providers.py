@@ -46,6 +46,9 @@ from backend.services.connector_catalog import CATALOG
 
 logger = logging.getLogger(__name__)
 
+#: What every content-derived ref starts with — a ref keyed on the row's content, not an id.
+DERIVED_PREFIX = "derived:"
+
 
 def derived_ref(
     provider_account_id: str, date: str, amount: float, currency: str, description: str
@@ -53,9 +56,12 @@ def derived_ref(
     """The fallback ref for a provider row with NO stable id of its own (RFC §A step 3) —
     a content hash, never dropped. Shared so all nine provider ``fetch_window``
     implementations hash the same five fields the same way; two providers hashing
-    differently would be harmless (refs never cross providers) but pointless drift."""
+    differently would be harmless (refs never cross providers) but pointless drift.
+
+    ``description`` is a FROZEN ref text (each provider's ``_ref_text``), never the row's
+    display description: when that moved, every id-less row already booked came back new."""
     key = f"{provider_account_id}|{date}|{amount}|{currency}|{description}"
-    return "derived:" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    return DERIVED_PREFIX + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -67,8 +73,10 @@ class FetchWindow:
     activity in the window) — ``[{provider_account_id, name, mask, currency, balance}]``,
     already in the COMMON shape (each provider's own ``fetch_window`` normalizes as it
     fetches). ``rows`` is likewise already normalized: ``[{external_refs, provider_account_id,
-    date, amount, currency, description, memo, pending, supersedes_ref, raw}]`` — ``raw`` is
-    the ORIGINAL provider record (the exact dict the wire response carried for that row),
+    date, amount, currency, description, memo, pending, supersedes_ref, raw}]``, plus an
+    optional ``ref_aliases`` (the refs an earlier version keyed the row on, so a row booked
+    under one is still known as booked; not ``supersedes_ref``, which is pending → posted).
+    ``raw`` is the ORIGINAL provider record (the exact dict the wire response carried for that row),
     kept so ``connector_snapshots.stash_rows`` can persist real evidence a transaction drawer
     later shows, never a re-serialization of the normalized fields. ``complete`` is False
     only when the provider's own paging/response said there was more the call didn't return

@@ -614,6 +614,12 @@ def _txn_description(plaid_txn: dict) -> str:
     return str(info).strip() if info else ""
 
 
+def _ref_text(plaid_txn: dict) -> str:
+    """The text an id-less row's ref hashes. FROZEN: an id-less row's ref hashes it, so a change here books every such row again."""
+    info = plaid_txn.get("merchant_name") or plaid_txn.get("name")
+    return (str(info).strip() if info else "") or "Plaid"
+
+
 # Plaid's own confidence in its category; below these the hint is noise, so none is offered.
 _HINT_CONFIDENCE = frozenset({"VERY_HIGH", "HIGH", "MEDIUM"})
 
@@ -667,7 +673,7 @@ def _txn_to_row(plaid_txn: dict, account: dict, account_id: str) -> dict | None:
     ref = (
         f"{account_id}:{txn_id}"
         if txn_id
-        else derived_ref(account_id, date_str, amount, currency, description or "Plaid")
+        else derived_ref(account_id, date_str, amount, currency, _ref_text(plaid_txn))
     )
     pending_id = str(plaid_txn.get("pending_transaction_id") or "").strip()
     return {
