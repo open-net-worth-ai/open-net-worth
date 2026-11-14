@@ -322,7 +322,7 @@ class TestNormalizeHelpers:
     def test_description_default(self):
         from backend.services.aggregation.plaid import _txn_description
 
-        assert _txn_description({}) == "Plaid"
+        assert _txn_description({}) == ""
 
     def test_date_parsed_from_string(self):
         from backend.services.aggregation.plaid import _txn_date

@@ -551,7 +551,7 @@ def _txn_description(txn: dict) -> str:
     info = (
         info or txn.get("creditorName") or txn.get("debtorName") or txn.get("additionalInformation")
     )
-    return (str(info).strip() if info else "") or "GoCardless"
+    return str(info).strip() if info else ""
 
 
 def _txn_payee(txn: dict, amount: float) -> Optional[str]:
@@ -609,7 +609,7 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
     ref = (
         f"{account_id}:{txn_id}"
         if txn_id
-        else derived_ref(account_id, date_str, amount, currency, description)
+        else derived_ref(account_id, date_str, amount, currency, description or "GoCardless")
     )
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],

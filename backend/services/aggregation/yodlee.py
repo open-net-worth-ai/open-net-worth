@@ -330,7 +330,7 @@ def _txn_description(yodlee_txn: dict) -> str:
             if isinstance(yodlee_txn.get("description"), dict)
             else yodlee_txn.get("description")
         )
-    return (str(info).strip() if info else "") or "Yodlee"
+    return str(info).strip() if info else ""
 
 
 def _txn_currency(yodlee_txn: dict, account_currency: str) -> str:

@@ -713,10 +713,12 @@ def _txn_description(eb_txn: dict) -> str:
     """Best human description, from the first of these the bank filled: remittance info
     (string or list), the counterparty's name, the bank's own wording for the kind of
     transaction (``bank_transaction_code.description``, e.g. "Card payment"), the creditor
-    reference (``reference_number``) — then a generic fallback. Some banks send only the
-    transaction code: reading just the first two left every such row a bare "Enable Banking"
-    (reported 2026-11-13). ``note`` is the account holder's own note, not the bank's, so it
-    is never the description."""
+    reference (``reference_number``) — else empty. Some banks send only the transaction
+    code: reading just the first two left every such row a bare "Enable Banking" (reported
+    2026-11-13). Empty, never a placeholder: a shared placeholder reads as the bank's own
+    words and lets one rule or payee catch unrelated rows. ``note`` is the account holder's
+    own note, not the bank's, so it is never the description. A row with no id keeps
+    the placeholder in its ref text, so its ref is unchanged."""
     info = eb_txn.get("remittance_information")
     if isinstance(info, list):
         info = " ".join(str(x).strip() for x in info if x and str(x).strip())
@@ -727,7 +729,7 @@ def _txn_description(eb_txn: dict) -> str:
             or _text_of((eb_txn.get("bank_transaction_code") or {}), "description")
             or _text_of(eb_txn, "reference_number")
         )
-    return " ".join(str(info or "").split()) or "Enable Banking"
+    return " ".join(str(info or "").split())
 
 
 def _name_of(party: object) -> str:
@@ -794,7 +796,7 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
     ref = (
         f"{account_uid}:{txn_id}"
         if txn_id
-        else derived_ref(account_uid, date_str, amount, currency, description)
+        else derived_ref(account_uid, date_str, amount, currency, description or "Enable Banking")
     )
     original_amount, original_currency = _original_charge(eb_txn, currency)
     return {

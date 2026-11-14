@@ -323,12 +323,12 @@ def _txn_to_row(lm_txn: dict, account_key: str, currency_hint: str) -> dict | No
     # v2 dropped `display_name` from the transaction object entirely (confirmed against a
     # live 19-row sample, 2026-08-17) — `payee` (Lunch Money's own cleaned-up label) is now
     # the best first choice, falling back to `original_name` (the raw bank-provided text).
-    description = (
-        lm_txn.get("payee") or lm_txn.get("original_name") or ""
-    ).strip() or "Lunch Money"
+    description = (lm_txn.get("payee") or lm_txn.get("original_name") or "").strip()
     currency = (lm_txn.get("currency") or currency_hint).upper()
     txn_id = _txn_id(lm_txn)
-    ref = txn_id or derived_ref(account_key, date_str, amount, currency, description)
+    ref = txn_id or derived_ref(
+        account_key, date_str, amount, currency, description or "Lunch Money"
+    )
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
         "raw": lm_txn,
