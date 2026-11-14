@@ -107,8 +107,10 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   merchant category that's exactly the name of one of your categories, that one is used. No
   category is ever created; anything else stays **Uncategorized**.
 - **First sync of an account:** books the history your bank serves, then moves the account's
-  Starting Balance back to the oldest row, so the history counts and **today's balance doesn't
-  change**. (Cash and card accounts only.)
+  Starting Balance back to the oldest row, so the history counts and **the balance stays the one
+  you opened the account with**. Settled transactions dated the day you opened it are already in
+  that balance, so they aren't counted again; a pending one is still to come off, so it counts
+  (in your working balance). (Cash and card accounts only.)
 
 A run books all its new transactions in one go: if something fails, nothing from that run is
 booked, and the next run tries again.

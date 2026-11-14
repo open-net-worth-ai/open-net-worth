@@ -298,38 +298,71 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
 
 
 def align_first_imports(provider: str, account_ids: set[str]) -> tuple[set[str], list[str]]:
-    """Move each first-imported cash/card account's start back to its oldest row from
-    ``provider``, so the history counts and today's balance doesn't move
-    (``tracking_start.align_tracking_start``, which refuses anything that would move it). Read
-    from the ledger, so a run that stopped after booking aligns on the next one. Returns
-    ``(settled account ids, warnings)``; an account that can't be aligned (its type, a balance
-    that wouldn't hold) is settled with a warning, never retried forever."""
-    from backend.core.errors import ValidationError
-    from backend.core.txn_sources import ext_ref_pairs
-    from backend.services import tracking_start
+    """Fit each first-imported cash/card account's history around its Starting Balance, so the
+    history counts and today's balance is the one the account was opened with. Read from the
+    ledger, so a run that stopped after booking aligns on the next one. Returns ``(settled
+    account ids, warnings)``; an account that can't be aligned (its type) is settled with a
+    warning, never retried forever. One that failed is left out, so only IT is retried: the
+    start-day fold is not idempotent, and a second pass over an aligned account would move its
+    balance.
 
+    Two moves, ONE write (``set_account_opening``): the start goes back to the oldest row from
+    ``provider`` with the opening rewound by what that exposes (``tracking_start.compute_align``,
+    the Preserve rewind), and the settled rows dated the start day itself come out of the
+    opening — it was the bank's balance that day, so it already holds them. Counting them on top
+    double-counted the start day (UAT 2026-11-14: checking 500 → 597.50, a card owed 500 →
+    +2,144.63). A pending row is not in it yet and keeps counting."""
     txns = ledger_service.transactions.all()
     settled: set[str] = set()
     warnings: list[str] = []
     for account_id in sorted(account_ids):
-        account = ledger_service.accounts.find_by_id(account_id)
-        if account is None:
-            settled.add(account_id)
-            continue
-        dates = [
-            str(t.get("date"))[:10]
-            for t in txns
-            if not t.get("deleted")
-            and account_id in (t.get("from_account_id"), t.get("to_account_id"))
-            and any(pair[0] == provider for pair in ext_ref_pairs(t))
-        ]
-        start = ledger_service.opening_date(account, txns)
-        settled.add(account_id)
-        if not dates or not start or min(dates) >= start:
-            continue
         try:
-            tracking_start.align_tracking_start(account_id, min(dates))
-        except ValidationError as exc:
+            _align_one(provider, account_id, txns, warnings)
+        except Exception:  # noqa: BLE001 — this account is retried next run, the others stand
+            logger.exception("bank_data_sync: %s alignment of %s failed", provider, account_id)
+            continue
+        settled.add(account_id)
+    return settled, warnings
+
+
+def _align_one(provider: str, account_id: str, txns: list[dict], warnings: list[str]) -> None:
+    """One account of ``align_first_imports``: at most one opening write."""
+    from backend.core.errors import ValidationError
+    from backend.core.txn_sources import ext_ref_pairs
+    from backend.services import tracking_start
+
+    account = ledger_service.accounts.find_by_id(account_id)
+    if account is None:
+        return
+    mine = [
+        t
+        for t in txns
+        if not t.get("deleted")
+        and account_id in (t.get("from_account_id"), t.get("to_account_id"))
+        and any(pair[0] == provider for pair in ext_ref_pairs(t))
+    ]
+    start = ledger_service.opening_date(account, txns)
+    if not mine or not start:
+        return
+    oldest = min(str(t.get("date"))[:10] for t in mine)
+    on_start = sum(
+        tracking_start._leg_effect(t, account_id)
+        for t in mine
+        if str(t.get("date"))[:10] == start and t.get("cleared")
+    )
+    if oldest >= start and abs(on_start) <= _AMOUNT_TOL:
+        return
+    try:
+        tracking_start.assert_alignable(account)
+    except ValidationError as exc:
+        if oldest < start:
             name = account.get("name") or "An account"
             warnings.append(f"{name}: history before {start} is booked but not counted — {exc}")
-    return settled, warnings
+        return
+    new_start = min(oldest, start)
+    plan = tracking_start.compute_align(
+        account, new_start, txns, start, ledger_service.opening_amount(account, txns)
+    )
+    ledger_service.set_account_opening(
+        account_id, round(plan["new_opening"] - on_start, 2), new_start
+    )

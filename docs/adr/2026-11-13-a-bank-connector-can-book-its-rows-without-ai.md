@@ -253,3 +253,20 @@ line `failed`, its `account_reads` entry says why, the run is `partial` beside a
 `account_gone` alone (24 h backoff, like a sign-in: it waits for the user). The bank card shows
 **Account not at the bank** with **Relink** (the connector's setup), and the account mark says to
 link it again. Amendment 7 makes the relink safe.
+
+## Amendment 10 (2026-11-14, UAT: the first import doesn't count the start day twice)
+
+On-screen UAT: a Plaid account opened today at the bank's balance got today's settled rows added
+on top (checking 500 → 597.50; a card owed 500 → +2,144.63 from a payment dated today). The
+Preserve rewind keeps the balance as it is AFTER booking, and rows dated the start day count from
+the start, so they were in the opening and in the balance. Enable Banking hid it through the
+empty-account auto-set; Plaid skips that set while anything is pending. `booker.align_first_imports`
+now writes ONE `set_account_opening`: the start back to the oldest row from the provider with the
+opening rewound by what that exposes (`tracking_start.compute_align`), less the settled
+provider rows dated the start day itself — the opening was the bank's balance that day and
+already holds them. Pending rows and rows of other sources on that day are untouched. This also
+applies when nothing predates the start. It is a deliberate, one-time, non-neutral opening move,
+made only on an account's first import (the `opening_txn_id` invariant is unchanged: one row,
+re-dated and re-amounted in place). Because the fold is not idempotent, alignment settles per
+account: one account's failure is retried alone (`pending_align`), never re-aligning an account
+whose write succeeded.

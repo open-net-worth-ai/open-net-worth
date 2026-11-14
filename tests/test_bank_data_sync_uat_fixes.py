@@ -247,3 +247,93 @@ def test_a_gone_account_beside_a_good_one_is_a_partial_run(bank):
     assert len(_live(saver)) == 1
     assert budget.state("gocardless")["account_reads"][bank.account]["status"] == "account_gone"
     assert "1 account not read" in import_runs.latest("gocardless", ("sync",))["outcome"]
+
+
+# ── UAT #5: the first import doesn't count the start day twice ──────────────────────────
+
+
+def _balances(account_id: str) -> tuple[float, float]:
+    account = ledger_service.accounts.find_by_id(account_id)
+    txns = ledger_service.transactions.all()
+    start = ledger_service.opening_date(account, txns)
+    return (
+        round(ledger_service.cleared_account_balance(account, txns, start), 2),
+        round(ledger_service.account_balance(account, txns, start), 2),
+    )
+
+
+def test_rows_dated_the_start_day_are_already_in_the_opening(bank):
+    # Opened today at 1,000.00 — the bank's balance today, which already holds today's posted
+    # rows. The pending one isn't in it yet.
+    bank.booked[ACC_MAIN] = [
+        txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0"),
+        txn(-10.00, days_ago(3), "ACME CAFE", tid="t3"),
+    ]
+    bank.pending[ACC_MAIN] = [txn(-5.00, days_ago(0), "ACME KIOSK")]
+    _run()
+    cleared, working = _balances(bank.account)
+    assert cleared == 1000.00, "today's posted row was counted on top of the opening"
+    assert working == 995.00
+    account = ledger_service.accounts.find_by_id(bank.account)
+    assert ledger_service.opening_date(account) == days_ago(3)
+
+
+def test_only_start_day_rows_still_fold_into_the_opening(bank):
+    bank.booked[ACC_MAIN] = [txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0")]
+    _run()
+    assert _balances(bank.account) == (1000.00, 1000.00)
+
+
+def test_a_card_payment_on_the_start_day_is_not_counted_twice(bank):
+    card = accounts_service.create_account(
+        {
+            "name": "ACME Card",
+            "kind": "liability",
+            "type": "credit",
+            "currency": "GBP",
+            "initial_balance": -500.00,
+            "external_ids": [{"source": "gocardless", "ref": ACC_SAVER}],
+        }
+    )["id"]
+    bank.booked[ACC_SAVER] = [
+        txn(2835.80, days_ago(0), "ACME PAYMENT THANK YOU", tid="p0"),
+        txn(-42.00, days_ago(2), "ACME BOOKS", tid="b2"),
+    ]
+    _run()
+    assert _balances(card) == (-500.00, -500.00)
+
+
+def test_a_later_sync_moves_nothing(bank):
+    bank.booked[ACC_MAIN] = [txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0")]
+    _run()
+    bank.booked[ACC_MAIN].append(txn(-7.00, days_ago(0), "ACME BUS", tid="t0b"))
+    _run()
+    # A row the bank posts after the first import is new money: it counts.
+    assert _balances(bank.account)[0] == 993.00
+
+
+def test_a_failed_alignment_never_aligns_an_aligned_account_again(bank, monkeypatch):
+    """Review: the start-day fold is not idempotent. One account's write failing must retry
+    only that one — re-aligning the other would move its balance by the start day again."""
+    saver = linked_account("ACME Saver", ACC_SAVER)
+    bank.booked[ACC_MAIN] = [
+        txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0"),
+        txn(-10.00, days_ago(3), "ACME CAFE", tid="t3"),
+    ]
+    bank.booked[ACC_SAVER] = [txn(-15.00, days_ago(2), "ACME FEE", tid="f2")]
+    real = ledger_service.set_account_opening
+
+    def fail_for_saver(account_id, *a, **k):
+        if account_id == saver:
+            raise OSError("ACME disk full")
+        return real(account_id, *a, **k)
+
+    monkeypatch.setattr(ledger_service, "set_account_opening", fail_for_saver)
+    _run()
+    assert budget.state("gocardless")["pending_align"] == [saver]
+    assert _balances(bank.account)[0] == 1000.00
+
+    monkeypatch.setattr(ledger_service, "set_account_opening", real)
+    _run()
+    assert _balances(bank.account)[0] == 1000.00, "the aligned account was aligned again"
+    assert budget.state("gocardless")["pending_align"] == []
