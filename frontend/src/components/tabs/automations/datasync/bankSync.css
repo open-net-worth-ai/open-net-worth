@@ -4,15 +4,24 @@
 
 .bs-summary {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.bs-summary-text {
-  min-width: 0;
-  display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+}
+.bs-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bs-summary-icon {
+  flex: none;
+  color: var(--accent);
+}
+.bs-summary-line {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink);
 }
 .bs-note,
 .bs-notice,

@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Button } from '../../../ui'
+import { RefreshCw } from 'lucide-react'
+import { Button, Text } from '../../../ui'
 import { useFlag } from '../../../../hooks/useFlag'
 import { everyLabel, nextRunLine } from './bankSyncHelpers'
 import { bankSyncSearch, useBankSync, type BankSyncStatus } from './bankSync'
@@ -25,18 +26,23 @@ function BankSyncSummary({ provider }: { provider: string }) {
   const setUp = status.stage === 'done'
   if (!setUp && !(status.accounts ?? []).length) return null
   return (
+    // Headed like the Accounts list above it, with the sync's own icon: it read as small print
+    // (owner, 2026-11-14), without a box of its own.
     <section className="bs-summary" aria-label={`${status.label} sync`}>
-      <div className="bs-summary-text">
-        <div className="cn-sublabel">Sync</div>
-        <p className="bs-note">
+      <Text size="sm" tone="ink" weight={600}>
+        Sync
+      </Text>
+      <div className="bs-summary-row">
+        <RefreshCw size={15} className="bs-summary-icon" aria-hidden="true" />
+        <p className="bs-summary-line">
           {setUp
             ? summaryLine(status)
-            : `Not set up · your history, then new transactions ${everyLabel(status.interval_hours).toLowerCase()}`}
+            : `Bring in your history, then new transactions ${everyLabel(status.interval_hours).toLowerCase()}.`}
         </p>
+        <Button size="sm" variant={setUp ? 'secondary' : 'primary'} onClick={open}>
+          {setUp ? 'Manage' : 'Set up sync'}
+        </Button>
       </div>
-      <Button size="sm" variant={setUp ? 'secondary' : 'primary'} onClick={open}>
-        {setUp ? 'Manage' : 'Set up sync'}
-      </Button>
     </section>
   )
 }

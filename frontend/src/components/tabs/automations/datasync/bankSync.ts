@@ -120,6 +120,12 @@ export interface BankRunCounts {
 const BASE = '/api/bank-sync'
 const isBankSyncKey = (key: string) => key.startsWith(BASE)
 
+/** Re-read every bank sync's status — after a link change made outside this page (the
+ *  connector's Accounts list), whose "Sync" line appears only once an account is linked. */
+export function refreshBankSyncs(): void {
+  invalidateQueryCache(isBankSyncKey)
+}
+
 async function readJson<T>(path: string, fallback: string): Promise<T | null> {
   const r = await authFetch(path)
   if (r.status === 404) return null // the flag is off, or this connector has no data sync

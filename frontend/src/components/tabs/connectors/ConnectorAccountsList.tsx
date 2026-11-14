@@ -23,6 +23,7 @@ import type {
   AccountCreate,
   AccountUpdate,
 } from '../accounts/types'
+import { refreshBankSyncs } from '../automations/datasync/bankSync'
 
 // `AccountLike`'s generic constraint needs its own explicit index signature (a plain
 // `ApiAccount` fails useAccounts<ApiAccount>() — "Index signature for type 'string' is missing"
@@ -109,6 +110,8 @@ export function ConnectorAccountsList({
       body: JSON.stringify({ external_ids: externalIds }),
     })
     if (!res.ok) throw new Error()
+    // The connector's Sync line reads which accounts are linked: show it the moment one is.
+    refreshBankSyncs()
   }
 
   // Names of accounts created here, until the shared account list refreshes with them.
