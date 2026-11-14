@@ -248,20 +248,54 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
         "access_token": access_token,
         "institution_id": inst_id,
         "institution_name": name,
+        # Which accounts this sign-in covers (mask + subtype, nothing secret): how a later link
+        # at the same bank tells a renewal from a second sign-in, even once this one has expired.
+        "accounts": _account_marks(store, access_token),
     }
     store.add_item(entry)
     if not name:
         named = name_bank(store, entry, _item_info(store, access_token))
         name = named.get("institution_name") or ""
         inst_id = named.get("institution_id") or inst_id
-    # Linking a bank that is already linked is a re-link (a fresh sign-in): retire the older
-    # Item — revoked at Plaid FIRST, dropped here only once Plaid has let it go, so a token is
-    # never thrown away while its Item could still be live there.
+    # Linking a bank that is already linked may be a re-link (a fresh sign-in of the same
+    # login): then the older Item is retired — revoked at Plaid FIRST, dropped here only once
+    # Plaid has let it go. But a second login at the same bank (a joint or business sign-in) is
+    # its own Item: revoking it, which can't be undone, cut off every account it held (review
+    # 2026-11-15). So an older Item is retired only when its accounts are the new one's
+    # (Plaid's own duplicate-Item test); one that can't be compared is kept.
     if inst_id:
+        mine = {_mark_key(m) for m in entry["accounts"]}
         for old in [i for i in store.items() if i.get("item_id") != item_id]:
-            if (old.get("institution_id") or "") == inst_id:
+            if (old.get("institution_id") or "") != inst_id:
+                continue
+            theirs = {
+                _mark_key(m)
+                for m in (old.get("accounts") or _account_marks(store, old["access_token"]))
+            }
+            if mine and theirs and mine & theirs:
                 _retire_item(store, old)
+            else:
+                logger.info("plaid: a second sign-in at the same bank; the first is kept")
     return {"item_id": item_id, "institution_name": name, "has_access_token": True}
+
+
+def _account_marks(store: PlaidConfigStore, access_token: str) -> list[dict]:
+    """An Item's accounts as ``{mask, subtype}`` (``/accounts/get``). ``[]`` when they can't be
+    read (an expired sign-in): then nothing is compared and nothing is revoked."""
+    try:
+        data = _post(store, "/accounts/get", {"access_token": access_token})
+    except ValidationError as exc:
+        logger.info("plaid: an Item's accounts couldn't be read to compare: %s", exc)
+        return []
+    return [
+        {"mask": str(a.get("mask") or ""), "subtype": str(a.get("subtype") or "")}
+        for a in data.get("accounts") or []
+        if isinstance(a, dict) and a.get("mask")
+    ]
+
+
+def _mark_key(mark: dict) -> tuple[str, str]:
+    return (str(mark.get("mask") or ""), str(mark.get("subtype") or ""))
 
 
 # Plaid says the bank's sign-in must be renewed — the Item needs update mode (Reconnect).

@@ -326,8 +326,9 @@ def create_session(code: str, state: str = "") -> dict:
 
     POSTs ``/sessions`` ``{code}``; Enable Banking returns ``{session_id, accounts[], access}``.
     The session becomes one more linked bank, named by the bank the link was started for.
-    Linking a bank that is already listed renews it: the new session takes its place and the
-    old one is revoked at Enable Banking. Returns ``{session_id, accounts, bank_key}``. Raises
+    Linking a bank that is already listed with the same accounts renews it: the new session
+    takes its place and the old one is revoked at Enable Banking. A second login at that bank
+    (no account in common) is kept beside it. Returns ``{session_id, accounts, bank_key}``. Raises
     ``ValidationError`` on a bad code / state / auth / transport failure."""
     auth_code = (code or "").strip()
     if not auth_code:
@@ -368,13 +369,16 @@ def create_session(code: str, state: str = "") -> dict:
     other_app = {b["session_id"] for b in store.banks() if b.get("access_ended") == "app_changed"}
     named = data.get("aspsp") if isinstance(data.get("aspsp"), dict) else {}
     accounts = data.get("accounts") or []
+    aspsp = str(pending.get("aspsp") or named.get("name") or cfg.get("aspsp") or "")
+    country = str(pending.get("country") or named.get("country") or cfg.get("country") or "")
     key, replaced = store.add_bank(
         session_id,
-        aspsp=str(pending.get("aspsp") or named.get("name") or cfg.get("aspsp") or ""),
-        country=str(pending.get("country") or named.get("country") or cfg.get("country") or ""),
+        aspsp=aspsp,
+        country=country,
         valid_until=(data.get("access") or {}).get("valid_until"),
         linked_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         account_ids=[_account_uid(a) for a in accounts if isinstance(a, dict)],
+        renews=_renewed_sessions(token, store, session_id, accounts, aspsp, country),
     )
     if pending.get("state"):
         store.drop_pending_link(pending["state"])
@@ -384,6 +388,46 @@ def create_session(code: str, state: str = "") -> dict:
         _remember_accounts(store, token, old_session, store.bank(key) or {})
         _revoke_session(token, old_session)
     return {"session_id": session_id, "accounts": accounts, "bank_key": key}
+
+
+def _account_hashes(token: str, session_id: str, accounts: Optional[list] = None) -> set[str]:
+    """A session's accounts by ``identification_hash`` — the same for an account across
+    sessions, still listed once a consent ended. Empty when it can't be read."""
+    entries = [a for a in accounts or [] if isinstance(a, dict) and a.get("identification_hash")]
+    if not entries:
+        try:
+            entries = session_accounts_data(token, session_id)
+        except (ExternalServiceError, httpx.HTTPError, ValueError) as exc:
+            logger.info("enable_banking: a consent's accounts couldn't be compared: %s", exc)
+            return set()
+    return {str(a["identification_hash"]) for a in entries if a.get("identification_hash")}
+
+
+def _renewed_sessions(
+    token: str,
+    store: EnableBankingConfigStore,
+    session_id: str,
+    accounts: list,
+    aspsp: str,
+    country: str,
+) -> set[str]:
+    """Which consents at the same bank this new one renews. A second login there (a joint or
+    business sign-in) shares no account with it and is kept — revoking it cut off every
+    account it held (review 2026-11-15). Where the two can't be compared (no hashes on either
+    side, or one listed under the previous app), it renews, as before: Enable Banking lists the
+    hashes even for an ended consent, so that is rare, and revoking an ended one costs nothing."""
+    mine = _account_hashes(token, session_id, accounts)
+    renewed: set[str] = set()
+    for bank in store.banks():
+        if bank["session_id"] == session_id or (bank["aspsp"], bank["country"]) != (aspsp, country):
+            continue
+        if bank.get("access_ended") == "app_changed":
+            renewed.add(bank["session_id"])
+            continue
+        theirs = _account_hashes(token, bank["session_id"])
+        if not mine or not theirs or mine & theirs:
+            renewed.add(bank["session_id"])
+    return renewed
 
 
 class ConsentEndedError(ExternalServiceError):

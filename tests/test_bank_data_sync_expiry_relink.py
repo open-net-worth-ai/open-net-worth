@@ -262,3 +262,54 @@ def test_a_pending_row_booked_under_the_bank_id_still_settles_in_place(bank):
     result = _run()
     assert result["counts"]["settled"] == 1
     assert [t["id"] for t in _live(bank.account)] == [booked["id"]]
+
+
+# ── A second login at the same bank keeps the first ─────────────────────────────────────────
+
+
+def _eb_with_old_login(monkeypatch, old_accounts: list[dict]):
+    from backend.db.enable_banking_config_store import EnableBankingConfigStore
+    from backend.services.aggregation import enable_banking as eb
+
+    store = EnableBankingConfigStore()
+    store.add_bank(
+        "SESS-OLD",
+        aspsp="ACME Bank",
+        country="FI",
+        valid_until=None,
+        linked_at="2026-11-01T00:00:00+00:00",
+        account_ids=["UID-OLD"],
+    )
+    monkeypatch.setattr(
+        eb, "session_accounts_data", lambda token, sid: old_accounts if sid == "SESS-OLD" else []
+    )
+    return eb, store
+
+
+def test_enable_banking_a_second_login_is_not_a_renewal(db_isolated, monkeypatch):
+    eb, store = _eb_with_old_login(monkeypatch, [{"uid": "UID-OLD", "identification_hash": "H1"}])
+    new = [{"uid": "UID-NEW", "identification_hash": "H2"}]
+    assert eb._renewed_sessions("tok", store, "SESS-NEW", new, "ACME Bank", "FI") == set()
+
+
+def test_enable_banking_the_same_accounts_again_is_a_renewal(db_isolated, monkeypatch):
+    eb, store = _eb_with_old_login(monkeypatch, [{"uid": "UID-OLD", "identification_hash": "H1"}])
+    new = [{"uid": "UID-NEW", "identification_hash": "H1"}]
+    assert eb._renewed_sessions("tok", store, "SESS-NEW", new, "ACME Bank", "FI") == {"SESS-OLD"}
+
+
+def test_enable_banking_logins_that_cannot_be_compared_renew_as_before(db_isolated, monkeypatch):
+    eb, store = _eb_with_old_login(monkeypatch, [])
+    new = [{"uid": "UID-NEW"}]
+    assert eb._renewed_sessions("tok", store, "SESS-NEW", new, "ACME Bank", "FI") == {"SESS-OLD"}
+
+
+def test_enable_banking_add_bank_keeps_a_login_it_does_not_renew(db_isolated):
+    from backend.db.enable_banking_config_store import EnableBankingConfigStore
+
+    store = EnableBankingConfigStore()
+    kw = {"aspsp": "ACME Bank", "country": "FI", "valid_until": None, "linked_at": "2026-11-01"}
+    store.add_bank("SESS-1", account_ids=["U1"], **kw)
+    _, replaced = store.add_bank("SESS-2", account_ids=["U2"], renews=set(), **kw)
+    assert replaced == []
+    assert [b["session_id"] for b in store.banks()] == ["SESS-1", "SESS-2"]

@@ -174,10 +174,13 @@ class EnableBankingConfigStore(AggregatorConfigStore):
         valid_until: Optional[str],
         linked_at: str,
         account_ids: list[str],
+        renews: Optional[set[str]] = None,
     ) -> tuple[str, list[str]]:
         """Add a bank whose consent just completed. Linking the SAME bank again (same name and
-        country) is a renewal: it takes the old one's place. Returns ``(bank_key, the session
-        ids it replaced)`` — the caller revokes those at Enable Banking."""
+        country) is a renewal: it takes the old one's place — unless ``renews`` names which of
+        those sessions it renews (the rest are another login at that bank, kept). Returns
+        ``(bank_key, the session ids it replaced)`` — the caller revokes those at Enable
+        Banking."""
         bank = {
             "key": bank_key(session_id),
             "session_id": session_id,
@@ -190,6 +193,8 @@ class EnableBankingConfigStore(AggregatorConfigStore):
         with self._unit(None) as c:
             current = self.banks(conn=c)
             same = [b for b in current if (b["aspsp"], b["country"]) == (aspsp, country)]
+            if renews is not None:
+                same = [b for b in same if b["session_id"] in renews]
             kept = [b for b in current if b not in same and b["session_id"] != session_id]
             self._write(c, [*kept, bank])
         return bank["key"], [b["session_id"] for b in same if b["session_id"] != session_id]

@@ -127,6 +127,8 @@ US and Canadian banks and cards, through your own Plaid developer account.
    imported stay) without touching your other banks. To renew a bank's sign-in or add accounts
    at it, use its own **Reconnect** / **Add accounts** — linking the same bank again as a new
    bank gives its accounts new identities, and links you made to the old ones stop matching.
+   A second sign-in at the same bank (a joint or business login, with other accounts) is added
+   beside the first; the first is only replaced when the new sign-in covers the same accounts.
 6. **③ Choose and link accounts** — every linked bank's accounts, grouped by type, each showing
    which bank it's at. **Add** each one you
    want to track, or **Link** it to an account you already have.
@@ -212,8 +214,9 @@ URLs.
 Bank consent usually lasts about 90 days. When a bank's access ends (it ran out, or you revoked
 it at the bank), a fetch names that bank and keeps fetching the others, and the form shows
 **access ended** on it — click **Renew** next to it. If no bank can be read, the fetch fails
-instead of returning nothing. Each bank renews on its own; linking the same bank again also renews
-it rather than adding it twice. Renewing keeps everything as it was: each account stays linked to
+instead of returning nothing. Each bank renews on its own; linking the same bank again with the
+same accounts also renews it rather than adding it twice. A second login at that bank (a joint or
+business sign-in, with other accounts) is added beside the first and leaves it linked. Renewing keeps everything as it was: each account stays linked to
 the same Open Net Worth account, and nothing already imported comes in again.
 
 Each transaction's description is the first of these your bank sends: its payment text, the
