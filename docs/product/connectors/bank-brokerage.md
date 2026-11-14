@@ -59,7 +59,9 @@ fetch from the provider's website and which fields to fill in.
      type, currency, last four digits, and the bank's settled balance as the starting balance
      (for a card or loan, the amount owed). The row itself shows the bank's balance including
      pending, when the bank sends it. Check them and click **Add account**.
-   - **Link** ties it to an account you already have instead — pick it from the list.
+   - **Link** ties it to an account you already have instead — pick it from the list. Each of
+     your accounts takes one account per connector, so one already linked through this connector
+     isn't offered; **Unlink** that link first, or **Add** this one as its own account.
 
    Either way the link saves straight away; there's nothing else to save. A linked row reads
    **Linked to "*account name*"**, and **Unlink** undoes it. On the **Accounts** screen, a

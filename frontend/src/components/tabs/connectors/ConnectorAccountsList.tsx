@@ -248,7 +248,12 @@ export function ConnectorAccountsList({
   useEffect(() => {
     onCountsRef.current?.({ linked: linkedCount, total, live })
   }, [linkedCount, total, live])
-  const pickAccounts = appAccounts.map((a) => fromApiAccount(a as unknown as ApiAccount))
+  // Link offers only accounts with no link from THIS connector yet: one account per bank
+  // account (owner, 2026-11-14 — two bank accounts in one book account mix their money, and
+  // the server refuses it). An account linked through another connector is still offered.
+  const pickAccounts = appAccounts
+    .filter((a) => !(a.external_ids ?? []).some((e) => e.source === provider))
+    .map((a) => fromApiAccount(a as unknown as ApiAccount))
 
   return (
     <Stack gap="--space-3">

@@ -196,6 +196,7 @@ def create_account(data: dict, *, side_effects: dict | None = None) -> dict:
         raw_ids = data["external_ids"]
         normalized = _normalize_external_ids(raw_ids)
         assert_external_ids_unique(None, normalized)
+        assert_one_link_per_source({"name": data.get("name")}, normalized)
         data.update(_link_fill(data, raw_ids))
         data["external_ids"] = normalized
 
@@ -306,6 +307,32 @@ def assert_external_ids_unique(account_id: str | None, ids: list[dict]) -> None:
                 )
 
 
+def assert_one_link_per_source(account: dict | None, ids: list[dict]) -> None:
+    """Refuse a write that gives one account a SECOND account from the same connector (owner,
+    2026-11-14: "it doesn't make sense to have 2 accounts link to the same book account").
+    Two bank accounts feeding one account mix their transactions and balances, the bank
+    balance check can't hold, and the sync reads each account's history only once — the
+    second account's was never read. Only an ADDED link is refused: an account that already
+    holds two (written before this rule) can still be saved, and unlinked down to one."""
+    before: dict[str, int] = {}
+    for e in (account or {}).get("external_ids") or []:
+        if isinstance(e, dict) and e.get("source"):
+            before[e["source"]] = before.get(e["source"], 0) + 1
+    after: dict[str, list[dict]] = {}
+    for e in ids:
+        if isinstance(e, dict) and e.get("source") and e.get("ref"):
+            after.setdefault(e["source"], []).append(e)
+    for source, entries in after.items():
+        if len(entries) > 1 and len(entries) > before.get(source, 0):
+            name = (account or {}).get("name") or "This account"
+            masks = [f"•••{e['mask']}" for e in entries if e.get("mask")]
+            held = f" ({', '.join(masks)})" if masks else ""
+            raise ValidationError(
+                f"{name} can be linked to only one {provider_label(source)} account{held}. "
+                "Unlink the other first, or add this one as its own account."
+            )
+
+
 def _link_fill(account: dict, raw_ids: list) -> dict:
     """last_four/institution fill from a newly linked entry's ``mask``/``institution`` — an
     EMPTY field only, existing non-empty values are never overwritten (RFC §D "Link-time
@@ -353,6 +380,7 @@ def update_account(
         raw_ids = changes["external_ids"]
         normalized = _normalize_external_ids(raw_ids)
         assert_external_ids_unique(account_id, normalized)
+        assert_one_link_per_source(existing, normalized)
         changes.update(_link_fill(existing, raw_ids))
         changes["external_ids"] = normalized
     new_source = changes.pop("value_source", None)
