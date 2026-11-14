@@ -33,8 +33,8 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
    1. **Choose accounts.** Each bank has a card listing its accounts in two columns: **At the bank**
       (the bank's account and its last digits) and **In your book** (the account it books into;
       click it to open it). Every one is ticked. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
-      (or **Link more accounts**) links a bank account here, as a new account or to one you have,
-      without going back to the connector.
+      (under the list) links a bank account here, as a new account or to one you have, without
+      going back to the connector.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
       so today's balance doesn't change. While it runs, the step names the account it's reading
@@ -124,8 +124,9 @@ balance is its own request, which banks limit separately, about as often as tran
   settled balance from that same read when its history comes in, so it matches from the start —
   whatever was or wasn't in the balance you typed or the app filled in when you added it.
 - **Any other account** is never changed for you. When its cleared balance and the bank's
-  disagree, its row says so — "Bank €1,500.00 · Your book €1,487.50" — with **Use the bank's
-  balance**, which moves the account's Starting Balance by the difference.
+  disagree, its row says **Off by €12.50**. Click it to see both figures ("Bank €1,500.00 · Your
+  book €1,487.50") and **Match the bank**, which moves the account's Starting Balance by the
+  difference.
 
 A card or loan's balance is money owed, so it's compared as a negative figure whichever way the
 bank reports it. GoCardless and Enable Banking say which figure is settled, and that's the one

@@ -105,16 +105,15 @@ function BankSyncHistory({ provider }: { provider: string }) {
                 type="button"
                 role="listitem"
                 className="a3-hist-row"
+                title={run.trigger === 'scheduled' ? 'Scheduled run' : 'Started by you'}
                 onClick={() => setOpen(run.id)}
               >
                 <span
                   className={`rd-dot ${bad ? 'bad' : run.status === 'running' ? 'run' : 'good'}`}
                   aria-hidden="true"
                 />
-                <span className="when">{fDateTime(run.started_at, 'short', 'always')}</span>
+                <span className="when">{fDateTime(run.started_at, 'short')}</span>
                 <span className="note">
-                  {run.trigger === 'scheduled' ? 'Scheduled' : 'By you'}
-                  {' — '}
                   {run.status === 'running' ? 'Syncing…' : run.outcome || run.error || ''}
                 </span>
                 {run.status === 'running' && <span className="a3-live" title="Running now" />}

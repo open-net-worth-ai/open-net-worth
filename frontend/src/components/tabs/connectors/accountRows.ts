@@ -19,6 +19,8 @@ export interface ProviderAccountRow {
   // The bank the account sits at, when one connector links several (Plaid); else null.
   institution?: string | null
   linked_account_id: string | null
+  // Linked here, but the bank no longer lists it (closed, or the bank was linked again).
+  not_listed?: boolean
 }
 
 export interface RowGroup {
@@ -39,14 +41,25 @@ const GROUP_LABELS: Record<AccountType, string> = {
 /** Rows grouped by suggested type, in the app's type order; untyped rows last as "Other".
  *  A provider that suggests no types at all gets ONE unlabelled group — headings that all
  *  say "Other" would only add noise. */
+export const GONE_GROUP = 'gone'
+
 export function groupRows(rows: ProviderAccountRow[]): RowGroup[] {
-  if (rows.every((r) => r.account_type == null)) return [{ key: 'all', label: '', rows }]
+  const listed = rows.filter((r) => !r.not_listed)
+  const gone: RowGroup = {
+    key: GONE_GROUP,
+    label: 'No longer at the bank',
+    rows: rows.filter((r) => r.not_listed),
+  }
+  if (listed.every((r) => r.account_type == null)) {
+    return [{ key: 'all', label: '', rows: listed }, gone].filter((g) => g.rows.length > 0)
+  }
   const groups: RowGroup[] = TYPE_ORDER.map((t) => ({
     key: t,
     label: GROUP_LABELS[t],
-    rows: rows.filter((r) => r.account_type === t),
+    rows: listed.filter((r) => r.account_type === t),
   }))
-  groups.push({ key: 'other', label: 'Other', rows: rows.filter((r) => r.account_type == null) })
+  groups.push({ key: 'other', label: 'Other', rows: listed.filter((r) => r.account_type == null) })
+  groups.push(gone)
   return groups.filter((g) => g.rows.length > 0)
 }
 

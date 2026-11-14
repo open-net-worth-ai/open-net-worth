@@ -738,8 +738,12 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
             }
         )
+    # Linked here, but the bank answered without them (closed, or linked again under a new id):
+    # flagged, so the list can say so instead of filing them under "Other".
     accounts.extend(
-        a for a in _linked_only_accounts(linked) if a["provider_account_id"] not in seen
+        {**a, "not_listed": True}
+        for a in _linked_only_accounts(linked)
+        if a["provider_account_id"] not in seen
     )
     result = {"status": "ok", "provider_label": provider.label, "accounts": accounts}
     if window.warnings:

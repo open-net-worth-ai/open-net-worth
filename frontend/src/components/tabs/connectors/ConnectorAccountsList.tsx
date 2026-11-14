@@ -16,7 +16,13 @@ import AccountModal from '../accounts/AccountModal'
 import { ConnectorAccountRow } from './ConnectorAccountRow'
 import { ConnectorNextStep } from './ConnectorNextStep'
 import { FileUnderBankFix } from './FileUnderBankFix'
-import { bankInstitution, groupRows, prefillFor, type ProviderAccountRow } from './accountRows'
+import {
+  bankInstitution,
+  GONE_GROUP,
+  groupRows,
+  prefillFor,
+  type ProviderAccountRow,
+} from './accountRows'
 import type {
   Account,
   ApiAccount,
@@ -358,6 +364,12 @@ export function ConnectorAccountsList({
               aria-label={group.label || undefined}
             >
               {group.label && <h4 className="conn-acct-group-label">{group.label}</h4>}
+              {group.key === GONE_GROUP && (
+                <Text size="xs" tone="muted">
+                  Your bank stopped listing these. Unlink each, then link the bank's current
+                  account.
+                </Text>
+              )}
               {group.rows.map((row) => (
                 <ConnectorAccountRow
                   key={row.provider_account_id}

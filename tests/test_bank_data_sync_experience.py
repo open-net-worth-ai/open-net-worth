@@ -216,3 +216,19 @@ def test_a_renewed_bank_keeps_its_accounts_ids_so_its_expiry_still_shows(db_isol
         store, "tok", key, "SESS-NEW", [{"uid": "UID-NEW", "identification_hash": "H1"}]
     )
     assert store.bank(key)["account_ids"] == ["UID-OLD"]
+
+
+# ── A link the bank no longer lists is flagged for the list, not filed under "Other" ────────
+
+
+def test_a_link_the_bank_no_longer_lists_is_flagged(bank):
+    from backend.services import connector_fetch
+    from tests.bank_sync_fakes import ACC_MAIN, linked_account
+
+    linked_account("ACME Old Saver", "acme-gone-1")
+    accounts = {
+        a["provider_account_id"]: a
+        for a in connector_fetch.provider_accounts("gocardless")["accounts"]
+    }
+    assert accounts["acme-gone-1"].get("not_listed") is True
+    assert not accounts[ACC_MAIN].get("not_listed")

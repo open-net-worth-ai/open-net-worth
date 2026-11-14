@@ -149,6 +149,22 @@ function kindOf(c: Connector): string {
 }
 
 /** The connector's public settings and state; its shape differs per kind. */
+// GoCardless requisition statuses that mean the bank's access is over (EX expired, RJ refused,
+// SU suspended); an unfinished link (CR, GA…) is not an error.
+const ENDED_REQUISITION = new Set(['EX', 'RJ', 'SU'])
+
+/** A linked bank of a bank connector that waits for the user: Plaid's `needs_reconnect`,
+ *  Enable Banking's `access_ended`, a GoCardless requisition that ended. */
+function aBankNeedsSignIn(cfg: Record<string, unknown>): boolean {
+  const banks = Array.isArray(cfg.banks) ? (cfg.banks as Record<string, unknown>[]) : []
+  return banks.some(
+    (b) =>
+      b.needs_reconnect === true ||
+      Boolean(b.access_ended) ||
+      ENDED_REQUISITION.has(String(b.status ?? '')),
+  )
+}
+
 function configOf(c: Connector): Record<string, unknown> {
   return c.config ?? {}
 }
@@ -211,7 +227,9 @@ export function statusOf(c: Connector): {
   const cfg = configOf(c)
   const lastStatus = str(cfg, 'last_status')
   // A bank that wants its sign-in renewed: the keys are fine, nothing syncs until Reconnect.
-  if (lastStatus === 'reconnect_needed') {
+  // Read from each bank too: another bank's good read overwrites `last_status`, which left the
+  // list saying "Connected" while one bank waited for a sign-in (UAT 2026-11-14).
+  if (lastStatus === 'reconnect_needed' || aBankNeedsSignIn(cfg)) {
     return { statusText: 'Sign-in needed', tone: 'warn', attention: true }
   }
   if (ERROR_STATUSES.has(c.status) || ERROR_STATUSES.has(lastStatus)) {
