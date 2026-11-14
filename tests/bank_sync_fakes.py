@@ -40,11 +40,20 @@ class FakeBank:
         self.fail_with: Exception | None = None
         # One account's bank failing while the others answer (provider account id → error).
         self.fail_accounts: dict[str, Exception] = {}
+        # What the bank says each account holds, in the listing's own terms (provider account
+        # id → e.g. ``{"cleared_balance": 990.0}`` or ``{"balance": 990.0}``); none by default.
+        self.balances: dict[str, dict] = {}
 
     def fetch_window(self, store, since, before, account, *, accounts_only=False):
         ids = [a for a in self.booked if account is None or a == account]
         accounts = [
-            {"provider_account_id": a, "name": f"ACME {a[-4:]}", "mask": a[-4:], "currency": "GBP"}
+            {
+                "provider_account_id": a,
+                "name": f"ACME {a[-4:]}",
+                "mask": a[-4:],
+                "currency": "GBP",
+                **self.balances.get(a, {}),
+            }
             for a in ids
         ]
         if accounts_only:

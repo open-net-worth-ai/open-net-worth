@@ -145,10 +145,19 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     if relink.is_relinked(p.key, app_id, pid):
         out.relinked.add(app_id)
     for acc in result.get("accounts") or []:
-        if acc.get("provider_account_id") == pid and acc.get("balance") is not None:
+        if acc.get("provider_account_id") != pid:
+            continue
+        amount, cleared = _figure(acc.get("balance")), _figure(acc.get("cleared_balance"))
+        if cleared is None and p.balance_is_settled:
+            cleared = amount  # the one figure is the settled one (Plaid)
+        # A bank that sends only a booked balance has no ``balance`` (that's settled + pending):
+        # its booked figure still counts, or the account was never checked nor set.
+        if amount is None:
+            amount = cleared
+        if amount is not None:
             out.balances[app_id] = {
-                "amount": float(acc["balance"]),
-                "cleared": _figure(acc.get("cleared_balance")),
+                "amount": amount,
+                "cleared": cleared,
                 "working": _figure(acc.get("working_balance")),
                 "currency": acc.get("currency"),
                 "pending": sum(float(r.get("amount") or 0) for r in rows if r.get("pending")),

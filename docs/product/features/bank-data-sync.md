@@ -107,10 +107,9 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   merchant category that's exactly the name of one of your categories, that one is used. No
   category is ever created; anything else stays **Uncategorized**.
 - **First sync of an account:** books the history your bank serves, then moves the account's
-  Starting Balance back to the oldest row, so the history counts and **the balance stays the one
-  you opened the account with**. Settled transactions dated the day you opened it are already in
-  that balance, so they aren't counted again; a pending one is still to come off, so it counts
-  (in your working balance). (Cash and card accounts only.)
+  Starting Balance back to the oldest row, so the history counts and **today's balance doesn't
+  change**. A new account is then set to the bank's own balance (below). (Cash and card accounts
+  only.)
 
 A run books all its new transactions in one go: if something fails, nothing from that run is
 booked, and the next run tries again.
@@ -121,15 +120,18 @@ Every sync also reads each account's balance from the bank, at no extra read (Go
 balance is its own request, which banks limit separately, about as often as transactions).
 
 - **An account you've just added** (holding only its Starting Balance) is set to the bank's
-  balance when its history comes in, so it matches from the start.
+  settled balance from that same read when its history comes in, so it matches from the start —
+  whatever was or wasn't in the balance you typed or the app filled in when you added it.
 - **Any other account** is never changed for you. When its cleared balance and the bank's
   disagree, its row says so — "Bank €1,500.00 · Your book €1,487.50" — with **Use the bank's
   balance**, which moves the account's Starting Balance by the difference.
 
 A card or loan's balance is money owed, so it's compared as a negative figure whichever way the
 bank reports it. GoCardless and Enable Banking say which figure is settled, and that's the one
-compared with your cleared balance. A bank with a single figure that may include pending
-payments (Plaid) counts as in step if it matches your working balance instead.
+compared with your cleared balance. Plaid sends a single figure that leaves out pending
+payments, so it's compared with your cleared balance too. Plaid may send a figure that's a few
+hours old: if it's behind, the row shows the difference rather than your balance silently
+changing.
 
 Banks report their balances in the same terms your accounts use, both on the connector's
 **Accounts** list and when Lucius lists a bank's accounts:

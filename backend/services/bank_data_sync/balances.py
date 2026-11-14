@@ -2,9 +2,10 @@
 already brings it back with the transactions, so keeping it costs no read.
 
 The bank's SETTLED figure (``cleared``: GoCardless and Enable Banking send it as a booked
-balance, ``aggregation/balance_kinds``) is compared with the account's CLEARED balance — pending
-rows are booked uncleared (pending.py), so the two speak of the same money. A bank with one
-undivided figure (``amount``; Plaid's "current" may hold pending) is in step if it matches the
+balance, ``aggregation/balance_kinds``; Plaid's ``current`` holds no pending, so the runner reads
+it as settled, ``Provider.balance_is_settled``) is compared with the account's CLEARED balance —
+pending rows are booked uncleared (pending.py), so the two speak of the same money. A bank with
+one undivided figure that may hold pending (``amount`` alone) is in step if it matches the
 cleared OR the working balance. A card or loan's balance is owed money: the book holds it
 negative, whichever way round the bank reports it.
 

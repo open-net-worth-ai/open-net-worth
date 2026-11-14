@@ -3,6 +3,8 @@ Amendments 7+). Each section names the UAT finding it pins. Synthetic ACME data 
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from backend.core import headless_turn
@@ -249,7 +251,11 @@ def test_a_gone_account_beside_a_good_one_is_a_partial_run(bank):
     assert "1 account not read" in import_runs.latest("gocardless", ("sync",))["outcome"]
 
 
-# ── UAT #5: the first import doesn't count the start day twice ──────────────────────────
+# ── UAT #5: a new account's first import ends at the bank's own balance ────────────────
+# Rows dated the start day are never guessed in or out of the opening: whether the opening
+# holds them depends on when that balance was read. A new account (nothing but its Starting
+# Balance) is set to the bank's SETTLED figure from the same read instead; any other account is
+# never changed silently (ADR 2026-11-13, Amendment 11).
 
 
 def _balances(account_id: str) -> tuple[float, float]:
@@ -262,29 +268,48 @@ def _balances(account_id: str) -> tuple[float, float]:
     )
 
 
-def test_rows_dated_the_start_day_are_already_in_the_opening(bank):
-    # Opened today at 1,000.00 — the bank's balance today, which already holds today's posted
-    # rows. The pending one isn't in it yet.
-    bank.booked[ACC_MAIN] = [
+def _today_and_before() -> list[dict]:
+    return [
         txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0"),
         txn(-10.00, days_ago(3), "ACME CAFE", tid="t3"),
     ]
+
+
+def test_a_new_account_ends_at_the_banks_booked_balance(bank):
+    bank.booked[ACC_MAIN] = _today_and_before()
     bank.pending[ACC_MAIN] = [txn(-5.00, days_ago(0), "ACME KIOSK")]
+    bank.balances[ACC_MAIN] = {"cleared_balance": 990.00}  # booked only: no expected figure
     _run()
-    cleared, working = _balances(bank.account)
-    assert cleared == 1000.00, "today's posted row was counted on top of the opening"
-    assert working == 995.00
+    assert _balances(bank.account) == (990.00, 985.00)
     account = ledger_service.accounts.find_by_id(bank.account)
     assert ledger_service.opening_date(account) == days_ago(3)
 
 
-def test_only_start_day_rows_still_fold_into_the_opening(bank):
-    bank.booked[ACC_MAIN] = [txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0")]
+def test_with_no_bank_figure_start_day_rows_simply_count(bank):
+    bank.booked[ACC_MAIN] = _today_and_before()
     _run()
-    assert _balances(bank.account) == (1000.00, 1000.00)
+    # Start moved back to the oldest row, today's balance kept (1,000 − 20); nothing guessed.
+    assert _balances(bank.account) == (980.00, 980.00)
 
 
-def test_a_card_payment_on_the_start_day_is_not_counted_twice(bank):
+def test_plaids_one_figure_is_read_as_settled_even_with_pending(bank):
+    settled_one_figure = dataclasses.replace(GC, balance_is_settled=True)
+    bank.booked[ACC_MAIN] = _today_and_before()
+    bank.pending[ACC_MAIN] = [txn(-5.00, days_ago(0), "ACME KIOSK")]
+    bank.balances[ACC_MAIN] = {"balance": 990.00}
+    runner.run_now(settled_one_figure, "manual", runner.opted_accounts("gocardless"))
+    assert _balances(bank.account) == (990.00, 985.00)
+
+
+def test_an_undivided_figure_with_pending_is_not_guessed(bank):
+    bank.booked[ACC_MAIN] = _today_and_before()
+    bank.pending[ACC_MAIN] = [txn(-5.00, days_ago(0), "ACME KIOSK")]
+    bank.balances[ACC_MAIN] = {"balance": 990.00}  # may hold the pending row: not settled
+    _run()
+    assert _balances(bank.account)[0] == 980.00
+
+
+def test_a_card_ends_at_what_the_bank_says_is_owed(bank):
     card = accounts_service.create_account(
         {
             "name": "ACME Card",
@@ -299,27 +324,41 @@ def test_a_card_payment_on_the_start_day_is_not_counted_twice(bank):
         txn(2835.80, days_ago(0), "ACME PAYMENT THANK YOU", tid="p0"),
         txn(-42.00, days_ago(2), "ACME BOOKS", tid="b2"),
     ]
+    bank.balances[ACC_SAVER] = {"cleared_balance": 500.00}
     _run()
     assert _balances(card) == (-500.00, -500.00)
 
 
-def test_a_later_sync_moves_nothing(bank):
-    bank.booked[ACC_MAIN] = [txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0")]
+def test_an_account_with_its_own_rows_is_never_set_silently(bank):
+    ledger_service.create_transaction(
+        {
+            "kind": "expense",
+            "date": days_ago(0),
+            "from_account_id": bank.account,
+            "from_amount": 3.00,
+            "from_currency": "GBP",
+            "description": "ACME CASH",
+        }
+    )
+    bank.booked[ACC_MAIN] = _today_and_before()
+    bank.balances[ACC_MAIN] = {"cleared_balance": 990.00}
+    _run()
+    assert _balances(bank.account)[0] == 977.00  # its opening kept; the gap pill offers the fix
+
+
+def test_a_later_sync_only_adds_new_rows(bank):
+    bank.booked[ACC_MAIN] = _today_and_before()
+    bank.balances[ACC_MAIN] = {"cleared_balance": 990.00}
     _run()
     bank.booked[ACC_MAIN].append(txn(-7.00, days_ago(0), "ACME BUS", tid="t0b"))
+    bank.balances[ACC_MAIN] = {"cleared_balance": 983.00}
     _run()
-    # A row the bank posts after the first import is new money: it counts.
-    assert _balances(bank.account)[0] == 993.00
+    assert _balances(bank.account)[0] == 983.00
 
 
-def test_a_failed_alignment_never_aligns_an_aligned_account_again(bank, monkeypatch):
-    """Review: the start-day fold is not idempotent. One account's write failing must retry
-    only that one — re-aligning the other would move its balance by the start day again."""
+def test_a_failed_alignment_retries_only_that_account(bank, monkeypatch):
     saver = linked_account("ACME Saver", ACC_SAVER)
-    bank.booked[ACC_MAIN] = [
-        txn(-20.00, days_ago(0), "ACME LUNCH", tid="t0"),
-        txn(-10.00, days_ago(3), "ACME CAFE", tid="t3"),
-    ]
+    bank.booked[ACC_MAIN] = _today_and_before()
     bank.booked[ACC_SAVER] = [txn(-15.00, days_ago(2), "ACME FEE", tid="f2")]
     real = ledger_service.set_account_opening
 
@@ -331,9 +370,10 @@ def test_a_failed_alignment_never_aligns_an_aligned_account_again(bank, monkeypa
     monkeypatch.setattr(ledger_service, "set_account_opening", fail_for_saver)
     _run()
     assert budget.state("gocardless")["pending_align"] == [saver]
-    assert _balances(bank.account)[0] == 1000.00
+    assert _balances(bank.account)[0] == 980.00
 
     monkeypatch.setattr(ledger_service, "set_account_opening", real)
     _run()
-    assert _balances(bank.account)[0] == 1000.00, "the aligned account was aligned again"
+    assert _balances(bank.account)[0] == 980.00, "the aligned account moved again"
+    assert _balances(saver)[0] == 1000.00  # its older row rewound into the opening
     assert budget.state("gocardless")["pending_align"] == []

@@ -270,3 +270,30 @@ made only on an account's first import (the `opening_txn_id` invariant is unchan
 re-dated and re-amounted in place). Because the fold is not idempotent, alignment settles per
 account: one account's failure is retried alone (`pending_align`), never re-aligning an account
 whose write succeeded.
+
+## Amendment 11 (2026-11-15, owner: a new account ends at the bank's balance; Amendment 10's start-day fold is withdrawn)
+
+Amendment 10 took the settled rows dated the start day out of the opening, on the assumption that
+the opening was the bank's balance that day and already held them. No date can tell that: it
+depends on WHEN the balance was read (a row posted after it is not in it), on WHICH figure it was
+(`closingBooked` / `CLBD` is the end of the day before and holds none of them), and on whether the
+user typed it. It is withdrawn: `booker.align_first_imports` again only moves the start back with
+the Preserve rewind, still ONE `set_account_opening` and still settled per account (retrying
+only a failed one). The UAT's 597.50 also came from Plaid's sandbox, whose balances are fixtures
+unrelated to its transactions.
+
+What anchors a new account instead is the existing empty-account auto-set (Amendment 3): the
+bank's SETTLED figure from the same read as the transactions. Two gaps kept it from Plaid and
+from many PSD2 banks, and both are closed:
+
+- **Plaid's `current` is settled.** Plaid's docs define `available` as `current` less pending
+  outflows plus pending inflows, so `current` holds no pending. `Provider.balance_is_settled`
+  (set for Plaid only) makes the runner read the one figure as `cleared`, so the auto-set no
+  longer skips a Plaid account with pending rows and the gap check compares it with the cleared
+  balance. Listings are unchanged: there it stays the undivided `balance`. Plaid's figure may be
+  cached; a stale one shows as a gap on a later sync instead of a silent change.
+- **A booked-only bank is recorded.** The runner recorded a balance only when the listing's
+  `balance` (the EXPECTED figure, settled + pending) was present, so a bank that sends only a
+  booked type was never compared nor set. It now records the booked figure on its own.
+
+An account with any other row keeps its opening and offers "Use the bank's balance", as before.

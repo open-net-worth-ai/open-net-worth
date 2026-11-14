@@ -298,20 +298,19 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
 
 
 def align_first_imports(provider: str, account_ids: set[str]) -> tuple[set[str], list[str]]:
-    """Fit each first-imported cash/card account's history around its Starting Balance, so the
-    history counts and today's balance is the one the account was opened with. Read from the
-    ledger, so a run that stopped after booking aligns on the next one. Returns ``(settled
-    account ids, warnings)``; an account that can't be aligned (its type) is settled with a
-    warning, never retried forever. One that failed is left out, so only IT is retried: the
-    start-day fold is not idempotent, and a second pass over an aligned account would move its
-    balance.
+    """Move each first-imported cash/card account's start back to its oldest row from
+    ``provider``, rewinding the opening by what that exposes (``tracking_start.compute_align``,
+    the Preserve rewind), so the history counts and today's balance doesn't move. ONE write
+    (``set_account_opening``) per account. Read from the ledger, so a run that stopped after
+    booking aligns on the next one. Returns ``(settled account ids, warnings)``; an account that
+    can't be aligned (its type) is settled with a warning, never retried forever. One that
+    failed is left out, so only IT is retried.
 
-    Two moves, ONE write (``set_account_opening``): the start goes back to the oldest row from
-    ``provider`` with the opening rewound by what that exposes (``tracking_start.compute_align``,
-    the Preserve rewind), and the settled rows dated the start day itself come out of the
-    opening — it was the bank's balance that day, so it already holds them. Counting them on top
-    double-counted the start day (UAT 2026-11-14: checking 500 → 597.50, a card owed 500 →
-    +2,144.63). A pending row is not in it yet and keeps counting."""
+    Rows dated the start day itself are left as they are: whether the opening already holds
+    them depends on WHEN that balance was read, which no date can tell. An account that held
+    nothing but its Starting Balance is then set to the bank's own settled figure from this same
+    read (``balances.record``); any other keeps its opening and offers "Use the bank's balance"
+    (ADR 2026-11-13, Amendment 11)."""
     txns = ledger_service.transactions.all()
     settled: set[str] = set()
     warnings: list[str] = []
@@ -345,24 +344,15 @@ def _align_one(provider: str, account_id: str, txns: list[dict], warnings: list[
     if not mine or not start:
         return
     oldest = min(str(t.get("date"))[:10] for t in mine)
-    on_start = sum(
-        tracking_start._leg_effect(t, account_id)
-        for t in mine
-        if str(t.get("date"))[:10] == start and t.get("cleared")
-    )
-    if oldest >= start and abs(on_start) <= _AMOUNT_TOL:
+    if oldest >= start:
         return
     try:
         tracking_start.assert_alignable(account)
     except ValidationError as exc:
-        if oldest < start:
-            name = account.get("name") or "An account"
-            warnings.append(f"{name}: history before {start} is booked but not counted — {exc}")
+        name = account.get("name") or "An account"
+        warnings.append(f"{name}: history before {start} is booked but not counted — {exc}")
         return
-    new_start = min(oldest, start)
     plan = tracking_start.compute_align(
-        account, new_start, txns, start, ledger_service.opening_amount(account, txns)
+        account, oldest, txns, start, ledger_service.opening_amount(account, txns)
     )
-    ledger_service.set_account_opening(
-        account_id, round(plan["new_opening"] - on_start, 2), new_start
-    )
+    ledger_service.set_account_opening(account_id, round(plan["new_opening"], 2), oldest)

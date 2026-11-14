@@ -570,8 +570,10 @@ def _account_to_common(account: dict) -> dict:
         "name": str(name),
         "mask": account.get("mask"),
         "currency": currency,
-        # Plaid's "current" doesn't say whether pending is in it, so it stays the one undivided
-        # ``balance`` and is never called cleared (balance_kinds).
+        # Plaid sends one figure, so it stays the undivided ``balance`` in listings
+        # (balance_kinds). It holds no pending (``available`` = current less pending outflows
+        # plus pending inflows), which the bank sync reads as its settled figure
+        # (``Provider.balance_is_settled``).
         "balance": balances.get("current"),
         "available_to_spend": balances.get("available"),
         "account_type": _suggested_account_type(account),
