@@ -232,3 +232,19 @@ def test_a_link_the_bank_no_longer_lists_is_flagged(bank):
     }
     assert accounts["acme-gone-1"].get("not_listed") is True
     assert not accounts[ACC_MAIN].get("not_listed")
+
+
+def test_a_runs_error_line_says_each_reason_once():
+    from backend.services.bank_data_sync import runner
+
+    line = runner._one_line(
+        [
+            "ACME Checking: the bank needs you to sign in again",
+            "ACME Card: the bank needs you to sign in again",
+            "ACME Saver: the bank isn't answering",
+        ]
+    )
+    assert line == (
+        "ACME Checking, ACME Card: the bank needs you to sign in again; "
+        "ACME Saver: the bank isn't answering"
+    )

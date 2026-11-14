@@ -314,6 +314,20 @@ def _align(p: Provider, first_import: set[str], warnings: list[str]) -> None:
     budget.update(p.key, pending_align=sorted(pending))
 
 
+def _one_line(warnings: list[str]) -> str:
+    """The run's warnings as one line, each reason once with the accounts it hit: "Checking,
+    Card: the bank needs you to sign in again" — not the same sentence once per account."""
+    by_reason: dict[str, list[str]] = {}
+    for w in warnings:
+        name, sep, reason = w.partition(": ")
+        if not sep:
+            name, reason = "", w
+        names = by_reason.setdefault(reason, [])
+        if name and name not in names:
+            names.append(name)
+    return "; ".join(f"{', '.join(n)}: {r}" if n else r for r, n in by_reason.items())
+
+
 def _remember_history_read(p: Provider, accounts: set[str]) -> None:
     """Each account whose whole history was just read. Rows in the book can't say it for an
     account the bank had nothing for, which then read as never imported: Import history came
@@ -402,7 +416,7 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
     counts["errors"] = len(errors)
     # A partial run (one bank read, another not) keeps what failed, so the bank that wasn't read
     # never shows as synced.
-    last_error = "; ".join(fetched.warnings)[:500] if status != "ok" else None
+    last_error = _one_line(fetched.warnings)[:500] if status != "ok" else None
     budget.record_outcome(p, status, last_error)
     import_runs.finish(
         run_id,
