@@ -290,6 +290,23 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
     return {"item_id": item_id, "institution_name": name, "has_access_token": True}
 
 
+def _plain(exc: ValidationError) -> str:
+    """What a bank read's failure means to the user, in words: Plaid's own message is technical
+    ("the login details of this item have changed…") and names the endpoint."""
+    code = exc.context.get("plaid_error_code")
+    if code in _UPDATE_MODE_CODES:
+        return "the bank needs you to sign in again — Reconnect it on the Plaid page"
+    if code in _ITEM_GONE_CODES:
+        return "Plaid no longer has this bank's connection — link the bank again on the Plaid page"
+    if code in _KEYS_CODES:
+        return "Plaid refused the app's keys — check them on the Plaid page"
+    if code in ("INSTITUTION_DOWN", "INSTITUTION_NOT_RESPONDING", "INSTITUTION_NOT_AVAILABLE"):
+        return "the bank isn't answering Plaid right now — the sync tries again later"
+    if code == "PRODUCT_NOT_READY":
+        return "Plaid is still gathering this bank's transactions — the sync tries again soon"
+    return str(exc)
+
+
 def _wake_sync() -> None:
     from backend.services.bank_data_sync import budget
 
@@ -322,6 +339,28 @@ _RECONNECT_CODES = frozenset(
 
 # Plaid says the Item is gone already — safe to forget it locally.
 _ITEM_GONE_CODES = frozenset({"ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN"})
+
+# Plaid answers almost every error with HTTP 400, so its error_code is what tells them apart
+# (plaid.com/docs/errors). The bank wants something from the user before it answers again:
+_USER_ACTION_CODES = (
+    _RECONNECT_CODES
+    | _ITEM_GONE_CODES
+    | frozenset(
+        {
+            "NO_ACCOUNTS",
+            "ITEM_LOCKED",
+            "USER_SETUP_REQUIRED",
+            "INVALID_CREDENTIALS",
+            "INSUFFICIENT_CREDENTIALS",
+            "INVALID_MFA",
+            "ITEM_NOT_SUPPORTED",
+        }
+    )
+)
+# What Reconnect (update mode) fixes: everything above but a connection that is gone.
+_UPDATE_MODE_CODES = _USER_ACTION_CODES - _ITEM_GONE_CODES
+# The app's own Plaid keys are wrong, whatever bank is asked:
+_KEYS_CODES = frozenset({"INVALID_API_KEYS", "UNAUTHORIZED_ENVIRONMENT", "INVALID_SECRET"})
 
 
 def _retire_item(store: PlaidConfigStore, item: dict) -> bool:
@@ -487,11 +526,9 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
             got = _fetch_item(store, item["access_token"], start_date=start_date, end_date=end_date)
         except ValidationError as exc:
             first_error = first_error or exc
-            if exc.context.get("plaid_error_code") in _RECONNECT_CODES:
+            if exc.context.get("plaid_error_code") in _UPDATE_MODE_CODES:
                 needed.add(key)
-                warnings.append(f"{bank}: its sign-in expired — reconnect it on the Plaid page")
-            else:
-                warnings.append(f"{bank}: {exc}")
+            warnings.append(f"{bank}: {_plain(exc)}")
             complete = False
             continue
         answered.add(key)
@@ -538,7 +575,7 @@ def fetch_balances(store: PlaidConfigStore) -> dict:
             data = _post(store, "/accounts/get", {"access_token": item["access_token"]})
         except ValidationError as exc:
             first_error = first_error or exc
-            if exc.context.get("plaid_error_code") in _RECONNECT_CODES:
+            if exc.context.get("plaid_error_code") in _UPDATE_MODE_CODES:
                 needed.add(key)
             complete = False
             continue
@@ -645,6 +682,10 @@ def _txn_amount(plaid_txn: dict) -> float | None:
         return None
     # Flip Plaid's sign so positive = money in (matches every other bank feed's convention).
     signed = -value
+    if plaid_txn.get("iso_currency_code") or not plaid_txn.get("unofficial_currency_code"):
+        # Plaid's banks are US/CA (dollars, cents); its sandbox serves 97.66696. An unofficial
+        # currency (a crypto balance) keeps its own precision.
+        signed = round(signed, 2)
     return signed or None
 
 
@@ -776,8 +817,9 @@ def fetch_window(
         # is this read's failure, never an "ok" with nothing in it — that dropped its pending
         # rows and showed it synced (UAT 2026-11-14). Another bank's trouble isn't its own.
         if account not in accounts_by_id:
-            if fetched.get("error") is not None:
-                raise fetched["error"]
+            error = fetched.get("error")
+            if error is not None:
+                raise ValidationError(_plain(error), **error.context) from None
         else:
             warnings = []
     rows: list[dict] = []
@@ -803,9 +845,12 @@ def classify_error(exc: Exception) -> str:
     rather than reporting every one as auth_error (which would tell a user to re-enter
     working credentials over a transient outage)."""
     if isinstance(exc, ValidationError):
-        if exc.context.get("plaid_error_code") in _RECONNECT_CODES:
-            # The keys are fine — the BANK wants its sign-in renewed (Reconnect, update mode).
+        code = exc.context.get("plaid_error_code")
+        if code in _USER_ACTION_CODES:
+            # The keys are fine — the BANK wants the user (Reconnect, or link it again).
             return "reconnect_needed"
+        if code in _KEYS_CODES:
+            return "auth_error"
         msg = str(exc).lower()
         if "could not reach plaid" in msg:
             return "connect_error"
