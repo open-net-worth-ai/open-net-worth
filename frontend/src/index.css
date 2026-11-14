@@ -9677,6 +9677,12 @@ body.hide-amounts .mask * {
     align-items: center;
     gap: var(--space-1);
   }
+  /* Buttons in a list row are row-sized, not form-sized: the small button's 6px padding and
+     1.55 line height made each account row 33px tall around a 12px label. */
+  .conn-acct-actions .ui-btn {
+    padding-block: 3px;
+    line-height: 1.3;
+  }
   /* The row's next step in the accent colour: Add a soft fill, Link… its text; Unlink stays
      quiet and only reddens under the pointer. */
   .conn-acct-actions .conn-acct-add {
