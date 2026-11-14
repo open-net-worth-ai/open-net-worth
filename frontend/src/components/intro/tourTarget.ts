@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 
 /** The element for a target. A screen can carry a hidden twin of a control (a closed side
  *  panel keeps its own copy, slid out sideways), so a match off to the side never counts; nor
@@ -99,7 +99,7 @@ export function resetGuidedForTests(): void {
 //
 // 1. A visit that ARRIVED with a purpose — a deep link or a provider's return, its address
 //    carrying one of these — shows no guide at all: the person came to do that one thing.
-const PURPOSE_PARAMS = ['connector', 'txn', 'batch', 'state', 'code', 'ref']
+const PURPOSE_PARAMS = ['connector', 'txn', 'batch', 'state', 'code', 'ref', 'sync']
 function arrivedWithPurpose(): boolean {
   if (typeof window === 'undefined') return false
   // The address the page was LOADED from, not the current one: the app tidies `?connector=…`
@@ -132,6 +132,11 @@ export function holdGuides(): () => void {
   return () => {
     if (holds.delete(key)) releasedAt = Date.now()
   }
+}
+
+/** A page that is itself the flow (a bank's sync page) holds guides for as long as it is shown. */
+export function useHoldGuides(): void {
+  useEffect(() => holdGuides(), [])
 }
 
 /** Whether a guide must wait: the visit came with a purpose, a flow is mid-way, or one only
