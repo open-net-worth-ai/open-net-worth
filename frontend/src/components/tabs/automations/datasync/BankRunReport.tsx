@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Sparkles } from 'lucide-react'
+import { Check, Sparkles } from 'lucide-react'
 import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
 import { useChatComposer } from '../../../../state/chatComposer'
@@ -17,8 +17,8 @@ import {
 import { useTransactionSurfaces } from '../../accounts/transactionSurfacesContext'
 
 // One bank sync run, opened from its History row (ADR 2026-11-13): one line on what it did; the
-// transactions it booked, drawn as the Accounts register draws them (its own classes and
-// category pill: date, payee, category or Uncategorized, amount), each opening its detail drawer
+// transactions it booked, by day, drawn as the Accounts register draws them (its own classes and
+// category pill: payee, category or Uncategorized, amount), each opening its detail drawer
 // OVER the report so you can go row by row; View in register and Categorize with Lucius in the
 // footer (owner, 2026-11-14). The account shows only when the run read more than one.
 
@@ -124,7 +124,11 @@ function RunBody({ r, counts }: { r: RunRecord; counts: Record<string, number> }
           {r.error || 'This run failed; nothing was booked.'}
         </Text>
       ) : (
-        <p className="bs-run-sum">{[n ? `${n} booked` : 'Nothing new', ...did].join(' · ')}</p>
+        <p className="bs-run-sum">
+          {n > 0 && <Check size={15} className="bs-run-ok" aria-hidden="true" />}
+          <strong>{n ? `${n} booked` : 'Nothing new'}</strong>
+          {did.length > 0 && <span className="bs-run-facts">{did.join(' · ')}</span>}
+        </p>
       )}
       {problems.map((p, i) => (
         <Text key={i} size="sm" tone="warn">
@@ -211,49 +215,82 @@ function Booked({ runId }: { runId: string }) {
     )
   const rows = booked.data ?? []
   const manyAccounts = new Set(rows.map(accountOf)).size > 1
+  const days: [string, BookedRow[]][] = []
+  for (const t of rows) {
+    const day = days[days.length - 1]
+    if (day && day[0] === t.date) day[1].push(t)
+    else days.push([t.date, [t]])
+  }
   return (
-    <ul className="bs-run-list" aria-label="Booked transactions">
-      {rows.map((t) => {
-        const out = !!t.from_account_id
-        const amount = out ? -(t.from_amount ?? 0) : (t.to_amount ?? 0)
-        const currency = (out ? t.from_currency : t.to_currency) ?? undefined
-        return (
-          <li key={t.id}>
-            <button
-              type="button"
-              className="bs-run-row"
-              aria-label={`Open ${t.payee_name || t.description}`}
-              onClick={() =>
-                openTransactionById(t.id, t.payee_name || t.description, { overModal: true })
-              }
-            >
-              <span className="acct-td-date">{fShortDate(t.date)}</span>
-              <span className="bs-run-payee">
-                <span className="acct-payee-nm">{t.payee_name || t.description}</span>
-                {manyAccounts && <span className="acct-payee-sub">{accountOf(t)}</span>}
-              </span>
-              <span className="bs-run-cat">
-                {t.category ? (
-                  <CategoryPill meta={catMap[t.category]} />
-                ) : (
-                  <span className="acct-unsorted">Uncategorized</span>
-                )}
-              </span>
-              <span className={`acct-td-amt ${amount < 0 ? 'neg' : 'pos'}`}>
-                <span className="acct-amt-main">
-                  {`${amount < 0 ? '−' : '+'}${fAmountNative(Math.abs(amount), currency)}`}
-                </span>
-                {t.original_amount != null && t.original_currency && (
-                  <span className="acct-amt-orig">
-                    {fAmountNative(Math.abs(t.original_amount), t.original_currency)}
-                  </span>
-                )}
-              </span>
-            </button>
-          </li>
-        )
-      })}
-    </ul>
+    <div className="bs-run-days" aria-label="Booked transactions">
+      {days.map(([date, txns]) => (
+        <section key={date} className="bs-run-day">
+          <h4 className="bs-run-date">{fDayLabel(date)}</h4>
+          <ul className="bs-run-list">
+            {txns.map((t) => (
+              <BookedLine
+                key={t.id}
+                t={t}
+                manyAccounts={manyAccounts}
+                category={t.category ? catMap[t.category] : undefined}
+                onOpen={() =>
+                  openTransactionById(t.id, t.payee_name || t.description, { overModal: true })
+                }
+              />
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+/** One booked transaction, drawn with the register's own cell classes. */
+function BookedLine({
+  t,
+  manyAccounts,
+  category,
+  onOpen,
+}: {
+  t: BookedRow
+  manyAccounts: boolean
+  category?: { label: string; color: string }
+  onOpen: () => void
+}) {
+  const out = !!t.from_account_id
+  const amount = out ? -(t.from_amount ?? 0) : (t.to_amount ?? 0)
+  const currency = (out ? t.from_currency : t.to_currency) ?? undefined
+  return (
+    <li>
+      <button
+        type="button"
+        className="bs-run-row"
+        aria-label={`Open ${t.payee_name || t.description}`}
+        onClick={onOpen}
+      >
+        <span className="bs-run-payee">
+          <span className="acct-payee-nm">{t.payee_name || t.description}</span>
+          {manyAccounts && <span className="acct-payee-sub">{accountOf(t)}</span>}
+        </span>
+        <span className="bs-run-cat">
+          {t.category ? (
+            <CategoryPill meta={category} />
+          ) : (
+            <span className="acct-unsorted">Uncategorized</span>
+          )}
+        </span>
+        <span className={`acct-td-amt ${amount < 0 ? 'neg' : 'pos'}`}>
+          <span className="acct-amt-main">
+            {`${amount < 0 ? '−' : '+'}${fAmountNative(Math.abs(amount), currency)}`}
+          </span>
+          {t.original_amount != null && t.original_currency && (
+            <span className="acct-amt-orig">
+              {fAmountNative(Math.abs(t.original_amount), t.original_currency)}
+            </span>
+          )}
+        </span>
+      </button>
+    </li>
   )
 }
 
@@ -267,10 +304,10 @@ function CategoryPill({ meta }: { meta?: { label: string; color: string } }) {
   )
 }
 
-/** "Nov 14" — one run spans days, not years. */
-function fShortDate(iso: string): string {
+/** "Sat, Nov 14" — one run spans days, not years. */
+function fDayLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00`)
   return Number.isNaN(d.getTime())
     ? iso
-    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }

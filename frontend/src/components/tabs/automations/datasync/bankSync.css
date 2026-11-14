@@ -259,13 +259,42 @@
   gap: 16px;
 }
 .bs-run-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   margin: 0;
   font-size: var(--text-sm);
+}
+.bs-run-sum strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.bs-run-ok {
+  flex: none;
+  color: var(--good);
+}
+.bs-run-facts {
   color: var(--muted);
 }
 /* The booked transactions, as the Accounts register draws them: date · payee · category ·
    amount, the register's own cell classes inside (acct-td-date, acct-payee-nm, acct-pill,
    acct-unsorted, acct-td-amt). */
+.bs-run-days {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* A day's heading, in the register's date style: small and muted, not shouting. */
+.bs-run-date {
+  margin: 0 0 2px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .bs-run-list {
   list-style: none;
   margin: 0;
@@ -276,7 +305,7 @@
 }
 .bs-run-row {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto 92px;
+  grid-template-columns: minmax(0, 1fr) auto 92px;
   align-items: center;
   gap: 12px;
   width: 100%;
