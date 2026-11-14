@@ -343,7 +343,9 @@ def test_an_account_with_its_own_rows_is_never_set_silently(bank):
     bank.booked[ACC_MAIN] = _today_and_before()
     bank.balances[ACC_MAIN] = {"cleared_balance": 990.00}
     _run()
-    assert _balances(bank.account)[0] == 977.00  # its opening kept; the gap pill offers the fix
+    # Not set to the bank's 990: its opening is kept and the gap pill offers the fix. The row
+    # typed by hand is uncleared, so it counts in the working balance only.
+    assert _balances(bank.account) == (980.00, 977.00)
 
 
 def test_a_later_sync_only_adds_new_rows(bank):
