@@ -194,7 +194,7 @@ FLAGS: tuple[Flag, ...] = (
             "afterwards wait for you in a review list. Bank syncs join the Data Sync tab in "
             "Automations. Off: only a Lucius Automation books bank rows, as before."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 13),
         remove_by=date(2027, 3, 1),

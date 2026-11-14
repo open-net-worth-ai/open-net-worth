@@ -16,9 +16,9 @@ on a schedule, with no AI model and nothing to pay for. When an account is first
 the history your bank serves (90 days for most European banks); after that each run books only
 what's new.
 
-> **Experimental.** Turn it on in [Settings → Developer → Experimental](settings.md#experimental-features)
-> (**Bank sync without AI**). Until then, only a Lucius Automation books bank transactions, as
-> before.
+> **On by default.** Nothing syncs until you set it up on a connector. To hide it, turn off
+> **Bank sync without AI** in [Settings → Developer → Experimental](settings.md#experimental-features);
+> then only a Lucius Automation books bank transactions.
 
 It works with **GoCardless**, **Enable Banking** and **Plaid**.
 
