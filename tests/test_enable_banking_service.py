@@ -1296,14 +1296,15 @@ def test_session_accounts_data_reads_a_closed_session(monkeypatch):
             {"bank_transaction_code": {"description": " "}, "reference_number": "RF18 5390"},
             "RF18 5390",
         ),
-        ({"creditor": {"name": None}, "bank_transaction_code": None}, "Enable Banking"),
-        ({"note": "my own note"}, "Enable Banking"),
+        ({"creditor": {"name": None}, "bank_transaction_code": None}, ""),
+        ({"note": "my own note"}, ""),
     ],
 )
 def test_the_description_comes_from_the_first_field_the_bank_filled(fields, expected):
     """Reported 2026-11-13: a bank whose rows carry no remittance text and no counterparty
     came out as a bare "Enable Banking" on every row, even when it named the kind of
-    transaction. ``note`` is the account holder's own, never the bank's description."""
+    transaction. ``note`` is the account holder's own, never the bank's description. With
+    nothing filled the description is EMPTY, never a placeholder that reads as bank text."""
     assert svc._txn_description(fields) == expected
 
 

@@ -231,12 +231,12 @@ def _txn_to_row(sf_txn: dict, sf_account_id: str, currency: str) -> dict | None:
     date_str = _txn_date(sf_txn)
     if date_str is None:
         return None
-    description = (sf_txn.get("description") or sf_txn.get("payee") or "").strip() or "SimpleFIN"
+    description = (sf_txn.get("description") or sf_txn.get("payee") or "").strip()
     txn_id = str(sf_txn.get("id") or "").strip()
     ref = (
         f"{sf_account_id}:{txn_id}"
         if txn_id
-        else derived_ref(sf_account_id, date_str, amount, currency, description)
+        else derived_ref(sf_account_id, date_str, amount, currency, description or "SimpleFIN")
     )
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],

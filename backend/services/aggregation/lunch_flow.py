@@ -185,9 +185,9 @@ def _txn_date(lf_txn: dict) -> str:
 
 
 def _txn_description(lf_txn: dict) -> str:
-    """The bank's own wording (``description``), then the merchant, then a fallback."""
+    """The bank's own wording (``description``), then the merchant, else empty."""
     info = lf_txn.get("description") or lf_txn.get("merchant")
-    return (str(info).strip() if info else "") or "Lunch Flow"
+    return str(info).strip() if info else ""
 
 
 def _ref_text(lf_txn: dict) -> str:

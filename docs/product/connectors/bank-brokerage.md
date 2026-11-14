@@ -213,8 +213,10 @@ the same Open Net Worth account, and nothing already imported comes in again.
 
 Each transaction's description is the first of these your bank sends: its payment text, the
 other party's name, its own name for the kind of transaction (such as "Card payment"), or the
-payment reference. A transaction with none of them is described as **Enable Banking**: your bank
-didn't send any detail for it.
+payment reference. A transaction with none of them has no description: your bank didn't send
+any detail for it. This holds for every bank connector: a transaction the bank sends without
+any wording shows a blank description (a dash in the register), never the connector's name.
+Rows imported before this change keep the name until you edit them.
 
 ### Switching to another Enable Banking application
 

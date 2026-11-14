@@ -552,7 +552,7 @@ def test_txn_to_row_description_falls_back_to_original_name_then_default():
         "plaid:1",
         "USD",
     )
-    assert row["description"] == "Lunch Money"
+    assert row["description"] == ""
 
 
 def test_txn_to_row_falls_back_to_derived_ref_when_no_id():

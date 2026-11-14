@@ -609,9 +609,9 @@ def _txn_date(plaid_txn: dict) -> str:
 
 
 def _txn_description(plaid_txn: dict) -> str:
-    """Best human description: merchant name, then the cleaned ``name``, then a fallback."""
+    """Best human description: merchant name, then the cleaned ``name``, else empty."""
     info = plaid_txn.get("merchant_name") or plaid_txn.get("name")
-    return (str(info).strip() if info else "") or "Plaid"
+    return str(info).strip() if info else ""
 
 
 # Plaid's own confidence in its category; below these the hint is noise, so none is offered.
@@ -667,7 +667,7 @@ def _txn_to_row(plaid_txn: dict, account: dict, account_id: str) -> dict | None:
     ref = (
         f"{account_id}:{txn_id}"
         if txn_id
-        else derived_ref(account_id, date_str, amount, currency, description)
+        else derived_ref(account_id, date_str, amount, currency, description or "Plaid")
     )
     pending_id = str(plaid_txn.get("pending_transaction_id") or "").strip()
     return {
