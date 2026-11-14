@@ -149,10 +149,24 @@ NON_RESTORABLE_FILES: frozenset[Path] = SECRET_FILES | frozenset(
 # state, redacted `last_error`) stays in a sanitised backup (it is SQL-denied to Lucius all the
 # same, see `db/sql_console`), but is NON_RESTORABLE below so a restore never pairs old settings
 # with the current secrets.
+TRADING_OPERATIONAL_TABLES: frozenset[str] = frozenset(
+    {
+        "trading_workspaces",
+        "trading_runs",
+        "trading_accounts",
+        "trading_orders",
+        "trading_fills",
+        "trading_events",
+        "trading_comparisons",
+        "trading_grants",
+    }
+)
+
 SECRET_TABLES: frozenset[str] = frozenset(
     {
         "secret_config",
         "connector_secrets",
+        "trading_grants",
     }
 )
 
@@ -221,6 +235,7 @@ NON_RESTORABLE_TABLES: frozenset[str] = (
         }
     )
     | SECRET_TABLES
+    | TRADING_OPERATIONAL_TABLES
 )
 
 
