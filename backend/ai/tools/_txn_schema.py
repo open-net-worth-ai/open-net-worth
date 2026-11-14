@@ -551,6 +551,8 @@ def filter_properties() -> dict[str, dict[str, Any]]:
             "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
             "description": (
                 "Filter by category label or id; pass a LIST to match any of several. "
+                "'Uncategorized' matches transactions with no category (combine it with "
+                "others in a list). "
                 "Passing a kind name here ('expense', 'income', …) filters by "
                 "transaction_types instead."
             ),

@@ -5215,6 +5215,35 @@ def uncategorized_summary(
 # ── Per-transaction lookup + query (service twins of api/ledger endpoints) ────────
 
 
+_UNCATEGORIZED_WORDS = frozenset({"uncategorized", "uncategorised"})
+
+
+def _split_uncategorized(refs: str | list[str] | None) -> tuple[str | list[str] | None, bool]:
+    """Take "Uncategorized" out of a category filter: ``(the other refs, asked for it)``. It is
+    no category's label — a transaction with none is stored with no category — so it matched
+    nothing, and Lucius asking for uncategorized rows got none (owner, 2026-11-14). A real
+    category the user named "Uncategorized" still wins: it is then just a label."""
+    if not refs:
+        return refs, False
+    from backend.services import categories as categories_service
+
+    rows = categories_service.all_category_rows()
+    items = [refs] if isinstance(refs, str) else list(refs)
+    words = [
+        r
+        for r in items
+        if isinstance(r, str)
+        and r.strip().lower() in _UNCATEGORIZED_WORDS
+        and not categories_service.resolve_category_ref(r, rows=rows)
+    ]
+    if not words:
+        return refs, False
+    rest = [r for r in items if r not in words]
+    if isinstance(refs, str):
+        return None, True
+    return (rest or None), True
+
+
 def resolve_category_refs(refs: str | list[str] | None) -> str | list[str] | None:
     """Resolve each caller-supplied category ref (id OR label, per
     services.categories.resolve_category_ref) to its stored id for a read filter.
@@ -5491,17 +5520,32 @@ def get_transactions(
     # as an id — resolve it so the filter still matches; an unresolved value falls through
     # unchanged (a read path never fails on a bad filter, it just returns no rows).
     # resolve_category_refs handles the single-ref and list shapes alike.
+    category, uncategorized = _split_uncategorized(category)
     category = resolve_category_refs(category)
 
-    txns = transactions.query_txns(
+    query = dict(
         kind=kind,
-        category=category,
         account_id=account_id,
         account_ids=account_ids,
         tag=tag,
         payee_id=payee_id,
         needs_review=needs_review,
     )
+    if uncategorized:
+        # "Uncategorized" is no category at all (None/blank), so no id can match it: the rows
+        # with none (is_uncategorized), plus any real categories asked for beside it.
+        named = (
+            {t["id"] for t in transactions.query_txns(category=category, **query)}
+            if category
+            else set()
+        )
+        txns = [
+            t
+            for t in transactions.query_txns(category=None, **query)
+            if is_uncategorized(t) or t.get("id") in named
+        ]
+    else:
+        txns = transactions.query_txns(category=category, **query)
     # q is applied here, not inside query_txns — see _apply_q_filter for why.
     txns = _apply_q_filter(txns, q, q_field)
 
