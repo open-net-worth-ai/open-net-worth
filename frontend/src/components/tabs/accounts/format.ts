@@ -80,6 +80,21 @@ export function fCur(n: number, ccy: string, opts: { cents?: boolean } = {}): st
 }
 
 /**
+ * The other side of a cross-currency transfer, under the row's own amount: `$200.00 →` when it
+ * sent the money here, `→ $100.00` when it received it. `approx` marks a figure that isn't booked
+ * yet (the import review's estimate); the register and the review otherwise read the same.
+ */
+export function otherSideFlow(
+  amount: number,
+  ccy: string,
+  sent: boolean,
+  opts: { approx?: boolean } = {},
+): string {
+  const other = (opts.approx ? '≈' : '') + fCur(Math.abs(amount), ccy, { cents: true })
+  return sent ? `${other} →` : `→ ${other}`
+}
+
+/**
  * Base-currency total — sidebar/overview totals. Defaults to no cents;
  * `opts.cents` forces 2dp (zero-decimal base currencies always stay whole).
  * Uses the app's currently-configured base currency (e.g. "SGD").

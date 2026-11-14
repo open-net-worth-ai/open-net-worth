@@ -15,6 +15,8 @@ import hashlib
 import logging
 from dataclasses import dataclass
 
+from backend.core.errors import ConflictError, MissingFxRateError, ValidationError
+from backend.core.fx import known_rate
 from backend.core.txn_sources import STATEMENT_NAMESPACE
 from backend.services import ledger as ledger_service
 from backend.services.import_common import (
@@ -107,6 +109,59 @@ def import_routing() -> ImportRouting | None:
         return None
 
 
+def lacks_route_rate(currency: str, target: dict) -> bool:
+    """True when ``target`` holds another currency and no rate converts this row into it. The
+    ledger's conversion raises on an unknown pair, so a route never reaches it: one row with no
+    rate must stay a plain row, not fail the whole review."""
+    target_ccy = (target.get("currency") or currency).upper()
+    return target_ccy != currency.upper() and known_rate(currency, target_ccy) is None
+
+
+def unconverted_leg(draft: dict) -> str | None:
+    """The side (``"from"``/``"to"``) of a routed transfer draft still stated in the statement's
+    currency while its account holds another. Its figure is not a fact until the choke converts
+    it, and even then only an estimate at the latest rate, so nothing may match on it or write
+    it onto a booked transfer. None for any other draft, an FX pair's native legs included."""
+    if draft.get("kind") != "transfer":
+        return None
+    for side in ("from", "to"):
+        account = ledger_service.accounts.find_by_id(draft.get(f"{side}_account_id") or "")
+        held = ((account or {}).get("currency") or "").upper()
+        stated = (draft.get(f"{side}_currency") or "").upper()
+        if held and stated and held != stated:
+            return side
+    return None
+
+
+def statement_leg_only(draft: dict) -> dict:
+    """A routed transfer draft as a Link may apply it: the statement speaks only for its own
+    account, so the unconverted leg's figure is dropped and the booked transfer keeps its own."""
+    side = unconverted_leg(draft)
+    return {**draft, f"{side}_amount": None} if side else draft
+
+
+def routed_other_leg(draft: dict) -> dict | None:
+    """What a cross-currency routed draft would book on the other account, resolved the way the
+    write resolves it so the review shows that figure. None when the draft has no such leg."""
+    side = unconverted_leg(draft)
+    if side is None:
+        return None
+    try:
+        resolved, _meta = ledger_service.resolve_transaction_row(
+            dict(draft), mint_payee=False, skip_payee_resolve=True, automations=[]
+        )
+    except (ValidationError, ConflictError, MissingFxRateError):
+        logger.warning("import routing: could not resolve the converted leg", exc_info=True)
+        return None
+    account = ledger_service.accounts.find_by_id(resolved[f"{side}_account_id"]) or {}
+    return {
+        "account_id": resolved[f"{side}_account_id"],
+        "account_name": account.get("name"),
+        "amount": resolved[f"{side}_amount"],
+        "currency": resolved[f"{side}_currency"],
+    }
+
+
 def route_transfer_draft(
     draft: dict,
     row: CanonicalRow,
@@ -115,14 +170,17 @@ def route_transfer_draft(
     target: dict | None,
     provenance_id: str | None,
 ) -> dict | None:
-    """The direction-aware two-leg transfer reshape of a plain single-leg draft — the ONE
-    reshape core shared by routing rules (SI-66) and Lucius-pass ``route_transfer`` ops
-    (SI-68). Honest fallbacks — None (the plain draft stands) when the target account is
-    gone, archived, the statement-side account itself, or holds a DIFFERENT currency (one
-    statement row cannot invent the other leg's converted amount)."""
+    """The direction-aware two-leg transfer reshape of a plain single-leg draft, for Lucius-pass
+    ``route_transfer`` ops (SI-68) — the review's Type picker included. Honest fallbacks — None
+    (the plain draft stands) when the target account is gone, archived, the statement-side
+    account itself, or holds a currency with no known rate.
+
+    Both legs are stated in the statement's currency: the choke converts the other account's
+    leg into its own currency at write time (see ``unconverted_leg``), the same shape
+    ``routed_transfer.routed_transfer_draft`` books for an explicit decision."""
     if target is None or target.get("archived") or target["id"] == account_id:
         return None
-    if (target.get("currency") or "").upper() != currency:
+    if lacks_route_rate(currency, target):
         return None
     outbound = row.direction == "OUT"
     transfer = {

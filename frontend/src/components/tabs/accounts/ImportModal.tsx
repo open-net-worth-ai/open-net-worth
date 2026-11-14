@@ -6,6 +6,7 @@ import { authFetch } from '../../../api/client'
 import { Modal, Button, FormField, Select, EmptyState, SegmentedControl } from '../../ui'
 import { Spark as LuciusSpark } from '../../../lucius/identity'
 import { fCur, fromApiTxn } from './data'
+import { otherSideFlow } from './format'
 import './statementImport.css'
 import { ConfirmModal } from './ConfirmModal'
 import { BookedScreen } from './BookedScreen'
@@ -40,6 +41,7 @@ import {
   mapComplete,
   existingTxnLine,
   transferLine,
+  crossCurrencyAmounts,
   originalCharge,
   matchOptionLine,
   driftPhrase,
@@ -368,7 +370,7 @@ function EditDraftModal({
   d: ImportPreviewDraft
   catList: Category[]
   payeeOptions: PayeeOption[]
-  /** The accounts this row can be a transfer with: same currency, not the statement's own. */
+  /** The accounts this row can be a transfer with: live, not the statement's own. */
   transferAccounts: Account[]
   onManagePayees?: () => void
   onCreateCategory?: (prefill: string, kind: 'income' | 'expense', cb: (id: string) => void) => void
@@ -385,6 +387,8 @@ function EditDraftModal({
   const [type, setType] = useState<'plain' | 'transfer'>(d.routed ? 'transfer' : 'plain')
   const [transferTo, setTransferTo] = useState(routedTo || '')
   const plainLabel = outflow ? 'Expense' : 'Income'
+  const differentCurrency = (a?: Account) =>
+    !!a && (a.currency || '').toUpperCase() !== (d.currency || '').toUpperCase()
   const save = () => {
     if (type === 'transfer') {
       if (transferTo !== routedTo) onSetTransfer(transferTo)
@@ -458,12 +462,17 @@ function EditDraftModal({
               value={transferTo}
               onChange={(e) => setTransferTo(e.target.value)}
               placeholder="Choose an account"
-              options={transferAccounts.map((a) => ({ value: a.id, label: a.name }))}
+              options={transferAccounts.map((a) => ({
+                value: a.id,
+                label: differentCurrency(a) ? `${a.name} (${a.currency})` : a.name,
+              }))}
             />
             <div className="imp3-edit-hint">
               {transferAccounts.length === 0
-                ? `No other ${d.currency} account to transfer with.`
-                : 'Books one transfer between the two accounts — never spending or income.'}
+                ? 'No other account to transfer with.'
+                : differentCurrency(transferAccounts.find((a) => a.id === transferTo))
+                  ? 'Books one transfer between the two accounts — never spending or income. The other side is converted at the latest exchange rate.'
+                  : 'Books one transfer between the two accounts — never spending or income.'}
             </div>
           </div>
         ) : (
@@ -2507,15 +2516,11 @@ export function ImportModal({
   // make sense. This used to be a blanket reset of every map on the statement —
   // real, reported data loss on a 100+-row statement (fixing one row's routing silently
   // discarded every other row's Import/Leave-out/merge decision).
-  /** Accounts a row can be a transfer with: same currency, live, not the statement's own. */
+  /** Accounts a row can be a transfer with: live, not the statement's own. Another currency is
+   *  fine — the review shows that side converted, and a pair with no rate flags the row. */
   function transferAccountsFor(d: ImportPreviewDraft): Account[] {
     const own = d.destId || accountId
-    return accounts.filter(
-      (a) =>
-        a.id !== own &&
-        !a.archived &&
-        (a.currency || '').toUpperCase() === (d.currency || '').toUpperCase(),
-    )
+    return accounts.filter((a) => a.id !== own && !a.archived)
   }
   /** The Edit window's Type switch: saved on the statement, then the review re-reads the cached
    *  parse (no AI) so the row shows — and Confirm books — exactly the chosen type. */
@@ -5807,6 +5812,19 @@ export function ImportModal({
                             </span>
                           ) : null
                         })()}
+                        {d.routed?.other_leg && (
+                          <span
+                            className="imp3-orig"
+                            title="The other account's side, converted at the latest exchange rate — an estimate"
+                          >
+                            {otherSideFlow(
+                              d.routed.other_leg.amount,
+                              d.routed.other_leg.currency,
+                              d.amount > 0,
+                              { approx: true },
+                            )}
+                          </span>
+                        )}
                       </span>
                       <svg
                         className={'imp3-chev' + (bodyOpen ? ' open' : '')}
@@ -5991,6 +6009,15 @@ export function ImportModal({
                                 <span>
                                   Books as transfer: {d.routed.from_account_name || '?'} →{' '}
                                   {d.routed.to_account_name || '?'}
+                                  {d.routed.other_leg && (
+                                    <>
+                                      {' • '}
+                                      {crossCurrencyAmounts(d)}
+                                      {' • '}
+                                      {d.routed.other_leg.currency.toUpperCase()} amount uses the
+                                      latest exchange rate, which can differ from your bank’s
+                                    </>
+                                  )}
                                 </span>
                                 {d.lucius?.op === 'route_transfer' && (
                                   // A real server round-trip (removes the routing, re-previews
@@ -7050,7 +7077,48 @@ export function ImportModal({
                           // shouldn't show an unfinished response". The pass now RAISES, so this screen is
                           // only ever reached by a read whose instructions WERE applied, and there is no
                           // failure state left for a line to report.
-                          const lines = [reconLine, coverageLine, amountsLine, ledgerLine].filter(
+                          //
+                          // A row the owner asked to be a transfer that no rate could honour is a
+                          // different case: the pass ran, and the row would book as spending or income
+                          // while looking like any other plain row. It decides nothing, so it warns.
+                          const noRateCount = preview.drafts.filter(
+                            (d, i) =>
+                              !isExcluded(d, i) &&
+                              (d.flags || []).some((f) => f.type === 'transfer_no_rate'),
+                          ).length
+                          const noRateLine =
+                            noRateCount > 0
+                              ? lineOf(
+                                  'warn',
+                                  <div className="imp3-vline warn imp-verdict-line">
+                                    <span className="imp3-vic" aria-hidden="true">
+                                      ⚠
+                                    </span>
+                                    <div>
+                                      <b>
+                                        {noRateCount === 1
+                                          ? '1 row you marked as a transfer will book as spending or income'
+                                          : `${noRateCount} rows you marked as transfers will book as spending or income`}
+                                      </b>
+                                      <em>
+                                        There’s no exchange rate for that account. Refresh exchange
+                                        rates and read the statement again, or keep{' '}
+                                        {noRateCount === 1
+                                          ? 'it as a plain row'
+                                          : 'them as plain rows'}
+                                        .
+                                      </em>
+                                    </div>
+                                  </div>,
+                                )
+                              : null
+                          const lines = [
+                            reconLine,
+                            coverageLine,
+                            amountsLine,
+                            ledgerLine,
+                            noRateLine,
+                          ].filter(
                             (
                               l,
                             ): l is {
