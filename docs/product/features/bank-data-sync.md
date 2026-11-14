@@ -6,7 +6,7 @@ order: 172
 audience: [user]
 status: beta
 related: [connectors/bank-brokerage, lucius/automations, features/categories-payees, features/accounts]
-keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc]
+keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc, undo, card payment]
 ---
 
 # Bank sync without AI
@@ -68,6 +68,16 @@ problems. Click a transaction there to open its details, or **View in register**
 everything that run booked in the Accounts register. When some of what it booked has no
 category, **Categorize with Lucius** puts a request for exactly those transactions (how many,
 their dates and accounts) in Lucius's box, in a new conversation, for you to send.
+
+**Undo this run** (in the same footer) takes back a sync that went wrong, such as one that
+booked duplicates. It removes what the run booked, brings back the pending transactions it
+dropped, puts a card payment it folded into a transaction you'd typed back to what that was,
+and returns an account's start to where it was before a first import moved it, so your balances
+are what they were. The bank's rows are not booked again by the next sync: each waits under
+**Needs your review** with **Book again** and **Dismiss** (Dismiss keeps it out for good). Only
+the most recent sync that changed your book can be undone, and a pending transaction the bank
+settled stays settled.
+
 The connector page shows one line (on or off, and the next sync) and **Manage**, which opens
 that page.
 

@@ -26,6 +26,7 @@ from backend.services.bank_data_sync import (
     relink,
     reviews,
     settings,
+    undo,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,11 @@ GONE_MESSAGE = (
 def _lock(key: str) -> threading.Lock:
     with _locks_guard:
         return _locks.setdefault(key, threading.Lock())
+
+
+def slot(key: str) -> threading.Lock:
+    """The connector's run slot: held while a run works, and by anything that must not overlap one."""
+    return _lock(key)
 
 
 @dataclass
@@ -299,6 +305,10 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     counts["pending_removed"] = result.pending_removed
     counts["card_payments"] = result.card_payments
     errors.extend({"item": "A row", "reason": e} for e in result.errors)
+    try:
+        counts["undoable"] = int(undo.record(p.key, run_id, p.label, result))
+    except Exception:  # noqa: BLE001 — booked either way; this run just can't be undone
+        logger.exception("bank_data_sync: %s run %s could not record its batch", p.key, run_id)
     return result.created
 
 
@@ -399,12 +409,15 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         # Read BEFORE booking: an account holding only its Starting Balance is set to the
         # bank's balance once its history is in (balances.py).
         empty = balances.only_opening(fetched.first_import)
+        moving = fetched.first_import | set(budget.state(p.key).get("pending_align") or [])
+        opening_before = undo.openings(moving)
         _progress(run_id, "booking", 0, len(fetched.rows), "", fetched.lines)
         created = _book(p, fetched, run_id, counts, errors)
         relink.remember(p.key, fetched.read_as)
         _align(p, fetched.first_import, fetched.warnings)
         _remember_history_read(p, fetched.first_import)
         _record_balances(p, fetched, empty, run_id)
+        undo.keep_openings(run_id, opening_before)
         _remember_reads(p, fetched.states)  # only once its rows are booked
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
         logger.exception("bank_data_sync: %s run failed", p.key)

@@ -102,6 +102,8 @@ export interface BankReview {
     row?: BankRowView
     user_edited?: boolean
     reason?: string
+    /** A row held back because the sync that booked it was undone: Book again, or Dismiss. */
+    undone?: boolean
   }
 }
 

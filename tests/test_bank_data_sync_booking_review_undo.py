@@ -196,3 +196,153 @@ def test_review_never_overwrites_a_payees_existing_default(bank):
     ledger_service.update_transaction(row["id"], {"category": dining})
 
     assert payee_registry.default_category_for(row["payee_id"], "expense") == groceries
+
+
+# ── 3. undo a run ───────────────────────────────────────────────────────────────────────────
+
+
+def _undo(run: dict) -> dict:
+    from backend.services.bank_data_sync import undo
+
+    return undo.undo_run("gocardless", run["run_id"])
+
+
+def _balances(*ids: str) -> tuple[float, ...]:
+    book = ledger_service.balances()
+    return tuple(round(book[i], 2) for i in ids)
+
+
+def test_a_run_records_its_batch_and_undo_removes_what_it_booked(bank):
+    main, card = linked_account("ACME Current", ACC_MAIN), _card()
+    before = _balances(main, card)
+    bank.booked[ACC_MAIN] = [
+        txn(-300.00, days_ago(2), "ACME CARD PAYMENT", tid="o1"),
+        txn(-10.00, days_ago(5), "ACME CAFE", tid="o2"),
+    ]
+    bank.booked[ACC_SAVER] = [txn(300.00, days_ago(1), "Payment Thank You-Mobile", tid="i1")]
+    run = _run()
+    batch = ledger_service.import_batches.find_by_id(f"bank_sync:{run['run_id']}")
+    assert batch["status"] == "active" and batch["transaction_count"] == 2
+    assert run["counts"]["undoable"] == 1
+
+    result = _undo(run)
+
+    assert result["removed"] == 2
+    assert _live() == []
+    assert _balances(main, card) == before  # the first import's moved start is put back
+    assert ledger_service.import_batches.find_by_id(batch["id"])["status"] == "rolled_back"
+
+
+def test_undone_rows_are_held_for_review_not_booked_again(bank):
+    from backend.services.bank_data_sync import review_actions, reviews
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-10.00, days_ago(5), "ACME CAFE", tid="o2")]
+    run = _run()
+    _undo(run)
+
+    items = reviews.open_items("gocardless")
+    assert [(i["kind"], i["detail"]["undone"], i["txn_id"]) for i in items] == [
+        ("duplicate", True, None)
+    ]
+    again = _run()
+    assert again["counts"]["booked"] == 0 and again["counts"]["held"] == 1
+    assert _live() == []
+
+    review_actions.book_separately(items[0]["id"])  # "Book again"
+
+    (row,) = _live()
+    assert row["description"] == "ACME CAFE" and row["from_amount"] == 10.00
+
+
+def test_a_dismissed_undone_row_stays_out(bank):
+    from backend.services.bank_data_sync import review_actions, reviews
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-10.00, days_ago(5), "ACME CAFE", tid="o2")]
+    _undo(_run())
+    review_actions.dismiss(reviews.open_items("gocardless")[0]["id"])
+
+    _run()
+
+    assert _live() == [] and reviews.open_items("gocardless") == []
+
+
+def test_undo_brings_back_the_pending_bookings_the_run_removed(bank):
+    main = linked_account("ACME Current", ACC_MAIN)
+    bank.pending[ACC_MAIN] = [txn(-8.00, days_ago(0), "ACME KIOSK", tid="p1")]
+    bank.booked[ACC_MAIN] = [txn(-2.00, days_ago(1), "ACME BUS", tid="b1")]
+    _run()
+    bank.pending[ACC_MAIN] = []  # the bank drops the hold
+    bank.booked[ACC_MAIN].append(txn(-3.00, days_ago(0), "ACME TRAM", tid="b2"))
+    dropped = _run()
+    assert {t["description"] for t in _live()} == {"ACME BUS", "ACME TRAM"}
+
+    result = _undo(dropped)
+
+    assert result["restored"] == 1
+    assert {t["description"] for t in _live()} == {"ACME BUS", "ACME KIOSK"}
+    assert main
+
+
+def test_only_the_latest_run_can_be_undone(bank):
+    from backend.core.errors import ConflictError
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-10.00, days_ago(5), "ACME CAFE", tid="o1")]
+    first = _run()
+    bank.booked[ACC_MAIN].append(txn(-4.00, days_ago(1), "ACME BUS", tid="o2"))
+    second = _run()
+
+    with pytest.raises(ConflictError, match="Undo that one first"):
+        _undo(first)
+    _undo(second)
+    _undo(first)
+
+    assert _live() == []
+
+
+def test_a_run_that_changed_nothing_has_nothing_to_undo(bank):
+    from backend.core.errors import ConflictError
+
+    linked_account("ACME Current", ACC_MAIN)
+    run = _run()
+
+    assert "undoable" not in run["counts"] or run["counts"]["undoable"] == 0
+    with pytest.raises(ConflictError, match="nothing to undo"):
+        _undo(run)
+
+
+def test_undo_folds_a_promoted_row_back_to_what_it_was(bank):
+    main = linked_account("ACME Current", ACC_MAIN)
+    _card()
+    typed = _typed("expense", from_account_id=main, from_amount=120.0, from_currency="GBP")
+    bank.booked[ACC_SAVER] = [txn(120.00, days_ago(1), "ACME PAYMENT THANK YOU", tid="i1")]
+    run = _run()
+    assert ledger_service.transactions.find_by_id(typed["id"])["kind"] == "transfer"
+
+    _undo(run)
+
+    row = ledger_service.transactions.find_by_id(typed["id"])
+    assert row["kind"] == "expense" and not row.get("deleted")
+
+
+def test_the_undo_route_answers_409_with_the_reason(bank):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.bank_sync_api import router
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-10.00, days_ago(5), "ACME CAFE", tid="o1")]
+    run = _run()
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    path = f"/api/bank-sync/gocardless/runs/{run['run_id']}/undo"
+
+    ok = client.post(path)
+    again = client.post(path)
+
+    assert ok.status_code == 200 and ok.json()["removed"] == 1
+    assert again.status_code == 409 and "already undone" in again.json()["detail"]

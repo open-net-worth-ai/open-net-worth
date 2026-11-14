@@ -192,7 +192,13 @@ def promote_into_book(
             except Exception:  # noqa: BLE001 — books as read; a later run pairs it
                 logger.exception("bank_data_sync: %s card payment not paired", provider)
                 continue
-            snapshots.append({"txn_id": existing["id"], "before": snapshot})
+            snapshots.append(
+                {
+                    "txn_id": existing["id"],
+                    "before": snapshot,
+                    "refs": [str(e.get("ref") or "") for e in draft.get("external_refs") or []],
+                }
+            )
             kept = [k for k in kept if k[1] is not draft]
             pool = [t for t in pool if t["id"] != existing["id"]]
     return kept, snapshots

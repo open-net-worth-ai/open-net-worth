@@ -29,6 +29,7 @@ function headline(item: BankReview): string {
   if (item.kind === 'modified') return `${bank} changed a transaction you have booked.`
   if (item.kind === 'posted') return 'A pending transaction posted at a different amount.'
   if (item.kind === 'vanished') return `${bank} no longer lists a transaction you have booked.`
+  if (d.undone) return 'You undid the sync that booked this, so it was not booked again.'
   return d.reason
     ? 'This looks like a transaction already in your book.'
     : 'Possibly already booked.'
@@ -102,8 +103,12 @@ function ReviewRow({
     <li className="bs-review">
       <div className="bs-review-head">{headline(item)}</div>
       <dl className="bs-review-rows">
-        <dt>In your book</dt>
-        <dd>{row(d.current)}</dd>
+        {!d.undone && (
+          <>
+            <dt>In your book</dt>
+            <dd>{row(d.current)}</dd>
+          </>
+        )}
         {item.kind !== 'vanished' && (
           <>
             <dt>From the bank</dt>
@@ -115,23 +120,26 @@ function ReviewRow({
         <p className="bs-warn">You edited this transaction; the bank’s version would replace it.</p>
       )}
       <div className="bs-actions">
-        <Button
-          size="sm"
-          variant="primary"
-          disabled={busy !== null}
-          loading={busy === `${item.id}:accept`}
-          onClick={() => onDecide(item, 'accept')}
-        >
-          {labels.accept}
-        </Button>
+        {!d.undone && (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={busy !== null}
+            loading={busy === `${item.id}:accept`}
+            onClick={() => onDecide(item, 'accept')}
+          >
+            {labels.accept}
+          </Button>
+        )}
         {item.kind === 'duplicate' && (
           <Button
             size="sm"
+            variant={d.undone ? 'primary' : undefined}
             disabled={busy !== null}
             loading={busy === `${item.id}:book`}
             onClick={() => onDecide(item, 'book')}
           >
-            Book it separately
+            {d.undone ? 'Book again' : 'Book it separately'}
           </Button>
         )}
         <Button
@@ -141,7 +149,7 @@ function ReviewRow({
           loading={busy === `${item.id}:dismiss`}
           onClick={() => onDecide(item, 'dismiss')}
         >
-          {labels.dismiss}
+          {d.undone ? 'Dismiss' : labels.dismiss}
         </Button>
       </div>
     </li>

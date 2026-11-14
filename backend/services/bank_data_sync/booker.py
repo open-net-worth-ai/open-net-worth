@@ -48,12 +48,20 @@ class Booked:
     # book promoted to it (``promoted`` holds their before-images, for Undo).
     card_payments: int = 0
     promoted: list[dict] = field(default_factory=list)
+    # Ids of the pending bookings this run took off the book, and the bank's own view of every
+    # row it booked or folded into a booking, by ref: what Undo needs (undo.py).
+    removed_ids: list[str] = field(default_factory=list)
+    booked_views: dict[str, dict] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
 
 def _ref(row: dict) -> str:
     refs = row.get("external_refs") or []
     return str(refs[0].get("ref") or "") if refs and isinstance(refs[0], dict) else ""
+
+
+def _refs_of(txn: dict) -> list[str]:
+    return [str((e or {}).get("ref") or "") for e in txn.get("external_refs") or []]
 
 
 def draft_for(row: dict) -> Optional[dict]:
@@ -248,7 +256,9 @@ def book(
             for row in rows:
                 if row.get("pending") and row.get("linked_account_id") in seen:
                     seen[row["linked_account_id"]].add(_ref(row))
-            out.pending_removed = pending.drop_vanished(entries, seen, read)
+            gone = pending.drop_vanished(entries, seen, read)
+            out.pending_removed = len(gone)
+            out.removed_ids.extend(gone)
             pending.save(provider, entries)
         return out
     finally:
@@ -275,13 +285,13 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
         else:
             if row.get("_relinked"):
                 continue  # the booking it already is carries its new ref (relink.carry)
-            settled = pending.settle(provider, ref, row, entries)
+            settled = pending.settle(provider, ref, row, entries, out.removed_ids)
             if settled == "settled":
                 out.settled += 1
                 continue
             if row.get("booked_txn_id") and settled == "none":
                 continue  # already booked (the window is read whole, booked rows included)
-            if ref in held:
+            if ref in held or row.get("supersedes_ref") in held:
                 out.held += 1
                 continue
             if _settle_superseding(provider, row, known, run_id, out):
@@ -295,16 +305,19 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     pending.save(provider, entries)  # what settled above is settled, whatever follows
     candidates, errors = _with_categories(candidates)
     out.errors.extend(errors)
+    views = {_ref(row): _row_view(row) for row, _ in candidates}
     types = {a["id"]: a.get("type") for a in ledger_service.accounts.all()}
     candidates = card_payments.pair_within(candidates, types)
     candidates, out.promoted = card_payments.promote_into_book(provider, candidates, types)
     out.card_payments = len(out.promoted)
+    out.booked_views = {r: views[r] for s in out.promoted for r in s["refs"] if r in views}
     if not candidates:
         return out
     created, skipped = ledger_service.bulk_create_transactions(
         [d for _, d in candidates], batch_id=batch_id, dedup_by_external_ref=True
     )
     out.created = created
+    out.booked_views |= {r: views[r] for t in created for r in _refs_of(t) if r in views}
     out.card_payments += sum(1 for t in created if t.get("kind") == "transfer")
     pending.remember(entries, created, pending_rows)
     out.pending = sum(

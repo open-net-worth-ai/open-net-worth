@@ -10,6 +10,7 @@
   * ``POST /api/bank-sync/{provider}/accounts/{id}/use-bank-balance``  match the bank's balance
   * ``POST /api/bank-sync/{provider}/import``         bring in the history (setup step 2)
   * ``POST /api/bank-sync/{provider}/run``            Sync now (409 with the reason when refused)
+  * ``POST /api/bank-sync/{provider}/runs/{run_id}/undo``  undo a run (409 with the reason when refused)
   * ``GET  /api/bank-sync/{provider}/runs``           its run history
   * ``GET  /api/bank-sync/reviews``                   open review items (``?provider=``)
   * ``POST /api/bank-sync/reviews/{id}/accept|dismiss|book``
@@ -123,6 +124,11 @@ async def bank_sync_run(provider: str):
 @router.post("/api/bank-sync/{provider}/import")
 async def bank_sync_import(provider: str):
     return await _call(bank_data_sync.import_history, provider)
+
+
+@router.post("/api/bank-sync/{provider}/runs/{run_id}/undo")
+async def bank_sync_undo_run(provider: str, run_id: str):
+    return await _call(bank_data_sync.undo_run, provider, run_id)
 
 
 @router.get("/api/bank-sync/{provider}/runs")

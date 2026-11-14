@@ -8,7 +8,8 @@
   (``attach_external_refs``), no money moves.
 * dismiss — the ledger stays as it is. A dismissed ``duplicate``/``posted`` keeps holding its
   ref back, so the next run doesn't ask again.
-* book — ``duplicate`` only: it is a different transaction after all; book it on its own.
+* book — ``duplicate`` only: it is a different transaction after all; book it on its own. For a
+  row held back because its sync was undone (``detail.undone``, undo.py) this is "Book again".
 
 Every write runs under the audit surface ``bank_data_sync`` as the user's act."""
 
@@ -114,6 +115,10 @@ def _accept(item: dict) -> str:
     kind, detail = item.get("kind"), item.get("detail") or {}
     if kind not in _ACCEPT_KINDS:
         raise ValidationError("Unknown review item.")
+    if detail.get("undone"):
+        raise ValidationError(
+            "This row was undone with its sync: choose Book again, or Dismiss it."
+        )
     txn = _live_txn(item)
 
     def apply() -> str:
