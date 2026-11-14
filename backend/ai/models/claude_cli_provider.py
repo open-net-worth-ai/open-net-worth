@@ -651,6 +651,8 @@ class ClaudeCliProvider(AIProvider):
                                             }
                                             emitted_call_count += 1
                                             watch.call_parsed()
+                                        if scanner.held:
+                                            watch.call_held()
                                         if visible:
                                             emitted_anything = True
                                             yield {"type": "text_delta", "text": visible}

@@ -91,6 +91,12 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
 - **Books settled transactions as cleared**, so an account's **Cleared** balance is what the
   bank has settled.
 - **Never re-books a transaction you deleted.**
+- **Never books the history again when a bank account is linked again.** Renew an expired
+  sign-in with **Reconnect**: it keeps the bank's accounts as they are. If a bank was linked
+  afresh instead (its accounts get new identities at the bank) and you **Unlink** the old
+  account and **Link** the new one, the next sync matches what the bank lists to the
+  transactions already in your book (same amount, same day or within three days) and books
+  only what's really new. The run says how many it matched.
 - **Keeps foreign charges' original amount and currency** beside the amount your account was
   charged.
 - **Puts each transaction in your review queue,** as YNAB books a bank's transactions
@@ -102,7 +108,8 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   category is ever created; anything else stays **Uncategorized**.
 - **First sync of an account:** books the history your bank serves, then moves the account's
   Starting Balance back to the oldest row, so the history counts and **today's balance doesn't
-  change**. (Cash and card accounts only.)
+  change**. A new account is then set to the bank's own balance (below). (Cash and card accounts
+  only.)
 
 A run books all its new transactions in one go: if something fails, nothing from that run is
 booked, and the next run tries again.
@@ -113,15 +120,18 @@ Every sync also reads each account's balance from the bank, at no extra read (Go
 balance is its own request, which banks limit separately, about as often as transactions).
 
 - **An account you've just added** (holding only its Starting Balance) is set to the bank's
-  balance when its history comes in, so it matches from the start.
+  settled balance from that same read when its history comes in, so it matches from the start —
+  whatever was or wasn't in the balance you typed or the app filled in when you added it.
 - **Any other account** is never changed for you. When its cleared balance and the bank's
   disagree, its row says so — "Bank €1,500.00 · Your book €1,487.50" — with **Use the bank's
   balance**, which moves the account's Starting Balance by the difference.
 
 A card or loan's balance is money owed, so it's compared as a negative figure whichever way the
 bank reports it. GoCardless and Enable Banking say which figure is settled, and that's the one
-compared with your cleared balance. A bank with a single figure that may include pending
-payments (Plaid) counts as in step if it matches your working balance instead.
+compared with your cleared balance. Plaid sends a single figure that leaves out pending
+payments, so it's compared with your cleared balance too. Plaid may send a figure that's a few
+hours old: if it's behind, the row shows the difference rather than your balance silently
+changing.
 
 Banks report their balances in the same terms your accounts use, both on the connector's
 **Accounts** list and when Lucius lists a bank's accounts:
@@ -167,7 +177,21 @@ are used, it says when its next read is, **Sync now** waits, and so does the sch
 
 If the bank refuses (its daily limit, expired access), the sync waits instead of retrying: until
 the limit resets, or a day for expired access. The connector page shows what the bank said.
-Renew the bank's access on the connector page if it expired.
+Renew the bank's access on the connector page if it expired. A bank whose access ended or was
+revoked only holds up its own accounts: your other banks still sync. If the bank refuses just
+one account, that account is tried again later and the rest are read as usual.
+
+A bank that couldn't be read is left exactly as it was: nothing of it is booked, its pending
+transactions stay on your book, and its history isn't marked as imported. Its card says
+**Sign-in needed** (with **Reconnect**) or **Last sync failed** (hover for why), and so does the
+mark beside its accounts. When one connector holds several banks, the others still sync, and
+the run says how many accounts it couldn't read; one bank's problem never shows on another's
+accounts.
+
+An account the bank no longer lists (it was closed, or the bank was linked again and its
+accounts have new identities) isn't read either. Its card says **Account not at the bank** with
+**Relink**, which opens the connector's setup: **Unlink** the old account and **Link** the bank's
+current one to the same account in your book. The next sync matches what's already booked.
 
 ## Related pages
 

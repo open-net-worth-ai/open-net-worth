@@ -127,6 +127,8 @@ US and Canadian banks and cards, through your own Plaid developer account.
    imported stay) without touching your other banks. To renew a bank's sign-in or add accounts
    at it, use its own **Reconnect** / **Add accounts** — linking the same bank again as a new
    bank gives its accounts new identities, and links you made to the old ones stop matching.
+   A second sign-in at the same bank (a joint or business login, with other accounts) is added
+   beside the first; the first is only replaced when the new sign-in covers the same accounts.
 6. **③ Choose and link accounts** — every linked bank's accounts, grouped by type, each showing
    which bank it's at. **Add** each one you
    want to track, or **Link** it to an account you already have.
@@ -146,8 +148,13 @@ yourself is never changed.
 **If a bank's sign-in expires** (a new password, a security check, or a consent your bank set to
 expire), that bank shows **Sign-in expired** in step ② and nothing syncs from it. Click
 **Reconnect** and sign in again — it renews the same connection, so the bank's accounts and every
-link you made to them stay exactly as they were. Opened a new account at a bank you already
-linked? Click **Add accounts** on that bank to pick it; existing links are untouched.
+link you made to them stay exactly as they were. Don't click **Link another bank** for it: that
+starts a new connection, and the bank's accounts come back with new identities. If that has
+already happened, **Unlink** each old account and **Link** the new one to the same account in
+your book; the [sync without AI](../features/bank-data-sync.md) then matches the bank's
+transactions to the ones already booked instead of booking them again. Opened a new account at a
+bank you already linked? Click **Add accounts** on that bank to pick it; existing links are
+untouched.
 
 You can also ask Lucius — "reconnect my Chase account" — from the app or a chat channel such as
 Telegram. He asks your approval, then sends you a **Sign in to Chase again** link to Plaid's own
@@ -207,8 +214,9 @@ URLs.
 Bank consent usually lasts about 90 days. When a bank's access ends (it ran out, or you revoked
 it at the bank), a fetch names that bank and keeps fetching the others, and the form shows
 **access ended** on it — click **Renew** next to it. If no bank can be read, the fetch fails
-instead of returning nothing. Each bank renews on its own; linking the same bank again also renews
-it rather than adding it twice. Renewing keeps everything as it was: each account stays linked to
+instead of returning nothing. Each bank renews on its own; linking the same bank again with the
+same accounts also renews it rather than adding it twice. A second login at that bank (a joint or
+business sign-in, with other accounts) is added beside the first and leaves it linked. Renewing keeps everything as it was: each account stays linked to
 the same Open Net Worth account, and nothing already imported comes in again.
 
 Each transaction's description is the first of these your bank sends: its payment text, the

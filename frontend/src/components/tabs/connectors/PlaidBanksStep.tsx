@@ -196,7 +196,8 @@ export function PlaidBanksStep({
         {caution && (
           <Text size="xs" tone="warn">
             Last fetch couldn&apos;t reach every bank — {caution}. If a bank&apos;s sign-in expired,
-            link it again.
+            click <strong>Reconnect</strong> beside it. Don&apos;t link it again as a new bank: that
+            gives its accounts new identities.
           </Text>
         )}
 

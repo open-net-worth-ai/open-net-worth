@@ -2,10 +2,10 @@
 ``2026-11-13-a-bank-connector-can-book-its-rows-without-ai``).
 
 THE flag seam for ``bank_data_sync``: every entry point here reads the flag once. Off, the
-routes answer 404, the scheduler tick does nothing, and no connector is in data mode — so the
-Automations-side refusal never fires and today's Lucius-only behaviour runs unchanged.
+routes answer 404, the scheduler tick does nothing, and no connector is in data mode, so only a
+Lucius Automation books bank rows, as before. On, the two are independent.
 
-Modules: ``settings`` (mode, opt-outs, the one-mode rule), ``budget`` (read budget + schedule),
+Modules: ``settings`` (mode, opt-outs), ``budget`` (read budget + schedule),
 ``booker`` (rows → one ledger write), ``reviews`` (the review list), ``runner`` (one run),
 ``followup`` (the optional Lucius categorisation)."""
 
@@ -56,6 +56,8 @@ def _accounts(p, key: str) -> list[dict]:
     from backend.services.bank_data_sync import pending as pending_rows
 
     pending_now = pending_rows.tracked(key)
+    # How each account's last read went: a bank that failed shows on its own accounts only.
+    last_reads = budget.state(key).get("account_reads") or {}
     out = []
     for a in accounts_service.linked_accounts_for_source(key):
         left, next_at = budget.reads_left(p, a.get("provider_account_id") or "")
@@ -94,6 +96,11 @@ def _accounts(p, key: str) -> list[dict]:
                 "access_ends_at": bank.get("ends_at"),
                 "access_ended": bool(bank.get("ended")),
                 "access_renew_soon": bool(bank.get("renew_soon")),
+                # The last read of THIS account: ok, or why it wasn't read (a sign-in to renew).
+                "read_status": (last_reads.get(a.get("linked_account_id") or "") or {}).get(
+                    "status"
+                ),
+                "read_error": (last_reads.get(a.get("linked_account_id") or "") or {}).get("error"),
                 # The bank's balance from the last read beside the book's cleared balance.
                 **(
                     balances.compare(row, bank_said.get(a.get("linked_account_id") or ""))
@@ -108,10 +115,10 @@ def _accounts(p, key: str) -> list[dict]:
 def _stage(mode: str, accounts: list[dict], set_up: bool = False) -> str:
     """Where setup stands — the steps on the bank's Data Sync page: ``accounts`` (nothing linked
     or ticked yet) → ``history`` (bring the history in) → ``sync`` (turn the sync on) → ``done``
-    (the sync is on, a Lucius Automation syncs the bank, or the sync was turned on once — turning
-    it off again leaves a set-up sync, as a budget app's does). Turning the sync on before
-    importing is fine: its first run brings the history in."""
-    if mode in ("data", "lucius") or set_up:
+    (the sync is on, or was turned on once — turning it off again leaves a set-up sync, as a
+    budget app's does). Turning the sync on before importing is fine: its first run brings the
+    history in."""
+    if mode == "data" or set_up:
         return "done"
     ticked = [a for a in accounts if a["sync"]]
     if not ticked:
@@ -271,7 +278,7 @@ def _start(key: str, *, needs_data: bool) -> dict:
             f"{p.label} banks let the app read each account {p.daily_reads} times a day, and "
             f"those reads are used. The next one is possible at about {_when(at)}."
         )
-    run = runner.start(p, "manual", ready)
+    run = runner.start(p, "manual")
     runner.finish_in_background(p, run, ready)
     return {"run_id": run["id"], "accounts": len(ready), "skipped_for_limit": len(spent)}
 
@@ -285,8 +292,7 @@ def run_now(key: str) -> dict:
 def import_history(key: str) -> dict:
     """Setup step 2, "Bring in your history": one run now, before the sync is turned on. A
     ticked account never imported gets everything the bank serves and its start moves back
-    (``booker.align_first_imports``); one imported before just catches up. Safe to run again.
-    Refused while a Lucius Automation syncs the bank."""
+    (``booker.align_first_imports``); one imported before just catches up. Safe to run again."""
     _require_on()
     return _start(key, needs_data=False)
 

@@ -35,6 +35,8 @@ def _clean(value):
         return sanitize_untrusted(value, max_len=500)
     if isinstance(value, dict):
         return {k: _clean(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_clean(v) for v in value]  # tags and the like: bank text too
     return value
 
 

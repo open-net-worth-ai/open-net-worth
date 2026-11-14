@@ -18,13 +18,25 @@ from backend.core.errors import ConflictError, ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.services import connector_fetch, connector_window, import_runs
 from backend.services.aggregation.providers import Provider
-from backend.services.bank_data_sync import balances, booker, budget, pending, reviews, settings
+from backend.services.bank_data_sync import (
+    balances,
+    booker,
+    budget,
+    pending,
+    relink,
+    reviews,
+    settings,
+)
 
 logger = logging.getLogger(__name__)
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 _STOP_STATUSES = ("auth_error", "not_configured", "disabled")
+GONE_MESSAGE = (
+    "the bank no longer lists this account, so nothing was read. If you linked the bank again, "
+    "Unlink this account and Link the bank's current one to it."
+)
 
 
 def _lock(key: str) -> threading.Lock:
@@ -54,6 +66,12 @@ class _Fetched:
     # there are dropped), and → what the bank said its balance is.
     read: dict[str, str] = field(default_factory=dict)
     balances: dict[str, dict] = field(default_factory=dict)
+    # Account id → the bank account it was read from; those read from a NEW one (relink.py).
+    read_as: dict[str, str] = field(default_factory=dict)
+    relinked: set[str] = field(default_factory=set)
+    # Account id → how its read went ({status, error}), kept per account so a bank that failed
+    # shows on its own accounts, never on another bank's (UAT 2026-11-14).
+    states: dict[str, dict] = field(default_factory=dict)
 
 
 def opted_accounts(key: str) -> list[dict]:
@@ -99,9 +117,21 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     status = result.get("status") or "error"
     name = account.get("name") or "An account"
     if status != "ok":
+        # Not read: its pending rows stay, its history isn't marked read, nothing is booked.
         error = sanitize_untrusted(str(result.get("error") or status), max_len=300)
         out.warnings.append(f"{name}: {error}")
+        out.states[app_id] = {"status": status, "error": error}
         return status
+    listed = {str(a.get("provider_account_id") or "") for a in result.get("accounts") or []}
+    if pid not in listed:
+        # The bank answered without this account: it was closed, or the bank was linked again
+        # and the account has a new id. Read as "done · 0 rows" it silently never synced again
+        # (UAT 2026-11-14) — it needs the user, so it's not read and says so.
+        error = GONE_MESSAGE
+        out.warnings.append(f"{name}: {error}")
+        out.states[app_id] = {"status": "account_gone", "error": error}
+        return "account_gone"
+    out.states[app_id] = {"status": "ok", "error": None}
     if warning:
         out.warnings.append(f"{name}: {warning}")
     out.warnings.extend(f"{name}: {w}" for w in result.get("warnings") or [])
@@ -111,11 +141,26 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     rows = [r for r in result.get("transactions") or [] if r.get("linked_account_id") == app_id]
     out.rows.extend(rows)
     out.read[app_id] = since
+    out.read_as[app_id] = pid
+    remembered = relink.read_as(p.key).get(app_id)
+    if relink.is_relinked(p.key, app_id, pid) or (
+        not remembered and relink.looks_relinked(p.key, app_id, rows, since)
+    ):
+        out.relinked.add(app_id)
     for acc in result.get("accounts") or []:
-        if acc.get("provider_account_id") == pid and acc.get("balance") is not None:
+        if acc.get("provider_account_id") != pid:
+            continue
+        amount, cleared = _figure(acc.get("balance")), _figure(acc.get("cleared_balance"))
+        if cleared is None and p.balance_is_settled:
+            cleared = amount  # the one figure is the settled one (Plaid)
+        # A bank that sends only a booked balance has no ``balance`` (that's settled + pending):
+        # its booked figure still counts, or the account was never checked nor set.
+        if amount is None:
+            amount = cleared
+        if amount is not None:
             out.balances[app_id] = {
-                "amount": float(acc["balance"]),
-                "cleared": _figure(acc.get("cleared_balance")),
+                "amount": amount,
+                "cleared": cleared,
                 "working": _figure(acc.get("working_balance")),
                 "currency": acc.get("currency"),
                 "pending": sum(float(r.get("amount") or 0) for r in rows if r.get("pending")),
@@ -173,7 +218,7 @@ def _run_status(statuses: list[str]) -> str:
         return "ok"
     if any(s == "ok" for s in statuses):
         return "partial"
-    for s in ("auth_error", "reconnect_needed", "rate_limited", "connect_error"):
+    for s in ("auth_error", "reconnect_needed", "account_gone", "rate_limited", "connect_error"):
         if s in statuses:
             return s
     return "error"
@@ -181,11 +226,16 @@ def _run_status(statuses: list[str]) -> str:
 
 def _outcome(counts: dict, status: str) -> str:
     parts = []
+    if status == "partial" and counts.get("not_read"):
+        n = counts["not_read"]
+        parts.append(f"{n} account{'s' if n != 1 else ''} not read")
     if counts.get("booked"):
         pend = counts.get("pending") or 0
         parts.append(
             f"{counts['booked']} booked ({pend} pending)" if pend else f"{counts['booked']} booked"
         )
+    if counts.get("relinked"):
+        parts.append(f"{counts['relinked']} already in your book, matched to the bank's new ids")
     if counts.get("settled"):
         parts.append(f"{counts['settled']} cleared")
     if counts.get("pending_removed"):
@@ -200,6 +250,8 @@ def _outcome(counts: dict, status: str) -> str:
         parts.append(
             {
                 "auth_error": "bank access needs renewing",
+                "reconnect_needed": "the bank needs you to sign in again",
+                "account_gone": "the bank no longer lists the account; link it again",
                 "rate_limited": "bank read limit reached",
             }.get(status, "the bank couldn't be read")
         )
@@ -210,7 +262,12 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     """The one ledger write and what follows it. Returns the rows it booked. Raises only when
     the write itself failed — then nothing was booked."""
     result = booker.book(
-        p.key, fetched.rows, run_id=run_id, batch_id=f"bank_sync:{run_id}", read=fetched.read
+        p.key,
+        fetched.rows,
+        run_id=run_id,
+        batch_id=f"bank_sync:{run_id}",
+        read=fetched.read,
+        relinked=fetched.relinked,
     )
     counts["booked"] = len(result.created)
     counts["already_booked"] += result.already_booked
@@ -218,6 +275,7 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     counts["to_review"] += result.to_review
     counts["held"] = result.held
     counts["linked"] = result.linked_refs
+    counts["relinked"] = result.relinked
     counts["pending"] = result.pending
     counts["settled"] = result.settled
     counts["pending_removed"] = result.pending_removed
@@ -254,6 +312,23 @@ def _remember_history_read(p: Provider, accounts: set[str]) -> None:
     budget.update(p.key, history_read=read)
 
 
+_UNBOOKED = {
+    "status": "error",
+    "error": "read, but the run failed before booking; nothing was booked",
+}
+
+
+def _remember_reads(p: Provider, states: dict[str, dict]) -> None:
+    """How each account's last read went, for its own line and bank on the sync's page."""
+    if not states:
+        return
+    at = budget.now().isoformat(timespec="seconds")
+    stamped = {a: {**s, "at": at} for a, s in states.items()}
+    budget.mutate(
+        p.key, lambda e: e.update(account_reads={**(e.get("account_reads") or {}), **stamped})
+    )
+
+
 def _figure(value: object) -> float | None:
     try:
         return None if value is None else float(value)  # type: ignore[arg-type]
@@ -268,7 +343,7 @@ def _record_balances(p: Provider, fetched: _Fetched, empty: set[str], run_id: st
 
     token = audit_context.set_audit_scope("system", booker.SURFACE, note=f"run:{run_id}")
     try:
-        fetched.warnings.extend(balances.record(p, fetched.balances, empty))
+        balances.record(p, fetched.balances, empty)
     except Exception:  # noqa: BLE001 — the booking stands
         logger.exception("bank_data_sync: %s balances could not be recorded", p.key)
     finally:
@@ -286,29 +361,40 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
     try:
         fetched = _fetch(p, accounts, run_id)
         counts.update(fetched.counts)
+        counts["not_read"] = sum(1 for s in fetched.statuses if s != "ok")
         status = _run_status(fetched.statuses)
         # Read BEFORE booking: an account holding only its Starting Balance is set to the
         # bank's balance once its history is in (balances.py).
         empty = balances.only_opening(fetched.first_import)
         _progress(run_id, "booking", 0, len(fetched.rows), "", fetched.lines)
         created = _book(p, fetched, run_id, counts, errors)
+        relink.remember(p.key, fetched.read_as)
         _align(p, fetched.first_import, fetched.warnings)
         _remember_history_read(p, fetched.first_import)
         _record_balances(p, fetched, empty, run_id)
+        _remember_reads(p, fetched.states)  # only once its rows are booked
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
         logger.exception("bank_data_sync: %s run failed", p.key)
         status = "error"
         errors.append({"item": "The run", "reason": "The run failed; nothing was booked."})
         fetched.warnings.append(sanitize_untrusted(str(exc), max_len=300))
+        # Read but not booked: never shown as a good read (review 2026-11-15).
+        unbooked = {a: _UNBOOKED if s["status"] == "ok" else s for a, s in fetched.states.items()}
+        try:
+            _remember_reads(p, unbooked)
+        except Exception:  # noqa: BLE001 — the run record below must still close
+            logger.exception("bank_data_sync: %s read states could not be kept", p.key)
     counts["errors"] = len(errors)
-    last_error = "; ".join(fetched.warnings)[:500] if status not in ("ok", "partial") else None
+    # A partial run (one bank read, another not) keeps what failed, so the bank that wasn't read
+    # never shows as synced.
+    last_error = "; ".join(fetched.warnings)[:500] if status != "ok" else None
     budget.record_outcome(p, status, last_error)
     import_runs.finish(
         run_id,
         "done" if status in ("ok", "partial") else "failed",
         phase="done",
         outcome=_outcome(counts, status),
-        error=last_error,
+        error=last_error if status != "partial" else None,
         counts=counts,
         warnings=fetched.warnings,
         errors=errors,
@@ -329,7 +415,7 @@ def _queue_followup(p: Provider, result: dict) -> None:
         logger.exception("bank_data_sync: %s follow-up could not be queued", p.key)
 
 
-def start(p: Provider, trigger: str, accounts: list[dict]) -> dict:
+def start(p: Provider, trigger: str) -> dict:
     """Claim the connector's run slot and open its record. ``ConflictError`` while one runs."""
     if not _lock(p.key).acquire(blocking=False):
         raise ConflictError(f"A {p.label} sync is already running.")
@@ -362,7 +448,7 @@ def finish_in_background(p: Provider, run: dict, accounts: list[dict]) -> None:
 
 def run_now(p: Provider, trigger: str, accounts: list[dict]) -> dict:
     """Run synchronously (the scheduler tick, tests). Releases the slot when done."""
-    run = start(p, trigger, accounts)
+    run = start(p, trigger)
     try:
         return execute(p, accounts, run["id"])
     except Exception:

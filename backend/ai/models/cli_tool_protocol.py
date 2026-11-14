@@ -696,6 +696,11 @@ def looks_like_an_unfenced_tool_call(text: str) -> bool:
 # Copies of one identical call that make a reply a loop. Two is a correction (the wrong dialect,
 # then the right one); three is the model repeating itself.
 _LOOP_REPEATS = 3
+# Stray closing tags in a row, with nothing written between them, that make a reply a loop. One
+# or two after a call are habit; live 2026-11-14 (chat, claude_cli) wrote `<invoke
+# name="get_transactions">` once, then `</invoke>` ~8,400 times (74,663 chars) to the 300 s
+# ceiling — no call ever repeated, so _LOOP_REPEATS never fired.
+_STRAY_LOOP = 5
 
 
 class ToolCallScanner:
@@ -727,6 +732,8 @@ class ToolCallScanner:
         # reply is `looping` and the provider ends the round at once (its calls still run).
         self._seen: dict[str, int] = {}
         self.looping = False
+        # Stray closers dropped since the last call or visible word (see _STRAY_LOOP).
+        self._strays = 0
         # A block that fails to parse is where a reply derails: the model gets no result to
         # continue from (dispatch never happened), so on live evidence (2026-08-10,
         # claude_cli:haiku, an Automation run) it starts reading its OWN transcript rendering
@@ -769,6 +776,7 @@ class ToolCallScanner:
         return True
 
     def _take(self, call: dict, *, xml_dialect: bool) -> None:
+        self._strays = 0
         key = json.dumps(call, sort_keys=True, default=str)
         self._seen[key] = self._seen.get(key, 0) + 1
         if self._seen[key] >= _LOOP_REPEATS:
@@ -870,8 +878,10 @@ class ToolCallScanner:
             )
             if stray[0] >= 0 and all(i < 0 or stray[0] < i for i in (start, echo)):
                 if stray[0]:
+                    self._note_words(self._buf[: stray[0]])
                     yield self._buf[: stray[0]]
                 self._buf = self._buf[stray[0] + len(stray[1]) :]
+                self._stray_closer()
                 continue
             if echo >= 0 and (start < 0 or echo < start):
                 if echo:
@@ -915,8 +925,23 @@ class ToolCallScanner:
             else:
                 safe, self._buf = self._buf, ""
             if safe:
+                self._note_words(safe)
                 yield safe
             return
+
+    def _note_words(self, text: str) -> None:
+        if text.strip():
+            self._strays = 0
+
+    def _stray_closer(self) -> None:
+        """A closing tag with no block open. A run of them with nothing between is a loop: the
+        reply is marked ``looping`` (the provider ends the round at once) and a held call is
+        released so it runs — the model was waiting on its result."""
+        self._strays += 1
+        if self._strays >= _STRAY_LOOP and not self.looping:
+            log.warning("cli_tools: reply repeats a stray closing tag — a loop")
+            self._release_held()
+            self.looping = True
 
     def flush(self) -> str:
         """Release the residue. An unterminated ``<tool_call>`` comes back as literal text —

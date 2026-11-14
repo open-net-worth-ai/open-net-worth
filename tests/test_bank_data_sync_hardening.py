@@ -175,19 +175,17 @@ def test_a_booking_that_committed_is_never_reported_as_unbooked(bank, monkeypatc
 
 
 def test_a_first_import_alignment_that_failed_is_retried(bank, monkeypatch):
-    from backend.services import tracking_start
-
     bank.booked[ACC_MAIN] = [txn(-40.00, days_ago(60), "ACME GROCER", tid="g1")]
-    real = tracking_start.align_tracking_start
+    real = ledger_service.set_account_opening
     monkeypatch.setattr(
-        tracking_start, "align_tracking_start", lambda *a, **k: (_ for _ in ()).throw(OSError())
+        ledger_service, "set_account_opening", lambda *a, **k: (_ for _ in ()).throw(OSError())
     )
     _run()
     account = ledger_service.accounts.find_by_id(bank.account)
     assert ledger_service.opening_date(account, ledger_service.transactions.all()) > days_ago(60)
     assert budget.state("gocardless")["pending_align"] == [bank.account]
 
-    monkeypatch.setattr(tracking_start, "align_tracking_start", real)
+    monkeypatch.setattr(ledger_service, "set_account_opening", real)
     _run()
     account = ledger_service.accounts.find_by_id(bank.account)
     assert ledger_service.opening_date(account, ledger_service.transactions.all()) == days_ago(60)

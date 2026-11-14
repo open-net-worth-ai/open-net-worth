@@ -138,6 +138,12 @@ class Provider:
     data_sync: bool = False
     sync_interval_hours: int = 6
     daily_reads: Optional[int] = None
+    # Whether the one undivided ``balance`` the provider reports is its SETTLED figure, for a
+    # provider that sends no separate booked balance. Plaid: its docs define ``available`` as
+    # ``current`` less pending outflows plus pending inflows, so ``current`` holds no pending.
+    # The sync then compares it with the CLEARED balance and sets a new account to it
+    # (``bank_data_sync.balances``).
+    balance_is_settled: bool = False
 
     @property
     def disabled(self) -> bool:
@@ -218,6 +224,7 @@ PROVIDERS: dict[str, Provider] = {
             lookback_days=14,
             history_days=730,
             data_sync=True,
+            balance_is_settled=True,
             _fetch=("backend.services.aggregation.plaid", "fetch_window"),
             _classify=("backend.services.aggregation.plaid", "classify_error"),
             _store=("backend.db", "PlaidConfigStore"),

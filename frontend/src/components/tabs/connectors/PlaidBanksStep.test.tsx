@@ -96,6 +96,10 @@ it('says when the last fetch could not reach every bank', () => {
     />,
   )
   expect(screen.getByText(/couldn't reach every bank — Wells Fargo/)).toBeTruthy()
+  // An expired sign-in is renewed with Reconnect, never by linking the bank again (UAT
+  // 2026-11-14: a re-link gave every account new ids and re-booked the history).
+  expect(screen.getByText(/couldn't reach every bank/).textContent).toMatch(/Reconnect/)
+  expect(screen.queryByText(/If a bank's sign-in expired, link it again/)).toBeNull()
 })
 
 it('a bank whose sign-in expired offers Reconnect, which renews THAT bank in place', () => {

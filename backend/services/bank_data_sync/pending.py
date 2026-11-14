@@ -16,13 +16,10 @@ keeping the user's category, payee, memo and tags. Either way nothing is booked 
 
 from __future__ import annotations
 
-import logging
 from datetime import date, timedelta
 
 from backend.services import ledger as ledger_service
 from backend.services.bank_data_sync import budget
-
-logger = logging.getLogger(__name__)
 
 _TOL = 0.005
 # How far from the pending date a settled row may land and still be "the same one".
@@ -51,9 +48,17 @@ def _match(entries: dict[str, dict], ref: str, row: dict) -> str | None:
     live = {k: e for k, e in entries.items() if not e.get("settled")}
     if ref in live and live[ref].get("account_id") == account:
         return ref
+    for alias in row.get("ref_aliases") or []:
+        # The same row filed under an earlier id (GoCardless's bank id, before its own came first).
+        if isinstance(alias, str) and alias in live and live[alias].get("account_id") == account:
+            return alias
     old = row.get("supersedes_ref")
-    if old and old in live and live[old].get("account_id") == account:
-        return old
+    if old:
+        # The bank names the pending row this one settles (Plaid's ``pending_transaction_id``).
+        # One we never booked is not some other pending charge of the same amount: guessing by
+        # amount here merged two real charges into one booking (two equal fares, the second
+        # never seen pending), understating spending (review 2026-11-15).
+        return old if old in live and live[old].get("account_id") == account else None
     posted, amount = _day(row.get("date")), float(row.get("amount") or 0)
     best: tuple[int, str] | None = None
     for key, e in entries.items():

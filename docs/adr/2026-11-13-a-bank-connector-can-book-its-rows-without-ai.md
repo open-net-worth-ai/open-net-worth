@@ -206,3 +206,125 @@ daily read limit, which the bank enforces). The ref floor still stops a row the 
 from being booked twice; the known gap is a pending payment that settles under a new reference,
 which Lucius could book beside the sync's settled booking. The connector's **Automate** becomes a
 menu of the two (`bankAutomate.ts`): the sync, and a Lucius Automation.
+
+## Amendment 7 (2026-11-14, UAT: an account linked again is never booked twice)
+
+On-screen UAT: a Plaid bank whose sign-in expired was linked again (the Plaid page's own advice)
+instead of reconnected. The new Item gave every account and transaction a new id; once the user
+unlinked the old accounts and linked the new ones, the next run booked the whole window a second
+time. The sync now remembers which bank account it last read for each book account (`runtime_state`
+`bank_data_sync.<provider>.read_as`, kept only after a run's booking). When a book account is read
+from a different one, that read is a re-link read (`bank_data_sync/relink.py`): each row with no
+known ref is matched to a live row already booked on that account from the same connector whose
+refs the bank no longer lists — same signed amount, same day first, then the nearest within 3
+days, one-to-one, pending only to a tracked pending booking (whose entry moves to the new ref) and
+settled only to a settled one — and its new ref is attached to that row (`attach_external_refs`)
+instead of booking it. Unmatched rows are booked as before. The Plaid page now steers an expired
+sign-in to **Reconnect** (update mode, same Item and ids) and says linking the bank again gives its
+accounts new identities. Links are not carried across automatically when the same bank is linked
+again: the user still re-links its accounts, and the match makes that safe.
+
+## Amendment 8 (2026-11-14, UAT: a bank that wasn't read is never treated as read)
+
+On-screen UAT: with one Plaid bank's sign-in expired, a sync read nothing from it, yet the run was
+`ok`, every pending booking of its accounts was dropped as "dropped by the bank", the card showed
+"Synced just now", and the error sat on the other bank's account line too. Cause: a one-account
+read (`fetch_all(account=…)`) came back `ok` with no rows when that account's bank failed and
+another answered. Contract now: a provider asked for ONE account raises when that account
+wasn't read — Plaid its bank's error (`fetch_transactions_get` returns it as `error`), GoCardless
+the ended consent of the bank holding it, Enable Banking the unread bank or the account's own
+transaction read — and keeps other banks' warnings off it. A bank's own expired access classifies
+as `reconnect_needed` (GoCardless `ValidationError(bank_access=True)`, Enable Banking
+`ExternalServiceError(bank_access=True)`), not the connector-wide `auth_error`, so the run goes
+on to the other banks. Such an account is not in the run's `read` set: its pending rows are not
+dropped, its history is not marked read, nothing is booked. Each account's last read is kept
+(`runtime_state` `...account_reads`: status, error, at) and served on its line (`read_status`,
+`read_error`); the bank card and the account marks read it, so one bank's failure shows on its
+own accounts only. A `partial` run keeps its warnings as `last_error` and says "N accounts not
+read".
+
+## Amendment 9 (2026-11-14, UAT: an account the bank no longer lists needs the user)
+
+On-screen UAT: after a bank was linked again, its old account ids were gone; the run said
+"Nothing new", their lines "done · 0 rows", green — the account silently never synced again. A
+read whose answer doesn't list the account asked for (`fetch_all(...)["accounts"]`) is now
+`account_gone` (`runner.GONE_MESSAGE`): not read (no pending dropped, no history marked), its
+line `failed`, its `account_reads` entry says why, the run is `partial` beside a good account and
+`account_gone` alone (24 h backoff, like a sign-in: it waits for the user). The bank card shows
+**Account not at the bank** with **Relink** (the connector's setup), and the account mark says to
+link it again. Amendment 7 makes the relink safe.
+
+## Amendment 10 (2026-11-14, UAT: the first import doesn't count the start day twice)
+
+On-screen UAT: a Plaid account opened today at the bank's balance got today's settled rows added
+on top (checking 500 → 597.50; a card owed 500 → +2,144.63 from a payment dated today). The
+Preserve rewind keeps the balance as it is AFTER booking, and rows dated the start day count from
+the start, so they were in the opening and in the balance. Enable Banking hid it through the
+empty-account auto-set; Plaid skips that set while anything is pending. `booker.align_first_imports`
+now writes ONE `set_account_opening`: the start back to the oldest row from the provider with the
+opening rewound by what that exposes (`tracking_start.compute_align`), less the settled
+provider rows dated the start day itself — the opening was the bank's balance that day and
+already holds them. Pending rows and rows of other sources on that day are untouched. This also
+applies when nothing predates the start. It is a deliberate, one-time, non-neutral opening move,
+made only on an account's first import (the `opening_txn_id` invariant is unchanged: one row,
+re-dated and re-amounted in place). Because the fold is not idempotent, alignment settles per
+account: one account's failure is retried alone (`pending_align`), never re-aligning an account
+whose write succeeded.
+
+## Amendment 11 (2026-11-15, owner: a new account ends at the bank's balance; Amendment 10's start-day fold is withdrawn)
+
+Amendment 10 took the settled rows dated the start day out of the opening, on the assumption that
+the opening was the bank's balance that day and already held them. No date can tell that: it
+depends on WHEN the balance was read (a row posted after it is not in it), on WHICH figure it was
+(`closingBooked` / `CLBD` is the end of the day before and holds none of them), and on whether the
+user typed it. It is withdrawn: `booker.align_first_imports` again only moves the start back with
+the Preserve rewind, still ONE `set_account_opening` and still settled per account (retrying
+only a failed one). The UAT's 597.50 also came from Plaid's sandbox, whose balances are fixtures
+unrelated to its transactions.
+
+What anchors a new account instead is the existing empty-account auto-set (Amendment 3): the
+bank's SETTLED figure from the same read as the transactions. Two gaps kept it from Plaid and
+from many PSD2 banks, and both are closed:
+
+- **Plaid's `current` is settled.** Plaid's docs define `available` as `current` less pending
+  outflows plus pending inflows, so `current` holds no pending. `Provider.balance_is_settled`
+  (set for Plaid only) makes the runner read the one figure as `cleared`, so the auto-set no
+  longer skips a Plaid account with pending rows and the gap check compares it with the cleared
+  balance. Listings are unchanged: there it stays the undivided `balance`. Plaid's figure may be
+  cached; a stale one shows as a gap on a later sync instead of a silent change.
+- **A booked-only bank is recorded.** The runner recorded a balance only when the listing's
+  `balance` (the EXPECTED figure, settled + pending) was present, so a bank that sends only a
+  booked type was never compared nor set. It now records the booked figure on its own.
+
+An account with any other row keeps its opening and offers "Use the bank's balance", as before.
+
+## Amendment 12 (2026-11-15, review: expiry and re-link across Plaid, GoCardless, Enable Banking)
+
+A review of expiry and re-linking against each provider's docs, with live runs on Plaid's
+sandbox, found five ways the book went wrong or a connection was lost. Each is fixed:
+
+- **A second login at the same bank keeps the first.** A same-bank link renews only a login it
+  shares accounts with (Plaid: account mask + subtype, recorded on each Item so an expired one is
+  still recognised; Enable Banking: `identification_hash`). Plaid never revokes a login it can't
+  compare (revoking is irreversible); Enable Banking renews as before where neither side can be
+  compared (an ended consent costs nothing to revoke). Live: a second sandbox login was kept, and
+  the same login linked again replaced only itself.
+- **A re-link with nothing remembered is still caught** (`relink.looks_relinked`): with no
+  `read_as`, a read is a re-link when the bank lists rows in the window and none of the account's
+  own rows from that connector dated there. Live: 73 rows matched where they were booked again.
+- **An ended consent holds up only its own bank.** GoCardless: an account read refused again with
+  a freshly minted token is that account's access (`bank_access`), not the keys. Enable Banking:
+  its error code is kept; `EXPIRED_SESSION` / `CLOSED_SESSION` / `REVOKED_SESSION` are an ended
+  consent (Renew is flagged on that bank), a 401/403 on one account after the session answered is
+  that account's (`account_refused`, retried), and "no bank could be read" says why. Before, all
+  of these read as `auth_error`: the run stopped for every bank and waited a day.
+- **A posted row that names its pending row settles only that one.** The amount fallback is for
+  banks that name none; with Plaid's `pending_transaction_id` it merged two equal charges.
+- **GoCardless rows are keyed on `internalTransactionId`**, the bank's `transactionId` kept as an
+  alias (a provider handle: same date and amount only). A row booked under the bank's id is
+  recognised, then filed under the stable one; a pending booking under it still settles.
+
+Still open from the same review: the 90-day catch-up floor for Plaid; first imports cut short
+(Plaid history not ready, Enable Banking's page cap) counting as complete; Plaid error codes
+sent as HTTP 400; no warning before a Plaid consent expires; the Enable Banking expiry warning
+after a renewal; GoCardless renewals needing a manual relink; and no undo for a sync run.

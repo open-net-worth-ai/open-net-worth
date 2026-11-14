@@ -219,8 +219,8 @@ books them here, and doesn't copy categories or Assigned.
 
 With **Bank sync without AI** on (the default; its switch is under **Experimental**), your GoCardless, Enable Banking
 and Plaid connectors appear here too: each books its bank's transactions by fixed rules, keeps a
-run history, and holds what the bank changes afterwards for your review. A bank syncs one way at
-a time — without AI, or by a Lucius Automation. See
+run history, and holds what the bank changes afterwards for your review. A bank can have a Lucius
+Automation as well; nothing stops the two from both running. See
 [Bank sync without AI](../features/bank-data-sync.md).
 
 ## Logging transactions from your email

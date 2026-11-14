@@ -12,6 +12,7 @@ import { connectorLogo } from '../../connectors/logos'
 import { SettingMenu } from './SyncBlocks'
 import { bankSyncSend, type BankSyncAccount, type BankSyncStatus } from './bankSync'
 import { everyLabel, type Act } from './bankSyncHelpers'
+import { readState, SIGN_IN, STOPPED } from './bankSyncMarks'
 
 // Pieces the bank sync's setup steps and its status panel share (ADR 2026-11-13).
 
@@ -284,23 +285,34 @@ function BankStatus({ status, accounts }: { status: BankSyncStatus; accounts: Ba
     .filter((d): d is string => !!d)
     .sort()[0]
   const soon = accounts.some((a) => a.access_renew_soon)
-  const signIn = status.last_status === 'auth_error' || status.last_status === 'reconnect_needed'
+  // THIS bank's accounts' last reads — never another bank's on the same connector.
+  const reads = accounts.filter((a) => a.sync).map((a) => readState(status, a))
+  const signIn = reads.some((r) => r.status && SIGN_IN.has(r.status))
+  const gone = reads.some((r) => r.status === 'account_gone')
+  const failed = reads.find((r) => r.status && STOPPED.has(r.status))
   const problem: [keyof typeof PILL, string, string] | null = ended
     ? ['bad', 'Access ended', 'Renew']
     : signIn
       ? ['bad', 'Sign-in needed', 'Reconnect']
-      : soon
-        ? ['warn', `Access ends ${fDate(ends!)}`, 'Renew']
-        : null
+      : gone
+        ? ['bad', 'Account not at the bank', 'Relink']
+        : failed
+          ? ['bad', 'Last sync failed', '']
+          : soon
+            ? ['warn', `Access ends ${fDate(ends!)}`, 'Renew']
+            : null
   const until = ends ? `Access until ${fDate(ends)}` : undefined
   if (problem)
     return (
       <span className="bs-bank-status">
-        <span className={PILL[problem[0]]} title={until}>
+        <span
+          className={PILL[problem[0]]}
+          title={problem[1] === 'Last sync failed' || gone ? (failed?.error ?? undefined) : until}
+        >
           <span className="bs-dot" aria-hidden="true" />
           {problem[1]}
         </span>
-        <ConnectorSetupButton status={status} label={problem[2]} link />
+        {problem[2] && <ConnectorSetupButton status={status} label={problem[2]} link />}
       </span>
     )
   // Nothing to say before the first sync: a grey "not synced yet" only raised a question.

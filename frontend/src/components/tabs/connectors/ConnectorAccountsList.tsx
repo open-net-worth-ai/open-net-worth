@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { Stack, Text, EmptyState, ErrorState, Loading } from '../../ui'
 import { useAccounts, type AccountLike } from '../../../hooks/serverState'
+import { useDataVersion } from '../../../hooks/useDataVersion'
 import { fromApiAccount } from '../accounts/data'
 import AccountModal from '../accounts/AccountModal'
 import { ConnectorAccountRow } from './ConnectorAccountRow'
@@ -84,13 +85,19 @@ export function ConnectorAccountsList({
   const { data: appAccountsData, refresh: refreshAppAccounts } = useAccounts<AppAccountRow>()
   const appAccounts = appAccountsData ?? []
 
+  // Re-read whenever data changes anywhere (a sync, Lucius, another tab). The old list stays
+  // on screen until the new one arrives, so a re-read never flickers the Link dialog.
+  const dataVersion = useDataVersion('*')
   const load = useCallback(() => {
-    setLoadErr(false)
     authFetch(`/api/connectors/${provider}/accounts`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((body: ConnectorAccountsResponse) => setData(body))
+      .then((body: ConnectorAccountsResponse) => {
+        setLoadErr(false)
+        setData(body)
+      })
       .catch(() => setLoadErr(true))
-  }, [provider])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dataVersion is the re-read trigger
+  }, [provider, dataVersion])
 
   useEffect(load, [load])
 

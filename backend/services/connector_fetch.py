@@ -103,10 +103,7 @@ def _count_reads(provider: Provider, account: Optional[str]) -> None:
 
 
 def _resolve_provider(provider_key: str) -> Provider:
-    try:
-        return providers.resolve([provider_key])[0]
-    except UnknownProvider:
-        raise
+    return providers.resolve([provider_key])[0]
 
 
 def _cap_identity_fields(out: dict) -> None:

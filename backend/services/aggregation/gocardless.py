@@ -161,14 +161,36 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
     return access
 
 
+_BANK_REFUSED = (
+    "the bank refused access to this account: its consent ended or was revoked, or the account "
+    "is no longer active. Renew the bank on the GoCardless page"
+)
+
+
 def _authed(store: GoCardlessConfigStore, method: str, path: str, **kwargs) -> httpx.Response:
-    """One authenticated call, retried once with a fresh token when the cached one is refused."""
+    """One authenticated call, retried once with a fresh token when the cached one is refused.
+
+    An account read refused AGAIN with a token just minted is not the keys (minting worked): it
+    is that account's access — expired, revoked, or the account closed, all HTTP 401 at
+    GoCardless. Read as bad keys it stopped every bank's sync for a day (review 2026-11-15), so
+    it is raised as that bank's access instead (``bank_access``)."""
     try:
         return _request(method, path, token=_bearer(store), **kwargs)
     except ExternalServiceError as exc:
         if "HTTP 401" not in str(exc):
+            if path.startswith("/accounts/") and "HTTP 403" in str(exc):
+                raise ExternalServiceError(
+                    f"GoCardless HTTP 403 — {_BANK_REFUSED}", bank_access=True
+                ) from None
             raise
-    return _request(method, path, token=_bearer(store, fresh=True), **kwargs)
+    try:
+        return _request(method, path, token=_bearer(store, fresh=True), **kwargs)
+    except ExternalServiceError as exc:
+        if path.startswith("/accounts/") and ("HTTP 401" in str(exc) or "HTTP 403" in str(exc)):
+            raise ExternalServiceError(
+                f"GoCardless HTTP 401 — {_BANK_REFUSED}", bank_access=True
+            ) from None
+        raise
 
 
 # ── bank picker + consent link ───────────────────────────────────────────────────────
@@ -522,7 +544,15 @@ def _account_balance(store: GoCardlessConfigStore, account_id: str) -> dict:
 
 
 def _txn_id(txn: dict) -> str:
-    return str(txn.get("transactionId") or txn.get("internalTransactionId") or "").strip()
+    """The row's id: GoCardless's own ``internalTransactionId`` first. The bank's
+    ``transactionId`` is bank-dependent and may change or repeat (GoCardless's docs): keyed on
+    it, a changed one booked the row twice and a repeated one hid a real transaction as
+    already booked (review 2026-11-15)."""
+    return str(txn.get("internalTransactionId") or txn.get("transactionId") or "").strip()
+
+
+def _bank_handle(txn: dict) -> str:
+    return str(txn.get("transactionId") or "").strip()
 
 
 def _txn_date(txn: dict) -> Optional[str]:
@@ -631,8 +661,14 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         if txn_id
         else derived_ref(account_id, date_str, amount, currency, _ref_text(txn))
     )
+    # Booked before the internal id came first, the row is filed under the bank's id: kept as
+    # an alias, it still reads as booked (only on the same date and amount — a provider handle,
+    # ``connector_fetch._booked_under_alias``) and a pending booking under it still settles.
+    handle = _bank_handle(txn)
+    aliases = [f"{account_id}:{handle}"] if handle and handle != txn_id else []
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
+        "ref_aliases": aliases,
         "raw": txn,
         "provider_account_id": account_id,
         "date": date_str,
@@ -678,6 +714,13 @@ def fetch_window(
     reads ``rate_limited``, not ``ok``)."""
     banks, warnings = _linked_banks(store)
     owned = [(b, a) for b in banks for a in b["account_ids"] if not account or a == account]
+    if account:
+        # ONE account (the bank data sync): its own bank's access ending is this read's failure,
+        # never an "ok" with nothing read (UAT 2026-11-14); other banks' trouble isn't its own.
+        stuck = next((b for b in store.banks() if account in (b.get("account_ids") or [])), None)
+        if not owned and stuck is not None:
+            raise ValidationError(_unusable(stuck), bank_access=True)
+        warnings = []
     cache = store.accounts_meta()
     # Listing the accounts (the connector page, Lucius's list tool) reads them from GoCardless:
     # details and balance, live. A sync reads the balance beside its transactions, below.
@@ -714,8 +757,12 @@ def fetch_window(
 
 def classify_error(exc: Exception) -> str:
     if isinstance(exc, ValidationError):
-        return "auth_error"
+        # One bank's access ended (``bank_access``) is that bank's, not the connector's keys: the
+        # sync goes on to the other banks' accounts (``auth_error`` stops it).
+        return "reconnect_needed" if exc.context.get("bank_access") else "auth_error"
     if isinstance(exc, ExternalServiceError):
+        if exc.context.get("bank_access"):
+            return "reconnect_needed"  # one bank's access, not the keys: the others read on
         msg = str(exc).lower()
         if "http 401" in msg or "http 403" in msg:
             return "auth_error"

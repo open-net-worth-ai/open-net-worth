@@ -2,9 +2,10 @@
 already brings it back with the transactions, so keeping it costs no read.
 
 The bank's SETTLED figure (``cleared``: GoCardless and Enable Banking send it as a booked
-balance, ``aggregation/balance_kinds``) is compared with the account's CLEARED balance — pending
-rows are booked uncleared (pending.py), so the two speak of the same money. A bank with one
-undivided figure (``amount``; Plaid's "current" may hold pending) is in step if it matches the
+balance, ``aggregation/balance_kinds``; Plaid's ``current`` holds no pending, so the runner reads
+it as settled, ``Provider.balance_is_settled``) is compared with the account's CLEARED balance —
+pending rows are booked uncleared (pending.py), so the two speak of the same money. A bank with
+one undivided figure that may hold pending (``amount`` alone) is in step if it matches the
 cleared OR the working balance. A card or loan's balance is owed money: the book holds it
 negative, whichever way round the bank reports it.
 
@@ -97,14 +98,13 @@ def only_opening(account_ids: set[str]) -> set[str]:
     return {a for a in account_ids if a not in busy}
 
 
-def record(p: Provider, read: dict[str, dict], empty_on_first_import: set[str]) -> list[str]:
+def record(p: Provider, read: dict[str, dict], empty_on_first_import: set[str]) -> None:
     """Keep what the bank said this run; set each empty first-imported account to it."""
     keep = stored(p.key)
     at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     for account_id, bank in read.items():
         keep[account_id] = {**bank, "at": at}
     budget.update(p.key, balances=keep)
-    notes: list[str] = []
     for account_id in empty_on_first_import & set(read):
         bank = read[account_id]
         if _settled(bank) is None and abs(float(bank.get("pending") or 0)) > _TOL:
@@ -113,4 +113,3 @@ def record(p: Provider, read: dict[str, dict], empty_on_first_import: set[str]) 
         if bank.get("currency") and bank["currency"] != account.get("currency"):
             continue
         use_bank(account_id, bank)
-    return notes

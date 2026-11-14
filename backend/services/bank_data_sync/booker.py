@@ -22,7 +22,7 @@ from typing import Optional
 
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
-from backend.services.bank_data_sync import pending, reviews
+from backend.services.bank_data_sync import pending, relink, reviews
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,8 @@ class Booked:
     to_review: int = 0
     held: int = 0
     linked_refs: int = 0
+    # Rows of an account linked again under a new id, matched to the bookings they already are.
+    relinked: int = 0
     # Pending rows: booked uncleared, settled (now cleared), dropped by the bank (removed).
     pending: int = 0
     settled: int = 0
@@ -123,6 +125,22 @@ def _with_categories(drafts: list[tuple[dict, dict]]) -> tuple[list[tuple[dict, 
     return kept, errors
 
 
+def _adopt_ref(provider: str, row: dict, ref: str, known: dict) -> None:
+    """A row found booked only under an alias (an earlier id: GoCardless's bank id before its
+    own came first) gets its current ref on that booking, so later reads key on the stable id
+    and a bank id that changes afterwards can't book it again."""
+    txn_id = row.get("booked_txn_id")
+    if not txn_id or (provider, ref) in known or row.get("_relinked"):
+        return
+    try:
+        ledger_service.attach_external_refs(
+            txn_id, row.get("external_refs") or [], reason="bank_data_sync: stable id"
+        )
+        known[(provider, ref)] = txn_id
+    except Exception:  # noqa: BLE001 — the row is booked either way; the next run tries again
+        logger.exception("bank_data_sync: %s could not file %s under its stable id", provider, ref)
+
+
 def _settle_superseding(provider: str, row: dict, known: dict, run_id, out: Booked) -> bool:
     """A posted row that replaces a pending one already booked (Plaid's
     ``pending_transaction_id``). Same amount: link the new ref to the booked row (no money
@@ -204,17 +222,22 @@ def book(
     run_id: Optional[str],
     batch_id: str,
     read: Optional[dict[str, str]] = None,
+    relinked: Optional[set[str]] = None,
 ) -> Booked:
     """Book ``rows`` (the opted-in accounts' window: posted and pending, booked or not) in one
     ledger write. Every write here — the batch, a pending row settled or dropped, a
     pending→posted link — runs under the audit surface ``bank_data_sync``. ``read``: account id
     → the window start it was read from, for dropping a pending row the bank no longer lists.
-    Raises only when that write failed (then nothing was booked)."""
+    ``relinked``: accounts read from a new bank id this run, whose rows are first matched to the
+    bookings they already are (``relink.carry``). Raises only when that write failed (then
+    nothing was booked)."""
     from backend.core import audit_context
 
     token = audit_context.set_audit_scope("system", SURFACE, note=f"run:{run_id}")
     try:
+        matched = relink.carry(provider, rows, relinked or set())
         out = _book(provider, rows, run_id=run_id, batch_id=batch_id)
+        out.relinked = matched
         if read:
             entries = pending.tracked(provider)
             seen: dict[str, set[str]] = {a: set() for a in read}
@@ -239,12 +262,15 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
         ref = _ref(row)
         if not ref:
             continue
+        _adopt_ref(provider, row, ref, known)
         if row.get("pending"):
             # Booked once, uncleared; the bank's pending list is read again every run.
             if row.get("booked_txn_id") or (provider, ref) in known or ref in held:
                 continue
             pending_rows[ref] = row
         else:
+            if row.get("_relinked"):
+                continue  # the booking it already is carries its new ref (relink.carry)
             settled = pending.settle(provider, ref, row, entries)
             if settled == "settled":
                 out.settled += 1
@@ -290,37 +316,60 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
 
 def align_first_imports(provider: str, account_ids: set[str]) -> tuple[set[str], list[str]]:
     """Move each first-imported cash/card account's start back to its oldest row from
-    ``provider``, so the history counts and today's balance doesn't move
-    (``tracking_start.align_tracking_start``, which refuses anything that would move it). Read
-    from the ledger, so a run that stopped after booking aligns on the next one. Returns
-    ``(settled account ids, warnings)``; an account that can't be aligned (its type, a balance
-    that wouldn't hold) is settled with a warning, never retried forever."""
-    from backend.core.errors import ValidationError
-    from backend.core.txn_sources import ext_ref_pairs
-    from backend.services import tracking_start
+    ``provider``, rewinding the opening by what that exposes (``tracking_start.compute_align``,
+    the Preserve rewind), so the history counts and today's balance doesn't move. ONE write
+    (``set_account_opening``) per account. Read from the ledger, so a run that stopped after
+    booking aligns on the next one. Returns ``(settled account ids, warnings)``; an account that
+    can't be aligned (its type) is settled with a warning, never retried forever. One that
+    failed is left out, so only IT is retried.
 
+    Rows dated the start day itself are left as they are: whether the opening already holds
+    them depends on WHEN that balance was read, which no date can tell. An account that held
+    nothing but its Starting Balance is then set to the bank's own settled figure from this same
+    read (``balances.record``); any other keeps its opening and offers "Use the bank's balance"
+    (ADR 2026-11-13, Amendment 11)."""
     txns = ledger_service.transactions.all()
     settled: set[str] = set()
     warnings: list[str] = []
     for account_id in sorted(account_ids):
-        account = ledger_service.accounts.find_by_id(account_id)
-        if account is None:
-            settled.add(account_id)
-            continue
-        dates = [
-            str(t.get("date"))[:10]
-            for t in txns
-            if not t.get("deleted")
-            and account_id in (t.get("from_account_id"), t.get("to_account_id"))
-            and any(pair[0] == provider for pair in ext_ref_pairs(t))
-        ]
-        start = ledger_service.opening_date(account, txns)
-        settled.add(account_id)
-        if not dates or not start or min(dates) >= start:
-            continue
         try:
-            tracking_start.align_tracking_start(account_id, min(dates))
-        except ValidationError as exc:
-            name = account.get("name") or "An account"
-            warnings.append(f"{name}: history before {start} is booked but not counted — {exc}")
+            _align_one(provider, account_id, txns, warnings)
+        except Exception:  # noqa: BLE001 — this account is retried next run, the others stand
+            logger.exception("bank_data_sync: %s alignment of %s failed", provider, account_id)
+            continue
+        settled.add(account_id)
     return settled, warnings
+
+
+def _align_one(provider: str, account_id: str, txns: list[dict], warnings: list[str]) -> None:
+    """One account of ``align_first_imports``: at most one opening write."""
+    from backend.core.errors import ValidationError
+    from backend.core.txn_sources import ext_ref_pairs
+    from backend.services import tracking_start
+
+    account = ledger_service.accounts.find_by_id(account_id)
+    if account is None:
+        return
+    mine = [
+        t
+        for t in txns
+        if not t.get("deleted")
+        and account_id in (t.get("from_account_id"), t.get("to_account_id"))
+        and any(pair[0] == provider for pair in ext_ref_pairs(t))
+    ]
+    start = ledger_service.opening_date(account, txns)
+    if not mine or not start:
+        return
+    oldest = min(str(t.get("date"))[:10] for t in mine)
+    if oldest >= start:
+        return
+    try:
+        tracking_start.assert_alignable(account)
+    except ValidationError as exc:
+        name = account.get("name") or "An account"
+        warnings.append(f"{name}: history before {start} is booked but not counted — {exc}")
+        return
+    plan = tracking_start.compute_align(
+        account, oldest, txns, start, ledger_service.opening_amount(account, txns)
+    )
+    ledger_service.set_account_opening(account_id, round(plan["new_opening"], 2), oldest)

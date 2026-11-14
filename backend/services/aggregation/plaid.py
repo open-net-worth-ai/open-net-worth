@@ -66,6 +66,8 @@ _CLIENT_NAME = "Open Net Worth"
 # /transactions/get page size + a guard against a pathological never-terminating page loop.
 _PAGE_SIZE = 500
 _MAX_FETCH_PAGES = 50
+# A response larger than this is refused, as GoCardless's and Enable Banking's are.
+_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
 # ── low-level POST helper ────────────────────────────────────────────────────────────
@@ -87,7 +89,10 @@ def _post(store: PlaidConfigStore, path: str, payload: dict) -> dict:
             timeout=_HTTP_TIMEOUT,
         )
     except httpx.HTTPError as exc:
-        raise ValidationError(f"could not reach Plaid: {exc}") from exc
+        # The class only, like the other banks: httpx's own message can carry the URL.
+        raise ValidationError(f"could not reach Plaid: {type(exc).__name__}") from None
+    if len(getattr(resp, "content", b"")) > _MAX_RESPONSE_BYTES:
+        raise ValidationError(f"could not reach Plaid: {path} answered too much; refused")
     if resp.status_code not in (200, 201):
         # Plaid error bodies carry {error_code, error_message}; surface what's useful.
         detail, code = "", ""
@@ -102,7 +107,11 @@ def _post(store: PlaidConfigStore, path: str, payload: dict) -> dict:
             plaid_error_code=code,
             http_status=resp.status_code,
         )
-    return resp.json() or {}
+    try:
+        return resp.json() or {}
+    except ValueError:
+        # A reply that isn't JSON (a proxy's error page): retried like an outage, typed.
+        raise ValidationError(f"could not reach Plaid: {path} answered with no JSON") from None
 
 
 # ── link token + public-token exchange (the consent flow) ─────────────────────────────
@@ -248,20 +257,54 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
         "access_token": access_token,
         "institution_id": inst_id,
         "institution_name": name,
+        # Which accounts this sign-in covers (mask + subtype, nothing secret): how a later link
+        # at the same bank tells a renewal from a second sign-in, even once this one has expired.
+        "accounts": _account_marks(store, access_token),
     }
     store.add_item(entry)
     if not name:
         named = name_bank(store, entry, _item_info(store, access_token))
         name = named.get("institution_name") or ""
         inst_id = named.get("institution_id") or inst_id
-    # Linking a bank that is already linked is a re-link (a fresh sign-in): retire the older
-    # Item — revoked at Plaid FIRST, dropped here only once Plaid has let it go, so a token is
-    # never thrown away while its Item could still be live there.
+    # Linking a bank that is already linked may be a re-link (a fresh sign-in of the same
+    # login): then the older Item is retired — revoked at Plaid FIRST, dropped here only once
+    # Plaid has let it go. But a second login at the same bank (a joint or business sign-in) is
+    # its own Item: revoking it, which can't be undone, cut off every account it held (review
+    # 2026-11-15). So an older Item is retired only when its accounts are the new one's
+    # (Plaid's own duplicate-Item test); one that can't be compared is kept.
     if inst_id:
+        mine = {_mark_key(m) for m in entry["accounts"]}
         for old in [i for i in store.items() if i.get("item_id") != item_id]:
-            if (old.get("institution_id") or "") == inst_id:
+            if (old.get("institution_id") or "") != inst_id:
+                continue
+            theirs = {
+                _mark_key(m)
+                for m in (old.get("accounts") or _account_marks(store, old["access_token"]))
+            }
+            if mine and theirs and mine & theirs:
                 _retire_item(store, old)
+            else:
+                logger.info("plaid: a second sign-in at the same bank; the first is kept")
     return {"item_id": item_id, "institution_name": name, "has_access_token": True}
+
+
+def _account_marks(store: PlaidConfigStore, access_token: str) -> list[dict]:
+    """An Item's accounts as ``{mask, subtype}`` (``/accounts/get``). ``[]`` when they can't be
+    read (an expired sign-in): then nothing is compared and nothing is revoked."""
+    try:
+        data = _post(store, "/accounts/get", {"access_token": access_token})
+    except Exception as exc:  # noqa: BLE001 — best effort: recording accounts never fails a link
+        logger.info("plaid: an Item's accounts couldn't be read to compare: %s", type(exc).__name__)
+        return []
+    return [
+        {"mask": str(a.get("mask") or ""), "subtype": str(a.get("subtype") or "")}
+        for a in data.get("accounts") or []
+        if isinstance(a, dict) and a.get("mask")
+    ]
+
+
+def _mark_key(mark: dict) -> tuple[str, str]:
+    return (str(mark.get("mask") or ""), str(mark.get("subtype") or ""))
 
 
 # Plaid says the bank's sign-in must be renewed — the Item needs update mode (Reconnect).
@@ -418,7 +461,7 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
     name (``_institution``). One bank failing (an expired login, say) never sinks the others:
     its error becomes a warning naming the bank and the result is marked incomplete; only when
     every bank fails does this raise. Returns ``{transactions[], accounts{id: account},
-    warnings[], complete}``."""
+    warnings[], complete, error}`` (``error``: the first bank's failure, or None)."""
     items = store.items()
     if not items:
         raise ValidationError("Plaid is not linked (no access token)")
@@ -463,6 +506,7 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
         "accounts": accounts,
         "warnings": warnings,
         "complete": complete,
+        "error": first_error,
     }
 
 
@@ -569,8 +613,10 @@ def _account_to_common(account: dict) -> dict:
         "name": str(name),
         "mask": account.get("mask"),
         "currency": currency,
-        # Plaid's "current" doesn't say whether pending is in it, so it stays the one undivided
-        # ``balance`` and is never called cleared (balance_kinds).
+        # Plaid sends one figure, so it stays the undivided ``balance`` in listings
+        # (balance_kinds). It holds no pending (``available`` = current less pending outflows
+        # plus pending inflows), which the bank sync reads as its settled figure
+        # (``Provider.balance_is_settled``).
         "balance": balances.get("current"),
         "available_to_spend": balances.get("available"),
         "account_type": _suggested_account_type(account),
@@ -701,11 +747,12 @@ def fetch_window(
 ) -> FetchWindow:
     """Plaid's provider-side windowed fetch (RFC §B) — ``/transactions/get`` with an
     explicit ``start_date``/``end_date``, paged via ``count``/``offset`` until every row in
-    the window is fetched (``complete=True`` always: the page loop only stops once Plaid's
-    own ``total_transactions`` is reached, or after ``_MAX_FETCH_PAGES`` as a safety cap —
-    the latter is the one case this reports ``complete=False``, so a capped fetch never
-    silently looks like a clean window for the vanished-row check). ``account`` filters
-    client-side (Plaid's ``/transactions/get`` has no per-account request filter)."""
+    the window is fetched: the page loop stops once Plaid's own ``total_transactions`` is
+    reached, or after ``_MAX_FETCH_PAGES`` as a safety cap, which (like a bank that couldn't
+    be read) reports ``complete=False``, so a capped fetch never looks like a clean window to
+    the vanished-row check. ``account`` filters
+    client-side (Plaid's ``/transactions/get`` has no per-account request filter); when the
+    bank that holds it can't be read, that bank's error is raised."""
     if accounts_only:
         # A single-day window minimizes (never eliminates — Plaid has no explicit
         # accounts-only endpoint) the transaction rows an accounts-only caller pays for.
@@ -716,6 +763,15 @@ def fetch_window(
     accounts = [_account_to_common(a) for a in accounts_by_id.values()]
 
     warnings = fetched.get("warnings") or []
+    if account and not accounts_only:
+        # ONE account asked for (the bank data sync reads one at a time): its own bank failing
+        # is this read's failure, never an "ok" with nothing in it — that dropped its pending
+        # rows and showed it synced (UAT 2026-11-14). Another bank's trouble isn't its own.
+        if account not in accounts_by_id:
+            if fetched.get("error") is not None:
+                raise fetched["error"]
+        else:
+            warnings = []
     rows: list[dict] = []
     if not accounts_only:
         for plaid_txn in fetched["transactions"]:

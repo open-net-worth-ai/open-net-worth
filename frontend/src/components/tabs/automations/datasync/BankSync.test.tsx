@@ -301,6 +301,52 @@ describe('with bank_data_sync on', () => {
     else expect(screen.queryByRole('button', { name: 'Renew' })).toBeNull()
   })
 
+  it('a bank that was not read shows on its own card and accounts only (UAT 2026-11-14)', () => {
+    const base = status().accounts![0]!
+    const st = status({
+      mode: 'data',
+      stage: 'done',
+      last_status: 'partial',
+      accounts: [
+        {
+          ...base,
+          account_id: 'a1',
+          name: 'ACME Checking',
+          bank: 'First ACME',
+          read_status: 'reconnect_needed',
+          read_error: 'its sign-in expired',
+        },
+        { ...base, account_id: 'a2', name: 'Other Card', bank: 'Other Bank', read_status: 'ok' },
+      ],
+    })
+    render(<BankSyncSettings status={st} />)
+    const first = screen.getByRole('group', { name: 'First ACME accounts to sync' })
+    expect(first.textContent).toMatch(/Sign-in needed/)
+    const other = screen.getByRole('group', { name: 'Other Bank accounts to sync' })
+    expect(other.textContent).not.toMatch(/Sign-in needed|failed/)
+    expect(markFor(st, st.accounts![0]!)?.text).toMatch(/sign in again/)
+    expect(markFor(st, st.accounts![1]!)?.tone).toBe('ok')
+  })
+
+  it('an account the bank no longer lists asks to be linked again, never reads as synced', () => {
+    const base = status().accounts![0]!
+    const st = status({
+      mode: 'data',
+      stage: 'done',
+      last_status: 'account_gone',
+      accounts: [{ ...base, bank: 'ACME Bank', read_status: 'account_gone', read_error: 'gone' }],
+    })
+    render(<BankSyncSettings status={st} />)
+    const group = screen.getByRole('group', { name: 'ACME Bank accounts to sync' })
+    expect(group.textContent).toMatch(/Account not at the bank/)
+    expect(group.textContent).not.toMatch(/Synced/)
+    expect(screen.getByRole('button', { name: 'Relink' })).toBeTruthy()
+    expect(markFor(st, st.accounts![0]!)).toMatchObject({
+      tone: 'bad',
+      text: expect.stringContaining('no longer lists'),
+    })
+  })
+
   it('marks an account the sync keeps: green, amber before access ends, red once it stopped', () => {
     const on = status({ mode: 'data' })
     const acc = on.accounts![0]!
