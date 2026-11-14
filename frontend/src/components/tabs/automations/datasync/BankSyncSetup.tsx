@@ -61,12 +61,12 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
         >
           {status.connected === false ? (
             <ConnectorSetupButton status={status} label={`Connect ${status.label}…`} />
-          ) : accounts.length === 0 ? (
-            <LinkAccountsButton status={status} primary />
           ) : (
+            // One place for the Link button whether accounts are linked or not: it owns the
+            // Link dialog, and moving it (no accounts ↔ some) re-made it and shut the dialog.
             <>
-              <AccountBoxes status={status} busy={busy} act={act} />
-              <LinkAccountsButton status={status} />
+              {accounts.length > 0 && <AccountBoxes status={status} busy={busy} act={act} />}
+              <LinkAccountsButton status={status} primary={accounts.length === 0} />
             </>
           )}
         </Step>

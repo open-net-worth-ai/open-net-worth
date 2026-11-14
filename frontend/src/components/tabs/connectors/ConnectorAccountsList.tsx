@@ -112,8 +112,10 @@ export function ConnectorAccountsList({
       body: JSON.stringify({ external_ids: externalIds }),
     })
     if (!res.ok) throw new Error()
-    // The connector's Sync line reads which accounts are linked: show it the moment one is.
-    refreshBankSyncs()
+    // The connector page's sync line reads which accounts are linked: show it the moment one
+    // is. Not inside the bank sync's own Link dialog (`embedded`): that page re-reads when the
+    // dialog closes, and re-read under it, it re-laid itself out and shut the dialog mid-use.
+    if (!embedded) refreshBankSyncs()
   }
 
   // Names of accounts created here, until the shared account list refreshes with them.
