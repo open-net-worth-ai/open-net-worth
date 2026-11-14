@@ -52,8 +52,12 @@ def _match(entries: dict[str, dict], ref: str, row: dict) -> str | None:
     if ref in live and live[ref].get("account_id") == account:
         return ref
     old = row.get("supersedes_ref")
-    if old and old in live and live[old].get("account_id") == account:
-        return old
+    if old:
+        # The bank names the pending row this one settles (Plaid's ``pending_transaction_id``).
+        # One we never booked is not some other pending charge of the same amount: guessing by
+        # amount here merged two real charges into one booking (two equal fares, the second
+        # never seen pending), understating spending (review 2026-11-15).
+        return old if old in live and live[old].get("account_id") == account else None
     posted, amount = _day(row.get("date")), float(row.get("amount") or 0)
     best: tuple[int, str] | None = None
     for key, e in entries.items():
