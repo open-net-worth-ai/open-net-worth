@@ -71,6 +71,10 @@ def draft_for(row: dict) -> Optional[dict]:
         # Cleared means settled at the bank: a posted row is, a pending one isn't yet
         # (pending.py clears it when the bank settles it).
         "cleared": not row.get("pending"),
+        # Booked for review, as YNAB books a bank's rows unapproved (owner, 2026-11-14): a feed
+        # is otherwise a trusted writer (core.txn_sources), and nothing asked the user to look.
+        # Settling a pending row later only clears it and moves its date — an approval stands.
+        "needs_review": True,
         f"{leg}_account_id": account_id,
         f"{leg}_amount": abs(amount),
         f"{leg}_currency": row.get("currency"),

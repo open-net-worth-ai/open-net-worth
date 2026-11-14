@@ -92,6 +92,9 @@ Lucius sync beside this one; **Automate** at the top of the connector's page set
 - **Never re-books a transaction you deleted.**
 - **Keeps foreign charges' original amount and currency** beside the amount your account was
   charged.
+- **Puts each transaction in your review queue,** as YNAB books a bank's transactions
+  unapproved: it counts in your balances straight away, and waits in **Review** until you
+  approve it. Settling a pending one later doesn't undo an approval.
 - **Categorises without AI:** your [Automations](../lucius/automations.md) rules and each payee's
   default category apply, as they do to any new transaction. Otherwise, if the bank gives a
   merchant category that's exactly the name of one of your categories, that one is used. No

@@ -90,6 +90,17 @@ def test_what_the_sync_books_is_cleared(bank):
     assert synced and all(t.get("cleared") is True for t in synced)
 
 
+def test_what_the_sync_books_waits_for_review(bank):
+    """Every row the sync books lands in the review queue, as YNAB books a bank's rows
+    unapproved (owner, 2026-11-14) — a feed is otherwise a trusted writer."""
+    main = linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-12.50, days_ago(4), "ACME CAFE", tid="r1")]
+    settings.save("gocardless", mode="data")
+    _run()
+    synced = [t for t in _live(main) if t.get("source") == "feed"]
+    assert synced and all(t.get("needs_review") is True for t in synced)
+
+
 def test_a_rerun_books_nothing_and_a_new_row_books_once(bank):
     main = linked_account("ACME Current", ACC_MAIN)
     bank.booked[ACC_MAIN] = [txn(-9.99, days_ago(3), "ACME STREAMING", tid="s1")]

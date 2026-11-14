@@ -183,3 +183,13 @@ figures it reads: when the bank names a settled figure, that alone is compared w
 balance and used by "Use the bank's balance" and the first-import set; the undivided figure keeps
 Amendment 3's rule (cleared or working counts as in step; the automatic set waits for nothing
 pending).
+
+## Amendment 5 (2026-11-14, owner: what the sync books waits for review)
+
+A bank feed is a trusted writer (`core.txn_sources.TRUSTED_WRITERS`), so the sync's rows skipped
+the review queue and nothing asked the user to look at them. Every row the sync books now carries
+`needs_review: true` in its draft (`booker.draft_for`; an explicit value wins over the source's
+default at the create choke), as YNAB books a bank's rows unapproved. They count in balances at
+once. Settling a pending row (`pending.settle`) changes only `cleared` and `date`, so an approval
+given while it was pending stands; a pending booking replaced by its settled row is a new row and
+waits again. Scoped to this sync — other feeds keep the trusted default.
