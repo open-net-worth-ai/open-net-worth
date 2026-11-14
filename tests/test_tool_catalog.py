@@ -13,6 +13,8 @@ are pinned below.
 
 from __future__ import annotations
 
+import pytest
+
 # Import order matters: importing backend.ai.tools triggers full tool registration.
 from backend.ai.tools import TOOL_SCHEMAS
 from backend.ai.tools import catalog as catalog_mod
@@ -62,6 +64,9 @@ def test_catalog_internal_section_is_a_single_flat_line():
     assert len(body) == 1, f"internal catalog is not one flat line — got {len(body)} lines: {body}"
 
 
+@pytest.mark.flags(
+    search_reads_results=False
+)  # the off-path shape; on is tests/test_search_reads_results_switch.py
 def test_completeness_every_schema_in_catalog():
     """Every name in TOOL_SCHEMAS minus _CATALOG_HIDDEN and minus a currently-gated
     connector tool must appear in build_tool_catalog().

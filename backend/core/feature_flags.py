@@ -77,7 +77,7 @@ FLAGS: tuple[Flag, ...] = (
             "unattended-script switches are retired while this is on. "
             "Details: Lucius > Permissions v2."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 10, 31),
         remove_by=date(2027, 1, 31),
@@ -94,7 +94,7 @@ FLAGS: tuple[Flag, ...] = (
             "allows X search allows web search. Off: searches return snippets only, as before. "
             "More in Help: Web search reads its results (Experimental)."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 10, 31),
         remove_by=date(2027, 1, 31),
@@ -118,7 +118,7 @@ FLAGS: tuple[Flag, ...] = (
             "Lucius decides which Intel news reaches you now, which waits for a roundup, "
             "and which stays in the Intel tab."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 2),
         remove_by=date(2027, 1, 31),
@@ -180,7 +180,7 @@ FLAGS: tuple[Flag, ...] = (
             "gets the same search for why it fell. It can delay an alert by up to two minutes and "
             "uses your search quota and AI model. Off: you get the quick alert only."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 6),
         remove_by=date(2027, 3, 1),
@@ -194,7 +194,7 @@ FLAGS: tuple[Flag, ...] = (
             "afterwards wait for you in a review list. Bank syncs join the Data Sync tab in "
             "Automations. Off: only a Lucius Automation books bank rows, as before."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 13),
         remove_by=date(2027, 3, 1),

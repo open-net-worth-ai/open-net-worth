@@ -732,11 +732,11 @@ def test_a_public_demo_never_starts_a_run(monkeypatch):
     assert run.active() is False
 
 
-def test_the_run_is_off_by_default_until_its_review_findings_are_fixed():
+def test_the_run_is_on_by_default():
     from backend.core.feature_flags import all_flags
 
     (flag,) = [f for f in all_flags() if f.name == "price_alert_lucius_run"]
-    assert flag.default is False
+    assert flag.default is True
 
 
 @pytest.mark.parametrize(

@@ -11,8 +11,8 @@ keywords: [permissions v2, experimental, approval mode, always allow, ask, block
 
 # Permissions v2 (experimental)
 
-> **This page describes an experimental model.** It is off by default. Turn it on in **Settings →
-> Developer → Experimental → Permissions v2**, and off again the same way. While it is off, Open Net
+> **This page describes an experimental model.** It is on by default. Turn it off in **Settings →
+> Developer → Experimental → Permissions v2**, and on again the same way. While it is off, Open Net
 > Worth works as [How Lucius's permissions work](permissions.md), [Confirm cards](confirm-cards.md)
 > and [Automations](automations.md) describe, and those pages are the ones to read. What switching
 > it off does to what you set while it was on is in [Turning it off and on

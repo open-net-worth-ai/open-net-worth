@@ -27,6 +27,10 @@ import pytest
 from backend.ai.tools import _confirm_gate as gate
 from backend.ai.tools import registry
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_permission_gate_dispatch_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 
 @pytest.fixture()
 def armed(db_isolated, monkeypatch):
