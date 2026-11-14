@@ -155,6 +155,8 @@ def book_separately(item_id: str, seen: Optional[str] = None) -> dict:
 def _book_separately(item: dict) -> str:
     if item.get("kind") != "duplicate":
         raise ValidationError("Only a possible duplicate can be booked separately.")
+    if (item.get("detail") or {}).get("undone"):
+        return _book_undone(item)
     draft = draft_for((item.get("detail") or {}).get("row") or {})
     if draft is None:
         raise ValidationError("This bank row has no account or amount to book.")
@@ -169,3 +171,30 @@ def _book_separately(item: dict) -> str:
         return "booked"
 
     return book()
+
+
+def _book_undone(item: dict) -> str:
+    """Book again a row (or a card payment's two rows) held back by an undo, through the same
+    pairing a run applies: a card payment comes back as a transfer, not income plus spending."""
+    from backend.services.bank_data_sync import card_payments
+
+    detail = item.get("detail") or {}
+    candidates = []
+    for row in (detail.get("row"), detail.get("pair")):
+        if not row:
+            continue
+        draft = draft_for(row)
+        if draft is None:
+            raise ValidationError("This bank row has no account or amount to book.")
+        candidates.append((row, draft))
+    types = {a["id"]: a.get("type") for a in ledger_service.accounts.all()}
+    candidates = card_payments.pair_within(candidates, types)
+    candidates, _promoted = card_payments.promote_into_book(item["provider"], candidates, types)
+    if candidates:
+        created, skipped = ledger_service.bulk_create_transactions(
+            [d for _, d in candidates], allow_duplicate=True, dedup_by_external_ref=True
+        )
+        if not created:
+            reason = (skipped[0] if skipped else {}).get("_duplicate_reason")
+            raise ConflictError(reason or "It couldn't be booked: that bank row is booked already.")
+    return "booked"

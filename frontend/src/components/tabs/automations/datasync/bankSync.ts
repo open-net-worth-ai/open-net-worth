@@ -104,6 +104,8 @@ export interface BankReview {
     reason?: string
     /** A row held back because the sync that booked it was undone: Book again, or Dismiss. */
     undone?: boolean
+    /** A card payment's other bank row: both are booked again together, as one transfer. */
+    pair?: BankRowView
   }
 }
 

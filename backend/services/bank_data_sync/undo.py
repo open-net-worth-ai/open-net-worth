@@ -93,13 +93,21 @@ def keep_openings(run_id: str, before: dict[str, dict]) -> None:
         logger.exception("bank_data_sync: run %s openings not kept for Undo", run_id)
 
 
-def _refs(provider: str, txns: list[dict]) -> list[str]:
-    return [
-        str(e.get("ref") or "")
-        for t in txns
-        for e in t.get("external_refs") or []
-        if e.get("source") == provider
-    ]
+def _groups(provider: str, txns: list[dict]) -> list[list[str]]:
+    """The refs of each row, as one group per row: a card payment filed as a transfer holds the
+    bank's two rows, which are re-booked together."""
+    out = []
+    for t in txns:
+        refs = [
+            str(e.get("ref") or "")
+            for e in t.get("external_refs") or []
+            if e.get("source") == provider
+        ]
+        if t.get("kind") == "transfer" and len(refs) >= 2:
+            out.append(refs[:2])
+        else:
+            out.extend([r] for r in refs)
+    return out
 
 
 def _check_undoable(provider: str, run_id: str) -> dict:
@@ -123,22 +131,32 @@ def _check_undoable(provider: str, run_id: str) -> dict:
     return batch
 
 
-def _hold(provider: str, run_id: str, batch: dict, refs: list[str]) -> int:
-    """One open ``duplicate`` item per undone ref (the bank's row, to Book again or Dismiss)."""
+def _hold(provider: str, run_id: str, batch: dict, groups: list[list[str]]) -> int:
+    """One open ``duplicate`` item per undone row (the bank's row, to Book again or Dismiss); a
+    card payment's two rows are ONE item, so they come back as one transfer."""
     views = batch.get("bank_rows") or {}
     held = 0
-    for ref in dict.fromkeys(refs):
-        view = views.get(ref)
-        if not ref or not view:
-            logger.warning("bank_data_sync: undone ref %s has no bank row to offer", ref)
+    seen: set[str] = set()
+    for group in groups:
+        group = [r for r in dict.fromkeys(group) if r and r not in seen]
+        seen.update(group)
+        found = [(r, views[r]) for r in group if r in views]
+        if len(found) < len(group):
+            logger.warning("bank_data_sync: undone refs %s have no bank row to offer", group)
+        if not found:
             continue
+        found.sort(key=lambda rv: float(rv[1].get("amount") or 0))  # the outflow first
+        ref, view = found[0]
+        detail = {"row": view, "reason": UNDONE_REASON, "undone": True}
+        if len(found) == 2:
+            detail |= {"pair": found[1][1], "refs": [ref, found[1][0]]}
         reviews.record(
             provider,
             "duplicate",
             ref,
             run_id=run_id,
             account_id=view.get("linked_account_id"),
-            detail={"row": view, "reason": UNDONE_REASON, "undone": True},
+            detail=detail,
         )
         held += 1
     return held
@@ -192,7 +210,9 @@ def undo_run(provider: str, run_id: str) -> dict:
         batch = _check_undoable(provider, run_id)
         bid = batch_id(run_id)
         rows = ledger_service.transactions.query_by_batch(bid, include_deleted=False)
-        refs = _refs(provider, rows) + [r for m in batch.get("merges") or [] for r in m["refs"]]
+        groups = _groups(provider, rows) + [
+            [r] for m in batch.get("merges") or [] for r in m["refs"]
+        ]
         token = audit_context.set_audit_scope("user", booker.SURFACE, note=f"undo run:{run_id}")
         try:
             result = import_undo.undo_import(bid)
@@ -205,7 +225,7 @@ def undo_run(provider: str, run_id: str) -> dict:
         }
         entries |= _tracked_again(batch)
         pending.save(provider, entries)
-        held = _hold(provider, run_id, batch, refs)
+        held = _hold(provider, run_id, batch, groups)
         _mark_undone(run_id)
         data_events.publish(["*"])
     return {

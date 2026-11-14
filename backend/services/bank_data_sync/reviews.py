@@ -115,11 +115,12 @@ def record_changes(provider: str, changes: list[dict], run_id: Optional[str]) ->
 
 def held_refs(provider: str) -> set[str]:
     """Refs a ``duplicate``/``posted`` item holds back from booking (open or dismissed)."""
-    return {
-        r["ref"]
-        for r in BankSyncReviewStore().for_provider(provider)
-        if r.get("kind") in HOLDING_KINDS and r.get("status") in ("open", "applying", "dismissed")
-    }
+    held: set[str] = set()
+    for r in BankSyncReviewStore().for_provider(provider):
+        if r.get("kind") in HOLDING_KINDS and r.get("status") in ("open", "applying", "dismissed"):
+            held.add(r["ref"])
+            held.update((r.get("detail") or {}).get("refs") or [])  # a card payment's two rows
+    return held
 
 
 STALE_CLAIM = timedelta(minutes=10)

@@ -113,6 +113,12 @@ function ReviewRow({
           <>
             <dt>From the bank</dt>
             <dd>{row(bankSide)}</dd>
+            {d.pair && (
+              <>
+                <dt>and</dt>
+                <dd>{row(d.pair)}</dd>
+              </>
+            )}
           </>
         )}
       </dl>

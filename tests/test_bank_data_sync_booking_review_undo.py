@@ -382,3 +382,21 @@ def test_a_pending_row_undo_brings_back_is_tracked_again(bank):
 
     (entry,) = pending.tracked("gocardless").values()
     assert ledger_service.transactions.find_by_id(entry["txn_id"])["description"] == "ACME KIOSK"
+
+
+def test_book_again_on_an_undone_card_payment_returns_one_transfer(bank):
+    from backend.services.bank_data_sync import review_actions, reviews
+
+    main, card = linked_account("ACME Current", ACC_MAIN), _card()
+    bank.booked[ACC_MAIN] = [txn(-300.00, days_ago(2), "ACME CARD PAYMENT", tid="o1")]
+    bank.booked[ACC_SAVER] = [txn(300.00, days_ago(1), "Payment Thank You-Mobile", tid="i1")]
+    _undo(_run())
+
+    (item,) = reviews.open_items("gocardless")  # ONE item holding both bank rows
+    assert item["detail"]["pair"]
+    assert _run()["counts"]["held"] == 2  # and both refs stay held
+    review_actions.book_separately(item["id"])
+
+    (transfer,) = _live()
+    assert transfer["kind"] == "transfer"
+    assert (transfer["from_account_id"], transfer["to_account_id"]) == (main, card)
