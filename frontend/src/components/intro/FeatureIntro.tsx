@@ -8,6 +8,7 @@ import { Button, Modal } from '../ui'
 import { Spark } from '../../lucius/identity'
 import {
   guidedThisVisit,
+  guidesHeld,
   inFirstRun,
   markGuided,
   modalOpen,
@@ -69,7 +70,7 @@ export function FeatureIntro({ open, steps, lucius, secondary, onClose }: Featur
   const due = open && !touring && !inFirstRun() && !yielded
   useRecheck(due && (claimed || !guidedThisVisit()))
   if (due && claimed && otherModalOpen()) setYielded(true)
-  const shown = due && (claimed || (!modalOpen() && !guidedThisVisit()))
+  const shown = due && (claimed || (!modalOpen() && !guidesHeld() && !guidedThisVisit()))
   useEffect(() => {
     if (shown && !claimed) {
       markGuided()

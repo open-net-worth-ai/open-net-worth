@@ -87,6 +87,57 @@ export function guidedThisVisit(): boolean {
 /** Tests only: a new visit. */
 export function resetGuidedForTests(): void {
   guided = false
+  purposeVisit = false
+  holds.clear()
+  releasedAt = 0
+}
+
+// Guides wait while the person is in the middle of something (ADR 2026-11-14). "Free" used to
+// mean only "no dialog on screen", so anything mid-way WITHOUT one looked idle: back from a
+// bank's consent, the app spends a second or two finishing the link before the connector opens,
+// and a tip started in that gap, under the page that then opened (owner, 2026-11-14).
+//
+// 1. A visit that ARRIVED with a purpose — a deep link or a provider's return, its address
+//    carrying one of these — shows no guide at all: the person came to do that one thing.
+const PURPOSE_PARAMS = ['connector', 'txn', 'batch', 'state', 'code', 'ref']
+function arrivedWithPurpose(): boolean {
+  if (typeof window === 'undefined') return false
+  // The address the page was LOADED from, not the current one: the app tidies `?connector=…`
+  // and a provider's `state`/`code` out of the address bar before this module may even load.
+  const loaded = (performance.getEntriesByType?.('navigation')[0] as PerformanceEntry | undefined)
+    ?.name
+  let url: URL
+  try {
+    url = new URL(loaded || window.location.href)
+  } catch {
+    return false
+  }
+  if (url.pathname.startsWith('/connectors/callback')) return true
+  return PURPOSE_PARAMS.some((p) => url.searchParams.has(p))
+}
+let purposeVisit = arrivedWithPurpose()
+/** Tests only: the visit arrived by a link. */
+export function arriveWithPurposeForTests(): void {
+  purposeVisit = true
+}
+
+// 2. A flow that is mid-way says so: `holdGuides()` on starting, the returned function when it
+//    is done. Guides then wait a moment longer, so a dialog that opens as it ends comes first.
+const holds = new Set<symbol>()
+let releasedAt = 0
+const SETTLE_MS = 1500
+export function holdGuides(): () => void {
+  const key = Symbol('guide-hold')
+  holds.add(key)
+  return () => {
+    if (holds.delete(key)) releasedAt = Date.now()
+  }
+}
+
+/** Whether a guide must wait: the visit came with a purpose, a flow is mid-way, or one only
+ *  just ended. Checked with `modalOpen()` by every guide before it starts. */
+export function guidesHeld(): boolean {
+  return purposeVisit || holds.size > 0 || Date.now() - releasedAt < SETTLE_MS
 }
 
 // One guide on screen at a time: an intro waits while a tour or tip is showing (tips already

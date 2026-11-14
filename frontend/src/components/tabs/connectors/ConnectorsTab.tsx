@@ -45,6 +45,7 @@ import {
   useRegisterScreenFacts,
 } from '../../../lucius/useScreenContract'
 import { CONNECTORS_OPEN_SETUP_SPEC } from '../../../lucius/screenCommands'
+import { holdGuides } from '../../intro/tourTarget'
 import {
   FAMILY_SECTIONS,
   STATUS_FILTERS,
@@ -209,8 +210,17 @@ export function ConnectorsTab(): JSX.Element {
     // Ask the provider whether the consent finished BEFORE showing the page, so its badge and
     // accounts read what the bank just did rather than the "waiting" left before it.
     const check = fromBank ? BANK_RETURN_CHECKS[id] : undefined
-    if (check) void check().finally(() => void reload().finally(open))
-    else open()
+    if (check) {
+      // Mid-way (asking the provider, then opening the page): no guide starts in the gap.
+      const release = holdGuides()
+      void check().finally(
+        () =>
+          void reload().finally(() => {
+            open()
+            release()
+          }),
+      )
+    } else open()
     return () => {
       live = false
       cancelAnimationFrame(raf)
@@ -228,15 +238,18 @@ export function ConnectorsTab(): JSX.Element {
     if (ebHandled.current === key) return
     ebHandled.current = key
     void navigate({ to: '/connectors', search: {}, replace: true } as never)
+    // Finishing the link takes a second or two with nothing open: no guide starts in it.
+    const release = holdGuides()
     void completeEnableBankingReturn(ebReturn).then((res) => {
       toast(res.message)
       // Linked: the connector page, whose Accounts list is the next step. Not linked: the form,
       // with the reason under Link bank and the pickers to try again.
       if (!res.ok) keepEnableBankingReturnError(res.message)
       // An already-linked connector opens its form too: the reason is shown there.
-      void reload().finally(() =>
-        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok }),
-      )
+      void reload().finally(() => {
+        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok })
+        release()
+      })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, ebReturn?.state, ebReturn?.code])
