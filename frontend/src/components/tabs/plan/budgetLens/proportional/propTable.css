@@ -842,7 +842,7 @@
 .pt-mgstats em,
 .pt-mk {
   font-style: normal;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -921,7 +921,7 @@
 .pt-ed-caphead > span:first-child,
 .pt-pop-f > span:first-child,
 .pt-pop-k {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1072,7 +1072,7 @@
   font-variant-numeric: tabular-nums;
 }
 .pt-ed-capuse {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;

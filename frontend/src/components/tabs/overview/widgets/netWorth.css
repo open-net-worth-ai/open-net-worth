@@ -169,7 +169,7 @@ button.ov-kpi {
 }
 
 .ov-kpi-l {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -252,7 +252,7 @@ button.ov-nums-cell {
 }
 
 .ov-nums-k {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -544,7 +544,7 @@ button.ov-breakdown-row--go:active {
 }
 
 .ov-breakdown-donut-label {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;

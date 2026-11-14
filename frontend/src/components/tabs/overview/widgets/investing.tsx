@@ -69,6 +69,7 @@ import { rowCap } from '../widgetDisplayShared'
 import { WidgetPlaceholder, WidgetSkeleton } from '../WidgetPlaceholder'
 import { useAnalytics, useValuedRows } from '../useWidgetData'
 import { GRID, OvChart, TICK, axes, legend, resolveColor } from '../charts'
+import { keyActivate } from '../../../../utils/keyActivate'
 
 // ── shared local fetch hook ──────────────────────────────────────────────────
 // A tiny widget-local read hook (mirrors OverviewDataContext's own inline
@@ -513,13 +514,10 @@ const HoldingsMap: ComponentType<WidgetContentProps> = ({
                     data-tip={treemapTip(l)}
                     data-tip-color={g.color}
                     data-tip-tap={clickable ? 'Tap again to open' : undefined}
-                    onClick={
-                      clickable
-                        ? () => onOpenAsset!(l.row.ticker || l.row.symbol || l.sym)
-                        : undefined
-                    }
                     role={clickable ? 'button' : undefined}
-                    tabIndex={clickable ? 0 : undefined}
+                    {...(clickable
+                      ? keyActivate(() => onOpenAsset!(l.row.ticker || l.row.symbol || l.sym))
+                      : {})}
                   >
                     <span className="ov-treemap-tile-sym">{l.sym}</span>
                     {chg != null && (
@@ -873,9 +871,8 @@ const UnrealizedGains: ComponentType<WidgetContentProps> = ({ instance, def, onO
             <div
               key={r.position_id ?? r.instrument_id ?? label}
               className={`ov-gains-row${clickable ? ' ov-gains-row--clickable' : ''}`}
-              onClick={clickable ? () => onOpenAsset!(r.ticker || r.symbol || label) : undefined}
               role={clickable ? 'button' : undefined}
-              tabIndex={clickable ? 0 : undefined}
+              {...(clickable ? keyActivate(() => onOpenAsset!(r.ticker || r.symbol || label)) : {})}
             >
               <div className="ov-gains-name">
                 {r.symbol && r.symbol !== label && <span className="ov-gains-sym">{r.symbol}</span>}

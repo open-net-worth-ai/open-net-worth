@@ -23,6 +23,7 @@ import { onwDataSource, readEmbeddedDescriptors } from './lucius/onwDataSource'
 import { refreshFromAdapter, seedEntityRegistry } from './lucius/entityRegistry'
 import { relayoutAfterRotation, relayoutAfterSwipeBack, stampPwaDisplayMode } from './utils/pwa'
 import { watchStatusBarTint } from './utils/statusBarTint'
+import { watchInputModality } from './utils/inputModality'
 import { startTapDiagnostics } from './utils/tapDiagnostics'
 
 // CSS must know whether browser chrome exists before the mobile shell renders. The iOS
@@ -31,6 +32,7 @@ stampPwaDisplayMode()
 relayoutAfterRotation()
 relayoutAfterSwipeBack()
 watchStatusBarTint()
+watchInputModality()
 startTapDiagnostics()
 
 // Wire the ONW DataSourceAdapter — the seam between the core mention engine and

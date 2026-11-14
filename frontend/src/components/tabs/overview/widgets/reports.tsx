@@ -92,6 +92,7 @@ import { SeriesLegend, type LegendGroup } from './seriesLegend'
 import { fitMode } from '../grid'
 import { vizOf } from '../vizModel'
 import { ArrowRight } from '../../../../ui/icons'
+import { keyActivate } from '../../../../utils/keyActivate'
 
 Chart.register(
   ArcElement,
@@ -588,7 +589,12 @@ const IncExpTable: ComponentType<WidgetContentProps> = ({ instance, def }) => {
           <span className="num ov-iet-avg">Avg / mo</span>
           <span className="num ov-iet-tot">{n}-mo total</span>
         </div>
-        <div className="ov-iet-row grp" onClick={() => toggle('income')}>
+        <div
+          className="ov-iet-row grp"
+          role="button"
+          aria-expanded={!!open.income}
+          {...keyActivate(() => toggle('income'))}
+        >
           <span className="ov-iet-lab">{chev('income')}Income</span>
           {numCells(incTot, 'in')}
         </div>
@@ -602,7 +608,12 @@ const IncExpTable: ComponentType<WidgetContentProps> = ({ instance, def }) => {
               {numCells(r, 'in')}
             </div>
           ))}
-        <div className="ov-iet-row grp" onClick={() => toggle('expense')}>
+        <div
+          className="ov-iet-row grp"
+          role="button"
+          aria-expanded={!!open.expense}
+          {...keyActivate(() => toggle('expense'))}
+        >
           <span className="ov-iet-lab">{chev('expense')}Spending</span>
           {numCells(spendTot, 'out')}
         </div>

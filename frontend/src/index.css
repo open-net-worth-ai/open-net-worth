@@ -260,13 +260,11 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  /* Sidebar nav icons: no ring (owner call, 2026-08-11) — .sidebar-item is a <button>, so
-   it inherited the rule above by default; it kept firing from a programmatic .focus()
-   (not a real keypress — e.g. focus returning here after Settings closes), which the
-   browser's :focus-visible heuristic can't tell apart from real keyboard use. The
-   `.active` background state already marks the current tab, so this isn't the sidebar's
-   only wayfinding signal. */
-  .sidebar-item:focus-visible {
+  /* Sidebar nav icons: no ring after POINTER use (owner call, 2026-08-11) — focus returning
+   here after Settings closes is a programmatic .focus() that :focus-visible can't tell from
+   a keypress. The last input modality (utils/inputModality.ts) can: keyboard users keep the
+   ring (WCAG 2.4.7), mouse/touch users don't see it. */
+  html[data-input='pointer'] .sidebar-item:focus-visible {
     outline: none;
   }
   /* Inputs/selects that already use outline:none for a border-highlight focus
@@ -1099,7 +1097,7 @@
     margin-bottom: 16px;
   }
   .tab-group-label {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -1666,7 +1664,7 @@
   }
   th .ar {
     opacity: 0.6;
-    font-size: 9px;
+    font-size: var(--text-2xs);
     margin-left: 3px;
   }
   /* .tag is retired — asset-class indicator is now a left border on the holding td */
@@ -1696,7 +1694,7 @@
     margin-left: 6px;
     padding: 0 5px;
     border-radius: 4px;
-    font-size: 9px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--muted);
@@ -1708,7 +1706,7 @@
     margin-left: 6px;
     padding: 0 5px;
     border-radius: 3px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.03em;
     color: var(--muted);
@@ -2081,7 +2079,7 @@ body.hide-amounts .mask * {
   /* ── Action log ── */
   .act-cat {
     display: inline-block;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -3522,7 +3520,7 @@ body.hide-amounts .mask * {
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: 0.72rem;
+    font-size: max(var(--text-2xs), 0.72rem);
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -3537,7 +3535,7 @@ body.hide-amounts .mask * {
     box-shadow: 0 0 8px 1px rgba(111, 155, 216, 0.7);
   }
   .briefing-date {
-    font-size: 0.7rem;
+    font-size: max(var(--text-2xs), 0.7rem);
     color: color-mix(in srgb, var(--faint) 88%, var(--bg));
   }
   .briefing-header-right {
@@ -3549,7 +3547,7 @@ body.hide-amounts .mask * {
     background: transparent;
     border: none;
     color: color-mix(in srgb, var(--faint) 60%, var(--bg));
-    font-size: 0.78rem;
+    font-size: max(var(--text-2xs), 0.78rem);
     cursor: pointer;
     padding: 2px 8px;
     border-radius: 4px;
@@ -3573,7 +3571,7 @@ body.hide-amounts .mask * {
     border: none;
     color: color-mix(in srgb, var(--faint) 60%, var(--bg));
     cursor: pointer;
-    font-size: 0.68rem;
+    font-size: max(var(--text-2xs), 0.68rem);
     padding: 2px 6px;
     display: inline-flex;
     align-items: center;
@@ -3589,7 +3587,7 @@ body.hide-amounts .mask * {
     background: transparent;
     border: none;
     color: color-mix(in srgb, var(--faint) 60%, var(--bg));
-    font-size: 0.82rem;
+    font-size: max(var(--text-2xs), 0.82rem);
     cursor: pointer;
     padding: 2px 6px;
     border-radius: 4px;
@@ -3620,7 +3618,7 @@ body.hide-amounts .mask * {
     padding: 13px 14px;
   }
   .briefing-settings-title {
-    font-size: 0.63rem;
+    font-size: max(var(--text-2xs), 0.63rem);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -3662,12 +3660,12 @@ body.hide-amounts .mask * {
     gap: 1px;
   }
   .briefing-toggle-label {
-    font-size: 0.82rem;
+    font-size: max(var(--text-2xs), 0.82rem);
     color: color-mix(in srgb, var(--ink) 85%, var(--primary));
     line-height: 1.3;
   }
   .briefing-toggle-hint {
-    font-size: 0.7rem;
+    font-size: max(var(--text-2xs), 0.7rem);
     color: color-mix(in srgb, var(--faint) 90%, var(--primary));
     line-height: 1.3;
   }
@@ -3693,7 +3691,7 @@ body.hide-amounts .mask * {
     color: color-mix(in srgb, var(--faint) 70%, var(--bg));
   }
   .briefing-settings-foot {
-    font-size: 0.68rem;
+    font-size: max(var(--text-2xs), 0.68rem);
     color: color-mix(in srgb, var(--faint) 88%, var(--bg));
     margin-top: 9px;
     font-style: italic;
@@ -3710,7 +3708,7 @@ body.hide-amounts .mask * {
     padding: 0;
   }
   .briefing-note {
-    font-size: 0.855rem;
+    font-size: max(var(--text-2xs), 0.855rem);
     line-height: 1.7;
     color: color-mix(in srgb, var(--muted) 55%, var(--ink));
   }
@@ -3766,13 +3764,13 @@ body.hide-amounts .mask * {
     border-radius: 4px;
   }
   .briefing-loading-label {
-    font-size: 0.75rem;
+    font-size: max(var(--text-2xs), 0.75rem);
     color: color-mix(in srgb, var(--faint) 50%, var(--bg));
     margin: 6px 0 0;
     font-style: italic;
   }
   .briefing-error {
-    font-size: 0.82rem;
+    font-size: max(var(--text-2xs), 0.82rem);
     color: var(--locked);
     margin: 0;
   }
@@ -3861,7 +3859,7 @@ body.hide-amounts .mask * {
     right: -6px;
     background: var(--bad);
     color: var(--ink-on-accent);
-    font-size: 9px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     min-width: 14px;
     height: 14px;
@@ -4039,7 +4037,7 @@ body.hide-amounts .mask * {
     display: flex;
     justify-content: space-between;
     padding: 8px 16px 4px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -4090,7 +4088,7 @@ body.hide-amounts .mask * {
   }
   .acct-list-cur {
     color: var(--faint);
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
   .acct-list-meta {
     font-size: 11px;
@@ -4413,7 +4411,7 @@ body.hide-amounts .mask * {
   .acct-txn-header {
     align-items: center;
     padding: 6px 0 8px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -4426,7 +4424,7 @@ body.hide-amounts .mask * {
    header title to the uniform 10px uppercase label style. */
   .acct-txn-header > div {
     position: relative;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     font-style: normal;
     color: var(--faint);
@@ -4622,7 +4620,7 @@ body.hide-amounts .mask * {
     display: inline-block;
     padding: 1px 6px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     background: var(--surface2);
   }
@@ -4636,7 +4634,7 @@ body.hide-amounts .mask * {
     display: inline-block;
     padding: 0 6px;
     border-radius: var(--radius-pill);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     color: var(--accent, #3b86dd);
     background: color-mix(in srgb, var(--accent, #3b86dd) 15%, transparent);
@@ -4655,7 +4653,7 @@ body.hide-amounts .mask * {
     display: inline-block;
     padding: 1px 6px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     white-space: nowrap;
   }
@@ -4679,7 +4677,7 @@ body.hide-amounts .mask * {
     display: inline-block;
     padding: 1px 6px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     color: var(--faint);
     background: color-mix(in srgb, var(--muted, #7c8595) 15%, transparent);
@@ -4988,7 +4986,7 @@ body.hide-amounts .mask * {
   }
   .acct-date-caret {
     opacity: 0.7;
-    font-size: 9px;
+    font-size: var(--text-2xs);
   }
   .acct-date-pop {
     position: absolute;
@@ -5159,7 +5157,7 @@ body.hide-amounts .mask * {
     border-radius: var(--radius-pill);
     background: var(--ink);
     color: var(--bg);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     line-height: 1;
   }
@@ -5325,7 +5323,7 @@ body.hide-amounts .mask * {
     font-weight: 500;
   }
   .term-badge {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     border-radius: var(--radius-pill);
     padding: 1px 7px;
     text-transform: capitalize;
@@ -5353,7 +5351,7 @@ body.hide-amounts .mask * {
    .term-badge: vested = done/muted, upcoming = accent, due = a dated-but-unapplied
    tranche the owner should action (record the vest). */
   .vest-badge {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     border-radius: var(--radius-pill);
     padding: 1px 7px;
     text-transform: capitalize;
@@ -5460,7 +5458,7 @@ body.hide-amounts .mask * {
   }
   .lots-closed-badge {
     margin-left: 6px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     border-radius: var(--radius-pill);
     padding: 1px 7px;
     border: 1px solid var(--border);
@@ -5725,7 +5723,7 @@ body.hide-amounts .mask * {
   .disposal-lots .realized-lots th {
     text-align: left;
     color: var(--faint);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 4px 6px;
@@ -10433,7 +10431,7 @@ body.hide-amounts .mask * {
     border: 1px solid var(--line);
     background: transparent;
     color: var(--faint);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     line-height: 1;
     display: inline-flex;
@@ -10575,7 +10573,7 @@ body.hide-amounts .mask * {
   .fan-chart-dry-label {
     position: absolute;
     top: 6px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     color: var(--bad);
     pointer-events: none;
     white-space: nowrap;
@@ -10806,7 +10804,7 @@ body.hide-amounts .mask * {
       display: none;
     }
     .asd-price-pct-pill {
-      font-size: 10px;
+      font-size: var(--text-2xs);
       padding: 1px 6px;
     }
   }
@@ -11212,7 +11210,7 @@ body.hide-amounts .mask * {
   }
 
   .asd-subtabs .rd-tab-count {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     color: var(--faint);
     background: var(--surface2);
@@ -13381,7 +13379,7 @@ body.hide-amounts .mask * {
     .asd-scale-axis {
       padding-left: 0;
       padding-right: 0;
-      font-size: 10px;
+      font-size: var(--text-2xs);
     }
     .asd-scale-row {
       grid-template-columns: 1fr;
@@ -13392,7 +13390,7 @@ body.hide-amounts .mask * {
     }
     .asd-scale-num-label {
       display: block;
-      font-size: 10px;
+      font-size: var(--text-2xs);
       color: var(--faint);
       font-weight: 400;
       margin-bottom: 2px;
@@ -14584,7 +14582,7 @@ body.hide-amounts .mask * {
     box-shadow: inset 0 0 0 1px var(--line-strong);
   }
   .intel-feed-filter-count {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--fg-3);
     font-variant-numeric: tabular-nums;
   }
@@ -15225,7 +15223,7 @@ body.hide-amounts .mask * {
   .intel-pulse-colhead {
     padding: 9px 16px 5px;
     border-bottom: 1px solid var(--line);
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--faint);
@@ -15300,7 +15298,7 @@ body.hide-amounts .mask * {
   .intel-pulse-owned {
     padding: 0 6px;
     border-radius: var(--radius-pill);
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     line-height: 1.6;
     color: var(--accent);
@@ -15333,7 +15331,7 @@ body.hide-amounts .mask * {
   .intel-pulse-today-sub,
   .intel-pulse-next-sub,
   .intel-pulse-trend-cap {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--faint);
     white-space: nowrap;
     overflow: hidden;
@@ -15544,7 +15542,7 @@ body.hide-amounts .mask * {
     border-radius: var(--radius-pill);
     background: var(--surface2);
     font: inherit;
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     line-height: 1;
     color: var(--muted);
@@ -15612,7 +15610,7 @@ body.hide-amounts .mask * {
     border-bottom: 1px solid var(--line);
   }
   .intel-desk-group-head {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--faint);
@@ -15676,7 +15674,7 @@ body.hide-amounts .mask * {
     min-width: 16px;
     padding: 0 5px;
     border-radius: var(--radius-pill);
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     line-height: 16px;
     text-align: center;
@@ -15870,7 +15868,7 @@ body.hide-amounts .mask * {
     gap: 2px;
   }
   .intel-explained-h {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--faint);
@@ -16033,7 +16031,7 @@ body.hide-amounts .mask * {
     flex-wrap: wrap;
   }
   .intel-story-sources-label {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.07em;
     text-transform: uppercase;
     color: var(--fg-3);
@@ -16071,7 +16069,7 @@ body.hide-amounts .mask * {
   }
   .intel-story-source-arrow {
     color: var(--fg-3);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     display: inline-flex;
     align-items: center;
   }
@@ -16231,7 +16229,7 @@ body.hide-amounts .mask * {
     margin: 3px 0 2px;
   }
   .intel-story-tl-flag {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
   }
   .intel-story-tl-title {
     font-size: 12px;
@@ -16251,7 +16249,7 @@ body.hide-amounts .mask * {
     gap: 3px;
     margin-top: 2px;
     margin-right: 8px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--fg-3);
     text-decoration: none;
   }
@@ -16416,7 +16414,7 @@ body.hide-amounts .mask * {
     text-overflow: ellipsis;
   }
   .intel-wlc-row-badge {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     padding: 1px 5px;
     border-radius: 5px;
@@ -16470,7 +16468,7 @@ body.hide-amounts .mask * {
     align-items: center;
     padding: 1px 7px;
     border-radius: 7px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     white-space: nowrap;
     color: var(--muted);
     background: var(--surface2);
@@ -16492,7 +16490,7 @@ body.hide-amounts .mask * {
     color: var(--fg-3);
   }
   .intel-wlc-topic-tag {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     color: var(--good);
     background: color-mix(in srgb, var(--good) 13%, transparent);
     padding: 1px 7px;
@@ -17051,7 +17049,7 @@ body.hide-amounts .mask * {
     font-variant-numeric: tabular-nums;
   }
   .intel-mm-rail-section {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--fg-3);
@@ -17321,7 +17319,7 @@ body.hide-amounts .mask * {
     font-variant-numeric: tabular-nums;
   }
   .intel-mm-list-default {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--accent);
@@ -17392,7 +17390,7 @@ body.hide-amounts .mask * {
   /* ── Per-list mute affordances ──────────────────────────────────────────────── */
   .intel-wlc-switch-muted,
   .intel-mm-rail-muted {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     color: var(--warn);
     flex-shrink: 0;
   }
@@ -17473,6 +17471,71 @@ body.hide-amounts .mask * {
        to var(--tap-min) while the box-model absorbs the extra area, not layout. */
       padding-block: max(0px, calc((var(--tap-min) - 1lh) / 2));
       padding-inline: max(0px, calc((var(--tap-min) - 1em) / 2));
+    }
+  }
+
+  /* Touch hit areas (2026-11-13 audit): small shared controls measured 10–30px on a phone.
+   The visible control keeps its size; an invisible ::after grows the HIT box to --tap-min,
+   so no layout moves. Icon-only controls grow both ways; chips, tabs and text buttons sit in
+   rows, so they grow vertically only and never steal a neighbour's tap. `:where()` keeps
+   `position: relative` at zero specificity so an already-positioned control stays put. */
+  @media (pointer: coarse) {
+    :where(
+      .info-pop-btn,
+      .stat-info-btn,
+      .pl-gtog-btn,
+      .pl-crow-open,
+      .pl-cdot--btn,
+      .ov-risk-link,
+      .ui-modal__close,
+      .btn-ghost-icon,
+      .kebab-trigger,
+      .acct-advbtn,
+      .acct-reopen,
+      .ui-btn,
+      .mk-chip,
+      .mvr-chip,
+      .ov-view-tab,
+      .ov-charttoggle__trigger,
+      .acct-filter-add,
+      .pl-madd-group,
+      .pl-gadd,
+      .intel-brief-ask
+    ) {
+      position: relative;
+    }
+    :where(
+      .info-pop-btn,
+      .stat-info-btn,
+      .pl-gtog-btn,
+      .pl-crow-open,
+      .pl-cdot--btn,
+      .ov-risk-link,
+      .ui-modal__close,
+      .btn-ghost-icon,
+      .kebab-trigger,
+      .acct-advbtn,
+      .acct-reopen
+    )::after {
+      content: '';
+      position: absolute;
+      inset: min(0px, calc((100% - var(--tap-min)) / 2));
+    }
+    :where(
+      .ui-btn,
+      .mk-chip,
+      .mvr-chip,
+      .ov-view-tab,
+      .ov-charttoggle__trigger,
+      .acct-filter-add,
+      .pl-madd-group,
+      .pl-gadd,
+      .intel-brief-ask
+    )::after {
+      content: '';
+      position: absolute;
+      inset-block: min(0px, calc((100% - var(--tap-min)) / 2));
+      inset-inline: 0;
     }
   }
 
@@ -17653,7 +17716,7 @@ body.hide-amounts .mask * {
         display: none;
       }
       .asd-price-pct-pill {
-        font-size: 10px;
+        font-size: var(--text-2xs);
         padding: 1px 6px;
       }
     }
@@ -18028,7 +18091,7 @@ body.hide-amounts .mask * {
   font-family: Georgia, 'Times New Roman', serif;
   font-style: italic;
   font-weight: normal;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--muted);
   line-height: 1;
   text-transform: none;
@@ -18108,7 +18171,7 @@ body.hide-amounts .mask * {
   background: var(--bad);
   color: var(--ink-on-accent);
   border-radius: var(--radius-pill);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 1px 5px;
   min-width: 16px;
@@ -18263,7 +18326,7 @@ body.hide-amounts .mask * {
 
 .act-tbl thead th {
   text-align: left;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -18325,7 +18388,7 @@ body.hide-amounts .mask * {
 .act-pill {
   display: inline-flex;
   align-items: center;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -18344,7 +18407,7 @@ body.hide-amounts .mask * {
 
 .opt-tbl thead th {
   text-align: left;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--faint);
@@ -18385,7 +18448,7 @@ body.hide-amounts .mask * {
 }
 
 .opt-note {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 3px;
   line-height: 1.4;
@@ -18399,7 +18462,7 @@ body.hide-amounts .mask * {
 .opt-dte {
   display: inline-block;
   margin-left: 7px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -19198,7 +19261,7 @@ body.hide-amounts .mask * {
 .mp-trigger-chev {
   flex: none;
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   display: inline-flex;
   align-items: center;
 }
@@ -20074,7 +20137,7 @@ body.hide-amounts .mask * {
   background: color-mix(in srgb, var(--good) 18%, var(--surface));
   color: var(--good);
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 8%, transparent);
-  animation: whats-new-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: whats-new-pop 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes whats-new-pop {
   from {

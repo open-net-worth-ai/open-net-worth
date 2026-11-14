@@ -200,7 +200,7 @@ function TargetView({
       : vToGo > 0.005
         ? 'var(--warn)'
         : vOverBy > 0.005
-          ? '#5aa9f0'
+          ? 'var(--overfunded)'
           : 'var(--good)'
   const vComplete = cat.available >= -0.005 && vToGo <= 0.005 && vOverBy <= 0.005
   const vCadWord = CAD_WORD[cat.cad || 'monthly'] || 'month'
@@ -609,7 +609,7 @@ export function TargetEditor({
       : toGo > 0.005
         ? 'var(--warn)'
         : overBy > 0.005
-          ? '#5aa9f0'
+          ? 'var(--overfunded)'
           : 'var(--good)'
   function resetDraft() {
     setTt(cat.tt || 'set_aside')

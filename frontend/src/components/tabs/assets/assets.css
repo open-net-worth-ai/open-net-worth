@@ -546,7 +546,7 @@
 }
 .as-tbl thead th {
   text-align: right;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--faint);
@@ -584,7 +584,7 @@
 .as-tbl tr.grp td {
   background: var(--bg-2);
   padding: 7px 13px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1126,7 +1126,7 @@
 .as-chart-lg {
   display: flex;
   gap: 16px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   margin-top: 8px;
   flex-wrap: wrap;

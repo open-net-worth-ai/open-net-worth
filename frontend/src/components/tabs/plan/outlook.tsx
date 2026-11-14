@@ -2034,7 +2034,7 @@ export function OutlookTab(props: OutlookTabProps) {
                     <div className="pl-rbd-legend">
                       {!rbdCond && (
                         <span>
-                          <i style={{ background: '#5b626e', opacity: 0.5 }} />
+                          <i style={{ background: 'var(--cash-c)', opacity: 0.5 }} />
                           No longer living
                         </span>
                       )}
@@ -2043,15 +2043,17 @@ export function OutlookTab(props: OutlookTabProps) {
                         Money ran out
                       </span>
                       <span>
-                        <i style={{ background: '#bfe3cf' }} />
+                        <i
+                          style={{ background: 'color-mix(in srgb, var(--good) 35%, var(--bg))' }}
+                        />
                         Have money (under 2×)
                       </span>
                       <span>
-                        <i style={{ background: '#46c08d' }} />
+                        <i style={{ background: 'var(--good)' }} />
                         2–5× your pot
                       </span>
                       <span>
-                        <i style={{ background: '#1d9e75' }} />
+                        <i style={{ background: 'var(--onwai)' }} />
                         Over 5× your pot
                       </span>
                       <label className="pl-rbd-toggle pl-checkrow">

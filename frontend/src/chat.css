@@ -174,7 +174,7 @@
     color: var(--muted);
   }
   .msg-assistant .msg-text h4 {
-    font-size: 0.92em;
+    font-size: max(var(--text-2xs), 0.92em);
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -246,7 +246,7 @@
     margin: 0 0 9px;
     padding: 0 0 0 10px;
     color: var(--muted);
-    font-size: 0.9em;
+    font-size: max(var(--text-2xs), 0.9em);
   }
 
   /* The transcript clips sideways overflow, so an unwrapped code block must scroll itself
@@ -261,7 +261,7 @@
     border: 1px solid var(--line);
     padding: 1px 5px;
     border-radius: 4px;
-    font-size: 0.85em;
+    font-size: max(var(--text-2xs), 0.85em);
     font-family: monospace;
   }
 
@@ -375,7 +375,7 @@
     border-radius: 8px;
   }
   .msg-assistant .msg-text .table-wrap table {
-    font-size: 0.85em;
+    font-size: max(var(--text-2xs), 0.85em);
     border-collapse: collapse;
     /* Auto width (not forced 100%) so sparse tables don't stretch and
      header↔value pairs stay tight; cap growth at the wrapper width. */
@@ -390,7 +390,7 @@
     white-space: nowrap;
     color: var(--faint);
     /* Relative to the TABLE's 0.85em, not to .msg-text — em compounds. */
-    font-size: 0.88em;
+    font-size: max(var(--text-2xs), 0.88em);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-weight: 600;
@@ -471,7 +471,7 @@
     margin-top: 3px;
   }
   .msg-tool-pill {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 500;
     padding: 2px 7px;
     border-radius: 10px;
@@ -718,7 +718,7 @@
     background: none;
     color: var(--faint);
     font: inherit;
-    font-size: 9px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     line-height: 1;
     display: inline-flex;
@@ -1656,7 +1656,7 @@
   .dup-review-table th {
     text-align: left;
     color: var(--faint);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 3px 6px;
@@ -1702,7 +1702,7 @@
   }
   .dup-cell-id {
     font-family: monospace;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     color: var(--faint);
   }
   .dup-cell-count {
@@ -1920,7 +1920,7 @@
   .msg-search-count {
     flex-shrink: 0;
     color: var(--faint);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     margin-top: 2px;
     white-space: nowrap;
     display: inline-flex;
@@ -1991,13 +1991,13 @@
     flex: 0 0 auto;
     max-width: 35%;
     color: var(--faint);
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
 
   /* ── Cost chip ── */
   .msg-cost-chip {
     margin-top: 8px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     color: var(--muted);
     opacity: 0.6;
     letter-spacing: 0.02em;
@@ -2012,7 +2012,7 @@
 
   /* Running session-cost chip in the chat toolbar */
   .chat-session-cost {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     color: var(--faint);
     white-space: nowrap;
     flex: none;
@@ -2053,7 +2053,7 @@
     color: var(--muted);
   }
   .msg-time {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--faint, var(--muted));
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -2062,7 +2062,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     padding: 1px 8px;
     border-radius: 5px;
     border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
@@ -2122,7 +2122,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     padding: 2px 8px;
     border-radius: 5px;
     border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
@@ -2231,7 +2231,7 @@
     color: var(--muted) !important;
   }
   .msg-restore-hint {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     color: var(--muted);
     opacity: 0.6;
     margin-top: 7px;
@@ -2243,11 +2243,11 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--good, #5fb878);
   }
   .msg-restore-undo {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     padding: 2px 8px;
     border-radius: 5px;
     cursor: pointer;
@@ -2354,7 +2354,7 @@
     color: var(--ink);
   }
   .cmd-setup-badge {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.03em;
     color: var(--good);
@@ -2779,7 +2779,7 @@
 }
 .wr-chip__glyph {
   color: var(--pos, #3fb950);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   display: inline-flex;
   align-items: center;
 }
@@ -2790,7 +2790,7 @@
   margin-left: auto;
   padding-left: 2px;
   color: var(--faint);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   display: inline-flex;
   align-items: center;
 }
