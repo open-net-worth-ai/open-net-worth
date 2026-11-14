@@ -86,3 +86,75 @@ def test_a_looping_reply_ends_the_round_at_once():
     seen = asyncio.run(read())
     assert watch.cut is True
     assert seen < 10
+
+
+# ── Live 2026-11-14 (UAT): one held call, then a flood of stray closing tags ────────────
+# The reply wrote `<invoke name="get_transactions">` once, then `</invoke>` ~8,400 times
+# (74,663 chars) to the 300 s ceiling. The empty call was held, no call ever repeated, so
+# neither the repeat rule nor the grace (which starts at a parsed call) could end the round.
+
+_HELD = '<invoke name="get_transactions">\n'
+_STRAY = "</invoke>\n"
+
+
+def test_a_flood_of_stray_closers_releases_the_held_call_and_marks_the_reply_looping():
+    scanner = ToolCallScanner()
+    list(scanner.feed(_HELD + _STRAY))
+    assert scanner.held == [{"name": "get_transactions", "input": {}}]
+    for _ in range(8400):
+        list(scanner.feed(_STRAY))
+        if scanner.looping:
+            break
+    assert scanner.looping is True
+    assert scanner.held == []
+    assert scanner.calls == [{"name": "get_transactions", "input": {}}]
+
+
+def test_the_stray_loop_is_seen_within_a_handful_of_closers():
+    scanner = ToolCallScanner()
+    list(scanner.feed(_HELD + _STRAY + _STRAY * 3))
+    assert scanner.looping is False
+    list(scanner.feed(_STRAY * 3))
+    assert scanner.looping is True
+
+
+def test_a_stray_closer_or_two_between_words_is_habit_not_a_loop():
+    scanner = _scan(
+        '<invoke name="list_accounts"></invoke>\n</invoke>\nHere are your accounts.\n'
+        "</invoke>\nAnything else?\n</invoke>\n"
+    )
+    assert scanner.looping is False
+    assert scanner.calls == [{"name": "list_accounts", "input": {}}]
+
+
+def test_a_stray_closer_flood_ends_the_round_at_once():
+    scanner = ToolCallScanner()
+    watch = PostCallWatch(grace=30.0)
+    list(scanner.feed(_HELD + _STRAY))
+
+    async def stream():
+        for _ in range(8400):
+            list(scanner.feed(_STRAY))
+            yield {"type": "stream_event", "event": {"type": "content_block_delta"}}
+
+    async def read() -> int:
+        seen = 0
+        async for _ in _until_call_grace(stream(), scanner, watch):
+            seen += 1
+        return seen
+
+    seen = asyncio.run(read())
+    assert watch.cut is True
+    assert seen < 20
+    assert scanner.calls == [{"name": "get_transactions", "input": {}}]
+
+
+def test_a_held_call_starts_the_grace_clock_once():
+    watch = PostCallWatch(grace=30.0)
+    assert watch.remaining(mid_block=False) is None
+    watch.call_held()
+    first = watch.last_call_at
+    assert watch.remaining(mid_block=False) is not None
+    watch.call_held()
+    assert watch.last_call_at == first, "a held call never restarts the clock"
+    assert watch.calls == 0
