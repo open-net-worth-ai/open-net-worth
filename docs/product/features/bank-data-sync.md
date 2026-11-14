@@ -70,8 +70,9 @@ category, **Categorize with Lucius** puts a request for exactly those transactio
 their dates and accounts) in Lucius's box, in a new conversation, for you to send.
 
 **Undo this run** (in the same footer) takes back a sync that went wrong, such as one that
-booked duplicates. It removes what the run booked, brings back the pending transactions it
-dropped, puts a card payment it folded into a transaction you'd typed back to what that was,
+booked duplicates. It removes what the run booked, brings back the pending transactions the bank
+dropped (a pending one that a settled transaction replaced stays gone, so it isn't counted
+twice), puts a card payment it folded into a transaction you'd typed back to what that was,
 and returns an account's start to where it was before a first import moved it, so your balances
 are what they were. The bank's rows are not booked again by the next sync: each waits under
 **Needs your review** with **Book again** and **Dismiss** (Dismiss keeps it out for good). Only

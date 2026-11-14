@@ -3,8 +3,10 @@
 A run that books or removes anything records an import batch under the id its rows already carry
 (``bank_sync:{run_id}``), the way a statement import does, so ``import_undo.undo_import`` has ONE
 implementation for both: the run's new rows are removed, the rows it folded a card payment into
-go back to what they were (``merges``), the pending bookings it took off the book come back
-(``deleted_ids``). What a batch can't hold, this adds:
+go back to what they were, the pending bookings the bank dropped come back (``deleted_ids``) and
+are tracked again (``pending_entries``). A pending booking a settled row REPLACED stays gone: its
+successor's ref is held, and bringing both back would count the spend twice. What a batch can't
+hold, this adds:
 
 * ``bank_rows`` — the bank's own view of each ref the run booked. Undone rows are not booked
   again silently (that would make Undo pointless for a bad run — duplicates, say): each ref is
@@ -56,6 +58,7 @@ def record(provider: str, run_id: str, label: str, result: booker.Booked) -> boo
             "run_id": run_id,
             "merges": result.promoted,
             "deleted_ids": result.removed_ids,
+            "pending_entries": result.removed_entries,
             "bank_rows": result.booked_views,
         },
     )
@@ -152,6 +155,17 @@ def _restore_openings(batch: dict) -> int:
     return restored
 
 
+def _tracked_again(batch: dict) -> dict[str, dict]:
+    """The pending bookings Undo brought back, tracked again so the bank settles or drops them as
+    it would any pending row (an untracked uncleared row would sit there for good)."""
+    out = {}
+    for ref, entry in (batch.get("pending_entries") or {}).items():
+        txn = ledger_service.transactions.find_by_id(entry.get("txn_id") or "")
+        if txn and not txn.get("deleted"):
+            out[ref] = entry
+    return out
+
+
 def _mark_undone(run_id: str) -> None:
     run = import_runs.get(run_id)
     counts = {**(run.get("counts") or {}), "undone": 1}
@@ -189,6 +203,7 @@ def undo_run(provider: str, run_id: str) -> dict:
         entries = {
             k: e for k, e in pending.tracked(provider).items() if e.get("txn_id") not in gone
         }
+        entries |= _tracked_again(batch)
         pending.save(provider, entries)
         held = _hold(provider, run_id, batch, refs)
         _mark_undone(run_id)

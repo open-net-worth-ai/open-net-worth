@@ -51,6 +51,7 @@ class Booked:
     # Ids of the pending bookings this run took off the book, and the bank's own view of every
     # row it booked or folded into a booking, by ref: what Undo needs (undo.py).
     removed_ids: list[str] = field(default_factory=list)
+    removed_entries: dict[str, dict] = field(default_factory=dict)
     booked_views: dict[str, dict] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
@@ -258,7 +259,8 @@ def book(
                     seen[row["linked_account_id"]].add(_ref(row))
             gone = pending.drop_vanished(entries, seen, read)
             out.pending_removed = len(gone)
-            out.removed_ids.extend(gone)
+            out.removed_ids.extend(g["entry"]["txn_id"] for g in gone)
+            out.removed_entries.update({g["ref"]: g["entry"] for g in gone})
             pending.save(provider, entries)
         return out
     finally:
@@ -285,7 +287,7 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
         else:
             if row.get("_relinked"):
                 continue  # the booking it already is carries its new ref (relink.carry)
-            settled = pending.settle(provider, ref, row, entries, out.removed_ids)
+            settled = pending.settle(provider, ref, row, entries)
             if settled == "settled":
                 out.settled += 1
                 continue

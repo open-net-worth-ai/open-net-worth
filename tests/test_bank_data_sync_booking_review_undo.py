@@ -346,3 +346,39 @@ def test_the_undo_route_answers_409_with_the_reason(bank):
 
     assert ok.status_code == 200 and ok.json()["removed"] == 1
     assert again.status_code == 409 and "already undone" in again.json()["detail"]
+
+
+def test_undo_never_counts_a_pending_row_and_its_settled_successor_twice(bank):
+    from backend.services.bank_data_sync import review_actions, reviews
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.pending[ACC_MAIN] = [txn(-10.00, days_ago(0), "ACME HOTEL", tid="h1")]
+    _run()
+    bank.pending[ACC_MAIN] = []
+    bank.booked[ACC_MAIN] = [txn(-12.00, days_ago(0), "ACME HOTEL", tid="h1")]
+    settled = _run()  # the settled 12.00 replaces the pending 10.00
+    assert [t["from_amount"] for t in _live("expense")] == [12.00]
+
+    _undo(settled)
+
+    assert _live("expense") == []  # the replaced pending row stays gone
+    (item,) = reviews.open_items("gocardless")
+    review_actions.book_separately(item["id"])
+    assert [t["from_amount"] for t in _live("expense")] == [12.00]
+
+
+def test_a_pending_row_undo_brings_back_is_tracked_again(bank):
+    from backend.services.bank_data_sync import pending
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.pending[ACC_MAIN] = [txn(-8.00, days_ago(0), "ACME KIOSK", tid="p1")]
+    bank.booked[ACC_MAIN] = [txn(-2.00, days_ago(1), "ACME BUS", tid="b1")]
+    _run()
+    bank.pending[ACC_MAIN] = []
+    dropped = _run()
+    assert {t["description"] for t in _live()} == {"ACME BUS"}
+
+    _undo(dropped)
+
+    (entry,) = pending.tracked("gocardless").values()
+    assert ledger_service.transactions.find_by_id(entry["txn_id"])["description"] == "ACME KIOSK"

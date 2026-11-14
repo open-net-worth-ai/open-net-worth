@@ -80,12 +80,11 @@ def settle(
     ref: str,
     row: dict,
     entries: dict[str, dict],
-    removed: list[str] | None = None,
 ) -> str:
     """A posted row that may be a pending one this sync booked. Returns ``settled`` (the booking
     is now cleared; book nothing), ``replaced`` (the pending booking is gone and ``row`` carries
-    its labels in ``_carry``; book the row; its id is appended to ``removed``) or ``none`` (not a
-    pending one)."""
+    its labels in ``_carry``; book the row) or ``none`` (not a pending one). A replaced booking is NOT
+    brought back by Undo: its settled successor is what a re-book would add, and both would count."""
     key = _match(entries, ref, row)
     if key is None:
         return "none"
@@ -105,8 +104,6 @@ def settle(
         return "settled"
     row["_carry"] = {k: txn.get(k) for k in _CARRIED if txn.get(k)}
     ledger_service.bulk_delete_transactions([txn["id"]], reject_identities=False)
-    if removed is not None:
-        removed.append(txn["id"])
     return "replaced"
 
 
@@ -136,10 +133,10 @@ def quiet_refs(provider: str) -> set[str]:
 
 def drop_vanished(
     entries: dict[str, dict], seen: dict[str, set[str]], since: dict[str, str]
-) -> list[str]:
+) -> list[dict]:
     """Remove each tracked pending booking the bank no longer lists on an account it was just
     read for, inside the window it was read over — a released hold or a cancelled payment.
-    Taken out as the sync's own booking, never remembered as deleted. Returns their ids."""
+    Taken out as the sync's own booking, never remembered as deleted. Returns each as ``{ref, entry}``, so Undo can track it again."""
     from backend.core.user_time import user_today
 
     old = (user_today() - _KEEP_SETTLED).isoformat()
@@ -153,11 +150,12 @@ def drop_vanished(
         and key not in seen[e["account_id"]]
         and str(e.get("date") or "") >= str(since.get(e["account_id"]) or "")
     ]
-    removed: list[str] = []
+    removed: list[dict] = []
     for key in gone:
-        txn_id = entries.pop(key).get("txn_id")
+        entry = entries.pop(key)
+        txn_id = entry.get("txn_id")
         txn = ledger_service.transactions.find_by_id(txn_id or "")
         if txn and not txn.get("deleted") and not txn.get("cleared"):
             ledger_service.bulk_delete_transactions([txn["id"]], reject_identities=False)
-            removed.append(txn["id"])
+            removed.append({"ref": key, "entry": entry})
     return removed
