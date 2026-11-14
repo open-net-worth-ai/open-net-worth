@@ -56,6 +56,8 @@ def _accounts(p, key: str) -> list[dict]:
     from backend.services.bank_data_sync import pending as pending_rows
 
     pending_now = pending_rows.tracked(key)
+    # How each account's last read went: a bank that failed shows on its own accounts only.
+    last_reads = budget.state(key).get("account_reads") or {}
     out = []
     for a in accounts_service.linked_accounts_for_source(key):
         left, next_at = budget.reads_left(p, a.get("provider_account_id") or "")
@@ -94,6 +96,11 @@ def _accounts(p, key: str) -> list[dict]:
                 "access_ends_at": bank.get("ends_at"),
                 "access_ended": bool(bank.get("ended")),
                 "access_renew_soon": bool(bank.get("renew_soon")),
+                # The last read of THIS account: ok, or why it wasn't read (a sign-in to renew).
+                "read_status": (last_reads.get(a.get("linked_account_id") or "") or {}).get(
+                    "status"
+                ),
+                "read_error": (last_reads.get(a.get("linked_account_id") or "") or {}).get("error"),
                 # The bank's balance from the last read beside the book's cleared balance.
                 **(
                     balances.compare(row, bank_said.get(a.get("linked_account_id") or ""))

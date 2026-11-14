@@ -175,6 +175,13 @@ If the bank refuses (its daily limit, expired access), the sync waits instead of
 the limit resets, or a day for expired access. The connector page shows what the bank said.
 Renew the bank's access on the connector page if it expired.
 
+A bank that couldn't be read is left exactly as it was: nothing of it is booked, its pending
+transactions stay on your book, and its history isn't marked as imported. Its card says
+**Sign-in needed** (with **Reconnect**) or **Last sync failed** (hover for why), and so does the
+mark beside its accounts. When one connector holds several banks, the others still sync, and
+the run says how many accounts it couldn't read; one bank's problem never shows on another's
+accounts.
+
 ## Related pages
 
 - [Bank & brokerage connectors](../connectors/bank-brokerage.md)

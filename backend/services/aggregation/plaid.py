@@ -418,7 +418,7 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
     name (``_institution``). One bank failing (an expired login, say) never sinks the others:
     its error becomes a warning naming the bank and the result is marked incomplete; only when
     every bank fails does this raise. Returns ``{transactions[], accounts{id: account},
-    warnings[], complete}``."""
+    warnings[], complete, error}`` (``error``: the first bank's failure, or None)."""
     items = store.items()
     if not items:
         raise ValidationError("Plaid is not linked (no access token)")
@@ -463,6 +463,7 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
         "accounts": accounts,
         "warnings": warnings,
         "complete": complete,
+        "error": first_error,
     }
 
 
@@ -705,7 +706,8 @@ def fetch_window(
     own ``total_transactions`` is reached, or after ``_MAX_FETCH_PAGES`` as a safety cap —
     the latter is the one case this reports ``complete=False``, so a capped fetch never
     silently looks like a clean window for the vanished-row check). ``account`` filters
-    client-side (Plaid's ``/transactions/get`` has no per-account request filter)."""
+    client-side (Plaid's ``/transactions/get`` has no per-account request filter); when the
+    bank that holds it can't be read, that bank's error is raised."""
     if accounts_only:
         # A single-day window minimizes (never eliminates — Plaid has no explicit
         # accounts-only endpoint) the transaction rows an accounts-only caller pays for.
@@ -716,6 +718,15 @@ def fetch_window(
     accounts = [_account_to_common(a) for a in accounts_by_id.values()]
 
     warnings = fetched.get("warnings") or []
+    if account and not accounts_only:
+        # ONE account asked for (the bank data sync reads one at a time): its own bank failing
+        # is this read's failure, never an "ok" with nothing in it — that dropped its pending
+        # rows and showed it synced (UAT 2026-11-14). Another bank's trouble isn't its own.
+        if account not in accounts_by_id:
+            if fetched.get("error") is not None:
+                raise fetched["error"]
+        else:
+            warnings = []
     rows: list[dict] = []
     if not accounts_only:
         for plaid_txn in fetched["transactions"]:

@@ -678,6 +678,13 @@ def fetch_window(
     reads ``rate_limited``, not ``ok``)."""
     banks, warnings = _linked_banks(store)
     owned = [(b, a) for b in banks for a in b["account_ids"] if not account or a == account]
+    if account:
+        # ONE account (the bank data sync): its own bank's access ending is this read's failure,
+        # never an "ok" with nothing read (UAT 2026-11-14); other banks' trouble isn't its own.
+        stuck = next((b for b in store.banks() if account in (b.get("account_ids") or [])), None)
+        if not owned and stuck is not None:
+            raise ValidationError(_unusable(stuck), bank_access=True)
+        warnings = []
     cache = store.accounts_meta()
     # Listing the accounts (the connector page, Lucius's list tool) reads them from GoCardless:
     # details and balance, live. A sync reads the balance beside its transactions, below.
@@ -714,7 +721,9 @@ def fetch_window(
 
 def classify_error(exc: Exception) -> str:
     if isinstance(exc, ValidationError):
-        return "auth_error"
+        # One bank's access ended (``bank_access``) is that bank's, not the connector's keys: the
+        # sync goes on to the other banks' accounts (``auth_error`` stops it).
+        return "reconnect_needed" if exc.context.get("bank_access") else "auth_error"
     if isinstance(exc, ExternalServiceError):
         msg = str(exc).lower()
         if "http 401" in msg or "http 403" in msg:

@@ -38,6 +38,8 @@ class FakeBank:
         self.pending: dict[str, list[dict]] = {ACC_MAIN: [], ACC_SAVER: []}
         self.reads: list[str] = []
         self.fail_with: Exception | None = None
+        # One account's bank failing while the others answer (provider account id → error).
+        self.fail_accounts: dict[str, Exception] = {}
 
     def fetch_window(self, store, since, before, account, *, accounts_only=False):
         ids = [a for a in self.booked if account is None or a == account]
@@ -52,6 +54,8 @@ class FakeBank:
             self.reads.append(a)
             if self.fail_with is not None:
                 raise self.fail_with
+            if a in self.fail_accounts:
+                raise self.fail_accounts[a]
             for t in self.booked[a]:
                 row = gocardless_svc._txn_to_row(t, a, "GBP", pending=False)
                 if row and since <= row["date"] <= before:

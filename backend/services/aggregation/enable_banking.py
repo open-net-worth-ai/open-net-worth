@@ -986,7 +986,13 @@ def fetch_window(
         token, store, with_balances=account is None
     )
     if account:
+        # ONE account (the bank data sync): its bank not answering is this read's failure,
+        # never an "ok" with nothing read (UAT 2026-11-14); other banks' trouble isn't its own.
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
+        if not eb_accounts and warnings:
+            ended = any(b.get("access_ended") for b in store.banks())
+            raise ExternalServiceError("; ".join(warnings), bank_access=ended)
+        warnings = []
     balances = parallel.each(
         lambda a: a.pop("_balances", None) or fetch_account_balances(token, _api_uid(a)),
         eb_accounts,
@@ -1004,6 +1010,8 @@ def fetch_window(
             )
         except (ExternalServiceError, httpx.HTTPError) as exc:
             logger.warning("enable_banking account fetch failed (%s): %s", account_uid, exc)
+            if account:
+                raise  # the one account asked for wasn't read: say so, never "ok"
             complete = False
             continue
         complete = complete and account_complete
@@ -1025,6 +1033,8 @@ def classify_error(exc: Exception) -> str:
     if isinstance(exc, ValidationError):
         return "auth_error"  # _bearer/consent-flow surfaces creds/key failures this way
     if isinstance(exc, ExternalServiceError):
+        if exc.context.get("bank_access"):
+            return "reconnect_needed"  # one bank's consent ended: renew THAT bank
         msg = str(exc).lower()
         if "http 401" in msg or "http 403" in msg:
             return "auth_error"

@@ -16,16 +16,35 @@ export interface SyncMark {
   text: string
 }
 
-const STOPPED = new Set(['auth_error', 'reconnect_needed', 'failed', 'error', 'connect_error'])
+export const STOPPED = new Set([
+  'auth_error',
+  'reconnect_needed',
+  'failed',
+  'error',
+  'connect_error',
+])
+export const SIGN_IN = new Set(['auth_error', 'reconnect_needed'])
+
+/** How this account's last read went. One connector can hold several banks, so a bank that
+ *  failed shows on its own accounts only (UAT 2026-11-14: a failed bank's error sat on the
+ *  other bank's account too). An account no run has read yet falls back to the sync's own. */
+export function readState(
+  s: BankSyncStatus,
+  a: BankSyncAccount,
+): { status: string | null; error: string | null } {
+  if (a.read_status) return { status: a.read_status, error: a.read_error ?? null }
+  return { status: s.last_status, error: s.last_error }
+}
 
 export function markFor(s: BankSyncStatus, a: BankSyncAccount): SyncMark | null {
   if (s.mode !== 'data' || !a.sync) return null
   if (a.access_ended)
     return { tone: 'bad', text: `${s.label}: access ended. Renew it to keep syncing.` }
-  if (s.last_status === 'auth_error' || s.last_status === 'reconnect_needed')
+  const read = readState(s, a)
+  if (read.status && SIGN_IN.has(read.status))
     return { tone: 'bad', text: `${s.label}: the bank needs you to sign in again.` }
-  if (s.last_status && STOPPED.has(s.last_status))
-    return { tone: 'bad', text: `${s.label}: the last sync failed. ${s.last_error ?? ''}`.trim() }
+  if (read.status && STOPPED.has(read.status))
+    return { tone: 'bad', text: `${s.label}: the last sync failed. ${read.error ?? ''}`.trim() }
   if (a.access_renew_soon && a.access_ends_at)
     return { tone: 'warn', text: `${s.label}: access ends ${fDate(a.access_ends_at)}. Renew it.` }
   const run = s.last_run

@@ -65,6 +65,9 @@ class _Fetched:
     # Account id → the bank account it was read from; those read from a NEW one (relink.py).
     read_as: dict[str, str] = field(default_factory=dict)
     relinked: set[str] = field(default_factory=set)
+    # Account id → how its read went ({status, error}), kept per account so a bank that failed
+    # shows on its own accounts, never on another bank's (UAT 2026-11-14).
+    states: dict[str, dict] = field(default_factory=dict)
 
 
 def opted_accounts(key: str) -> list[dict]:
@@ -110,9 +113,12 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     status = result.get("status") or "error"
     name = account.get("name") or "An account"
     if status != "ok":
+        # Not read: its pending rows stay, its history isn't marked read, nothing is booked.
         error = sanitize_untrusted(str(result.get("error") or status), max_len=300)
         out.warnings.append(f"{name}: {error}")
+        out.states[app_id] = {"status": status, "error": error}
         return status
+    out.states[app_id] = {"status": "ok", "error": None}
     if warning:
         out.warnings.append(f"{name}: {warning}")
     out.warnings.extend(f"{name}: {w}" for w in result.get("warnings") or [])
@@ -195,6 +201,9 @@ def _run_status(statuses: list[str]) -> str:
 
 def _outcome(counts: dict, status: str) -> str:
     parts = []
+    if status == "partial" and counts.get("not_read"):
+        n = counts["not_read"]
+        parts.append(f"{n} account{'s' if n != 1 else ''} not read")
     if counts.get("booked"):
         pend = counts.get("pending") or 0
         parts.append(
@@ -216,6 +225,7 @@ def _outcome(counts: dict, status: str) -> str:
         parts.append(
             {
                 "auth_error": "bank access needs renewing",
+                "reconnect_needed": "the bank needs you to sign in again",
                 "rate_limited": "bank read limit reached",
             }.get(status, "the bank couldn't be read")
         )
@@ -276,6 +286,17 @@ def _remember_history_read(p: Provider, accounts: set[str]) -> None:
     budget.update(p.key, history_read=read)
 
 
+def _remember_reads(p: Provider, states: dict[str, dict]) -> None:
+    """How each account's last read went, for its own line and bank on the sync's page."""
+    if not states:
+        return
+    at = budget.now().isoformat(timespec="seconds")
+    stamped = {a: {**s, "at": at} for a, s in states.items()}
+    budget.mutate(
+        p.key, lambda e: e.update(account_reads={**(e.get("account_reads") or {}), **stamped})
+    )
+
+
 def _figure(value: object) -> float | None:
     try:
         return None if value is None else float(value)  # type: ignore[arg-type]
@@ -308,7 +329,9 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
     try:
         fetched = _fetch(p, accounts, run_id)
         counts.update(fetched.counts)
+        counts["not_read"] = sum(1 for s in fetched.statuses if s != "ok")
         status = _run_status(fetched.statuses)
+        _remember_reads(p, fetched.states)
         # Read BEFORE booking: an account holding only its Starting Balance is set to the
         # bank's balance once its history is in (balances.py).
         empty = balances.only_opening(fetched.first_import)
@@ -324,14 +347,16 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         errors.append({"item": "The run", "reason": "The run failed; nothing was booked."})
         fetched.warnings.append(sanitize_untrusted(str(exc), max_len=300))
     counts["errors"] = len(errors)
-    last_error = "; ".join(fetched.warnings)[:500] if status not in ("ok", "partial") else None
+    # A partial run (one bank read, another not) keeps what failed, so the bank that wasn't read
+    # never shows as synced.
+    last_error = "; ".join(fetched.warnings)[:500] if status != "ok" else None
     budget.record_outcome(p, status, last_error)
     import_runs.finish(
         run_id,
         "done" if status in ("ok", "partial") else "failed",
         phase="done",
         outcome=_outcome(counts, status),
-        error=last_error,
+        error=last_error if status != "partial" else None,
         counts=counts,
         warnings=fetched.warnings,
         errors=errors,

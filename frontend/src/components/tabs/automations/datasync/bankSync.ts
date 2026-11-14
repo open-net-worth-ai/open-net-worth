@@ -46,6 +46,10 @@ export interface BankSyncAccount {
   access_ended?: boolean
   /** It ends within two weeks: the page asks for a renewal now (the server decides when). */
   access_renew_soon?: boolean
+  /** How the last read of THIS account went (`ok`, `reconnect_needed`, …) and, if it wasn't
+   *  read, why. Null before any run read it. */
+  read_status?: string | null
+  read_error?: string | null
 }
 
 export interface BankSyncStatus {

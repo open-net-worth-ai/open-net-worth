@@ -6,11 +6,14 @@ from __future__ import annotations
 import pytest
 
 from backend.core import headless_turn
+from backend.core.errors import ValidationError
 from backend.services import accounts as accounts_service
+from backend.services import import_runs
 from backend.services import ledger as ledger_service
 from backend.services.aggregation import gocardless as gocardless_svc
+from backend.services.aggregation import plaid as plaid_svc
 from backend.services.aggregation.providers import PROVIDERS
-from backend.services.bank_data_sync import pending, relink, runner, settings
+from backend.services.bank_data_sync import budget, pending, relink, runner, settings
 from tests.bank_sync_fakes import (
     ACC_MAIN,
     ACC_SAVER,
@@ -116,3 +119,93 @@ def test_a_first_read_is_never_a_relink(bank):
     result = _run()
     assert result["counts"]["relinked"] == 0
     assert not relink.is_relinked("gocardless", bank.account, ACC_MAIN)
+
+
+# ── UAT #2: a bank that wasn't read is never treated as read ────────────────────────────
+
+
+def _expired() -> ValidationError:
+    return ValidationError("ACME Bank: bank access expired", bank_access=True)
+
+
+def test_an_unread_bank_keeps_its_pending_rows_and_the_other_bank_still_syncs(bank):
+    saver = linked_account("ACME Saver", ACC_SAVER)
+    bank.pending[ACC_MAIN] = [txn(-9.99, days_ago(1), "ACME STREAM")]
+    _run()
+    [held] = _live(bank.account)
+
+    bank.fail_accounts[ACC_MAIN] = _expired()
+    bank.booked[ACC_SAVER] = [txn(25.00, days_ago(1), "ACME INTEREST", tid="s1")]
+    result = _run()
+
+    assert result["status"] == "partial"
+    assert result["counts"]["pending_removed"] == 0, "pending rows dropped though nothing was read"
+    assert [t["id"] for t in _live(bank.account)] == [held["id"]]
+    assert len(_live(saver)) == 1, "the bank that answered didn't sync"
+    st = budget.state("gocardless")
+    assert "expired" in (st["last_error"] or "")
+    reads = st["account_reads"]
+    assert reads[bank.account]["status"] == "reconnect_needed"
+    assert reads[saver]["status"] == "ok" and reads[saver]["error"] is None
+
+
+def test_an_unread_account_is_not_marked_imported(bank):
+    bank.fail_accounts[ACC_MAIN] = _expired()
+    _run()
+    assert bank.account not in (budget.state("gocardless").get("history_read") or {})
+    del bank.fail_accounts[ACC_MAIN]
+    bank.booked[ACC_MAIN] = [txn(-12.50, days_ago(40), "ACME CAFE", tid="h1")]
+    _run()
+    assert len(_live(bank.account)) == 1, "the full history wasn't read once the bank answered"
+
+
+def test_another_banks_failure_is_not_this_accounts_warning(bank):
+    saver = linked_account("ACME Saver", ACC_SAVER)
+    bank.fail_accounts[ACC_MAIN] = _expired()
+    result = _run()
+    run = import_runs.latest("gocardless", ("sync",))
+    assert all(not w.startswith("ACME Saver") for w in run.get("warnings") or [])
+    assert result["status"] == "partial"
+    assert budget.state("gocardless")["account_reads"][saver]["status"] == "ok"
+
+
+def test_plaid_one_account_read_raises_when_its_bank_failed(monkeypatch):
+    expired = ValidationError(
+        "Plaid /transactions/get failed: HTTP 400 — login", plaid_error_code="ITEM_LOGIN_REQUIRED"
+    )
+    monkeypatch.setattr(
+        plaid_svc,
+        "fetch_transactions_get",
+        lambda store, **kw: {
+            "transactions": [],
+            "accounts": {"acme-other": {"account_id": "acme-other", "balances": {}}},
+            "warnings": ["First ACME: its sign-in expired — reconnect it on the Plaid page"],
+            "complete": False,
+            "error": expired,
+        },
+    )
+    with pytest.raises(ValidationError):
+        plaid_svc.fetch_window(None, "2026-11-01", "2026-11-14", "acme-expired")
+    assert plaid_svc.classify_error(expired) == "reconnect_needed"
+    # The bank that answered: its read is clean, the other bank's trouble isn't its own.
+    window = plaid_svc.fetch_window(None, "2026-11-01", "2026-11-14", "acme-other")
+    assert window.warnings == []
+
+
+def test_gocardless_an_ended_banks_account_is_not_read_as_ok(db_isolated, monkeypatch):
+    from backend.db.gocardless_config_store import GoCardlessConfigStore
+
+    monkeypatch.setattr(gocardless_svc, "_read_requisition", lambda store, bank: None)
+    configure_gocardless()
+    store = GoCardlessConfigStore()
+    key = store.add_bank(
+        "req-2",
+        institution_id="ACME_OTHER_GB",
+        institution_name="ACME Other",
+        country="GB",
+        consent_expires_at=None,
+    )
+    store.update_bank(key, status="EX", account_ids=["acc-ended-0003"])
+    with pytest.raises(ValidationError) as caught:
+        gocardless_svc.fetch_window(store, "2026-11-01", "2026-11-14", "acc-ended-0003")
+    assert gocardless_svc.classify_error(caught.value) == "reconnect_needed"

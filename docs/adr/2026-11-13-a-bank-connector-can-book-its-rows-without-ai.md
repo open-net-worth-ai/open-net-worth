@@ -223,3 +223,22 @@ instead of booking it. Unmatched rows are booked as before. The Plaid page now s
 sign-in to **Reconnect** (update mode, same Item and ids) and says linking the bank again gives its
 accounts new identities. Links are not carried across automatically when the same bank is linked
 again: the user still re-links its accounts, and the match makes that safe.
+
+## Amendment 8 (2026-11-14, UAT: a bank that wasn't read is never treated as read)
+
+On-screen UAT: with one Plaid bank's sign-in expired, a sync read nothing from it, yet the run was
+`ok`, every pending booking of its accounts was dropped as "dropped by the bank", the card showed
+"Synced just now", and the error sat on the other bank's account line too. Cause: a one-account
+read (`fetch_all(account=…)`) came back `ok` with no rows when that account's bank failed and
+another answered. Contract now: a provider asked for ONE account raises when that account
+wasn't read — Plaid its bank's error (`fetch_transactions_get` returns it as `error`), GoCardless
+the ended consent of the bank holding it, Enable Banking the unread bank or the account's own
+transaction read — and keeps other banks' warnings off it. A bank's own expired access classifies
+as `reconnect_needed` (GoCardless `ValidationError(bank_access=True)`, Enable Banking
+`ExternalServiceError(bank_access=True)`), not the connector-wide `auth_error`, so the run goes
+on to the other banks. Such an account is not in the run's `read` set: its pending rows are not
+dropped, its history is not marked read, nothing is booked. Each account's last read is kept
+(`runtime_state` `...account_reads`: status, error, at) and served on its line (`read_status`,
+`read_error`); the bank card and the account marks read it, so one bank's failure shows on its
+own accounts only. A `partial` run keeps its warnings as `last_error` and says "N accounts not
+read".
