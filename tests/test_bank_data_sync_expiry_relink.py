@@ -337,3 +337,45 @@ def test_bank_text_inside_a_list_is_cleaned_for_the_screen():
     assert cleaned["n"] == 3
     assert isinstance(cleaned["tags"], list) and len(cleaned["tags"]) == 2
     assert cleaned["tags"][1] == "ok"
+
+
+def _plaid_answers(monkeypatch, response):
+    import httpx
+
+    from backend.db.plaid_config_store import PlaidConfigStore
+    from backend.services.aggregation import plaid as plaid_svc
+
+    PlaidConfigStore().update({"client_id": "cid", "secret": "skey"})
+    monkeypatch.setattr(
+        plaid_svc.httpx,
+        "post",
+        lambda url, **k: httpx.Response(*response, request=httpx.Request("POST", url)),
+    )
+    return plaid_svc, PlaidConfigStore()
+
+
+def test_plaid_a_reply_that_is_not_json_is_a_typed_retryable_error(db_isolated, monkeypatch):
+    from backend.core.errors import ValidationError
+
+    plaid_svc, store = _plaid_answers(monkeypatch, (200,))
+    with pytest.raises(ValidationError) as err:
+        plaid_svc._post(store, "/accounts/get", {})
+    assert plaid_svc.classify_error(err.value) == "connect_error"
+
+
+def test_plaid_a_reply_too_large_is_refused(db_isolated, monkeypatch):
+    from backend.core.errors import ValidationError
+
+    big = b"{" + b" " * (8 * 1024 * 1024 + 1) + b"}"
+    plaid_svc, store = _plaid_answers(monkeypatch, (200,))
+    import httpx
+
+    monkeypatch.setattr(
+        plaid_svc.httpx,
+        "post",
+        lambda url, **k: httpx.Response(200, content=big, request=httpx.Request("POST", url)),
+    )
+    with pytest.raises(ValidationError) as err:
+        plaid_svc._post(store, "/transactions/get", {})
+    assert "refused" in str(err.value)
+    assert plaid_svc.classify_error(err.value) == "connect_error"

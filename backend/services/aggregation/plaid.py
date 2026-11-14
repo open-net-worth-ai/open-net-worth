@@ -66,6 +66,8 @@ _CLIENT_NAME = "Open Net Worth"
 # /transactions/get page size + a guard against a pathological never-terminating page loop.
 _PAGE_SIZE = 500
 _MAX_FETCH_PAGES = 50
+# A response larger than this is refused, as GoCardless's and Enable Banking's are.
+_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
 # ── low-level POST helper ────────────────────────────────────────────────────────────
@@ -87,7 +89,10 @@ def _post(store: PlaidConfigStore, path: str, payload: dict) -> dict:
             timeout=_HTTP_TIMEOUT,
         )
     except httpx.HTTPError as exc:
-        raise ValidationError(f"could not reach Plaid: {exc}") from exc
+        # The class only, like the other banks: httpx's own message can carry the URL.
+        raise ValidationError(f"could not reach Plaid: {type(exc).__name__}") from None
+    if len(getattr(resp, "content", b"")) > _MAX_RESPONSE_BYTES:
+        raise ValidationError(f"could not reach Plaid: {path} answered too much; refused")
     if resp.status_code not in (200, 201):
         # Plaid error bodies carry {error_code, error_message}; surface what's useful.
         detail, code = "", ""
@@ -102,7 +107,11 @@ def _post(store: PlaidConfigStore, path: str, payload: dict) -> dict:
             plaid_error_code=code,
             http_status=resp.status_code,
         )
-    return resp.json() or {}
+    try:
+        return resp.json() or {}
+    except ValueError:
+        # A reply that isn't JSON (a proxy's error page): retried like an outage, typed.
+        raise ValidationError(f"could not reach Plaid: {path} answered with no JSON") from None
 
 
 # ── link token + public-token exchange (the consent flow) ─────────────────────────────
