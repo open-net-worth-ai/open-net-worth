@@ -176,8 +176,8 @@ bank in chat. Once an account's reads
 are used, it says when its next read is, **Sync now** waits, and so does the schedule.
 
 If the bank refuses (its daily limit, expired access), the sync waits instead of retrying: until
-the limit resets, or a day for expired access. The connector page shows what the bank said.
-Renew the bank's access on the connector page if it expired. A bank whose access ended or was
+the limit resets, or until you renew expired access. The connector page shows what the bank
+said. Renew (or Reconnect) the bank on the connector page, and the sync runs again right away. A bank whose access ended or was
 revoked only holds up its own accounts: your other banks still sync. If the bank refuses just
 one account, that account is tried again later and the rest are read as usual.
 

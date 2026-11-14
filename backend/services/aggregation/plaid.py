@@ -221,6 +221,7 @@ def _complete_update_mode(store: PlaidConfigStore, bank: str, data: dict) -> dic
         message = error.get("display_message") or error.get("error_message") or "Plaid ended it"
         raise ValidationError(f"The bank wasn't reconnected: {message}")
     store.mark_reconnect(needed=set(), ok={bank})
+    _wake_sync()
     item = store.item_by_key(bank) or {}
     return {
         "status": "linked",
@@ -285,7 +286,14 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
                 _retire_item(store, old)
             else:
                 logger.info("plaid: a second sign-in at the same bank; the first is kept")
+    _wake_sync()
     return {"item_id": item_id, "institution_name": name, "has_access_token": True}
+
+
+def _wake_sync() -> None:
+    from backend.services.bank_data_sync import budget
+
+    budget.access_renewed("plaid")
 
 
 def _account_marks(store: PlaidConfigStore, access_token: str) -> list[dict]:

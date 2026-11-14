@@ -399,6 +399,10 @@ def _read_requisition(store: GoCardlessConfigStore, bank: dict) -> None:
     data = _json(_authed(store, "GET", f"/requisitions/{bank['requisition_id']}/")) or {}
     status = str(data.get("status") or "").strip().upper()
     fields: dict = {"status": status}
+    if status == LINKED and bank.get("status") != LINKED:
+        from backend.services.bank_data_sync import budget
+
+        budget.access_renewed("gocardless")  # a link or renewal just finished
     if status == LINKED:
         fields["account_ids"] = [str(a) for a in (data.get("accounts") or []) if a]
         fields["linked_at"] = bank["linked_at"] or _iso(_now())

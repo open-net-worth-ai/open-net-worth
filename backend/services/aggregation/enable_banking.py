@@ -387,6 +387,9 @@ def create_session(code: str, state: str = "") -> dict:
         # back to them — even on a book that never listed its accounts since it was linked.
         _remember_accounts(store, token, old_session, store.bank(key) or {})
         _revoke_session(token, old_session)
+    from backend.services.bank_data_sync import budget
+
+    budget.access_renewed("enable_banking")
     return {"session_id": session_id, "accounts": accounts, "bank_key": key}
 
 
