@@ -312,6 +312,12 @@ def _remember_history_read(p: Provider, accounts: set[str]) -> None:
     budget.update(p.key, history_read=read)
 
 
+_UNBOOKED = {
+    "status": "error",
+    "error": "read, but the run failed before booking; nothing was booked",
+}
+
+
 def _remember_reads(p: Provider, states: dict[str, dict]) -> None:
     """How each account's last read went, for its own line and bank on the sync's page."""
     if not states:
@@ -357,7 +363,6 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         counts.update(fetched.counts)
         counts["not_read"] = sum(1 for s in fetched.statuses if s != "ok")
         status = _run_status(fetched.statuses)
-        _remember_reads(p, fetched.states)
         # Read BEFORE booking: an account holding only its Starting Balance is set to the
         # bank's balance once its history is in (balances.py).
         empty = balances.only_opening(fetched.first_import)
@@ -367,11 +372,18 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         _align(p, fetched.first_import, fetched.warnings)
         _remember_history_read(p, fetched.first_import)
         _record_balances(p, fetched, empty, run_id)
+        _remember_reads(p, fetched.states)  # only once its rows are booked
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
         logger.exception("bank_data_sync: %s run failed", p.key)
         status = "error"
         errors.append({"item": "The run", "reason": "The run failed; nothing was booked."})
         fetched.warnings.append(sanitize_untrusted(str(exc), max_len=300))
+        # Read but not booked: never shown as a good read (review 2026-11-15).
+        unbooked = {a: _UNBOOKED if s["status"] == "ok" else s for a, s in fetched.states.items()}
+        try:
+            _remember_reads(p, unbooked)
+        except Exception:  # noqa: BLE001 — the run record below must still close
+            logger.exception("bank_data_sync: %s read states could not be kept", p.key)
     counts["errors"] = len(errors)
     # A partial run (one bank read, another not) keeps what failed, so the bank that wasn't read
     # never shows as synced.

@@ -313,3 +313,27 @@ def test_enable_banking_add_bank_keeps_a_login_it_does_not_renew(db_isolated):
     _, replaced = store.add_bank("SESS-2", account_ids=["U2"], renews=set(), **kw)
     assert replaced == []
     assert [b["session_id"] for b in store.banks()] == ["SESS-1", "SESS-2"]
+
+
+# ── Review cleanups (2026-11-15) ─────────────────────────────────────────────────────────────
+
+
+def test_an_account_read_but_not_booked_never_shows_a_good_read(bank, monkeypatch):
+    bank.booked[ACC_MAIN] = [txn(-5.00, days_ago(1), "ACME BAKERY", tid="b1")]
+
+    def fail(*a, **k):
+        raise RuntimeError("ACME disk full")
+
+    monkeypatch.setattr(runner, "_book", fail)
+    _run()
+    read = budget.state("gocardless")["account_reads"][bank.account]
+    assert read["status"] == "error"
+
+
+def test_bank_text_inside_a_list_is_cleaned_for_the_screen():
+    from backend.services.bank_data_sync import reviews
+
+    cleaned = reviews._clean({"tags": ["ACME\\u202e<script>", "ok"], "n": 3})
+    assert cleaned["n"] == 3
+    assert isinstance(cleaned["tags"], list) and len(cleaned["tags"]) == 2
+    assert cleaned["tags"][1] == "ok"
