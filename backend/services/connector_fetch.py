@@ -738,10 +738,12 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
             }
         )
-    # Linked here, but the bank answered without them (closed, or linked again under a new id):
-    # flagged, so the list can say so instead of filing them under "Other".
+    # Linked here, but missing from the list. With every bank answering, the bank no longer
+    # lists them (closed, or linked again under a new id); with one that couldn't be read
+    # (an expired sign-in) they may well still be there. Flagged either way, never "Other".
+    flag = "unread" if window.warnings else "not_listed"
     accounts.extend(
-        {**a, "not_listed": True}
+        {**a, flag: True}
         for a in _linked_only_accounts(linked)
         if a["provider_account_id"] not in seen
     )

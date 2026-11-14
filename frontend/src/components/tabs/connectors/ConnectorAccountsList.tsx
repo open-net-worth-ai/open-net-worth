@@ -20,6 +20,7 @@ import {
   bankInstitution,
   GONE_GROUP,
   groupRows,
+  UNREAD_GROUP,
   prefillFor,
   type ProviderAccountRow,
 } from './accountRows'
@@ -368,6 +369,11 @@ export function ConnectorAccountsList({
                 <Text size="xs" tone="muted">
                   Your bank stopped listing these. Unlink each, then link the bank's current
                   account.
+                </Text>
+              )}
+              {group.key === UNREAD_GROUP && (
+                <Text size="xs" tone="muted">
+                  Their bank couldn't be read just now. They stay linked.
                 </Text>
               )}
               {group.rows.map((row) => (
