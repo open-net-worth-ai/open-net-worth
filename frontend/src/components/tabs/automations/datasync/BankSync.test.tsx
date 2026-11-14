@@ -170,7 +170,7 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
       expect(navigate).toHaveBeenCalledWith(
         expect.objectContaining({
           to: '/automations',
-          search: { view: 'sync', sync: 'bank:gocardless' },
+          search: { view: 'sync', sync: 'bank-gocardless' },
         }),
       )
     },

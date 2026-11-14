@@ -17,7 +17,7 @@ export function DataSyncView({
   onOpen,
 }: {
   entries: DataSyncEntry[]
-  /** Bank connectors that can sync without AI; a card opens `bank:<provider>`. */
+  /** Bank connectors that can sync without AI; a card opens `bank-<provider>`. */
   banks?: BankSyncStatus[]
   onOpen: (key: string) => void
 }) {
@@ -61,7 +61,7 @@ export function DataSyncView({
       {connected.length > 0 && (
         <div className="a3-list" aria-label="Bank syncs">
           {connected.map((b) => (
-            <BankSyncCard key={b.provider} status={b} onOpen={() => onOpen(`bank:${b.provider}`)} />
+            <BankSyncCard key={b.provider} status={b} onOpen={() => onOpen(`bank-${b.provider}`)} />
           ))}
         </div>
       )}
@@ -114,7 +114,7 @@ export function DataSyncView({
                 type="button"
                 className="a3-tpl"
                 aria-label={`Set up ${b.label}`}
-                onClick={() => onOpen(`bank:${b.provider}`)}
+                onClick={() => onOpen(`bank-${b.provider}`)}
               >
                 <BankLogo provider={b.provider} />
                 <span className="a3-tpl-body">

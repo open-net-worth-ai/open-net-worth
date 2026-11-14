@@ -580,7 +580,7 @@ async function openGoCardlessForm(page, baseUrl) {
 async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }) {
   // The bank's own page in Automations → Data Sync: its setup steps, then its status panel.
   const openSyncPage = async () => {
-    await bank.goto(`${baseUrl}/automations?view=sync&sync=bank:gocardless`)
+    await bank.goto(`${baseUrl}/automations?view=sync&sync=bank-gocardless`)
     await dismissIntro(bank)
   }
   const syncNow = async () => {
@@ -708,7 +708,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
       const parking = async () =>
         (await rowsIn('CA_Monzo')).find((r) => r.refs.some((x) => x.endsWith(':tx_c6')))
       assert.equal((await parking()).amount, -1, 'the bank’s change was applied without asking')
-      await app.goto(`${baseUrl}/automations?view=sync&sync=bank:gocardless`)
+      await app.goto(`${baseUrl}/automations?view=sync&sync=bank-gocardless`)
       await dismissIntro(app)
       await app
         .getByText('GoCardless changed a transaction you have booked.')

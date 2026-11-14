@@ -73,15 +73,15 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   // flag: all off (or still loading), only the Lucius list, as before.
   const dataSyncs = useDataSyncs()
   // Bank connectors that sync without AI (ADR 2026-11-13) sit beside the budget apps; their
-  // page is `?sync=bank:<provider>`.
+  // page is `?sync=bank-<provider>` (a dash: a colon showed as `%3A` in the address bar; the
+  // old `bank:` form is still read, for a link saved before).
   const banksOn = useFlag('bank_data_sync') === true
   const bankSyncs = useBankSyncs(banksOn).data ?? []
   const syncOn = dataSyncs.length > 0 || bankSyncs.length > 0
   const syncEntry = dataSyncs.find((e) => e.app.key === search.sync) ?? null
-  const bankKey =
-    banksOn && typeof search.sync === 'string' && search.sync.startsWith('bank:')
-      ? search.sync.slice('bank:'.length)
-      : null
+  const bankMatch =
+    banksOn && typeof search.sync === 'string' ? /^bank[-:](.+)$/.exec(search.sync) : null
+  const bankKey = bankMatch ? bankMatch[1]! : null
   const syncKey = syncEntry?.app.key ?? null
   const view: AutomationsView =
     syncOn && (syncKey || bankKey || search.view === 'sync') ? 'sync' : 'lucius'

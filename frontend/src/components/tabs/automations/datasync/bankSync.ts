@@ -191,4 +191,4 @@ export async function bankSyncSend<T = unknown>(
 }
 
 /** Where a bank's sync lives: its page in Automations → Data Sync. */
-export const bankSyncSearch = (provider: string) => ({ view: 'sync', sync: `bank:${provider}` })
+export const bankSyncSearch = (provider: string) => ({ view: 'sync', sync: `bank-${provider}` })
