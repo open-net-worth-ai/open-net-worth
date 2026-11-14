@@ -14,6 +14,7 @@ import { resolveDirectory } from '../tabs/connectors/directoryRows'
 import { useConnectors } from '../tabs/connectors/useConnectors'
 import { icon } from '../tabs/connectors/icons'
 import { connectorLogo } from '../tabs/connectors/logos'
+import { FIRST_PARTY_PUBLISHER } from '../tabs/connectors/VendorTrust'
 import { preopenSignInWindow } from '../tabs/connectors/oauthSignIn'
 import type { ReactNode } from 'react'
 import { ArrowRight, Share2 } from '../../ui/icons'
@@ -74,7 +75,17 @@ export function ConnectorSetupCard({
   // tile draws it. The custom server keeps the Connectors icon.
   const glyph = entry.generic ? null : icon(entry.icon)()
   const action = actionFor(entry, connectors)
-  const by = entry.generic ? entry.sub : entry.publisher ? `By ${entry.publisher}` : entry.sub
+  // Who built it, by the connector page's rule (`PublisherLine`, owner 2026-08-21): an MCP
+  // server's own publisher; a connector of ours is Open Net Worth's, whatever service it calls
+  // (that service already names the card). "By Enable Banking" contradicted the page's
+  // "Developed by Open Net Worth" (owner, 2026-11-14).
+  const by = entry.generic
+    ? entry.sub
+    : !entry.mcp
+      ? `By ${FIRST_PARTY_PUBLISHER}`
+      : entry.publisher
+        ? `By ${entry.publisher}`
+        : entry.sub
   return (
     <div className="cmd-setup-card">
       <span
