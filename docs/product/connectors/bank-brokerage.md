@@ -458,7 +458,7 @@ remove it, but it is no longer supported — use one of the connectors above ins
 ## Turning on automatic syncing
 
 **Without AI (experimental):** GoCardless, Enable Banking and Plaid can book their transactions
-by fixed rules, with no AI — click **Set up sync** under **Sync** on the connector's page.
+by fixed rules, with no AI — click **Set up sync** under **Data import and sync** on the connector's page.
 See [Bank sync without AI](../features/bank-data-sync.md). The rest of this section is the
 Lucius way.
 

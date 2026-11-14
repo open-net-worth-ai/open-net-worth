@@ -39,6 +39,7 @@ import {
   completeEnableBankingReturn,
   enableBankingReturnOf,
   keepEnableBankingReturnError,
+  setFinishingBankLink,
 } from './bankPage'
 import {
   useRegisterScreenCommands,
@@ -211,12 +212,15 @@ export function ConnectorsTab(): JSX.Element {
     // accounts read what the bank just did rather than the "waiting" left before it.
     const check = fromBank ? BANK_RETURN_CHECKS[id] : undefined
     if (check) {
-      // Mid-way (asking the provider, then opening the page): no guide starts in the gap.
+      // The page opens at once and says it's finishing while the provider is asked; no guide
+      // starts meanwhile.
       const release = holdGuides()
+      setFinishingBankLink(id)
+      open()
       void check().finally(
         () =>
           void reload().finally(() => {
-            open()
+            setFinishingBankLink(null)
             release()
           }),
       )
@@ -238,8 +242,11 @@ export function ConnectorsTab(): JSX.Element {
     if (ebHandled.current === key) return
     ebHandled.current = key
     void navigate({ to: '/connectors', search: {}, replace: true } as never)
-    // Finishing the link takes a second or two with nothing open: no guide starts in it.
+    // Finishing the link takes a second or two: the connector's page opens at once and says
+    // so, and no guide starts meanwhile.
     const release = holdGuides()
+    setFinishingBankLink('enable_banking')
+    openConnector('enable_banking')
     void completeEnableBankingReturn(ebReturn).then((res) => {
       toast(res.message)
       // Linked: the connector page, whose Accounts list is the next step. Not linked: the form,
@@ -247,7 +254,15 @@ export function ConnectorsTab(): JSX.Element {
       if (!res.ok) keepEnableBankingReturnError(res.message)
       // An already-linked connector opens its form too: the reason is shown there.
       void reload().finally(() => {
-        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok })
+        setFinishingBankLink(null)
+        // Not linked: the form, with the reason under Link bank. The page is already open, and
+        // it reads "open on the form" only when it opens — so it opens again.
+        if (!res.ok) {
+          setDetailId(null)
+          requestAnimationFrame(() =>
+            openConnector('enable_banking', { configure: true, formFirst: true }),
+          )
+        }
         release()
       })
     })

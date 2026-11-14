@@ -5,6 +5,7 @@
 // and the caller still shows the URL as a link: a blocked tab, a mini-window browser that hands
 // back no handle, or an iOS home-screen app (which cannot steer a sheet it opened) all leave the
 // user one tap from the bank. The desktop app hands the URL to the system browser instead.
+import { useSyncExternalStore } from 'react'
 import { authFetch } from '../../../api/client'
 import { desktopBridge, openExternal } from '../../../platform/desktop'
 
@@ -57,6 +58,29 @@ export function openBankPageTab(): BankPageTab {
       }
     },
   }
+}
+
+// Back from a bank, the app finishes the link (a second or two) with the connector's page
+// ALREADY open, showing that it is finishing — not on the bare Connectors list with nothing
+// happening (owner, 2026-11-14). The connector screen sets it; the provider's page reads it.
+let finishing: string | null = null
+const finishingListeners = new Set<() => void>()
+
+/** The provider whose bank link is being finished now, or null when it's done. */
+export function setFinishingBankLink(provider: string | null): void {
+  finishing = provider
+  finishingListeners.forEach((l) => l())
+}
+
+/** Whether `provider`'s bank link is still being finished. */
+export function useFinishingBankLink(provider: string): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      finishingListeners.add(l)
+      return () => finishingListeners.delete(l)
+    },
+    () => finishing === provider,
+  )
 }
 
 /** Where GoCardless sends the user after consent: back to its own connector page, which lists

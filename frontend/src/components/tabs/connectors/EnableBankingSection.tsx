@@ -5,6 +5,7 @@ import {
   enableBankingReturnUrl,
   openBankPageTab,
   peekEnableBankingReturnError,
+  useFinishingBankLink,
 } from './bankPage'
 import {
   Stack,
@@ -17,6 +18,7 @@ import {
   TextArea,
   Select,
   useSecretReveal,
+  Loading,
 } from '../../ui'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
@@ -182,6 +184,16 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   }
 
   useEffect(load, [])
+
+  // Back from the bank, this page opens while the link is still being finished; once it is,
+  // re-read the banks (the Accounts list below re-reads with them).
+  const finishing = useFinishingBankLink('enable_banking')
+  const wasFinishing = useRef(finishing)
+  useEffect(() => {
+    if (wasFinishing.current && !finishing) load()
+    wasFinishing.current = finishing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finishing])
 
   async function save(): Promise<boolean> {
     if (!form || !cfg) return false
@@ -714,11 +726,15 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
 
       {/* Re-read when a bank is added, renewed or removed — like PlaidSection's banksVersion —
           so a removed bank's accounts never linger in the list. */}
-      <ConnectorAccountsList
-        key={banks.map((b) => b.key).join(',')}
-        provider="enable_banking"
-        providerLabel="Enable Banking"
-      />
+      {finishing ? (
+        <Loading label="Finishing the bank link…" />
+      ) : (
+        <ConnectorAccountsList
+          key={banks.map((b) => b.key).join(',')}
+          provider="enable_banking"
+          providerLabel="Enable Banking"
+        />
+      )}
     </Stack>
   )
 }

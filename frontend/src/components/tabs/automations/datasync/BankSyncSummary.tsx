@@ -30,7 +30,7 @@ function BankSyncSummary({ provider }: { provider: string }) {
     // (owner, 2026-11-14), without a box of its own.
     <section className="bs-summary" aria-label={`${status.label} sync`}>
       <Text size="sm" tone="ink" weight={600}>
-        Sync
+        Data import and sync
       </Text>
       <div className="bs-summary-row">
         <RefreshCw size={15} className="bs-summary-icon" aria-hidden="true" />

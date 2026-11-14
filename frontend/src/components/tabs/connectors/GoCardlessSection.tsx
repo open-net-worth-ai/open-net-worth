@@ -10,6 +10,7 @@ import {
   PasswordField,
   Select,
   useSecretReveal,
+  Loading,
 } from '../../ui'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
@@ -18,7 +19,7 @@ import { BankHandoff } from './BankHandoff'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { GoCardlessBanks } from './GoCardlessBanks'
 import { isPending, type GoCardlessBank } from './gocardlessBank'
-import { bankReturnUrl, openBankPageTab } from './bankPage'
+import { bankReturnUrl, openBankPageTab, useFinishingBankLink } from './bankPage'
 
 // GoCardless Bank Account Data connector config over /api/gocardless/*. A blank secret-key
 // field keeps the saved key; the GET echoes only `has_credentials`. One connector holds any
@@ -112,6 +113,15 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
       })
       .catch(() => setError(true))
   }, [apply, checkLink])
+
+  // Back from the bank, this page opens while the link is still being checked; once it is,
+  // re-read the banks — and mount the Accounts list only then, so it reads the new link.
+  const finishing = useFinishingBankLink('gocardless')
+  const wasFinishing = useRef(finishing)
+  useEffect(() => {
+    if (wasFinishing.current && !finishing) load()
+    wasFinishing.current = finishing
+  }, [finishing, load])
 
   useEffect(load, [load])
 
@@ -409,7 +419,11 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
       )}
 
       <div className="gc-section">
-        <ConnectorAccountsList provider="gocardless" providerLabel="GoCardless" />
+        {finishing ? (
+          <Loading label="Finishing the bank link…" />
+        ) : (
+          <ConnectorAccountsList provider="gocardless" providerLabel="GoCardless" />
+        )}
       </div>
     </Stack>
   )
