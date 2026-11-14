@@ -12,6 +12,13 @@ import type { Version } from './sync'
 export type RunKind = 'import' | 'verify' | 'preview' | 'sync'
 export type RunStatus = 'running' | 'done' | 'failed' | 'interrupted'
 
+export interface ImportAccountLine {
+  name: string
+  mask: string
+  state: 'waiting' | 'reading' | 'done' | 'failed' | 'skipped'
+  rows: number | null
+}
+
 export interface RunSummary {
   id: string
   provider: string
@@ -26,7 +33,13 @@ export interface RunSummary {
   archived_at: string | null
   phase: string
   // A bank sync also names what it is on: the account being read (`label`).
-  progress: { done: number; total: number; label?: string }
+  progress: {
+    done: number
+    total: number
+    label?: string
+    /** A bank sync's accounts, one line each, while it reads them. */
+    accounts?: ImportAccountLine[]
+  }
   error: string | null
 }
 

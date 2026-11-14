@@ -447,3 +447,49 @@
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* The import's accounts, one line each (ImportProgress). */
+.bs-progress-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bs-progress-acct {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+}
+.bs-progress-acct .bs-progress-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.bs-progress-acct .bs-progress-what {
+  color: var(--muted);
+}
+.bs-progress-acct.waiting .bs-progress-name,
+.bs-progress-acct.skipped .bs-progress-name {
+  color: var(--muted);
+  font-weight: 400;
+}
+.bs-progress-acct.failed .bs-progress-what {
+  color: var(--bad);
+}
+.bs-progress-ok {
+  flex: none;
+  color: var(--good);
+}
+.bs-progress-dot {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  box-sizing: border-box;
+}

@@ -47,6 +47,9 @@ class _Fetched:
     )
     warnings: list[str] = field(default_factory=list)
     statuses: list[str] = field(default_factory=list)
+    # One line per account for the screen: name, mask, state (waiting · reading · done ·
+    # failed · skipped) and, once read, how many rows the bank sent.
+    lines: list[dict] = field(default_factory=list)
     # Account id → the window start it was read from (pending rows the bank stopped listing
     # there are dropped), and → what the bank said its balance is.
     read: dict[str, str] = field(default_factory=dict)
@@ -125,14 +128,18 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     return "ok"
 
 
-def _progress(run_id: str, phase: str, done: int, total: int, label: str) -> None:
+def _progress(
+    run_id: str, phase: str, done: int, total: int, label: str, lines: list[dict] | None = None
+) -> None:
     """What the run is doing, for the screen that watches it: ``reading`` an account (``label``
-    its name, ``done`` of ``total`` accounts read) or ``booking`` (``total`` rows). Never fails
-    the run."""
+    its name, ``done`` of ``total`` accounts read) or ``booking`` (``total`` rows), with every
+    account's own line (``accounts``) so one already read never vanishes from view (owner,
+    2026-11-14). Never fails the run."""
+    progress: dict = {"done": done, "total": total, "label": label}
+    if lines is not None:
+        progress["accounts"] = [dict(line) for line in lines]
     try:
-        import_runs.update(
-            run_id, phase=phase, progress={"done": done, "total": total, "label": label}
-        )
+        import_runs.update(run_id, phase=phase, progress=progress)
         data_events.publish(["*"])
     except Exception:  # noqa: BLE001 — progress is a courtesy, the run is the work
         logger.debug("bank_data_sync: progress not recorded", exc_info=True)
@@ -140,12 +147,23 @@ def _progress(run_id: str, phase: str, done: int, total: int, label: str) -> Non
 
 def _fetch(p: Provider, accounts: list[dict], run_id: str) -> _Fetched:
     out = _Fetched()
+    out.lines = [
+        {"name": a.get("name") or "", "mask": a.get("mask") or "", "state": "waiting", "rows": None}
+        for a in accounts
+    ]
     for i, account in enumerate(accounts):
-        _progress(run_id, "reading", i, len(accounts), account.get("name") or "")
+        out.lines[i]["state"] = "reading"
+        _progress(run_id, "reading", i, len(accounts), account.get("name") or "", out.lines)
+        before = len(out.rows)
         status = _fetch_account(p, account, run_id, out)
+        out.lines[i].update(
+            state="done" if status == "ok" else "failed", rows=len(out.rows) - before
+        )
         out.statuses.append(status)
         out.counts["accounts"] += 1
         if status in _STOP_STATUSES:
+            for line in out.lines[i + 1 :]:
+                line["state"] = "skipped"
             break
     return out
 
@@ -272,7 +290,7 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         # Read BEFORE booking: an account holding only its Starting Balance is set to the
         # bank's balance once its history is in (balances.py).
         empty = balances.only_opening(fetched.first_import)
-        _progress(run_id, "booking", 0, len(fetched.rows), "")
+        _progress(run_id, "booking", 0, len(fetched.rows), "", fetched.lines)
         created = _book(p, fetched, run_id, counts, errors)
         _align(p, fetched.first_import, fetched.warnings)
         _remember_history_read(p, fetched.first_import)
