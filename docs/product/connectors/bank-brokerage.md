@@ -156,6 +156,10 @@ transactions to the ones already booked instead of booking them again. Opened a 
 bank you already linked? Click **Add accounts** on that bank to pick it; existing links are
 untouched.
 
+Some banks give Plaid access only for a set time. When Plaid tells the app when that ends, the
+bank's card in the [sync without AI](../features/bank-data-sync.md) turns amber two weeks ahead
+with **Reconnect**, and red once it has ended.
+
 You can also ask Lucius — "reconnect my Chase account" — from the app or a chat channel such as
 Telegram. He asks your approval, then sends you a **Sign in to Chase again** link to Plaid's own
 page. You sign in there yourself: Lucius never sees your bank password or a security code. Tell

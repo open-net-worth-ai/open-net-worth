@@ -222,6 +222,16 @@ def _complete_update_mode(store: PlaidConfigStore, bank: str, data: dict) -> dic
         raise ValidationError(f"The bank wasn't reconnected: {message}")
     store.mark_reconnect(needed=set(), ok={bank})
     item = store.item_by_key(bank) or {}
+    if item:
+        # A renewed sign-in has a new end date (or none): the old one would warn of an expiry
+        # that no longer comes.
+        store.update_item(
+            item.get("item_id") or "",
+            {
+                "consent_expires_at": None,
+                **_consent_fields(_item_info(store, item["access_token"])),
+            },
+        )
     _wake_sync()
     return {
         "status": "linked",
@@ -253,6 +263,7 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
     inst = institution or {}
     name = str(inst.get("name") or "").strip()
     inst_id = str(inst.get("institution_id") or "").strip()
+    info = _item_info(store, access_token)
     listed = _listed_accounts(store, access_token)
     entry = {
         "item_id": item_id,
@@ -264,10 +275,11 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
         "accounts": _account_marks(listed),
         # Plaid's own ids for them: which bank an account's failed read belongs to.
         "account_ids": _account_ids(listed),
+        **_consent_fields(info),
     }
     store.add_item(entry)
     if not name:
-        named = name_bank(store, entry, _item_info(store, access_token))
+        named = name_bank(store, entry, info)
         name = named.get("institution_name") or ""
         inst_id = named.get("institution_id") or inst_id
     # Linking a bank that is already linked may be a re-link (a fresh sign-in of the same
@@ -341,6 +353,15 @@ def _account_marks(accounts: list[dict]) -> list[dict]:
 
 def _account_ids(accounts: list[dict]) -> list[str]:
     return sorted({str(a["account_id"]) for a in accounts if a.get("account_id")})
+
+
+def _consent_fields(info: dict) -> dict:
+    """The Item's consent end (``/item/get`` → ``item.consent_expiration_time``) as an entry
+    field; empty when Plaid's answer doesn't say (the key is absent), ``None`` when the Item has
+    no expiry."""
+    if "consent_expiration_time" not in info:
+        return {}
+    return {"consent_expires_at": info.get("consent_expiration_time") or None}
 
 
 def _mark_key(mark: dict) -> tuple[str, str]:
@@ -518,11 +539,17 @@ def _fetch_item(
     }
 
 
-def _record_item(store: PlaidConfigStore, item: dict, account_ids: list[str]) -> None:
-    """Keep which accounts an Item holds on the Item itself, written only when it changed (no
-    call of its own: it rides on the ``/transactions/get`` answer)."""
-    if item.get("account_ids") != account_ids:
-        store.update_item(item.get("item_id") or "", {"account_ids": account_ids})
+def _record_item(store: PlaidConfigStore, item: dict, info: dict, account_ids: list[str]) -> None:
+    """Keep what a successful read says about an Item — its consent end and which accounts it
+    holds — on the Item itself, written only when it changed (no call of its own: both ride
+    on the ``/transactions/get`` answer)."""
+    fields = {
+        k: v
+        for k, v in {**_consent_fields(info), "account_ids": account_ids}.items()
+        if item.get(k) != v and (v or k in item)
+    }
+    if fields:
+        store.update_item(item.get("item_id") or "", fields)
 
 
 def fetch_transactions_get(
@@ -565,7 +592,7 @@ def fetch_transactions_get(
             continue
         answered.add(key)
         holders[key] = sorted(got["accounts"])
-        _record_item(store, item, holders[key])
+        _record_item(store, item, got.get("item") or {}, holders[key])
         item = name_bank(store, item, got.get("item") or {})
         transactions.extend(got["transactions"])
         for acct_id, acct in got["accounts"].items():
@@ -621,7 +648,7 @@ def fetch_balances(store: PlaidConfigStore) -> dict:
             complete = False
             continue
         answered.add(key)
-        _record_item(store, item, _account_ids(data.get("accounts") or []))
+        _record_item(store, item, {}, _account_ids(data.get("accounts") or []))
         institution = item.get("institution_name") or bank_name(item)
         for acct in data.get("accounts") or []:
             accounts.append(_account_to_common({**acct, "_institution": institution}))
