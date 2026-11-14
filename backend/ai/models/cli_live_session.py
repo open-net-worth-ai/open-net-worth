@@ -117,9 +117,13 @@ class LiveSession:
             return 0.0
         return env_seconds(cls.STALL_ENV, cls.STALL_DEFAULT, 10.0)
 
+    def launch_argv(self) -> list[str]:
+        """The argv handed to the OS; a transport may rewrite ``self.argv`` (its pool key)."""
+        return self.argv
+
     async def start(self) -> None:
         self.proc = await asyncio.create_subprocess_exec(
-            *self.argv,
+            *self.launch_argv(),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

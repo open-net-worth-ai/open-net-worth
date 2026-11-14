@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import pathlib
 import stat
 import textwrap
 
@@ -92,8 +93,9 @@ def _text_deltas(*chunks: str) -> list[dict]:
 def _fake_cli(tmp_path, events: list[dict], *, exit_code: int = 0):
     """Write a fake `claude` executable replaying ``events``; return its path.
 
-    It also dumps the argv it was called with (and its stdin) to ``argv.json`` next to
-    itself, so a test can assert on the command line we actually build.
+    It also dumps the argv it was called with (its stdin, and the contents of any
+    ``--system-prompt-file``) to ``argv.json`` next to itself, so a test can assert on the
+    command line we actually build.
     """
     script = tmp_path / "claude"
     payload = "\n".join(json.dumps(e) for e in events)
@@ -106,11 +108,18 @@ def _fake_cli(tmp_path, events: list[dict], *, exit_code: int = 0):
             # Read LINE BY LINE, replaying the scripted events per user message. The real
             # CLI does the same, and a live session keeps stdin open — a `stdin.read()`
             # here would block forever instead of answering the first turn.
+            args = sys.argv[1:]
+            system_file = None
+            if "--system-prompt-file" in args:
+                path = args[args.index("--system-prompt-file") + 1]
+                system_file = pathlib.Path(path).read_bytes().decode("utf-8")
             seen = []
             for line in sys.stdin:
                 seen.append(line)
                 (here / "argv.json").write_text(
-                    json.dumps({{"argv": sys.argv[1:], "stdin": "".join(seen)}})
+                    json.dumps(
+                        {{"argv": args, "stdin": "".join(seen), "system_file": system_file}}
+                    )
                 )
                 sys.stdout.write({payload!r})
                 sys.stdout.write("\\n" if {payload!r} else "")
@@ -516,7 +525,8 @@ async def test_argv_carries_the_four_load_bearing_isolation_flags(tmp_path):
     # We never delegate conversation state to the CLI.
     assert "--resume" not in argv and "--continue" not in argv
     assert "--no-session-persistence" in argv
-    assert argv[argv.index("--system-prompt") + 1] == "SYS"
+    assert "--system-prompt" not in argv
+    assert _recorded(tmp_path)["system_file"] == "SYS"
 
 
 @pytest.mark.asyncio
@@ -856,10 +866,48 @@ async def test_the_tool_manifest_is_appended_to_the_system_prompt(tmp_path):
         system="BASE SYSTEM",
         model="haiku",
     )
-    argv = _recorded(tmp_path)["argv"]
-    system = argv[argv.index("--system-prompt") + 1]
+    system = _recorded(tmp_path)["system_file"]
     assert system.startswith("BASE SYSTEM")
     assert "get_net_worth" in system
+
+
+# Windows' CreateProcess refuses a command line past 32,767 characters with WinError 206.
+_WINDOWS_COMMAND_LINE_LIMIT = 32_767
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("live_session", [True, False])
+async def test_a_huge_system_prompt_travels_in_a_file_not_on_the_command_line(
+    tmp_path, monkeypatch, live_session
+):
+    monkeypatch.setenv("ONW_CLAUDE_CLI_SESSIONS", "1" if live_session else "0")
+    cli = _fake_cli(tmp_path, [_init_event(), *_text_deltas("ok"), _result_event("ok")])
+    tools = [
+        {"name": f"tool_{i}", "description": "d" * 400, "input_schema": {}} for i in range(200)
+    ]
+    await _collect(
+        ClaudeCliProvider(cli_path=str(cli)),
+        messages=[{"role": "user", "content": "hi"}],
+        tools=tools,
+        system="BASE SYSTEM\nline two — ünïcode",
+        model="haiku",
+    )
+    rec = _recorded(tmp_path)
+    assert "--system-prompt" not in rec["argv"]
+    assert len(" ".join(rec["argv"])) < _WINDOWS_COMMAND_LINE_LIMIT
+    assert len(rec["system_file"]) > _WINDOWS_COMMAND_LINE_LIMIT
+    assert rec["system_file"].startswith("BASE SYSTEM\nline two — ünïcode")
+    assert "tool_199" in rec["system_file"]
+
+
+@pytest.mark.asyncio
+async def test_the_system_prompt_file_is_removed_with_the_workdir(tmp_path):
+    cli = _fake_cli(tmp_path, [_init_event(), _result_event("hi")])
+    await ClaudeCliProvider(cli_path=str(cli)).complete("say hi", system="SYS", model="haiku")
+
+    path = _recorded(tmp_path)["argv"]
+    path = path[path.index("--system-prompt-file") + 1]
+    assert not pathlib.Path(path).exists()
 
 
 @pytest.mark.asyncio

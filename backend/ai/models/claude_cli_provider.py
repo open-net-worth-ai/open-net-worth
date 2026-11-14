@@ -8,11 +8,13 @@ Invocation contract (verified against ``claude`` 2.1.216 — see
 ``.claude/rfcs/2026-07-22-claude-code-cli-provider.md`` §3)::
 
     claude -p --input-format stream-json --output-format stream-json --verbose
-           --include-partial-messages --model <model> --system-prompt <text>
+           --include-partial-messages --model <model> --system-prompt-file <path>
            --tools "" --strict-mcp-config --setting-sources ""
            --no-session-persistence [--effort <level>] [--max-budget-usd <n>]
 
-with ONE NDJSON user message on stdin.
+with ONE NDJSON user message on stdin. ``_argv`` still builds ``--system-prompt <text>`` (the
+live-session key); ``claude_cli_argv`` moves the text into a file at launch, because the tool
+manifest is far past Windows' 32,767-character command line (WinError 206).
 
 Four of those flags are load-bearing and must not be dropped:
 
@@ -54,6 +56,7 @@ from backend.core.errors import ConfigurationError, ExternalServiceError, Provid
 
 from . import claude_live_session, cli_sign_in
 from .base import AIProvider, log_text_cap
+from .claude_cli_argv import with_system_prompt_file
 from .cli_call_grace import PostCallWatch, grace_seconds
 from .cli_tool_protocol import (
     ToolCallScanner,
@@ -392,7 +395,7 @@ class ClaudeCliProvider(AIProvider):
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                *argv,
+                *with_system_prompt_file(argv, workdir),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

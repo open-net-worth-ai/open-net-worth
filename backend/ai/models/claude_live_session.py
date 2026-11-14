@@ -46,6 +46,7 @@ from typing import Optional
 from backend.ai.image_payloads import decode_image_payloads
 
 from . import cli_live_session
+from .claude_cli_argv import with_system_prompt_file
 from .cli_live_session import SessionPool, fingerprints, pending_turn  # noqa: F401
 
 # A child that emits nothing for this long, first event included, is wedged (a stalled first
@@ -77,6 +78,9 @@ class LiveSession(cli_live_session.LiveSession):
 
     def is_final(self, event: dict) -> bool:
         return event.get("type") == "result"
+
+    def launch_argv(self) -> list[str]:
+        return with_system_prompt_file(self.argv, self.workdir)
 
     async def send(self, text: str, images: Optional[list[dict]] = None) -> None:
         decode_image_payloads(images or [])

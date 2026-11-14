@@ -34,6 +34,7 @@ mechanisms that differ, the few guarantees that are weaker, and what the owner p
 | Autostart | launchd / systemd | Task Scheduler (Run-key fallback, no crash restart) | `cli/autostart_windows.py` |
 | Server self-upgrade (`onw upgrade`, `--auto-upgrade`) | installs in place, then exits 75 or re-executes | a detached helper copied outside the install waits for the server to exit (0, so the task can't restart the old copy), installs with retries and starts it again; its log is `upgrade.log` in `%APPDATA%\uv\open-net-worth-upgrades` | `cli/self_update.py`, `cli/upgrade_steps.py` |
 | Launch at login (desktop) | Login Item | Login item that starts through `Update.exe`, so it survives updates | `desktop/src/main/login-item.ts` |
+| Command-line length (Claude Code CLI provider) | `ARG_MAX` (MiBs; Linux caps one argument at 128 KiB) | `CreateProcess` caps the whole line at 32,767 characters — `[WinError 206]` past it. Prompt-sized text never rides in argv: the system prompt and tool manifest go in `--system-prompt-file`, the prompt over stdin | `ai/models/claude_cli_argv.py` |
 | Watched-folder imports | inode + dev from `lstat` | same; Node reports Windows file indexes as doubles, the helper compares after the same rounding | `desktop/qa/identity-check.mjs` |
 
 ## Weaker than on POSIX (by design limits of the OS)
