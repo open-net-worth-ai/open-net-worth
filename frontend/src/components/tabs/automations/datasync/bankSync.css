@@ -357,3 +357,44 @@
     animation: none;
   }
 }
+
+/* The import, account by account (ImportedSummary). */
+.bs-imported {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bs-imported-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 20px;
+  list-style: none;
+}
+.bs-imported-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-size: var(--text-sm);
+}
+.bs-imported-acct {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bs-imported-acct:hover {
+  text-decoration: underline;
+}
+.bs-imported-what {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

@@ -83,7 +83,10 @@ def next_read_at(p: Provider, accounts: list[dict]):
 
 def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> str:
     pid, app_id = account["provider_account_id"], account["linked_account_id"]
-    since, before, warning, first = connector_window.account_window(p, app_id)
+    read_before = app_id in (budget.state(p.key).get("history_read") or {})
+    since, before, warning, first = connector_window.account_window(
+        p, app_id, history_read=read_before
+    )
     # connector_fetch counts the read against the daily limit before it calls the bank.
     # The whole window, pending and already-booked rows too: a pending row is booked uncleared
     # and settled or dropped against what the bank lists now (pending.py). Still one read.
@@ -220,6 +223,19 @@ def _align(p: Provider, first_import: set[str], warnings: list[str]) -> None:
     budget.update(p.key, pending_align=sorted(pending))
 
 
+def _remember_history_read(p: Provider, accounts: set[str]) -> None:
+    """Each account whose whole history was just read. Rows in the book can't say it for an
+    account the bank had nothing for, which then read as never imported: Import history came
+    back, and every sync re-read the full history."""
+    if not accounts:
+        return
+    from backend.core.user_time import user_today
+
+    read = dict(budget.state(p.key).get("history_read") or {})
+    read.update({a: user_today().isoformat() for a in accounts})
+    budget.update(p.key, history_read=read)
+
+
 def _figure(value: object) -> float | None:
     try:
         return None if value is None else float(value)  # type: ignore[arg-type]
@@ -259,6 +275,7 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         _progress(run_id, "booking", 0, len(fetched.rows), "")
         created = _book(p, fetched, run_id, counts, errors)
         _align(p, fetched.first_import, fetched.warnings)
+        _remember_history_read(p, fetched.first_import)
         _record_balances(p, fetched, empty, run_id)
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
         logger.exception("bank_data_sync: %s run failed", p.key)

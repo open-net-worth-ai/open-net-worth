@@ -45,6 +45,8 @@ def _accounts(p, key: str) -> list[dict]:
     excluded = set(settings.get(key)["excluded_account_ids"])
     rows = {r.get("id"): r for r in accounts_service.all_account_rows()}
     booked = ledger_service.booked_from(key)
+    # Imported = history read: a row in the book, or a read the bank had nothing for.
+    history_read = budget.state(key).get("history_read") or {}
     from backend.services.bank_data_sync import access
 
     granted = access.by_account(p)
@@ -75,7 +77,8 @@ def _accounts(p, key: str) -> list[dict]:
                 "reads_left": left,
                 "next_read_at": _iso(next_at),
                 # History brought in: whether anything from this bank is booked here yet.
-                "imported": a.get("linked_account_id") in booked,
+                "imported": a.get("linked_account_id") in booked
+                or a.get("linked_account_id") in history_read,
                 # What came from this bank, counted in the book: the import step's line.
                 "booked": (booked.get(a.get("linked_account_id") or "") or {}).get("count", 0),
                 # Of those, the ones still pending at the bank (booked uncleared, pending.py).

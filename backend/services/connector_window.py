@@ -61,15 +61,20 @@ def default_window(
     return start.isoformat(), resolved_before, warning
 
 
-def account_window(provider: Provider, account_id: str) -> tuple[str, str, Optional[str], bool]:
+def account_window(
+    provider: Provider, account_id: str, *, history_read: bool = False
+) -> tuple[str, str, Optional[str], bool]:
     """``(since, before, warning, first_import)`` for ONE linked app account — the AI-free bank
     sync reads accounts one at a time, so an account unticked or never imported does not widen
     another's window. Never imported from this provider → its backfill (``history_since``);
     otherwise ``lookback_days`` before that account's newest booked row, never more than
-    ``MAX_CATCH_UP_DAYS`` back."""
+    ``MAX_CATCH_UP_DAYS`` back. ``history_read``: its history was read before and the bank had
+    nothing, so no row says so — it catches up from today rather than re-reading it all."""
     today = user_today()
     before = today.isoformat()
     if account_id not in ledger_service.accounts_booked_from(provider.key):
+        if history_read:
+            return (today - timedelta(days=provider.lookback_days)).isoformat(), before, None, False
         return history_since(provider), before, None, True
     newest = ledger_service.newest_booked_date(provider.key, account_id)
     anchor = min(newest, today) if newest else today

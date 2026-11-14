@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Check, Download, Loader2, Play } from 'lucide-react'
 import { fDate } from '../../../../utils/format'
@@ -39,11 +39,19 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   const imported = accounts.some((a) => a.sync && a.imported)
   // A ticked account with no history yet (one linked after the import) is what Import is for.
   const missing = accounts.filter((a) => a.sync && !a.imported)
-  // The server only STARTS the import and answers at once; until the status names that run,
-  // the screen would fall back to the button for a moment. So it stays "importing" from the
-  // tap until the status catches up.
-  const [startedRun, setStartedRun] = useState<string | null>(null)
-  const awaitingRun = startedRun !== null && status.last_run?.id !== startedRun
+  // The server only STARTS the import and answers at once; until the status shows a newer run,
+  // the screen would fall back to the button for a moment. So it stays "importing" from the tap
+  // while the status still shows the run from before it — ANY newer run ends the wait (waiting
+  // for one particular run left the screen on "Starting…" when another one finished first),
+  // and so does a few seconds with nothing.
+  const [waitingFrom, setWaitingFrom] = useState<string | null>(null)
+  const awaitingRun =
+    waitingFrom !== null && !status.running && (status.last_run?.id ?? '') === waitingFrom
+  useEffect(() => {
+    if (waitingFrom === null) return
+    const timer = setTimeout(() => setWaitingFrom(null), 15000)
+    return () => clearTimeout(timer)
+  }, [waitingFrom])
   const importing = status.running || busy === 'import' || awaitingRun
   const noReads = outOfReads(status)
 
@@ -71,27 +79,13 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
           {reached < 2 ? null : importing ? (
             <ImportProgress run={status.running ? status.last_run : null} />
           ) : imported && missing.length === 0 ? (
-            <p className="bs-done">
-              <Check size={14} aria-hidden="true" />
-              {importedLine(accounts)}
-              {status.last_run && (
-                <button
-                  type="button"
-                  className="a3-linkbtn"
-                  onClick={() =>
-                    void navigate({
-                      to: '/accounts',
-                      search: {
-                        batch: `bank_sync:${status.last_run!.id}`,
-                        batchLabel: `${status.label} import · ${fDate(status.last_run!.started_at)}`,
-                      } as never,
-                    } as never)
-                  }
-                >
-                  View in register
-                </button>
-              )}
-            </p>
+            <ImportedSummary
+              accounts={accounts.filter((a) => a.sync && a.imported)}
+              historyDays={status.history_days ?? 90}
+              onOpen={(id) =>
+                void navigate({ to: '/accounts', search: { account: id } as never } as never)
+              }
+            />
           ) : (
             <>
               <p>
@@ -109,8 +103,9 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
                   disabled={!status.ready || noReads}
                   onClick={() =>
                     void act('import', async () => {
+                      const before = status.last_run?.id ?? ''
                       const r = await bankSyncSend<{ run_id?: string }>(`/${p}/import`, 'POST')
-                      if (r?.run_id) setStartedRun(r.run_id)
+                      if (r?.run_id) setWaitingFrom(before)
                       return r
                     })
                   }
@@ -160,26 +155,47 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
 
 /** "6 transactions imported, Nov 5 – Nov 13 · 3 pending" — counted in the book (a run's own
  *  record can be gone). */
-function importedLine(accounts: BankSyncAccount[]): string {
-  const into = accounts.filter((a) => a.sync && a.imported)
-  const n = into.reduce((sum, a) => sum + (a.booked ?? 0), 0)
-  const pend = into.reduce((sum, a) => sum + (a.booked_pending ?? 0), 0)
-  const firsts = into
-    .map((a) => a.booked_from)
-    .filter((d): d is string => !!d)
-    .sort()
-  const lasts = into
-    .map((a) => a.booked_to)
-    .filter((d): d is string => !!d)
-    .sort()
-  const first = firsts[0]
-  const last = lasts[lasts.length - 1]
-  const span =
-    first && last ? (first === last ? fDate(first) : `${fDate(first)} – ${fDate(last)}`) : ''
-  return [
-    `${n} ${n === 1 ? 'transaction' : 'transactions'} imported${span ? `, ${span}` : ''}`,
-    pend ? `${pend} pending` : '',
-  ]
+/** The import, account by account: what came in and from when, or that the bank had nothing.
+ *  Each account opens its register. One sentence for all of them (176 imported · none at the
+ *  bank for •••3555) was hard to read (owner, 2026-11-14). */
+function ImportedSummary({
+  accounts,
+  historyDays,
+  onOpen,
+}: {
+  accounts: BankSyncAccount[]
+  historyDays: number
+  onOpen: (accountId: string) => void
+}) {
+  return (
+    <div className="bs-imported">
+      <p className="bs-done">
+        <Check size={14} aria-hidden="true" />
+        History imported
+      </p>
+      <ul className="bs-imported-list">
+        {accounts.map((a) => (
+          <li key={a.account_id}>
+            <button type="button" className="bs-imported-acct" onClick={() => onOpen(a.account_id)}>
+              {a.name}
+              {a.last_four && <span className="bs-acct-mask">{`•••${a.last_four}`}</span>}
+            </button>
+            <span className="bs-imported-what">{importedDetail(a, historyDays)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function importedDetail(a: BankSyncAccount, historyDays: number): string {
+  const n = a.booked ?? 0
+  if (!n) return `No transactions at the bank in the last ${historyDays} days`
+  const from = a.booked_from
+  const to = a.booked_to
+  const span = from && to ? (from === to ? fDate(from) : `${fDate(from)} – ${fDate(to)}`) : ''
+  const pending = a.booked_pending ? `${a.booked_pending} pending` : ''
+  return [`${n} ${n === 1 ? 'transaction' : 'transactions'}`, span, pending]
     .filter(Boolean)
     .join(' · ')
 }

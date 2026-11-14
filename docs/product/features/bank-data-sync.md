@@ -39,8 +39,10 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
       so today's balance doesn't change. While it runs, the step names the account it's reading
       ("2 of 3" with several) and then how many transactions it's booking; a bank can take a
-      minute to send a long history. Once it's in, the step says so (with **View in register**);
-      **Import history** comes back only for an account that has no history yet. **Skip for now**
+      minute to send a long history. Once it's in, the step lists each account with what came in and
+      from when, or that the bank had no transactions for it (that account is done too); click an
+      account to open its register.
+      **Import history** comes back only for an account added after the import. **Skip for now**
       goes straight to step 3: the first sync brings the history in anyway.
    3. **Turn on.** Pick how often it runs, then **Turn on**: new transactions are booked on that
       schedule from then on.
