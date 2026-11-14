@@ -446,3 +446,38 @@ def test_an_unreadable_agreement_keeps_the_estimate_and_is_tried_again(gocardles
     gc._refresh(store)
     assert store.bank(key)["consent_expires_at"] == "2026-12-01T00:00:00+00:00"
     assert store.bank(key)["consent_dated"] is False
+
+
+# ── a multi-currency bank: pots share one IBAN ───────────────────────────────────────
+
+
+def _pots(gocardless, *, new_order=("USD", "EUR"), same_currency=False):
+    """Old pots A1 (EUR) and A2 (USD) on ONE IBAN; the renewal lists them as B1, B2 in
+    ``new_order``."""
+    store = _gc_store()
+    currencies = {A1: "EUR", A2: "USD"}
+    for acc, cur in currencies.items():
+        gocardless.details[acc] = {**_details(IBAN1), "currency": cur}
+    _linked(store, gocardless, OLD_REQ, [A1, A2])
+    for acc in (A1, A2):
+        store.cache_account_meta(acc, gc._read_meta(store, acc, store.banks()[0], {"name": "x"}))
+    for acc, cur in zip((B1, B2), new_order):
+        gocardless.details[acc] = {**_details(IBAN1), "currency": "EUR" if same_currency else cur}
+    _linked(store, gocardless, NEW_REQ, [B1, B2], replaces=OLD_REQ)
+    return store
+
+
+def test_pots_sharing_an_iban_are_matched_by_currency(gocardless):
+    store = _pots(gocardless)
+    assert gc._refresh(store) == []
+    bank = store.banks()[0]
+    assert bank["account_ids"] == [A2, A1]  # B1 is the USD pot, B2 the EUR one
+    assert bank["api_account_ids"] == {A2: B1, A1: B2}
+
+
+def test_pots_that_cannot_be_told_apart_are_not_carried(gocardless):
+    store = _pots(gocardless, same_currency=True)
+    warnings = gc._refresh(store)
+    bank = store.banks()[0]
+    assert bank["account_ids"] == [B1, B2] and bank["api_account_ids"] == {}
+    assert len(warnings) == 1 and "2 account(s)" in warnings[0]

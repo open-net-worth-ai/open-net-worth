@@ -281,10 +281,10 @@ To renew a bank before it expires, click **Renew**: the old access keeps working
 finish at the bank, so you lose nothing if you stop halfway.
 
 Access runs from the day you approve it at the bank, not from the day you started linking. Once
-a renewal is approved, each account is matched to the one it replaces by its IBAN, so its link
+a renewal is approved, each account is matched to the one it replaces by its IBAN and currency, so its link
 to your account and every transaction already booked carry on as they were: nothing to unlink or
 link again. (Open Net Worth keeps only a fingerprint of the IBAN.) An account the bank gives no
-IBAN for is named in a warning; link that one by hand.
+IBAN for, or accounts that share one IBAN and currency, are named in a warning; link those by hand.
 
 **Banks limit how often you can fetch.** Many allow only four reads per account per day. (With
 [Bank sync without AI](../features/bank-data-sync.md), each account shows the reads it has

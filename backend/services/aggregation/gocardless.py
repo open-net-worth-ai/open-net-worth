@@ -476,24 +476,28 @@ def _refresh(store: GoCardlessConfigStore) -> list[str]:
 
 def _carry_links(store: GoCardlessConfigStore, new: dict, old: dict) -> list[str]:
     """A renewal gives every account a new id at GoCardless. Match each new account to the one it
-    renews by its full IBAN (``_identity`` — a hash, never stored as the IBAN), and keep the OLD
+    renews by its full IBAN and currency (``_identity`` — a hash, never stored as the IBAN; a
+    multi-currency account's pots share one IBAN), and keep the OLD
     id as its id here (``api_account_ids`` maps it to the new one for GoCardless's own calls), so
     the book's links and every booked row's ref stay as they were. An account whose IBAN can't be
-    read is left under its new id (a link by hand, as before) and named in a warning."""
+    read — or one whose identity another account on the same side shares, which would be a guess —
+    is left under its new id (a link by hand, as before) and named in a warning."""
     meta = store.accounts_meta()
-    known: dict[str, str] = {}
+    old_identity: dict[str, Optional[str]] = {}
     for stable in old["account_ids"]:
         identity = (meta.get(stable) or {}).get("identity")
         if not identity:  # cached before identities were kept: read once, from the old consent
             identity = _read_account(store, old, stable, meta).get("identity")
-        if identity:
-            known[identity] = stable
+        old_identity[stable] = identity
+    new_details = {c: _read_account(store, new, c, {}) for c in new["account_ids"]}
+    old_seen = [i for i in old_identity.values() if i]
+    new_seen = [d.get("identity") for d in new_details.values() if d.get("identity")]
+    known = {i: a for a, i in old_identity.items() if i and old_seen.count(i) == 1}
     ids: list[str] = []
     api_ids: dict[str, str] = {}
-    for current in new["account_ids"]:
-        details = _read_account(store, new, current, {})
+    for current, details in new_details.items():
         identity = details.get("identity")
-        stable = known.pop(identity, None) if identity else None
+        stable = known.get(identity) if identity and new_seen.count(identity) == 1 else None
         if stable:
             api_ids[stable] = current
             with _META_LOCK:  # the fresher details, filed under the id the book knows it by
@@ -507,7 +511,8 @@ def _carry_links(store: GoCardlessConfigStore, new: dict, old: dict) -> list[str
         return []
     return [
         f"{_bank_name(new)}: {len(lost)} account(s) could not be matched to their earlier ones "
-        "(the bank gave no IBAN, or a read was refused) — unlink them and link the new ones"
+        "(no IBAN, a refused read, or accounts sharing one IBAN and currency) — unlink them and "
+        "link the new ones"
     ]
 
 
@@ -551,14 +556,17 @@ def _api_id(bank: dict, account_id: str) -> str:
     return (bank.get("api_account_ids") or {}).get(account_id, account_id)
 
 
-def _identity(institution_id: object, iban: object) -> Optional[str]:
-    """A hash of the bank and the account's FULL IBAN — the same account across consents. The
-    IBAN itself is never kept. None when the bank gives no IBAN (a card's masked PAN is no
+def _identity(institution_id: object, iban: object, currency: object) -> Optional[str]:
+    """A hash of the bank, the account's FULL IBAN and its currency — the same account across
+    consents (a multi-currency account's pots share an IBAN, so the currency tells them apart).
+    The IBAN itself is never kept. None when the bank gives no IBAN (a card's masked PAN is no
     identity)."""
     number = re.sub(r"\s+", "", str(iban or "")).upper()
     if not number:
         return None
-    return hashlib.sha256(f"gocardless-account:{institution_id}|{number}".encode()).hexdigest()[:32]
+    code = str(currency or "").strip().upper()
+    key = f"gocardless-account:{institution_id}|{number}|{code}"
+    return hashlib.sha256(key.encode()).hexdigest()[:32]
 
 
 def _read_meta(store: GoCardlessConfigStore, api_id: str, bank: dict, fallback: dict) -> dict:
@@ -576,7 +584,9 @@ def _read_meta(store: GoCardlessConfigStore, api_id: str, bank: dict, fallback: 
         "currency": (str(details.get("currency") or "").upper() or None),
         "mask": iban[-4:] or None,
         "account_type": _ACCOUNT_TYPES.get(str(details.get("cashAccountType") or "").upper()),
-        "identity": _identity(bank.get("institution_id"), details.get("iban")),
+        "identity": _identity(
+            bank.get("institution_id"), details.get("iban"), details.get("currency")
+        ),
         "read_at": _iso(_now()),
     }
 
