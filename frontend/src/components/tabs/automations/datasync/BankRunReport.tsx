@@ -1,6 +1,8 @@
 import { useNavigate } from '@tanstack/react-router'
+import { Sparkles } from 'lucide-react'
 import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
+import { useChatComposer } from '../../../../state/chatComposer'
 import { useQueryCache } from '../../../../state/queryCache'
 import { fAmountNative, fDate } from '../../../../utils/format'
 import { Badge, Cluster, ErrorState, Modal, Skeleton, Text } from '../../../ui'
@@ -142,6 +144,7 @@ function RunBody({
               View in register
             </button>
           )}
+          {(counts.booked ?? 0) > 0 && <CategorizeWithLucius r={r} onClose={onClose} />}
         </div>
       )}
       {problems.map((p, i) => (
@@ -151,6 +154,44 @@ function RunBody({
       ))}
       {(counts.booked ?? 0) > 0 && <Booked runId={r.id} onClose={onClose} />}
     </div>
+  )
+}
+
+/** Hands Lucius exactly this run's uncategorized rows: how many, from when to when, in which
+ *  accounts, and "all of them". His transaction tool can't filter by run, so a bare "these"
+ *  became "this month" and skipped the rest (owner test, 2026-11-14). The prompt lands in his
+ *  box, in a new conversation, for the user to send. */
+function CategorizeWithLucius({ r, onClose }: { r: RunRecord; onClose: () => void }) {
+  const booked = useBooked(r.id)
+  const composer = useChatComposer()
+  const open = (booked.data ?? []).filter((t) => !t.category)
+  if (!open.length) return null
+  const dates = open.map((t) => t.date).sort()
+  const first = dates[0]!
+  const last = dates[dates.length - 1]!
+  const accounts = [
+    ...new Set(
+      open.map((t) => (t.from_account_id ? t.from_account_name : t.to_account_name) || ''),
+    ),
+  ].filter(Boolean)
+  const span = first === last ? fDate(first) : `${fDate(first)} – ${fDate(last)}`
+  const prompt =
+    `Categorize the ${open.length} uncategorized ${open.length === 1 ? 'transaction' : 'transactions'} ` +
+    `the ${r.plan_name || 'bank'} sync booked on ${fDate(r.started_at.slice(0, 10))}: all of them, ` +
+    `dated ${span}${accounts.length ? `, in ${accounts.join(', ')}` : ''}.`
+  return (
+    <button
+      type="button"
+      className="a3-linkbtn bs-run-lucius"
+      onClick={() => {
+        composer.setPendingText(prompt)
+        composer.requestOpen(true)
+        onClose()
+      }}
+    >
+      <Sparkles size={12} aria-hidden="true" />
+      Categorize with Lucius
+    </button>
   )
 }
 

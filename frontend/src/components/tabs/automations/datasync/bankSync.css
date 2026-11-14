@@ -256,9 +256,19 @@
 }
 .bs-run-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 6px 14px;
+}
+.bs-run-head > :first-child {
+  flex: 1;
+}
+/* Lucius's own colour: --lucius is reserved for him. */
+.bs-run-head .bs-run-lucius {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--lucius);
 }
 .bs-run-list li {
   border-top: 1px solid var(--line);

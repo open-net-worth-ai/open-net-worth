@@ -62,7 +62,9 @@ when it last synced.
 Click a run in the history to see what it did: what it read from the bank, what it booked (each
 transaction, with its account and category), what it left pending or sent to review, and any
 problems. Click a transaction there to open its details, or **View in register** to see
-everything that run booked in the Accounts register.
+everything that run booked in the Accounts register. When some of what it booked has no
+category, **Categorize with Lucius** puts a request for exactly those transactions (how many,
+their dates and accounts) in Lucius's box, in a new conversation, for you to send.
 The connector page shows one line (on or off, and the next sync) and **Manage**, which opens
 that page.
 
