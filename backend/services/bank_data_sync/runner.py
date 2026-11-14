@@ -142,7 +142,10 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     out.rows.extend(rows)
     out.read[app_id] = since
     out.read_as[app_id] = pid
-    if relink.is_relinked(p.key, app_id, pid):
+    remembered = relink.read_as(p.key).get(app_id)
+    if relink.is_relinked(p.key, app_id, pid) or (
+        not remembered and relink.looks_relinked(p.key, app_id, rows, since)
+    ):
         out.relinked.add(app_id)
     for acc in result.get("accounts") or []:
         if acc.get("provider_account_id") != pid:

@@ -6,8 +6,9 @@ the old account and Link the new one, and the next read listed the whole window 
 book had never seen: all of it was booked a second time (UAT 2026-11-14, 73 rows).
 
 The sync remembers which bank account it last read for each book account (``read_as``: book
-account id → provider account id, ``runtime_state``). When that changes, the first read is a
-RE-LINK read: each row with no known ref is matched to a row already booked on that account
+account id → provider account id, ``runtime_state``). When that changes — or, with nothing
+remembered, when the read lists none of the rows the account holds in its window
+(``looks_relinked``) — the first read is a RE-LINK read: each row with no known ref is matched to a row already booked on that account
 from this connector whose own refs the bank no longer lists — same signed amount, same day
 first, then the nearest within ``_NEAR`` days, never one row twice — and the new ref is attached
 to it instead of booking it. A pending row matches only a pending booking (its tracked entry
@@ -37,6 +38,33 @@ def is_relinked(provider: str, account_id: str, provider_account_id: str) -> boo
     Never read before (or read before this was remembered): not a re-link."""
     prior = read_as(provider).get(account_id)
     return bool(prior) and prior != provider_account_id
+
+
+def looks_relinked(provider: str, account_id: str, rows: list[dict], since: str) -> bool:
+    """A re-link seen in the read itself, for a book account with no ``read_as`` yet — linked
+    before this was remembered, or whose bank failed every read since (an expired sign-in, then
+    linked again: the 73-row UAT duplicate, live 2026-11-15). The bank lists rows in the window,
+    the account holds rows from this connector dated in it, and not one of them is listed: the
+    bank's ids changed. A normal read always lists some of what it booked last time."""
+    listed = _listed(rows)
+    if not listed:
+        return False
+    from backend.core.txn_sources import ext_ref_pairs
+
+    openings = ledger_service.opening_txn_ids()
+    held: set[str] = set()
+    for t in ledger_service.transactions.all():
+        if t.get("deleted") or t.get("id") in openings or str(t.get("date") or "")[:10] < since:
+            continue
+        if account_id in (t.get("from_account_id"), t.get("to_account_id")):
+            held.update(ref for src, ref in ext_ref_pairs(t) if src == provider)
+    return bool(held) and not held & listed
+
+
+def _listed(rows: list[dict]) -> set[str]:
+    return {_ref(r) for r in rows if _ref(r)} | {
+        a for r in rows for a in r.get("ref_aliases") or [] if isinstance(a, str)
+    }
 
 
 def remember(provider: str, read: dict[str, str]) -> None:
@@ -91,9 +119,7 @@ def carry(provider: str, rows: list[dict], relinked: set[str]) -> int:
     many were matched. Runs inside the booker's audit scope."""
     if not relinked:
         return 0
-    listed = {_ref(r) for r in rows if _ref(r)} | {
-        a for r in rows for a in r.get("ref_aliases") or [] if isinstance(a, str)
-    }
+    listed = _listed(rows)
     pool = _candidates(provider, relinked, listed)
     entries = pending.tracked(provider)
     pending_by_txn = {e.get("txn_id"): k for k, e in entries.items() if not e.get("settled")}
