@@ -78,6 +78,7 @@
 }
 /* One card per bank: its name and status on top, its accounts below. */
 .bs-bank {
+  container-type: inline-size;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--panel);
@@ -209,6 +210,49 @@
 }
 .bs-acct + .bs-acct {
   border-top: 1px solid var(--line);
+}
+.bs-acct .ui-check {
+  min-width: 0;
+}
+.bs-acct .ui-check__label {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.bs-acct-nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bs-acct .bs-acct-mask {
+  flex: none;
+}
+/* The Accounts card narrower than ~560px of its OWN width (the Lucius panel open, a phone): each
+   account is two lines — the bank's name and mask, then the book account and its gap. */
+@container (max-width: 560px) {
+  .bs-acct-cols {
+    display: none;
+  }
+  .bs-acct {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 3px;
+  }
+  .bs-acct-side {
+    padding-left: calc(16px + var(--space-3));
+  }
+}
+/* The sync page's content narrower than ~900px (the Lucius panel open): History goes under
+   Accounts rather than squeezing both. */
+.bs-detail {
+  container-type: inline-size;
+}
+@container (max-width: 900px) {
+  .bs-detail .a3-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
 }
 .bs-acct-mask {
   margin-left: 6px;

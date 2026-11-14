@@ -276,6 +276,21 @@ describe('with bank_data_sync on', () => {
     expect(other.textContent).toContain('Other Card')
   })
 
+  it('a long bank account name is cut with an ellipsis and keeps its full name in the title', () => {
+    const base = status().accounts![0]!
+    const long = 'Plaid Gold Standard 0% Interest Checking'
+    render(
+      <BankSyncSettings
+        status={status({
+          mode: 'data',
+          stage: 'done',
+          accounts: [{ ...base, bank: 'ACME Bank', bank_name: long, mask: '0000' }],
+        })}
+      />,
+    )
+    expect(screen.getByTitle(long).textContent).toBe(long)
+  })
+
   it.each([
     [{ access_ends_at: '2099-02-11T00:00:00+00:00' }, /ACME Current/, null],
     [

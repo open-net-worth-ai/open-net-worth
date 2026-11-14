@@ -55,7 +55,7 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
   const status = sync.data
   if (status.stage === 'done')
     return (
-      <div className="a3-wrap" data-od-id="bank-sync-detail">
+      <div className="a3-wrap bs-detail" data-od-id="bank-sync-detail">
         {crumb}
         <BankSyncHead status={status} />
         <div className="a3-cols">
