@@ -387,10 +387,30 @@ def create_session(code: str, state: str = "") -> dict:
         # back to them — even on a book that never listed its accounts since it was linked.
         _remember_accounts(store, token, old_session, store.bank(key) or {})
         _revoke_session(token, old_session)
+    _store_stable_ids(store, token, key, session_id, accounts)
     from backend.services.bank_data_sync import budget
 
     budget.access_renewed("enable_banking")
     return {"session_id": session_id, "accounts": accounts, "bank_key": key}
+
+
+def _store_stable_ids(
+    store: EnableBankingConfigStore, token: str, key: str, session_id: str, accounts: list
+) -> None:
+    """Record the new bank's accounts under their ids HERE — AFTER the consent it renews had
+    its accounts remembered, so each maps back to the id its links already use. Stored as the
+    session's own uids, a renewed bank's accounts were no longer found by their links, and its
+    expiry warning and "Access ended" vanished (review 2026-11-15). Best effort."""
+    bank = store.bank(key) or {}
+    entries = [a for a in accounts if isinstance(a, dict) and a.get("identification_hash")]
+    try:
+        entries = entries or session_accounts_data(token, session_id)
+    except (ExternalServiceError, httpx.HTTPError, ValueError) as exc:
+        logger.info("enable_banking: a new consent's account ids stay as given: %s", exc)
+        return
+    ids = [_stable_account_id(store, bank, a) for a in entries if _account_uid(a)]
+    if ids:
+        store.set_account_ids(key, ids)
 
 
 def _account_hashes(token: str, session_id: str, accounts: Optional[list] = None) -> set[str]:

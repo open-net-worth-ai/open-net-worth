@@ -192,3 +192,27 @@ def test_plaid_another_banks_failure_never_cuts_this_accounts_read_short(monkeyp
         lambda store, **kw: {**fetched(store), "cut_short": {"acme-ok"}},
     )
     assert plaid.fetch_window(None, "2026-11-01", "2026-11-14", "acme-ok").complete is False
+
+
+# ── Enable Banking: a renewed bank is still found by the accounts linked to it ──────────────
+
+
+def test_a_renewed_bank_keeps_its_accounts_ids_so_its_expiry_still_shows(db_isolated):
+    from backend.db.enable_banking_config_store import EnableBankingConfigStore
+    from backend.services.aggregation import enable_banking as eb
+
+    store = EnableBankingConfigStore()
+    # The account as first linked: its id here is the first uid it was seen under.
+    store.account_id(aspsp="ACME Bank", country="FI", identification_hash="H1", uid="UID-OLD")
+    key, _ = store.add_bank(
+        "SESS-NEW",
+        aspsp="ACME Bank",
+        country="FI",
+        valid_until="2027-02-10T00:00:00+00:00",
+        linked_at="2026-11-15",
+        account_ids=["UID-NEW"],
+    )
+    eb._store_stable_ids(
+        store, "tok", key, "SESS-NEW", [{"uid": "UID-NEW", "identification_hash": "H1"}]
+    )
+    assert store.bank(key)["account_ids"] == ["UID-OLD"]
