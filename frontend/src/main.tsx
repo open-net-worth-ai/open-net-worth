@@ -21,14 +21,17 @@ import { LazyPhoneSetupPage } from './components/phoneSetup/LazyPhoneSetupPage.t
 import { wireDataSource } from './lucius/adapters'
 import { onwDataSource, readEmbeddedDescriptors } from './lucius/onwDataSource'
 import { refreshFromAdapter, seedEntityRegistry } from './lucius/entityRegistry'
-import { relayoutAfterRotation, stampPwaDisplayMode } from './utils/pwa'
+import { relayoutAfterRotation, relayoutAfterSwipeBack, stampPwaDisplayMode } from './utils/pwa'
 import { watchStatusBarTint } from './utils/statusBarTint'
+import { startTapDiagnostics } from './utils/tapDiagnostics'
 
 // CSS must know whether browser chrome exists before the mobile shell renders. The iOS
 // navigator.standalone fallback is more reliable than the display-mode query by itself.
 stampPwaDisplayMode()
 relayoutAfterRotation()
+relayoutAfterSwipeBack()
 watchStatusBarTint()
+startTapDiagnostics()
 
 // Wire the ONW DataSourceAdapter — the seam between the core mention engine and
 // the FastAPI backend (GET /api/mentionables, POST /api/mentions/resolve,

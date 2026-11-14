@@ -571,6 +571,23 @@ async def _run_linked_account_totals() -> None:
         logger.exception("scheduler: linked_account_totals error: %s", exc)
 
 
+async def _run_followed_portfolios() -> None:
+    """Re-read every followed portfolio's source for a new filing (flag-gated at run time, so
+    switching the flag needs no re-registration)."""
+    try:
+        from backend.services.feature_flags import enabled
+        from backend.services.followed_portfolios import service
+
+        if not enabled("followed_portfolios"):
+            return
+        result = await asyncio.to_thread(service.refresh_all)
+        warmed = await asyncio.to_thread(service.warm_featured)
+        if result["checked"] or warmed:
+            logger.info("scheduler: followed_portfolios — %s, %d previews warm", result, warmed)
+    except Exception as exc:
+        logger.exception("scheduler: followed_portfolios error: %s", exc)
+
+
 async def _run_bank_data_sync() -> None:
     """Tick of the AI-free bank sync (ADR 2026-11-13): runs each connector in "Sync without AI"
     mode when its own schedule says it is due. Nothing at all while ``bank_data_sync`` is off."""
@@ -688,6 +705,19 @@ def start() -> None:
             id="bank_data_sync",  # one generic tick, opt-in per connector — not an ingest:<provider> poll
             replace_existing=True,
             misfire_grace_time=120,
+            max_instances=1,
+        )
+
+    # Followed portfolios — filings land quarterly (13F) or a few times a month (House), so
+    # twice a day is generous. Calls SEC / House Clerk, hence not on a QA run.
+    if outward:
+        _scheduler.add_job(
+            _run_followed_portfolios,
+            # Soon after start: it also warms the Discover cards, which a first visit waits on.
+            trigger=IntervalTrigger(hours=12, start_date=datetime.now() + timedelta(minutes=1)),
+            id="followed_portfolios",
+            replace_existing=True,
+            misfire_grace_time=3600,
             max_instances=1,
         )
 

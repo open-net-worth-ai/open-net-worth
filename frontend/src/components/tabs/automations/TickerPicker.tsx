@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react'
 import { authFetch } from '../../../api/client'
 import type { AutomationOption } from '../../../api/automations'
 
-interface MarketResult {
+export interface MarketResult {
   symbol: string
   name: string
   asset_class: string
@@ -28,7 +28,9 @@ export interface PickedInstrument {
   currency?: string
 }
 
-function useMarketSearch(query: string, enabled: boolean) {
+/** The command palette's market search, debounced: shared with the Copy Trading ticker
+ *  fix (search only; nothing is created until something is picked here). */
+export function useMarketSearch(query: string, enabled: boolean) {
   const [results, setResults] = useState<MarketResult[]>([])
   const [loading, setLoading] = useState(false)
   useEffect(() => {

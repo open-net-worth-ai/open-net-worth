@@ -286,6 +286,10 @@ def _align_vectors(
     return aligned_p, aligned_a
 
 
+# Public for a caller that lines up its own two return vectors (the followed-portfolio compare).
+align_vectors = _align_vectors
+
+
 def _daily_return_series_from_value_series(
     start: str,
     end: str,

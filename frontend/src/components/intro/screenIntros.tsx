@@ -176,7 +176,7 @@ export const SCREEN_INTROS: Record<IntroScreen, ScreenIntroConfig> = {
       'statement instead of typing. Ask me one thing at a time.',
   },
   intel: {
-    name: 'Intel',
+    name: 'Intelligence',
     start: {
       target: 'setup-intel',
       title: 'Watch a ticker',

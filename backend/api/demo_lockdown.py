@@ -121,6 +121,9 @@ _LOCKED: tuple[_Rule, ...] = (
     ),
     *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
+    # A directory search, a preview and a follow make this server call SEC / the House Clerk; the writes
+    # are refused by default (not in ``_WRITABLE``), the search needs its own line.
+    *_rules(_ANY, r"^/api/followed-portfolios/(directory|preview|preview/returns)$"),
     # Actual reads a saved server on a GET too: a budget list signs in and answers with names.
     *_rules(_ANY, r"^/api/actual-budget(/.*)?$"),
     # The REST connector's list shows each API's address (a credential), and reading an OpenAPI
@@ -130,6 +133,7 @@ _LOCKED: tuple[_Rule, ...] = (
     *_rules(
         _ANY,
         r"^/api/logs$",
+        r"^/api/diagnostics/client$",
         r"^/api/qa(/.*)?$",
         r"^/api/setup-status/(data-location|inspect-path)$",
         r"^/api/checkpoints(/.*)?$",

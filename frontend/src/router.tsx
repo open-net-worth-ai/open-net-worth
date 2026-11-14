@@ -170,6 +170,8 @@ const automationsRoute = createRoute({
     // Deep-link from a Connectors provider section's "Automate with a template" — opens the
     // editor prefilled with `sync_<provider>` and is cleared once consumed (Automations.tsx).
     template: typeof search.template === 'string' ? search.template : undefined,
+    // What the template is for (a followed portfolio's name): fills its `[name]`.
+    for: typeof search.for === 'string' ? search.for : undefined,
     // `view=sync` shows the data syncs (fixed rules, no AI); `sync=ynab` opens one, and
     // `report` one of its runs.
     view: typeof search.view === 'string' ? search.view : undefined,

@@ -110,6 +110,7 @@ from backend.api.chat import router as chat_router
 from backend.api.chat_pairing_api import router as chat_pairing_router
 from backend.api.chat_suggestions import router as chat_suggestions_router
 from backend.api.checkpoints import router as checkpoints_router
+from backend.api.client_diagnostics import router as client_diagnostics_router
 from backend.api.commitments_api import router as commitments_router
 from backend.api.config import router as config_router
 from backend.api.connector_secrets import router as connector_secrets_router
@@ -131,6 +132,7 @@ from backend.api.favicon import router as favicon_router
 from backend.api.feature_flags import router as feature_flags_router
 from backend.api.fire import router as fire_router
 from backend.api.fixed_income import router as fixed_income_router
+from backend.api.followed_portfolios import router as followed_portfolios_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
 from backend.api.gocardless_api import router as gocardless_router
 from backend.api.ibkr_api import router as ibkr_router
@@ -1182,6 +1184,7 @@ app.include_router(options_router)
 app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
 app.include_router(investment_theses_router)
+app.include_router(followed_portfolios_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)
@@ -1268,6 +1271,7 @@ app.include_router(connector_secrets_router)
 app.include_router(connectors_router)
 app.include_router(demo_router)
 app.include_router(logs_router)
+app.include_router(client_diagnostics_router)
 app.include_router(problem_reports_router)
 app.include_router(product_docs_router)
 app.include_router(terminal_router)
@@ -1459,7 +1463,14 @@ def _with_cache_policy(response, path: str):
         # never a version-mismatched pair to replay. The cost is one small local HTML fetch
         # per navigation; the hashed CSS/JS it points at stay cached for a year below.
         response.headers["Cache-Control"] = "no-store"
-    elif "_astro/" in path or "/assets/" in path or path.startswith("assets/"):
+    elif (
+        "_astro/" in path
+        or "/assets/" in path
+        or path.startswith(("assets/", "portfolio-photos/", "portfolio-logos/"))
+    ):
+        # Famous Portfolios' portraits and logos carry a content hash in their names
+        # (`<name>-<hash>.webp`), so a new picture is a new file: with no header the
+        # browser re-asked for every card's picture on each visit (owner, 2026-11-13).
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     elif path.startswith("connector-logos/"):
         # Brand marks keep their names when replaced, so not immutable — but left with no

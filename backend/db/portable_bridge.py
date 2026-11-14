@@ -427,6 +427,7 @@ from backend.db.tables import (
     envelopes,
     evidence,
     evidence_subjects,
+    followed_portfolios,
     grants,
     import_batches,
     import_runs,
@@ -802,6 +803,7 @@ BRIDGED: dict[str, Bridge] = {
     "vest_events.json": _investment_bridge(vest_events),
     "option_contracts.json": _investment_bridge(option_contracts),
     "investment_theses.json": _investment_bridge(investment_theses),
+    "followed_portfolios.json": _investment_bridge(followed_portfolios),
     "realized_events.json": _investment_bridge(realized_events),
     "watchlist.json": Bridge(
         export_fn=investments_io.export_watchlist,
@@ -1157,6 +1159,10 @@ def _wipe_investment_theses(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, investment_theses, "id")
 
 
+def _wipe_followed_portfolios(conn: Connection) -> list[Path]:
+    return _capture_then_delete(conn, followed_portfolios, "id")
+
+
 def _wipe_realized_events(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, realized_events, "id")
 
@@ -1450,6 +1456,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     "vest_events.json": _wipe_vest_events,
     "option_contracts.json": _wipe_option_contracts,
     "investment_theses.json": _wipe_investment_theses,
+    "followed_portfolios.json": _wipe_followed_portfolios,
     "realized_events.json": _wipe_realized_events,
     "watchlist.json": _wipe_watchlists,
     # wipe-only — deliberately NOT a BRIDGED key (a cache; module docstring, PLAN 4B TASK

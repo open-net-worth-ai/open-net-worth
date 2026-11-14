@@ -124,6 +124,31 @@ def _fetch_name(symbol: str) -> tuple[str, str, str]:
         return symbol, "", ""
 
 
+def company_names(symbols: list[str], *, fetch_missing: bool = False) -> dict[str, str]:
+    """``{symbol: display name}`` from the name cache the rest of the app reads ("Bank of
+    America Corporation", not a filing's "BANK OF AMER CORP"). With ``fetch_missing``, the
+    uncached ones are looked up first (in parallel) and the cache saved."""
+    wanted = [s for s in dict.fromkeys(symbols) if s]
+    missing = [s for s in wanted if s not in _NAMES_CACHE]
+    if fetch_missing and missing:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(missing), 14)) as ex:
+            list(ex.map(_fetch_name, missing))
+        save_names_cache(_NAMES_CACHE)
+    return {s: display_name(_NAMES_CACHE[s]) for s in wanted if _NAMES_CACHE.get(s)}
+
+
+def company_sectors(symbols: list[str], *, fetch_missing: bool = False) -> dict[str, str]:
+    """``{symbol: sector}`` ("Technology", "Financial Services") from the sector cache the
+    Investments allocation reads. With ``fetch_missing``, the uncached ones are looked up first."""
+    wanted = [s for s in dict.fromkeys(symbols) if s]
+    missing = [s for s in wanted if not _SECTOR_CACHE.get(s)]
+    if fetch_missing and missing:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(missing), 14)) as ex:
+            list(ex.map(_fetch_sector, missing))
+        save_sectors_cache(_SECTOR_CACHE)
+    return {s: _SECTOR_CACHE[s] for s in wanted if _SECTOR_CACHE.get(s)}
+
+
 def _fetch_sector(symbol: str) -> str:
     if _SECTOR_CACHE.get(symbol):
         return _SECTOR_CACHE[symbol]

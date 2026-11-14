@@ -312,6 +312,13 @@ export interface ReturnSeriesPoint {
 
 export interface PortfolioReturns {
   period: ReturnPeriod
+  /** The one asset type these figures cover, `all_assets` for the book plus owned assets, or
+   *  null for the whole invested book. */
+  band?: 'equity' | 'crypto' | 'commodity' | 'all_assets' | null
+  /** The asset types the book holds at the window's end, largest first. */
+  bands_held?: ('equity' | 'crypto' | 'commodity')[]
+  /** Whether you own at least one valued asset (a home, a car): what `all_assets` adds. */
+  has_owned_assets?: boolean
   start: string // requested window start (original, pre-clamp)
   end: string
   effective_start: string // actual window start after clamping to inception / price_floor

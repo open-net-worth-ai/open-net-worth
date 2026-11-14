@@ -657,6 +657,8 @@ envelopes = book_payload_table("envelopes")
 income_events = book_payload_table("income_events")
 # Why you own / would buy an instrument (services.investment_theses) — one row per instrument.
 investment_theses = book_payload_table("investment_theses")
+# Public portfolios the user follows (services.followed_portfolios) — one row per follow.
+followed_portfolios = book_payload_table("followed_portfolios")
 recurring_streams = book_payload_table("recurring_streams")
 targets = book_payload_table("targets")
 corrections = book_payload_table("corrections")
