@@ -208,9 +208,9 @@ More in [Models and cost](../lucius/models-and-cost.md).
 
 ## Without a model
 
-First run asks for a model; **Not now** skips it (add one later in **Settings → AI Models**). If
-you don't want to pay, use a free local model. Without a model, or if yours later becomes
-unavailable (out of credit, signed out), everything except Lucius keeps working: accounts, the ledger, budgeting, investments and CSV/OFX/QIF import. What needs a
+First run asks for a model — there's no skip. If you don't want to pay, use a free local model.
+If your model later becomes unavailable (out of credit, signed out), everything except Lucius
+keeps working: accounts, the ledger, budgeting, investments and CSV/OFX/QIF import. What needs a
 model: chatting with Lucius, reading PDF statements and screenshots, auto-categorizing,
 automations and memory.
 

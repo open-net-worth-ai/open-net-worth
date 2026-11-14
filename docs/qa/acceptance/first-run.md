@@ -85,8 +85,6 @@ Several criteria need a *genuinely* fresh instance — run `make qa-fresh-reset`
   off without a model
 - WHEN I click it
 - THEN first run advances and no model config is written
-- AND finishing setup lands on the Dashboard, not a Lucius chat with no model behind it, and a
-  reload stays in the app (the completion stamp doesn't wait on a model)
 
 ---
 
