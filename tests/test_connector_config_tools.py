@@ -25,6 +25,10 @@ import pytest
 
 from backend.models.mcp_client import McpServerConfig, mcp_connector_id
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_connector_config_tools_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 
 @pytest.fixture()
 def svc(db_isolated):

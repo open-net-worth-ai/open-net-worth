@@ -24,6 +24,10 @@ from backend.db import category_store as cat_mod
 from backend.services import ledger as svc
 from backend.services import ledger_preview, payee_registry
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_ledger_confirm_gate_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 # The two tools the gate mechanism is exercised against. NOT the production policy — see the
 # `env` fixture's note on why those are now two different things.
 _MECHANISM_TOOLS = ("add_transactions", "update_transactions")

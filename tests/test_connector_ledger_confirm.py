@@ -36,6 +36,10 @@ from backend.core.tool_use_context import set_tool_use_id
 from backend.db import category_store as cat_mod
 from backend.services import ledger as svc
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_connector_ledger_confirm_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 
 class _TextOnlyProvider:
     """Stubs the resume's one model round trip — plain text, no tools, no network."""

@@ -29,6 +29,10 @@ from backend.db import skill_store as _skill_store_mod
 from backend.db.skill_store import SkillStore
 from backend.services import skill_bundles as _sb_mod
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_run_script_tool_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
