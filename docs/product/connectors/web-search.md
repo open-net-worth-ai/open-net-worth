@@ -24,7 +24,7 @@ only need this page if you want a different search provider.
 |---|---|---|
 | **DuckDuckGo** | Free, no setup. Fine for occasional lookups; can be rate-limited under heavy use. | No key needed |
 | **Tavily** | Search built for AI — returns clean page text. A good all-round upgrade. | [app.tavily.com](https://app.tavily.com/) |
-| **Perplexity (Sonar)** | Answers the question directly and lists the sources it used. | Your Perplexity account → **Settings → API** ([perplexity.ai/settings/api](https://www.perplexity.ai/settings/api)); needs API credit |
+| **Perplexity (Sonar)** | Answers the question directly and lists the sources it used. | Your Perplexity account → **Settings → API** ([console.perplexity.ai](https://console.perplexity.ai/)); needs API credit |
 | **Serper** | Google's results, fast and low-cost. | [serper.dev/api-keys](https://serper.dev/api-keys) |
 | **Google Programmable Search** | Google's own search API. Needs an API key **and** a search engine ID. | See [Google Programmable Search](#google-programmable-search) |
 | **Firecrawl** | Search plus full-page reading, including pages that only render with JavaScript. Pick it if page reads come back empty or blocked. | [firecrawl.dev/app/api-keys](https://www.firecrawl.dev/app/api-keys) |
