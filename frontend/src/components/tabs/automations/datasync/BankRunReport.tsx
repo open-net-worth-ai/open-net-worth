@@ -76,6 +76,7 @@ export function BankRunReport({ runId, onClose }: { runId: string; onClose: () =
     <Modal
       open
       size="md"
+      className="bs-run-modal"
       onClose={onClose}
       title={
         r ? (

@@ -493,3 +493,8 @@
   border-radius: 50%;
   box-sizing: border-box;
 }
+
+/* A run's report: a little wider than a form dialog, so payee, category and amount breathe. */
+.ui-modal-card.bs-run-modal {
+  width: min(620px, 100%);
+}
