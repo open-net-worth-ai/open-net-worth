@@ -271,9 +271,11 @@ function UndoRun({
                       your review, where you can Book again or Dismiss it.
                     </p>
                     {error && (
-                      <Text size="sm" tone="bad" role="alert">
-                        {error}
-                      </Text>
+                      <div role="alert">
+                        <Text size="sm" tone="bad">
+                          {error}
+                        </Text>
+                      </div>
                     )}
                   </>
                 ),
