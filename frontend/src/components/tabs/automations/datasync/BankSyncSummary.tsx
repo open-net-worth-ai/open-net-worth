@@ -7,7 +7,7 @@ import './bankSync.css'
 
 // The bank sync on a connector's page (ADR 2026-11-13). Before it's set up: the connector's one
 // "Next: bring in transactions" card, with Set up sync. After: one line (on or off, next sync)
-// and Manage. Both open its page in Automations → Data sync. Nothing for a connector without a
+// and Manage. Both open its page in Automations → Data Sync. Nothing for a connector without a
 // sync, or with the flag off.
 
 export function BankSyncSection({ provider }: { provider: string }) {

@@ -128,7 +128,7 @@ def refuse_beside_data(automation: dict) -> None:
             raise ConflictError(
                 f"{p.label} already syncs without AI, so this Automation would book its rows "
                 f"twice. To let Lucius sync it instead, turn that sync off first in Automations → "
-                f"Data sync → {p.label}."
+                f"Data Sync → {p.label}."
             )
 
 

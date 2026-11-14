@@ -9,7 +9,7 @@ import { DataSyncCard } from './DataSyncCard'
 import type { BankSyncStatus } from './bankSync'
 import type { DataSyncEntry } from './useDataSyncs'
 
-// The Data sync view of Automations: syncs that keep this book and another app in step by fixed
+// The Data Sync view of Automations: syncs that keep this book and another app in step by fixed
 // rules, with no AI involved. The ones not set up yet are offered below the ones that are.
 export function DataSyncView({
   entries,

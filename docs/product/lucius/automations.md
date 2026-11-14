@@ -201,7 +201,7 @@ Deleting an Automation also deletes its run history. It can't be undone.
 ## Data syncs
 
 The switch at the top of **Automations** has two sides. **Lucius** holds the jobs you give Lucius
-(everything on this page). **Data sync** holds syncs that keep this book and another app in step
+(everything on this page). **Data Sync** holds syncs that keep this book and another app in step
 by fixed rules instead: no prompt, model or permission mode, no AI involved, nothing to pay. Each
 opens to its own page with its settings and history, and the switch shows how many items wait for
 your review.

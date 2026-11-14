@@ -576,9 +576,9 @@ async function openGoCardlessForm(page, baseUrl) {
 /** The bank sync without AI, end to end (GCL_DATA_SYNC=1): chosen on the connector's page with
  *  one account unticked, a first import of the bank's whole history that keeps today's balance,
  *  a re-run that books nothing, a bank correction held for review, the 4-reads-a-day limit, the
- *  one-mode rule against a Lucius sync, and the Data sync tab. */
+ *  one-mode rule against a Lucius sync, and the Data Sync tab. */
 async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }) {
-  // The bank's own page in Automations → Data sync: its setup steps, then its status panel.
+  // The bank's own page in Automations → Data Sync: its setup steps, then its status panel.
   const openSyncPage = async () => {
     await bank.goto(`${baseUrl}/automations?view=sync&sync=bank:gocardless`)
     await dismissIntro(bank)
@@ -754,7 +754,7 @@ async function dataSyncSteps({ app, bank, baseUrl, fake, accountIds, bookedAll }
     const body = await r.json()
     assert.equal(r.status, 409, `a Lucius sync beside it answered ${r.status}`)
     assert.match(body.detail, /already syncs without AI/)
-    assert.match(body.detail, /Data sync → GoCardless/)
+    assert.match(body.detail, /Data Sync → GoCardless/)
   })
 
   await step(

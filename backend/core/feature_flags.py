@@ -128,7 +128,7 @@ FLAGS: tuple[Flag, ...] = (
         name="ynab_import_and_sync",
         description=(
             "Import a whole YNAB plan, then keep it and this book in step on a schedule: from "
-            "YNAB, to YNAB or both ways. Adds the Data sync tab in Automations."
+            "YNAB, to YNAB or both ways. Adds the Data Sync tab in Automations."
         ),
         default=True,
         owner="owner",
@@ -154,7 +154,7 @@ FLAGS: tuple[Flag, ...] = (
         name="actual_budget_sync",
         description=(
             "Connect an Actual server, import a whole budget and keep it and this book "
-            "in step on a schedule. Shares the Data sync tab in Automations with YNAB."
+            "in step on a schedule. Shares the Data Sync tab in Automations with YNAB."
         ),
         default=False,
         owner="owner",
@@ -191,7 +191,7 @@ FLAGS: tuple[Flag, ...] = (
             "Book a bank connector's transactions without AI. On the GoCardless, Enable Banking "
             "or Plaid connector, choose Sync without AI: each linked account you tick gets the "
             "history the bank serves, then new rows on a schedule. Changes the bank makes "
-            "afterwards wait for you in a review list. Bank syncs join the Data sync tab in "
+            "afterwards wait for you in a review list. Bank syncs join the Data Sync tab in "
             "Automations. Off: only a Lucius Automation books bank rows, as before."
         ),
         default=False,

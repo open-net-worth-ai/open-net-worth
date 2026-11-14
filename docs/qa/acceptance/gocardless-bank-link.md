@@ -153,7 +153,7 @@ default run proves nothing changed with the flag off.
 - THEN the GoCardless connector shows one **Sync** line ("Not set up · …") with **Set up sync**, no
   Lucius "Set up automation" card beside it, and no account boxes
 - WHEN I click **Set up sync**
-- THEN its page in Automations → Data sync opens on the setup steps, each linked account ticked
+- THEN its page in Automations → Data Sync opens on the setup steps, each linked account ticked
 
 ### GCL-DS-UNTICK
 - WHEN I untick Savings Pot
@@ -188,10 +188,10 @@ default run proves nothing changed with the flag off.
 
 ### GCL-DS-ONE-MODE
 - WHEN a Lucius **Sync GoCardless** Automation is created while it syncs without AI
-- THEN it is refused, naming the switch: turn that sync off first in Automations → Data sync → GoCardless
+- THEN it is refused, naming the switch: turn that sync off first in Automations → Data Sync → GoCardless
 
 ### GCL-DS-DATA-SYNC-TAB
-- WHEN I open Automations → Data sync
+- WHEN I open Automations → Data Sync
 - THEN GoCardless is listed; its page shows the history of every run
 - WHEN I click the first import's run
 - THEN its report lists the transactions it booked and how many stayed pending at the bank

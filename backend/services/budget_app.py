@@ -308,6 +308,6 @@ def refuse_beside_others(before: str, then: str) -> None:
     """``before`` and ``then``: what the person is doing, for the two sentences."""
     if other := other_sync_on():
         raise ConflictError(
-            f"The {other.name} sync is on. Turn it off in Data sync before {before}."
+            f"The {other.name} sync is on. Turn it off in Data Sync before {before}."
         )
     refuse_while_others_run(then)

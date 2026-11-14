@@ -103,7 +103,7 @@ def _accounts(p, key: str) -> list[dict]:
 
 
 def _stage(mode: str, accounts: list[dict], set_up: bool = False) -> str:
-    """Where setup stands — the steps on the bank's Data sync page: ``accounts`` (nothing linked
+    """Where setup stands — the steps on the bank's Data Sync page: ``accounts`` (nothing linked
     or ticked yet) → ``history`` (bring the history in) → ``sync`` (turn the sync on) → ``done``
     (the sync is on, a Lucius Automation syncs the bank, or the sync was turned on once — turning
     it off again leaves a set-up sync, as a budget app's does). Turning the sync on before
@@ -159,7 +159,7 @@ def _set_up(p) -> bool:
 
 
 def overview() -> list[dict]:
-    """Every bank connector that can sync without AI — the Automations → Data sync list. One
+    """Every bank connector that can sync without AI — the Automations → Data Sync list. One
     whose connector isn't set up yet (``connected`` false) is offered under "Add a data sync",
     as the budget apps are, so the sync is findable before its connector exists."""
     _require_on()

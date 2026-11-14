@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The Actual sync's page and its row in Data sync: YNAB's components with Actual's words, and the
+// The Actual sync's page and its row in Data Sync: YNAB's components with Actual's words, and the
 // little only Actual has (tracking, the server's warnings, the sentence a refusal comes back with).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,7 +19,7 @@ vi.mock('../../../../api/client', () => ({ authFetch }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 
 const HOST = 'actual.acme.test'
-const REFUSAL = 'The YNAB sync is on. Turn it off in Data sync before turning on the Actual sync.'
+const REFUSAL = 'The YNAB sync is on. Turn it off in Data Sync before turning on the Actual sync.'
 const CONNECTOR = {
   id: 'actual_budget',
   name: 'Actual Budget',
@@ -457,7 +457,7 @@ describe('the history', () => {
   })
 })
 
-describe('the Data sync list', () => {
+describe('the Data Sync list', () => {
   it('only Actual on: one tile, set up by name', async () => {
     actual = notSetUp()
     const onOpen = vi.fn()

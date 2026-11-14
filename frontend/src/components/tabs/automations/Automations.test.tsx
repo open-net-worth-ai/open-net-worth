@@ -533,12 +533,12 @@ describe('Automations', () => {
   })
 })
 
-// The Data sync view is behind the ynab_import_and_sync flag: off, the screen is main's.
+// The Data Sync view is behind the ynab_import_and_sync flag: off, the screen is main's.
 describe('Automations — the ynab_import_and_sync flag', () => {
   let restoreFlags: () => void = () => {}
   afterEach(() => restoreFlags())
 
-  it('off: no Data sync tab, and a sync deep link still opens the Lucius list', async () => {
+  it('off: no Data Sync tab, and a sync deep link still opens the Lucius list', async () => {
     restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: false })
     route.search = { view: 'sync', sync: 'ynab' }
     render(<Automations onOpenChat={vi.fn()} onOpenConversation={vi.fn()} />)
@@ -548,7 +548,7 @@ describe('Automations — the ynab_import_and_sync flag', () => {
     expect(screen.getByText(/^Run on a schedule or when something happens\./)).toBeTruthy()
   })
 
-  it('on: Lucius and Data sync are two tabs', async () => {
+  it('on: Lucius and Data Sync are two tabs', async () => {
     restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: true })
     render(<Automations onOpenChat={vi.fn()} onOpenConversation={vi.fn()} />)
 

@@ -12,7 +12,7 @@ import { nextRunLine, outOfReads, useAct, type Act } from './bankSyncHelpers'
 import { bankSyncSend, modeNotice, type BankSyncStatus, type ModeResult } from './bankSync'
 import './bankSync.css'
 
-// A bank's Data sync page once it is set up (ADR 2026-11-13), laid out as the budget apps' page
+// A bank's Data Sync page once it is set up (ADR 2026-11-13), laid out as the budget apps' page
 // is: the head holds the switch, the next sync and Sync now; the left column its settings. Data
 // sync is the no-AI path: someone who wants Lucius to sync a bank uses a Lucius Automation.
 

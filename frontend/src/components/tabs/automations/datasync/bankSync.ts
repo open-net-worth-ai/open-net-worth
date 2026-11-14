@@ -202,5 +202,5 @@ export function modeNotice(result: ModeResult): string | null {
   return null
 }
 
-/** Where a bank's sync lives: its page in Automations → Data sync. */
+/** Where a bank's sync lives: its page in Automations → Data Sync. */
 export const bankSyncSearch = (provider: string) => ({ view: 'sync', sync: `bank:${provider}` })

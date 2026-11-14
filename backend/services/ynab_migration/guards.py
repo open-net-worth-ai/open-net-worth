@@ -39,7 +39,7 @@ def refuse_another_budget(app, plan_id: str) -> None:
     st = app.stores.state().doc("state")
     if st.get("enabled") and st.get("plan_id") not in (None, plan_id):
         raise ConflictError(
-            f"The {app.name} sync is on for {st.get('plan_name')}. Turn it off in Data sync before "
+            f"The {app.name} sync is on for {st.get('plan_name')}. Turn it off in Data Sync before "
             f"importing another {app.name} {app.plan_word}."
         )
 

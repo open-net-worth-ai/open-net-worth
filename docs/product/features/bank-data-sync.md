@@ -24,7 +24,7 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
 
 ## Turn it on
 
-1. Open **Automations → Data sync**. GoCardless, Enable Banking and Plaid are there beside YNAB
+1. Open **Automations → Data Sync**. GoCardless, Enable Banking and Plaid are there beside YNAB
    and Actual: under **Add a data sync** until their connector is set up, then as a card. Or, on a
    connector's page, click **Set up sync** on its **Sync** line.
 2. The bank's own page walks you through it. A bank not connected yet starts with **Connect

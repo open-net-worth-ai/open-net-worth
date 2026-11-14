@@ -80,7 +80,7 @@ def test_a_lucius_sync_cannot_be_turned_on_while_data_sync_is(bank):
     bank_data_sync.set_mode("gocardless", "data")
     with pytest.raises(ConflictError, match="already syncs without AI"):
         _automation()
-    with pytest.raises(ConflictError, match="Data sync → GoCardless"):
+    with pytest.raises(ConflictError, match="Data Sync → GoCardless"):
         apply_automation_change({"op": "resume", "id": paused["id"]})
 
 

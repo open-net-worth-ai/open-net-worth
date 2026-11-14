@@ -4,7 +4,7 @@ import type { BankSyncStatus } from './bankSync'
 import { everyLabel } from './bankSyncHelpers'
 import { BankLogo } from './BankSyncParts'
 
-// A bank connector in the Data sync view: the same row as a budget app's sync, opening the
+// A bank connector in the Data Sync view: the same row as a budget app's sync, opening the
 // bank's own sync page.
 
 export function BankSyncCard({ status, onOpen }: { status: BankSyncStatus; onOpen: () => void }) {

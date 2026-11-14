@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // Bank sync without AI (ADR 2026-11-13): the connector line, the bank's page (the on/off switch,
-// Sync per account, the setup steps), the review list and the Data sync card — and nothing at all
+// Sync per account, the setup steps), the review list and the Data Sync card — and nothing at all
 // with the flag off. No Lucius option anywhere on it.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -446,7 +446,7 @@ describe('with bank_data_sync on', () => {
     expect(screen.queryByRole('button', { name: 'Link accounts' })).toBeNull()
   })
 
-  it('puts bank connectors in the Data sync view beside the budget apps', () => {
+  it('puts bank connectors in the Data Sync view beside the budget apps', () => {
     const onOpen = vi.fn()
     render(
       <DataSyncView

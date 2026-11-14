@@ -10,7 +10,7 @@ import { BankSyncSetup } from './BankSyncSetup'
 import { useBankSync, useBankSyncRuns } from './bankSync'
 import './bankSync.css'
 
-// A bank connector's Data sync page in Automations (ADR 2026-11-13), laid out as the budget
+// A bank connector's Data Sync page in Automations (ADR 2026-11-13), laid out as the budget
 // apps' page: the setup steps until its sync is on; then the switch and Sync now in the head,
 // anything to review and the settings on the left, the run history on the right.
 
