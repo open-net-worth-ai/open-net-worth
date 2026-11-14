@@ -146,8 +146,13 @@ yourself is never changed.
 **If a bank's sign-in expires** (a new password, a security check, or a consent your bank set to
 expire), that bank shows **Sign-in expired** in step ② and nothing syncs from it. Click
 **Reconnect** and sign in again — it renews the same connection, so the bank's accounts and every
-link you made to them stay exactly as they were. Opened a new account at a bank you already
-linked? Click **Add accounts** on that bank to pick it; existing links are untouched.
+link you made to them stay exactly as they were. Don't click **Link another bank** for it: that
+starts a new connection, and the bank's accounts come back with new identities. If that has
+already happened, **Unlink** each old account and **Link** the new one to the same account in
+your book; the [sync without AI](../features/bank-data-sync.md) then matches the bank's
+transactions to the ones already booked instead of booking them again. Opened a new account at a
+bank you already linked? Click **Add accounts** on that bank to pick it; existing links are
+untouched.
 
 You can also ask Lucius — "reconnect my Chase account" — from the app or a chat channel such as
 Telegram. He asks your approval, then sends you a **Sign in to Chase again** link to Plaid's own

@@ -22,7 +22,7 @@ from typing import Optional
 
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
-from backend.services.bank_data_sync import pending, reviews
+from backend.services.bank_data_sync import pending, relink, reviews
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,8 @@ class Booked:
     to_review: int = 0
     held: int = 0
     linked_refs: int = 0
+    # Rows of an account linked again under a new id, matched to the bookings they already are.
+    relinked: int = 0
     # Pending rows: booked uncleared, settled (now cleared), dropped by the bank (removed).
     pending: int = 0
     settled: int = 0
@@ -204,17 +206,22 @@ def book(
     run_id: Optional[str],
     batch_id: str,
     read: Optional[dict[str, str]] = None,
+    relinked: Optional[set[str]] = None,
 ) -> Booked:
     """Book ``rows`` (the opted-in accounts' window: posted and pending, booked or not) in one
     ledger write. Every write here — the batch, a pending row settled or dropped, a
     pending→posted link — runs under the audit surface ``bank_data_sync``. ``read``: account id
     → the window start it was read from, for dropping a pending row the bank no longer lists.
-    Raises only when that write failed (then nothing was booked)."""
+    ``relinked``: accounts read from a new bank id this run, whose rows are first matched to the
+    bookings they already are (``relink.carry``). Raises only when that write failed (then
+    nothing was booked)."""
     from backend.core import audit_context
 
     token = audit_context.set_audit_scope("system", SURFACE, note=f"run:{run_id}")
     try:
+        matched = relink.carry(provider, rows, relinked or set())
         out = _book(provider, rows, run_id=run_id, batch_id=batch_id)
+        out.relinked = matched
         if read:
             entries = pending.tracked(provider)
             seen: dict[str, set[str]] = {a: set() for a in read}
@@ -245,6 +252,8 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
                 continue
             pending_rows[ref] = row
         else:
+            if row.get("_relinked"):
+                continue  # the booking it already is carries its new ref (relink.carry)
             settled = pending.settle(provider, ref, row, entries)
             if settled == "settled":
                 out.settled += 1

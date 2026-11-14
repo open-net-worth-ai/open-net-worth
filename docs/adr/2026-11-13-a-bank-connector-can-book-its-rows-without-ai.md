@@ -206,3 +206,20 @@ daily read limit, which the bank enforces). The ref floor still stops a row the 
 from being booked twice; the known gap is a pending payment that settles under a new reference,
 which Lucius could book beside the sync's settled booking. The connector's **Automate** becomes a
 menu of the two (`bankAutomate.ts`): the sync, and a Lucius Automation.
+
+## Amendment 7 (2026-11-14, UAT: an account linked again is never booked twice)
+
+On-screen UAT: a Plaid bank whose sign-in expired was linked again (the Plaid page's own advice)
+instead of reconnected. The new Item gave every account and transaction a new id; once the user
+unlinked the old accounts and linked the new ones, the next run booked the whole window a second
+time. The sync now remembers which bank account it last read for each book account (`runtime_state`
+`bank_data_sync.<provider>.read_as`, kept only after a run's booking). When a book account is read
+from a different one, that read is a re-link read (`bank_data_sync/relink.py`): each row with no
+known ref is matched to a live row already booked on that account from the same connector whose
+refs the bank no longer lists — same signed amount, same day first, then the nearest within 3
+days, one-to-one, pending only to a tracked pending booking (whose entry moves to the new ref) and
+settled only to a settled one — and its new ref is attached to that row (`attach_external_refs`)
+instead of booking it. Unmatched rows are booked as before. The Plaid page now steers an expired
+sign-in to **Reconnect** (update mode, same Item and ids) and says linking the bank again gives its
+accounts new identities. Links are not carried across automatically when the same bank is linked
+again: the user still re-links its accounts, and the match makes that safe.

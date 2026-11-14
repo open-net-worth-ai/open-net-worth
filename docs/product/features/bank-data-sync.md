@@ -91,6 +91,12 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
 - **Books settled transactions as cleared**, so an account's **Cleared** balance is what the
   bank has settled.
 - **Never re-books a transaction you deleted.**
+- **Never books the history again when a bank account is linked again.** Renew an expired
+  sign-in with **Reconnect**: it keeps the bank's accounts as they are. If a bank was linked
+  afresh instead (its accounts get new identities at the bank) and you **Unlink** the old
+  account and **Link** the new one, the next sync matches what the bank lists to the
+  transactions already in your book (same amount, same day or within three days) and books
+  only what's really new. The run says how many it matched.
 - **Keeps foreign charges' original amount and currency** beside the amount your account was
   charged.
 - **Puts each transaction in your review queue,** as YNAB books a bank's transactions

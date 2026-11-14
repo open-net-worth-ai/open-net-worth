@@ -18,7 +18,15 @@ from backend.core.errors import ConflictError, ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.services import connector_fetch, connector_window, import_runs
 from backend.services.aggregation.providers import Provider
-from backend.services.bank_data_sync import balances, booker, budget, pending, reviews, settings
+from backend.services.bank_data_sync import (
+    balances,
+    booker,
+    budget,
+    pending,
+    relink,
+    reviews,
+    settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +62,9 @@ class _Fetched:
     # there are dropped), and → what the bank said its balance is.
     read: dict[str, str] = field(default_factory=dict)
     balances: dict[str, dict] = field(default_factory=dict)
+    # Account id → the bank account it was read from; those read from a NEW one (relink.py).
+    read_as: dict[str, str] = field(default_factory=dict)
+    relinked: set[str] = field(default_factory=set)
 
 
 def opted_accounts(key: str) -> list[dict]:
@@ -111,6 +122,9 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     rows = [r for r in result.get("transactions") or [] if r.get("linked_account_id") == app_id]
     out.rows.extend(rows)
     out.read[app_id] = since
+    out.read_as[app_id] = pid
+    if relink.is_relinked(p.key, app_id, pid):
+        out.relinked.add(app_id)
     for acc in result.get("accounts") or []:
         if acc.get("provider_account_id") == pid and acc.get("balance") is not None:
             out.balances[app_id] = {
@@ -186,6 +200,8 @@ def _outcome(counts: dict, status: str) -> str:
         parts.append(
             f"{counts['booked']} booked ({pend} pending)" if pend else f"{counts['booked']} booked"
         )
+    if counts.get("relinked"):
+        parts.append(f"{counts['relinked']} already in your book, matched to the bank's new ids")
     if counts.get("settled"):
         parts.append(f"{counts['settled']} cleared")
     if counts.get("pending_removed"):
@@ -210,7 +226,12 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     """The one ledger write and what follows it. Returns the rows it booked. Raises only when
     the write itself failed — then nothing was booked."""
     result = booker.book(
-        p.key, fetched.rows, run_id=run_id, batch_id=f"bank_sync:{run_id}", read=fetched.read
+        p.key,
+        fetched.rows,
+        run_id=run_id,
+        batch_id=f"bank_sync:{run_id}",
+        read=fetched.read,
+        relinked=fetched.relinked,
     )
     counts["booked"] = len(result.created)
     counts["already_booked"] += result.already_booked
@@ -218,6 +239,7 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     counts["to_review"] += result.to_review
     counts["held"] = result.held
     counts["linked"] = result.linked_refs
+    counts["relinked"] = result.relinked
     counts["pending"] = result.pending
     counts["settled"] = result.settled
     counts["pending_removed"] = result.pending_removed
@@ -292,6 +314,7 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         empty = balances.only_opening(fetched.first_import)
         _progress(run_id, "booking", 0, len(fetched.rows), "", fetched.lines)
         created = _book(p, fetched, run_id, counts, errors)
+        relink.remember(p.key, fetched.read_as)
         _align(p, fetched.first_import, fetched.warnings)
         _remember_history_read(p, fetched.first_import)
         _record_balances(p, fetched, empty, run_id)
