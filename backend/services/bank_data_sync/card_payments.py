@@ -145,7 +145,9 @@ def pair_within(candidates: list[tuple[dict, dict]], types: dict) -> list[tuple[
 
 
 def _book_pool(drafts: list[dict], provider: str) -> list[dict]:
-    """Live single-leg rows that could be the other side of one of ``drafts``."""
+    """Live single-leg rows that could be the other side of one of ``drafts``: cleared, or from a
+    provider (they carry an external ref). A stray uncleared row typed by hand is never
+    rewritten: promotion changes its date, category and cleared state."""
     days = [x for x in (_day(d.get("date")) for d in drafts) if x]
     if not days:
         return []
@@ -158,7 +160,10 @@ def _book_pool(drafts: list[dict], provider: str) -> list[dict]:
             date_from=(min(days) - _GAP).isoformat(),
             date_to=(max(days) + _GAP).isoformat(),
         )
-        if not t.get("merged_into") and t["id"] not in tracked and t["id"] not in opening
+        if not t.get("merged_into")
+        and t["id"] not in tracked
+        and t["id"] not in opening
+        and (t.get("cleared") or t.get("external_refs"))
     ]
 
 

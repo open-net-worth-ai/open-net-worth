@@ -64,7 +64,13 @@ def _live(kind: str | None = None) -> list[dict]:
 
 def _typed(kind: str, **fields) -> dict:
     return ledger_service.create_transaction(
-        {"kind": kind, "date": days_ago(1), "description": "typed by hand", **fields}
+        {
+            "kind": kind,
+            "date": days_ago(1),
+            "description": "typed by hand",
+            "cleared": True,
+            **fields,
+        }
     )
 
 
@@ -100,6 +106,38 @@ def test_a_card_payment_meets_a_row_typed_by_hand(bank):
     (transfer,) = _live()
     assert transfer["id"] == typed["id"] and transfer["kind"] == "transfer"
     assert transfer["to_account_id"] == card
+
+
+def test_a_stray_uncleared_row_typed_by_hand_is_never_rewritten(bank):
+    main = linked_account("ACME Current", ACC_MAIN)
+    _card()
+    typed = _typed(
+        "expense", from_account_id=main, from_amount=120.0, from_currency="GBP", cleared=False
+    )
+    bank.booked[ACC_SAVER] = [txn(120.00, days_ago(1), "ACME PAYMENT THANK YOU", tid="i1")]
+
+    _run()
+
+    assert ledger_service.transactions.find_by_id(typed["id"])["kind"] == "expense"
+    assert sorted(t["kind"] for t in _live()) == ["expense", "income"]
+
+
+def test_an_uncleared_row_from_another_connector_still_pairs(bank):
+    main = linked_account("ACME Current", ACC_MAIN)
+    _card()
+    other = _typed(
+        "expense",
+        from_account_id=main,
+        from_amount=120.0,
+        from_currency="GBP",
+        cleared=False,
+        external_refs=[{"source": "plaid", "ref": "plaid-1"}],
+    )
+    bank.booked[ACC_SAVER] = [txn(120.00, days_ago(1), "ACME PAYMENT THANK YOU", tid="i1")]
+
+    _run()
+
+    assert ledger_service.transactions.find_by_id(other["id"])["kind"] == "transfer"
 
 
 def test_the_paying_side_arriving_later_pairs_with_the_card_income(bank):

@@ -117,7 +117,7 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   checking (which would inflate both reports). When the card gets a payment and one of your
   checking-type accounts has an outflow of the same amount within three days, and either one is
   worded like a payment, they become a single transfer, whichever the sync read first, and
-  whether the other side came from another bank connector or you typed it. A match must be
+  whether the other side came from another bank connector or you typed it (a row you typed is only used once you have cleared it). A match must be
   unique: if two rows could be the other side, nothing is paired. Merchant refunds, and
   anything you deleted before, are never paired. A payment whose other side isn't in your book
   stays income on the card until it is; then the two pair. The run says how many it filed.
