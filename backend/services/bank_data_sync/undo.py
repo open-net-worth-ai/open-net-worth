@@ -80,9 +80,9 @@ def openings(account_ids: set[str]) -> dict[str, dict]:
     return out
 
 
-def keep_openings(run_id: str, before: dict[str, dict]) -> None:
+def keep_openings(run_id: str, before: dict[str, dict]) -> bool:
     """File the Starting Balances this run moved on its batch. Best effort: a failure leaves the
-    run undoable, with those balances not restored."""
+    run undoable, with those balances not restored (False)."""
     try:
         now = openings(set(before))
         moved = {a: b for a, b in before.items() if now.get(a) != b}
@@ -90,8 +90,10 @@ def keep_openings(run_id: str, before: dict[str, dict]) -> None:
             ledger_service.import_batches.update_by_id(
                 batch_id(run_id), {"opening_restores": moved}
             )
+        return True
     except Exception:  # noqa: BLE001
         logger.exception("bank_data_sync: run %s openings not kept for Undo", run_id)
+        return False
 
 
 def _groups(provider: str, txns: list[dict]) -> list[list[str]]:
@@ -163,15 +165,23 @@ def _hold(provider: str, run_id: str, batch: dict, groups: list[list[str]]) -> i
     return held
 
 
-def _restore_openings(batch: dict) -> int:
+def _restore_openings(batch: dict) -> tuple[int, list[str]]:
+    """Put back the Starting Balances the run moved. Returns how many, and a plain sentence for
+    each account whose start couldn't be put back."""
     restored = 0
+    failed: list[str] = []
     for account_id, was in (batch.get("opening_restores") or {}).items():
         try:
             ledger_service.set_account_opening(account_id, was["amount"], as_of=was["as_of"])
             restored += 1
         except Exception:  # noqa: BLE001 — the rows are undone; say so rather than fail
             logger.exception("bank_data_sync: opening of %s not restored", account_id)
-    return restored
+            account = ledger_service.accounts.find_by_id(account_id) or {}
+            failed.append(
+                f"{account.get('name') or 'An account'}'s start couldn't be put back, "
+                "so check its balance."
+            )
+    return restored, failed
 
 
 def _tracked_again(batch: dict) -> dict[str, dict]:
@@ -242,8 +252,9 @@ def undo_run(provider: str, run_id: str) -> dict:
         token = audit_context.set_audit_scope("user", booker.SURFACE, note=f"undo run:{run_id}")
         try:
             result = import_undo.undo_import(bid)
-            restored_openings = _restore_openings(batch)
+            restored_openings, opening_failures = _restore_openings(batch)
             reverted, not_reverted = _revert_promotions(batch)
+            not_reverted += opening_failures
         finally:
             audit_context.clear_audit_scope(token)
         gone = {r["id"] for r in rows}

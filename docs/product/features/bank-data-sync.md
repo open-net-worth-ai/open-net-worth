@@ -77,7 +77,9 @@ and returns an account's start to where it was before a first import moved it, s
 are what they were. The bank's rows are not booked again by the next sync: each waits under
 **Needs your review** with **Book again** and **Dismiss** (Dismiss keeps it out for good). Only
 the most recent sync that changed your book can be undone, and a pending transaction the bank
-settled stays settled.
+settled stays settled. A transaction you changed since is left as you changed it, and the run
+says so, as it does when a sync couldn't be saved for Undo or an account's start couldn't be put
+back.
 
 The connector page shows one line (on or off, and the next sync) and **Manage**, which opens
 that page.

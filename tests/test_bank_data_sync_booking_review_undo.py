@@ -476,3 +476,42 @@ def test_a_promoted_row_you_changed_in_the_same_fields_is_left_alone_and_said_so
 
     assert ledger_service.transactions.find_by_id(typed["id"])["kind"] == "transfer"
     assert len(result["not_reverted"]) == 1 and "changed it since" in result["not_reverted"][0]
+
+
+# ── silent failures are visible ─────────────────────────────────────────────────────────────
+
+
+def test_a_run_whose_record_could_not_be_saved_says_it_cannot_be_undone(bank, monkeypatch):
+    from backend.services import import_runs
+    from backend.services.bank_data_sync import undo
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("db busy")
+
+    monkeypatch.setattr(undo, "record", broken)
+    linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-10.00, days_ago(5), "ACME CAFE", tid="o1")]
+
+    run = _run()
+
+    warnings = [str(w) for w in import_runs.get(run["run_id"])["warnings"]]
+    assert any("can't be undone" in w for w in warnings)
+    assert len(_live()) == 1  # still booked
+
+
+def test_an_opening_that_could_not_be_put_back_is_said_on_the_run(bank, monkeypatch):
+    from backend.services import import_runs
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [txn(-10.00, days_ago(5), "ACME CAFE", tid="o1")]
+    run = _run()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("db busy")
+
+    monkeypatch.setattr(ledger_service, "set_account_opening", broken)
+    result = _undo(run)
+
+    assert any("couldn't be put back" in s for s in result["not_reverted"])
+    warnings = [str(w) for w in import_runs.get(run["run_id"])["warnings"]]
+    assert any("couldn't be put back" in w for w in warnings)

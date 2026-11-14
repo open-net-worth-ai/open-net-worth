@@ -309,6 +309,7 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
         counts["undoable"] = int(undo.record(p.key, run_id, p.label, result))
     except Exception:  # noqa: BLE001 — booked either way; this run just can't be undone
         logger.exception("bank_data_sync: %s run %s could not record its batch", p.key, run_id)
+        fetched.warnings.append("This sync can't be undone, because its record couldn't be saved.")
     return result.created
 
 
@@ -417,7 +418,10 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         _align(p, fetched.first_import, fetched.warnings)
         _remember_history_read(p, fetched.first_import)
         _record_balances(p, fetched, empty, run_id)
-        undo.keep_openings(run_id, opening_before)
+        if not undo.keep_openings(run_id, opening_before):
+            fetched.warnings.append(
+                "Undoing this sync won't put an account's start back, because it couldn't be noted."
+            )
         _remember_reads(p, fetched.states)  # only once its rows are booked
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
         logger.exception("bank_data_sync: %s run failed", p.key)
