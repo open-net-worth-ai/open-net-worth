@@ -80,6 +80,7 @@ _EXEMPT: set = {
 # definition (no socket leaves the box), so it counts as loopback. A real remote
 # client never presents this host.
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
+_FORWARDING_HEADERS = ("forwarded", "x-forwarded-for", "x-forwarded-host", "x-real-ip")
 
 # The in-process TestClient presents ``Host: testserver``.
 _LOOPBACK_HOSTNAMES = {"127.0.0.1", "::1", "localhost", "testserver", "testclient"}
@@ -136,6 +137,11 @@ def _is_loopback(request: HTTPConnection) -> bool:
     # A gateway pass-through request was forwarded by the proxy, so its TCP peer says nothing
     # about the real caller: it is always remote, whatever address the proxy connects from.
     if getattr(request.state, "gateway_passthrough", False):
+        return False
+    # A reverse proxy on this host (nginx, Caddy, `tailscale serve`) connects from 127.0.0.1,
+    # so its whole audience would look local. A forwarding header marks a proxied hop. Its
+    # presence can only REMOVE trust, so a forged one costs the sender nothing it had.
+    if any(name in request.headers for name in _FORWARDING_HEADERS):
         return False
     client = request.client
     if client is None:

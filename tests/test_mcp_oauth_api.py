@@ -51,6 +51,19 @@ def _client(remote: bool = False) -> TestClient:
 _TUNNEL_HEADERS = {"x-forwarded-proto": "https", "x-forwarded-host": "onw.example.test"}
 
 
+def _owner_bearer() -> dict:
+    """A request that came through a tunnel is not trusted as local, so it signs in, as the
+    owner's browser or phone does through one."""
+    from backend.db.auth_store import AuthStore
+
+    store = AuthStore()
+    return {"authorization": f"Bearer {store.api_token() or store.rotate_api_token()}"}
+
+
+def _tunnel_headers() -> dict:
+    return {**_TUNNEL_HEADERS, **_owner_bearer()}
+
+
 # ── begin() never 5xx's, even for a hopeless request ────────────────────────────
 
 
@@ -62,7 +75,7 @@ def test_begin_on_an_unreachable_server_returns_200_ok_false(db_isolated, monkey
     res = _client().post(
         "/api/mcp-clients/oauth/begin",
         json={"url": "https://mcp.example.test/mcp"},
-        headers=_TUNNEL_HEADERS,
+        headers=_tunnel_headers(),
     )
     assert res.status_code == 200
     body = res.json()

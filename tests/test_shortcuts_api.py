@@ -22,6 +22,15 @@ def client():
     return TestClient(app)
 
 
+def _owner_bearer() -> dict:
+    """A request that came through a tunnel is not trusted as local, so it signs in, as the
+    owner's browser or phone does through one."""
+    from backend.db.auth_store import AuthStore
+
+    store = AuthStore()
+    return {"authorization": f"Bearer {store.api_token() or store.rotate_api_token()}"}
+
+
 def _prepare(client, **body):
     return client.post("/api/shortcuts/prepare", json=body)
 
@@ -66,6 +75,7 @@ def test_detection_honours_tunnel_forwarding_headers(client):
             "host": "127.0.0.1:8080",
             "x-forwarded-proto": "https",
             "x-forwarded-host": "wispy-frog-42.trycloudflare.com",
+            **_owner_bearer(),
         },
     )
     assert res.json()["base_url"] == "https://wispy-frog-42.trycloudflare.com"
@@ -77,6 +87,7 @@ def test_detection_takes_the_first_hop_of_a_proxy_chain(client):
         headers={
             "x-forwarded-proto": "https, http",
             "x-forwarded-host": "outer.example.com, inner.local",
+            **_owner_bearer(),
         },
     )
     assert res.json()["base_url"] == "https://outer.example.com"
@@ -86,7 +97,11 @@ def test_prepare_uses_the_detected_url_by_default(client):
     res = client.post(
         "/api/shortcuts/prepare",
         json={},
-        headers={"x-forwarded-proto": "https", "x-forwarded-host": "tunnel.example.com"},
+        headers={
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "tunnel.example.com",
+            **_owner_bearer(),
+        },
     )
     body = res.json()
     assert body["base_url"] == "https://tunnel.example.com"
@@ -353,7 +368,11 @@ def test_reaching_the_instance_through_a_tunnel_teaches_the_phone_address(client
     PhoneShortcutStateStore().set_phone_base_url("")
     client.get(
         "/api/shortcuts",
-        headers={"x-forwarded-proto": "https", "x-forwarded-host": "tunnel.example.com"},
+        headers={
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "tunnel.example.com",
+            **_owner_bearer(),
+        },
     )
     local = client.get("/api/shortcuts", headers={"host": "localhost:8080"}).json()
     assert local["base_url"] == "https://tunnel.example.com"
