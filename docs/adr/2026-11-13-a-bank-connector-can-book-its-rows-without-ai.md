@@ -297,3 +297,34 @@ from many PSD2 banks, and both are closed:
   booked type was never compared nor set. It now records the booked figure on its own.
 
 An account with any other row keeps its opening and offers "Use the bank's balance", as before.
+
+## Amendment 12 (2026-11-15, review: expiry and re-link across Plaid, GoCardless, Enable Banking)
+
+A review of expiry and re-linking against each provider's docs, with live runs on Plaid's
+sandbox, found five ways the book went wrong or a connection was lost. Each is fixed:
+
+- **A second login at the same bank keeps the first.** A same-bank link renews only a login it
+  shares accounts with (Plaid: account mask + subtype, recorded on each Item so an expired one is
+  still recognised; Enable Banking: `identification_hash`). Plaid never revokes a login it can't
+  compare (revoking is irreversible); Enable Banking renews as before where neither side can be
+  compared (an ended consent costs nothing to revoke). Live: a second sandbox login was kept, and
+  the same login linked again replaced only itself.
+- **A re-link with nothing remembered is still caught** (`relink.looks_relinked`): with no
+  `read_as`, a read is a re-link when the bank lists rows in the window and none of the account's
+  own rows from that connector dated there. Live: 73 rows matched where they were booked again.
+- **An ended consent holds up only its own bank.** GoCardless: an account read refused again with
+  a freshly minted token is that account's access (`bank_access`), not the keys. Enable Banking:
+  its error code is kept; `EXPIRED_SESSION` / `CLOSED_SESSION` / `REVOKED_SESSION` are an ended
+  consent (Renew is flagged on that bank), a 401/403 on one account after the session answered is
+  that account's (`account_refused`, retried), and "no bank could be read" says why. Before, all
+  of these read as `auth_error`: the run stopped for every bank and waited a day.
+- **A posted row that names its pending row settles only that one.** The amount fallback is for
+  banks that name none; with Plaid's `pending_transaction_id` it merged two equal charges.
+- **GoCardless rows are keyed on `internalTransactionId`**, the bank's `transactionId` kept as an
+  alias (a provider handle: same date and amount only). A row booked under the bank's id is
+  recognised, then filed under the stable one; a pending booking under it still settles.
+
+Still open from the same review: the 90-day catch-up floor for Plaid; first imports cut short
+(Plaid history not ready, Enable Banking's page cap) counting as complete; Plaid error codes
+sent as HTTP 400; no warning before a Plaid consent expires; the Enable Banking expiry warning
+after a renewal; GoCardless renewals needing a manual relink; and no undo for a sync run.
