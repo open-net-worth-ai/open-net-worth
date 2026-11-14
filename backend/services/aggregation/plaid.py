@@ -738,10 +738,10 @@ def fetch_window(
 ) -> FetchWindow:
     """Plaid's provider-side windowed fetch (RFC §B) — ``/transactions/get`` with an
     explicit ``start_date``/``end_date``, paged via ``count``/``offset`` until every row in
-    the window is fetched (``complete=True`` always: the page loop only stops once Plaid's
-    own ``total_transactions`` is reached, or after ``_MAX_FETCH_PAGES`` as a safety cap —
-    the latter is the one case this reports ``complete=False``, so a capped fetch never
-    silently looks like a clean window for the vanished-row check). ``account`` filters
+    the window is fetched: the page loop stops once Plaid's own ``total_transactions`` is
+    reached, or after ``_MAX_FETCH_PAGES`` as a safety cap, which (like a bank that couldn't
+    be read) reports ``complete=False``, so a capped fetch never looks like a clean window to
+    the vanished-row check. ``account`` filters
     client-side (Plaid's ``/transactions/get`` has no per-account request filter); when the
     bank that holds it can't be read, that bank's error is raised."""
     if accounts_only:

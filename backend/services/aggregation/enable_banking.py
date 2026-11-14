@@ -544,11 +544,7 @@ def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
             ) from None
         suffix = f" {code}" if code else ""
         raise ExternalServiceError(f"Enable Banking HTTP {status}{suffix}") from None
-    except httpx.HTTPError as exc:
-        raise ExternalServiceError(
-            f"Enable Banking request failed ({type(exc).__name__})"
-        ) from None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — re-raised without the URL (it holds the session)
         raise ExternalServiceError(
             f"Enable Banking request failed ({type(exc).__name__})"
         ) from None

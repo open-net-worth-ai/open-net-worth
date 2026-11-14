@@ -16,13 +16,10 @@ keeping the user's category, payee, memo and tags. Either way nothing is booked 
 
 from __future__ import annotations
 
-import logging
 from datetime import date, timedelta
 
 from backend.services import ledger as ledger_service
 from backend.services.bank_data_sync import budget
-
-logger = logging.getLogger(__name__)
 
 _TOL = 0.005
 # How far from the pending date a settled row may land and still be "the same one".

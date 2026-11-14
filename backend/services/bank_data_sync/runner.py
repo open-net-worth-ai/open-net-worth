@@ -337,7 +337,7 @@ def _record_balances(p: Provider, fetched: _Fetched, empty: set[str], run_id: st
 
     token = audit_context.set_audit_scope("system", booker.SURFACE, note=f"run:{run_id}")
     try:
-        fetched.warnings.extend(balances.record(p, fetched.balances, empty))
+        balances.record(p, fetched.balances, empty)
     except Exception:  # noqa: BLE001 — the booking stands
         logger.exception("bank_data_sync: %s balances could not be recorded", p.key)
     finally:
@@ -403,7 +403,7 @@ def _queue_followup(p: Provider, result: dict) -> None:
         logger.exception("bank_data_sync: %s follow-up could not be queued", p.key)
 
 
-def start(p: Provider, trigger: str, accounts: list[dict]) -> dict:
+def start(p: Provider, trigger: str) -> dict:
     """Claim the connector's run slot and open its record. ``ConflictError`` while one runs."""
     if not _lock(p.key).acquire(blocking=False):
         raise ConflictError(f"A {p.label} sync is already running.")
@@ -436,7 +436,7 @@ def finish_in_background(p: Provider, run: dict, accounts: list[dict]) -> None:
 
 def run_now(p: Provider, trigger: str, accounts: list[dict]) -> dict:
     """Run synchronously (the scheduler tick, tests). Releases the slot when done."""
-    run = start(p, trigger, accounts)
+    run = start(p, trigger)
     try:
         return execute(p, accounts, run["id"])
     except Exception:

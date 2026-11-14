@@ -14,9 +14,9 @@ export type BankSyncStage = 'accounts' | 'history' | 'sync' | 'done'
 export interface BankSyncAccount {
   account_id: string
   name: string
-  /** What the bank calls the account. */
   /** The bank it's at — one connector can hold several. */
   bank?: string
+  /** What the bank calls the account. */
   bank_name: string
   mask: string
   sync: boolean
