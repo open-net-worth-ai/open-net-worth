@@ -9645,6 +9645,31 @@ body.hide-amounts .mask * {
     align-items: center;
     gap: var(--space-1);
   }
+  /* The row's next step in the accent colour: Add a soft fill, Link… its text; Unlink stays
+     quiet and only reddens under the pointer. */
+  .conn-acct-actions .conn-acct-add {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+    font-weight: 500;
+  }
+  .conn-acct-actions .conn-acct-add:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  .conn-acct-actions .conn-acct-link {
+    color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+  }
+  .conn-acct-actions .conn-acct-link:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .conn-acct-actions .conn-acct-unlink {
+    color: var(--muted);
+  }
+  .conn-acct-actions .conn-acct-unlink:hover:not(:disabled) {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 8%, transparent);
+  }
   /* A prompt suggestion chip DOES something (hands the prompt to Lucius) — the arrow and hover
      set it apart from tool/category chips, which are labels. */
   .cn-promptchip {

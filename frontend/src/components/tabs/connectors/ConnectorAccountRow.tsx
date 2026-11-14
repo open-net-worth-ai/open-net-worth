@@ -1,6 +1,7 @@
 // One provider account in the connector "Accounts" list: what it is (type icon, name, last four,
 // balance) and its next step — Add it as a new account or Link… it to an existing one, or, once
 // linked, show where it lands with a quiet Unlink.
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../../ui'
 import { AccIcon } from '../accounts/ds'
@@ -66,7 +67,13 @@ export function ConnectorAccountRow({
       )}
       <div className="conn-acct-actions">
         {linked ? (
-          <Button size="sm" variant="ghost" loading={busy} onClick={onUnlink}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="conn-acct-unlink"
+            loading={busy}
+            onClick={onUnlink}
+          >
             Unlink
           </Button>
         ) : picking ? (
@@ -93,13 +100,20 @@ export function ConnectorAccountRow({
           </>
         ) : (
           <>
-            <Button size="sm" loading={busy} onClick={onAdd}>
+            <Button
+              size="sm"
+              className="conn-acct-add"
+              iconLeft={<Plus size={13} aria-hidden="true" />}
+              loading={busy}
+              onClick={onAdd}
+            >
               Add
             </Button>
             {accounts.length > 0 && (
               <Button
                 size="sm"
                 variant="ghost"
+                className="conn-acct-link"
                 aria-label={`Link ${row.name} to an existing account`}
                 onClick={() => setPicking(true)}
               >
