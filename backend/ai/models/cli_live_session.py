@@ -33,6 +33,13 @@ DEFAULT_IDLE_SECONDS = 1800.0
 
 RenderFull = Callable[[list[dict]], "tuple[str, list[dict]]"]
 
+# A write to a child whose stdin is gone. Stdlib asyncio raises an OSError (BrokenPipe /
+# ConnectionReset); uvloop, which uvicorn[standard] runs the server on, raises RuntimeError
+# "unable to perform operation on <WriteUnixTransport closed=True …>; the handler is closed".
+# Both mean the child went away (issue #131: only OSError was caught, so on uvloop the raw
+# text reached the chat and the start retry never ran).
+CLOSED_PIPE_ERRORS = (OSError, RuntimeError)
+
 
 def env_flag(name: str) -> bool:
     """A boolean env switch that defaults ON; ``0``/``false``/``no`` turns it off."""
@@ -146,21 +153,24 @@ class LiveSession:
         """True for the event that ends one turn (the process stays up after it)."""
         raise NotImplementedError
 
+    async def _stopped(self, what: str) -> ExternalServiceError:
+        await asyncio.sleep(0.2)  # let the drain collect the exit message
+        said = " | ".join(self.stderr_tail)[-300:]
+        return ExternalServiceError(
+            f"{self.LABEL} {what}" + (f": {said}" if said else " (it printed no reason)")
+        )
+
     async def _write(self, payload: bytes) -> None:
         proc = self.proc
         if proc is None or proc.stdin is None or proc.returncode is not None:
-            await asyncio.sleep(0.2)  # let the drain collect the exit message
-            said = " | ".join(self.stderr_tail)[-300:]
-            raise ExternalServiceError(
-                f"{self.LABEL} stopped right after starting"
-                + (f": {said}" if said else " (it printed no reason)")
-            )
+            raise await self._stopped("stopped right after starting")
         try:
             proc.stdin.write(payload)
             await proc.stdin.drain()
-        except OSError as err:
-            # The child exited between the liveness check and the write.
-            raise ExternalServiceError(f"{self.LABEL} session closed its input: {err}") from err
+        except CLOSED_PIPE_ERRORS as err:
+            # The child exited, or closed its input, between the liveness check and the write.
+            log.warning("%s: write to the child failed: %r", self.LOG_PREFIX, err)
+            raise await self._stopped("session closed its input") from err
 
     async def _timed_out(self, stalled: bool = False) -> ProviderTimeoutError:
         self.timed_out = True

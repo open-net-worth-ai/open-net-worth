@@ -58,6 +58,7 @@ from . import claude_live_session, cli_sign_in
 from .base import AIProvider, log_text_cap
 from .claude_cli_argv import with_system_prompt_file
 from .cli_call_grace import PostCallWatch, grace_seconds
+from .cli_live_session import CLOSED_PIPE_ERRORS
 from .cli_tool_protocol import (
     ToolCallScanner,
     flatten_messages_with_images,
@@ -420,9 +421,14 @@ class ClaudeCliProvider(AIProvider):
                 ensure_ascii=False,
             )
             assert proc.stdin is not None
-            proc.stdin.write((payload + "\n").encode("utf-8"))
-            await proc.stdin.drain()
-            proc.stdin.close()
+            try:
+                proc.stdin.write((payload + "\n").encode("utf-8"))
+                await proc.stdin.drain()
+                proc.stdin.close()
+            except CLOSED_PIPE_ERRORS as err:
+                # The CLI went away before reading its prompt: _events reports its exit
+                # status and stderr, which say why, rather than this write's error.
+                log.warning("claude_cli: the CLI closed its input at start: %r", err)
             return proc, workdir
         except BaseException:
             try:
@@ -478,6 +484,9 @@ class ClaudeCliProvider(AIProvider):
                         log.debug("claude_cli: skipping non-JSON stdout line: %.200s", line)
                 rc = await proc.wait()
                 if rc != 0:
+                    # stderr reaches EOF just after the exit: read it out first, or a CLI
+                    # that dies at start reports "(no stderr)" instead of what it said.
+                    await asyncio.wait({err_task}, timeout=1.0)
                     detail = b"".join(errs).decode("utf-8", "replace").strip()[:500]
                     raise ExternalServiceError(
                         f"Claude Code CLI exited with status {rc}: {detail or '(no stderr)'}"
