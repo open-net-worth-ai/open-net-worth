@@ -249,6 +249,9 @@ def _outcome(counts: dict, status: str) -> str:
         parts.append(
             f"{counts['booked']} booked ({pend} pending)" if pend else f"{counts['booked']} booked"
         )
+    if counts.get("card_payments"):
+        n = counts["card_payments"]
+        parts.append(f"{n} card payment{'s' if n != 1 else ''} filed as a transfer")
     if counts.get("relinked"):
         parts.append(f"{counts['relinked']} already in your book, matched to the bank's new ids")
     if counts.get("settled"):
@@ -294,6 +297,7 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     counts["pending"] = result.pending
     counts["settled"] = result.settled
     counts["pending_removed"] = result.pending_removed
+    counts["card_payments"] = result.card_payments
     errors.extend({"item": "A row", "reason": e} for e in result.errors)
     return result.created
 

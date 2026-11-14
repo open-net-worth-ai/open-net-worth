@@ -22,7 +22,7 @@ from typing import Optional
 
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
-from backend.services.bank_data_sync import pending, relink, reviews
+from backend.services.bank_data_sync import card_payments, pending, relink, reviews
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,10 @@ class Booked:
     pending: int = 0
     settled: int = 0
     pending_removed: int = 0
+    # Card payments booked as ONE transfer (card_payments.py): new rows, and rows already in the
+    # book promoted to it (``promoted`` holds their before-images, for Undo).
+    card_payments: int = 0
+    promoted: list[dict] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
@@ -291,12 +295,17 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     pending.save(provider, entries)  # what settled above is settled, whatever follows
     candidates, errors = _with_categories(candidates)
     out.errors.extend(errors)
+    types = {a["id"]: a.get("type") for a in ledger_service.accounts.all()}
+    candidates = card_payments.pair_within(candidates, types)
+    candidates, out.promoted = card_payments.promote_into_book(provider, candidates, types)
+    out.card_payments = len(out.promoted)
     if not candidates:
         return out
     created, skipped = ledger_service.bulk_create_transactions(
         [d for _, d in candidates], batch_id=batch_id, dedup_by_external_ref=True
     )
     out.created = created
+    out.card_payments += sum(1 for t in created if t.get("kind") == "transfer")
     pending.remember(entries, created, pending_rows)
     out.pending = sum(
         1
