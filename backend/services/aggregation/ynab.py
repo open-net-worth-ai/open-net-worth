@@ -429,13 +429,6 @@ def fetch_window(
     cfg = store.get()
     named = ynab_plan.plan(store, plan_id) if plan_id else None
     budget_id = named["id"] if named else cfg.get("budget_id") or _resolve_single_budget(store)
-    from backend.services import ynab_sync
-
-    if ynab_sync.plan_in_sync(budget_id):
-        raise ValidationError(
-            "The two-way YNAB sync is on for this plan and already brings its transactions in "
-            "(and sends yours back); fetching them again would book each one twice."
-        )
     saved_currency = None if named else store.get().get("budget_currency")
     currency = ((named or {}).get("currency") or saved_currency or "").upper()
     currency = currency or ledger_service.base_currency().upper()
@@ -449,6 +442,7 @@ def fetch_window(
         return FetchWindow(accounts=listed, rows=[], complete=True)
     txns = fetch_transactions(store, budget_id, since_date=since)
 
+    openings = _imported_openings(budget_id, txns)
     account_names: dict[str, str] = {}
     rows: list[dict] = []
     for ynab_txn in txns:
@@ -459,6 +453,8 @@ def fetch_window(
         if account and account_key != account:
             continue
         row = _txn_to_row(ynab_txn, account_key, currency)
+        if row is not None and _txn_id(ynab_txn) in openings:
+            row["is_opening"] = True
         if row is not None and row["date"] <= before:
             rows.append(row)
 
@@ -468,6 +464,24 @@ def fetch_window(
         if not account or key == account
     ]
     return FetchWindow(accounts=accounts, rows=rows, complete=True)
+
+
+def _imported_openings(plan_id: str, txns: list[dict]) -> set[str]:
+    """The ids of each account's Starting Balance row in a plan imported here, picked the way the
+    import picked them. The import folded each one into its account's opening, so it carries no
+    YNAB id of its own; marked, the fetch reports it as that opening instead of as new. A plan
+    never imported keeps its Starting Balance rows as ordinary rows."""
+    from backend.services import import_runs
+    from backend.services.ynab_migration.mapping import SB_PAYEE
+
+    if not import_runs.plan_imported(EXTERNAL_SOURCE, plan_id):
+        return set()
+    found: dict[str, str] = {}
+    for t in sorted(txns, key=lambda t: (str(t.get("date")), str(t.get("id")))):
+        is_sb = (t.get("payee_name") or "").strip().lower() == SB_PAYEE
+        if is_sb and not t.get("deleted") and not t.get("transfer_account_id"):
+            found.setdefault(str(t.get("account_id")), _txn_id(t))
+    return set(found.values())
 
 
 def classify_error(exc: Exception) -> str:

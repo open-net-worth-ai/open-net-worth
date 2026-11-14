@@ -1,0 +1,324 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+import { fCompact, fPct } from '../../../utils/format'
+import { ActionMenu, Button, type SwipeAction } from '../../ui'
+import { Pencil } from '../../../ui/icons'
+import { FilterChips, SearchBox } from './Controls'
+import type {
+  FollowModel,
+  OptionContract,
+  PerfPeriod,
+  PerfWindow,
+} from '../../../api/followedPortfolios'
+import { COPY } from './following.copy'
+import { companyName, nameClasses, signedPct, toneOf, tradeLine } from './following.format'
+import { SectorPie } from './SectorPie'
+import { NameCell } from './NameCell'
+import { useAssetNav } from '../../../state/assetNav'
+import { tilesOf, UNCHANGED } from './sectorTiles'
+import { SortTable, type Column } from './SortTable'
+import { TickerDialog } from './TickerDialog'
+import { FilterSheet } from '../../tabs/investments/FilterSheet'
+import { useIsMobile } from '../../../hooks/useIsMobile'
+import type { Names } from './activityRows'
+
+interface Props {
+  model: FollowModel
+  period: PerfPeriod
+  win: PerfWindow | undefined
+  names: Names
+  sectors: Record<string, string>
+  /** Present for a fund: sets the ticker for a filing code ("" clears it). */
+  onSetTicker?: (key: string, symbol: string) => Promise<void>
+  /** Saving a ticker also starts watching (the portfolio is only open, not watched). */
+  watchesToo?: boolean
+  /** The tickers in your own book, upper-cased: their rows say "You own". */
+  held: Set<string>
+  /** Each ticker's exchange, from its own quote. */
+  exchanges?: Record<string, string>
+}
+
+interface Row {
+  key: string
+  symbol: string | null
+  name: string
+  filedName: string
+  weight: number
+  /** The map tile it belongs to (its sector, or itself); none for a holding with no ticker. */
+  tile: string | null
+  shares: string
+  ret: number | null
+  /** The filing code a correction names; none for a member's holdings. */
+  code: string | null
+  shareClass?: string | null
+  /** A member's option contracts on it. */
+  contracts?: OptionContract[]
+}
+
+const pct = (n: number) => fPct(n, { fraction: true })
+
+const OTHER_SECTOR = 'Other'
+
+/** Sectors are known for most of the weight: the map is drawn by sector, else by stock. */
+function sectorsKnown(model: FollowModel, sectors: Record<string, string>): boolean {
+  return model.holdings.reduce((n, h) => n + (sectors[h.symbol] ? h.weight : 0), 0) >= 0.5
+}
+
+function rowsOf(
+  model: FollowModel,
+  names: Names,
+  sliceOf: (symbol: string) => string,
+  returns: Record<string, number>,
+): Row[] {
+  const held: Row[] = model.holdings.map((h) => ({
+    key: h.symbol,
+    symbol: h.symbol,
+    name: names[h.symbol] ?? companyName(h.name),
+    filedName: h.name,
+    weight: h.weight,
+    tile: sliceOf(h.symbol),
+    shares: h.last_trade ? tradeLine(h.last_trade) : h.shares ? fCompact(h.shares) : '—',
+    ret: returns[h.symbol] ?? null,
+    code: h.keys?.[0] ?? null,
+    shareClass: h.share_class,
+    contracts: h.options,
+  }))
+  // A holding with no ticker is a row like any other, never a footnote: copying the portfolio
+  // without it would silently drop a position, so it says so and offers the fix.
+  const missing: Row[] = model.unmatched.map((u) => ({
+    key: `u-${u.key}`,
+    symbol: null,
+    name: companyName(u.name),
+    filedName: u.name,
+    weight: u.weight,
+    tile: null,
+    shares: '—',
+    ret: null,
+    code: u.key || null,
+  }))
+  return nameClasses([...held, ...missing]).sort((a, b) => b.weight - a.weight)
+}
+
+/** The map of what they hold (a tile per sector, coloured by what they did with it), then every
+ *  holding, largest first. Tapping a tile narrows the list to it; a holding with no ticker is a
+ *  warning row with the fix on it. */
+export function HoldingRows({
+  model,
+  period,
+  win,
+  names,
+  sectors,
+  onSetTicker,
+  watchesToo,
+  held,
+  exchanges,
+}: Props) {
+  const { openAsset } = useAssetNav()
+  const returns = win?.status === 'ok' ? win.holdings : {}
+  const bySector = sectorsKnown(model, sectors)
+  const sliceOf = (symbol: string) => (bySector ? (sectors[symbol] ?? OTHER_SECTOR) : symbol)
+  const rows = rowsOf(model, names, sliceOf, returns)
+  const tiles = tilesOf(model, bySector, sliceOf)
+  const [fixing, setFixing] = useState<Row | null>(null)
+  const [query, setQuery] = useState('')
+  const [tile, setTile] = useState<string | null>(null)
+  // Theirs, or only what you hold too (owner, 2026-11-13): the rows' "You own" badge, as a filter.
+  const [ownedOnly, setOwnedOnly] = useState(false)
+  const isMobile = useIsMobile()
+  // Owned by you keeps the full list's height, as Trading Activity's filters do: the page did
+  // not shrink under a reader scrolled down, so the rows did not jump (owner, 2026-11-14).
+  const listBox = useRef<HTMLDivElement>(null)
+  const [fullHeight, setFullHeight] = useState<number | undefined>(undefined)
+  const isHeld = (r: Row) => !!r.symbol && held.has(r.symbol)
+  const ownedCount = rows.filter(isHeld).length
+  const pickedTile = tiles.find((t) => t.key === tile) ?? null
+  const q = query.trim().toLowerCase()
+  const shown = rows.filter(
+    (r) =>
+      (!tile || r.tile === tile) &&
+      (!ownedOnly || isHeld(r)) &&
+      (!q || `${r.symbol ?? ''} ${r.name}`.toLowerCase().includes(q)),
+  )
+  const member = model.estimated
+  const columns: Column<Row>[] = [
+    {
+      key: 'name',
+      label: COPY.colStock,
+      left: true,
+      sortValue: (r) => r.symbol ?? r.name,
+      cell: (r) => (
+        <NameCell
+          symbol={r.symbol}
+          name={r.name}
+          held={!!r.symbol && held.has(r.symbol)}
+          contracts={r.contracts}
+          exchange={r.symbol ? exchanges?.[r.symbol] : undefined}
+        />
+      ),
+    },
+    {
+      key: 'weight',
+      label: COPY.colWeight,
+      primary: true,
+      sortValue: (r) => r.weight,
+      cell: (r) => pct(r.weight),
+    },
+    {
+      key: 'shares',
+      label: member ? COPY.colLastTrade : COPY.colSharesHeld,
+      // Ink like the other figures, and on a phone's card too (a labelled line under the name).
+      cell: (r) => r.shares,
+    },
+    {
+      key: 'ret',
+      label: COPY.perfColumn[period],
+      secondary: true,
+      sortValue: (r) => r.ret,
+      className: (r) => toneOf(r.ret),
+      cell: (r) => signedPct(r.ret),
+    },
+    ...(onSetTicker
+      ? [
+          {
+            key: 'fix',
+            label: '',
+            action: true,
+            className: () => 'fol-fix-cell',
+            cell: (r: Row) =>
+              !r.code ? null : (
+                // The fix is its own action: it must not also open the row's stock.
+                <span onClick={(e) => e.stopPropagation()}>{fixCell(r)}</span>
+              ),
+          },
+        ]
+      : []),
+  ]
+  // On a touch screen the card slides left onto the fix; the "⋯" menu is for a mouse.
+  const swipeFix = (r: Row): SwipeAction[] =>
+    onSetTicker && r.code && r.symbol
+      ? [
+          {
+            label: COPY.tickerFixAction,
+            ariaLabel: COPY.tickerFixFor(r.symbol),
+            onClick: () => setFixing(r),
+            icon: <Pencil size={20} strokeWidth={1.8} aria-hidden="true" />,
+          },
+        ]
+      : []
+  function fixCell(r: Row) {
+    return r.symbol ? (
+      <span className="fol-row-menu">
+        <ActionMenu
+          label={COPY.holdingActions(r.symbol)}
+          items={[{ label: COPY.tickerFixAction, onSelect: () => setFixing(r) }]}
+        />
+      </span>
+    ) : (
+      <Button size="sm" onClick={() => setFixing(r)}>
+        {COPY.tickerSetAction}
+      </Button>
+    )
+  }
+  useLayoutEffect(() => {
+    if (!ownedOnly && listBox.current) setFullHeight(listBox.current.offsetHeight)
+  })
+  return (
+    <section className="fol-holdings" aria-label={COPY.holdingsTitle}>
+      {tiles.length > 1 && (
+        <div className="fol-panel">
+          <h2 className="fol-sec-title">{bySector ? COPY.bySectorTitle : COPY.bySizeTitle}</h2>
+          <SectorPie
+            tiles={tiles}
+            picked={tile}
+            onPick={setTile}
+            bySector={bySector}
+            label={bySector ? COPY.mapBySector : COPY.mapByStock}
+          />
+        </div>
+      )}
+      <div className="fol-sec">
+        <h2 className="fol-sec-title">
+          {/* Every holding the filing lists, a holding with no ticker included. */}
+          {COPY.allHoldingsTitle(rows.length)}
+        </h2>
+        {/* Investments' search (its sticky .mk-toolbar row is not used: it painted over the
+            row above it on a phone). */}
+        <div className="fol-htools">
+          <SearchBox
+            value={query}
+            onChange={setQuery}
+            label={COPY.holdingsSearch}
+            placeholder={`${COPY.holdingsSearch}…`}
+          />
+          {ownedCount > 0 && (
+            <FilterChips
+              label={COPY.holdingsFilterLabel}
+              value={ownedOnly ? 'owned' : 'all'}
+              onChange={(v) => setOwnedOnly(v === 'owned')}
+              options={[
+                { value: 'all', label: COPY.filterAllHoldings, count: rows.length },
+                { value: 'owned', label: COPY.filterOwned, count: ownedCount },
+              ]}
+            />
+          )}
+          {/* A phone folds the chips into Investments' filter button and its sheet (owner,
+              2026-11-14); a wider screen keeps the chips. */}
+          {ownedCount > 0 && (
+            <FilterSheet
+              className="fol-hfilter"
+              presentation={isMobile ? 'sheet' : 'popover'}
+              title={COPY.holdingsFilterLabel}
+              active={ownedOnly}
+              groups={[
+                {
+                  title: COPY.holdingsFilterLabel,
+                  value: ownedOnly ? 'owned' : 'all',
+                  onChange: (v) => setOwnedOnly(v === 'owned'),
+                  options: [
+                    { id: 'all', label: COPY.filterAllHoldings, count: rows.length },
+                    { id: 'owned', label: COPY.filterOwned, count: ownedCount },
+                  ],
+                },
+              ]}
+            />
+          )}
+        </div>
+        {/* A picked tile, however small, is named here with its share and change. */}
+        {pickedTile && (
+          <div className="fol-picked">
+            <span className="fol-picked-name">{pickedTile.label}</span>
+            <span className="fol-picked-fig">{(pickedTile.weight * 100).toFixed(1)}%</span>
+            {/* Plain ink, as in the legend: shares bought or sold, not a gain or a loss. */}
+            {pickedTile.change != null && Math.abs(pickedTile.change) >= UNCHANGED && (
+              <span>{pickedTile.fresh ? COPY.legendNew : signedPct(pickedTile.change)}</span>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setTile(null)}>
+              {COPY.showAll}
+            </Button>
+          </div>
+        )}
+        <div ref={listBox} style={ownedOnly ? { minHeight: fullHeight } : undefined}>
+          {shown.length === 0 && <p className="fol-empty">{COPY.noHoldingMatch(query.trim())}</p>}
+          <SortTable
+            rows={shown}
+            columns={columns}
+            rowKey={(r) => r.key}
+            label={COPY.holdingsTitle}
+            initialSort="weight"
+            // A row opens its stock, as a holding does everywhere else in the app.
+            onRowClick={(r) => r.symbol && openAsset({ ticker: r.symbol, label: r.name })}
+            swipeActions={swipeFix}
+          />
+        </div>
+      </div>
+      {fixing && onSetTicker && (
+        <TickerDialog
+          filedName={fixing.filedName}
+          current={fixing.symbol}
+          watchesToo={!!watchesToo}
+          onSave={(symbol) => onSetTicker(fixing.code!, symbol)}
+          onClose={() => setFixing(null)}
+        />
+      )}
+    </section>
+  )
+}

@@ -31,19 +31,38 @@ export function isWebKit(userAgent: string): boolean {
  *  the whole page sits a status band lower until something makes iOS lay it out again — in
  *  the owner's screen recording a touch did, ~5s later. Nudge that layout pass ourselves on
  *  every rotation: re-assert the scroll origin and toggle the root's height for one frame. */
-export function relayoutAfterRotation(): void {
-  if (typeof window === 'undefined') return
-  if (document.documentElement.dataset.onwDevice !== 'iphone') return
-  const nudge = () =>
+const nudge = () =>
+  requestAnimationFrame(() => {
+    const root = document.documentElement
+    window.scrollTo(0, 0)
+    root.style.minHeight = 'calc(100% + 1px)'
     requestAnimationFrame(() => {
-      const root = document.documentElement
+      root.style.minHeight = ''
       window.scrollTo(0, 0)
-      root.style.minHeight = 'calc(100% + 1px)'
-      requestAnimationFrame(() => {
-        root.style.minHeight = ''
-        window.scrollTo(0, 0)
-      })
     })
+  })
+
+const isIphone = () =>
+  typeof window !== 'undefined' && document.documentElement.dataset.onwDevice === 'iphone'
+
+/** After iOS's edge swipe-back, an iPhone kept tapping with a stale page offset: every tap's
+ *  click landed exactly 735px above the finger, on the page root, so nothing could be tapped
+ *  until the next swipe-back (owner's tap trace, 2026-11-14). Safari restored the page scroll
+ *  of the history entry, while this app scrolls an inner pane and keeps the page at 0. So the
+ *  browser never restores a page scroll here, and every back/forward gets the rotation's nudge. */
+export function relayoutAfterSwipeBack(): void {
+  if (!isIphone()) return
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+  const settle = () => {
+    nudge()
+    for (const ms of [60, 150, 300, 500]) window.setTimeout(nudge, ms)
+  }
+  window.addEventListener('popstate', settle)
+  window.addEventListener('pageshow', (e) => e.persisted && settle())
+}
+
+export function relayoutAfterRotation(): void {
+  if (!isIphone()) return
   // iOS settles the rotated layout at an unannounced moment, so nudge right away, a few times
   // while it settles, and on each resize it reports — the first one after it settles wins.
   let lastWidth = window.innerWidth

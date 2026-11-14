@@ -34,7 +34,8 @@ export function GoCardlessBanks({
   /** A bank was renewed or left the list — re-read the status. */
   onChanged: () => void
   /** A relink started — the bank page's URL, kept on screen in case no tab opened. */
-  onLink: (url: string) => void
+  /** The bank's consent page, whether a tab went there, and the bank's name. */
+  onLink: (link: { url: string; opened: boolean; bank: string }) => void
 }) {
   const [removing, setRemoving] = useState<GoCardlessBank | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -68,7 +69,7 @@ export function GoCardlessBanks({
       }
       if (tab && d.link) {
         opened = tab.go(d.link)
-        onLink(d.link)
+        onLink({ url: d.link, opened, bank: bank.institution_name || '' })
       }
       onChanged()
       emitDataChanged(['config'])

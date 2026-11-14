@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { X } from '../../ui/icons'
 
-export type TagTone = 'accent' | 'muted'
+/** `warn`: a caution about what the chip sits beside (an estimate, a missing report). */
+export type TagTone = 'accent' | 'muted' | 'warn'
 
 export interface TagProps {
   children: ReactNode

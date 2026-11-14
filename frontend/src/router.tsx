@@ -103,11 +103,15 @@ export function validateAccountsSearch(search: Record<string, unknown>): {
   account?: string
   txn?: string
   review?: 'transactions'
+  batch?: string
+  batchLabel?: string
 } {
   return {
     account: typeof search.account === 'string' ? search.account : undefined,
     txn: typeof search.txn === 'string' ? search.txn : undefined,
     review: search.review === 'transactions' ? search.review : undefined,
+    batch: typeof search.batch === 'string' ? search.batch : undefined,
+    batchLabel: typeof search.batchLabel === 'string' ? search.batchLabel : undefined,
   }
 }
 
@@ -119,6 +123,8 @@ const accountsRoute = createRoute({
   // open the SAME drawer the register opens rather than a chat-only lookalike. Mirrors the
   // /commitments?open=<id> precedent (a Plan budget row deep-linking its commitment).
   // ?review=transactions is a one-shot command that opens the compact review queue.
+  // ?batch=<id> is a one-shot command: the register, filtered to one write batch (a bank sync's
+  // run report links its run here); ?batchLabel= names the filter chip after that run.
   validateSearch: validateAccountsSearch,
 })
 // Assets tab — /assets. `assetRoute` (below) is already taken by the instrument-detail
@@ -164,6 +170,8 @@ const automationsRoute = createRoute({
     // Deep-link from a Connectors provider section's "Automate with a template" — opens the
     // editor prefilled with `sync_<provider>` and is cleared once consumed (Automations.tsx).
     template: typeof search.template === 'string' ? search.template : undefined,
+    // What the template is for (a followed portfolio's name): fills its `[name]`.
+    for: typeof search.for === 'string' ? search.for : undefined,
     // `view=sync` shows the data syncs (fixed rules, no AI); `sync=ynab` opens one, and
     // `report` one of its runs.
     view: typeof search.view === 'string' ? search.view : undefined,

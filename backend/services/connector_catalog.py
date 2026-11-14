@@ -603,7 +603,7 @@ _KINDS: tuple[ConnectorKind, ...] = (
     _kind(
         # Import and two-way sync of an Actual Budget server (flag ``actual_budget_sync``). The
         # address is a secret too: it can carry credentials, and an endpoint is one. No Lucius
-        # tools - the connector is driven from the Data sync tab.
+        # tools - the connector is driven from the Data Sync tab.
         "actual_budget",
         "Actual Budget",
         _actual_budget_configured,

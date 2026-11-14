@@ -2212,7 +2212,7 @@
 }
 
 /* ── Data syncs (fixed rules, no AI model) — today the two-way YNAB sync ── */
-/* The Lucius / Data sync tabs close the masthead, under the title on a row of their own: the
+/* The Lucius / Data Sync tabs close the masthead, under the title on a row of their own: the
    page's own panels supply the gap below. */
 .a3-masthead--tabs {
   flex-direction: column;

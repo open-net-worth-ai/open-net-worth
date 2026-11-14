@@ -51,6 +51,7 @@ const CSS_FILES = [
   join(ROOT, 'frontend/src/components/tabs/investments/activity.css'),
   join(ROOT, 'frontend/src/components/tabs/investments/options.css'),
   join(ROOT, 'frontend/src/components/tabs/investments/equity.css'),
+  join(ROOT, 'frontend/src/components/intel/following/following.css'),
   // Accounts redesign module CSS (acct-*/lx-*/imp-*/pm-*/pay-*/txn-* classes)
   join(ROOT, 'frontend/src/components/tabs/accounts/accounts.css'),
   // Statement Import Decide step — verbatim port of the handoff prototype (imp3-* classes)
@@ -72,6 +73,8 @@ const CSS_FILES = [
   join(ROOT, 'frontend/src/components/tabs/builder.css'),
   // Unified instruction-first Automations surface (a3-* classes)
   join(ROOT, 'frontend/src/components/tabs/automations.css'),
+  // Bank sync without AI — connector panel, review list, run history (bs-* classes)
+  join(ROOT, 'frontend/src/components/tabs/automations/datasync/bankSync.css'),
   // Settings overlay redesign module CSS (rd-set-*/rd-* classes, scoped under .onw-settings)
   join(ROOT, 'frontend/src/components/tabs/settings/settings.css'),
   join(ROOT, 'frontend/src/components/tabs/connectors/connectors.css'),

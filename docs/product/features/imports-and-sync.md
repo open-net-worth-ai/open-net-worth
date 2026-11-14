@@ -15,22 +15,25 @@ The **YNAB** data sync brings your history in from YNAB and then keeps the two i
 categories, envelopes, every transaction and each month's Assigned amounts, checked against YNAB's
 own figures. After the import, **transactions**, **categories and category groups** (both ways) and
 the **Assigned of an envelope that holds one category** stay in step. Changes can flow **Both ways**, only **From YNAB**, or only **To YNAB**. It is a
-**data sync**: open **Automations**, switch to **Data sync** at the top and pick **YNAB**. A data
+**data sync**: open **Automations**, switch to **Data Sync** at the top and pick **YNAB**. A data
 sync follows fixed rules rather
 than a Lucius prompt, so no AI is involved and it costs nothing to run. Every run is
 saved, so you can come back to its report whenever you like, from any device.
 
 > **Experimental, on by default.** It has a switch in [Settings → Developer → Experimental](settings.md#experimental-features)
-> (**Ynab import and sync**). Turning it off stops the sync and takes YNAB out of the **Data sync**
+> (**Ynab import and sync**). Turning it off stops the sync and takes YNAB out of the **Data Sync**
 > tab, but keeps its settings, review list and history, so turning it back on carries on where it
 > left off. The tab goes too unless Actual is there. The YNAB connector itself works the same
 > either way.
 
 This is separate from [importing a statement](importing.md), which reads one bank or card file, and
 from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transactions on a schedule.
+Lucius can still read a synced plan's transactions, since reading changes nothing. Rows already
+in your book, including each account's Starting Balance (which the import put into the account's
+opening balance), show as already booked, so Lucius isn't offered them again.
 
 Coming from Actual Budget instead? Once it's turned on in **Settings → Developer → Experimental**, it
-has its own card under **Data sync**, and works the same way,
+has its own card under **Data Sync**, and works the same way,
 with a few differences its page lists: see [Import from Actual Budget](actual-budget-import.md). A
 book syncs with one of the two at a time, and an import from one is refused while the other's sync is
 on.
@@ -113,8 +116,8 @@ Until it is set up, its page is two steps, the second unlocked by the first:
    itself when the import succeeds (every hour by default). If it can't turn on, the report says
    why and step 2 offers **Turn on**. Running again is safe: nothing is booked twice.
 
-Once it has been imported it appears under **Automations → Data sync** with its schedule and an
-**N to review** tag when something needs you (the **Data sync** switch shows the same count). Its menu has **Sync now**, **Turn on** /
+Once it has been imported it appears under **Automations → Data Sync** with its schedule and an
+**N to review** tag when something needs you (the **Data Sync** switch shows the same count). Its menu has **Sync now**, **Turn on** /
 **Turn off** and **Open**.
 
 ## Once it's running

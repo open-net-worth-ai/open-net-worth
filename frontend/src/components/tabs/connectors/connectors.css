@@ -248,6 +248,19 @@
   }
 }
 
+/* The bank step's button is a link styled as a button (BankHandoff): it keeps the button's own
+   text colour and border, not the page's accent link look above. */
+.cn-page a.bank-handoff-go.btn-primary,
+.cn-page a.bank-handoff-go.btn-primary:hover {
+  color: var(--ink-on-cta);
+  border: none;
+}
+.cn-page a.bank-handoff-go.btn-secondary,
+.cn-page a.bank-handoff-go.btn-secondary:hover {
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
 /* ── segment tabs (underline) ─────────────────────────────────────────────── */
 .cn-page .rd-tabs {
   display: flex;

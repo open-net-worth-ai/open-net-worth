@@ -3,7 +3,9 @@
 // reviews, on the template's own schedule) — or the sentence to ask Lucius for a one-off fetch.
 import { useRouter } from '@tanstack/react-router'
 import { Button, Text } from '../../ui'
+import { useFlag } from '../../../hooks/useFlag'
 import { ALL_TEMPLATES, templateKeyForConnector } from '../automations/automationTemplates'
+import { useBankSyncs } from '../automations/datasync/bankSync'
 
 /** "every 6 hours" / "every hour" — the template's own interval, so the copy can't drift. */
 function cadence(templateKey: string | null): string | null {
@@ -31,7 +33,13 @@ export function ConnectorNextStep({
   // Optional: these forms also render outside the router (tests, previews).
   const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
   const templateKey = templateKeyForConnector(provider)
-  if (linkedCount === 0) return null
+  // A bank with sync without AI gets ONE next step, the connector page's Sync card (Set up sync,
+  // then its status). This card beside it offered a second, Lucius way in, and once the sync was
+  // on it said "linking doesn't import anything yet" while it did. Lucius stays one click away:
+  // the connector header's Automate.
+  const bankSyncs = useBankSyncs(useFlag('bank_data_sync') === true)
+  const hasBankSync = (bankSyncs.data ?? []).some((s) => s.provider === provider)
+  if (linkedCount === 0 || hasBankSync) return null
   const every = cadence(templateKey)
   const target = linkedCount === 1 ? 'your linked account' : 'your linked accounts'
 

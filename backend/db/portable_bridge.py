@@ -410,6 +410,8 @@ from backend.db.tables import (
     attachments,
     automation_runs,
     automations,
+    bank_sync_reviews,
+    bank_sync_settings,
     budget_assignments,
     budget_engine_state,
     categories,
@@ -425,6 +427,7 @@ from backend.db.tables import (
     envelopes,
     evidence,
     evidence_subjects,
+    followed_portfolios,
     grants,
     import_batches,
     import_runs,
@@ -800,6 +803,7 @@ BRIDGED: dict[str, Bridge] = {
     "vest_events.json": _investment_bridge(vest_events),
     "option_contracts.json": _investment_bridge(option_contracts),
     "investment_theses.json": _investment_bridge(investment_theses),
+    "followed_portfolios.json": _investment_bridge(followed_portfolios),
     "realized_events.json": _investment_bridge(realized_events),
     "watchlist.json": Bridge(
         export_fn=investments_io.export_watchlist,
@@ -1155,6 +1159,10 @@ def _wipe_investment_theses(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, investment_theses, "id")
 
 
+def _wipe_followed_portfolios(conn: Connection) -> list[Path]:
+    return _capture_then_delete(conn, followed_portfolios, "id")
+
+
 def _wipe_realized_events(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, realized_events, "id")
 
@@ -1288,6 +1296,15 @@ def _wipe_ynab_sync(conn: Connection) -> list[Path]:
     otherwise be reconciled against a ledger that no longer holds the rows they describe."""
     paths: list[Path] = []
     for table in (ynab_sync_conflicts, ynab_sync_baselines, ynab_sync_mirror, ynab_sync_state):
+        paths.extend(_capture_then_delete(conn, table, "id"))
+    return paths
+
+
+def _wipe_bank_sync(conn: Connection) -> list[Path]:
+    """The bank data sync's settings and review list — a reset book has no linked accounts or
+    booked rows for either to point at."""
+    paths: list[Path] = []
+    for table in (bank_sync_reviews, bank_sync_settings):
         paths.extend(_capture_then_delete(conn, table, "id"))
     return paths
 
@@ -1439,6 +1456,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     "vest_events.json": _wipe_vest_events,
     "option_contracts.json": _wipe_option_contracts,
     "investment_theses.json": _wipe_investment_theses,
+    "followed_portfolios.json": _wipe_followed_portfolios,
     "realized_events.json": _wipe_realized_events,
     "watchlist.json": _wipe_watchlists,
     # wipe-only — deliberately NOT a BRIDGED key (a cache; module docstring, PLAN 4B TASK
@@ -1489,6 +1507,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     "tool_permissions.json": _wipe_tool_permissions,
     "ynab_sync.json": _wipe_ynab_sync,
     "actual_sync.json": _wipe_actual_sync,
+    "bank_sync.json": _wipe_bank_sync,
     "memory_settings.json": _wipe_memory_settings,
     "preferred_models.json": _wipe_preferred_models,
     # Misc stores (plan 4e task 1) — the three BRIDGED misc stores, reached via the

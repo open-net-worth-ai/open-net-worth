@@ -10,6 +10,11 @@ import { fDate } from '../../../utils/format'
 import { accessEnded, type EnableBankingBank } from './enableBankingBank'
 
 function bankLine(b: EnableBankingBank, country: string): { text: string; warn: boolean } {
+  if (b.access_ended === 'app_changed')
+    return {
+      text: `${country} · linked under your previous app — renew to keep syncing`,
+      warn: true,
+    }
   if (accessEnded(b))
     return { text: `${country} · access ended — renew to keep syncing`, warn: true }
   const n = `${b.accounts} account${b.accounts === 1 ? '' : 's'}`

@@ -3792,6 +3792,15 @@ body.hide-amounts .mask * {
     align-items: center;
     flex-shrink: 0;
   }
+  /* The column can be narrow on a wide window (the chat pane open): the actions then wrap
+     below the title instead of squeezing the subtitle to a word per line. */
+  .intel-page-header {
+    flex-wrap: wrap;
+    row-gap: var(--space-3);
+  }
+  .intel-page-header .ui-page-header__titles {
+    flex: 1 1 18rem;
+  }
   @keyframes intel-pulse {
     0%,
     100% {
@@ -7350,9 +7359,15 @@ body.hide-amounts .mask * {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 15%, transparent);
   }
+  /* A tint of the ink, like accent and warn are tints of theirs: --surface2 is pure white in the
+     light theme, the same as the page, so the pill vanished and screens patched borders on. */
   .ui-tag--muted {
     color: var(--muted);
-    background: var(--surface2);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+  .ui-tag--warn {
+    color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
   }
   .ui-tag__remove {
     all: unset;
@@ -9532,6 +9547,14 @@ body.hide-amounts .mask * {
   .acct-row-linked--off {
     color: var(--faint);
   }
+  /* The bank sync's mark on an account it keeps (bankSyncMarks): amber when the bank's access
+     ends soon, red when the sync has stopped. Green is the plain linked colour above. */
+  .acct-row-linked.acct-sync-warn {
+    color: var(--warn);
+  }
+  .acct-row-linked.acct-sync-bad {
+    color: var(--bad);
+  }
 
   .conn-acct-head {
     display: flex;
@@ -9614,11 +9637,75 @@ body.hide-amounts .mask * {
     color: var(--faint);
     font-size: var(--text-xs);
   }
+  /* "Link bank" → approve at the bank: the one thing left to do, so a callout with a button
+     (BankHandoff), never small print. */
+  .bank-handoff {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: var(--radius-md, 10px);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+  .bank-handoff-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+  .bank-handoff-text strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .bank-handoff-go {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+  }
   .conn-acct-actions {
     flex: none;
     display: flex;
     align-items: center;
     gap: var(--space-1);
+  }
+  /* Buttons in a list row are row-sized, not form-sized: the small button's 6px padding and
+     1.55 line height made each account row 33px tall around a 12px label. */
+  .conn-acct-actions .ui-btn {
+    padding-block: 3px;
+    line-height: 1.3;
+    border-radius: var(--radius-sm);
+  }
+  /* The row's next step in the accent colour: Add a soft fill, Link… its text; Unlink stays
+     quiet and only reddens under the pointer. */
+  .conn-acct-actions .conn-acct-add {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+    font-weight: 500;
+  }
+  .conn-acct-actions .conn-acct-add:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  .conn-acct-actions .conn-acct-link {
+    color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+  }
+  .conn-acct-actions .conn-acct-link:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .conn-acct-actions .conn-acct-unlink {
+    color: var(--muted);
+  }
+  .conn-acct-actions .conn-acct-unlink:hover:not(:disabled) {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 8%, transparent);
   }
   /* A prompt suggestion chip DOES something (hands the prompt to Lucius) — the arrow and hover
      set it apart from tool/category chips, which are labels. */

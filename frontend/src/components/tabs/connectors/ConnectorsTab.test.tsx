@@ -16,8 +16,23 @@ import type { Connector } from './types'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
-const signInWithOAuth = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true, error: null })))
-vi.mock('./oauthSignIn', () => ({ signInWithOAuth }))
+// A sign-in that waits until the test settles it, like the real window: `finish` resolves the
+// newest one, `cancel` resolves it as cancelled.
+const signIns = vi.hoisted(() => ({
+  settle: [] as ((o: { ok: boolean; error: string | null; reason: string | null }) => void)[],
+}))
+const signInWithOAuthCancellable = vi.hoisted(() =>
+  vi.fn(() => {
+    let settle: (o: { ok: boolean; error: string | null; reason: string | null }) => void = () => {}
+    const outcome = new Promise<{ ok: boolean; error: string | null; reason: string | null }>(
+      (r) => (settle = r),
+    )
+    signIns.settle.push(settle)
+    return { outcome, cancel: vi.fn(() => settle({ ok: false, error: null, reason: 'cancelled' })) }
+  }),
+)
+vi.mock('./oauthSignIn', () => ({ signInWithOAuthCancellable, CANCELLED_REASON: 'cancelled' }))
+const signInWithOAuth = signInWithOAuthCancellable
 const routerSearch = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
@@ -138,7 +153,10 @@ describe('Reconnect on a server that signs in', () => {
 
   const tested = () => authFetch.mock.calls.filter(([url]) => url === '/api/mcp-clients/acme/test')
 
-  beforeEach(() => signInWithOAuth.mockClear())
+  beforeEach(() => {
+    signInWithOAuth.mockClear()
+    signIns.settle = []
+  })
 
   it('tries the connection again and opens no sign-in window for a network failure', async () => {
     withServer(server({ connected: true, needs_reauth: false }))
@@ -167,6 +185,53 @@ describe('Reconnect on a server that signs in', () => {
 
     await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({ server_id: 'acme' }))
     expect(tested()).toHaveLength(0)
+  })
+
+  // Owner, 2026-11-13: the desktop app signs in through the system browser; closing it left
+  // "Reconnecting…" disabled for the flow's whole ten minutes.
+  async function openDetailWaitingOnSignIn() {
+    withServer(server({ connected: true, needs_reauth: true }))
+    await renderTab()
+    fireEvent.click(await screen.findByText('Acme'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Reconnect' }))
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledTimes(1))
+    return dialog
+  }
+
+  it('lets a waiting sign-in be opened again, replacing the one nobody can see', async () => {
+    const dialog = await openDetailWaitingOnSignIn()
+    const first = signInWithOAuth.mock.results[0]!.value as { cancel: () => void }
+
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Open sign-in again' }))
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledTimes(2))
+    expect(first.cancel).toHaveBeenCalled()
+    // The replaced flow settling as cancelled must not clear the new one's waiting state.
+    expect(await within(dialog).findByRole('button', { name: 'Open sign-in again' })).toBeTruthy()
+  })
+
+  it("goes straight on to the sign-in from Lucius's card Reconnect on the installed server", async () => {
+    withServer(server({ connected: true, needs_reauth: true }))
+    await renderTab()
+
+    act(() =>
+      dispatchScreenCommand({
+        name: 'connectors.open_setup',
+        args: { id: 'mcp:acme', connect: true },
+      }),
+    )
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({ server_id: 'acme' }))
+  })
+
+  it('cancels a waiting sign-in and gives the plain Reconnect back', async () => {
+    const dialog = await openDetailWaitingOnSignIn()
+
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Cancel' }))
+
+    expect(await within(dialog).findByRole('button', { name: 'Reconnect' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()
   })
 })
 

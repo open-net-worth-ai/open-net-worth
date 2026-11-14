@@ -25,7 +25,8 @@ export interface RunSummary {
   outcome: string
   archived_at: string | null
   phase: string
-  progress: { done: number; total: number }
+  // A bank sync also names what it is on: the account being read (`label`).
+  progress: { done: number; total: number; label?: string }
   error: string | null
 }
 

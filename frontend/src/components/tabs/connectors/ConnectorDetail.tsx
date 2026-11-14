@@ -42,6 +42,7 @@ import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
+import { BankSyncSection } from '../automations/datasync/BankSyncSummary'
 import { cachedRestApi, getRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
@@ -66,6 +67,12 @@ export interface ConnectorDetailProps {
   /** True while a Reconnect click is waiting on an OAuth sign-in — the button says so instead
    *  of sitting there with no feedback while the popup runs. */
   reconnecting?: boolean
+  /** Present only while Reconnect waits on an OAuth sign-in. Its window may have been closed
+   *  where the app can't see it (the desktop app's system browser), so the button stays live —
+   *  another click starts a fresh sign-in — and this drops the one that's waiting. */
+  onCancelSignIn?: () => void
+  /** Starts a fresh sign-in in place of the waiting one. */
+  onRestartSignIn?: () => void
   onViewDetails: () => void
   /** MCP only — reopens the setup drawer pre-filled. A connector with a `configForm`
    *  reopens THAT instead, and never reaches this. */
@@ -140,6 +147,8 @@ export function ConnectorDetail({
   onSetEnabled,
   onReconnect,
   reconnecting = false,
+  onCancelSignIn,
+  onRestartSignIn,
   onViewDetails,
   onEditConnection,
   onRefreshTools,
@@ -464,6 +473,15 @@ export function ConnectorDetail({
       <Btn size="lg" variant="primary" onClick={() => setConfiguringId(entry.id)}>
         Reconnect
       </Btn>
+    ) : onCancelSignIn ? (
+      <>
+        <Btn size="lg" variant="ghost" onClick={onCancelSignIn}>
+          Cancel
+        </Btn>
+        <Btn size="lg" variant="primary" onClick={onRestartSignIn ?? onReconnect}>
+          Open sign-in again
+        </Btn>
+      </>
     ) : (
       <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
         {!reconnecting
@@ -619,6 +637,10 @@ export function ConnectorDetail({
             bank or broker shows them here — not only behind Edit configuration. */}
           {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured && entry.enabled ? (
             <ConnectorAccountsList provider={entry.id} providerLabel={entry.name} />
+          ) : null}
+          {/* Bank sync without AI (ADR 2026-11-13) — nothing for a connector without one. */}
+          {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured ? (
+            <BankSyncSection provider={entry.id} />
           ) : null}
 
           {entry.prompts.length > 0 ? (

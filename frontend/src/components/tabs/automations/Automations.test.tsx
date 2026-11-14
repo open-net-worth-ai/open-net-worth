@@ -22,6 +22,7 @@ const route = vi.hoisted(() => ({
     automation?: string
     run?: string
     template?: string
+    for?: string
     view?: string
     sync?: string
   },
@@ -469,6 +470,20 @@ describe('Automations', () => {
     })
   })
 
+  // Auto-copy on a followed portfolio: the template opens already naming it, so the
+  // owner is not asked again what they just clicked.
+  it("fills a template's [name] from ?for=, and clears both params", async () => {
+    route.search = { template: 'copy-followed-portfolio', for: 'Acme Capital' }
+    render(<Automations />)
+    await screen.findByRole('dialog', { hidden: true })
+    expect(screen.getByDisplayValue('Copy Acme Capital')).toBeTruthy()
+    expect(
+      screen.getByDisplayValue(/^Copy the followed portfolio Acme Capital in my broker account/),
+    ).toBeTruthy()
+    const call = navigate.mock.calls.find((c) => c[0]?.to === '/automations')!
+    expect(call[0].search({ template: 'x', for: 'y' })).toEqual({})
+  })
+
   // CDS-UI-12: an unknown template key is a silent no-op — gallery renders, editor stays
   // closed, no error/console warning.
   it('silently ignores an unknown ?template= key', async () => {
@@ -518,12 +533,12 @@ describe('Automations', () => {
   })
 })
 
-// The Data sync view is behind the ynab_import_and_sync flag: off, the screen is main's.
+// The Data Sync view is behind the ynab_import_and_sync flag: off, the screen is main's.
 describe('Automations — the ynab_import_and_sync flag', () => {
   let restoreFlags: () => void = () => {}
   afterEach(() => restoreFlags())
 
-  it('off: no Data sync tab, and a sync deep link still opens the Lucius list', async () => {
+  it('off: no Data Sync tab, and a sync deep link still opens the Lucius list', async () => {
     restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: false })
     route.search = { view: 'sync', sync: 'ynab' }
     render(<Automations onOpenChat={vi.fn()} onOpenConversation={vi.fn()} />)
@@ -533,7 +548,7 @@ describe('Automations — the ynab_import_and_sync flag', () => {
     expect(screen.getByText(/^Run on a schedule or when something happens\./)).toBeTruthy()
   })
 
-  it('on: Lucius and Data sync are two tabs', async () => {
+  it('on: Lucius and Data Sync are two tabs', async () => {
     restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: true })
     render(<Automations onOpenChat={vi.fn()} onOpenConversation={vi.fn()} />)
 

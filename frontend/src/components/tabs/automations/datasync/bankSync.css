@@ -1,0 +1,410 @@
+/* Bank sync without AI (ADR 2026-11-13): the panel on a bank connector's page and on its Data
+   sync page, the review list and the run history. Built on the design-system primitives; only
+   the layout around them lives here. */
+
+.bs-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bs-summary-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bs-note,
+.bs-notice,
+.bs-warn {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-3);
+}
+.bs-notice {
+  color: var(--ink);
+}
+.bs-warn {
+  color: var(--warn);
+}
+.bs-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+/* The brand plate (a3-mark), larger in the title and small beside a card's name. */
+.a3-mark.bs-mark-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.a3-mark.bs-mark-lg .a3-mark-logo {
+  padding: 7px;
+}
+.a3-mark.bs-mark-xs {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+.a3-mark.bs-mark-xs .a3-mark-logo {
+  padding: 3px;
+}
+/* Scoped under the step body, whose own paragraph colour would otherwise win. */
+.a3-step-body .bs-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  color: var(--good);
+}
+.a3-step-body .bs-done svg {
+  flex: none;
+}
+.bs-banks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* One card per bank: its name and status on top, its accounts below. */
+.bs-bank {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+.bs-bank-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.bs-bank-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bs-bank-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.bs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.bs-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+}
+.bs-pill-warn {
+  color: var(--warn);
+}
+.bs-pill-warn .bs-dot {
+  background: var(--warn);
+}
+.bs-pill-bad {
+  color: var(--bad);
+}
+.bs-pill-bad .bs-dot {
+  background: var(--bad);
+}
+.bs-bank-accts {
+  list-style: none;
+  margin: 0;
+  padding: 2px 14px;
+}
+.bs-acct {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 9px 0;
+}
+.bs-acct-cols {
+  padding: 8px 14px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.bs-acct-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.bs-gap {
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.bs-acct-book {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bs-acct-book svg {
+  flex: none;
+  color: var(--muted);
+}
+.bs-acct-book .bs-acct-mask {
+  margin-left: 2px;
+}
+.bs-acct-book:hover {
+  text-decoration: underline;
+}
+.bs-acct + .bs-acct {
+  border-top: 1px solid var(--line);
+}
+.bs-acct-mask {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.bs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.bs-reviews {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bs-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.bs-review-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bs-review-rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.bs-review-rows dt {
+  color: var(--muted);
+}
+.bs-review-rows dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .bs-review-rows {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A run's report (BankRunReport): a line on what it did, then the booked rows. */
+.bs-run {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bs-run-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bs-run-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+.bs-run-head > :first-child {
+  flex: 1;
+}
+/* Lucius's own colour: --lucius is reserved for him. */
+.bs-run-head .bs-run-lucius {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--lucius);
+}
+.bs-run-list li {
+  border-top: 1px solid var(--line);
+}
+.bs-run-row {
+  display: grid;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 9px 0;
+  font-size: 13px;
+}
+.bs-run-row:hover .what > span:first-child {
+  text-decoration: underline;
+}
+.bs-run-row .when {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.bs-run-row .what {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bs-run-row .sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.bs-run-row .amt {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.bs-run-row .amt.in {
+  color: var(--pos);
+}
+
+/* The import's live progress: what it is on, and a bar that keeps moving while the bank
+   answers (how long a bank takes isn't known, so the bar shows motion, not a percentage). */
+.bs-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 420px;
+}
+.bs-progress-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+.bs-progress-spin {
+  flex: none;
+  color: var(--accent);
+  animation: bs-spin 0.9s linear infinite;
+}
+.bs-progress-bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.bs-progress-bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: bs-sweep 1.4s ease-in-out infinite;
+}
+@keyframes bs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes bs-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-progress-spin,
+  .bs-progress-bar span {
+    animation: none;
+  }
+}
+
+/* The import, account by account (ImportedSummary). */
+.bs-imported {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bs-imported-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 20px;
+  list-style: none;
+}
+.bs-imported-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-size: var(--text-sm);
+}
+.bs-imported-acct {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bs-imported-acct:hover {
+  text-decoration: underline;
+}
+.bs-imported-what {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

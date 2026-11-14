@@ -240,7 +240,7 @@ def _answer_import_first(plan_id: str) -> None:
 
 def _turn_on_sync(run: _Run, plan_id: str, direction: str) -> None:
     """The import is done and stays done: a sync that cannot turn on is said in the log, and
-    the Data sync page offers to turn it on."""
+    the Data Sync page offers to turn it on."""
     from backend.services.ynab_sync import runner
 
     if not current().syncs:
@@ -249,7 +249,7 @@ def _turn_on_sync(run: _Run, plan_id: str, direction: str) -> None:
     try:
         runner.update_settings(enabled=True, interval=None, plan_id=plan_id, direction=direction)
     except OpenNetWorthError as exc:
-        run.log(f"The sync was not turned on: {exc.message or exc}. Turn it on from Data sync.")
+        run.log(f"The sync was not turned on: {exc.message or exc}. Turn it on from Data Sync.")
         return
     name = current().name
     label = {"both": "both ways", "from_ynab": f"from {name}", "to_ynab": f"to {name}"}

@@ -24,7 +24,7 @@ which version you have: in the desktop app, **Open Net Worth → About Open Net 
 
 ## 2026-11-05 — Actual Budget can be imported and kept in step
 
-Turn it on in **Settings → Developer → Experimental**, and **Automations → Data sync** has an
+Turn it on in **Settings → Developer → Experimental**, and **Automations → Data Sync** has an
 [Actual](../features/actual-budget-import.md) card beside YNAB: connect your own Actual server, review what would come across, import it, and keep the two in step if
 you want to. Nothing changes for a book that doesn't use it, and YNAB's sync reads and behaves as it
 did. Once imported, Ready to Assign won't match Actual's To Budget, because the two are worked out

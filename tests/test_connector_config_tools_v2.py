@@ -638,6 +638,29 @@ def test_connector_reads_point_lucius_at_the_directory_tool(svc):
         assert "search_connector_directory" in note
 
 
+def test_a_failing_connector_points_lucius_at_its_card():
+    # Lucius told the owner to find an expired IBKR sign-in in Connectors themselves and showed
+    # the card only when asked (2026-11-13): the failing row now names the card that fixes it.
+    from types import SimpleNamespace
+
+    from backend.ai.tools.connectors import _status_row
+
+    def view(status, error=None):
+        return SimpleNamespace(
+            id="mcp:acme-broker",
+            name="Acme",
+            enabled=True,
+            status=status,
+            error=error,
+            kind="mcp",
+            config={"transport": "remote"},
+        )
+
+    failing = _status_row(view("error", "Connection has expired."))
+    assert "connectors.open_setup" in failing["fix"] and "'mcp:acme-broker'" in failing["fix"]
+    assert "fix" not in _status_row(view("active"))
+
+
 def test_a_status_check_on_named_connectors_stays_on_topic(svc):
     out = _call("get_connector_status", {"connectors": ["email"]})
     assert "more_in_directory" not in out

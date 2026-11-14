@@ -5,7 +5,7 @@ category: connectors
 order: 60
 audience: [user]
 status: beta
-related: [lucius/automations, lucius/overview, features/importing, getting-started/what-is-open-net-worth]
+related: [lucius/automations, lucius/overview, features/importing, features/bank-data-sync, getting-started/what-is-open-net-worth]
 keywords: [plaid, simplefin, enable banking, gocardless, nordigen, lunch flow, lunch money, ynab, alpaca, interactive brokers, ibkr flex retired, bank sync, brokerage sync, setup, sync template, last fetched]
 ---
 
@@ -56,9 +56,10 @@ fetch from the provider's website and which fields to fill in.
    provider can see, grouped by type (cash,
    credit cards, loans, retirement…) where the provider says what each account is. For each row:
    - **Add** creates a new account in Open Net Worth, with the form already filled in — name,
-     type, currency, last four digits, and today's balance as the starting balance (for a card or
-     loan, the amount owed). Check them and click **Add account**.
-   - **Link…** ties it to an account you already have instead — pick it from the list.
+     type, currency, last four digits, and the bank's settled balance as the starting balance
+     (for a card or loan, the amount owed). The row itself shows the bank's balance including
+     pending, when the bank sends it. Check them and click **Add account**.
+   - **Link** ties it to an account you already have instead — pick it from the list.
 
    Either way the link saves straight away; there's nothing else to save. A linked row reads
    **Linked to "*account name*"**, and **Unlink** undoes it. On the **Accounts** screen, a
@@ -126,7 +127,7 @@ US and Canadian banks and cards, through your own Plaid developer account.
    bank gives its accounts new identities, and links you made to the old ones stop matching.
 6. **③ Choose and link accounts** — every linked bank's accounts, grouped by type, each showing
    which bank it's at. **Add** each one you
-   want to track, or **Link…** it to an account you already have.
+   want to track, or **Link** it to an account you already have.
 7. **④ Bring in transactions** — linking imports nothing by itself. (An investment or
    retirement account needs no transactions: with **Brokerage total** on, it follows the total
    Plaid reports — see [Accounts](../features/accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).) Click **Set up automation**
@@ -170,9 +171,10 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
    "END PRIVATE KEY" line — into **Private key**. Click **Save**.
 5. Reopen the form (**⋯ → Edit configuration**). Under **2 Link your banks**, choose your
    **Country** — its banks load by themselves — then your **Bank**, and click **Link bank**.
-6. Your bank's sign-in page opens in a new tab. After you approve access, your bank brings you
-   back to **Connectors**, the link finishes by itself, and the Enable Banking connector opens.
-   Link your accounts in its **Accounts** list.
+6. Your bank's sign-in page opens in a new tab. If no tab opens (some browsers block it, and the
+   iPhone home-screen app can't open one), click **Open** *your bank* in the box under the form. After
+   you approve access, your bank brings you back to **Connectors**, the link finishes by itself,
+   and the Enable Banking connector opens. Link your accounts in its **Accounts** list.
 
 **More than one bank:** one Enable Banking connector holds all of them. Under **2 Link your
 banks**, each linked bank is listed with its country, account count and how long its access
@@ -200,11 +202,32 @@ If **Link bank** or **Complete link** fails, the message gives Enable Banking's 
 example, `REDIRECT_URI_NOT_ALLOWED` names the URL to add to your application's allowed redirect
 URLs.
 
-Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
-error, and the form says which bank's access has ended — click **Renew** next to it. Each bank
-renews on its own; linking the same bank again also renews it rather than adding it twice. Renewing
-keeps everything as it was: each account stays linked to the same Open Net Worth account, and
-nothing already imported comes in again.
+Bank consent usually lasts about 90 days. When a bank's access ends (it ran out, or you revoked
+it at the bank), a fetch names that bank and keeps fetching the others, and the form shows
+**access ended** on it — click **Renew** next to it. If no bank can be read, the fetch fails
+instead of returning nothing. Each bank renews on its own; linking the same bank again also renews
+it rather than adding it twice. Renewing keeps everything as it was: each account stays linked to
+the same Open Net Worth account, and nothing already imported comes in again.
+
+Each transaction's description is the first of these your bank sends: its payment text, the
+other party's name, its own name for the kind of transaction (such as "Card payment"), or the
+payment reference. A transaction with none of them is described as **Enable Banking**: your bank
+didn't send any detail for it.
+
+### Switching to another Enable Banking application
+
+A bank's access belongs to the application you linked it with, so another application can't read
+it. To move to a new application (from a sandbox one to a production one, say), click **Edit** on
+step 1, paste the new **Application ID** and its **private key**, and click **Save**. The form
+warns you first while banks are linked. On Save:
+
+- Enable Banking checks the new ID and key. If it refuses them, nothing changes: your banks keep
+  syncing under the current application.
+- Each bank's access under the old application is revoked at Enable Banking.
+- Every bank shows **linked under your previous app**. Click **Renew** on each one and approve at
+  your bank again. Its accounts stay linked, and nothing already imported comes in again.
+
+Add the step 1 **Redirect URL** to the new application's redirect URLs too.
 
 ## GoCardless
 
@@ -221,7 +244,7 @@ signups in 2025, so if you don't have one, use **Enable Banking** instead.
    **Country** (for example `GB`, `DE`, `FR`), click **List banks**, choose your bank under
    **Bank**, and click **Link bank**.
 5. Your bank's sign-in page opens in a new tab. If no tab opens (some browsers block it, and the
-   iPhone home-screen app can't open one), click **open your bank's page** under the form. Approve
+   iPhone home-screen app can't open one), click **Open** *your bank* in the box under the form. Approve
    access there. Afterwards the bank sends you back to the GoCardless connector in Open Net
    Worth. You don't need to copy a code.
 6. The connector's page lists the bank's accounts under **Accounts** — link each one there (see
@@ -241,7 +264,9 @@ linking again; the other banks keep fetching. Click **Link again** on that bank 
 To renew a bank before it expires, click **Renew**: the old access keeps working until you
 finish at the bank, so you lose nothing if you stop halfway.
 
-**Banks limit how often you can fetch.** Many allow only four reads per account per day. The
+**Banks limit how often you can fetch.** Many allow only four reads per account per day. (With
+[Bank sync without AI](../features/bank-data-sync.md), each account shows the reads it has
+left today.) The
 **Sync GoCardless** template runs twice a day, which leaves room for one fetch you ask for
 yourself. If you hit the limit, the connector shows **rate limited** with roughly when the limit
 resets. Wait until then; you don't need to link again.
@@ -304,10 +329,10 @@ move your whole plan across instead, use the migration below.
 
 To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
 across, and check the result against YNAB, open **Automations →
-Data sync → YNAB**: the [YNAB data sync](../features/imports-and-sync.md) uses the token you saved
+Data Sync → YNAB**: the [YNAB data sync](../features/imports-and-sync.md) uses the token you saved
 here, and the import is its second setup step. It is on by default; turning it off in
 [Settings → Developer → Experimental](../features/settings.md#experimental-features) hides the
-**Data sync** tab.
+**Data Sync** tab.
 A YNAB category can go with a category you already have (matched by name, ignoring emoji and
 capitals), into one of your envelopes, or become a new one; nothing of yours is renamed or moved
 ([how](../features/imports-and-sync.md#set-it-up)).
@@ -432,6 +457,11 @@ remove it, but it is no longer supported — use one of the connectors above ins
 
 ## Turning on automatic syncing
 
+**Without AI (experimental):** GoCardless, Enable Banking and Plaid can book their transactions
+by fixed rules, with no AI — click **Set up sync** under **Sync** on the connector's page.
+See [Bank sync without AI](../features/bank-data-sync.md). The rest of this section is the
+Lucius way.
+
 Nothing is booked on a schedule until you turn it on. Open the connector and click **Automate**.
 That opens a ready-made Automation — for example **Sync SimpleFIN** — as a draft you can read and
 edit; click **Create automation** to switch it on. You'll find the same drafts under **Automations
@@ -439,21 +469,24 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 
 | Connector | Default schedule |
 |---|---|
-| SimpleFIN, Plaid, Lunch Money, Lunch Flow, YNAB, Enable Banking | Every 6 hours |
-| GoCardless | Every 12 hours (banks limit reads per day) |
+| SimpleFIN, Plaid, Lunch Money, Lunch Flow, YNAB | Every 6 hours |
+| GoCardless, Enable Banking | Every 12 hours (banks limit reads per day) |
 
 The schedule and the wording are yours to change. Each run:
 
-- **Brings in your bank's whole history the first time.** A newly linked account's first sync
-  reaches back as far as the bank allows (90 days for GoCardless), and the account's starting
-  point moves back to the oldest of those transactions so they count — in spending and reports —
-  while today's balance stays exactly what you set.
+- **Doesn't pull your bank's whole history.** A run is for keeping up day to day, so even the
+  first run reads the last 14 days — booking months of history through Lucius would cost a lot of
+  model use. To bring in older transactions, ask Lucius for the range ("fetch my Monzo
+  transactions since March 1"). Transactions older than the account's start are booked but
+  don't count in its balance; Lucius tells you, and moves the start back only if you ask. Banks
+  serve about 90 days (up to two years for a bank linked through Plaid).
 - **Looks back 14 days from the newest transaction it already booked**, so a transaction your
   bank posts late is still caught — and after a pause (a holiday, an expired bank link, a paused
   automation) the next run picks up where the book stops instead of skipping the gap. Banks only
   serve about 90 days of history, so a gap longer than that is reported for you to check against
   a statement.
-- **Names the payee after who was paid**, where the bank says (GoCardless sends it): a card
+- **Names the payee after who was paid**, where the bank says (GoCardless, Enable Banking,
+  SimpleFIN and Lunch Flow send it): a card
   payment shows *Acme Grocer* as the payee, while the transaction keeps the bank's own wording
   (*CARD 1234 ACME STORES LONDON*) so the payee learns to recognise it next time.
 - **Keeps both figures for a purchase in another currency.** A €48.00 meal your UK card was
@@ -552,6 +585,12 @@ link again.
 **Enable Banking: "starting the bank link failed: HTTP 4xx"** — Enable Banking's own reason
 follows. `REDIRECT_URI_NOT_ALLOWED` after **Link with a code instead** means
 `https://localhost/connectors` isn't in your application's redirect URLs.
+
+**Enable Banking: "Enable Banking refused the new app … Nothing was changed"** — you saved
+another application while banks are linked, and Enable Banking refused the ID and key. "Application
+does not exist" means the ID is wrong; "Wrong signature" means the key belongs to a different
+application, so paste the new application's own `.pem` key. Your banks keep syncing under the
+current application until a save goes through.
 
 **Enable Banking: "the Enable Banking private key is not a valid PEM RSA key"** — paste the whole
 `.pem` file, including the BEGIN and END lines.

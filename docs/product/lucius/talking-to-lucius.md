@@ -86,7 +86,8 @@ into the message box of the floating dock): a statement (PDF, CSV, Excel), a rec
 screenshot of your banking app. Then say
 what to do — *"import this"*, *"log these purchases"*, *"what's my deductible?"*. Files you send
 are stored so the conversation can refer back to them (they're listed in **Settings → Data →
-Uploaded files**). To keep one with your other papers, ask Lucius to save it to
+Uploaded files**, where a photo shows a thumbnail. Tap it to see the full image and delete it
+there). To keep one with your other papers, ask Lucius to save it to
 [Documents](documents.md).
 
 ### File types Lucius can read

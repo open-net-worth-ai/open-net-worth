@@ -10821,5 +10821,74 @@
       "start_date"
     ],
     "type": "object"
+  },
+  "get_followed_portfolios": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolios": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Only these follows, by name or id. Omit for all of them."
+      },
+      "top_n": {
+        "type": "integer",
+        "description": "How many top holdings to return per follow, 1-50. Default 20."
+      },
+      "search": {
+        "type": "string",
+        "description": "Instead of the follows, search for a portfolio to follow by fund or House member name, e.g. 'Berkshire'. Empty string lists the well-known ones."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "set_followed_portfolios": {
+    "additionalProperties": false,
+    "properties": {
+      "follow_portfolios": {
+        "items": {
+          "properties": {
+            "kind": {
+              "description": "The kind of portfolio.",
+              "enum": [
+                "fund_13f",
+                "house_member",
+                "etf_daily"
+              ],
+              "type": "string"
+            },
+            "source_ref": {
+              "description": "The source_ref from the search result.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source_ref"
+          ],
+          "type": "object"
+        },
+        "type": "array",
+        "description": "Portfolios to start following."
+      },
+      "refresh_portfolios": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Follows (name or id) to re-read from their source now."
+      },
+      "unfollow_portfolios": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Follows (name or id) to stop following."
+      }
+    },
+    "type": "object",
+    "required": []
   }
 }

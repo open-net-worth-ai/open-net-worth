@@ -5,7 +5,7 @@ import { AutomationMenu } from '../AutomationMenu'
 import { YNAB_APP, appBlurb, type BudgetAppInfo } from './budgetApps'
 import { scheduleLabel, type YnabSyncSummary } from './ynabSync'
 
-// A data sync in the Data sync view: the same row as a Lucius Automation, with the sync's own
+// A data sync in the Data Sync view: the same row as a Lucius Automation, with the sync's own
 // menu (no edit or duplicate: there is no prompt to change).
 export function DataSyncCard({
   app = YNAB_APP,

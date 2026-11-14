@@ -7,9 +7,9 @@ import { CONNECTORS_OPEN_SETUP_SPEC } from '../../../lucius/screenCommands'
 import { useQueryCache } from '../../../state/queryCache'
 import { dismissProblem, startCall, useVoiceCall } from './voiceCall'
 
-// The Call button (`voice_calls` flag). In the composer's Send slot once calls are set up: typing
-// and calling are alternative ways in, so they share one slot — Call while the box is empty, Send
-// once you type. Until then the slot stays Send, and the dock's pill offers the setup.
+// The Call button (`voice_calls` flag), in the composer's Send slot: typing and calling are
+// alternative ways in, so they share one slot — Call while the box is empty, Send once you type.
+// It is there before calls are set up too, so a new owner can find them (owner, 2026-11-12).
 // It never errors inline (owner, 2026-11-03): not set up → it opens Voice calls in Connectors; set up but
 // not working → the reason appears in the call notice above the composer (VoiceCallNotice).
 
@@ -36,13 +36,13 @@ export function useVoiceReadiness(): VoiceReadiness | undefined {
   return on === true ? data : undefined
 }
 
-/** Whether the composer's Send slot may hold Call: a button that draws nothing (flag off) or only
- *  offers setup left a new owner with no Send at all, or a faded phone in its place (owner,
- *  2026-11-05). */
+/** Whether the composer's Send slot may hold Call: only once the flag is on and the server has
+ *  answered, so the slot never draws nothing (flag off left no Send at all, 2026-11-05). Not set
+ *  up still holds Call — pressing it opens setup (owner, 2026-11-12). */
 export function useCallInSendSlot(): boolean {
   const readiness = useVoiceReadiness()
   const call = useVoiceCall()
-  return readiness?.ready === true && call.phase === 'idle'
+  return readiness !== undefined && call.phase === 'idle'
 }
 
 /** Takes the owner to Voice calls in Connectors. The tab may not be mounted yet: the command waits

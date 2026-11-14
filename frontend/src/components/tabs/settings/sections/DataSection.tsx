@@ -10,9 +10,12 @@ import { desktopBridge } from '../../../../platform/desktop'
 import { openReportProblem } from '../../../../state/reportProblem'
 import { useCachedFetchState } from '../../../../state/queryCache'
 import { fDate } from '../../../../utils/format'
-import { Clock, FileText } from '../../../../ui/icons'
+import { Clock } from '../../../../ui/icons'
 import { Badge, Btn, Field, Modal, Panel, Toggle, row, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
+import { UploadedFileRow } from './UploadedFileRow'
+import { fmtSize } from './uploadFiles'
+import type { UploadRow } from './uploadFiles'
 
 interface BackupRow {
   name: string
@@ -22,22 +25,9 @@ interface BackupRow {
   trigger: 'auto' | 'manual'
 }
 
-interface UploadRow {
-  id: string
-  filename: string
-  size_bytes: number
-  created_at: string
-}
-
 interface BackupSettings {
   enabled: boolean
   retention_days: number
-}
-
-function fmtSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${bytes} B`
 }
 
 function fmtWhen(iso: string): string {
@@ -419,23 +409,7 @@ export function DataSection({ toast }: SectionProps) {
       >
         {uploadRows.length ? (
           uploadRows.map((u) => (
-            <div className="rd-row" key={u.id}>
-              <span className="rd-row-ic">
-                <FileText size={14} strokeWidth={1.7} aria-hidden="true" />
-              </span>
-              <div className="rd-row-main">
-                <div className="rd-row-title">{u.filename}</div>
-                <div className="rd-row-meta">
-                  <span>{fmtSize(u.size_bytes)}</span>
-                  <span>{fDate(u.created_at, 'short', 'always')}</span>
-                </div>
-              </div>
-              <div className="rd-row-actions">
-                <Btn size="xs" variant="ghost" onClick={() => void deleteUpload(u)}>
-                  Delete
-                </Btn>
-              </div>
-            </div>
+            <UploadedFileRow key={u.id} upload={u} onDelete={(row) => void deleteUpload(row)} />
           ))
         ) : (
           <div style={{ padding: '14px 18px' }}>

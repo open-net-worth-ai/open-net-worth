@@ -135,6 +135,12 @@ def has_writing_run(provider: str) -> bool:
     return ImportRunStore().has_running(provider, WRITING_KINDS)
 
 
+def plan_imported(provider: str, plan_id: str) -> bool:
+    """Whether this plan was ever imported here: its Starting Balances then live in the accounts'
+    openings, not as rows of their own."""
+    return ImportRunStore().finished(provider, "import", plan_id)
+
+
 def summary(run: dict) -> dict:
     return {k: run.get(k) for k in COLUMNS}
 

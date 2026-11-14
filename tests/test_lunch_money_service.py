@@ -456,22 +456,43 @@ def test_txn_to_row_v2_sign_convention_debit_is_negative_credit_is_positive():
     assert row["amount"] == 15.0
 
 
-def test_txn_to_row_defends_against_a_split_parent_even_though_v2_excludes_it_by_default():
-    """v2's GET /transactions excludes a split parent by default (verified live
-    2026-08-17) — this adapter never passes include_split_parents, so it should never see
-    one in practice. _txn_to_row still checks is_split_parent defensively (belt-and-
-    suspenders) — fetch_window already filters these before calling it, so this proves the
-    second check actually works on its own."""
-    lm_txn = {
-        "id": 555,
+def test_a_group_parent_without_its_children_is_booked_not_dropped(monkeypatch):
+    """Lunch Money returns a group as its parent ALONE unless the children are asked for
+    (seen on its v2 mock, 2026-11-13). Skipping a parent whose children are not in the feed
+    lost the whole group's money; it is booked itself instead."""
+    parent = {
+        "id": 301,
         "date": "2026-08-01",
-        "payee": "Split rent (parent)",
-        "amount": "1000.00",
+        "payee": "ACME Fuel (grouped)",
+        "amount": "25.69",
         "currency": "usd",
-        "is_group_parent": False,
-        "is_split_parent": True,
+        "plaid_account_id": 9001,
+        "is_group_parent": True,
+        "group_parent_id": None,
+        "is_split_parent": False,
+        "split_parent_id": None,
     }
-    assert svc._txn_to_row(lm_txn, "plaid:1", "USD") is None
+    _stub_feed(monkeypatch, feed={"transactions": [parent], "has_more": False})
+    window = svc.fetch_window(_configured_store(), "2026-08-01", "2026-08-01", None)
+    assert [(r["external_refs"][0]["ref"], r["amount"]) for r in window.rows] == [("301", -25.69)]
+
+
+def test_fetch_transactions_asks_for_group_children(monkeypatch):
+    """The children are the real movements, each in its own account — they must be asked
+    for, or a group only ever arrives as its parent."""
+    seen: list[dict] = []
+
+    class _Resp:
+        def json(self):
+            return {"transactions": [], "has_more": False}
+
+    def _get(store, path, params):
+        seen.append(dict(params))
+        return _Resp()
+
+    monkeypatch.setattr(svc, "_safe_get", _get)
+    svc.fetch_transactions(_configured_store(), start_date="2026-08-01", end_date="2026-08-02")
+    assert seen and seen[0]["include_group_children"] == "true"
 
 
 @pytest.mark.parametrize("bad_amount", ["NaN", "Infinity", "-Infinity", "1e400"])

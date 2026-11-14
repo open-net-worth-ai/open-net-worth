@@ -734,7 +734,26 @@ function RouterShellInner() {
     dateOn?: string
     /** Dashboard Top merchants deep-link: one payee by name (the register's `payee` token). */
     payee?: string
+    /** A bank sync run's report: everything one write batch booked (the `importBatch` token). */
+    batch?: string
+    /** What the register's filter chip calls that batch ("Enable Banking sync · Nov 14"). */
+    batchLabel?: string
   } | null>(null)
+  // ?batch=<id> (one-shot): becomes the register's batch filter, then leaves the URL.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const batchParam = (location.search as any)?.batch
+  useEffect(() => {
+    if (typeof batchParam !== 'string' || !batchParam) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const label = (location.search as any)?.batchLabel
+    setCashFilter({ batch: batchParam, batchLabel: typeof label === 'string' ? label : undefined })
+    navigate({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      search: ((prev: any) => ({ ...prev, batch: undefined, batchLabel: undefined })) as any,
+      replace: true,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchParam])
   // Plan → Accounts deep-link: open the transaction detail drawer for one row.
   const [cashOpenTxn, setCashOpenTxn] = useState<Record<string, unknown> | null>(null)
 

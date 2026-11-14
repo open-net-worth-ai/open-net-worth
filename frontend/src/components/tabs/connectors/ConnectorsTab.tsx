@@ -29,7 +29,7 @@ import { resolveDirectory, setupTargetFor, suggestionsBySection } from './direct
 import { InstitutionPickerModal } from './InstitutionPickerModal'
 import { McpEditModal } from './McpEditModal'
 import { deleteMcpServer } from './mcpApi'
-import { signInWithOAuth } from './oauthSignIn'
+import { CANCELLED_REASON, signInWithOAuthCancellable } from './oauthSignIn'
 import { savePermissions } from './permissions'
 import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
 import { mcpAuthType, mcpNeedsSignIn, toEntry, toMcpEditTarget } from './adapter'
@@ -45,6 +45,7 @@ import {
   useRegisterScreenFacts,
 } from '../../../lucius/useScreenContract'
 import { CONNECTORS_OPEN_SETUP_SPEC } from '../../../lucius/screenCommands'
+import { holdGuides } from '../../intro/tourTarget'
 import {
   FAMILY_SECTIONS,
   STATUS_FILTERS,
@@ -94,6 +95,11 @@ export function ConnectorsTab(): JSX.Element {
    *  popup + poll, not an instant call, so this both guards against a rapid double-click
    *  opening a second popup and lets the detail page's big button say so while it waits. */
   const [reconnectingId, setReconnectingId] = useState<string | null>(null)
+  /** The OAuth sign-in a Reconnect is waiting on, while it waits. The desktop app signs in
+   *  through the system browser, whose closing nothing here can see, so the waiting button
+   *  stays live: a second click starts a fresh sign-in, Cancel drops it. */
+  const pendingSignIn = useRef<{ id: string; cancel: () => void } | null>(null)
+  const [signInWaitingId, setSignInWaitingId] = useState<string | null>(null)
   /** Carried from the institution search into Enable Banking's form, which asks for a
    *  country the user has already typed once. */
   const [routedCountry, setRoutedCountry] = useState<string | undefined>(undefined)
@@ -204,8 +210,17 @@ export function ConnectorsTab(): JSX.Element {
     // Ask the provider whether the consent finished BEFORE showing the page, so its badge and
     // accounts read what the bank just did rather than the "waiting" left before it.
     const check = fromBank ? BANK_RETURN_CHECKS[id] : undefined
-    if (check) void check().finally(() => void reload().finally(open))
-    else open()
+    if (check) {
+      // Mid-way (asking the provider, then opening the page): no guide starts in the gap.
+      const release = holdGuides()
+      void check().finally(
+        () =>
+          void reload().finally(() => {
+            open()
+            release()
+          }),
+      )
+    } else open()
     return () => {
       live = false
       cancelAnimationFrame(raf)
@@ -223,15 +238,18 @@ export function ConnectorsTab(): JSX.Element {
     if (ebHandled.current === key) return
     ebHandled.current = key
     void navigate({ to: '/connectors', search: {}, replace: true } as never)
+    // Finishing the link takes a second or two with nothing open: no guide starts in it.
+    const release = holdGuides()
     void completeEnableBankingReturn(ebReturn).then((res) => {
       toast(res.message)
       // Linked: the connector page, whose Accounts list is the next step. Not linked: the form,
       // with the reason under Link bank and the pickers to try again.
       if (!res.ok) keepEnableBankingReturnError(res.message)
       // An already-linked connector opens its form too: the reason is shown there.
-      void reload().finally(() =>
-        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok }),
-      )
+      void reload().finally(() => {
+        openConnector('enable_banking', { configure: !res.ok, formFirst: !res.ok })
+        release()
+      })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, ebReturn?.state, ebReturn?.code])
@@ -256,6 +274,10 @@ export function ConnectorsTab(): JSX.Element {
       setDirectoryFamily('all')
     } else {
       openConnector(target.id, { configure: target.kind === 'form' })
+      // The card's Reconnect on an installed server whose sign-in is dead: start it here, into
+      // the window the card opened on the user's click.
+      const installed = entries.find((e) => e.id === target.id)
+      if (connect && target.kind === 'settings' && installed?.attention) void reconnect(installed)
     }
   }
   const applySetupRef = useRef(applySetup)
@@ -310,7 +332,7 @@ export function ConnectorsTab(): JSX.Element {
    *  (`EmailUnifiedSection`'s own note: "a real cross-connector test flow is a future
    *  addition") — what actually needs fixing is the credentials, so open the config form
    *  instead of lying about success. */
-  async function reconnect(entry: ConnectorDetailEntry) {
+  async function reconnect(entry: ConnectorDetailEntry, opts?: { restart?: boolean }) {
     if (!entry.mcp) {
       if (entry.enabled) {
         openConnector(entry.id, { configure: true })
@@ -319,15 +341,26 @@ export function ConnectorsTab(): JSX.Element {
       await patchEnabled(entry, true)
       return
     }
-    if (reconnectingId === entry.id) return // a popup is already open for this one
+    // A click while one is in flight is ignored (a double-click must not start two sign-ins),
+    // except "Open sign-in again", which replaces a waiting sign-in whose window may have been
+    // closed where nothing here can see it.
+    const waiting = pendingSignIn.current?.id === entry.id
+    if (waiting ? !opts?.restart : reconnectingId === entry.id) return
     const serverId = entry.id.slice(MCP_PREFIX.length)
     const wire = connectors.find((c) => c.id === entry.id)
     setReconnectingId(entry.id)
+    let flow: { id: string; cancel: () => void } | null = null
     try {
-      if (wire && mcpNeedsSignIn(wire)) {
+      if (waiting || (wire && mcpNeedsSignIn(wire))) {
+        pendingSignIn.current?.cancel()
         // Registration is reused; only the user's consent is re-obtained (§4.5's "a background
         // path never re-registers" — this is the one human-initiated `begin` that may).
-        const outcome = await signInWithOAuth({ server_id: serverId })
+        const signIn = signInWithOAuthCancellable({ server_id: serverId })
+        flow = { id: entry.id, cancel: signIn.cancel }
+        pendingSignIn.current = flow
+        setSignInWaitingId(entry.id)
+        const outcome = await signIn.outcome
+        if (outcome.reason === CANCELLED_REASON) return
         await reload()
         toast(
           outcome.ok
@@ -347,8 +380,23 @@ export function ConnectorsTab(): JSX.Element {
         toast(`${entry.name} needs you to sign in again. Select Reconnect to do it.`)
       else toast(`Couldn't reach ${entry.name}`)
     } finally {
-      setReconnectingId((id) => (id === entry.id ? null : id))
+      // A newer sign-in that replaced this one owns the waiting state — leave it alone.
+      const superseded =
+        flow !== null && pendingSignIn.current !== null && pendingSignIn.current !== flow
+      if (!superseded) {
+        if (pendingSignIn.current === flow) pendingSignIn.current = null
+        setReconnectingId((id) => (id === entry.id ? null : id))
+        setSignInWaitingId((id) => (id === entry.id ? null : id))
+      }
     }
+  }
+
+  /** Drop a sign-in nobody is going to finish. */
+  function cancelSignIn(id: string) {
+    const pending = pendingSignIn.current
+    if (pending?.id !== id) return
+    pendingSignIn.current = null
+    pending.cancel()
   }
 
   /** Returns whether the level LANDED — the ladder rolls its optimistic change back on
@@ -525,6 +573,8 @@ export function ConnectorsTab(): JSX.Element {
           onSetEnabled={(enabled) => patchEnabled(detail, enabled)}
           onReconnect={() => void reconnect(detail)}
           reconnecting={reconnectingId === detail.id}
+          onCancelSignIn={signInWaitingId === detail.id ? () => cancelSignIn(detail.id) : undefined}
+          onRestartSignIn={() => void reconnect(detail, { restart: true })}
           onViewDetails={() => openLandingPage(detail.id)}
           // MCP only: a connector WITH a credential form reopens that form in place and never
           // reaches this. Opening the directory here was a dead end — it browsed what you

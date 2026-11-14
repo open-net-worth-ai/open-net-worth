@@ -1,6 +1,11 @@
 {
   "_comment": "Code area → product doc pages a change there most likely affects. Used by scripts/docs_impact.py (commit-msg hook) to suggest pages. Order matters: first match wins per file.",
   "areas": [
+    { "glob": "backend/*/followed_portfolio*", "docs": ["docs/product/features/copy-trading.md"] },
+    { "glob": "backend/services/followed_portfolios/**", "docs": ["docs/product/features/copy-trading.md"] },
+    { "glob": "frontend/src/components/intel/following/**", "docs": ["docs/product/features/copy-trading.md"] },
+    { "glob": "backend/services/bank_data_sync/**", "docs": ["docs/product/features/bank-data-sync.md", "docs/product/connectors/bank-brokerage.md"] },
+    { "glob": "frontend/src/components/tabs/automations/datasync/[Bb]ank*", "docs": ["docs/product/features/bank-data-sync.md"] },
     { "glob": "desktop/src/**", "docs": ["docs/product/operations/desktop.md", "desktop/README.md"] },
     { "glob": "scripts/install*", "docs": ["docs/product/getting-started/installation.md", "docs/product/operations/desktop.md"] },
     { "glob": "backend/*/terminal.py", "docs": ["docs/product/operations/terminal.md"] },

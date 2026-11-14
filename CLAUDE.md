@@ -71,6 +71,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Planning / Equity | `planning.apply_budget_change` / `equity_service.apply_equity_change` |
 | Automations · Income · Receipts | `apply_automation_change` · `apply_income_change` · `receipts_service.apply_receipt_change` |
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
+| Followed portfolios (flag `followed_portfolios`; information only — no account, no trade sizing) | `followed_portfolios.service.apply_followed_portfolio_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
 | Intel delivery (now / later / skip, flag `intel_delivery_decider`) | `news_delivery.apply_delivery_change` |
@@ -464,8 +465,10 @@ frontend/src/
 - External MCP: `tool_permissions` is the SINGLE authority on whether a call fires — no
   unconfigurable floor, for every tool in the app. `discovered_tools` is what WE observed in a
   handshake, never a client-supplied value.
-- A stdio MCP connection persists for the app's LIFETIME, one child per server, serialized by a
-  per-server lock; its stderr is a pipe that MUST stay drained (`StderrTail`).
+- An MCP connection persists for the app's LIFETIME, one per server: a stdio child (serialized by
+  a per-server lock; its stderr is a pipe that MUST stay drained, `StderrTail`) or an HTTP
+  session (`Mcp-Session-Id`, opened by boot discovery, re-opened once on a 404). Only a config
+  change or shutdown ends it — never a tool error (`McpToolError`).
 - `always_allow` means allow everywhere, including unattended — never silently degraded.
 - A connector's `endpoint` is a credential — model-facing reads project `redact_endpoint`, never
   the raw field; every server-chosen string is sanitized.

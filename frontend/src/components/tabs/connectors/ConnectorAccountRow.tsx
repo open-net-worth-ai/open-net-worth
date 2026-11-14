@@ -1,6 +1,7 @@
 // One provider account in the connector "Accounts" list: what it is (type icon, name, last four,
-// balance) and its next step — Add it as a new account or Link… it to an existing one, or, once
+// balance) and its next step — Add it as a new account or Link it to an existing one, or, once
 // linked, show where it lands with a quiet Unlink.
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../../ui'
 import { AccIcon } from '../accounts/ds'
@@ -8,12 +9,12 @@ import { AddAccountSelect } from '../accounts/pickers'
 import type { Account } from '../accounts/types'
 import { fCur } from '../accounts/format'
 import { TYPE_COLOR, TYPE_ICON } from '../accounts/categories'
-import { isOwed, type ProviderAccountRow } from './accountRows'
+import { isOwed, shownBalance, type ProviderAccountRow } from './accountRows'
 
 interface Props {
   row: ProviderAccountRow
   linkedName: string
-  // The app's own accounts, for Link… — the same searchable, type-grouped picker as the ledger.
+  // The app's own accounts, for Link — the same searchable, type-grouped picker as the ledger.
   accounts: Account[]
   // False when the connector isn't answering — a linked row is then a leftover, shown muted.
   live?: boolean
@@ -58,15 +59,21 @@ export function ConnectorAccountRow({
           )}
         </div>
       </div>
-      {row.balance != null && (
+      {shownBalance(row) != null && (
         <div className="conn-acct-bal">
-          {fCur(row.balance, row.currency, { cents: true })}
+          {fCur(shownBalance(row) as number, row.currency, { cents: true })}
           {isOwed(row) && <span className="conn-acct-owed"> owed</span>}
         </div>
       )}
       <div className="conn-acct-actions">
         {linked ? (
-          <Button size="sm" variant="ghost" loading={busy} onClick={onUnlink}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="conn-acct-unlink"
+            loading={busy}
+            onClick={onUnlink}
+          >
             Unlink
           </Button>
         ) : picking ? (
@@ -93,17 +100,24 @@ export function ConnectorAccountRow({
           </>
         ) : (
           <>
-            <Button size="sm" loading={busy} onClick={onAdd}>
+            <Button
+              size="sm"
+              className="conn-acct-add"
+              iconLeft={<Plus size={13} aria-hidden="true" />}
+              loading={busy}
+              onClick={onAdd}
+            >
               Add
             </Button>
             {accounts.length > 0 && (
               <Button
                 size="sm"
                 variant="ghost"
+                className="conn-acct-link"
                 aria-label={`Link ${row.name} to an existing account`}
                 onClick={() => setPicking(true)}
               >
-                Link…
+                Link
               </Button>
             )}
           </>

@@ -151,6 +151,15 @@ describe('AccountModal quick create', () => {
     expect(screen.getByDisplayValue('Everyday account')).toBeTruthy()
   })
 
+  it("shows the server's own reason when it refuses the account", async () => {
+    const reason = 'Exchange rate unavailable for EUR → ACME.'
+    renderAdd(vi.fn().mockRejectedValue(new Error(JSON.stringify({ detail: reason }))))
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Everyday account' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe(reason)
+  })
+
   it('keeps the old wide edit layout with metadata above the type-specific details', () => {
     const props = {
       mode: 'edit' as const,

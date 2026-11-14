@@ -18,8 +18,13 @@ export function VoiceCallNotice({
   busy = false,
   onNewChat,
   onOpenChat,
+  everyCall = false,
 }: {
   sessionId: string
+  /** Away from the chat this is the only place a call's trouble can show, so it shows whichever
+   *  conversation the call was for: matched against the one last open, a refusal could go unsaid
+   *  (owner's phone, 2026-11-13). */
+  everyCall?: boolean
   /** Lucius is answering something: a call's problem has been moved on from. */
   busy?: boolean
   /** Starts a new conversation, for a call this one can't take. */
@@ -33,7 +38,9 @@ export function VoiceCallNotice({
   const [detailOpen, setDetailOpen] = useState(false)
   // A call's problem stays with its conversation: it isn't about the one you've moved to.
   const problem =
-    call.problem?.sessionId && call.problem.sessionId !== sessionId ? null : call.problem
+    !everyCall && call.problem?.sessionId && call.problem.sessionId !== sessionId
+      ? null
+      : call.problem
   // Once you've moved on — sent Lucius a message — the call's problem is old news: it went on
   // showing above an unrelated chat (owner, 2026-11-03). No call is on when there is a problem,
   // so this turn is always yours.
@@ -110,7 +117,7 @@ export function VoiceCallNotice({
           <button
             type="button"
             className="lx-call-notice-action"
-            onClick={() => void startCall(sessionId)}
+            onClick={() => void startCall(problem.sessionId ?? sessionId)}
           >
             {problem.kind === 'dropped'
               ? 'Call again'

@@ -123,6 +123,13 @@ class Provider:
     # How far back an account's FIRST import reaches — the history the bank serves (GoCardless
     # / PSD2: 90 days). 0 = a first import uses the ordinary lookback, as before.
     history_days: int = 0
+    # Bank data sync (ADR 2026-11-13) — adapter config only, never per-provider booking code:
+    # whether the no-AI sync may book this provider's rows, how often it runs, and how many
+    # transaction reads per account a rolling 24 h allows (None = no app-side cap). PSD2 banks
+    # often allow 4 unattended reads a day; "Sync now" spends the same budget.
+    data_sync: bool = False
+    sync_interval_hours: int = 6
+    daily_reads: Optional[int] = None
 
     @property
     def disabled(self) -> bool:
@@ -191,6 +198,7 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["simplefin"].label,
             note="US/CA banks + cards; linked by claiming a one-time setup token.",
             lookback_days=14,
+            history_days=90,
             _fetch=("backend.services.aggregation.simplefin", "fetch_window"),
             _classify=("backend.services.aggregation.simplefin", "classify_error"),
             _store=("backend.db", "SimpleFinConfigStore"),
@@ -200,6 +208,8 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["plaid"].label,
             note="US/CA banks; credentials + a linked Item; sandbox or production.",
             lookback_days=14,
+            history_days=730,
+            data_sync=True,
             _fetch=("backend.services.aggregation.plaid", "fetch_window"),
             _classify=("backend.services.aggregation.plaid", "classify_error"),
             _store=("backend.db", "PlaidConfigStore"),
@@ -221,6 +231,7 @@ PROVIDERS: dict[str, Provider] = {
                 "plus a linked bank."
             ),
             lookback_days=14,
+            history_days=90,
             _fetch=("backend.services.aggregation.lunch_flow", "fetch_window"),
             _classify=("backend.services.aggregation.lunch_flow", "classify_error"),
             _store=("backend.db.lunch_flow_config_store", "LunchFlowConfigStore"),
@@ -239,6 +250,12 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["enable_banking"].label,
             note="EU PSD2; an application id + private key + a per-bank/country session.",
             lookback_days=14,
+            history_days=90,
+            data_sync=True,
+            # 12 h, not 6: every Enable Banking read also reads each account's details and
+            # balance, which PSD2 banks count against the same 4-a-day limit.
+            sync_interval_hours=12,
+            daily_reads=4,
             _fetch=("backend.services.aggregation.enable_banking", "fetch_window"),
             _classify=("backend.services.aggregation.enable_banking", "classify_error"),
             _store=("backend.db", "EnableBankingConfigStore"),
@@ -252,6 +269,9 @@ PROVIDERS: dict[str, Provider] = {
             ),
             lookback_days=14,
             history_days=90,
+            data_sync=True,
+            sync_interval_hours=12,
+            daily_reads=4,
             _fetch=("backend.services.aggregation.gocardless", "fetch_window"),
             _classify=("backend.services.aggregation.gocardless", "classify_error"),
             _store=("backend.db", "GoCardlessConfigStore"),

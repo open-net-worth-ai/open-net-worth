@@ -8,7 +8,12 @@ export interface ProviderAccountRow {
   name: string
   mask: string
   currency: string
+  // The bank's balances in the book's own terms, each null when the bank doesn't send it:
+  // balance = settled + pending (working), cleared_balance = settled only, available_to_spend =
+  // overdraft or credit included. A bank with one undivided figure (Plaid) sends only balance.
   balance: number | null
+  cleared_balance?: number | null
+  available_to_spend?: number | null
   // The provider's suggested app account type (one of the seven), or null.
   account_type: AccountType | null
   // The bank the account sits at, when one connector links several (Plaid); else null.
@@ -45,6 +50,11 @@ export function groupRows(rows: ProviderAccountRow[]): RowGroup[] {
   return groups.filter((g) => g.rows.length > 0)
 }
 
+/** The one figure a row shows: the working balance, else the settled one. */
+export function shownBalance(row: ProviderAccountRow): number | null {
+  return row.balance ?? row.cleared_balance ?? null
+}
+
 export function isOwed(row: ProviderAccountRow): boolean {
   return row.account_type != null && LIABILITY_TYPES.has(row.account_type)
 }
@@ -52,8 +62,10 @@ export function isOwed(row: ProviderAccountRow): boolean {
 /** The create form's seed for a provider account: its suggested type, and its balance in the
  *  form's terms — a card or loan's amount OWED is entered positive (the form signs it), and a
  *  provider may report it either way round. The balance comes ONLY with a known type: the form
- *  otherwise starts on Cash, where a card's prefilled debt would book as an asset. */
+ *  otherwise starts on Cash, where a card's prefilled debt would book as an asset. It is the
+ *  SETTLED figure when the bank sends one: a bank sync books pending rows on top, uncleared. */
 export function prefillFor(row: ProviderAccountRow, institution?: string): AccountPrefill {
+  const start = row.cleared_balance ?? row.balance
   return {
     type: row.account_type ?? undefined,
     name: row.name,
@@ -63,9 +75,9 @@ export function prefillFor(row: ProviderAccountRow, institution?: string): Accou
     // Unknown → left blank for the user to fill, rather than filing the account under "Plaid".
     institution: institution || row.institution || undefined,
     initial:
-      row.balance == null || row.account_type == null
+      start == null || row.account_type == null
         ? undefined
-        : String(isOwed(row) ? Math.abs(row.balance) : row.balance),
+        : String(isOwed(row) ? Math.abs(start) : start),
   }
 }
 

@@ -571,6 +571,38 @@ async def _run_linked_account_totals() -> None:
         logger.exception("scheduler: linked_account_totals error: %s", exc)
 
 
+async def _run_followed_portfolios() -> None:
+    """Re-read every followed portfolio's source for a new filing (flag-gated at run time, so
+    switching the flag needs no re-registration)."""
+    try:
+        from backend.services.feature_flags import enabled
+        from backend.services.followed_portfolios import service
+
+        if not enabled("followed_portfolios"):
+            return
+        result = await asyncio.to_thread(service.refresh_all)
+        warmed = await asyncio.to_thread(service.warm_featured)
+        if result["checked"] or warmed:
+            logger.info("scheduler: followed_portfolios — %s, %d previews warm", result, warmed)
+    except Exception as exc:
+        logger.exception("scheduler: followed_portfolios error: %s", exc)
+
+
+async def _run_bank_data_sync() -> None:
+    """Tick of the AI-free bank sync (ADR 2026-11-13): runs each connector in "Sync without AI"
+    mode when its own schedule says it is due. Nothing at all while ``bank_data_sync`` is off."""
+    try:
+        from backend.services import bank_data_sync
+
+        if await asyncio.to_thread(bank_data_sync.run_if_due):
+            logger.info("scheduler: bank_data_sync ran")
+        # The opt-in Lucius follow-up runs here, on the loop, never inside the booking run.
+        if await bank_data_sync.run_followups():
+            logger.info("scheduler: bank_data_sync follow-up categorised rows")
+    except Exception as exc:
+        logger.exception("scheduler: bank_data_sync error: %s", exc)
+
+
 def _outward_jobs_allowed() -> bool:
     """False on a QA/isolated run (ONW_QA_MODE) unless it opts in with ONW_QA_RUN_SCHEDULES=1.
 
@@ -663,6 +695,29 @@ def start() -> None:
             id="linked_account_totals",  # a balance read, not an ingest poll
             replace_existing=True,
             misfire_grace_time=120,
+            max_instances=1,
+        )
+        # Bank sync without AI — one tick a minute; each connector's cadence (GoCardless 12 h,
+        # others 6 h) and read budget live in its own state. No-op while the flag is off.
+        _scheduler.add_job(
+            _run_bank_data_sync,
+            trigger=IntervalTrigger(seconds=60),
+            id="bank_data_sync",  # one generic tick, opt-in per connector — not an ingest:<provider> poll
+            replace_existing=True,
+            misfire_grace_time=120,
+            max_instances=1,
+        )
+
+    # Followed portfolios — filings land quarterly (13F) or a few times a month (House), so
+    # twice a day is generous. Calls SEC / House Clerk, hence not on a QA run.
+    if outward:
+        _scheduler.add_job(
+            _run_followed_portfolios,
+            # Soon after start: it also warms the Discover cards, which a first visit waits on.
+            trigger=IntervalTrigger(hours=12, start_date=datetime.now() + timedelta(minutes=1)),
+            id="followed_portfolios",
+            replace_existing=True,
+            misfire_grace_time=3600,
             max_instances=1,
         )
 

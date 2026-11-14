@@ -18,7 +18,14 @@ from collections import OrderedDict
 from collections.abc import AsyncIterator
 from typing import Optional
 
-from backend.ai import assistant, conversation, live_sessions, session_titles, turns
+from backend.ai import (
+    assistant,
+    conversation,
+    live_sessions,
+    pending_injection,
+    session_titles,
+    turns,
+)
 from backend.ai.spoken_lines import AFTER_MESSAGE, BEFORE_MESSAGE, UNHEARD_KEY, VOICE_LINES_KEY
 from backend.ai.tool_text import harness_note, is_harness_note
 from backend.ai.tools.registry import may_change_something
@@ -135,6 +142,8 @@ def translate(raw: dict) -> Optional[DeskEvent]:
         return DeskEvent(
             "approval", summary, ref=str(raw.get("tool_use_id") or ""), readable=readable
         )
+    if kind == "message_delivered":
+        return DeskEvent("joined", ref=str(raw.get("message_id") or ""))
     if kind == "error":
         return DeskEvent("error", str(raw.get("message") or ""))
     return None
@@ -432,6 +441,47 @@ async def ask(
         yield event
 
 
+JOIN_PREFIX = "voice_"
+_JOINING_MAX = 64
+_joining: dict[str, str] = {}  # words sent to join a call's turn, not taken in yet: ref → said
+
+
+def join_turn(session_id: str, said: str, task_id: str = "") -> str:
+    """Add the owner's words to the call's own turn while it runs, as the next thing it reads (the
+    mid-turn injection typed messages use): the same turn takes them in and answers all of it.
+    Queued behind it instead, "file them under Startup Costs" waited out an approval whose answer
+    then asked where to file them (owner's call, 2026-11-09). Returns the message's reference, or
+    "" when there's no call turn running. No ``await`` from the check to the enqueue: see
+    ``pending_injection`` on why that keeps it race-free."""
+    said = said.strip()
+    turn_id = turns.executing_turn_id(session_id)
+    if not said or turn_id is None or turn_id not in _call_turns:
+        return ""
+    ref = f"{JOIN_PREFIX}{task_id or uuid.uuid4().hex[:12]}"
+    pending_injection.enqueue(session_id, ref, said)
+    _joining[ref] = said
+    while len(_joining) > _JOINING_MAX:  # a turn that died with words still queued
+        _joining.pop(next(iter(_joining)))
+    log.info("voice: the owner's words join the turn under way")
+    return ref
+
+
+def withdraw_join(session_id: str, ref: str) -> bool:
+    """The turn ended before it took them in: they come back, to start the next one."""
+    if not ref.startswith(JOIN_PREFIX) or not pending_injection.withdraw(session_id, ref):
+        return False
+    _joining.pop(ref, None)
+    return True
+
+
+def _show_joined(session_id: str, turn_id: str, ref: str) -> None:
+    """The turn took their words in: they show in the chat now, between what he'd said and what he
+    says next. Typed ones are already on the screen that sent them; these never were."""
+    said = _joining.pop(ref, None)
+    if said:
+        _announce(session_id, turn_id, said, message_id=ref)
+
+
 def stop_call_turn(session_id: str) -> None:
     """Stop the call's own turn running on this conversation: the owner has said more, so what it
     is working on is out of date. Never a turn the call didn't start, like something typed."""
@@ -625,14 +675,14 @@ async def _write_lines(session_id: str) -> None:
         _line_writers.pop(session_id, None)
 
 
-def _announce(session_id: str, turn_id: str, said: str) -> None:
+def _announce(session_id: str, turn_id: str, said: str, *, message_id: str = "") -> None:
     live_sessions.publish(
         session_id,
         {
             "type": "user_message",
             "session_id": session_id,
             "turn_id": turn_id,
-            "message_id": f"voice_{uuid.uuid4().hex[:12]}",
+            "message_id": message_id or f"voice_{uuid.uuid4().hex[:12]}",
             "text": said,
             "attachments": [],
         },
@@ -751,6 +801,8 @@ async def _follow(session_id: str, turn_id: str) -> AsyncIterator[DeskEvent]:
     async for raw in live_sessions.watch(session_id):
         if raw.get("turn_id") not in (None, turn_id):
             continue
+        if raw.get("type") == "message_delivered":
+            _show_joined(session_id, turn_id, str(raw.get("message_id") or ""))
         event = translate(raw)
         if event is not None:
             yield event

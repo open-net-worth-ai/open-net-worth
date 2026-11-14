@@ -98,10 +98,13 @@ with real credentials; not automated (new signups are closed, and we hold no acc
   differs from its remittance text, a salary credit naming only the payer, two separate id-less
   £3.00 coffees on one day, a purchase paid in euros, a row dated only by its booking date-time,
   a life-insurance premium and a university tuition fee (no category in the book fits either),
-  an older direct debit, a pending taxi fare, and interest on the second account
+  an older direct debit, a pending taxi fare, interest on the second account, and two rows
+  40 and 75 days old
 - WHEN the GoCardless sync Automation — created from its template, word for word — runs
-- THEN the book holds exactly the bank's ten booked rows — each once, on the right account,
-  with the bank's date and amount — and not the pending fare; no two rows share a bank ref
+- THEN the book holds exactly the bank's ten booked rows of the last two weeks — each once, on
+  the right account, with the bank's date and amount — and not the pending fare, nor the two
+  older rows (a daily sync never pulls history: that is a model bill nobody asked for); no two
+  rows share a bank ref
 
 ### GCL-CATEGORISED
 - GIVEN that sync run, which books through the `book-transactions` skill
@@ -115,6 +118,12 @@ with real credentials; not automated (new signups are closed, and we hold no acc
 - GIVEN that sync was booked
 - WHEN I tap "Fetch my GoCardless transactions" on the connector page and send it
 - THEN nothing new is booked and nothing is duplicated
+
+### GCL-LUCIUS-RANGE
+- GIVEN that sync was booked, and the bank still holds the two older rows
+- WHEN I ask Lucius to fetch my GoCardless transactions from 90 days ago and book what's missing
+- THEN exactly those two rows are booked, and CA_Monzo's start is NOT moved — whether they're
+  right is mine to judge
 
 ### GCL-STATUS-AFTER
 - GIVEN the bank was approved in the other tab
@@ -131,6 +140,61 @@ with real credentials; not automated (new signups are closed, and we hold no acc
 - WHEN I click Remove and confirm
 - THEN its Remove shows it is working while GoCardless revokes (seconds), then the bank leaves the
   list, its consent is deleted at GoCardless, and my other bank stays
+
+## Bank sync without AI (`GCL_DATA_SYNC=1`)
+
+`GCL_DATA_SYNC=1 npm run e2e:gocardless-bank-link` boots the backend with `bank_data_sync` on;
+the Lucius steps skip and these run after GCL-NAV-BACK (ADR
+`2026-11-13-a-bank-connector-can-book-its-rows-without-ai`). Run it beside the default mode: the
+default run proves nothing changed with the flag off.
+
+### GCL-DS-SETUP
+- GIVEN both accounts are linked
+- THEN the GoCardless connector shows one **Sync** line ("Not set up · …") with **Set up sync**, no
+  Lucius "Set up automation" card beside it, and no account boxes
+- WHEN I click **Set up sync**
+- THEN its page in Automations → Data Sync opens on the setup steps, each linked account ticked
+
+### GCL-DS-UNTICK
+- WHEN I untick Savings Pot
+- THEN it says Not synced
+
+### GCL-DS-FIRST-IMPORT
+- WHEN I press **Import history** (step 2)
+- THEN CA_Monzo holds exactly the bank's booked rows, its 40- and 75-day history included, the
+  pending taxi fare excluded, both £3.00 coffees, the EUR charge with its original amount
+- AND its start moved back to the oldest row and its balance is still £1,000
+- AND Savings Pot was neither read from the bank nor booked
+- AND the sync is still off: importing doesn't turn it on
+
+### GCL-DS-TURN-ON
+- WHEN I press **Turn on** (step 3), which offers no AI choice
+- THEN the page shows the on/off switch with **Sync now**, and no Lucius option anywhere
+
+### GCL-DS-RERUN
+- WHEN I press **Sync now** again
+- THEN the run says "Nothing new" and nothing more is booked
+
+### GCL-DS-REVIEW
+- GIVEN the bank changes a booked row's amount (£1.00 → £1.50)
+- WHEN the next run reads it
+- THEN the ledger still says £1.00 and the change waits under **Needs your review**
+- AND after **Use the bank's version** the ledger says £1.50
+
+### GCL-DS-READ-LIMIT (third-party limits)
+- WHEN a fourth sync has read CA_Monzo today
+- THEN a fifth **Sync now** is refused with "read each account 4 times a day", the button is
+  disabled, the head says "Out of bank reads today", and the bank was read at most 4 times
+
+### GCL-DS-ONE-MODE
+- WHEN a Lucius **Sync GoCardless** Automation is created while it syncs without AI
+- THEN it is refused, naming the switch: turn that sync off first in Automations → Data Sync → GoCardless
+
+### GCL-DS-DATA-SYNC-TAB
+- WHEN I open Automations → Data Sync
+- THEN GoCardless is listed; its page shows the history of every run
+- WHEN I click the first import's run
+- THEN its report lists the transactions it booked and how many stayed pending at the bank
 
 ## Non-functional
 

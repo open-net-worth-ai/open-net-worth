@@ -45,6 +45,7 @@ const CSS_FILES = [
   join(ROOT, 'frontend/src/chat.css'),
   join(ROOT, 'frontend/src/components/skills/skills.css'),
   join(ROOT, 'frontend/src/components/tabs/plan/plan.css'),
+  join(ROOT, 'frontend/src/components/intel/following/following.css'),
 ]
 
 // ── Token definitions — parsed from the generated CSS ────────────────────────

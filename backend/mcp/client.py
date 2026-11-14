@@ -28,6 +28,7 @@ import base64
 import binascii
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -186,6 +187,28 @@ class McpCallError(Exception):
         return self._safe_summary if self._safe_summary is not None else str(self)
 
 
+class McpToolError(McpCallError):
+    """The tool ran and reported failure (``isError``) — the CONNECTION is fine. A pooled
+    session or child must survive it: ending a broker's session over one rejected order would
+    log it out for the next call."""
+
+
+class McpSessionExpired(McpCallError):
+    """The server no longer knows our ``Mcp-Session-Id`` (HTTP 404 on a request that carried
+    one). Per the Streamable HTTP spec the request was NOT processed, so the connection starts
+    a fresh session and retries it once. ``session_id`` is the id THAT request carried — what a
+    concurrent caller compares against to tell "still dead" from "already replaced"."""
+
+    def __init__(self, message: str, *, session_id: str):
+        super().__init__(message)
+        self.session_id = session_id
+
+
+# After a server refuses the handshake, wait this long before a call tries it again — a
+# stateless server that never speaks it must not cost a failed handshake on every call.
+_HANDSHAKE_RETRY_SECONDS = 30.0
+
+
 class _OAuthUnauthorized(McpCallError):
     """Internal signal: an ``oauth``-authed request got a 401. Caught exactly once by
     ``McpClientConnection._rpc``, which refreshes and retries — never surfaced past that (a
@@ -215,6 +238,15 @@ class McpClientConnection:
         # Set from ``initialize``'s response and echoed thereafter — see the class docstring.
         self._session_id: Optional[str] = None
         self._protocol_version: Optional[str] = None
+        # The handshake's result, kept so a pooled connection answers ``initialize`` once per
+        # session (as the stdio client does), not once per call.
+        self._handshake: Optional[dict] = None
+        self._handshake_refused_at: Optional[float] = None
+        self._closed = False
+        # A pooled connection is shared by concurrent turns: request ids and a session
+        # re-handshake must not interleave (``_rpc_ids_lock`` / ``_session_lock``).
+        self._ids_lock = threading.Lock()
+        self._session_lock = threading.Lock()
 
     # ── context manager (symmetry with the stdio client, which has a child to reap) ──
 
@@ -229,8 +261,29 @@ class McpClientConnection:
         #
         # ``Literal[False]``, not ``bool``: a ``bool`` return says the manager MAY swallow an
         # exception, and this one never does — mypy's own ``exit-return`` check says so.
+        self._closed = True
         if self._session_id:
             self._end_session()
+        return False
+
+    # ── pooled use (``client_manager`` keeps ONE of these per server) ──────────────
+
+    def is_alive(self) -> bool:
+        """Open until closed. There is no process to die; a session the server forgot is
+        handled per request (``McpSessionExpired``), not by replacing the connection."""
+        return not self._closed
+
+    def has_session(self) -> bool:
+        return self._handshake is not None
+
+    def adopt_config(self, config: McpServerConfig) -> None:
+        """Take a freshly refreshed credential (an OAuth access token rotates hourly) without
+        ending the session it authenticates."""
+        self._config = config
+
+    def take_tools_changed(self) -> bool:
+        """Symmetry with the stdio client. A ``tools/list_changed`` notice would arrive on a
+        server-initiated stream we do not hold open; the scheduled re-read picks changes up."""
         return False
 
     # ── public API ───────────────────────────────────────────────────────────────
@@ -245,16 +298,63 @@ class McpClientConnection:
         MUST send it before normal operation) — a stateful server refuses ``tools/call`` on a
         session that never finished initializing.
         """
-        result = self._rpc(
-            "initialize",
-            {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": CLIENT_INFO,
-            },
-        )
-        self._notify("notifications/initialized")
-        return result
+        if self._handshake is not None:
+            return self._handshake
+        with self._session_lock:
+            if self._handshake is None:
+                self._open_session_locked()
+            assert self._handshake is not None
+            return self._handshake
+
+    def ensure_session(self) -> None:
+        """Best-effort: open the session if there is none. A server that refuses the handshake
+        still gets its calls, sessionless, as before sessions existed; it is asked again only
+        after ``_HANDSHAKE_RETRY_SECONDS``."""
+        if self._handshake is not None:
+            return
+        with self._session_lock:
+            if self._handshake is not None or self._closed:
+                return
+            refused = self._handshake_refused_at
+            if refused is not None and time.monotonic() - refused < _HANDSHAKE_RETRY_SECONDS:
+                return
+            try:
+                self._open_session_locked()
+            except McpCallError as exc:
+                self._handshake_refused_at = time.monotonic()
+                logger.info(
+                    "mcp '%s' initialize failed; calling without a session: %s",
+                    self._config.id,
+                    exc.safe_summary,
+                )
+
+    def _open_session_locked(self) -> None:
+        """Handshake on a side connection, then swap its session in all at once (caller holds
+        ``_session_lock``). Concurrent requests keep sending the OLD id until the swap — never
+        none: a stateful server rejects a request with no session outright, and that is not
+        recoverable the way a 404 for a stale one is."""
+        side = McpClientConnection(self._config, deadline=self._deadline)
+        try:
+            result = side._rpc(
+                "initialize",
+                {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": CLIENT_INFO,
+                },
+            )
+            side._notify("notifications/initialized")
+        except Exception:
+            side.__exit__(None, None, None)  # a session issued before the failure is closed
+            raise
+        if self._closed:  # evicted while handshaking: close the new session, never adopt it
+            side.__exit__(None, None, None)
+            raise McpCallError(f"server '{self._config.id}' connection was closed")
+        self._config = side._config  # an OAuth refresh during the handshake is kept
+        self._session_id = side._session_id
+        self._protocol_version = side._protocol_version
+        self._handshake = result
+        self._handshake_refused_at = None
 
     def list_tools(self) -> list[dict]:
         """MCP ``tools/list`` → the server's tool descriptors (``[{name, description, inputSchema}]``).
@@ -262,7 +362,7 @@ class McpClientConnection:
         Malformed entries (missing a string ``name``) are dropped rather than crashing —
         a lying/buggy server can't poison the listing (RFC §5.4 schema-drift clamp).
         """
-        result = self._rpc("tools/list", {})
+        result = self._rpc_in_session("tools/list", {})
         raw = result.get("tools") if isinstance(result, dict) else None
         if not isinstance(raw, list):
             return []
@@ -300,15 +400,32 @@ class McpClientConnection:
         manager fences it as a tool error. ``arguments`` is the model's tool-call input —
         the ONLY thing (besides the server's own auth header) we send.
         """
-        result = self._rpc("tools/call", {"name": tool, "arguments": arguments or {}})
+        result = self._rpc_in_session("tools/call", {"name": tool, "arguments": arguments or {}})
         text, images = split_result_content(
             result.get("content") if isinstance(result, dict) else None
         )
         if isinstance(result, dict) and result.get("isError"):
-            raise McpCallError(text or "external tool reported an error")
+            raise McpToolError(text or "external tool reported an error")
         return text, images
 
     # ── transport ────────────────────────────────────────────────────────────────
+
+    def _rpc_in_session(self, method: str, params: dict) -> dict:
+        """``_rpc``, recovering ONCE from a session the server forgot (a restart, an idle
+        timeout): a fresh handshake, then the same request again. Safe to repeat — a 404 for an
+        unknown session means the server did not process the request (Streamable HTTP spec).
+        Concurrent callers that all saw the same dead session re-handshake once between them."""
+        try:
+            return self._rpc(method, params)
+        except McpSessionExpired as exc:
+            dead = exc.session_id
+        with self._session_lock:
+            if self._closed:
+                raise McpCallError(f"server '{self._config.id}' connection was closed")
+            if self._session_id == dead:  # nobody replaced it yet — this caller does
+                logger.info("mcp '%s' session expired; starting a new one", self._config.id)
+                self._open_session_locked()
+        return self._rpc(method, params)
 
     def _rpc(self, method: str, params: dict) -> dict:
         """Send one JSON-RPC request; return the ``result`` block or raise ``McpCallError``.
@@ -375,10 +492,13 @@ class McpClientConnection:
 
     def _send(self, method: str, params: dict) -> dict:
         """One JSON-RPC request/response cycle — the body ``_rpc`` retries at most once."""
-        self._next_id += 1
-        request_id = self._next_id
+        with self._ids_lock:
+            self._next_id += 1
+            request_id = self._next_id
         payload = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
         body = json.dumps(payload).encode("utf-8")
+        # One read of the session: the id this request carries is the id a 404 refers to.
+        sent_session = self._session_id
 
         url = (self._config.url or "").strip()
         if not url:
@@ -402,7 +522,9 @@ class McpClientConnection:
         if timeout <= 0:
             raise McpCallError(f"server '{self._config.id}' timed out before it finished replying")
 
-        request = urllib.request.Request(url, data=body, headers=self._headers(), method="POST")
+        request = urllib.request.Request(
+            url, data=body, headers=self._headers(sent_session), method="POST"
+        )
         try:
             with _urlopen(request, timeout) as resp:
                 # Read at most MAX_RESPONSE_BYTES + 1: if the extra byte materialises the
@@ -432,6 +554,11 @@ class McpClientConnection:
             # A non-2xx status — read whatever body it carries for the message, but
             # do not trust it as a valid result.
             detail = _error_detail(_safe_read(exc))
+            if exc.code == 404 and sent_session and method != "initialize":
+                raise McpSessionExpired(
+                    f"server '{self._config.id}' no longer knows this session (HTTP 404)",
+                    session_id=sent_session,
+                ) from exc
             if exc.code == 401 and self._config.auth_type == "oauth":
                 raise _OAuthUnauthorized(
                     f"server '{self._config.id}' returned HTTP 401: {detail}",
@@ -459,9 +586,10 @@ class McpClientConnection:
                 f"{redact_endpoint('http', url)}: {reason}"
             ) from exc
 
-        if session_id:
-            # The server MAY assign a session id on ``initialize`` (MCP Streamable HTTP
-            # transport spec); once it does, every later call on THIS connection echoes it.
+        if session_id and method == "initialize":
+            # The server assigns the session id on ``initialize`` (MCP Streamable HTTP spec);
+            # every later call on THIS connection echoes it. Only that answer sets it: a late
+            # reply on a replaced session must not put the dead id back.
             self._session_id = session_id
 
         try:
@@ -486,7 +614,7 @@ class McpClientConnection:
             self._protocol_version = negotiated or PROTOCOL_VERSION
         return result if isinstance(result, dict) else {}
 
-    def _headers(self) -> dict:
+    def _headers(self, session_id: Optional[str] = None) -> dict:
         """Request headers — JSON content + the server's own auth header.
 
         ``Accept`` offers BOTH ``application/json`` and ``text/event-stream``: a Streamable
@@ -502,8 +630,9 @@ class McpClientConnection:
             "Accept": "application/json, text/event-stream",
             "User-Agent": USER_AGENT,
         }
-        if self._session_id:
-            headers["Mcp-Session-Id"] = self._session_id
+        sid = session_id if session_id is not None else self._session_id
+        if sid:
+            headers["Mcp-Session-Id"] = sid
         if self._protocol_version:
             headers["MCP-Protocol-Version"] = self._protocol_version
         if self._config.auth_type == "oauth":

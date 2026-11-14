@@ -241,7 +241,7 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           Actual
         </a>
         , enter the address of your server and how you sign in to it, then choose a budget. You
-        import it and keep it in step from Automations, under Data sync.
+        import it and keep it in step from Automations, under Data Sync.
       </Text>
 
       {paused && (

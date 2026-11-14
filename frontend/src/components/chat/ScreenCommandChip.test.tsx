@@ -1,17 +1,51 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const navigateMock = vi.fn()
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigateMock }))
+const installed = vi.hoisted(() => ({ rows: [] as unknown[] }))
+vi.mock('../../api/client', () => ({
+  authFetch: vi.fn(() =>
+    Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: installed.rows }) }),
+  ),
+}))
 
 import { _resetBusForTests, onScreenCommand } from '../../lucius/bus'
+import { clearQueryCache } from '../../state/queryCache'
+import { MCP_INSTALL_PRESETS } from '../tabs/connectors/catalog'
 import { ScreenCommandChip } from './ScreenCommandChip'
 
 beforeEach(() => {
   _resetBusForTests()
+  clearQueryCache()
+  installed.rows = []
   navigateMock.mockClear()
 })
+afterEach(cleanup)
+
+/** Webull's hosted server as the user already has it — merged into its catalog card by URL. */
+function webullServer(oauth: { connected: boolean; needs_reauth: boolean }) {
+  return {
+    id: 'mcp:acme-webull',
+    name: 'Webull',
+    kind: 'mcp',
+    enabled: true,
+    config: {
+      transport: 'remote',
+      url: MCP_INSTALL_PRESETS['mcp-webull']!.url,
+      auth_type: 'oauth',
+      oauth,
+      last_status: oauth.needs_reauth ? 'auth_error' : 'ok',
+    },
+    secrets_public: {},
+    status: oauth.needs_reauth ? 'error' : 'active',
+    error: oauth.needs_reauth ? 'Connection has expired.' : null,
+    pausable: true,
+    short_description: '',
+    tools: [],
+  }
+}
 
 it('renders the mapped label and, on click, re-dispatches the command and navigates', () => {
   const seen = vi.fn()
@@ -106,4 +140,35 @@ it('shows the custom-server card for id custom, and the plain chip for an id it 
     />,
   )
   expect(screen.getByRole('button', { name: /set up connector/i })).toBeTruthy()
+})
+
+// Owner, 2026-11-13: an installed IBKR whose sign-in had expired got a card reading "Connect",
+// as if it had never been set up. The card reads the connector's live state.
+it('says Reconnect for an installed server whose sign-in expired, and goes on to the sign-in', async () => {
+  installed.rows = [webullServer({ connected: true, needs_reauth: true })]
+  const seen = vi.fn()
+  onScreenCommand('connectors.', seen)
+  const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+  const command = { name: 'connectors.open_setup', args: { id: 'mcp-webull' } }
+  render(<ScreenCommandChip command={command} route="connectors" />)
+  fireEvent.click(await screen.findByRole('button', { name: /^reconnect/i }))
+  expect(screen.getByText('By Webull · Authentication issue')).toBeTruthy()
+  expect(openSpy).toHaveBeenCalledWith('about:blank', 'onw-mcp-oauth', expect.any(String))
+  expect(seen).toHaveBeenCalledWith({ ...command, args: { ...command.args, connect: true } })
+  openSpy.mockRestore()
+})
+
+it('says Open for an installed server that works, and opens no sign-in window', async () => {
+  installed.rows = [webullServer({ connected: true, needs_reauth: false })]
+  const seen = vi.fn()
+  onScreenCommand('connectors.', seen)
+  const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+  // Lucius may name the installed id itself (get_connector_status's `fix`).
+  const command = { name: 'connectors.open_setup', args: { id: 'mcp:acme-webull' } }
+  render(<ScreenCommandChip command={command} route="connectors" />)
+  fireEvent.click(await screen.findByRole('button', { name: /^open/i }))
+  expect(screen.getByText('Webull')).toBeTruthy()
+  expect(openSpy).not.toHaveBeenCalled()
+  expect(seen).toHaveBeenCalledWith(command)
+  openSpy.mockRestore()
 })

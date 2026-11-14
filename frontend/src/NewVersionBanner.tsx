@@ -1,26 +1,35 @@
 // NewVersionBanner — an installed phone app RESUMES the page it already has when you switch
 // back to it; it only loads a new build after a full close. So a deploy looked "not fixed" on
 // the owner's phone while the server was already serving the fix. Whenever the app comes back
-// to the foreground (and every few minutes while open), compare the entry script the server
-// serves now with the one running, and offer a one-tap reload when they differ. index.html is
+// to the foreground (and every few minutes while open), compare the entry files (script and
+// stylesheet) the server serves now with the ones running, and offer a one-tap reload when they differ. index.html is
 // served no-store, so the fetch is always current. Never reloads on its own: a composer draft
 // or a half-filled form must not vanish.
 import { useEffect, useState } from 'react'
 
-const ENTRY = /\/assets\/index-[\w-]+\.js/
+// The build's entry files: its script AND its stylesheet. A style-only change rebuilds the CSS
+// under a new name while the script keeps its old one, so comparing the script alone missed it.
+const ENTRY = /\/assets\/index-[\w-]+\.(?:js|css)/g
 const EVERY_MS = 5 * 60_000
 
-function runningEntry(): string | null {
-  const script = document.querySelector<HTMLScriptElement>(
-    'script[type="module"][src*="/assets/index-"]',
+function runningEntries(): Set<string> {
+  const urls = [
+    ...document.querySelectorAll<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]'),
+  ].map((s) => s.src)
+  urls.push(
+    ...[
+      ...document.querySelectorAll<HTMLLinkElement>(
+        'link[rel="stylesheet"][href*="/assets/index-"]',
+      ),
+    ].map((l) => l.href),
   )
-  return script ? new URL(script.src, window.location.href).pathname : null
+  return new Set(urls.map((u) => new URL(u, window.location.href).pathname))
 }
 
-async function servedEntry(): Promise<string | null> {
+async function servedEntries(): Promise<string[]> {
   const r = await fetch('/', { cache: 'no-store', credentials: 'same-origin' })
-  if (!r.ok) return null
-  return (await r.text()).match(ENTRY)?.[0] ?? null
+  if (!r.ok) return []
+  return (await r.text()).match(ENTRY) ?? []
 }
 
 export function NewVersionBanner() {
@@ -28,15 +37,16 @@ export function NewVersionBanner() {
   // A reload takes a moment to show (longest on a phone); the button says it's happening.
   const [reloading, setReloading] = useState(false)
   useEffect(() => {
-    const running = runningEntry()
-    if (!running) return // the dev server has no hashed entry to compare
+    const running = runningEntries()
+    if (!running.size) return // the dev server has no hashed entry to compare
     let checking = false
     const check = async () => {
       if (checking || document.visibilityState !== 'visible') return
       checking = true
       try {
-        const served = await servedEntry()
-        if (served && served !== running) setStale(true)
+        // Stale when the server lists an entry file this page did not load.
+        const served = await servedEntries()
+        if (served.some((path) => !running.has(path))) setStale(true)
       } catch {
         // Offline or the server is restarting — the next return to the app tries again.
       } finally {

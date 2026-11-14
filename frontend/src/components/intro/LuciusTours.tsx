@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { onGuideRequest } from '../../state/guideRequests'
 import type { GuideRequest } from '../../state/guideRequests'
 import { PageTour } from './PageTour'
-import { findTarget, guidedThisVisit, inFirstRun, modalOpen } from './tourTarget'
+import { findTarget, guidedThisVisit, guidesHeld, inFirstRun, modalOpen } from './tourTarget'
 import type { TourStep } from './PageTour'
 import { useSeenIntro } from './useSeenIntro'
 
@@ -70,7 +70,7 @@ function OnceTour({
     if (!unseen || shown) return
     const timer = setInterval(() => {
       if (tourRunning || inFirstRun() || modalOpen() || !findTarget(steps[0]!.target)) return
-      if (guidedThisVisit()) return
+      if (guidedThisVisit() || guidesHeld()) return
       if (requires && !requires()) return
       clearInterval(timer)
       tourRunning = true

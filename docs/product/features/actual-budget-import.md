@@ -26,7 +26,7 @@ to Actual.
 
 ## Connect your server
 
-Open **Automations → Data sync → Actual** and click **Connect Actual…**. It's the same panel as
+Open **Automations → Data Sync → Actual** and click **Connect Actual…**. It's the same panel as
 **Connectors → Actual Budget**, and it opens right over the page.
 
 - **Server address** is the address you open Actual at. Plain http to another computer still works,
@@ -57,7 +57,7 @@ page, the connector says so. Either add the header your proxy accepts under **Pr
 these paths through to Actual without the proxy's login: `/account`, `/info`, `/sync`, `/data` and
 `/data-file-index.txt`. The sync doesn't use `/api`.
 
-On a hosted instance the form says Actual isn't available, and **Data sync** doesn't list it.
+On a hosted instance the form says Actual isn't available, and **Data Sync** doesn't list it.
 
 **Pausing the connector stops all contact with your server.** No scheduled run starts, a run under way
 stops at its next batch, and **Sync now**, the review, the import, a re-check and the budget list all
@@ -169,7 +169,7 @@ the same comparison again whenever you like, against Actual's figures at that mo
 The sync runs on a schedule, every 15 or 30 minutes, hourly, every 6 hours, daily or only when you
 ask. It covers transactions, each month's Assigned, categories and groups. No AI model is involved.
 
-Once it's set up, **Automations → Data sync → Actual** has the switch and **Sync now** at the top,
+Once it's set up, **Automations → Data Sync → Actual** has the switch and **Sync now** at the top,
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
 **Schedule**, the budget, how it decides, and a history of its runs. The history leaves out previews
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the

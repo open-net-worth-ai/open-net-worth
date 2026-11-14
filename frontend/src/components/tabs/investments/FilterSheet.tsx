@@ -68,11 +68,10 @@ export function FilterGroupList({
             >
               <span className="mk-filter-item-label">{o.label}</span>
               {o.count != null && <span className="mk-filter-item-count">{o.count}</span>}
-              {g.value === o.id && (
-                <span className="mk-filter-item-tick" aria-hidden>
-                  <Check size={14} />
-                </span>
-              )}
+              {/* Every row keeps the tick's room, so the counts stay in one column. */}
+              <span className="mk-filter-item-tick" aria-hidden>
+                {g.value === o.id && <Check size={14} />}
+              </span>
             </button>
           ))}
         </div>

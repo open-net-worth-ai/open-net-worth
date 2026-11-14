@@ -420,7 +420,20 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     }
     sync_state.schedule_next(st, started)
     sync_state.save(st)
+    if error is None and tally["requests"]:
+        _vouch_for_connector()
     data_events.publish(["*"])
+
+
+def _vouch_for_connector() -> None:
+    """A run that reached the app disproves a stored "couldn't reach" on its connector. Never
+    raises: the run's own result stands without it."""
+    try:
+        current().config_store().clear_reach_failure()
+    except Exception:
+        logger.warning(
+            "%s sync: couldn't clear the connector's stale status", current().name, exc_info=True
+        )
 
 
 def _hold_off_for_others() -> None:

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The Data sync tab follows either flag, and Actual only where it can run at all: behind the
+// The Data Sync tab follows either flag, and Actual only where it can run at all: behind the
 // gateway it isn't listed, and a link to its page falls back to the list.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -82,7 +82,7 @@ const flags = (ynab_import_and_sync: boolean, actual_budget_sync: boolean) => {
   restore = overrideFlagsForTests({ ynab_import_and_sync, actual_budget_sync })
 }
 
-describe('Data sync follows either flag', () => {
+describe('Data Sync follows either flag', () => {
   it('neither flag: no tab', async () => {
     flags(false, false)
     render(<Automations />)

@@ -383,7 +383,7 @@ describe('the notes', () => {
   })
 
   it('says an import would be refused before anything is settled, and holds it', async () => {
-    blocked = 'The YNAB sync is on. Turn it off in Data sync before importing from Actual.'
+    blocked = 'The YNAB sync is on. Turn it off in Data Sync before importing from Actual.'
     const w = await open()
     const note = await w.findByText(blocked)
     expect(note.closest('li')?.className).toContain('ynr-note--bad')
@@ -509,7 +509,7 @@ describe('when it can’t go on', () => {
   })
 
   it('a refusal the block now states says it once, and focus isn’t left on a dead button', async () => {
-    const sentence = 'The YNAB sync is on. Turn it off in Data sync before importing from Actual.'
+    const sentence = 'The YNAB sync is on. Turn it off in Data Sync before importing from Actual.'
     startRefusal = sentence
     const w = await open()
     fireEvent.click(w.getByRole('button', { name: 'Accept suggestions' }))

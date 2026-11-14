@@ -157,7 +157,7 @@ describe('EnableBankingSection', () => {
   it('says the consent ran out when a fetch was refused after a link', async () => {
     serve({ ...linked, last_error: 'Enable Banking HTTP 401' })
     render(<EnableBankingSection />)
-    expect(await screen.findByText(/Access to a bank has expired/)).toBeTruthy()
+    expect(await screen.findByText(/Access to a bank has ended/)).toBeTruthy()
   })
 
   it('lists every linked bank and adds another with the picker', async () => {
@@ -207,5 +207,130 @@ describe('EnableBankingSection', () => {
         ),
       ).toBe(true),
     )
+  })
+})
+
+describe('EnableBankingSection bank page', () => {
+  // Found 2026-11-13: with the bank's tab blocked (a pop-up blocker, an embedded browser, the
+  // iPhone home-screen app) the form said "Approve access in the tab that just opened" and left
+  // nothing to click. GoCardless's form already kept the link on screen.
+  const renew = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Renew access to ACME Bank (Finland)' }))
+
+  it('with the tab blocked, the link to the bank is the instruction', async () => {
+    serve(linked, { url: 'https://bank.example/consent', returns_to_app: true })
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<EnableBankingSection />)
+    await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
+    renew()
+    // The bank's page is the main action: a button naming the bank, not small print.
+    const link = await screen.findByRole('link', { name: /^Open ACME Bank$/ })
+    expect(link.getAttribute('href')).toBe('https://bank.example/consent')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    expect(screen.getByText('Approve access at ACME Bank')).toBeTruthy()
+  })
+
+  it('opens the tab on the click, points it at the bank, and keeps the link as a fallback', async () => {
+    serve(linked, { url: 'https://bank.example/consent', returns_to_app: true })
+    const tab = { opener: {}, closed: false, location: { href: '' }, close: vi.fn() }
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    render(<EnableBankingSection />)
+    await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
+    renew()
+    expect(open).toHaveBeenCalledTimes(1) // on the click, before the server answered
+    await waitFor(() => expect(tab.location.href).toBe('https://bank.example/consent'))
+    expect(await screen.findByText('Approve access in the ACME Bank tab')).toBeTruthy()
+    const link = screen.getByRole('link', { name: /Open ACME Bank again/ })
+    expect(link.getAttribute('href')).toBe('https://bank.example/consent')
+    expect(tab.close).not.toHaveBeenCalled()
+  })
+
+  it('keeps the link when the bank returns a code to paste, too', async () => {
+    serve(linked, { url: 'https://bank.example/consent', returns_to_app: false })
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<EnableBankingSection />)
+    await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
+    renew()
+    const link = await screen.findByRole('link', { name: /^Open ACME Bank$/ })
+    expect(link.getAttribute('href')).toBe('https://bank.example/consent')
+    expect(screen.getByText(/paste it below/)).toBeTruthy()
+  })
+})
+
+describe('EnableBankingSection after switching apps', () => {
+  // A bank's consent belongs to the app that created it; after another app is saved, every
+  // bank answered nothing while the form still said Connected (2026-11-13).
+  it('says each bank was linked under the previous app and offers Renew on it', async () => {
+    serve({
+      ...linked,
+      banks: [
+        { ...bankRow('ACME Bank', 'FI', 'k1'), access_ended: 'app_changed' },
+        { ...bankRow('Other Bank', 'SE', 'k2'), access_ended: 'app_changed' },
+      ],
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(
+      await screen.findByText(/Your banks were linked under your previous Enable Banking app/),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('Finland · linked under your previous app — renew to keep syncing'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/access until/)).toBeNull()
+  })
+
+  it('says only the bank from the previous app needs renewing when another is fine', async () => {
+    serve({
+      ...linked,
+      banks: [
+        bankRow('ACME Bank', 'FI', 'k1'),
+        { ...bankRow('Other Bank', 'SE', 'k2'), access_ended: 'app_changed' },
+      ],
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(
+      await screen.findByText(
+        'A bank was linked under your previous Enable Banking app. Click Renew next to it to keep it syncing.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('says a bank whose consent ended needs renewing', async () => {
+    serve({
+      ...linked,
+      banks: [{ ...bankRow('ACME Bank', 'FI', 'k1'), access_ended: 'ended' }],
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(await screen.findByText(/Access to a bank has ended/)).toBeTruthy()
+    expect(screen.getByText('Finland · access ended — renew to keep syncing')).toBeTruthy()
+  })
+
+  it('warns before saving another app while banks are linked', async () => {
+    serve(linked)
+    render(<EnableBankingSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.queryByText(/Saving another app ends their/)).toBeNull()
+    fireEvent.change(screen.getByLabelText(/Application ID/), {
+      target: { value: '424286e7-0000-4000-8000-000000000000' },
+    })
+    expect(screen.getByText(/Saving another app ends their\s+access/)).toBeTruthy()
+    expect(screen.getByText("Paste the new app's private key.")).toBeTruthy()
+  })
+
+  it("shows what the last fetch couldn't read, less what a bank row already says", async () => {
+    serve({
+      ...linked,
+      banks: [
+        bankRow('ACME Bank', 'FI', 'k1'),
+        { ...bankRow('Other Bank', 'SE', 'k2'), access_ended: 'ended' },
+      ],
+      last_caution:
+        "Other Bank: access ended — renew it in Connectors to keep it syncing; ACME Bank: couldn't be read (Enable Banking HTTP 503)",
+    } as unknown as ReturnType<typeof status>)
+    render(<EnableBankingSection />)
+    expect(
+      await screen.findByText(
+        /Last fetch couldn.t read everything — ACME Bank: couldn't be read \(Enable Banking HTTP 503\)$/,
+      ),
+    ).toBeTruthy()
   })
 })

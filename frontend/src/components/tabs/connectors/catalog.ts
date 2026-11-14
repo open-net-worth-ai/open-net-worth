@@ -385,7 +385,7 @@ export const CATALOG: CatalogEntry[] = [
     tools: ['get_connector_status', 'connector_sync'],
   },
   {
-    // Behind the `actual_budget_sync` flag. No Lucius tools: it is driven from the Data sync tab.
+    // Behind the `actual_budget_sync` flag. No Lucius tools: it is driven from the Data Sync tab.
     id: 'actual_budget',
     flag: 'actual_budget_sync',
     name: 'Actual Budget',

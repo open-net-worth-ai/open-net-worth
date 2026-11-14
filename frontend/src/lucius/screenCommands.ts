@@ -92,7 +92,7 @@ export const AUTOMATIONS_REVIEW_DRAFT_SPEC: ScreenCommandSpec = {
 export const CONNECTORS_OPEN_SETUP_SPEC: ScreenCommandSpec = {
   name: 'connectors.open_setup',
   description:
-    'Open a directory connector’s setup form, or id "custom" for the Add MCP server form (UI only). The user enters credentials and clicks Connect; nothing is added until then.',
+    'Show the card for a connector (UI only): a directory id to set one up, an installed id from get_connector_status (e.g. "mcp:<server>") to reconnect or open one the user already has, or "custom" for the Add MCP server form. The user signs in or enters credentials and clicks the button; nothing changes until then.',
   route: 'connectors',
   params: [{ name: 'id', type: 'string', required: true }],
 }

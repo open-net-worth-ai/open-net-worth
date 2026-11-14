@@ -61,6 +61,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, RedirectNotRegisteredError, ValidationError
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation import balance_kinds, parallel
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -362,6 +363,9 @@ def create_session(code: str, state: str = "") -> dict:
         raise ValidationError("Enable Banking did not return a session id")
 
     cfg = store.get()
+    # The previous app's consents were remembered and revoked at the switch; this app can't
+    # read them.
+    other_app = {b["session_id"] for b in store.banks() if b.get("access_ended") == "app_changed"}
     named = data.get("aspsp") if isinstance(data.get("aspsp"), dict) else {}
     accounts = data.get("accounts") or []
     key, replaced = store.add_bank(
@@ -374,12 +378,17 @@ def create_session(code: str, state: str = "") -> dict:
     )
     if pending.get("state"):
         store.drop_pending_link(pending["state"])
-    for old_session in replaced:
+    for old_session in (s for s in replaced if s not in other_app):
         # Renewal: remember the old consent's accounts first, so the new session's uids map
         # back to them — even on a book that never listed its accounts since it was linked.
         _remember_accounts(store, token, old_session, store.bank(key) or {})
         _revoke_session(token, old_session)
     return {"session_id": session_id, "accounts": accounts, "bank_key": key}
+
+
+class ConsentEndedError(ExternalServiceError):
+    """Enable Banking no longer answers for a bank's consent: it was revoked, ran out, or
+    belongs to another application. Only renewing that bank brings it back."""
 
 
 def _remember_accounts(
@@ -388,10 +397,20 @@ def _remember_accounts(
     """Record a session's accounts' ids (``_stable_account_id``). Best effort: a session that
     can't be read is one whose ids this book has most likely recorded already."""
     try:
-        for account in fetch_session_accounts(token, session_id):
+        for account in session_accounts_data(token, session_id):
             _stable_account_id(store, bank, account)
-    except (ExternalServiceError, httpx.HTTPError) as exc:
+    except (ExternalServiceError, httpx.HTTPError, ValueError) as exc:
         logger.warning("enable_banking: an old consent's accounts are unavailable: %s", exc)
+
+
+def session_accounts_data(token: str, session_id: str) -> list[dict]:
+    """A session's ``accounts_data`` — each account's uid and ``identification_hash``, which
+    is all ``_stable_account_id`` needs. Verified on the sandbox: still there once the consent
+    is closed or ran out (its account endpoints refuse by then), and the same hash the
+    details endpoint gives; so a renewal of a consent that already ended still keeps its
+    accounts' ids."""
+    data = _safe_get(token, f"/sessions/{session_id}", {}).json() or {}
+    return [a for a in data.get("accounts_data") or [] if isinstance(a, dict)]
 
 
 def _revoke_session(token: str, session_id: str) -> bool:
@@ -484,22 +503,36 @@ def fetch_session_accounts(token: str, session_id: str) -> list[dict]:
     A details failure keeps ``{"uid": uid}`` so transactions still fetch. Raises
     ``ExternalServiceError`` (never the raw httpx exception — see ``_safe_get``) when the
     session itself can't be read."""
-    resp = _safe_get(token, f"/sessions/{session_id}", {})
+    try:
+        resp = _safe_get(token, f"/sessions/{session_id}", {})
+    except ExternalServiceError as exc:
+        # Another application's session, or one Enable Banking has forgotten.
+        if "HTTP 404" in str(exc):
+            raise ConsentEndedError(
+                "Enable Banking no longer knows this consent (HTTP 404)"
+            ) from None
+        raise
     data = resp.json() or {}
+    # Verified on the sandbox: a revoked consent still answers 200 and lists its accounts,
+    # with status CLOSED — only its transactions refuse (401 CLOSED_SESSION).
+    status = str(data.get("status") or "").strip().upper()
+    if status and status != "AUTHORIZED":
+        raise ConsentEndedError(f"Enable Banking says this consent is {status.lower()}")
     uids: list[str] = []
     for entry in data.get("accounts") or []:
         uid = _account_uid(entry) if isinstance(entry, dict) else str(entry or "").strip()
         if uid and uid not in uids:
             uids.append(uid)
-    accounts: list[dict] = []
-    for uid in uids:
+
+    def with_details(uid: str) -> dict:
         try:
             details = _safe_get(token, f"/accounts/{uid}/details", {}).json()
         except (ExternalServiceError, ValueError) as exc:
             logger.warning("enable_banking account details failed: %s", exc)
             details = None
-        accounts.append({**details, "uid": uid} if isinstance(details, dict) else {"uid": uid})
-    return accounts
+        return {**details, "uid": uid} if isinstance(details, dict) else {"uid": uid}
+
+    return parallel.each(with_details, uids)
 
 
 def fetch_account_transactions(
@@ -564,10 +597,14 @@ def _account_mask(eb_account: dict) -> Optional[str]:
     return str(iban)[-4:] if iban else None
 
 
-def _account_to_common(eb_account: dict, balance: Optional[float] = None) -> dict:
-    """An Enable Banking account → the common ``accounts[]`` shape (RFC §A)."""
+def _account_to_common(
+    eb_account: dict, balance: Optional[float] = None, kinds: Optional[dict] = None
+) -> dict:
+    """An Enable Banking account → the common ``accounts[]`` shape (RFC §A). ``kinds``: its
+    balance by kind (``balance_kinds.split``)."""
     kind = str(eb_account.get("cash_account_type") or "").upper()
     return {
+        **(kinds or {}),
         "provider_account_id": _account_uid(eb_account),
         "name": _account_name(eb_account),
         "mask": _account_mask(eb_account),
@@ -581,15 +618,16 @@ def _account_to_common(eb_account: dict, balance: Optional[float] = None) -> dic
     }
 
 
-def fetch_account_balance(token: str, account_uid: str) -> Optional[float]:
-    """GET ``/accounts/{uid}/balances`` → one signed figure, booked balance preferred
-    (verified on the sandbox: ``[{balance_type: "CLBD", balance_amount: {amount, currency}}]``).
-    Never raises — a bank that won't give balances leaves the account without one."""
+def fetch_account_balances(token: str, account_uid: str) -> tuple[Optional[float], dict]:
+    """GET ``/accounts/{uid}/balances`` → ``(one signed figure, booked preferred; {cleared_balance,
+    working_balance, available_to_spend})`` (``balance_kinds``; verified on the sandbox:
+    ``[{balance_type: "CLBD", balance_amount: {amount, currency}}]``). Never raises — a bank
+    that won't give balances leaves the account without one."""
     try:
         data = _safe_get(token, f"/accounts/{account_uid}/balances", {}).json() or {}
     except (ExternalServiceError, ValueError) as exc:
         logger.warning("enable_banking balances unavailable: %s", exc)
-        return None
+        return None, balance_kinds.split({})
     by_type: dict[str, float] = {}
     for b in data.get("balances") or []:
         if not isinstance(b, dict):
@@ -599,16 +637,18 @@ def fetch_account_balance(token: str, account_uid: str) -> Optional[float]:
         except (TypeError, ValueError):
             continue
         by_type.setdefault(str(b.get("balance_type") or "").upper(), amount)
-    for kind in _BALANCE_PREFERENCE:
-        if kind in by_type:
-            return by_type[kind]
-    return next(iter(by_type.values()), None)
+    best = next((by_type[k] for k in _BALANCE_PREFERENCE if k in by_type), None)
+    if best is None:
+        best = next(iter(by_type.values()), None)
+    return best, balance_kinds.split(by_type)
 
 
 def _txn_id(eb_txn: dict) -> str:
-    """The stable Enable Banking transaction id (``entry_reference`` preferred, then
-    ``transaction_id``). Empty string if neither is present."""
-    return str(eb_txn.get("entry_reference") or eb_txn.get("transaction_id") or "").strip()
+    """The bank's immutable id for a transaction, ``entry_reference``, or "" without one.
+    Never ``transaction_id``: Enable Banking documents it as a fetch handle that "can not be
+    used to uniquely identify transactions and may change if the list of transactions is
+    requested again" — keyed on it, a re-listed row came back as new and booked twice."""
+    return str(eb_txn.get("entry_reference") or "").strip()
 
 
 def _txn_amount(eb_txn: dict) -> tuple[float | None, str]:
@@ -655,18 +695,33 @@ def _txn_date(eb_txn: dict) -> str:
 
 
 def _txn_description(eb_txn: dict) -> str:
-    """Best human description: remittance info (string or list), then the counterparty name,
-    then a generic fallback."""
+    """Best human description, from the first of these the bank filled: remittance info
+    (string or list), the counterparty's name, the bank's own wording for the kind of
+    transaction (``bank_transaction_code.description``, e.g. "Card payment"), the creditor
+    reference (``reference_number``) — then a generic fallback. Some banks send only the
+    transaction code: reading just the first two left every such row a bare "Enable Banking"
+    (reported 2026-11-13). ``note`` is the account holder's own note, not the bank's, so it
+    is never the description."""
     info = eb_txn.get("remittance_information")
     if isinstance(info, list):
-        info = " ".join(str(x) for x in info if x)
-    if not info:
-        creditor = eb_txn.get("creditor") or {}
-        debtor = eb_txn.get("debtor") or {}
-        info = (creditor.get("name") if isinstance(creditor, dict) else None) or (
-            debtor.get("name") if isinstance(debtor, dict) else None
+        info = " ".join(str(x).strip() for x in info if x and str(x).strip())
+    if not (isinstance(info, str) and info.strip()):
+        info = (
+            _name_of(eb_txn.get("creditor"))
+            or _name_of(eb_txn.get("debtor"))
+            or _text_of((eb_txn.get("bank_transaction_code") or {}), "description")
+            or _text_of(eb_txn, "reference_number")
         )
-    return (str(info).strip() if info else "") or "Enable Banking"
+    return " ".join(str(info or "").split()) or "Enable Banking"
+
+
+def _name_of(party: object) -> str:
+    return _text_of(party, "name") if isinstance(party, dict) else ""
+
+
+def _text_of(obj: object, key: str) -> str:
+    value = obj.get(key) if isinstance(obj, dict) else None
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _txn_payee(eb_txn: dict, amount: float) -> Optional[str]:
@@ -736,21 +791,46 @@ def _bank_label(bank: dict, banks: list[dict]) -> Optional[str]:
     return f"{name} ({country})" if len(twins) > 1 and country else name
 
 
-def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tuple[list[dict], bool]:
+_RENEW = "renew it in Connectors to keep it syncing"
+
+
+def _bank_unread(store: EnableBankingConfigStore, bank: dict, label: str, exc: Exception) -> str:
+    """The warning for a bank that couldn't be read. A consent Enable Banking says has ended
+    is flagged on the bank, so the form shows Renew on it too."""
+    logger.warning("enable_banking: a bank's accounts are unavailable: %s", exc)
+    if isinstance(exc, ConsentEndedError):
+        store.mark_access_ended([bank["key"]], "ended")
+        return f"{label}: access ended — {_RENEW}"
+    return f"{label}: couldn't be read ({exc})"
+
+
+def _accounts_of_every_bank(
+    token: str, store: EnableBankingConfigStore
+) -> tuple[list[dict], bool, list[str]]:
     """Every linked bank's accounts, each tagged with its bank (``institution``). One bank
     that can't be read (its consent ended, the bank is down) never hides the others: it is
-    skipped and the result is marked incomplete."""
+    skipped, named in a warning, and the result is marked incomplete. When no bank at all can
+    be read, that is the fetch's error — never an "ok" with nothing in it."""
     out: list[dict] = []
     complete = True
+    warnings: list[str] = []
     seen: set[str] = set()
     banks = store.banks()
     for bank in banks:
+        label = _bank_label(bank, banks) or "A bank"
+        if bank.get("access_ended") == "app_changed":
+            warnings.append(f"{label}: linked under your previous Enable Banking app — {_RENEW}")
+            complete = False
+            continue
         try:
             accounts = fetch_session_accounts(token, bank["session_id"])
         except (ExternalServiceError, httpx.HTTPError) as exc:
-            logger.warning("enable_banking: a bank's accounts are unavailable: %s", exc)
+            warnings.append(_bank_unread(store, bank, label, exc))
             complete = False
             continue
+        if bank.get("access_ended"):
+            # It answers again (back on the app it was linked under): nothing to renew.
+            store.mark_access_ended([bank["key"]], None)
         for a in accounts:
             api_uid = _account_uid(a)
             uid = _stable_account_id(store, bank, a)
@@ -760,7 +840,9 @@ def _accounts_of_every_bank(token: str, store: EnableBankingConfigStore) -> tupl
             out.append(
                 {**a, "uid": uid, "_api_uid": api_uid, "_institution": _bank_label(bank, banks)}
             )
-    return out, complete
+    if banks and len(warnings) == len(banks):
+        raise ValidationError("No bank could be read. " + "; ".join(warnings))
+    return out, complete, warnings
 
 
 def _stable_account_id(store: EnableBankingConfigStore, bank: dict, eb_account: dict) -> str:
@@ -799,12 +881,11 @@ def fetch_window(
     ``_MAX_FETCH_PAGES`` without exhausting its ``continuation_key`` — a truncated fetch must
     never look complete to the vanished-row check."""
     token = _bearer(store)
-    eb_accounts, complete = _accounts_of_every_bank(token, store)
+    eb_accounts, complete, warnings = _accounts_of_every_bank(token, store)
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
-    accounts = [
-        _account_to_common(a, fetch_account_balance(token, _api_uid(a))) for a in eb_accounts
-    ]
+    balances = parallel.each(lambda a: fetch_account_balances(token, _api_uid(a)), eb_accounts)
+    accounts = [_account_to_common(a, *b) for a, b in zip(eb_accounts, balances)]
 
     rows: list[dict] = []
     for eb_account in eb_accounts:
@@ -825,7 +906,7 @@ def fetch_window(
             row = _txn_to_row(eb_txn, account_uid, currency_hint)
             if row is not None:
                 rows.append(row)
-    return FetchWindow(accounts=accounts, rows=rows, complete=complete)
+    return FetchWindow(accounts=accounts, rows=rows, complete=complete, warnings=warnings)
 
 
 def classify_error(exc: Exception) -> str:

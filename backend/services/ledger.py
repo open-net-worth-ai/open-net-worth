@@ -2208,24 +2208,41 @@ def known_external_refs(source: str) -> dict[tuple[str | None, str], str]:
 def accounts_booked_from(source: str) -> set[str]:
     """Ids of the accounts holding at least one LIVE transaction that carries a ``source``
     ref — which linked accounts a connector has already imported into."""
-    out: set[str] = set()
+    return set(booked_from(source))
+
+
+def booked_from(source: str) -> dict[str, dict]:
+    """Account id → ``{count, first, last}`` of the LIVE transactions on it that carry a
+    ``source`` ref: what a connector has booked there and over which dates, read from the
+    ledger itself (a sync's run records can be gone)."""
+    out: dict[str, dict] = {}
     for t in transactions.all():
         if t.get("deleted") and not t.get("merged_into"):
             continue
-        if any(pair[0] == source for pair in ext_ref_pairs(t)):
-            out.update(a for a in (t.get("from_account_id"), t.get("to_account_id")) if a)
+        if not any(pair[0] == source for pair in ext_ref_pairs(t)):
+            continue
+        day = str(t.get("date") or "")[:10]
+        for a in {t.get("from_account_id"), t.get("to_account_id")} - {None, ""}:
+            row = out.setdefault(a, {"count": 0, "first": day, "last": day})
+            row["count"] += 1
+            if day and (not row["first"] or day < row["first"]):
+                row["first"] = day
+            if day > row["last"]:
+                row["last"] = day
     return out
 
 
-def newest_booked_date(source: str) -> date | None:
+def newest_booked_date(source: str, account_id: str | None = None) -> date | None:
     """The date of the newest LIVE transaction carrying a ``source`` ref (a merged-away row
     counts through its canonical one, as in ``known_external_refs``) — where the ledger's
-    record of that connector stops."""
+    record of that connector stops. ``account_id`` narrows it to rows on that account."""
     newest: date | None = None
     for t in transactions.all():
         if t.get("deleted") and not t.get("merged_into"):
             continue
         if not any(pair[0] == source for pair in ext_ref_pairs(t)):
+            continue
+        if account_id and account_id not in (t.get("from_account_id"), t.get("to_account_id")):
             continue
         try:
             d = date.fromisoformat(str(t.get("date"))[:10])

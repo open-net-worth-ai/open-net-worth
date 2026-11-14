@@ -160,3 +160,10 @@ populated instances retain their setup status. The ordinary empty-book setup pat
   finding from the same audit: the default `DATA_DIR` is `backend/data`, *inside the repo
   checkout*, which is why `.gitignore` carries 58 hand-maintained entries for it. Split into its
   own plan as a distinct subsystem; screen 1 renders the path read-only until then.
+
+## Amendment (2026-11-14, owner): the AI step has no way past it
+
+*"OUR APP MUST HAVE AI."* First run cannot finish without a model: no "Not now", no "Skip", no
+path that stamps setup complete with nothing configured. Ruling 2's "Not now" wording is
+superseded. A no-AI feature (a bank's data sync) is a choice inside an app that has a model, never
+a reason to let setup end without one. A "Not now" shipped briefly as 2fa5c670 and was reverted.

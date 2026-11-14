@@ -17,7 +17,7 @@ unusual for that stock, a price you set an alert on, news that touches your hold
 entering the price range you said you'd buy at. Everything is tied to your real portfolio, not a
 generic news feed.
 
-Open **Intel** in the sidebar (the page is titled **Intelligence**).
+Open **Intelligence** in the sidebar (the page is titled **Intelligence**).
 
 **Beta:** fully working, but its news and alert pipeline is still being tuned. Treat an alert as a
 prompt to look, not a complete picture — the Intel page itself is the full record.
@@ -29,7 +29,7 @@ and get alerts to your phone.
 
 ### 1. Watch some tickers
 
-1. Open **Intel** and click **＋ New list** (beside the tabs). In **Watchlists & monitors**, click
+1. Open **Intelligence** and click **＋ New list** (beside the tabs). In **Watchlists & monitors**, click
    **New watchlist**, and rename it — for example "Semis".
 2. Close the pop-up. Your list now has its own tab.
 3. On the list's tab, type a ticker into **Add ticker — e.g. NVDA** in the side panel and press
@@ -73,8 +73,11 @@ two minutes (usually much less), so the message can arrive a little later, and i
 and search quota, up to 20 runs a day. The search can only search: it can't change your data, send
 anything or place an order, and it never sees your position or profile. Digits in the alert's name
 and instructions are removed before it searches, but it does read the rest of the wording, so keep
-private details out of them. What it finds is labelled *From a web search, unverified*. Your **Web
-search** setting for scans doesn't turn this off; the experiment switch does. If a run fails or
+private details out of them. The message says which outlet reported what ("Reuters reports …")
+and links the search results it relied on. Only links the search actually returned are kept, never
+one copied out of a page's text. When the cause rests on a single report, Lucius may say it's worth
+double-checking. Your **Web search** setting for scans doesn't turn this off; the experiment switch
+does. If a run fails or
 times out, you get the quick alert. This doesn't run on the Antigravity or Codex CLIs, which have
 tools of their own that the app can't limit. With this on, an automatic crash-watch alert on a
 holding is looked into the same way: Lucius searches for why it fell before it messages you.
@@ -120,6 +123,12 @@ lets its news scans search the web too. Explained alerts and Lucius's reads need
 
 Want a daily summary of your money and portfolio? Start the **Daily briefing** template in
 [Automations](../lucius/automations.md).
+
+## Copy Trading
+
+Intelligence has a **Copy Trading** tab (turn it off with **Followed portfolios** in Settings →
+Developer → Experimental): famous funds and US House members you follow, what they hold and what
+changed in their latest filing. See [Copy Trading](copy-trading.md).
 
 ## Find your way around
 
@@ -348,14 +357,17 @@ already told you in the last 48 hours and what time it is where you are, and cho
   Anything still waiting after a week is dropped. Your daily briefing can add a short paragraph
   on what is waiting.
 - **Skip** — analyst target changes, "moved 3%" with no new cause, anything you told it to
-  ignore, anything you were already told. It stays in the Intel tab.
+  ignore, anything you were already told. It stays in the Intelligence tab.
 
-Everything is still in the Intel tab either way. **A price alert you set always reaches you right
+Everything is still in the Intelligence tab either way. **A price alert you set always reaches you right
 away**, at any hour, and Lucius only chooses how the message reads. To stop one, mute the ticker or
 turn the alert off. Automatic crash-watch alerts are different: Lucius can hold them back, usually
 because you've already heard about the same slide, but they are still sent as written if Lucius
 cannot be reached. A crash-watch alert reaches Lucius with the latest headlines Intel has on that
-holding, so its message says what is behind the drop rather than telling you to go and check.
+holding, so its message says what is behind the drop rather than telling you to go and check. If
+those headlines are about the company but don't explain the drop (a stake filing, say), the message
+names them instead of saying there was no news. It links what it cites by outlet name, and it never
+calls a crash-watch alert a level you set.
 
 With the experiment on, Lucius also decides whether a new development about a company you were
 told about recently is worth another message. Without it, Intel holds back further news about the
@@ -370,7 +382,7 @@ Lucius reads it every time it decides. You can also ask Lucius in chat to set it
 **No alerts on my phone** — check that the channel is set up and enabled in **Connectors**, and
 ticked for that alert kind in **Settings → Intelligence → Alerts**. Remember only explained alerts
 are pushed for watch signals; the rest stay in the app. If you turned on the experiment above,
-Lucius may have held a news or crash-watch alert for a roundup or skipped it; the Intel tab has it
+Lucius may have held a news or crash-watch alert for a roundup or skipped it; the Intelligence tab has it
 either way. It never does that to a price alert you set.
 
 **An alert I expected did not come right away** — with the experiment on, a normal alert waits

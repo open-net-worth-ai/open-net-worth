@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isWebKit, stampPwaDisplayMode } from './pwa'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { isWebKit, relayoutAfterSwipeBack, stampPwaDisplayMode } from './pwa'
 
 describe('isWebKit', () => {
   it.each([
@@ -75,5 +75,39 @@ describe('stampPwaDisplayMode', () => {
     stampPwaDisplayMode()
 
     expect(document.documentElement.dataset.onwDisplayMode).toBe('standalone')
+  })
+})
+
+describe('relayoutAfterSwipeBack', () => {
+  // jsdom's history has no scrollRestoration; a browser's does.
+  beforeEach(() => {
+    Object.defineProperty(history, 'scrollRestoration', {
+      value: 'auto',
+      writable: true,
+      configurable: true,
+    })
+  })
+  afterEach(() => {
+    delete document.documentElement.dataset.onwDevice
+    history.scrollRestoration = 'auto'
+    vi.restoreAllMocks()
+  })
+
+  it('on an iPhone, never restores a page scroll and puts the page back at 0 after going back', () => {
+    document.documentElement.dataset.onwDevice = 'iphone'
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0)
+      return 0
+    })
+    relayoutAfterSwipeBack()
+    expect(history.scrollRestoration).toBe('manual')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
+  })
+
+  it('leaves every other device alone', () => {
+    relayoutAfterSwipeBack()
+    expect(history.scrollRestoration).toBe('auto')
   })
 })

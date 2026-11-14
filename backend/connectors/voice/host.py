@@ -45,6 +45,8 @@ CALLS = frozenset(
         "answer_unheard",
         "waiting_cards",
         "answer_card",
+        "join_turn",
+        "withdraw_join",
     }
 )
 STREAMS = frozenset({"ask", "follow_next_turn"})
@@ -146,6 +148,16 @@ class Host:
         if method == "stop_request":
             desk.stop_call_turn(self._owned(args))
             return None
+        if method == "join_turn":
+            session_id = self._owned(args)
+            self._count_ask(session_id)
+            if _out_of_budget(session_id):
+                return ""  # it waits for a turn of its own, which says so
+            return desk.join_turn(
+                session_id, str(args.get("said") or ""), str(args.get("task_id") or "")[:32]
+            )
+        if method == "withdraw_join":
+            return desk.withdraw_join(self._owned(args), str(args.get("ref") or ""))
         if method == "claim_call":
             return self._claim(str(args.get("room") or ""))
         if method == "part_of_day":

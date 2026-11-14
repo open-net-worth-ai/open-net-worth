@@ -657,6 +657,8 @@ envelopes = book_payload_table("envelopes")
 income_events = book_payload_table("income_events")
 # Why you own / would buy an instrument (services.investment_theses) — one row per instrument.
 investment_theses = book_payload_table("investment_theses")
+# Public portfolios the user follows (services.followed_portfolios) — one row per follow.
+followed_portfolios = book_payload_table("followed_portfolios")
 recurring_streams = book_payload_table("recurring_streams")
 targets = book_payload_table("targets")
 corrections = book_payload_table("corrections")
@@ -681,6 +683,11 @@ actual_sync_state = book_payload_table("actual_sync_state")
 actual_sync_mirror = book_payload_table("actual_sync_mirror")
 actual_sync_baselines = book_payload_table("actual_sync_baselines")
 actual_sync_conflicts = book_payload_table("actual_sync_conflicts")
+
+# Bank data sync (ADR 2026-11-13-a-bank-connector-can-book-its-rows-without-ai): a connector's
+# sync settings (id = provider key) and its review list. No credentials; not checkpointed.
+bank_sync_settings = book_payload_table("bank_sync_settings")
+bank_sync_reviews = book_payload_table("bank_sync_reviews")
 
 # owned_assets / owned_asset_categories: the Assets tab domain (ADR 2026-09-06-assets-tab-
 # faithful-port) — things you own that are valued by a dated manual mark, not a ledger balance

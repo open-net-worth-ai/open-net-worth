@@ -552,9 +552,33 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
         )
         if flags:
             out.setdefault("warnings", []).extend(flags)
+            _add_align_next_step(out, flags, [new])
     except Exception:  # noqa: BLE001
         pass
     return json.dumps(out, ensure_ascii=False), None
+
+
+def _add_align_next_step(result: dict, warnings: list[dict], created: list[dict]) -> None:
+    """Say what rows booked before their account's start mean, in the result itself: they
+    don't count until the USER chooses to count them — never moved on a model's own call,
+    since nothing here can tell whether the rows are right."""
+    oldest: dict[str, str] = {}
+    by_id = {t.get("id"): t for t in created}
+    for w in warnings:
+        if w.get("type") != "before_tracking_start" or not w.get("account_id"):
+            continue
+        txn = by_id.get(w.get("txn_id")) or (created[0] if len(created) == 1 else None)
+        day = str((txn or {}).get("date") or "")
+        if day and (w["account_id"] not in oldest or day < oldest[w["account_id"]]):
+            oldest[w["account_id"]] = day
+    if oldest:
+        result["next_step"] = (
+            "Rows above are dated before their account's start, so they don't count — a normal "
+            "state. Mention it once; call align_account_start only if the user asks to count "
+            "them (only they know whether the rows are right). Oldest row per account: "
+            + ", ".join(f"{aid} → {day}" for aid, day in sorted(oldest.items()))
+            + "."
+        )
 
 
 class SimulateCashflowInput(ToolInput):
@@ -2897,6 +2921,7 @@ async def add_transactions(input_data: dict):
                     warnings.append({"txn_id": txn.get("id"), **equal_amount_warning})
             if warnings:
                 result["warnings"] = warnings
+                _add_align_next_step(result, warnings, created)
         except Exception:  # noqa: BLE001 — surfacing must never break a completed batch
             logger.exception(
                 "tool add_transactions: tracking-start pass failed for batch %s", batch_id
