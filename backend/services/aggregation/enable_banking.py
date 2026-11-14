@@ -760,6 +760,23 @@ _NOT_MONEY_STATUSES = frozenset({"CNCL", "RJCT", "SCHD"})
 _PENDING_STATUSES = frozenset({"PDNG", "HOLD"})
 
 
+def _original_charge(eb_txn: dict, booked_in: str) -> tuple[Optional[float], Optional[str]]:
+    """A purchase made in another currency: what the merchant charged (``exchange_rate.
+    instructed_amount``, e.g. USD 9.39 beside the EUR 7.05 the account paid), as GoCardless's
+    ``_original_charge`` reads its ``instructedAmount``. ``(None, None)`` for a row in the
+    account's own currency. It goes in the row's ``original_amount``/``original_currency``."""
+    fx = eb_txn.get("exchange_rate") if isinstance(eb_txn.get("exchange_rate"), dict) else {}
+    paid = fx.get("instructed_amount") if isinstance(fx.get("instructed_amount"), dict) else {}
+    currency = str(paid.get("currency") or fx.get("unit_currency") or "").upper()
+    try:
+        amount = abs(float(paid.get("amount")))
+    except (TypeError, ValueError):
+        return None, None
+    if currency and currency != (booked_in or "").upper() and amount:
+        return amount, currency
+    return None, None
+
+
 def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | None:
     """One Enable Banking transaction → the common normalized row shape (RFC §A step 3).
     Returns None for an unparseable/zero amount or an unrecognized credit/debit indicator
@@ -779,6 +796,7 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         if txn_id
         else derived_ref(account_uid, date_str, amount, currency, description)
     )
+    original_amount, original_currency = _original_charge(eb_txn, currency)
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
         "raw": eb_txn,
@@ -789,6 +807,8 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "description": description,
         "payee": _txn_payee(eb_txn, amount),
         "memo": None,
+        "original_amount": original_amount,
+        "original_currency": original_currency,
         "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,
     }

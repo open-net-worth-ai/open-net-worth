@@ -572,6 +572,28 @@ def test_txn_to_row_falls_back_to_derived_ref_when_no_id():
     assert row["raw"] is txn
 
 
+def test_a_foreign_charge_keeps_what_the_merchant_charged():
+    """Enable Banking sends the merchant's own amount in ``exchange_rate.instructed_amount``
+    (seen on the Nordea sandbox: USD 9.39 for EUR 7.05); it lands in original_amount/currency,
+    as GoCardless's instructedAmount does. A row in the account's currency has none."""
+    txn = {
+        "booking_date": "2026-11-12",
+        "transaction_amount": {"amount": "7.05", "currency": "EUR"},
+        "credit_debit_indicator": "DBIT",
+        "remittance_information": ["ACME STORE"],
+        "exchange_rate": {
+            "unit_currency": "USD",
+            "exchange_rate": "1.1729",
+            "instructed_amount": {"currency": "USD", "amount": "9.39"},
+        },
+    }
+    row = svc._txn_to_row(txn, "EB-CHK", "EUR")
+    assert (row["amount"], row["currency"]) == (-7.05, "EUR")
+    assert (row["original_amount"], row["original_currency"]) == (9.39, "USD")
+    home = {**txn, "exchange_rate": None}
+    assert svc._txn_to_row(home, "EB-CHK", "EUR")["original_amount"] is None
+
+
 def test_a_relisted_row_keeps_its_ref_when_only_transaction_id_changes():
     """Enable Banking's transaction_id "may change if the list of transactions is requested
     again" (its docs). The same money listed twice with two transaction_ids must carry ONE
