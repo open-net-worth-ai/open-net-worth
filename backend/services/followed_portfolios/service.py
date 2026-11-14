@@ -196,6 +196,31 @@ def resolve(ref: str) -> dict:
     return hits[0]
 
 
+_card_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="followed-card")
+_cards_in_flight: set[tuple[str, str]] = set()
+_cards_lock = threading.Lock()
+
+
+def _refresh_card_soon(kind: str, ref: str) -> None:
+    """Make this card again off the request, once at a time per card."""
+    key = (kind, str(ref))
+    with _cards_lock:
+        if key in _cards_in_flight:
+            return
+        _cards_in_flight.add(key)
+
+    def run() -> None:
+        try:
+            preview.summary(preview.preview_row(kind, ref))
+        except Exception:  # a source that is down leaves the last figures showing
+            logger.warning("followed portfolios: card refresh failed for %s", key, exc_info=True)
+        finally:
+            with _cards_lock:
+                _cards_in_flight.discard(key)
+
+    _card_pool.submit(run)
+
+
 def preview_summary(kind: str, ref: str) -> dict:
     """A Discover card's figures for any portfolio, followed or not (read-only, cached). A 1Y
     return copied report by report needs a year of reports: two quarters gave a wrong figure
@@ -205,6 +230,14 @@ def preview_summary(kind: str, ref: str) -> dict:
     if kept is not None:
         followed = FollowedPortfolioStore().find_by_source(kept["kind"], kept["source_ref"])
         return {**kept, "follow_id": followed["id"] if followed else None}
+    # Past its 12 hours or a day old: the last figures now, a fresh card made in the background,
+    # never an empty card while the SEC is read (owner, 2026-11-14). ``stale`` tells the screen
+    # to ask again shortly.
+    last = preview.last_summary(kind, ref) if kind in preview.KINDS else None
+    if last is not None:
+        _refresh_card_soon(kind, ref)
+        followed = FollowedPortfolioStore().find_by_source(last["kind"], last["source_ref"])
+        return {**last, "stale": True, "follow_id": followed["id"] if followed else None}
     row = preview.preview_row(kind, ref)
     followed = FollowedPortfolioStore().find_by_source(row["kind"], row["source_ref"])
     return {**preview.summary(row), "follow_id": followed["id"] if followed else None}

@@ -26,8 +26,10 @@ export function PortfolioCard({ entry, onOpen, onSlow }: Props) {
   const s = card.data
   const cardKey = `${entry.kind}:${entry.source_ref}`
   // Only a card the server must fetch counts as slow: a kept one waiting its turn behind
-  // other requests is just loading, and says nothing (owner, 2026-11-13).
-  const slow = useSlow(!s && !card.error && entry.ready !== true)
+  // other requests is just loading, and says nothing (owner, 2026-11-13). A card showing its
+  // last figures while the server brings it up to date counts too: the banner says the gallery
+  // is being refreshed, and the card keeps its figures meanwhile (owner, 2026-11-14).
+  const slow = useSlow((!s && !card.error && entry.ready !== true) || s?.stale === true)
   useEffect(() => {
     onSlow?.(slow)
     // A card that leaves (a filter, a new search) stops counting as loading.

@@ -47,6 +47,9 @@ _NORMALIZE = {
 }
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _summaries: dict[tuple[str, str], tuple[float, str, dict]] = {}
+# Every card's last figures, however old (wall-clock stamp): shown at once while a fresh one is
+# made, instead of an empty card after a restart or a new day (owner, 2026-11-14).
+_last: dict[tuple[str, str], tuple[float, str, dict]] = {}
 logger = logging.getLogger(__name__)
 # Previews outlive a restart: a cold Discover page would otherwise refetch and reprice every
 # filing. It is a cache of public data, safe to delete; wall-clock stamps, not monotonic ones.
@@ -72,9 +75,13 @@ def _load_disk() -> None:
             key = (item["row"]["kind"], item["row"]["source_ref"])
             _cache.setdefault(key, (now_mono - age, item["row"]))
     for item in data.get("summaries") or []:
-        age = now_wall - float(item.get("at") or 0)
-        if age < _TTL_SECONDS and isinstance(item.get("summary"), dict):
-            key = (item["summary"]["kind"], item["summary"]["source_ref"])
+        if not isinstance(item.get("summary"), dict):
+            continue
+        at = float(item.get("at") or 0)
+        age = now_wall - at
+        key = (item["summary"]["kind"], item["summary"]["source_ref"])
+        _last.setdefault(key, (at, str(item.get("day")), item["summary"]))
+        if age < _TTL_SECONDS:
             _summaries.setdefault(key, (now_mono - age, str(item.get("day")), item["summary"]))
 
 
@@ -85,6 +92,12 @@ def _save_disk() -> None:
         "summaries": [
             {"at": now_wall - (now_mono - t), "day": day, "summary": s}
             for t, day, s in _summaries.values()
+        ]
+        # A card not made again yet keeps its last figures on disk too.
+        + [
+            {"at": at, "day": day, "summary": s}
+            for key, (at, day, s) in _last.items()
+            if key not in _summaries
         ],
     }
     with _disk_lock:
@@ -354,10 +367,17 @@ def kept_summary(kind: str, ref: str) -> dict | None:
     return None
 
 
+def last_summary(kind: str, ref: str) -> dict | None:
+    """The card's last figures, however old — shown while a fresh one is made."""
+    hit = _last.get((kind, _NORMALIZE[kind](ref)))
+    return hit[2] if hit else None
+
+
 def card_ready(kind: str, ref: str) -> bool:
     """Whether this portfolio's card is answered from what is kept, with nothing to fetch: the
-    gallery says "loading" only for cards that really go to the SEC or the House."""
-    if kept_summary(kind, ref) is not None:
+    gallery says "loading" only for cards that really go to the SEC or the House. A card shown
+    from its last figures while it is made again counts as answered."""
+    if kept_summary(kind, ref) is not None or last_summary(kind, ref) is not None:
         return True
     hit = _cache.get((kind, ref))
     return bool(
@@ -372,9 +392,10 @@ def cached_figures(kind: str, ref: str) -> dict:
     """What a sort needs from a card, if it was already priced — never fetches (the directory
     lists every portfolio at once). ``{}`` when nothing is cached yet."""
     hit = _summaries.get((kind, ref))
-    if not hit or time.monotonic() - hit[0] >= _TTL_SECONDS:
+    card = hit[2] if hit and time.monotonic() - hit[0] < _TTL_SECONDS else last_summary(kind, ref)
+    if card is None:
         return {}
-    return {"return_12m": hit[2].get("return_12m"), "latest_at": hit[2].get("latest_at")}
+    return {"return_12m": card.get("return_12m"), "latest_at": card.get("latest_at")}
 
 
 def summary(row: dict) -> dict:
@@ -390,6 +411,7 @@ def summary(row: dict) -> dict:
     out = _summary(row)
     if out.get("return_12m") is not None:
         _summaries[key] = (time.monotonic(), stamp, out)
+        _last[key] = (time.time(), stamp, out)
         _save_disk()
     return out
 

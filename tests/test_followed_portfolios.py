@@ -81,8 +81,12 @@ class FakeSource:
 
 @pytest.fixture(autouse=True)
 def _filings_kept_apart(monkeypatch, tmp_path):
+    from backend.services.followed_portfolios import preview
+
     monkeypatch.setattr(filing_store, "_DIR", tmp_path / "filings")
     monkeypatch.setattr(closes_store, "_DIR", tmp_path / "closes")
+    # Each test starts with no card's last figures (they outlive the 12 hours by design).
+    monkeypatch.setattr(preview, "_last", {})
 
 
 @pytest.fixture
@@ -825,3 +829,41 @@ def test_the_background_warm_up_waits_until_copy_trading_is_used(monkeypatch, tm
     (tmp_path / "followed_portfolio_previews.json").write_text("{}")
     service.warm_featured()
     assert calls == [0]
+
+
+def test_a_card_past_its_time_shows_its_last_figures_and_is_made_again_off_the_request(
+    monkeypatch,
+):
+    """After a restart or a new day a card used to come back empty while the SEC was read
+    again; it now shows its last figures at once, marked stale, and a fresh one is made in the
+    background (owner, 2026-11-14)."""
+    from backend.services.followed_portfolios import preview
+
+    last = {"kind": "fund_13f", "source_ref": "1067983", "name": "ACME", "return_12m": 0.1}
+    monkeypatch.setattr(preview, "_summaries", {})
+    monkeypatch.setattr(preview, "_last", {("fund_13f", "1067983"): (0.0, "old", last)})
+    refreshed: list[tuple[str, str]] = []
+    monkeypatch.setattr(service, "_refresh_card_soon", lambda k, r: refreshed.append((k, r)))
+    monkeypatch.setattr(
+        preview, "preview_row", lambda *a, **k: pytest.fail("must not read the SEC on the request")
+    )
+    out = service.preview_summary("fund_13f", "1067983")
+    assert out["stale"] is True and out["return_12m"] == 0.1
+    assert refreshed == [("fund_13f", "1067983")]
+    assert preview.card_ready("fund_13f", "1067983")
+    assert preview.cached_figures("fund_13f", "1067983")["return_12m"] == 0.1
+
+
+def test_a_card_never_made_is_still_fetched_on_the_request(monkeypatch):
+    from backend.services.followed_portfolios import preview
+
+    monkeypatch.setattr(preview, "_summaries", {})
+    monkeypatch.setattr(preview, "_last", {})
+    monkeypatch.setattr(
+        preview, "preview_row", lambda *a, **k: {"kind": "fund_13f", "source_ref": "1"}
+    )
+    monkeypatch.setattr(
+        preview, "summary", lambda row: {"kind": "fund_13f", "source_ref": "1", "name": "ACME"}
+    )
+    out = service.preview_summary("fund_13f", "1")
+    assert "stale" not in out and out["name"] == "ACME"

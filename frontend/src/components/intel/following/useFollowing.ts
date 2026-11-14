@@ -55,10 +55,18 @@ export function usePerformance(id: string): QueryCacheResult<FollowPerformance> 
 // A preview is fetched and priced server-side and kept for hours; the screen need not ask often.
 const PREVIEW_STALE_MS = 15 * 60 * 1000
 
+// A card shown from its last figures (the server is making a fresh one) asks again this often.
+const STALE_CARD_RETRY_MS = 5000
+
 export function usePreviewSummary(kind: FollowKind, ref: string): QueryCacheResult<PreviewSummary> {
-  return useQueryCache(previewSummaryKey(kind, ref), () => fetchPreviewSummary(kind, ref), {
+  const [waiting, setWaiting] = useState(false)
+  const result = useQueryCache(previewSummaryKey(kind, ref), () => fetchPreviewSummary(kind, ref), {
     staleTime: PREVIEW_STALE_MS,
+    refetchInterval: waiting ? STALE_CARD_RETRY_MS : undefined,
   })
+  const stale = Boolean(result.data?.stale)
+  useEffect(() => setWaiting(stale), [stale])
+  return result
 }
 
 export function usePreviewPage(kind: FollowKind, ref: string): QueryCacheResult<PreviewPage> {
