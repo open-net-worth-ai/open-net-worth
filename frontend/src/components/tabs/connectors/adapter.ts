@@ -149,20 +149,11 @@ function kindOf(c: Connector): string {
 }
 
 /** The connector's public settings and state; its shape differs per kind. */
-// GoCardless requisition statuses that mean the bank's access is over (EX expired, RJ refused,
-// SU suspended); an unfinished link (CR, GA…) is not an error.
-const ENDED_REQUISITION = new Set(['EX', 'RJ', 'SU'])
-
-/** A linked bank of a bank connector that waits for the user: Plaid's `needs_reconnect`,
- *  Enable Banking's `access_ended`, a GoCardless requisition that ended. */
+/** A bank connector with a bank waiting for the user: Plaid's `reconnect_needed` list, or the
+ *  count Enable Banking and GoCardless send (`banks_need_sign_in`). */
 function aBankNeedsSignIn(cfg: Record<string, unknown>): boolean {
-  const banks = Array.isArray(cfg.banks) ? (cfg.banks as Record<string, unknown>[]) : []
-  return banks.some(
-    (b) =>
-      b.needs_reconnect === true ||
-      Boolean(b.access_ended) ||
-      ENDED_REQUISITION.has(String(b.status ?? '')),
-  )
+  const plaid = cfg.reconnect_needed
+  return (Array.isArray(plaid) && plaid.length > 0) || Number(cfg.banks_need_sign_in ?? 0) > 0
 }
 
 function configOf(c: Connector): Record<string, unknown> {
