@@ -175,6 +175,7 @@ export function TransactionSurfacesProvider({
     txn: Txn | null
     mode: 'view' | 'edit'
     hint?: string
+    overModal?: boolean
     error?: string
   } | null>(null)
   const [confirm, setConfirm] = useState<{ txn: Txn; effects?: string[] } | null>(null)
@@ -229,8 +230,8 @@ export function TransactionSurfacesProvider({
     [],
   )
   const openTransactionById = useCallback(
-    (id: string, hint?: string) => {
-      setDetail({ id, txn: null, mode: 'view', hint })
+    (id: string, hint?: string, opts?: { overModal?: boolean }) => {
+      setDetail({ id, txn: null, mode: 'view', hint, overModal: opts?.overModal })
       void authFetch(`/api/transactions/${encodeURIComponent(id)}`)
         .then((res) => (res.ok ? (res.json() as Promise<ApiTxn>) : null))
         .then((row) => {
@@ -323,7 +324,7 @@ export function TransactionSurfacesProvider({
           txn={detail.txn ?? placeholderTxn(detail.id, detail.hint)}
           loading={!detail.txn}
           actionError={detail.error ?? null}
-          liftAboveModal={reviewScope !== null}
+          liftAboveModal={reviewScope !== null || !!detail.overModal}
           initialMode={detail.mode}
           accounts={accounts}
           categories={categories}

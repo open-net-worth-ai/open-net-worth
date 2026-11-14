@@ -256,69 +256,70 @@
 .bs-run {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
+.bs-run-sum {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+/* The booked transactions, as the Accounts register draws them: date · payee · category ·
+   amount, the register's own cell classes inside (acct-td-date, acct-payee-nm, acct-pill,
+   acct-unsorted, acct-td-amt). */
 .bs-run-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.bs-run-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 14px;
-}
-.bs-run-head > :first-child {
-  flex: 1;
-}
-/* Lucius's own colour: --lucius is reserved for him. */
-.bs-run-head .bs-run-lucius {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--lucius);
-}
-.bs-run-list li {
+.bs-run-list li + li {
   border-top: 1px solid var(--line);
 }
 .bs-run-row {
   display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto 92px;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  background: none;
+  padding: 9px 4px;
   border: 0;
+  background: none;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: baseline;
-  padding: 9px 0;
-  font-size: 13px;
 }
-.bs-run-row:hover .what > span:first-child {
-  text-decoration: underline;
+.bs-run-row:hover,
+.bs-run-row:focus-visible {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
-.bs-run-row .when {
-  color: var(--muted);
-  white-space: nowrap;
-}
-.bs-run-row .what {
+.bs-run-payee {
   display: flex;
   flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
-.bs-run-row .sub {
-  font-size: 12px;
-  color: var(--muted);
+.bs-run-payee .acct-payee-nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.bs-run-row .amt {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+.bs-run-cat {
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
 }
-.bs-run-row .amt.in {
-  color: var(--pos);
+.bs-run-row .acct-td-amt {
+  padding-right: 0;
+}
+/* The footer's two actions; Categorize with Lucius in his own colour. */
+.bs-run-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.bs-run-foot .bs-run-lucius {
+  background: var(--lucius);
+  border-color: var(--lucius);
+  color: #fff;
 }
 
 /* The import's live progress: what it is on, and a bar that keeps moving while the bank
