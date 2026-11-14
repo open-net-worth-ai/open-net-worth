@@ -23,7 +23,7 @@ def _declared() -> feature_flags.Flag:
 def test_the_flag_is_declared_as_specified():
     flag = _declared()
 
-    assert flag.default is False
+    assert flag.default is True
     assert flag.owner == "owner"
     assert flag.added == date(2026, 10, 31)
     assert flag.remove_by == date(2027, 1, 31)
