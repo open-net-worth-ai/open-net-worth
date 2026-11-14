@@ -284,8 +284,8 @@ def _account_marks(store: PlaidConfigStore, access_token: str) -> list[dict]:
     read (an expired sign-in): then nothing is compared and nothing is revoked."""
     try:
         data = _post(store, "/accounts/get", {"access_token": access_token})
-    except ValidationError as exc:
-        logger.info("plaid: an Item's accounts couldn't be read to compare: %s", exc)
+    except Exception as exc:  # noqa: BLE001 — best effort: recording accounts never fails a link
+        logger.info("plaid: an Item's accounts couldn't be read to compare: %s", type(exc).__name__)
         return []
     return [
         {"mask": str(a.get("mask") or ""), "subtype": str(a.get("subtype") or "")}
