@@ -3,7 +3,8 @@
 A run that books or removes anything records an import batch under the id its rows already carry
 (``bank_sync:{run_id}``), the way a statement import does, so ``import_undo.undo_import`` has ONE
 implementation for both: the run's new rows are removed, the rows it folded a card payment into
-go back to what they were, the pending bookings the bank dropped come back (``deleted_ids``) and
+go back to what they were (only the fields the promotion changed, and only while they are
+still as it left them: a later edit or delete of yours stands), the pending bookings the bank dropped come back (``deleted_ids``) and
 are tracked again (``pending_entries``). A pending booking a settled row REPLACED stays gone: its
 successor's ref is held, and bringing both back would count the spend twice. What a batch can't
 hold, this adds:
@@ -56,7 +57,7 @@ def record(provider: str, run_id: str, label: str, result: booker.Booked) -> boo
         {
             "provider": provider,
             "run_id": run_id,
-            "merges": result.promoted,
+            "promotions": result.promoted,
             "deleted_ids": result.removed_ids,
             "pending_entries": result.removed_entries,
             "bank_rows": result.booked_views,
@@ -184,11 +185,38 @@ def _tracked_again(batch: dict) -> dict[str, dict]:
     return out
 
 
-def _mark_undone(run_id: str) -> None:
+def _revert_promotions(batch: dict) -> tuple[list[list[str]], list[str]]:
+    """Put back each row the run folded a card payment into, changing ONLY the fields the
+    promotion changed and only while they are still as it left them. A row you deleted since
+    stays deleted (it is not brought back past the ledger's memory of deletions); one whose
+    promoted fields you edited is left as it is. Returns the bank refs of the rows reverted (held
+    for review) and a plain sentence for each row left alone."""
+    reverted: list[list[str]] = []
+    left: list[str] = []
+    for p in batch.get("promotions") or []:
+        live = ledger_service.transactions.find_by_id(p["txn_id"])
+        if live is None or live.get("deleted"):
+            continue
+        changed = p["changed"]
+        if any(live.get(k) != c["after"] for k, c in changed.items()):
+            name = live.get("description") or "A transaction"
+            left.append(f"{name} was left as the transfer it became, because you changed it since.")
+            continue
+        ledger_service.transactions.upsert({**live, **{k: c["before"] for k, c in changed.items()}})
+        reverted.append(p["refs"])
+    return reverted, left
+
+
+def _mark_undone(run_id: str, warnings: list[str]) -> None:
     run = import_runs.get(run_id)
     counts = {**(run.get("counts") or {}), "undone": 1}
     outcome = f"{run.get('outcome') or 'Sync'} (undone)"
-    import_runs.update(run_id, counts=counts, outcome=outcome)
+    import_runs.update(
+        run_id,
+        counts=counts,
+        outcome=outcome,
+        warnings=[*(run.get("warnings") or []), *warnings],
+    )
 
 
 @contextmanager
@@ -210,13 +238,12 @@ def undo_run(provider: str, run_id: str) -> dict:
         batch = _check_undoable(provider, run_id)
         bid = batch_id(run_id)
         rows = ledger_service.transactions.query_by_batch(bid, include_deleted=False)
-        groups = _groups(provider, rows) + [
-            [r] for m in batch.get("merges") or [] for r in m["refs"]
-        ]
+        groups = _groups(provider, rows)
         token = audit_context.set_audit_scope("user", booker.SURFACE, note=f"undo run:{run_id}")
         try:
             result = import_undo.undo_import(bid)
             restored_openings = _restore_openings(batch)
+            reverted, not_reverted = _revert_promotions(batch)
         finally:
             audit_context.clear_audit_scope(token)
         gone = {r["id"] for r in rows}
@@ -225,13 +252,14 @@ def undo_run(provider: str, run_id: str) -> dict:
         }
         entries |= _tracked_again(batch)
         pending.save(provider, entries)
-        held = _hold(provider, run_id, batch, groups)
-        _mark_undone(run_id)
+        held = _hold(provider, run_id, batch, groups + reverted)
+        _mark_undone(run_id, not_reverted)
         data_events.publish(["*"])
     return {
         "run_id": run_id,
         "removed": result["deleted"],
-        "restored": result["restored"] + result["unmerged"],
+        "restored": result["restored"] + len(reverted),
+        "not_reverted": not_reverted,
         "held_for_review": held,
         "openings_restored": restored_openings,
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

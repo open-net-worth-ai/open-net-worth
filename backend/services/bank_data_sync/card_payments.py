@@ -167,7 +167,8 @@ def promote_into_book(
 ) -> tuple[list[tuple[dict, dict]], list[dict]]:
     """Candidates left after each one that is the other side of a row ALREADY in the book is
     folded into it (``apply_import_transfer_pair_merge``: the row becomes the transfer and
-    inherits the bank's refs). Also returns each promoted row's before-image, for Undo. A
+    inherits the bank's refs). Also returns, for Undo, each promoted row's id, the bank refs it
+    took and the fields the promotion changed (before and after). A
     promotion that fails leaves its candidate to book as it was read."""
     settled = [(r, d) for r, d in candidates if not r.get("pending") and d.get("cleared")]
     pool = _book_pool([d for _, d in settled], provider)
@@ -188,14 +189,18 @@ def promote_into_book(
             if _deleted_before(draft):
                 continue
             try:
-                ledger_service.apply_import_transfer_pair_merge(existing["id"], draft)
+                after = ledger_service.apply_import_transfer_pair_merge(existing["id"], draft) or {}
             except Exception:  # noqa: BLE001 — books as read; a later run pairs it
                 logger.exception("bank_data_sync: %s card payment not paired", provider)
                 continue
             snapshots.append(
                 {
                     "txn_id": existing["id"],
-                    "before": snapshot,
+                    "changed": {
+                        k: {"before": snapshot.get(k), "after": after.get(k)}
+                        for k in snapshot.keys() | after.keys()
+                        if snapshot.get(k) != after.get(k)
+                    },
                     "refs": [str(e.get("ref") or "") for e in draft.get("external_refs") or []],
                 }
             )

@@ -400,3 +400,41 @@ def test_book_again_on_an_undone_card_payment_returns_one_transfer(bank):
     (transfer,) = _live()
     assert transfer["kind"] == "transfer"
     assert (transfer["from_account_id"], transfer["to_account_id"]) == (main, card)
+
+
+def _promoted_by_a_run(bank):
+    main = linked_account("ACME Current", ACC_MAIN)
+    _card()
+    typed = _typed("expense", from_account_id=main, from_amount=120.0, from_currency="GBP")
+    bank.booked[ACC_SAVER] = [txn(120.00, days_ago(1), "ACME PAYMENT THANK YOU", tid="i1")]
+    return typed, _run()
+
+
+def test_undoing_a_promotion_keeps_your_later_edits_to_other_fields(bank):
+    typed, run = _promoted_by_a_run(bank)
+    ledger_service.update_transaction(typed["id"], {"tags": ["mine"]})
+
+    _undo(run)
+
+    row = ledger_service.transactions.find_by_id(typed["id"])
+    assert row["kind"] == "expense" and row["tags"] == ["mine"]
+
+
+def test_undoing_a_promotion_does_not_bring_back_a_row_you_deleted(bank):
+    typed, run = _promoted_by_a_run(bank)
+    ledger_service.bulk_delete_transactions([typed["id"]])
+
+    _undo(run)
+
+    assert ledger_service.transactions.find_by_id(typed["id"])["deleted"] is True
+    assert _live() == []
+
+
+def test_a_promoted_row_you_changed_in_the_same_fields_is_left_alone_and_said_so(bank):
+    typed, run = _promoted_by_a_run(bank)
+    ledger_service.update_transaction(typed["id"], {"cleared": False})  # the promotion cleared it
+
+    result = _undo(run)
+
+    assert ledger_service.transactions.find_by_id(typed["id"])["kind"] == "transfer"
+    assert len(result["not_reverted"]) == 1 and "changed it since" in result["not_reverted"][0]
