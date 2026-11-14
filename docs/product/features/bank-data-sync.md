@@ -177,7 +177,9 @@ are used, it says when its next read is, **Sync now** waits, and so does the sch
 
 If the bank refuses (its daily limit, expired access), the sync waits instead of retrying: until
 the limit resets, or a day for expired access. The connector page shows what the bank said.
-Renew the bank's access on the connector page if it expired.
+Renew the bank's access on the connector page if it expired. A bank whose access ended or was
+revoked only holds up its own accounts: your other banks still sync. If the bank refuses just
+one account, that account is tried again later and the rest are read as usual.
 
 A bank that couldn't be read is left exactly as it was: nothing of it is booked, its pending
 transactions stay on your book, and its history isn't marked as imported. Its card says

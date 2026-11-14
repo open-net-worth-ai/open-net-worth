@@ -124,3 +124,81 @@ def test_an_ordinary_read_with_nothing_remembered_is_not_a_relink(bank):
     assert result["counts"]["relinked"] == 0
     assert result["counts"]["booked"] == 1
     assert not relink.looks_relinked("gocardless", bank.account, [], days_ago(30))
+
+
+# ── A bank refusing one account is that bank's access, never the keys stopping every bank ─────
+
+
+def test_gocardless_a_refusal_after_a_fresh_token_is_the_banks_access(monkeypatch):
+    from backend.core.errors import ExternalServiceError
+
+    monkeypatch.setattr(gocardless_svc, "_bearer", lambda store, fresh=False: "tok")
+
+    def refuse(method, path, token=None, **kw):
+        raise ExternalServiceError("GoCardless HTTP 401")
+
+    monkeypatch.setattr(gocardless_svc, "_request", refuse)
+    with pytest.raises(ExternalServiceError) as err:
+        gocardless_svc._authed(None, "GET", "/accounts/acme-1/transactions/")
+    assert err.value.context.get("bank_access") is True
+    assert gocardless_svc.classify_error(err.value) == "reconnect_needed"
+
+    # Anything that isn't an account read is still the keys.
+    with pytest.raises(ExternalServiceError) as keys:
+        gocardless_svc._authed(None, "GET", "/institutions/")
+    assert gocardless_svc.classify_error(keys.value) == "auth_error"
+
+
+def test_one_banks_refused_account_never_stops_the_other_bank(bank):
+    from backend.core.errors import ExternalServiceError
+
+    saver = linked_account("ACME Saver", ACC_SAVER)
+    bank.booked[ACC_SAVER] = [txn(-4.00, days_ago(1), "ACME SHOP", tid="s1")]
+    bank.fail_accounts[ACC_MAIN] = ExternalServiceError(
+        "GoCardless HTTP 401 — the bank refused access", bank_access=True
+    )
+    result = _run()
+    assert result["counts"]["booked"] == 1
+    assert len(_live(saver)) == 1, "the other bank's account was skipped"
+    assert budget.state("gocardless")["account_reads"][bank.account]["status"] == "reconnect_needed"
+
+
+def _eb_get(monkeypatch, status: int, body: dict):
+    import httpx
+
+    from backend.services.aggregation import enable_banking as eb
+
+    def get(url, **kw):
+        request = httpx.Request("GET", url)
+        response = httpx.Response(status, json=body, request=request)
+        return response
+
+    monkeypatch.setattr(eb.httpx, "get", get)
+    return eb
+
+
+@pytest.mark.parametrize("code", ["EXPIRED_SESSION", "CLOSED_SESSION", "REVOKED_SESSION"])
+def test_enable_banking_an_ended_session_is_the_banks_consent(monkeypatch, code):
+    eb = _eb_get(monkeypatch, 401, {"error": code, "message": "ACME"})
+    with pytest.raises(eb.ConsentEndedError) as err:
+        eb._safe_get("tok", "/accounts/acme-1/transactions", {})
+    assert code in str(err.value)
+    assert eb.classify_error(err.value) == "reconnect_needed"
+
+
+def test_enable_banking_a_plain_401_is_still_the_app(monkeypatch):
+    from backend.core.errors import ExternalServiceError
+
+    eb = _eb_get(monkeypatch, 401, {"message": "ACME no code"})
+    with pytest.raises(ExternalServiceError) as err:
+        eb._safe_get("tok", "/sessions/acme", {})
+    assert not isinstance(err.value, eb.ConsentEndedError)
+    assert eb.classify_error(err.value) == "auth_error"
+
+
+def test_enable_banking_one_refused_account_is_retried_not_a_stop():
+    from backend.core.errors import ExternalServiceError
+    from backend.services.aggregation import enable_banking as eb
+
+    refused = ExternalServiceError("Enable Banking HTTP 403 — refused", account_refused=True)
+    assert eb.classify_error(refused) == "connect_error"

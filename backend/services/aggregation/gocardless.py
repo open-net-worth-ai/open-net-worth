@@ -161,14 +161,36 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
     return access
 
 
+_BANK_REFUSED = (
+    "the bank refused access to this account: its consent ended or was revoked, or the account "
+    "is no longer active. Renew the bank on the GoCardless page"
+)
+
+
 def _authed(store: GoCardlessConfigStore, method: str, path: str, **kwargs) -> httpx.Response:
-    """One authenticated call, retried once with a fresh token when the cached one is refused."""
+    """One authenticated call, retried once with a fresh token when the cached one is refused.
+
+    An account read refused AGAIN with a token just minted is not the keys (minting worked): it
+    is that account's access — expired, revoked, or the account closed, all HTTP 401 at
+    GoCardless. Read as bad keys it stopped every bank's sync for a day (review 2026-11-15), so
+    it is raised as that bank's access instead (``bank_access``)."""
     try:
         return _request(method, path, token=_bearer(store), **kwargs)
     except ExternalServiceError as exc:
         if "HTTP 401" not in str(exc):
+            if path.startswith("/accounts/") and "HTTP 403" in str(exc):
+                raise ExternalServiceError(
+                    f"GoCardless HTTP 403 — {_BANK_REFUSED}", bank_access=True
+                ) from None
             raise
-    return _request(method, path, token=_bearer(store, fresh=True), **kwargs)
+    try:
+        return _request(method, path, token=_bearer(store, fresh=True), **kwargs)
+    except ExternalServiceError as exc:
+        if path.startswith("/accounts/") and ("HTTP 401" in str(exc) or "HTTP 403" in str(exc)):
+            raise ExternalServiceError(
+                f"GoCardless HTTP 401 — {_BANK_REFUSED}", bank_access=True
+            ) from None
+        raise
 
 
 # ── bank picker + consent link ───────────────────────────────────────────────────────
@@ -725,6 +747,8 @@ def classify_error(exc: Exception) -> str:
         # sync goes on to the other banks' accounts (``auth_error`` stops it).
         return "reconnect_needed" if exc.context.get("bank_access") else "auth_error"
     if isinstance(exc, ExternalServiceError):
+        if exc.context.get("bank_access"):
+            return "reconnect_needed"  # one bank's access, not the keys: the others read on
         msg = str(exc).lower()
         if "http 401" in msg or "http 403" in msg:
             return "auth_error"

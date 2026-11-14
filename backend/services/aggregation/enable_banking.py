@@ -456,6 +456,19 @@ def remove_bank(key: str) -> dict:
 # ── account / transaction fetch ──────────────────────────────────────────────────────
 
 
+_SESSION_ENDED = frozenset({"EXPIRED_SESSION", "CLOSED_SESSION", "REVOKED_SESSION"})
+
+
+def _error_code(resp: httpx.Response) -> str:
+    """Enable Banking's ``error`` code from an error body (``EXPIRED_SESSION`` …) — a bare
+    upper-case code, never free text, so it is safe to show. "" when there isn't one."""
+    try:
+        code = str((resp.json() or {}).get("error") or "").strip()
+    except (ValueError, AttributeError):
+        return ""
+    return code if code.replace("_", "").isalnum() and code.isupper() and len(code) <= 40 else ""
+
+
 def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
     """GET wrapper for the account/transaction endpoints that NEVER lets a raw exception
     escape (mirrors ``lunch_money._safe_get``/``ynab._safe_get``) and bounds the response
@@ -478,7 +491,15 @@ def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
         )
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        raise ExternalServiceError(f"Enable Banking HTTP {exc.response.status_code}") from None
+        status, code = exc.response.status_code, _error_code(exc.response)
+        if code in _SESSION_ENDED:
+            # The FAQ: act on the error code, not the HTTP status. A revoked or expired consent
+            # can still list its accounts; only reads refuse (401 CLOSED_SESSION on the sandbox).
+            raise ConsentEndedError(
+                f"Enable Banking says this consent has ended ({code})", bank_access=True
+            ) from None
+        suffix = f" {code}" if code else ""
+        raise ExternalServiceError(f"Enable Banking HTTP {status}{suffix}") from None
     except httpx.HTTPError as exc:
         raise ExternalServiceError(
             f"Enable Banking request failed ({type(exc).__name__})"
@@ -911,12 +932,14 @@ def _accounts_of_every_bank(
     out: list[dict] = []
     complete = True
     warnings: list[str] = []
+    failures: list[Exception] = []
     seen: set[str] = set()
     banks = store.banks()
     for bank in banks:
         label = _bank_label(bank, banks) or "A bank"
         if bank.get("access_ended") == "app_changed":
             warnings.append(f"{label}: linked under your previous Enable Banking app — {_RENEW}")
+            failures.append(ConsentEndedError("linked under a previous app"))
             complete = False
             continue
         try:
@@ -925,6 +948,7 @@ def _accounts_of_every_bank(
             )
         except (ExternalServiceError, httpx.HTTPError) as exc:
             warnings.append(_bank_unread(store, bank, label, exc))
+            failures.append(exc)
             complete = False
             continue
         if bank.get("access_ended"):
@@ -937,11 +961,31 @@ def _accounts_of_every_bank(
                 continue
             seen.add(uid)
             out.append(
-                {**a, "uid": uid, "_api_uid": api_uid, "_institution": _bank_label(bank, banks)}
+                {
+                    **a,
+                    "uid": uid,
+                    "_api_uid": api_uid,
+                    "_institution": _bank_label(bank, banks),
+                    "_bank_key": bank["key"],
+                }
             )
     if banks and len(warnings) == len(banks):
-        raise ValidationError("No bank could be read. " + "; ".join(warnings))
+        message = "No bank could be read. " + "; ".join(warnings)
+        if failures and all(isinstance(e, ConsentEndedError) for e in failures):
+            # Every bank's consent ended: renew them. Not the app's key (``auth_error``).
+            raise ExternalServiceError(message, bank_access=True)
+        if any(_refused(e) for e in failures):
+            raise ValidationError(message)  # the app itself is refused: its key or id
+        raise ExternalServiceError(message)  # down or slow: retried soon, not in a day
     return out, complete, warnings
+
+
+def _refused(exc: Exception) -> bool:
+    """An HTTP 401/403 that isn't an ended consent: Enable Banking refusing the app itself."""
+    if isinstance(exc, ConsentEndedError):
+        return False
+    msg = str(exc)
+    return "HTTP 401" in msg or "HTTP 403" in msg
 
 
 def _stable_account_id(store: EnableBankingConfigStore, bank: dict, eb_account: dict) -> str:
@@ -990,7 +1034,19 @@ def fetch_window(
         # never an "ok" with nothing read (UAT 2026-11-14); other banks' trouble isn't its own.
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
         if not eb_accounts and warnings:
-            ended = any(b.get("access_ended") for b in store.banks())
+            holder = next(
+                (b for b in store.banks() if account in (b.get("account_ids") or [])), None
+            )
+            # Its own bank's consent, not any bank's (review 2026-11-15). An account renewed
+            # under a new uid isn't in ``account_ids``: then any ended bank may be its own.
+            if holder is not None:
+                ended = bool(holder.get("access_ended"))
+                mine = [
+                    w for w in warnings if w.startswith(_bank_label(holder, store.banks()) or "")
+                ]
+                warnings = mine or warnings
+            else:
+                ended = any(b.get("access_ended") for b in store.banks())
             raise ExternalServiceError("; ".join(warnings), bank_access=ended)
         warnings = []
     balances = parallel.each(
@@ -1010,7 +1066,15 @@ def fetch_window(
             )
         except (ExternalServiceError, httpx.HTTPError) as exc:
             logger.warning("enable_banking account fetch failed (%s): %s", account_uid, exc)
+            if isinstance(exc, ConsentEndedError) and eb_account.get("_bank_key"):
+                store.mark_access_ended([eb_account["_bank_key"]], "ended")  # shows Renew
             if account:
+                if _refused(exc):
+                    # The session answered, so the app's key is fine: the bank won't serve THIS
+                    # account. Its failure, never one that stops every other bank's accounts.
+                    raise ExternalServiceError(
+                        f"{exc} — the bank refused this account", account_refused=True
+                    ) from None
                 raise  # the one account asked for wasn't read: say so, never "ok"
             complete = False
             continue
@@ -1035,6 +1099,8 @@ def classify_error(exc: Exception) -> str:
     if isinstance(exc, ExternalServiceError):
         if exc.context.get("bank_access"):
             return "reconnect_needed"  # one bank's consent ended: renew THAT bank
+        if exc.context.get("account_refused"):
+            return "connect_error"  # this account only: retried, the others read on
         msg = str(exc).lower()
         if "http 401" in msg or "http 403" in msg:
             return "auth_error"
