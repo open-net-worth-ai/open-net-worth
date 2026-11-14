@@ -61,7 +61,7 @@ const STALE_CARD_RETRY_MS = 5000
 export function usePreviewSummary(kind: FollowKind, ref: string): QueryCacheResult<PreviewSummary> {
   const [waiting, setWaiting] = useState(false)
   const result = useQueryCache(previewSummaryKey(kind, ref), () => fetchPreviewSummary(kind, ref), {
-    staleTime: waiting ? 0 : PREVIEW_STALE_MS,
+    staleTime: PREVIEW_STALE_MS,
     refetchInterval: waiting ? STALE_CARD_RETRY_MS : undefined,
   })
   const stale = Boolean(result.data?.stale)
