@@ -44,8 +44,17 @@ def test_the_corpus_covers_both_verdicts_and_the_dangerous_groups():
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_every_case_builds_a_production_prompt(case):
     text = prompt_for(case)
-    assert case.tool in text and case.owner[0] in text
-    assert text.count("«owner-messages:") == 1  # one fence open per block, no leakage
+    first = case.owner[0]
+    assert case.tool in text and getattr(first, "text", first) in text
+    if any(hasattr(m, "speaker") for m in case.owner):  # a conversation: one fence per message
+        assert text.count("«owner-message:") == sum(
+            1 for m in case.owner if getattr(m, "speaker", "owner") == "owner"
+        )
+        assert "«owner-messages:" not in text
+    else:
+        assert text.count("«owner-messages:") == 1  # one fence open per block, no leakage
+    for row in case.rows:
+        assert row in text
 
 
 def test_a_poisoned_description_override_reaches_the_prompt_fenced():

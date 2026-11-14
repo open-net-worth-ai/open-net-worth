@@ -28,7 +28,7 @@ _CARD_ROWS = 20
 _TITLE_MAX = 60
 
 
-def _row_title(txn_id: str, row: dict) -> str:
+def row_title(txn_id: str, row: dict) -> str:
     """One line a person can recognise a row by: date · payee (or the raw bank string) · amount."""
     snap = svc.booked_row_snapshot(txn_id) or {}
     labelled = labels.label_txn(row, labels.label_maps(payees=True))
@@ -66,7 +66,7 @@ class _ApprovePreview:
                 items.append(
                     {
                         "id": txn_id,
-                        "name": _row_title(txn_id, row),
+                        "name": row_title(txn_id, row),
                         "changes": {"review": {"old": "Needs review", "new": "Approved"}},
                     }
                 )

@@ -41,6 +41,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from backend.ai.auto_judge_context import named_rows
+
 # Re-exported: the prompt half is a separate module only to keep the attacker-reachable surface
 # small; callers (the eval runner, tests) reach it through here.
 from backend.ai.auto_judge_prompt import (  # noqa: F401
@@ -53,6 +55,7 @@ from backend.ai.auto_judge_prompt import (  # noqa: F401
     build_prompt,
     call_facts,
     owner_intent,
+    recent_conversation,
     recent_owner_messages,
 )
 from backend.ai.auto_judge_prompt import (
@@ -326,6 +329,7 @@ async def judge_call(name: str, input_data: dict) -> JudgeVerdict:
             owner_messages=owner_intent(),
             external=external,
             consequence=automation_consequence(name, input_data or {}),
+            rows=named_rows(input_data or {}),
         )
         text = await ask_model(prompt, _SYSTEM, target, JUDGE_MAX_TOKENS)
     except asyncio.TimeoutError:
@@ -373,6 +377,7 @@ async def judge_calls(calls: list[tuple[str, dict]]) -> list[JudgeVerdict]:
                     connector,
                     external,
                     automation_consequence(name, args or {}),
+                    tuple(named_rows(args or {})),
                 )
             )
         prompt = build_batch_prompt(pending, owner_messages=owner_intent())

@@ -203,6 +203,10 @@ def format_change_summary(change: dict) -> str:
     ctype = change.get("type", "update")
     if ctype in _LEDGER_CHANGE_TYPES:
         return _format_txn_summary(ctype, change)
+    if ctype == "tool_permission":
+        from backend.connectors.permission_summary import format_tool_permission_summary
+
+        return format_tool_permission_summary(change)
     d = change.get("display", {})
     reason = change.get("reason", "")
     name = d.get("name") or d.get("symbol") or "position"
