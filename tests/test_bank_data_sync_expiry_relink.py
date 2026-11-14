@@ -202,3 +202,63 @@ def test_enable_banking_one_refused_account_is_retried_not_a_stop():
 
     refused = ExternalServiceError("Enable Banking HTTP 403 — refused", account_refused=True)
     assert eb.classify_error(refused) == "connect_error"
+
+
+# ── GoCardless: the bank's transaction id may change or repeat ───────────────────────────────
+
+
+def test_a_bank_id_that_changes_never_books_the_row_twice(bank):
+    bank.booked[ACC_MAIN] = [
+        txn(-5.00, days_ago(2), "ACME BAKERY", tid="bank-1", internalTransactionId="gc-1")
+    ]
+    _run()
+    bank.booked[ACC_MAIN] = [
+        txn(
+            -5.00, days_ago(2), "ACME BAKERY", tid="bank-1-renumbered", internalTransactionId="gc-1"
+        )
+    ]
+    result = _run()
+    assert result["counts"]["booked"] == 0
+    assert len(_live(bank.account)) == 1
+
+
+def test_a_bank_id_that_repeats_never_hides_a_real_transaction(bank):
+    bank.booked[ACC_MAIN] = [
+        txn(-5.00, days_ago(2), "ACME BAKERY", tid="bank-1", internalTransactionId="gc-1")
+    ]
+    _run()
+    bank.booked[ACC_MAIN].append(
+        txn(-7.00, days_ago(1), "ACME BUTCHER", tid="bank-1", internalTransactionId="gc-2")
+    )
+    result = _run()
+    assert result["counts"]["booked"] == 1
+    assert len(_live(bank.account)) == 2
+
+
+def test_a_row_booked_under_the_bank_id_is_recognised_and_moves_to_the_stable_id(bank):
+    # Booked before the internal id came first: the bank's id was the row's id then.
+    bank.booked[ACC_MAIN] = [txn(-5.00, days_ago(2), "ACME BAKERY", tid="bank-1")]
+    _run()
+    bank.booked[ACC_MAIN] = [
+        txn(-5.00, days_ago(2), "ACME BAKERY", tid="bank-1", internalTransactionId="gc-1")
+    ]
+    assert _run()["counts"]["booked"] == 0
+    # Filed under the stable id now, so a later change of the bank's id is harmless too.
+    bank.booked[ACC_MAIN] = [
+        txn(-5.00, days_ago(2), "ACME BAKERY", tid="bank-1b", internalTransactionId="gc-1")
+    ]
+    assert _run()["counts"]["booked"] == 0
+    assert len(_live(bank.account)) == 1
+
+
+def test_a_pending_row_booked_under_the_bank_id_still_settles_in_place(bank):
+    bank.pending[ACC_MAIN] = [txn(-9.99, days_ago(1), "ACME STREAM", tid="bank-p")]
+    _run()
+    [booked] = _live(bank.account)
+    bank.pending[ACC_MAIN] = []
+    bank.booked[ACC_MAIN] = [
+        txn(-9.99, days_ago(0), "ACME STREAM", tid="bank-p", internalTransactionId="gc-9")
+    ]
+    result = _run()
+    assert result["counts"]["settled"] == 1
+    assert [t["id"] for t in _live(bank.account)] == [booked["id"]]

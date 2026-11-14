@@ -125,6 +125,22 @@ def _with_categories(drafts: list[tuple[dict, dict]]) -> tuple[list[tuple[dict, 
     return kept, errors
 
 
+def _adopt_ref(provider: str, row: dict, ref: str, known: dict) -> None:
+    """A row found booked only under an alias (an earlier id: GoCardless's bank id before its
+    own came first) gets its current ref on that booking, so later reads key on the stable id
+    and a bank id that changes afterwards can't book it again."""
+    txn_id = row.get("booked_txn_id")
+    if not txn_id or (provider, ref) in known or row.get("_relinked"):
+        return
+    try:
+        ledger_service.attach_external_refs(
+            txn_id, row.get("external_refs") or [], reason="bank_data_sync: stable id"
+        )
+        known[(provider, ref)] = txn_id
+    except Exception:  # noqa: BLE001 — the row is booked either way; the next run tries again
+        logger.exception("bank_data_sync: %s could not file %s under its stable id", provider, ref)
+
+
 def _settle_superseding(provider: str, row: dict, known: dict, run_id, out: Booked) -> bool:
     """A posted row that replaces a pending one already booked (Plaid's
     ``pending_transaction_id``). Same amount: link the new ref to the booked row (no money
@@ -246,6 +262,7 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
         ref = _ref(row)
         if not ref:
             continue
+        _adopt_ref(provider, row, ref, known)
         if row.get("pending"):
             # Booked once, uncleared; the bank's pending list is read again every run.
             if row.get("booked_txn_id") or (provider, ref) in known or ref in held:

@@ -544,7 +544,15 @@ def _account_balance(store: GoCardlessConfigStore, account_id: str) -> dict:
 
 
 def _txn_id(txn: dict) -> str:
-    return str(txn.get("transactionId") or txn.get("internalTransactionId") or "").strip()
+    """The row's id: GoCardless's own ``internalTransactionId`` first. The bank's
+    ``transactionId`` is bank-dependent and may change or repeat (GoCardless's docs): keyed on
+    it, a changed one booked the row twice and a repeated one hid a real transaction as
+    already booked (review 2026-11-15)."""
+    return str(txn.get("internalTransactionId") or txn.get("transactionId") or "").strip()
+
+
+def _bank_handle(txn: dict) -> str:
+    return str(txn.get("transactionId") or "").strip()
 
 
 def _txn_date(txn: dict) -> Optional[str]:
@@ -653,8 +661,14 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         if txn_id
         else derived_ref(account_id, date_str, amount, currency, _ref_text(txn))
     )
+    # Booked before the internal id came first, the row is filed under the bank's id: kept as
+    # an alias, it still reads as booked (only on the same date and amount — a provider handle,
+    # ``connector_fetch._booked_under_alias``) and a pending booking under it still settles.
+    handle = _bank_handle(txn)
+    aliases = [f"{account_id}:{handle}"] if handle and handle != txn_id else []
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
+        "ref_aliases": aliases,
         "raw": txn,
         "provider_account_id": account_id,
         "date": date_str,

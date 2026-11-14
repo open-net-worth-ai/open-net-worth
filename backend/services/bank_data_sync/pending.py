@@ -51,6 +51,10 @@ def _match(entries: dict[str, dict], ref: str, row: dict) -> str | None:
     live = {k: e for k, e in entries.items() if not e.get("settled")}
     if ref in live and live[ref].get("account_id") == account:
         return ref
+    for alias in row.get("ref_aliases") or []:
+        # The same row filed under an earlier id (GoCardless's bank id, before its own came first).
+        if isinstance(alias, str) and alias in live and live[alias].get("account_id") == account:
+            return alias
     old = row.get("supersedes_ref")
     if old:
         # The bank names the pending row this one settles (Plaid's ``pending_transaction_id``).
