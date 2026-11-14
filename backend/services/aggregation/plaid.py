@@ -38,12 +38,13 @@ recomputed from the native leg there, never fabricated here).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
 from backend.core.errors import ValidationError
+from backend.core.user_time import user_today
 from backend.db.plaid_config_store import PlaidConfigStore, bank_key, bank_name
 from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
@@ -539,6 +540,33 @@ def _fetch_item(
     }
 
 
+# Plaid's first answer after a link covers only about the last 30 days; the rest of the history
+# follows once its historical update finishes (``transactions_update_status``).
+_RECENT_DAYS = 30
+_HISTORY_DONE = "HISTORICAL_UPDATE_COMPLETE"
+
+
+def _history_ready(store: PlaidConfigStore, item: dict) -> bool:
+    """Whether Plaid has finished gathering this Item's whole history. One cheap
+    ``/transactions/sync`` (``count`` 1, no cursor) states it as ``transactions_update_status``;
+    once it says complete that is kept on the Item and never asked again. A failed call, or a
+    status short of complete, is "not yet" — the read is retried, never booked half."""
+    if item.get("history_ready"):
+        return True
+    try:
+        data = _post(
+            store, "/transactions/sync", {"access_token": item["access_token"], "count": 1}
+        )
+    except ValidationError as exc:
+        logger.info("plaid: an Item's update status couldn't be read: %s", exc)
+        return False
+    status = data.get("transactions_update_status")
+    if status is not None and status != _HISTORY_DONE:
+        return False
+    store.update_item(item.get("item_id") or "", {"history_ready": True})
+    return True
+
+
 def _record_item(store: PlaidConfigStore, item: dict, info: dict, account_ids: list[str]) -> None:
     """Keep what a successful read says about an Item — its consent end and which accounts it
     holds — on the Item itself, written only when it changed (no call of its own: both ride
@@ -559,7 +587,8 @@ def fetch_transactions_get(
     name (``_institution``). One bank failing (an expired login, say) never sinks the others:
     its error becomes a warning naming the bank and the result is marked incomplete; only when
     every bank fails does this raise (unless ``raise_if_all_fail`` is off, which leaves that
-    to the caller).
+    to the caller). A window reaching back past the last ~30 days also needs each bank's whole
+    history to be gathered: until Plaid says so, that bank's accounts are ``cut_short``.
     Returns ``{transactions[], accounts{id: account}, warnings[], complete, cut_short,
     errors{bank_key: error}, holders{bank_key: [account ids]}, error}`` (``error``: the first
     bank's failure, or None)."""
@@ -576,6 +605,7 @@ def fetch_transactions_get(
     cut_short: set[str] = set()
     errors: dict[str, ValidationError] = {}
     holders: dict[str, list[str]] = {}
+    needs_history = start_date < (user_today() - timedelta(days=_RECENT_DAYS)).isoformat()
     for item in items:
         bank = item.get("institution_name") or "a linked bank"
         key = bank_key(item.get("item_id") or "")
@@ -603,9 +633,14 @@ def fetch_transactions_get(
                 **acct,
                 "_institution": item.get("institution_name") or bank_name(item),
             }
-        complete = complete and not got["truncated"]
-        if got["truncated"]:
+        waiting = needs_history and not _history_ready(store, item)
+        complete = complete and not got["truncated"] and not waiting
+        if got["truncated"] or waiting:
             cut_short.update(got["accounts"])
+        if waiting:
+            warnings.append(
+                f"{bank}: Plaid is still gathering its history — the sync tries again soon"
+            )
     store.mark_reconnect(needed=needed, ok=answered)
     if raise_if_all_fail and first_error is not None and len(errors) == len(items):
         raise first_error
@@ -614,8 +649,9 @@ def fetch_transactions_get(
         "accounts": accounts,
         "warnings": warnings,
         "complete": complete,
-        # Accounts at a bank whose read hit the page cap: one account's read is whole unless it
-        # is one of these (another bank failing doesn't cut THIS account's read short).
+        # Accounts at a bank whose read hit the page cap or whose history isn't gathered yet:
+        # one account's read is whole unless it is one of these (another bank failing doesn't
+        # cut THIS account's read short).
         "cut_short": cut_short,
         "errors": errors,
         "holders": holders,

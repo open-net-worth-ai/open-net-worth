@@ -193,6 +193,10 @@ the run says how many accounts it couldn't read; one bank's problem never shows 
 accounts. With several Plaid banks failing at once, each account shows the reason of its own
 bank.
 
+Right after you link a Plaid bank, Plaid is still gathering its older transactions. The first
+import waits for that: nothing is booked and the account says it couldn't be read in full, then
+the sync tries again, until Plaid has the whole history.
+
 An account the bank no longer lists (it was closed, or the bank was linked again and its
 accounts have new identities) isn't read either. Its card says **Account not at the bank** with
 **Relink**, which opens the connector's setup: **Unlink** the old account and **Link** the bank's

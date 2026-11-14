@@ -15,6 +15,7 @@ from backend.services.aggregation import plaid as svc
 from backend.services.aggregation.providers import PROVIDERS
 from backend.services.bank_data_sync import access
 
+LONG_AGO = (user_today() - timedelta(days=400)).isoformat()
 RECENT = (user_today() - timedelta(days=10)).isoformat()
 TODAY = user_today().isoformat()
 
@@ -76,6 +77,56 @@ def _bank(monkeypatch, *, fail: dict | None = None, status: dict | None = None, 
 
     monkeypatch.setattr(svc.httpx, "post", fake_post)
     return calls
+
+
+# ── 1. history not ready ─────────────────────────────────────────────────────────────────
+
+
+def test_a_first_import_is_cut_short_until_plaid_has_the_whole_history(store, monkeypatch):
+    store.add_item(_item("i1", "Chase"))
+    calls = _bank(monkeypatch, status={"access-i1": "INITIAL_UPDATE_COMPLETE"})
+    window = svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1")
+    assert window.complete is False
+    assert "/transactions/sync:access-i1" in calls
+    assert not store.items()[0].get("history_ready")
+
+
+def test_once_the_history_is_complete_it_is_remembered_and_never_asked_again(store, monkeypatch):
+    store.add_item(_item("i1", "Chase"))
+    calls = _bank(monkeypatch, status={"access-i1": "HISTORICAL_UPDATE_COMPLETE"})
+    assert svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1").complete is True
+    assert store.items()[0]["history_ready"] is True
+    svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1")
+    assert sum(c.startswith("/transactions/sync") for c in calls) == 1
+
+
+def test_a_short_window_never_asks_plaid_for_the_update_status(store, monkeypatch):
+    store.add_item(_item("i1", "Chase"))
+    calls = _bank(monkeypatch)
+    window = svc.fetch_window(store, RECENT, TODAY, "acct-access-i1")
+    assert window.complete is True
+    assert not any(c.startswith("/transactions/sync") for c in calls)
+
+
+def test_one_banks_history_not_ready_cuts_short_only_its_own_accounts(store, monkeypatch):
+    store.add_item(_item("i1", "Chase"))
+    store.add_item(_item("i2", "Wells Fargo"))
+    _bank(monkeypatch, status={"access-i2": "HISTORICAL_UPDATE_COMPLETE"})
+    assert svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1").complete is False
+    assert svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i2").complete is True
+
+
+def test_a_status_call_that_fails_is_not_yet_not_a_failed_read(store, monkeypatch):
+    store.add_item(_item("i1", "Chase"))
+
+    def fake_post(url, json=None, timeout=None):
+        path = url.split(".plaid.com", 1)[1]
+        if path == "/transactions/sync":
+            return _Resp({"error_code": "INTERNAL_SERVER_ERROR"}, 500)
+        return _Resp({"accounts": [{"account_id": "a1", "balances": {}}], "total_transactions": 0})
+
+    monkeypatch.setattr(svc.httpx, "post", fake_post)
+    assert svc.fetch_window(store, LONG_AGO, TODAY, "a1").complete is False
 
 
 # ── 2. consent end ───────────────────────────────────────────────────────────────────────
