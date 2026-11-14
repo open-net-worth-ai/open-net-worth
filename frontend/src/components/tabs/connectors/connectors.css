@@ -2212,3 +2212,8 @@
   align-items: center;
   gap: 6px;
 }
+.acct-acctsel-note {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+}

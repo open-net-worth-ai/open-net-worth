@@ -706,6 +706,9 @@ export interface AddAccountSelectProps {
   advance: (dir: number, fromEl?: HTMLElement | null) => void
   autoFocus?: boolean
   autoOpen?: boolean
+  /** A short note after an account's name (a connector it is already linked to); accounts with
+   *  one list after those without, within their type. */
+  note?: (a: Account) => string | null
 }
 
 export function AddAccountSelect({
@@ -715,6 +718,7 @@ export function AddAccountSelect({
   advance,
   autoFocus,
   autoOpen,
+  note,
 }: AddAccountSelectProps) {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(0)
@@ -727,7 +731,9 @@ export function AddAccountSelect({
   const grouped = TYPE_ORDER.map((g) => ({
     key: g,
     label: TYPE_LABELS[g],
-    items: accounts.filter((a) => a.type === g && (!ql || a.name.toLowerCase().includes(ql))),
+    items: accounts
+      .filter((a) => a.type === g && (!ql || a.name.toLowerCase().includes(ql)))
+      .sort((a, b) => Number(!!note?.(a)) - Number(!!note?.(b))),
   })).filter((g) => g.items.length)
   const flat = grouped.flatMap((g) => g.items)
   useEffect(() => {
@@ -876,6 +882,7 @@ export function AddAccountSelect({
                       {a.id === value ? <Check size={12} aria-hidden="true" /> : null}
                     </span>
                     <span className="acct-acctsel-nm">{a.name}</span>
+                    {note?.(a) && <span className="acct-acctsel-note">{note(a)}</span>}
                   </button>
                 )
               })}

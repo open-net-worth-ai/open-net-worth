@@ -34,7 +34,8 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
       (the bank's account and its last digits) and **In your book** (the account it books into;
       click it to open it). Every one is ticked. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
       (under the list) links a bank account here, as a new account or to one you have, without
-      going back to the connector.
+      going back to the connector. **Link** lists only accounts in the bank account's currency,
+      the ones not linked to another connector first; **Unlink** undoes a wrong pick.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
       so today's balance doesn't change. While it runs, the step names the account it's reading
