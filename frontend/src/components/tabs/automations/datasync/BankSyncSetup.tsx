@@ -49,11 +49,18 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
     return () => clearTimeout(timer)
   }, [waitingFrom])
   const importing = status.running || busy === 'import' || awaitingRun
+  // An import that fails at once ends the wait like any newer run: say so, never just bring
+  // the button back as if nothing happened.
+  const [startedRun, setStartedRun] = useState<string | null>(null)
+  const importFailed =
+    startedRun !== null && status.last_run?.id === startedRun && status.last_run.status === 'failed'
+      ? status.last_error || 'The import failed. Try again, or check the connector page.'
+      : null
   const noReads = outOfReads(status)
 
   return (
     <>
-      <ActionError error={error} />
+      <ActionError error={error ?? importFailed} />
       <ol className="a3-steps" data-od-id="bank-sync-setup">
         <Step
           n={1}
@@ -101,7 +108,10 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
                     void act('import', async () => {
                       const before = status.last_run?.id ?? ''
                       const r = await bankSyncSend<{ run_id?: string }>(`/${p}/import`, 'POST')
-                      if (r?.run_id) setWaitingFrom(before)
+                      if (r?.run_id) {
+                        setWaitingFrom(before)
+                        setStartedRun(r.run_id)
+                      }
                       return r
                     })
                   }
