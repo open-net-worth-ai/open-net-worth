@@ -140,6 +140,13 @@ has to decide what it means for other users, whose choices the owner can't make 
 Retire the flag by 2027-03-01: keep the run, or delete this. The narration-only branch stays either
 way, because a public demo and the excluded CLIs use it.
 
+## Amendment, 2026-11-15: on by default
+
+The owner decided the open points above and turned the flag on by default, with the run as it
+stands: it runs for every fired alert, under the count caps only. Turning it off in Settings →
+Developer → Experimental still brings back the quick alert alone. The gaps listed above are
+unchanged.
+
 ## Agent provenance
 
 Claude (Opus 5.5), interactive session on `main`, following an owner report of 2026-11-05.

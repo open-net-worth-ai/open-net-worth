@@ -217,7 +217,7 @@ book in step: from the app, to the app, or both ways. A book syncs with one of t
 **Sync YNAB** template under Lucius is the one-way version: Lucius fetches new YNAB transactions and
 books them here, and doesn't copy categories or Assigned.
 
-With **Bank sync without AI** on (also under **Experimental**), your GoCardless, Enable Banking
+With **Bank sync without AI** on (the default; its switch is under **Experimental**), your GoCardless, Enable Banking
 and Plaid connectors appear here too: each books its bank's transactions by fixed rules, keeps a
 run history, and holds what the bank changes afterwards for your review. A bank syncs one way at
 a time — without AI, or by a Lucius Automation. See

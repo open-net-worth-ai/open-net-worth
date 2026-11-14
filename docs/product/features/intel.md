@@ -66,8 +66,8 @@ For a story rather than one stock — an IPO, a war, interest rates:
 5. Click **Create alert**. The ticker's alerts screen shows every level on a 52-week price scale, each with its own
    on/off switch.
 
-**Let Lucius look into each alert (experimental, off by default).** In Settings → Developer →
-Experimental, turn on *"When a price alert fires, Lucius looks into it"*. Lucius then follows an
+**Lucius looks into each alert (experimental, on by default).** While *"When a price alert fires,
+Lucius looks into it"* is on in Settings → Developer → Experimental, Lucius follows an
 alert's instructions when it fires, searching the web and X before it messages you. It takes up to
 two minutes (usually much less), so the message can arrive a little later, and it uses your AI model
 and search quota, up to 20 runs a day. The search can only search: it can't change your data, send
@@ -343,9 +343,9 @@ monitors):
 
 ## Let Lucius decide what reaches your phone (experimental)
 
-By default every alert that passes Intel's checks goes to your phone as it happens. If that is too
-many, turn on **Settings → Developer → Experimental → Lucius decides which Intel news reaches
-you**. Lucius then looks at each alert before it is sent, knowing what you hold and watch, what it
+By default Lucius decides which alerts reach your phone (**Settings → Developer → Experimental →
+Lucius decides which Intel news reaches you**; turn it off to get every alert that passes Intel's
+checks as it happens). Lucius looks at each alert before it is sent, knowing what you hold and watch, what it
 already told you in the last 48 hours and what time it is where you are, and chooses:
 
 - **Now** — it changes how you see something you hold or watch: a deal agreed or collapsing, a

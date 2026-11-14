@@ -11,7 +11,7 @@ keywords: [web search, experimental, page excerpts, top results, snippets, x sea
 
 # Web search reads its results (Experimental)
 
-This page describes an **experimental** switch, off by default. Turn it on under Settings →
+This page describes an **experimental** switch, on by default. Turn it off under Settings →
 Developer → **Experimental** (see [Experimental features](../features/settings.md#experimental-features)),
 as **Web search reads the pages behind its top results**. Everything on [Web search](web-search.md)
 is true as written while the switch is off.
