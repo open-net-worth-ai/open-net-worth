@@ -4,6 +4,7 @@ bank's error, not the first failing bank's (ADR 2026-11-13, Amendment 14)."""
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -114,6 +115,17 @@ def test_one_banks_history_not_ready_cuts_short_only_its_own_accounts(store, mon
     _bank(monkeypatch, status={"access-i2": "HISTORICAL_UPDATE_COMPLETE"})
     assert svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1").complete is False
     assert svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i2").complete is True
+
+
+def test_two_account_reads_in_one_run_make_one_status_call(store, monkeypatch):
+    store.add_item(_item("i1", "Chase"))
+    calls = _bank(monkeypatch, status={"access-i1": "INITIAL_UPDATE_COMPLETE"})
+    svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1")
+    svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1")
+    assert sum(c.startswith("/transactions/sync") for c in calls) == 1
+    store.update_item("i1", {"history_checked_at": time.time() - 16 * 60})
+    svc.fetch_window(store, LONG_AGO, TODAY, "acct-access-i1")
+    assert sum(c.startswith("/transactions/sync") for c in calls) == 2
 
 
 def test_a_status_call_that_fails_is_not_yet_not_a_failed_read(store, monkeypatch):

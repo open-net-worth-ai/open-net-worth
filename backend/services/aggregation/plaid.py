@@ -38,6 +38,7 @@ recomputed from the native leg there, never fabricated here).
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -544,26 +545,35 @@ def _fetch_item(
 # follows once its historical update finishes (``transactions_update_status``).
 _RECENT_DAYS = 30
 _HISTORY_DONE = "HISTORICAL_UPDATE_COMPLETE"
+# A "not ready yet" answer is trusted this long: the bank sync reads accounts one at a time and
+# each read loops over every Item, so one run asks an Item once, not once per account.
+_NOT_READY_TTL = 15 * 60
 
 
 def _history_ready(store: PlaidConfigStore, item: dict) -> bool:
     """Whether Plaid has finished gathering this Item's whole history. One cheap
     ``/transactions/sync`` (``count`` 1, no cursor) states it as ``transactions_update_status``;
     once it says complete that is kept on the Item and never asked again. A failed call, or a
-    status short of complete, is "not yet" — the read is retried, never booked half."""
+    status short of complete, is "not yet" — remembered for 15 minutes, then asked again; the read
+    is retried, never booked half."""
     if item.get("history_ready"):
         return True
+    item_id = item.get("item_id") or ""
+    if time.time() - float(item.get("history_checked_at") or 0) < _NOT_READY_TTL:
+        return False
     try:
         data = _post(
             store, "/transactions/sync", {"access_token": item["access_token"], "count": 1}
         )
     except ValidationError as exc:
         logger.info("plaid: an Item's update status couldn't be read: %s", exc)
+        store.update_item(item_id, {"history_checked_at": time.time()})
         return False
     status = data.get("transactions_update_status")
     if status is not None and status != _HISTORY_DONE:
+        store.update_item(item_id, {"history_checked_at": time.time()})
         return False
-    store.update_item(item.get("item_id") or "", {"history_ready": True})
+    store.update_item(item_id, {"history_ready": True, "history_checked_at": None})
     return True
 
 
