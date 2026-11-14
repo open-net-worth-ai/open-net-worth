@@ -182,6 +182,8 @@ def _stub_price_monitor(monkeypatch, *, alert_channels, default_channels=("email
     return pm, calls, upserts
 
 
+# The legacy direct push; with intel_delivery_decider on the alert goes through the decider (tests/test_delivery_*.py).
+@pytest.mark.flags(intel_delivery_decider=False)
 def test_price_monitor_routes_to_configured_channels(monkeypatch, isolate):
     pm, calls, upserts = _stub_price_monitor(monkeypatch, alert_channels=["telegram", "webhook"])
     fired = asyncio.run(pm.run_price_check())
@@ -258,6 +260,8 @@ def test_legacy_config_write_surfaces_via_store(isolate):
     assert WatchlistStore().as_dict()["config"]["last_price_check_at"] == "2026-06-18T09:30:00"
 
 
+# The legacy direct push; with intel_delivery_decider on the alert goes through the decider (tests/test_delivery_*.py).
+@pytest.mark.flags(intel_delivery_decider=False)
 def test_price_monitor_survives_real_watchlist_write(monkeypatch, isolate):
     """End-to-end regression for the KeyError: drive run_price_check with the REAL writer.
 

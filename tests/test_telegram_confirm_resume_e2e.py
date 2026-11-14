@@ -205,6 +205,8 @@ async def test_resumed_turn_delivers_its_answer_to_the_chat(tg, monkeypatch):
 
 
 @pytest.mark.asyncio
+# The old permission gate; permissions_v2 is on by default.
+@pytest.mark.flags(permissions_v2=False)
 async def test_confirm_tap_binds_the_connector_cost_surface(tg, monkeypatch):
     """The mechanism behind both defects, pinned directly.
 

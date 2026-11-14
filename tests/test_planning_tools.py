@@ -999,6 +999,8 @@ def test_every_budget_write_tool_previews_names_on_its_gate_card():
     assert missing == []
 
 
+# The old permission gate's card; permissions_v2 (default on) shows a tool_permission card instead.
+@pytest.mark.flags(permissions_v2=False)
 def test_the_gate_card_a_user_sees_names_the_envelope(isolated, monkeypatch):
     from backend.ai.tools import _confirm_gate
 
