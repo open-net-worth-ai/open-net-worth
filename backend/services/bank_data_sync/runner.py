@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 _STOP_STATUSES = ("auth_error", "not_configured", "disabled")
+CUT_SHORT_MESSAGE = (
+    "the bank sent only part of the history, so nothing was booked yet — the next sync reads it "
+    "all again"
+)
 GONE_MESSAGE = (
     "the bank no longer lists this account, so nothing was read. If you linked the bank again, "
     "Unlink this account and Link the bank's current one to it."
@@ -131,6 +135,14 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
         out.warnings.append(f"{name}: {error}")
         out.states[app_id] = {"status": "account_gone", "error": error}
         return "account_gone"
+    whole = (result.get("window") or {}).get("complete") is not False
+    if first and not whole:
+        # A first import the bank cut short (a page cap, a bank that stopped answering part
+        # way): booked, it marked the history read and left the rest unfetched for good. Nothing
+        # is booked; it stays a first import, read whole again soon (review 2026-11-15).
+        out.warnings.append(f"{name}: {CUT_SHORT_MESSAGE}")
+        out.states[app_id] = {"status": "connect_error", "error": CUT_SHORT_MESSAGE}
+        return "connect_error"
     out.states[app_id] = {"status": "ok", "error": None}
     if warning:
         out.warnings.append(f"{name}: {warning}")
@@ -140,7 +152,10 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     out.counts["to_review"] += reviews.record_changes(p.key, changes, run_id)
     rows = [r for r in result.get("transactions") or [] if r.get("linked_account_id") == app_id]
     out.rows.extend(rows)
-    out.read[app_id] = since
+    if whole:
+        # Pending bookings the bank no longer lists are dropped only after a whole read: one
+        # cut short just didn't reach them.
+        out.read[app_id] = since
     out.read_as[app_id] = pid
     remembered = relink.read_as(p.key).get(app_id)
     if relink.is_relinked(p.key, app_id, pid) or (

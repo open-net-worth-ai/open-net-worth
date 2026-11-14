@@ -1092,6 +1092,7 @@ def fetch_window(
                 ended = any(b.get("access_ended") for b in store.banks())
             raise ExternalServiceError("; ".join(warnings), bank_access=ended)
         warnings = []
+        complete = True  # another bank's trouble never cuts THIS account's read short
     balances = parallel.each(
         lambda a: a.pop("_balances", None) or fetch_account_balances(token, _api_uid(a)),
         eb_accounts,

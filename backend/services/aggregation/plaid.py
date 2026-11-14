@@ -519,6 +519,7 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
     complete = True
     first_error: Optional[ValidationError] = None
     needed, answered = set(), set()
+    cut_short: set[str] = set()
     for item in items:
         bank = item.get("institution_name") or "a linked bank"
         key = bank_key(item.get("item_id") or "")
@@ -543,6 +544,8 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
                 "_institution": item.get("institution_name") or bank_name(item),
             }
         complete = complete and not got["truncated"]
+        if got["truncated"]:
+            cut_short.update(got["accounts"])
     store.mark_reconnect(needed=needed, ok=answered)
     if first_error is not None and len(warnings) == len(items):
         raise first_error
@@ -551,6 +554,9 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
         "accounts": accounts,
         "warnings": warnings,
         "complete": complete,
+        # Accounts at a bank whose read hit the page cap: one account's read is whole unless
+        # it is one of these (another bank failing doesn't cut THIS account's read short).
+        "cut_short": cut_short,
         "error": first_error,
     }
 
@@ -831,9 +837,10 @@ def fetch_window(
             row = _txn_to_row(plaid_txn, accounts_by_id.get(account_id, {}), account_id)
             if row is not None:
                 rows.append(row)
-        return FetchWindow(
-            accounts=accounts, rows=rows, complete=fetched["complete"], warnings=warnings
+        complete = (
+            account not in (fetched.get("cut_short") or set()) if account else fetched["complete"]
         )
+        return FetchWindow(accounts=accounts, rows=rows, complete=complete, warnings=warnings)
     return FetchWindow(accounts=accounts, rows=rows, complete=True, warnings=warnings)
 
 

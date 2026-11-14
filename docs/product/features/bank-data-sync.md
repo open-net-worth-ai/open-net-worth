@@ -109,7 +109,8 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
 - **First sync of an account:** books the history your bank serves, then moves the account's
   Starting Balance back to the oldest row, so the history counts and **today's balance doesn't
   change**. A new account is then set to the bank's own balance (below). (Cash and card accounts
-  only.)
+  only.) If the bank sends only part of the history, nothing is booked yet: the next sync reads
+  it all again, so no history is left out.
 
 A run books all its new transactions in one go: if something fails, nothing from that run is
 booked, and the next run tries again.
