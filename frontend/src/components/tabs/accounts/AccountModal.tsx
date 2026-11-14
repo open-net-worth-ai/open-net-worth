@@ -324,8 +324,8 @@ export default function AccountModal({
       }
       try {
         await onSave(payload)
-      } catch {
-        setSaveErr('We couldn’t add this account. Check the details and try again.')
+      } catch (err) {
+        setSaveErr(serverReason(err) ?? 'We couldn’t add this account. Try again.')
       } finally {
         setSaving(false)
       }
@@ -364,8 +364,8 @@ export default function AccountModal({
       if (valuation && valueSource !== valuation.source) update.value_source = valueSource
       try {
         await onSave(update, account.id)
-      } catch {
-        setSaveErr('We couldn’t save these details. Try again.')
+      } catch (err) {
+        setSaveErr(serverReason(err) ?? 'We couldn’t save these details. Try again.')
       } finally {
         setSaving(false)
       }
@@ -1099,4 +1099,20 @@ function ValueSourceSection({
       </Stack>
     </section>
   )
+}
+
+/** The server's own reason for refusing a save — callers throw the response body, whose
+ *  `detail` says what was wrong (an exchange rate it can't get, a name already taken). A
+ *  generic "check the details" hid it while the details were fine. */
+function serverReason(err: unknown): string | null {
+  const text = err instanceof Error ? err.message : ''
+  try {
+    const detail = (JSON.parse(text) as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail.trim()
+    const message = (detail as { message?: unknown } | null)?.message
+    if (typeof message === 'string' && message.trim()) return message.trim()
+  } catch {
+    // not a JSON body
+  }
+  return null
 }
