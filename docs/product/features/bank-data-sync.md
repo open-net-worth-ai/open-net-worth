@@ -116,7 +116,11 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
 - **Categorises without AI:** your [Automations](../lucius/automations.md) rules and each payee's
   default category apply, as they do to any new transaction. Otherwise, if the bank gives a
   merchant category that's exactly the name of one of your categories, that one is used. No
-  category is ever created; anything else stays **Uncategorized**.
+  category is ever created; anything else stays **Uncategorized**. When you give a synced
+  transaction a category in **Review**, its payee keeps it as its default (if the payee has none
+  yet; an existing default is never overwritten), so the next sync files that payee by itself.
+  A bank that puts a store or reference number in the wording ("ACME GROCER 1234") gives each
+  number its own payee: merge those in **Payees** and the default follows.
 - **First sync of an account:** books the history your bank serves, then moves the account's
   Starting Balance back to the oldest row, so the history counts and **today's balance doesn't
   change**. A new account is then set to the bank's own balance (below). (Cash and card accounts

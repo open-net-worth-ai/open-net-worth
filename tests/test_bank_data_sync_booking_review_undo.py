@@ -151,3 +151,48 @@ def test_a_payment_further_than_the_window_is_not_paired(bank):
     _run()
 
     assert _live("transfer") == []
+
+
+# ── 2. Review teaches the payee ─────────────────────────────────────────────────────────────
+
+
+def _category(name: str) -> str:
+    from backend.services import categories as categories_service
+
+    return categories_service.create_category(name, "expense")["id"]
+
+
+def _booked(text: str) -> dict:
+    return next(t for t in _live("expense") if t["description"] == text)
+
+
+def test_categorising_a_synced_row_in_review_teaches_its_payee(bank):
+    linked_account("ACME Current", ACC_MAIN)
+    groceries = _category("Groceries")
+    bank.booked[ACC_MAIN] = [txn(-40.00, days_ago(3), "ACME GROCER", tid="t1")]
+    _run()
+    first = _booked("ACME GROCER")
+    assert first["category"] is None and first["needs_review"] is True
+
+    ledger_service.update_transaction(first["id"], {"category": groceries, "needs_review": False})
+    bank.booked[ACC_MAIN].append(txn(-22.00, days_ago(1), "ACME GROCER", tid="t2"))
+    _run()
+
+    second = next(t for t in _live("expense") if t["id"] != first["id"])
+    assert second["category"] == groceries
+    assert second["payee_id"] == first["payee_id"]
+
+
+def test_review_never_overwrites_a_payees_existing_default(bank):
+    from backend.services import payee_registry
+
+    linked_account("ACME Current", ACC_MAIN)
+    groceries, dining = _category("Groceries"), _category("Dining")
+    bank.booked[ACC_MAIN] = [txn(-40.00, days_ago(3), "ACME GROCER", tid="t1")]
+    _run()
+    row = _booked("ACME GROCER")
+    ledger_service.update_transaction(row["id"], {"category": groceries})
+
+    ledger_service.update_transaction(row["id"], {"category": dining})
+
+    assert payee_registry.default_category_for(row["payee_id"], "expense") == groceries
