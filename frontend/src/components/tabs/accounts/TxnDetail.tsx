@@ -1877,9 +1877,12 @@ export default function TxnDetail({
         setSource({ status: 'error' })
       })
   }, [txn?.id, hasSourceProvenance, onLoadSourceEntries])
+  // Also once the row LANDS: a drawer opened by id starts from a placeholder with no refs (same
+  // id), so keyed on the id alone it decided "no source" and never looked again (owner,
+  // 2026-11-14: no raw bank fields on a row opened from a sync's report).
   useEffect(() => {
     loadSourceEntries()
-  }, [txn?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [txn?.id, hasSourceProvenance]) // eslint-disable-line react-hooks/exhaustive-deps
   // "Unlink source" (CDS-6): per-entry busy/error state, keyed the same way the toggle/
   // disclosure state above is — one entry's failure never blocks or mislabels another's
   // button. On success the entry is filtered out of `source.data` locally (no refetch of the
