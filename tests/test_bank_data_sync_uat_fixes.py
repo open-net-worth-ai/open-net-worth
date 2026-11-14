@@ -209,3 +209,41 @@ def test_gocardless_an_ended_banks_account_is_not_read_as_ok(db_isolated, monkey
     with pytest.raises(ValidationError) as caught:
         gocardless_svc.fetch_window(store, "2026-11-01", "2026-11-14", "acc-ended-0003")
     assert gocardless_svc.classify_error(caught.value) == "reconnect_needed"
+
+
+# ── UAT #3: a linked account the bank no longer has needs attention, never "done" ───────
+
+
+def test_an_account_the_bank_no_longer_lists_is_not_read_and_says_so(bank):
+    bank.pending[ACC_MAIN] = [txn(-9.99, days_ago(1), "ACME STREAM")]
+    _run()
+    [held] = _live(bank.account)
+
+    # The bank was linked again: the old id is gone, the account not yet re-linked.
+    del bank.booked[ACC_MAIN]
+    del bank.pending[ACC_MAIN]
+    result = _run()
+
+    assert result["status"] == "account_gone"
+    assert result["counts"]["pending_removed"] == 0
+    assert [t["id"] for t in _live(bank.account)] == [held["id"]]
+    st = budget.state("gocardless")
+    assert st["last_status"] == "account_gone"
+    assert st["account_reads"][bank.account]["status"] == "account_gone"
+    assert "link" in st["account_reads"][bank.account]["error"].lower()
+    run = import_runs.latest("gocardless", ("sync",))
+    assert run["status"] == "failed"
+    assert "no longer lists" in run["outcome"]
+    [line] = run["progress"]["accounts"]
+    assert line["state"] == "failed", "the account read as done · 0 rows"
+
+
+def test_a_gone_account_beside_a_good_one_is_a_partial_run(bank):
+    saver = linked_account("ACME Saver", ACC_SAVER)
+    del bank.booked[ACC_MAIN]
+    bank.booked[ACC_SAVER] = [txn(25.00, days_ago(1), "ACME INTEREST", tid="s1")]
+    result = _run()
+    assert result["status"] == "partial"
+    assert len(_live(saver)) == 1
+    assert budget.state("gocardless")["account_reads"][bank.account]["status"] == "account_gone"
+    assert "1 account not read" in import_runs.latest("gocardless", ("sync",))["outcome"]

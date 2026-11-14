@@ -22,6 +22,7 @@ export const STOPPED = new Set([
   'failed',
   'error',
   'connect_error',
+  'account_gone',
 ])
 export const SIGN_IN = new Set(['auth_error', 'reconnect_needed'])
 
@@ -43,6 +44,11 @@ export function markFor(s: BankSyncStatus, a: BankSyncAccount): SyncMark | null 
   const read = readState(s, a)
   if (read.status && SIGN_IN.has(read.status))
     return { tone: 'bad', text: `${s.label}: the bank needs you to sign in again.` }
+  if (read.status === 'account_gone')
+    return {
+      tone: 'bad',
+      text: `${s.label}: the bank no longer lists this account. Link it again.`,
+    }
   if (read.status && STOPPED.has(read.status))
     return { tone: 'bad', text: `${s.label}: the last sync failed. ${read.error ?? ''}`.trim() }
   if (a.access_renew_soon && a.access_ends_at)

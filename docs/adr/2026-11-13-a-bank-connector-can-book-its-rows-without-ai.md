@@ -242,3 +242,14 @@ dropped, its history is not marked read, nothing is booked. Each account's last 
 `read_error`); the bank card and the account marks read it, so one bank's failure shows on its
 own accounts only. A `partial` run keeps its warnings as `last_error` and says "N accounts not
 read".
+
+## Amendment 9 (2026-11-14, UAT: an account the bank no longer lists needs the user)
+
+On-screen UAT: after a bank was linked again, its old account ids were gone; the run said
+"Nothing new", their lines "done · 0 rows", green — the account silently never synced again. A
+read whose answer doesn't list the account asked for (`fetch_all(...)["accounts"]`) is now
+`account_gone` (`runner.GONE_MESSAGE`): not read (no pending dropped, no history marked), its
+line `failed`, its `account_reads` entry says why, the run is `partial` beside a good account and
+`account_gone` alone (24 h backoff, like a sign-in: it waits for the user). The bank card shows
+**Account not at the bank** with **Relink** (the connector's setup), and the account mark says to
+link it again. Amendment 7 makes the relink safe.

@@ -182,6 +182,11 @@ mark beside its accounts. When one connector holds several banks, the others sti
 the run says how many accounts it couldn't read; one bank's problem never shows on another's
 accounts.
 
+An account the bank no longer lists (it was closed, or the bank was linked again and its
+accounts have new identities) isn't read either. Its card says **Account not at the bank** with
+**Relink**, which opens the connector's setup: **Unlink** the old account and **Link** the bank's
+current one to the same account in your book. The next sync matches what's already booked.
+
 ## Related pages
 
 - [Bank & brokerage connectors](../connectors/bank-brokerage.md)

@@ -328,6 +328,25 @@ describe('with bank_data_sync on', () => {
     expect(markFor(st, st.accounts![1]!)?.tone).toBe('ok')
   })
 
+  it('an account the bank no longer lists asks to be linked again, never reads as synced', () => {
+    const base = status().accounts![0]!
+    const st = status({
+      mode: 'data',
+      stage: 'done',
+      last_status: 'account_gone',
+      accounts: [{ ...base, bank: 'ACME Bank', read_status: 'account_gone', read_error: 'gone' }],
+    })
+    render(<BankSyncSettings status={st} />)
+    const group = screen.getByRole('group', { name: 'ACME Bank accounts to sync' })
+    expect(group.textContent).toMatch(/Account not at the bank/)
+    expect(group.textContent).not.toMatch(/Synced/)
+    expect(screen.getByRole('button', { name: 'Relink' })).toBeTruthy()
+    expect(markFor(st, st.accounts![0]!)).toMatchObject({
+      tone: 'bad',
+      text: expect.stringContaining('no longer lists'),
+    })
+  })
+
   it('marks an account the sync keeps: green, amber before access ends, red once it stopped', () => {
     const on = status({ mode: 'data' })
     const acc = on.accounts![0]!

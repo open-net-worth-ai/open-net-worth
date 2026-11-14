@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 _STOP_STATUSES = ("auth_error", "not_configured", "disabled")
+GONE_MESSAGE = (
+    "the bank no longer lists this account, so nothing was read. If you linked the bank again, "
+    "Unlink this account and Link the bank's current one to it."
+)
 
 
 def _lock(key: str) -> threading.Lock:
@@ -118,6 +122,15 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
         out.warnings.append(f"{name}: {error}")
         out.states[app_id] = {"status": status, "error": error}
         return status
+    listed = {str(a.get("provider_account_id") or "") for a in result.get("accounts") or []}
+    if pid not in listed:
+        # The bank answered without this account: it was closed, or the bank was linked again
+        # and the account has a new id. Read as "done · 0 rows" it silently never synced again
+        # (UAT 2026-11-14) — it needs the user, so it's not read and says so.
+        error = GONE_MESSAGE
+        out.warnings.append(f"{name}: {error}")
+        out.states[app_id] = {"status": "account_gone", "error": error}
+        return "account_gone"
     out.states[app_id] = {"status": "ok", "error": None}
     if warning:
         out.warnings.append(f"{name}: {warning}")
@@ -193,7 +206,7 @@ def _run_status(statuses: list[str]) -> str:
         return "ok"
     if any(s == "ok" for s in statuses):
         return "partial"
-    for s in ("auth_error", "reconnect_needed", "rate_limited", "connect_error"):
+    for s in ("auth_error", "reconnect_needed", "account_gone", "rate_limited", "connect_error"):
         if s in statuses:
             return s
     return "error"
@@ -226,6 +239,7 @@ def _outcome(counts: dict, status: str) -> str:
             {
                 "auth_error": "bank access needs renewing",
                 "reconnect_needed": "the bank needs you to sign in again",
+                "account_gone": "the bank no longer lists the account; link it again",
                 "rate_limited": "bank read limit reached",
             }.get(status, "the bank couldn't be read")
         )

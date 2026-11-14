@@ -288,23 +288,26 @@ function BankStatus({ status, accounts }: { status: BankSyncStatus; accounts: Ba
   // THIS bank's accounts' last reads — never another bank's on the same connector.
   const reads = accounts.filter((a) => a.sync).map((a) => readState(status, a))
   const signIn = reads.some((r) => r.status && SIGN_IN.has(r.status))
+  const gone = reads.some((r) => r.status === 'account_gone')
   const failed = reads.find((r) => r.status && STOPPED.has(r.status))
   const problem: [keyof typeof PILL, string, string] | null = ended
     ? ['bad', 'Access ended', 'Renew']
     : signIn
       ? ['bad', 'Sign-in needed', 'Reconnect']
-      : failed
-        ? ['bad', 'Last sync failed', '']
-        : soon
-          ? ['warn', `Access ends ${fDate(ends!)}`, 'Renew']
-          : null
+      : gone
+        ? ['bad', 'Account not at the bank', 'Relink']
+        : failed
+          ? ['bad', 'Last sync failed', '']
+          : soon
+            ? ['warn', `Access ends ${fDate(ends!)}`, 'Renew']
+            : null
   const until = ends ? `Access until ${fDate(ends)}` : undefined
   if (problem)
     return (
       <span className="bs-bank-status">
         <span
           className={PILL[problem[0]]}
-          title={problem[1] === 'Last sync failed' ? (failed?.error ?? undefined) : until}
+          title={problem[1] === 'Last sync failed' || gone ? (failed?.error ?? undefined) : until}
         >
           <span className="bs-dot" aria-hidden="true" />
           {problem[1]}
