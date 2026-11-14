@@ -147,10 +147,6 @@ def _summary(p) -> dict:
         "last_error": st.get("last_error"),
         "running": import_runs.has_running(p.key),
         "to_review": reviews.open_count(p.key),
-        "lucius_automations": [
-            {"id": a["id"], "name": a.get("name"), "status": a.get("status")}
-            for a in settings.lucius_syncs(p.key, ("active", "paused"))
-        ],
     }
 
 
@@ -191,30 +187,17 @@ def status(key: str) -> dict:
 
 
 def set_mode(key: str, mode: str) -> dict:
-    """Switch a connector's sync mode; says what it did to Lucius Automations."""
+    """Turn a connector's sync on (``data``) or off. A Lucius Automation is never touched."""
     _require_on()
     p = settings.provider(key)
     if mode not in settings.MODES:
-        raise ValidationError("mode must be off, data or lucius")
-    paused: list[str] = []
-    resumed: Optional[str] = None
+        raise ValidationError("mode must be off or data")
     if mode == "data":
-        paused = settings.pause_lucius_syncs(key)
         settings.save(key, mode="data", set_up=True)
         budget.schedule_from_now(p)
     else:
         settings.save(key, mode="off")
-        if mode == "lucius":
-            resumed = settings.resume_lucius_sync(key)
-        else:
-            paused = settings.pause_lucius_syncs(key)
-    needs_template = mode == "lucius" and resumed is None and not settings.lucius_syncs(key)
-    return {
-        **status(key),
-        "paused_automations": paused,
-        "resumed_automation": resumed,
-        "needs_template": needs_template,
-    }
+    return status(key)
 
 
 def set_interval(key: str, hours: int) -> dict:
@@ -277,10 +260,6 @@ def _start(key: str, *, needs_data: bool) -> dict:
     p = settings.provider(key)
     if needs_data and not settings.is_data(key):
         raise ConflictError(f"The {p.label} sync is off.")
-    if not needs_data and settings.mode(key) == "lucius":
-        raise ConflictError(
-            f"A Lucius Automation syncs {p.label}. Pause it first, so its rows aren't booked twice."
-        )
     runner.refuse_unless_ready(p)
     accounts = runner.opted_accounts(key)
     if not accounts:
@@ -344,12 +323,6 @@ def list_runs(key: str) -> list[dict]:
     _require_on()
     settings.provider(key)
     return [r for r in import_runs.list_runs(key) if r.get("kind") == "sync"]
-
-
-def refuse_automation_beside_data_sync(automation: dict) -> None:
-    """Called by the Automations choke before an Automation becomes active. No-op when off."""
-    if is_on():
-        settings.refuse_beside_data(automation)
 
 
 # ── the review list ─────────────────────────────────────────────────────────────────

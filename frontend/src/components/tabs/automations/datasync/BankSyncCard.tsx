@@ -15,9 +15,7 @@ export function BankSyncCard({ status, onOpen }: { status: BankSyncStatus; onOpe
       ? status.next_run_at
         ? `${everyLabel(status.interval_hours)} · next ${fScheduleWhen(status.next_run_at)}`
         : everyLabel(status.interval_hours)
-      : status.mode === 'lucius'
-        ? 'A Lucius Automation syncs it'
-        : 'Off'
+      : 'Off'
   return (
     <article
       className={`a3-row${on ? '' : ' off'}`}

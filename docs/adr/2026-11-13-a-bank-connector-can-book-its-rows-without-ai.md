@@ -193,3 +193,16 @@ default at the create choke), as YNAB books a bank's rows unapproved. They count
 once. Settling a pending row (`pending.settle`) changes only `cleared` and `date`, so an approval
 given while it was pending stands; a pending booking replaced by its settled row is a new row and
 waits again. Scoped to this sync — other feeds keep the trusted default.
+
+## Amendment 6 (2026-11-14, owner: the sync and a Lucius Automation are independent)
+
+The one-mode rule is removed. It decided that a Lucius Automation "synced" a bank by reading the
+Automation's tools and words (`settings.syncs_connector`, a heuristic that can match an
+Automation that never syncs), then paused such Automations when the sync was turned on, refused
+creating or resuming one while it was on, and refused Import history beside one. The owner found
+it opaque: nothing now detects, pauses or refuses either for the other, `mode` is only `off` or
+`data`, and a Lucius fetch tool was never blocked (it only counts against the bank's shared
+daily read limit, which the bank enforces). The ref floor still stops a row the bank lists once
+from being booked twice; the known gap is a pending payment that settles under a new reference,
+which Lucius could book beside the sync's settled booking. The connector's **Automate** becomes a
+menu of the two (`bankAutomate.ts`): the sync, and a Lucius Automation.

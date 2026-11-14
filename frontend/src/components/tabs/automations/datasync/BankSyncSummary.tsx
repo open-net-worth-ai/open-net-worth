@@ -51,6 +51,5 @@ function summaryLine(status: BankSyncStatus): string {
   const review = status.to_review ? ` · ${status.to_review} to review` : ''
   if (status.mode === 'data')
     return `On · ${status.running ? 'Syncing now…' : nextRunLine(status)}${review}`
-  if (status.mode === 'lucius') return `Off · a Lucius Automation syncs it${review}`
   return 'Off'
 }

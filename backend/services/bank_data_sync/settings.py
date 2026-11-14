@@ -1,23 +1,22 @@
-"""A bank connector's data-sync settings and the one-mode rule.
+"""A bank connector's data-sync settings.
 
 Stored per connector in ``bank_sync_settings`` (id = provider key): ``mode`` (``off`` | ``data``),
 ``excluded_account_ids`` (the app accounts the user unticked — Sync is on by default, so only the
 opt-outs are kept, keyed by app account id because that survives a provider relink),
 ``lucius_followup`` (built, hidden in the UI for now), ``set_up`` (turned on at least once) and
-``interval_hours`` (the schedule the user chose; absent = the provider's default). "Lucius" is never stored: a connector is in Lucius mode when an active Lucius
-Automation syncs it, a fact the Automations table already holds (ADR 2026-11-13)."""
+``interval_hours`` (the schedule the user chose; absent = the provider's default). The sync and
+a Lucius Automation are independent: nothing here detects, pauses or refuses one for the other
+(ADR 2026-11-13, Amendment 6)."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
-from backend.core.errors import ConflictError, NotFoundError
+from backend.core.errors import NotFoundError
 from backend.db.bank_sync_store import BankSyncSettingsStore
 from backend.services.aggregation import providers
 
-MODES = ("off", "data", "lucius")
-_SYNC_VERBS = ("fetch", "sync", "book", "import")
+MODES = ("off", "data")
 
 
 def _now() -> str:
@@ -82,73 +81,6 @@ def is_data(key: str) -> bool:
     return get(key)["mode"] == "data"
 
 
-# ── Lucius sync Automations ─────────────────────────────────────────────────────────
-
-
-def syncs_connector(automation: dict, key: str) -> bool:
-    """Whether ``automation`` is a Lucius sync of connector ``key``: it names the connector's
-    fetch tool (in its words or its always-allowed tools), or names the connector and fetches,
-    syncs, books or imports. A heuristic over the user's own words — the ref floor still stops
-    a double booking when it misses."""
-    tool = f"{key}_fetch_transactions"
-    allowed = {
-        t for entry in automation.get("always_allowed") or [] for t in (entry.get("tools") or [])
-    }
-    if tool in allowed:
-        return True
-    text = f"{automation.get('name') or ''}\n{automation.get('instructions') or ''}".lower()
-    if tool in text:
-        return True
-    label = providers.PROVIDERS[key].label.lower() if key in providers.PROVIDERS else key
-    return label in text and any(verb in text for verb in _SYNC_VERBS)
-
-
-def lucius_syncs(key: str, statuses: tuple[str, ...] = ("active",)) -> list[dict]:
-    from backend.db.automation_store import AutomationStore
-
-    return [
-        a
-        for a in AutomationStore().all()
-        if a.get("status") in statuses and syncs_connector(a, key)
-    ]
-
-
 def mode(key: str) -> str:
-    """``data`` when stored so; else ``lucius`` when an active Lucius Automation syncs it."""
-    if is_data(key):
-        return "data"
-    return "lucius" if lucius_syncs(key) else "off"
-
-
-def refuse_beside_data(automation: dict) -> None:
-    """The reverse of the one-mode rule: an Automation about to be ACTIVE that syncs a connector
-    in data mode is refused, naming the switch that changes it."""
-    for p in capable_providers():
-        if is_data(p.key) and syncs_connector(automation, p.key):
-            raise ConflictError(
-                f"{p.label} already syncs without AI, so this Automation would book its rows "
-                f"twice. To let Lucius sync it instead, turn that sync off first in Automations → "
-                f"Data Sync → {p.label}."
-            )
-
-
-def pause_lucius_syncs(key: str) -> list[str]:
-    """Pause every active Lucius sync of ``key``; the names of those paused."""
-    from backend.services.automations.service import apply_automation_change
-
-    names = []
-    for a in lucius_syncs(key):
-        apply_automation_change({"op": "pause", "id": a["id"]})
-        names.append(a.get("name") or "Untitled")
-    return names
-
-
-def resume_lucius_sync(key: str) -> Optional[str]:
-    """Resume the ONE paused Lucius sync of ``key``, if there is exactly one; its name."""
-    from backend.services.automations.service import apply_automation_change
-
-    paused = lucius_syncs(key, ("paused",))
-    if len(paused) != 1:
-        return None
-    apply_automation_change({"op": "resume", "id": paused[0]["id"]})
-    return paused[0].get("name") or "Untitled"
+    """``data`` while the sync is on, else ``off``."""
+    return "data" if is_data(key) else "off"

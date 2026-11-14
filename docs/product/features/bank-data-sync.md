@@ -71,11 +71,12 @@ that page.
 ## It's the no-AI way
 
 This sync never uses an AI model. If you'd rather Lucius synced a bank, use a Lucius Automation
-such as **Sync GoCardless** instead (see [Automations](../lucius/automations.md)). Only one of
-the two can sync a bank: turning this sync on pauses that bank's Lucius sync Automation and says
-which one it paused, so nothing is booked twice. While it's on, turning that Automation back on
-is refused, with a message telling you to turn this sync off first. The connector page doesn't suggest a
-Lucius sync beside this one; **Automate** at the top of the connector's page sets one up.
+such as **Sync GoCardless** instead (see [Automations](../lucius/automations.md)). On a bank's
+connector page, **Automate** offers both: **Sync transactions (no AI)** opens this sync (it
+reads **· On** once it's on), and **Lucius Automation** starts a new Automation. The two are
+independent: neither pauses or blocks the other. A transaction the bank lists once is never
+booked twice, but if both run, a pending payment that settles under a new reference at the bank
+can be booked by Lucius as well as by this sync, so running one per bank is simplest.
 
 ## What a run does
 

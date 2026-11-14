@@ -34,7 +34,9 @@
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRight } from '../../../ui/icons'
+import { ArrowRight, ChevronDown } from '../../../ui/icons'
+import { ActionMenu } from '../../ui'
+import { useBankAutomateChoices } from '../automations/datasync/bankAutomate'
 import { templateKeyForConnector } from '../automations/automationTemplates'
 import { BackTitle, Badge, Btn, Kebab, Modal, Mono, type KebabItem } from './primitives'
 import { useConnectorSaveHost } from './formSave'
@@ -242,6 +244,11 @@ export function ConnectorDetail({
   const automateKey = templateKeyForConnector(entry.kind)
   const openTemplate = (key: string) =>
     void navigate({ to: '/automations', search: { template: key } as never } as never)
+  // A bank connector's Automate offers both ways: its no-AI sync and a Lucius Automation.
+  const bankChoices = useBankAutomateChoices(
+    entry.kind,
+    automateKey ? () => openTemplate(automateKey) : null,
+  )
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const isMobile = useIsMobile()
   const [removing, setRemoving] = useState(false)
@@ -311,7 +318,11 @@ export function ConnectorDetail({
   const phoneRunningItems: KebabItem[] =
     isMobile && running
       ? [
-          ...(automateKey ? [{ label: 'Automate', onClick: () => openTemplate(automateKey) }] : []),
+          ...(bankChoices
+            ? bankChoices.map((c) => ({ label: c.label, onClick: c.onSelect }))
+            : automateKey
+              ? [{ label: 'Automate', onClick: () => openTemplate(automateKey) }]
+              : []),
           { label: 'Pause connector', onClick: () => setConfirmingPause(true) },
         ]
       : []
@@ -493,7 +504,19 @@ export function ConnectorDetail({
     )
   ) : entry.enabled ? (
     <>
-      {automateKey ? (
+      {bankChoices ? (
+        <ActionMenu
+          label="Automate"
+          items={bankChoices.map((c) => ({ label: c.label, onSelect: c.onSelect }))}
+          trigger={
+            <>
+              Automate
+              <ChevronDown size={14} aria-hidden="true" />
+            </>
+          }
+          triggerClassName="rd-btn secondary lg cn-automate-trigger"
+        />
+      ) : automateKey ? (
         // Puts the connector to work: opens its Automation template (logging from
         // the mailbox, a bank or broker sync) as an unsaved draft.
         <Btn size="lg" onClick={() => openTemplate(automateKey)}>

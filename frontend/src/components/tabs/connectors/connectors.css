@@ -2205,3 +2205,10 @@
     bottom: calc(96px + env(safe-area-inset-bottom));
   }
 }
+
+/* Automate on a bank connector is a menu (bankAutomate.ts): the button with its chevron. */
+.cn-page .cn-automate-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

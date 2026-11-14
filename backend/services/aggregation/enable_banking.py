@@ -494,7 +494,9 @@ def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
     return resp
 
 
-def fetch_session_accounts(token: str, session_id: str) -> list[dict]:
+def fetch_session_accounts(
+    token: str, session_id: str, *, with_balances: bool = False
+) -> list[dict]:
     """GET ``/sessions/{id}`` → the consented accounts, each enriched from
     ``/accounts/{uid}/details`` (name, currency, type).
 
@@ -532,7 +534,20 @@ def fetch_session_accounts(token: str, session_id: str) -> list[dict]:
             details = None
         return {**details, "uid": uid} if isinstance(details, dict) else {"uid": uid}
 
-    return parallel.each(with_details, uids)
+    # Listing every account: each one's details AND balance in the same round (the balance
+    # needs only the session's uid), not one round after the other — ~1.5 s less on the sandbox.
+    tasks = [(uid, "details") for uid in uids]
+    if with_balances:
+        tasks += [(uid, "balances") for uid in uids]
+    done = parallel.each(
+        lambda t: with_details(t[0]) if t[1] == "details" else fetch_account_balances(token, t[0]),
+        tasks,
+    )
+    accounts = done[: len(uids)]
+    if with_balances:
+        for account, figures in zip(accounts, done[len(uids) :]):
+            account["_balances"] = figures
+    return accounts
 
 
 def fetch_account_transactions(
@@ -805,7 +820,7 @@ def _bank_unread(store: EnableBankingConfigStore, bank: dict, label: str, exc: E
 
 
 def _accounts_of_every_bank(
-    token: str, store: EnableBankingConfigStore
+    token: str, store: EnableBankingConfigStore, *, with_balances: bool = False
 ) -> tuple[list[dict], bool, list[str]]:
     """Every linked bank's accounts, each tagged with its bank (``institution``). One bank
     that can't be read (its consent ended, the bank is down) never hides the others: it is
@@ -823,7 +838,9 @@ def _accounts_of_every_bank(
             complete = False
             continue
         try:
-            accounts = fetch_session_accounts(token, bank["session_id"])
+            accounts = fetch_session_accounts(
+                token, bank["session_id"], with_balances=with_balances
+            )
         except (ExternalServiceError, httpx.HTTPError) as exc:
             warnings.append(_bank_unread(store, bank, label, exc))
             complete = False
@@ -881,10 +898,17 @@ def fetch_window(
     ``_MAX_FETCH_PAGES`` without exhausting its ``continuation_key`` — a truncated fetch must
     never look complete to the vanished-row check."""
     token = _bearer(store)
-    eb_accounts, complete, warnings = _accounts_of_every_bank(token, store)
+    # Every account wanted: their balances come with their details. One account (a sync): only
+    # its own balance is read — a bank limits balance reads too.
+    eb_accounts, complete, warnings = _accounts_of_every_bank(
+        token, store, with_balances=account is None
+    )
     if account:
         eb_accounts = [a for a in eb_accounts if _account_uid(a) == account]
-    balances = parallel.each(lambda a: fetch_account_balances(token, _api_uid(a)), eb_accounts)
+    balances = parallel.each(
+        lambda a: a.pop("_balances", None) or fetch_account_balances(token, _api_uid(a)),
+        eb_accounts,
+    )
     accounts = [_account_to_common(a, *b) for a, b in zip(eb_accounts, balances)]
 
     rows: list[dict] = []

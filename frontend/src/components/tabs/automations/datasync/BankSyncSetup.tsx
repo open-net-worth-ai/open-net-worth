@@ -12,12 +12,7 @@ import {
 } from './BankSyncParts'
 import { outOfReads, useAct } from './bankSyncHelpers'
 import { Step } from './SyncSetupSteps'
-import {
-  bankSyncSend,
-  type BankSyncAccount,
-  type BankSyncStatus,
-  type ModeResult,
-} from './bankSync'
+import { bankSyncSend, type BankSyncAccount, type BankSyncStatus } from './bankSync'
 
 // A bank's sync before it is on (ADR 2026-11-13), as the budget apps' setup reads: pick the
 // accounts, bring in the history, turn it on. Turning it on without step 2 is allowed — its first
@@ -126,9 +121,6 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
           {reached < 2 ? null : (
             <>
               <ScheduleMenu status={status} busy={busy} act={act} />
-              {status.mode === 'lucius' && (
-                <p className="bs-note">Pauses the Lucius Automation that syncs it now.</p>
-              )}
               <div className="bs-actions">
                 <Button
                   size="sm"
@@ -137,9 +129,7 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
                   loading={busy === 'mode'}
                   disabled={busy !== null}
                   onClick={() =>
-                    void act('mode', () =>
-                      bankSyncSend<ModeResult>(`/${p}/mode`, 'PUT', { mode: 'data' }),
-                    )
+                    void act('mode', () => bankSyncSend(`/${p}/mode`, 'PUT', { mode: 'data' }))
                   }
                 >
                   Turn on
@@ -153,8 +143,6 @@ export function BankSyncSetup({ status }: { status: BankSyncStatus }) {
   )
 }
 
-/** "6 transactions imported, Nov 5 – Nov 13 · 3 pending" — counted in the book (a run's own
- *  record can be gone). */
 /** The import, account by account: what came in and from when, or that the bank had nothing.
  *  Each account opens its register. One sentence for all of them (176 imported · none at the
  *  bank for •••3555) was hard to read (owner, 2026-11-14). */

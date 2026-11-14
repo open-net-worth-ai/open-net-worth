@@ -44,7 +44,6 @@ function status(over: Partial<BankSyncStatus> = {}): BankSyncStatus {
     last_error: null,
     running: false,
     to_review: 0,
-    lucius_automations: [],
     history_days: 90,
     stage: 'history',
     accounts: [
@@ -73,12 +72,7 @@ beforeEach(() => {
     if (init?.method) sent.push({ url, method: init.method, body: init.body })
     if (url === '/api/bank-sync/gocardless/mode' && init?.method === 'PUT') {
       current = status({ mode: 'data' })
-      return reply({
-        ...current,
-        paused_automations: ['Sync GoCardless'],
-        resumed_automation: null,
-        needs_template: false,
-      })
+      return reply(current)
     }
     if (url === '/api/bank-sync/gocardless') return reply(current)
     if (url === '/api/bank-sync') return reply({ connectors: [current] })
@@ -201,14 +195,11 @@ describe('with bank_data_sync on', () => {
     expect((sw as HTMLInputElement).checked).toBe(true)
   })
 
-  it('switching it on says which Automation it turned off', async () => {
+  it('switching it on turns the sync on and touches no Automation', async () => {
     render(<BankSyncHead status={status({ stage: 'done' })} />)
     fireEvent.click(screen.getByRole('switch', { name: 'Turn the GoCardless sync on' }))
-    expect(
-      await screen.findByText(
-        /Turned off the Automation “Sync GoCardless”, so rows aren’t booked twice/,
-      ),
-    ).toBeTruthy()
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(screen.queryByText(/Automation/)).toBeNull()
     expect(sent[0]).toMatchObject({ url: '/api/bank-sync/gocardless/mode', method: 'PUT' })
     expect(JSON.parse(sent[0]!.body!)).toEqual({ mode: 'data' })
   })

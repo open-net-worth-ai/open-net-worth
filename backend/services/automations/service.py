@@ -206,8 +206,6 @@ def apply_automation_change(change: dict) -> dict:
         clean = validate_new_automation(change.get("automation") or change, now=now)
         clean["trigger"] = pin_price_instrument(clean["trigger"])
         clean["trigger_revision"] = new_id("triggerrev")
-        if clean["status"] == "active":
-            _refuse_beside_bank_data_sync(clean)
         clean["next_run_at"] = (
             compute_next_run(clean["trigger"], now, created_at=clean.get("created_at"))
             if clean["status"] == "active"
@@ -229,7 +227,6 @@ def apply_automation_change(change: dict) -> dict:
             {"status": "paused", "next_run_at": None, "updated_at": now.isoformat()},
         )
     if op == "resume":
-        _refuse_beside_bank_data_sync(existing)
         trigger = validate_trigger(existing["trigger"], now=now)
         next_run = compute_next_run(trigger, now, created_at=existing.get("created_at"))
         _refuse_rearming_without_a_run(existing, trigger, next_run)
@@ -255,8 +252,6 @@ def apply_automation_change(change: dict) -> dict:
         )
         if "trigger" in changes:
             merged["trigger"] = pin_price_instrument(merged["trigger"])
-        if merged["status"] == "active" and _SYNC_RELEVANT.intersection(changes):
-            _refuse_beside_bank_data_sync(merged)
         patch = {key: merged[key] for key in _EDITABLE_FIELDS if key in changes}
         if {"status", "trigger"}.intersection(changes):
             patch["next_run_at"] = (
@@ -283,16 +278,6 @@ def apply_automation_change(change: dict) -> dict:
 
 
 # Edits that can turn an Automation into a bank sync, or wake one up.
-_SYNC_RELEVANT = frozenset({"status", "name", "instructions", "always_allowed", "trigger"})
-
-
-def _refuse_beside_bank_data_sync(automation: dict) -> None:
-    """One sync mode per bank connector (ADR 2026-11-13): an Automation about to be active that
-    would sync a connector set to "Sync without AI" is refused, naming the switch. A no-op while
-    ``bank_data_sync`` is off."""
-    from backend.services import bank_data_sync
-
-    bank_data_sync.refuse_automation_beside_data_sync(automation)
 
 
 def _refuse_caller_completed(status: object, current: object = None) -> None:

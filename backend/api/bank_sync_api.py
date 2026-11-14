@@ -33,7 +33,7 @@ router = APIRouter()
 
 
 class ModeBody(BaseModel):
-    mode: Literal["off", "data", "lucius"]
+    mode: Literal["off", "data"]
 
 
 class AccountSyncBody(BaseModel):

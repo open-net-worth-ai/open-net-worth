@@ -9,7 +9,7 @@ import {
   ScheduleMenu,
 } from './BankSyncParts'
 import { nextRunLine, outOfReads, useAct, type Act } from './bankSyncHelpers'
-import { bankSyncSend, modeNotice, type BankSyncStatus, type ModeResult } from './bankSync'
+import { bankSyncSend, type BankSyncStatus } from './bankSync'
 import './bankSync.css'
 
 // A bank's Data Sync page once it is set up (ADR 2026-11-13), laid out as the budget apps' page
@@ -26,8 +26,7 @@ export function BankSyncHead({ status }: { status: BankSyncStatus }) {
   async function toggle() {
     setNotice(null)
     const mode = on ? 'off' : 'data'
-    const result = await act('mode', () => bankSyncSend<ModeResult>(`/${p}/mode`, 'PUT', { mode }))
-    if (result) setNotice(modeNotice(result))
+    await act('mode', () => bankSyncSend(`/${p}/mode`, 'PUT', { mode }))
   }
 
   async function runNow() {
@@ -83,7 +82,6 @@ export function BankSyncHead({ status }: { status: BankSyncStatus }) {
 }
 
 function stateLine(status: BankSyncStatus): string {
-  if (status.mode === 'lucius') return 'Off: a Lucius Automation syncs it'
   if (status.mode !== 'data') return 'Off'
   if (status.running) return 'Syncing now…'
   if (!status.ready) return `Waiting: ${status.label} isn’t connected`

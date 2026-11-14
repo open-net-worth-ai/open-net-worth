@@ -24,6 +24,7 @@ import type {
   AccountUpdate,
 } from '../accounts/types'
 import { refreshBankSyncs } from '../automations/datasync/bankSync'
+import { useHasBankSync } from '../automations/datasync/bankAutomate'
 
 // `AccountLike`'s generic constraint needs its own explicit index signature (a plain
 // `ApiAccount` fails useAccounts<ApiAccount>() — "Index signature for type 'string' is missing"
@@ -72,6 +73,7 @@ export function ConnectorAccountsList({
   notConfiguredText?: { title: string; body: string }
 }) {
   const [data, setData] = useState<ConnectorAccountsResponse | null>(null)
+  const hasSync = useHasBankSync(provider)
   const [loadErr, setLoadErr] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<string | null>(null)
@@ -264,8 +266,10 @@ export function ConnectorAccountsList({
       </div>
       {live && data.accounts.length > 0 && linkedCount < data.accounts.length && (
         <Text size="xs" tone="muted">
-          Add each account you want to track, or link it to one you already have. Nothing is
-          imported until Lucius fetches transactions.
+          Add each account you want to track, or link it to one you already have.{' '}
+          {hasSync
+            ? 'Nothing is imported until you set up sync below, or a Lucius Automation fetches it.'
+            : 'Nothing is imported until Lucius fetches transactions.'}
         </Text>
       )}
       {!data && !loadErr && <Loading label="Loading accounts…" />}

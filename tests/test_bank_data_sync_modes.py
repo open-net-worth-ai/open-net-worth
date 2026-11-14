@@ -7,7 +7,7 @@ from datetime import timedelta
 
 import pytest
 
-from backend.core.errors import ConflictError
+from backend.core.errors import ConflictError, ValidationError
 from backend.services import bank_data_sync
 from backend.services import ledger as ledger_service
 from backend.services.aggregation import gocardless as gocardless_svc
@@ -59,53 +59,32 @@ def _automation(**overrides) -> dict:
     return apply_automation_change({"op": "create", "automation": {**SYNC_TEMPLATE, **overrides}})
 
 
-# ── one mode at a time ───────────────────────────────────────────────────────────────
+# ── the sync and a Lucius Automation are independent ─────────────────────────────────
+# (ADR 2026-11-13, Amendment 6): nothing detects, pauses or refuses one for the other.
 
 
-def test_sync_without_ai_turns_the_lucius_sync_off_and_says_so(bank):
+def test_turning_the_sync_on_leaves_a_lucius_automation_running(bank):
     lucius = _automation()
-    assert bank_data_sync.status("gocardless")["mode"] == "lucius"
-
     result = bank_data_sync.set_mode("gocardless", "data")
-
     assert result["mode"] == "data"
-    assert result["paused_automations"] == ["Sync GoCardless"]
+    assert "paused_automations" not in result
     from backend.db.automation_store import AutomationStore
 
-    assert AutomationStore().find_by_id(lucius["id"])["status"] == "paused"
+    assert AutomationStore().find_by_id(lucius["id"])["status"] == "active"
 
 
-def test_a_lucius_sync_cannot_be_turned_on_while_data_sync_is(bank):
+def test_a_lucius_automation_can_be_created_and_resumed_while_the_sync_is_on(bank):
     paused = _automation(status="paused")
     bank_data_sync.set_mode("gocardless", "data")
-    with pytest.raises(ConflictError, match="already syncs without AI"):
-        _automation()
-    with pytest.raises(ConflictError, match="Data Sync → GoCardless"):
-        apply_automation_change({"op": "resume", "id": paused["id"]})
-
-
-def test_choosing_lucius_turns_data_sync_off_and_resumes_its_automation(bank):
     _automation()
-    bank_data_sync.set_mode("gocardless", "data")
-    result = bank_data_sync.set_mode("gocardless", "lucius")
-    assert result["mode"] == "lucius"
-    assert result["resumed_automation"] == "Sync GoCardless"
-    assert result["needs_template"] is False
+    apply_automation_change({"op": "resume", "id": paused["id"]})
 
 
-def test_choosing_lucius_with_no_automation_asks_for_the_template(bank):
-    result = bank_data_sync.set_mode("gocardless", "lucius")
-    assert result["mode"] == "off"
-    assert result["needs_template"] is True
-
-
-def test_an_unrelated_automation_is_left_alone(bank):
-    other = _automation(name="Weekly review", instructions="Summarise my spending every Sunday.")
-    result = bank_data_sync.set_mode("gocardless", "data")
-    assert result["paused_automations"] == []
-    from backend.db.automation_store import AutomationStore
-
-    assert AutomationStore().find_by_id(other["id"])["status"] == "active"
+def test_lucius_is_not_a_sync_mode(bank):
+    _automation()
+    assert bank_data_sync.status("gocardless")["mode"] == "off"
+    with pytest.raises(ValidationError):
+        bank_data_sync.set_mode("gocardless", "lucius")
 
 
 # ── the read budget ──────────────────────────────────────────────────────────────────
@@ -206,12 +185,6 @@ def test_setup_walks_accounts_then_history_then_sync(bank):
     bank_data_sync.set_mode("gocardless", "off")
     st = bank_data_sync.status("gocardless")
     assert (st["mode"], st["stage"]) == ("off", "done")
-
-
-def test_history_import_is_refused_while_lucius_syncs_the_bank(bank):
-    _automation()
-    with pytest.raises(ConflictError, match="Lucius Automation syncs GoCardless"):
-        bank_data_sync.import_history("gocardless")
 
 
 def test_no_ticked_account_is_the_accounts_step(bank):
