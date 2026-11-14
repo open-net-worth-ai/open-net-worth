@@ -52,9 +52,10 @@ Once it's set up, the page shows a switch to turn it on or off, the next sync an
 below them, the accounts, the schedule, anything that needs your review, and the run history.
 Each bank has its own card, its accounts inside. Its top right says how it stands: a green dot
 and when it last synced (hover for until when the bank lets the app read it). European banks
-grant that access for a set time (often 90 or 180 days), and so do some US and Canadian banks
-through Plaid: two weeks before it ends the dot turns amber with **Renew** (**Reconnect** for
-Plaid), and once it has ended, or the bank wants you to sign in again, it turns red
+grant that access for a set time (often 90 or 180 days; Enable Banking links ask for the
+bank's own longest), and so do some US and Canadian banks through Plaid: two weeks before it
+ends the dot turns amber with **Renew** (**Reconnect** for Plaid), and once it has ended, or the
+bank wants you to sign in again, it turns red
 with **Renew** or **Reconnect**. Either opens the connector's own setup.
 
 In **Accounts**, every account the sync keeps has a link icon after its name: green while it
