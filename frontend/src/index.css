@@ -9639,6 +9639,38 @@ body.hide-amounts .mask * {
     color: var(--faint);
     font-size: var(--text-xs);
   }
+  /* "Link bank" → approve at the bank: the one thing left to do, so a callout with a button
+     (BankHandoff), never small print. */
+  .bank-handoff {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: var(--radius-md, 10px);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+  .bank-handoff-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+  .bank-handoff-text strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .bank-handoff-go {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+  }
   .conn-acct-actions {
     flex: none;
     display: flex;

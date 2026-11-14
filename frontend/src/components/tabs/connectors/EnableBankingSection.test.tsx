@@ -223,10 +223,11 @@ describe('EnableBankingSection bank page', () => {
     render(<EnableBankingSection />)
     await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
     renew()
-    const link = await screen.findByRole('link', { name: /open your bank.s page/i })
+    // The bank's page is the main action: a button naming the bank, not small print.
+    const link = await screen.findByRole('link', { name: /^Open ACME Bank$/ })
     expect(link.getAttribute('href')).toBe('https://bank.example/consent')
     expect(link.getAttribute('rel')).toContain('noopener')
-    expect(screen.queryByText(/tab that just opened/)).toBeNull()
+    expect(screen.getByText('Approve access at ACME Bank')).toBeTruthy()
   })
 
   it('opens the tab on the click, points it at the bank, and keeps the link as a fallback', async () => {
@@ -238,8 +239,8 @@ describe('EnableBankingSection bank page', () => {
     renew()
     expect(open).toHaveBeenCalledTimes(1) // on the click, before the server answered
     await waitFor(() => expect(tab.location.href).toBe('https://bank.example/consent'))
-    expect(await screen.findByText(/tab that just opened/)).toBeTruthy()
-    const link = screen.getByRole('link', { name: /open your bank.s page/i })
+    expect(await screen.findByText('Approve access in the ACME Bank tab')).toBeTruthy()
+    const link = screen.getByRole('link', { name: /Open ACME Bank again/ })
     expect(link.getAttribute('href')).toBe('https://bank.example/consent')
     expect(tab.close).not.toHaveBeenCalled()
   })
@@ -250,7 +251,7 @@ describe('EnableBankingSection bank page', () => {
     render(<EnableBankingSection />)
     await screen.findByRole('button', { name: 'Renew access to ACME Bank (Finland)' })
     renew()
-    const link = await screen.findByRole('link', { name: /open your bank.s page/i })
+    const link = await screen.findByRole('link', { name: /^Open ACME Bank$/ })
     expect(link.getAttribute('href')).toBe('https://bank.example/consent')
     expect(screen.getByText(/paste it below/)).toBeTruthy()
   })

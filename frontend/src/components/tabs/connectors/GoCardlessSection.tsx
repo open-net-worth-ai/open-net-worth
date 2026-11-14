@@ -14,6 +14,7 @@ import {
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
+import { BankHandoff } from './BankHandoff'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { GoCardlessBanks } from './GoCardlessBanks'
 import { isPending, type GoCardlessBank } from './gocardlessBank'
@@ -69,7 +70,9 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
   const [linkErr, setLinkErr] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
   const [checking, setChecking] = useState(false)
-  const [bankLink, setBankLink] = useState<string | null>(null)
+  const [bankLink, setBankLink] = useState<{ url: string; opened: boolean; bank: string } | null>(
+    null,
+  )
   const autoChecked = useRef(false)
 
   const apply = useCallback((c: GoCardlessStatus) => {
@@ -189,7 +192,8 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
       }
       if (d.link) {
         opened = tab.go(d.link)
-        setBankLink(d.link)
+        const bank = institutions.find((i) => i.id === institutionId)?.name ?? ''
+        setBankLink({ url: d.link, opened, bank })
       }
       autoChecked.current = true
       load()
@@ -399,13 +403,9 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
       </Stack>
 
       {bankLink && banks.some(isPending) && (
-        <Text size="xs" tone="faint" className="gc-section">
-          Finish at your bank, then come back and select Check links. If no new tab opened,{' '}
-          <a href={bankLink} target="_blank" rel="noopener noreferrer">
-            open your bank&apos;s page
-          </a>
-          .
-        </Text>
+        <div className="gc-section">
+          <BankHandoff bank={bankLink.bank} url={bankLink.url} opened={bankLink.opened} />
+        </div>
       )}
 
       <div className="gc-section">

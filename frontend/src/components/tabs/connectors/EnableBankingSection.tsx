@@ -21,6 +21,7 @@ import {
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
+import { BankHandoff } from './BankHandoff'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { Icons } from './icons'
 import { EnableBankingBanks } from './EnableBankingBanks'
@@ -148,7 +149,9 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
   const [returnsToApp, setReturnsToApp] = useState<boolean | null>(null)
   // The bank's consent page, kept on screen once a link starts: a blocked tab, a mini-window
   // browser or an iOS home-screen app leaves no tab, so the link is the way to the bank.
-  const [bankLink, setBankLink] = useState<{ url: string; opened: boolean } | null>(null)
+  const [bankLink, setBankLink] = useState<{ url: string; opened: boolean; bank: string } | null>(
+    null,
+  )
   // Enable Banking refused this app's address. Step 1 holds the address to add; this keeps the
   // bank to retry with a code.
   const [unregistered, setUnregistered] = useState<{ target?: EnableBankingBank } | null>(null)
@@ -282,7 +285,7 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       setReturnsToApp(data.returns_to_app === true)
       if (data.url) {
         opened = tab.go(data.url)
-        setBankLink({ url: data.url, opened })
+        setBankLink({ url: data.url, opened, bank })
       }
       load()
     } finally {
@@ -643,33 +646,19 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
               {linkErr}
             </Text>
           )}
-          {returnsToApp === true && (
-            <Text size="xs" tone="muted">
-              {bankLink?.opened === false ? (
-                <BankPageLink url={bankLink.url} lead />
-              ) : (
-                'Approve access in the tab that just opened.'
-              )}{' '}
-              Your bank brings you back here and the link finishes by itself.
-              {bankLink?.opened && <BankPageLink url={bankLink.url} />}
-            </Text>
+          {returnsToApp === true && bankLink && (
+            <BankHandoff bank={bankLink.bank} url={bankLink.url} opened={bankLink.opened} />
           )}
           {unregistered && (
             <Text size="xs" tone="warn">
               Add the Redirect URL from step 1 to your Enable Banking app first, then link again.
             </Text>
           )}
-          {returnsToApp === false && (
-            <Text size="xs" tone="warn">
-              {bankLink?.opened === false && (
-                <>
-                  <BankPageLink url={bankLink.url} lead />{' '}
-                </>
-              )}
+          {returnsToApp === false && bankLink && (
+            <BankHandoff bank={bankLink.bank} url={bankLink.url} opened={bankLink.opened}>
               After you approve, the bank tab shows an error page. That&apos;s expected: copy the
               code from its address bar (the part after code=) and paste it below.
-              {bankLink?.opened && <BankPageLink url={bankLink.url} />}
-            </Text>
+            </BankHandoff>
           )}
 
           {pasteOpen ? (
@@ -732,16 +721,4 @@ export function EnableBankingSection({ initialCountry }: { initialCountry?: stri
       />
     </Stack>
   )
-}
-
-/** The bank's consent page as a link. `lead`: no tab opened, so this IS the instruction;
- *  otherwise a fallback after it, for a tab that opened somewhere the user can't see. */
-function BankPageLink({ url, lead = false }: { url: string; lead?: boolean }) {
-  const link = (
-    <a href={url} target="_blank" rel="noopener noreferrer">
-      {lead ? 'Open your bank’s page' : 'open your bank’s page'}
-    </a>
-  )
-  if (lead) return <>{link} to approve access.</>
-  return <> If no tab opened, {link}.</>
 }

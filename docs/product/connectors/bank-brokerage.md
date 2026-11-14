@@ -172,7 +172,7 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 5. Reopen the form (**⋯ → Edit configuration**). Under **2 Link your banks**, choose your
    **Country** — its banks load by themselves — then your **Bank**, and click **Link bank**.
 6. Your bank's sign-in page opens in a new tab. If no tab opens (some browsers block it, and the
-   iPhone home-screen app can't open one), click **Open your bank's page** under the form. After
+   iPhone home-screen app can't open one), click **Open** *your bank* in the box under the form. After
    you approve access, your bank brings you back to **Connectors**, the link finishes by itself,
    and the Enable Banking connector opens. Link your accounts in its **Accounts** list.
 
@@ -244,7 +244,7 @@ signups in 2025, so if you don't have one, use **Enable Banking** instead.
    **Country** (for example `GB`, `DE`, `FR`), click **List banks**, choose your bank under
    **Bank**, and click **Link bank**.
 5. Your bank's sign-in page opens in a new tab. If no tab opens (some browsers block it, and the
-   iPhone home-screen app can't open one), click **open your bank's page** under the form. Approve
+   iPhone home-screen app can't open one), click **Open** *your bank* in the box under the form. Approve
    access there. Afterwards the bank sends you back to the GoCardless connector in Open Net
    Worth. You don't need to copy a code.
 6. The connector's page lists the bank's accounts under **Accounts** — link each one there (see

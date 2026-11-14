@@ -164,7 +164,7 @@ describe('GoCardlessSection bank page', () => {
     current = status([bank({ status: 'CR', accounts: 0 })])
     resolveLink({ ok: true, json: () => Promise.resolve({ link: 'https://bank.example/consent' }) })
     await waitFor(() => expect(tab.location.href).toBe('https://bank.example/consent'))
-    const fallback = await screen.findByRole('link', { name: /open your bank's page/ })
+    const fallback = await screen.findByRole('link', { name: /again$/ })
     expect(fallback.getAttribute('href')).toBe('https://bank.example/consent')
     expect(tab.close).not.toHaveBeenCalled()
   })
