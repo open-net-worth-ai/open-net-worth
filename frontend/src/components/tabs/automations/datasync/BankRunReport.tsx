@@ -4,7 +4,8 @@ import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
 import { useChatComposer } from '../../../../state/chatComposer'
 import { useQueryCache } from '../../../../state/queryCache'
-import { fAmountNative, fDate } from '../../../../utils/format'
+import { fDate, getBaseCurrency } from '../../../../utils/format'
+import { fCur } from '../../accounts/format'
 import { Badge, Button, Cluster, ErrorState, Modal, Skeleton, Text } from '../../../ui'
 import {
   STATUS_LABEL,
@@ -281,11 +282,11 @@ function BookedLine({
         </span>
         <span className={`acct-td-amt ${amount < 0 ? 'neg' : 'pos'}`}>
           <span className="acct-amt-main">
-            {`${amount < 0 ? '−' : '+'}${fAmountNative(Math.abs(amount), currency)}`}
+            {`${amount < 0 ? '−' : '+'}${fCur(Math.abs(amount), currency ?? getBaseCurrency(), { cents: true })}`}
           </span>
           {t.original_amount != null && t.original_currency && (
             <span className="acct-amt-orig">
-              {fAmountNative(Math.abs(t.original_amount), t.original_currency)}
+              {fCur(Math.abs(t.original_amount), t.original_currency, { cents: true })}
             </span>
           )}
         </span>
