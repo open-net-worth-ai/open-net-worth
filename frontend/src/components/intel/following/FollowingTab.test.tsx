@@ -184,12 +184,12 @@ describe('Discover', () => {
     expect(await screen.findByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeTruthy()
   })
 
-  it('shows no breadcrumb on a phone, which goes back with the edge swipe', async () => {
+  it('keeps the breadcrumb on a phone', async () => {
     phone.on = true
     try {
       setup()
       await open('Acme Capital')
-      expect(screen.queryByRole('navigation', { name: COPY.breadcrumbLabel })).toBeNull()
+      expect(screen.getByRole('navigation', { name: COPY.breadcrumbLabel })).toBeTruthy()
     } finally {
       phone.on = false
     }
