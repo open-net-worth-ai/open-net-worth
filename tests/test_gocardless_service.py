@@ -343,14 +343,17 @@ def test_renewing_a_working_bank_keeps_it_until_the_new_consent_is_linked(fake):
     assert {r["provider_account_id"] for r in window.rows} == {ACC}
     assert window.warnings == [] and window.complete is True
 
-    # Finished at the bank: the renewal takes over and the old requisition is revoked.
+    # Finished at the bank: the renewal takes over and the old requisition is revoked. The new
+    # account has the old one's IBAN and currency, so it keeps the old id here and GoCardless's
+    # new id is only what the calls use.
     fake.requisitions[REQ2] = {"status": "LN", "accounts": [ACC3]}
     window = svc.fetch_window(store, "2026-05-01", "2026-05-31", None)
     assert ("DELETE", f"/requisitions/{REQ}/", {}) in fake.calls
     [bank] = store.banks()
     assert (bank["requisition_id"], bank["replaces"]) == (REQ2, None)
-    assert {r["provider_account_id"] for r in window.rows} == {ACC3}
-    assert ACC not in store.accounts_meta()
+    assert bank["api_account_ids"] == {ACC: ACC3}
+    assert {r["provider_account_id"] for r in window.rows} == {ACC}
+    assert ("GET", f"/accounts/{ACC3}/transactions/") in {c[:2] for c in fake.calls}
 
 
 def test_relinking_an_unknown_bank_is_refused(fake):
