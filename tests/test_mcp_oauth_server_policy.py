@@ -304,3 +304,16 @@ def test_the_public_demo_locks_every_oauth_path(method, path):
     from backend.api.demo_lockdown import is_demo_locked
 
     assert is_demo_locked(method, path)
+
+
+@pytest.mark.flags(mcp_oauth=True)
+def test_an_approval_whose_code_was_never_redeemed_is_not_a_connected_app():
+    from backend.services.mcp_oauth import grants
+    from tests.mcp_oauth_helpers import approve, start
+
+    client = build_client()
+    _, challenge = pkce()
+    assert approve(client, start(client, challenge)).status_code == 200
+    assert grants.list_connected_apps() == []
+    connect(client)
+    assert len(grants.list_connected_apps()) == 1

@@ -113,6 +113,21 @@ class McpOAuthStore:
         with get_engine().connect() as c:
             return _row(c.execute(stmt))
 
+    def list_connected_grants(self) -> list[dict]:
+        """Live grants an app actually redeemed (it holds a token). A consent whose code was never
+        exchanged — an abandoned sign-in — is not a connected app."""
+        from sqlalchemy import exists
+
+        has_token = exists().where(mcp_oauth_tokens.c.grant_id == mcp_oauth_grants.c.grant_id)
+        with get_engine().connect() as c:
+            rows = c.execute(
+                select(mcp_oauth_grants)
+                .where(mcp_oauth_grants.c.revoked_at.is_(None))
+                .where(has_token)
+                .order_by(mcp_oauth_grants.c.created_at)
+            )
+            return [dict(r) for r in rows.mappings()]
+
     def list_live_grants(self) -> list[dict]:
         with get_engine().connect() as c:
             rows = c.execute(

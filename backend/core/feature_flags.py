@@ -205,9 +205,9 @@ FLAGS: tuple[Flag, ...] = (
             "Connect claude.ai, Claude on your phone, Claude Desktop's custom connectors and "
             "ChatGPT to your book over the internet. They sign in with OAuth: you type your "
             "password on a consent page and choose read-only or read and change. Needs a public "
-            "HTTPS address (Settings > MCP) and a password, and loopback trust off. Settings > "
-            "MCP lists connected apps and revokes them. Off: only the API token opens /mcp, "
-            "as before."
+            "HTTPS address (Settings > MCP), a password, and \"Don't ask for the password on "
+            'this computer" off. Settings > MCP lists connected apps and revokes them. Off: '
+            "only the API token opens /mcp, as before."
         ),
         default=False,
         owner="owner",

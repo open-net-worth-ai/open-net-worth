@@ -70,7 +70,7 @@ describe('Settings → MCP → Hosted apps', () => {
     serve({ ...ON, available: false, reasons: ['no_password', 'loopback_trusted'], apps: [] })
     render(<McpOAuthPanel toast={vi.fn()} />)
     expect(await screen.findByText(/Set a password in Settings → Security/)).toBeTruthy()
-    expect(screen.getByText(/Turn off "Trust this computer"/)).toBeTruthy()
+    expect(screen.getByText(/Don't ask for the password on this computer/)).toBeTruthy()
   })
 
   it('revokes an app', async () => {
@@ -104,7 +104,14 @@ describe('Settings → MCP → Hosted apps', () => {
     await waitFor(() => expect(container.textContent).toContain('onw_cs_secret'))
     const secretBox = container.querySelector('[data-ctx-secret]:not(span)')
     expect(secretBox?.textContent).toContain('onw_cs_secret')
-    const body = JSON.parse(String((mockAuthFetch.mock.calls.at(-2)![1] as RequestInit).body))
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy secret' }))
+    expect(writeText).toHaveBeenCalledWith('onw_cs_secret')
+    const post = mockAuthFetch.mock.calls.find(
+      ([, init]) => (init as RequestInit)?.method === 'POST',
+    )!
+    const body = JSON.parse(String((post[1] as RequestInit).body))
     expect(body).toEqual({ name: 'My app', redirect_uris: ['https://app.example/cb'] })
   })
 

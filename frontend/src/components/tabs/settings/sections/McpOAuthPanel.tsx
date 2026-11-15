@@ -52,7 +52,7 @@ const REASONS: Record<string, string> = {
   no_password: 'Set a password in Settings → Security — the consent page asks for it.',
   auth_disabled: 'Sign-in is turned off on this instance.',
   loopback_trusted:
-    'Turn off "Trust this computer" in Settings → Security: behind a proxy or tunnel every visitor looks like this computer.',
+    'In Settings → Security, turn off "Don\'t ask for the password on this computer": behind a proxy or tunnel every visitor looks like this computer.',
   demo: 'Not available on the public demo.',
   gateway: 'Not available behind the Open Net Worth gateway yet.',
   desktop: 'The desktop app only accepts connections from this computer.',
@@ -80,6 +80,13 @@ async function detail(r: Response): Promise<string> {
   } catch {
     return `Failed (${r.status})`
   }
+}
+
+function copy(text: string, what: string, toast: Toast): void {
+  void navigator.clipboard
+    .writeText(text)
+    .then(() => toast(`${what} copied`))
+    .catch(() => toast('Could not copy — select it manually'))
 }
 
 function when(iso: string | null): string {
@@ -112,10 +119,13 @@ function OAuthBody({
     >
       {status.available ? (
         <span className="rd-help" style={{ display: 'block', lineHeight: 1.55 }}>
-          <Badge tone="good">On</Badge> In claude.ai: Settings → Connectors → Add custom connector.
-          In ChatGPT: Settings → Apps → Create (Developer mode). Paste{' '}
-          <span data-ctx-secret="">{status.mcp_url}</span>. Each app gets read-only access unless
-          you tick changes on the consent page.
+          <Badge tone="good">On</Badge> In claude.ai, open Connectors and choose Add custom
+          connector. In ChatGPT, add a custom MCP server (Developer mode). Paste{' '}
+          <span data-ctx-secret="">{status.mcp_url}</span>{' '}
+          <Btn size="xs" variant="ghost" onClick={() => copy(status.mcp_url, 'Address', toast)}>
+            Copy
+          </Btn>{' '}
+          Each app gets read-only access unless you tick changes on the consent page.
         </span>
       ) : (
         <div>
@@ -279,8 +289,18 @@ function Credentials({
         </div>
       ))}
       {created ? (
-        <div className="rd-code" data-ctx-secret="" style={{ marginBottom: 8 }}>
-          {`Client ID: ${created.client_id}\nClient secret: ${created.client_secret}\n\nCopy the secret now — it is not shown again.`}
+        <div style={{ marginBottom: 8 }}>
+          <div className="rd-code" data-ctx-secret="">
+            {`Client ID: ${created.client_id}\nClient secret: ${created.client_secret}\n\nCopy the secret now — it is not shown again.`}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <Btn size="xs" onClick={() => copy(created.client_id, 'Client ID', toast)}>
+              Copy client ID
+            </Btn>
+            <Btn size="xs" onClick={() => copy(created.client_secret, 'Client secret', toast)}>
+              Copy secret
+            </Btn>
+          </div>
         </div>
       ) : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

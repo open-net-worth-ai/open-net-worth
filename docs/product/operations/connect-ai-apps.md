@@ -151,7 +151,7 @@ claude mcp add --transport http open-net-worth http://127.0.0.1:8080/mcp \
 
 ## claude.ai, Claude on your phone and ChatGPT (sign in with OAuth)
 
-**Experimental — off by default.** Turn on `mcp_oauth` under **Settings → Developer →
+**Experimental — off by default.** Turn on **Mcp oauth** under **Settings → Developer →
 Experimental** first (see [Experimental features](../features/settings.md#experimental-features)).
 
 claude.ai (web and mobile), Claude Desktop's **Add custom connector** and ChatGPT run on their
@@ -162,15 +162,17 @@ password, and choose whether it may only read or may also make changes.
 1. Make your instance reachable at a public HTTPS address — see
    [Exposing beyond localhost](exposing-beyond-localhost.md). (This needs a server install; the
    desktop app only accepts connections from its own computer.)
-2. In **Settings → Security**, set a password if you haven't, and turn **Trust this computer**
-   off. Behind a reverse proxy or tunnel every visitor looks like "this computer", so the
-   connection is refused while it's on.
+2. In **Settings → Security**, set a password if you haven't, and turn off **Don't ask for the
+   password on this computer**. Behind a reverse proxy or tunnel every visitor looks like "this
+   computer", so the connection is refused while it's on.
 3. In **Settings → MCP → Hosted apps**, enter your public address (for example
-   `https://wealth.example.com`) and click **Save**. Or set `ONW_PUBLIC_URL` on the server. The
+   `https://wealth.example.com`) and click **Save**. **Copy** next to the address puts it on your
+   clipboard. Or set `ONW_PUBLIC_URL` on the server. The
    panel shows **On** when everything is ready, and lists what's missing when it isn't.
 4. Add the connector in the app, using the address the panel shows (`https://your-address/mcp`):
-   - **claude.ai:** **Settings → Connectors → Add custom connector**. Leave the advanced OAuth
-     fields empty. The connector also works in Claude on your phone and in Claude Desktop.
+   - **claude.ai:** open **Connectors** (under **Customize** or **Settings**) and choose **Add
+     custom connector**. Leave the advanced OAuth fields empty. The connector also works in Claude
+     on your phone and in Claude Desktop.
    - **ChatGPT:** with Developer mode on, add a custom MCP server (connector) with that URL and
      choose OAuth.
 5. A page from your own address opens. Check the address bar, read which app is asking, type your
@@ -197,7 +199,8 @@ book.
 
 **Another hosted app.** If an app asks for a client ID and secret, create them in **Settings → MCP
 → Hosted apps → App credentials**: enter the app's name and its redirect (callback) URL. The
-secret is shown once.
+secret is shown once, with **Copy client ID** and **Copy secret** buttons. An app shows under
+**Connected apps** once it has finished signing in.
 
 **If your hosted app accepts a header instead.** Some apps let you set a fixed
 `Authorization: Bearer …` header. In **Settings → MCP**, choose **Generic HTTP / remote**, click

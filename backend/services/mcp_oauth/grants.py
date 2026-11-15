@@ -39,7 +39,7 @@ def list_connected_apps() -> list[dict]:
             "last_used_at": g["last_used_at"],
             "expires_at": g["expires_at"],
         }
-        for g in McpOAuthStore().list_live_grants()
+        for g in McpOAuthStore().list_connected_grants()
     ]
 
 
