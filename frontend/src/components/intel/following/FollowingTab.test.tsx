@@ -72,6 +72,7 @@ vi.mock('../usePortfolioTickerMaps', () => ({
 // what its tooltip would say at the last point, so a test can read both.
 vi.mock('./ActivityChart', () => ({
   CHART_HEIGHT: 200,
+  CHART_BOX: '200px',
   ActivityChart: (p: {
     label: string
     points: { date: string }[]
