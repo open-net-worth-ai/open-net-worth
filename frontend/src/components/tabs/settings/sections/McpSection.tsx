@@ -9,7 +9,13 @@ import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
 import { Btn, Panel, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
-import { FALLBACK_LAUNCH, MCP_CLIENTS, launchNote } from './mcpClients'
+import {
+  FALLBACK_LAUNCH,
+  MCP_CLIENTS,
+  STDIO_VARIANTS,
+  defaultVariant,
+  launchNote,
+} from './mcpClients'
 import type { McpLaunch, StdioVariant } from './mcpClients'
 
 /** What the rendered snippet shows in place of the real bearer. */
@@ -25,7 +31,8 @@ async function getJson<T>(path: string): Promise<T> {
 
 export function McpSection({ toast, openSection }: SectionProps) {
   const [client, setClient] = useState('claude-desktop')
-  const [variant, setVariant] = useState<StdioVariant>('installed')
+  // null until the user picks: the default follows what the server reports (Docker → remote).
+  const [picked, setPicked] = useState<StdioVariant | null>(null)
   const { data: tokenData, initialLoading: loadingToken } = useCachedFetchState<{ token: string }>(
     '/api/auth/api-token',
     () => getJson<{ token: string }>('/api/auth/api-token'),
@@ -38,6 +45,7 @@ export function McpSection({ toast, openSection }: SectionProps) {
   )
   useSectionBusy((loadingToken && !tokenData) || (loadingLaunch && !launchData))
   const launch = launchData ?? FALLBACK_LAUNCH
+  const variant = picked ?? defaultVariant(launch)
   const origin = window.location.origin
   const token = tokenData?.token || 'YOUR_API_TOKEN'
   const g = MCP_CLIENTS.find((c) => c.id === client) || MCP_CLIENTS[0]!
@@ -96,22 +104,17 @@ export function McpSection({ toast, openSection }: SectionProps) {
           <div
             className="rd-seg"
             role="tablist"
-            aria-label="How Open Net Worth is installed"
+            aria-label="How Open Net Worth runs"
             style={{ marginTop: 9 }}
           >
-            {(
-              [
-                ['installed', 'Installed (onw)'],
-                ['source', 'Running from source'],
-              ] as const
-            ).map(([key, label]) => (
+            {STDIO_VARIANTS.map(([key, label]) => (
               <button
                 type="button"
                 key={key}
                 role="tab"
                 aria-selected={variant === key}
                 className={'rd-seg-b' + (variant === key ? ' on' : '')}
-                onClick={() => setVariant(key)}
+                onClick={() => setPicked(key)}
               >
                 {label}
               </button>

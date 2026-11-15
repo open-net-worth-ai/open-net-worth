@@ -25,6 +25,7 @@ const INSTALLED = {
   command_found: true,
   root: null,
   source_root: null,
+  container: false,
 }
 
 beforeEach(() => {
@@ -58,6 +59,24 @@ describe('Settings → MCP', () => {
     const { container } = render(<McpSection toast={vi.fn()} />)
     fireEvent.click(await screen.findByRole('tab', { name: 'Running from source' }))
     expect(container.querySelector('.rd-code')!.textContent).toContain('backend.mcp.stdio_bridge')
+  })
+
+  it('Docker: picks "Docker or another computer" itself — onw on the AI app\'s computer', async () => {
+    serve({ ...INSTALLED, command: 'onw', command_found: false, container: true })
+    const { container } = render(<McpSection toast={vi.fn()} />)
+    const tab = await screen.findByRole('tab', { name: 'Docker or another computer' })
+    await waitFor(() => expect(tab.getAttribute('aria-selected')).toBe('true'))
+    const code = container.querySelector('.rd-code')!.textContent!
+    expect(code).toContain('"command": "onw"')
+    expect(code).toContain('ONW_BASE_URL')
+    expect(screen.getByText(/uv tool install open-net-worth/)).toBeTruthy()
+  })
+
+  it('a path this server found never reaches the "another computer" config', async () => {
+    serve(INSTALLED)
+    const { container } = render(<McpSection toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('tab', { name: 'Docker or another computer' }))
+    expect(container.querySelector('.rd-code')!.textContent).not.toContain('/opt/onw/bin/onw')
   })
 
   it('desktop app: no install choice, and the config carries ONW_ROOT', async () => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FALLBACK_LAUNCH, MCP_CLIENTS, SOURCE_CWD_PLACEHOLDER, launchNote } from './mcpClients'
+import {
+  FALLBACK_LAUNCH,
+  MCP_CLIENTS,
+  SOURCE_CWD_PLACEHOLDER,
+  defaultVariant,
+  launchNote,
+} from './mcpClients'
 import type { McpLaunch, SnippetContext } from './mcpClients'
 
 const ORIGIN = 'http://127.0.0.1:8080'
@@ -10,6 +16,7 @@ const DESKTOP: McpLaunch = {
   command_found: true,
   root: 'C:\\Users\\me\\Open Net Worth',
   source_root: null,
+  container: false,
 }
 
 const ctx = (over: Partial<SnippetContext> = {}): SnippetContext => ({
@@ -64,6 +71,26 @@ describe('MCP client snippets', () => {
     const launch = { ...FALLBACK_LAUNCH, source_root: '/src/onw' }
     const filled = firstBlock(snippet('claude-desktop', ctx({ variant: 'source', launch })))
     expect(filled.mcpServers['open-net-worth'].cwd).toBe('/src/onw')
+  })
+
+  it('"Docker or another computer" runs a bare onw at this address, never a server-side path', () => {
+    const launch = { ...FALLBACK_LAUNCH, command: '/home/me/.local/bin/onw', command_found: true }
+    for (const id of ['claude-desktop', 'cursor', 'other']) {
+      const server = firstBlock(snippet(id, ctx({ launch, variant: 'remote' }))).mcpServers[
+        'open-net-worth'
+      ]
+      expect(server).toEqual({
+        command: 'onw',
+        args: ['mcp'],
+        env: { ONW_BASE_URL: ORIGIN, ONW_API_TOKEN: 'TOK' },
+      })
+    }
+  })
+
+  it('a container install defaults to "Docker or another computer"', () => {
+    expect(defaultVariant({ ...FALLBACK_LAUNCH, container: true })).toBe('remote')
+    expect(defaultVariant(FALLBACK_LAUNCH)).toBe('installed')
+    expect(launchNote(FALLBACK_LAUNCH, 'remote')).toMatch(/uv tool install open-net-worth/)
   })
 
   it('no client still ships the old checkout-only command as its default', () => {

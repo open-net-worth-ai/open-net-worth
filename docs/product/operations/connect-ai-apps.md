@@ -35,8 +35,10 @@ starts for you.
 1. In Open Net Worth, open **Settings → MCP**.
 2. Under **Connect from…**, click your app: **Claude Desktop**, **Cursor**, **VS Code (Copilot)**
    or **Cline / Continue / other**.
-3. If you run Open Net Worth as a server rather than the desktop app, pick how you installed it:
-   **Installed (onw)** or **Running from source**.
+3. If you run Open Net Worth as a server rather than the desktop app, pick how it runs:
+   **Installed (onw)**, **Running from source**, or **Docker or another computer** (see
+   [Docker, or an AI app on another computer](#docker-or-an-ai-app-on-another-computer)).
+   With Docker, Settings picks the last one for you.
 4. Click **Copy config**. The copy contains your real API token (the screen shows a placeholder,
    `ONW_API_TOKEN_PASTED_ON_COPY`, so the token never appears on the page).
 5. Paste it where the hint on screen says:
@@ -80,6 +82,49 @@ right one:
 | **Desktop app** | The Python bundled inside the app, with `-m backend.cli mcp`. Instead of an address, the config names your book folder (`ONW_ROOT`), because the desktop app picks a new address each time it starts and the bridge finds the current one there. If you move the app or switch book folders, copy the config again. |
 | **Installed (`onw`)** | The `onw` command, with `mcp`. Settings fills in its full path when it can, because apps like Claude Desktop don't search your shell's `PATH`. |
 | **Running from source** | `python3 -m backend.mcp.stdio_bridge`, run in your checkout folder. See the troubleshooting note below if your app can't start it. |
+| **Docker or another computer** | `onw mcp`, installed on the computer where the AI app runs, with the address of your Open Net Worth. See below. |
+
+## Docker, or an AI app on another computer
+
+When Open Net Worth runs in Docker, or on another computer (a home server, a NAS), the AI app
+can't start anything from it: the programs inside the container or on the server don't exist on
+the computer where the AI app runs. So that computer gets its own copy of the bridge:
+
+1. On the computer running the AI app, install the bridge:
+
+   ```bash
+   uv tool install open-net-worth
+   ```
+
+   This doesn't start a second Open Net Worth there. `onw mcp` only passes each message from the
+   AI app to your instance's address and hands the answer back.
+2. On that same computer, open Open Net Worth in the browser, go to **Settings → MCP**, choose
+   **Docker or another computer** and click **Copy config**. Copying it there puts in the
+   address that computer reaches your instance at.
+3. Paste it into the AI app as in the steps above.
+
+**You don't need to update the bridge when you update Open Net Worth.** It doesn't contain any
+Open Net Worth tools: each time the AI app connects, it asks your instance for the tool list, so
+new tools appear on their own. It depends only on the MCP standard itself.
+
+If you'd rather install nothing from Open Net Worth on that computer, the generic `mcp-remote`
+bridge does the same job. It needs Node.js:
+
+```json
+{
+  "mcpServers": {
+    "open-net-worth": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://your-server:8080/mcp", "--allow-http",
+               "--header", "Authorization:${ONW_AUTH}"],
+      "env": { "ONW_AUTH": "Bearer your-api-token" }
+    }
+  }
+}
+```
+
+`--allow-http` is only needed for an `http://` address. The token sits in `env` because some
+apps break an argument that contains a space.
 
 ## Set up Claude Code
 
@@ -141,6 +186,9 @@ An app holding your API token **acts as you**: it can read your whole book and m
 - Open Net Worth isn't running — start it, then restart Claude Desktop.
 - The app can't find `onw`. Replace `"command"` with the full path printed by `which onw`
   (Windows: `where onw`).
+- The log says `Failed to spawn process: No such file or directory` and Open Net Worth runs in
+  Docker or on another computer: `onw` isn't installed where the AI app runs. See
+  [Docker, or an AI app on another computer](#docker-or-an-ai-app-on-another-computer).
 - The JSON is invalid — check you pasted only one block and didn't leave `//` comment lines in.
 
 **"cannot reach Open Net Worth MCP server at …"** — the bridge started but Open Net Worth isn't
