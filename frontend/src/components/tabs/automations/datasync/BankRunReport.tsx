@@ -267,8 +267,9 @@ function UndoRun({
                       {`This removes the ${removes} this sync booked${dropped ? ` and brings back the ${brings} it dropped` : ''}. Your balances go back to what they were before it.`}
                     </p>
                     <p>
-                      The bank’s rows aren’t booked again by the next sync: each waits under Needs
-                      your review, where you can Book again or Dismiss it.
+                      The bank’s rows aren’t booked again by the next sync. They wait together under
+                      Needs your review, where you can book them all again, book one, or forget
+                      them.
                     </p>
                     {error && (
                       <div role="alert">

@@ -74,8 +74,9 @@ booked duplicates. It removes what the run booked, brings back the pending trans
 dropped (a pending one that a settled transaction replaced stays gone, so it isn't counted
 twice), puts a card payment it folded into a transaction you'd typed back to what that was,
 and returns an account's start to where it was before a first import moved it, so your balances
-are what they were. The bank's rows are not booked again by the next sync: each waits under
-**Needs your review** with **Book again** and **Dismiss** (Dismiss keeps it out for good). Only
+are what they were. The bank's rows are not booked again by the next sync: they wait together, as one item under
+**Needs your review**, with **Book all again** and **Forget them** (which keeps them out for
+good); **Show the transactions** lists them, each with its own **Book again**. Only
 the most recent sync that changed your book can be undone, and a pending transaction the bank
 settled stays settled. A transaction you changed since is left as you changed it, and the run
 says so, as it does when a sync couldn't be saved for Undo or an account's start couldn't be put

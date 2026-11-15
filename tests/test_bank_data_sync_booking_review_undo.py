@@ -280,8 +280,8 @@ def test_undone_rows_are_held_for_review_not_booked_again(bank):
     _undo(run)
 
     items = reviews.open_items("gocardless")
-    assert [(i["kind"], i["detail"]["undone"], i["txn_id"]) for i in items] == [
-        ("duplicate", True, None)
+    assert [(i["kind"], len(i["detail"]["rows"]), i["txn_id"]) for i in items] == [
+        ("undone", 1, None)
     ]
     again = _run()
     assert again["counts"]["booked"] == 0 and again["counts"]["held"] == 1
@@ -291,6 +291,34 @@ def test_undone_rows_are_held_for_review_not_booked_again(bank):
 
     (row,) = _live()
     assert row["description"] == "ACME CAFE" and row["from_amount"] == 10.00
+
+
+def test_an_undone_run_is_one_review_item_however_many_rows_it_booked(bank):
+    from backend.services.bank_data_sync import review_actions, reviews
+
+    linked_account("ACME Current", ACC_MAIN)
+    bank.booked[ACC_MAIN] = [
+        txn(-10.00, days_ago(5), "ACME CAFE", tid="o1"),
+        txn(-4.00, days_ago(4), "ACME BUS", tid="o2"),
+        txn(-6.00, days_ago(3), "ACME KIOSK", tid="o3"),
+    ]
+    result = _undo(_run())
+
+    (item,) = reviews.open_items("gocardless")
+    assert result["held_for_review"] == 3 and len(item["detail"]["rows"]) == 3
+    assert _run()["counts"]["held"] == 3 and _live() == []
+
+    bus = next(e for e in item["detail"]["rows"] if e["row"]["description"] == "ACME BUS")
+    review_actions.book_separately(item["id"], ref=bus["refs"][0])  # "Book again" on one row
+
+    assert [t["description"] for t in _live()] == ["ACME BUS"]
+    (item,) = reviews.open_items("gocardless")  # the other two still wait, still held
+    assert len(item["detail"]["rows"]) == 2 and _run()["counts"]["booked"] == 0
+
+    review_actions.book_separately(item["id"], seen=item["updated_at"])  # "Book all again"
+
+    assert {t["description"] for t in _live()} == {"ACME CAFE", "ACME BUS", "ACME KIOSK"}
+    assert reviews.open_items("gocardless") == []
 
 
 def test_a_dismissed_undone_row_stays_out(bank):
@@ -431,7 +459,8 @@ def test_book_again_on_an_undone_card_payment_returns_one_transfer(bank):
     _undo(_run())
 
     (item,) = reviews.open_items("gocardless")  # ONE item holding both bank rows
-    assert item["detail"]["pair"]
+    (entry,) = item["detail"]["rows"]
+    assert entry["pair"] and len(entry["refs"]) == 2
     assert _run()["counts"]["held"] == 2  # and both refs stay held
     review_actions.book_separately(item["id"])
 

@@ -143,16 +143,38 @@ beforeEach(() => {
             id: 'bsr_2',
             provider: 'gocardless',
             provider_label: 'GoCardless',
-            kind: 'duplicate',
-            ref: 'acc:o1',
+            kind: 'undone',
+            ref: 'run:r2',
             txn_id: null,
             created_at: '2026-11-14T10:00:00+00:00',
             updated_at: '2026-11-14T10:00:00+00:00',
             detail: {
               undone: true,
-              reason: 'You undid the sync that booked this.',
-              current: null,
-              row: { date: '2026-11-12', amount: -10, currency: 'GBP', description: 'ACME CAFE' },
+              reason: 'You undid the sync that booked these.',
+              rows: [
+                {
+                  refs: ['acc:o1'],
+                  row: {
+                    date: '2026-11-12',
+                    amount: -10,
+                    currency: 'GBP',
+                    description: 'ACME CAFE',
+                  },
+                },
+                {
+                  refs: ['acc:o2'],
+                  row: { date: '2026-11-11', amount: -4, currency: 'GBP', description: 'ACME BUS' },
+                },
+                {
+                  refs: ['acc:o3'],
+                  row: {
+                    date: '2026-11-10',
+                    amount: -6,
+                    currency: 'GBP',
+                    description: 'ACME KIOSK',
+                  },
+                },
+              ],
             },
           },
         ],
@@ -298,19 +320,25 @@ describe('with bank_data_sync on', () => {
     )
   })
 
-  it('a row held back by an undone sync offers Book again or Dismiss, never Same transaction', async () => {
+  it('an undone sync is one item: Book all again, Forget them, or book one row', async () => {
     undoneItem = true
     render(<BankSyncReviews provider="gocardless" />)
-    expect(
-      await screen.findByText('You undid the sync that booked this, so it was not booked again.'),
-    ).toBeTruthy()
-    expect(screen.queryByText('In your book')).toBeNull()
+    expect(await screen.findByText(/its 3 transactions weren’t booked again/)).toBeTruthy()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Same transaction' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Book again' }))
+    expect(screen.getByRole('button', { name: 'Forget them' })).toBeTruthy()
+    expect(screen.queryByText(/ACME BUS/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show the 3 transactions' }))
+    const bus = screen.getByText(/ACME BUS/).closest('li')!
+    fireEvent.click(bus.querySelector('button')!)
     await waitFor(() =>
       expect(sent.at(-1)).toMatchObject({ url: '/api/bank-sync/reviews/bsr_2/book' }),
     )
+    expect(JSON.parse(sent.at(-1)!.body!)).toMatchObject({ ref: 'acc:o2' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Book all 3 again' }))
+    await waitFor(() => expect(JSON.parse(sent.at(-1)!.body!).ref).toBeUndefined())
   })
 
   it('accounts are grouped under the bank each one is at', () => {
@@ -488,7 +516,7 @@ describe('with bank_data_sync on', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Undo this sync?' })
     expect(dialog.textContent).toContain('removes the 2 transactions this sync booked')
     expect(dialog.textContent).toContain('brings back the 1 pending one it dropped')
-    expect(dialog.textContent).toContain('Book again or Dismiss')
+    expect(dialog.textContent).toContain('book them all again, book one, or forget them')
     expect(sent).toHaveLength(0)
     const confirm = Array.from(dialog.querySelectorAll('button')).find(
       (b) => b.textContent === 'Undo this run',

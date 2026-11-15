@@ -344,8 +344,10 @@ legs, and an unpaired wrong guess would be silent where an unpaired row is visib
 **Undo.** A run that books or removes anything records an import batch under
 `bank_sync:{run_id}` (`create_batch(batch_id=)`) with `merges` (promoted rows' before-images),
 `deleted_ids` (pending rows it removed), the bank's view of each ref, and opening restores;
-`import_undo.undo_import` does the rest. The refs a user undid are held as open review items
-("Book again" / "Dismiss"), never silently re-booked by the next sync. Only the latest run that
+`import_undo.undo_import` does the rest. The refs a user undid are held by ONE open `undone`
+review item per run ("Book all again" / "Forget them", or "Book again" on one row), never
+silently re-booked by the next sync; an item per row turned undoing a 60-row import into 60
+decisions. Only the latest run that
 changed the book is undoable; edits made since the run and pending rows settled since are not
 reverted. "Book again" on a transfer that was paired books its two refs as separate rows.
 

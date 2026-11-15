@@ -371,12 +371,13 @@ def dismiss_review(item_id: str, seen: Optional[str] = None) -> dict:
     return review_actions.dismiss(item_id, seen)
 
 
-def book_review(item_id: str, seen: Optional[str] = None) -> dict:
-    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
+def book_review(item_id: str, seen: Optional[str] = None, ref: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409). ``ref``
+    books one row of an undone sync again; without it, all of them."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.book_separately(item_id, seen)
+    return review_actions.book_separately(item_id, seen, ref)
 
 
 async def run_followups() -> int:

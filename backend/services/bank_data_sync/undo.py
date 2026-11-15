@@ -10,9 +10,10 @@ successor's ref is held, and bringing both back would count the spend twice. Wha
 hold, this adds:
 
 * ``bank_rows`` — the bank's own view of each ref the run booked. Undone rows are not booked
-  again silently (that would make Undo pointless for a bad run — duplicates, say): each ref is
-  held back as an open ``duplicate`` review item (``detail.undone``) with **Book again** and
-  **Dismiss**, so the next sync neither re-books nor forgets them.
+  again silently (that would make Undo pointless for a bad run — duplicates, say): ONE open
+  ``undone`` review item holds all of them back (``detail.rows``) with **Book all again**,
+  **Forget them** and a per-row **Book again**, so the next sync neither re-books nor forgets
+  them, and undoing 60 rows is one decision, not 60.
 * ``opening_restores`` — an account's Starting Balance the run moved (the first import's
   alignment, the bank's balance), put back so the balance doesn't change by what Undo removes.
 
@@ -35,7 +36,7 @@ from backend.services.bank_data_sync import booker, pending, reviews
 
 logger = logging.getLogger(__name__)
 
-UNDONE_REASON = "You undid the sync that booked this, so it was not booked again."
+UNDONE_REASON = "You undid the sync that booked these, so they were not booked again."
 
 
 def batch_id(run_id: str) -> str:
@@ -130,11 +131,11 @@ def _check_undoable(provider: str, run_id: str) -> dict:
     return batch
 
 
-def _hold(provider: str, run_id: str, batch: dict, groups: list[list[str]]) -> int:
-    """One open ``duplicate`` item per undone row (the bank's row, to Book again or Dismiss); a
-    card payment's two rows are ONE item, so they come back as one transfer."""
+def _held_rows(batch: dict, groups: list[list[str]]) -> list[dict]:
+    """The bank's view of each undone row, a card payment's two rows as ONE entry (booked again
+    together, as one transfer). ``refs`` names the entry: Book again can take just that one."""
     views = batch.get("bank_rows") or {}
-    held = 0
+    out: list[dict] = []
     seen: set[str] = set()
     for group in groups:
         group = [r for r in dict.fromkeys(group) if r and r not in seen]
@@ -145,20 +146,31 @@ def _hold(provider: str, run_id: str, batch: dict, groups: list[list[str]]) -> i
         if not found:
             continue
         found.sort(key=lambda rv: float(rv[1].get("amount") or 0))  # the outflow first
-        ref, view = found[0]
-        detail = {"row": view, "reason": UNDONE_REASON, "undone": True}
+        entry = {"refs": [r for r, _ in found], "row": found[0][1]}
         if len(found) == 2:
-            detail |= {"pair": found[1][1], "refs": [ref, found[1][0]]}
+            entry["pair"] = found[1][1]
+        out.append(entry)
+    return sorted(out, key=lambda e: e["row"].get("date") or "", reverse=True)
+
+
+def _hold(provider: str, run_id: str, batch: dict, groups: list[list[str]]) -> int:
+    """ONE open ``undone`` item for the whole run, holding every undone row back from the next
+    sync: Book all again, Forget them, or Book again one row. Returns how many rows it holds."""
+    rows = _held_rows(batch, groups)
+    if rows:
         reviews.record(
             provider,
-            "duplicate",
-            ref,
+            "undone",
+            f"run:{run_id}",
             run_id=run_id,
-            account_id=view.get("linked_account_id"),
-            detail=detail,
+            detail={
+                "rows": rows,
+                "run_at": import_runs.get(run_id).get("started_at"),
+                "reason": UNDONE_REASON,
+                "undone": True,
+            },
         )
-        held += 1
-    return held
+    return len(rows)
 
 
 def _restore_openings(batch: dict) -> tuple[int, list[str]]:

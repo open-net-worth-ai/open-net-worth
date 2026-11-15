@@ -1,7 +1,13 @@
 import { useState } from 'react'
-import { fAmountNative, fDate } from '../../../../utils/format'
+import { fAmountNative, fDate, fTime } from '../../../../utils/format'
 import { Button, ErrorState } from '../../../ui'
-import { bankSyncSend, useBankReviews, type BankReview, type BankRowView } from './bankSync'
+import {
+  bankSyncSend,
+  useBankReviews,
+  type BankReview,
+  type BankRowView,
+  type BankUndoneRow,
+} from './bankSync'
 import './bankSync.css'
 
 // The bank sync's review list (ADR 2026-11-13): what the bank changed after booking, and rows it
@@ -12,7 +18,10 @@ const ACTIONS: Record<BankReview['kind'], { accept: string; dismiss: string }> =
   posted: { accept: 'Use the posted amount', dismiss: 'Keep mine' },
   vanished: { accept: 'Delete it', dismiss: 'Keep it' },
   duplicate: { accept: 'Same transaction', dismiss: 'Ignore it' },
+  undone: { accept: 'Book all again', dismiss: 'Forget them' },
 }
+
+type Decide = (item: BankReview, action: 'accept' | 'dismiss' | 'book', ref?: string) => void
 
 function row(v: BankRowView | null | undefined): string {
   if (!v) return 'gone from your book'
@@ -52,12 +61,13 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
   const items = reviews.data ?? []
   if (items.length === 0) return null
 
-  async function decide(item: BankReview, action: 'accept' | 'dismiss' | 'book') {
-    setBusy(`${item.id}:${action}`)
+  async function decide(item: BankReview, action: 'accept' | 'dismiss' | 'book', ref?: string) {
+    setBusy(`${item.id}:${action}${ref ? `:${ref}` : ''}`)
     setError(null)
     try {
       await bankSyncSend(`/reviews/${item.id}/${action}`, 'POST', {
         updated_at: item.updated_at,
+        ...(ref ? { ref } : {}),
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That didn’t work.')
@@ -79,9 +89,13 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
         </div>
       )}
       <ul className="bs-reviews" aria-label="Bank changes to review">
-        {items.map((item) => (
-          <ReviewRow key={item.id} item={item} busy={busy} onDecide={decide} />
-        ))}
+        {items.map((item) =>
+          item.kind === 'undone' ? (
+            <UndoneRun key={item.id} item={item} busy={busy} onDecide={decide} />
+          ) : (
+            <ReviewRow key={item.id} item={item} busy={busy} onDecide={decide} />
+          ),
+        )}
       </ul>
     </section>
   )
@@ -94,7 +108,7 @@ function ReviewRow({
 }: {
   item: BankReview
   busy: string | null
-  onDecide: (item: BankReview, action: 'accept' | 'dismiss' | 'book') => void
+  onDecide: Decide
 }) {
   const d = item.detail
   const labels = ACTIONS[item.kind]
@@ -156,6 +170,99 @@ function ReviewRow({
           onClick={() => onDecide(item, 'dismiss')}
         >
           {d.undone ? 'Dismiss' : labels.dismiss}
+        </Button>
+      </div>
+    </li>
+  )
+}
+
+function undoneRow(e: BankUndoneRow): string {
+  return e.pair ? `${row(e.row)} and ${row(e.pair)}` : row(e.row)
+}
+
+// A sync you undid: its rows held back from the next sync as ONE decision, however many there
+// are — Book all again, Forget them, or open the list and book one row again.
+function UndoneRun({
+  item,
+  busy,
+  onDecide,
+}: {
+  item: BankReview
+  busy: string | null
+  onDecide: Decide
+}) {
+  const [open, setOpen] = useState(false)
+  const rows = item.detail.rows ?? []
+  const n = rows.length
+  const one = n === 1
+  const at = item.detail.run_at ? new Date(item.detail.run_at) : null
+  const when = at && !isNaN(at.getTime()) ? ` from ${fDate(at)}, ${fTime(at)}` : ''
+  const listId = `bs-undone-${item.id}`
+  return (
+    <li className="bs-review">
+      <div className="bs-review-head">
+        {one
+          ? `You undid the sync${when}, so this wasn’t booked again.`
+          : `You undid the sync${when}, so its ${n} transactions weren’t booked again.`}
+      </div>
+      {one ? (
+        <dl className="bs-review-rows">
+          <dt>From the bank</dt>
+          <dd>{undoneRow(rows[0])}</dd>
+        </dl>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="bs-undone-toggle"
+            aria-expanded={open}
+            aria-controls={listId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? 'Hide them' : `Show the ${n} transactions`}
+          </button>
+          {open && (
+            <ul
+              className="bs-undone-rows"
+              id={listId}
+              aria-label="Transactions from the undone sync"
+            >
+              {rows.map((e) => (
+                <li key={e.refs[0]} className="bs-undone-row">
+                  <span>{undoneRow(e)}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy !== null}
+                    loading={busy === `${item.id}:book:${e.refs[0]}`}
+                    onClick={() => onDecide(item, 'book', e.refs[0])}
+                  >
+                    Book again
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      <div className="bs-actions">
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={busy !== null}
+          loading={busy === `${item.id}:book`}
+          onClick={() => onDecide(item, 'book')}
+        >
+          {one ? 'Book again' : `Book all ${n} again`}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy !== null}
+          loading={busy === `${item.id}:dismiss`}
+          onClick={() => onDecide(item, 'dismiss')}
+        >
+          {one ? 'Forget it' : 'Forget them'}
         </Button>
       </div>
     </li>
