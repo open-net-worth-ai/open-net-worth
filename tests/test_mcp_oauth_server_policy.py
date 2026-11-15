@@ -168,6 +168,8 @@ def test_read_scope_allows_exactly_the_tools_both_classifiers_call_read_only():
         "run_screen_command",
         "find_tools",
         "activate_skill",
+        # writes a skill + script file when no card can be shown (security review, 2026-11-16)
+        "save_code_as_skill",
     ],
 )
 def test_side_effect_tools_are_never_read(name):

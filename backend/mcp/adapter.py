@@ -100,6 +100,8 @@ _SIDE_EFFECT_NO_DOMAIN: frozenset[str] = frozenset(
         "run_script",
         "run_code",
         "run_screen_command",
+        # Writes a skill and its script file when no approval card can be shown (inbound MCP).
+        "save_code_as_skill",
         # An Automation run's own task list — turn-ephemeral, like the scope changes above.
         "add_run_tasks",
         "update_run_task",
