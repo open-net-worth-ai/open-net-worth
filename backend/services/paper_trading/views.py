@@ -364,3 +364,47 @@ def defaults() -> dict:
         "kinds": KIND_LABEL,
         **SIMULATED,
     }
+
+
+def positions_in(instrument_id: str) -> dict:
+    """Every live paper position in one instrument across ACTIVE paper portfolios — for the
+    asset page, which shows each as its own labelled row and never adds it to the real totals.
+    Phase 1 has no short options or cover; the fields are present so a row's shape is stable."""
+    key = f"inst:{str(instrument_id or '').strip()}"
+    asset = assets.resolve_key(key)
+    rows: list[dict] = []
+    for row in PaperPortfolioStore().all():
+        if row.get("status") != "active":
+            continue
+        bk = service.derive(row["id"])
+        if bk.quantity(key) <= 0:
+            continue
+        val = valuation.value(row, bk, _now())
+        held = next((h for h in val["holdings"] if h["asset_key"] == key), None)
+        if held is None:
+            continue
+        rows.append(
+            {
+                "portfolio_id": row["id"],
+                "portfolio_name": row["name"],
+                "quantity": held["quantity"],
+                "price": held["price"],
+                "value_home": held["value_home"],
+                "currency": row["home_currency"],
+                "price_currency": held["price_currency"],
+                "cost_home": held["cost_home"],
+                "return_pct": held["pnl_pct"],
+                "basis": held["basis"],
+                "basis_label": held["basis_label"],
+                "frozen": held["frozen"],
+                "short_options": [],
+                "cover": None,
+                **SIMULATED,
+            }
+        )
+    return {
+        "instrument_id": key.split(":", 1)[1],
+        "symbol": assets.describe(asset)["symbol"],
+        "positions": rows,
+        **SIMULATED,
+    }

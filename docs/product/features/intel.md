@@ -130,12 +130,6 @@ Intelligence has a **Copy Trading** tab (turn it off with **Followed portfolios*
 Developer → Experimental): famous funds and US House members you follow, what they hold and what
 changed in their latest filing. See [Copy Trading](copy-trading.md).
 
-## Paper trading
-
-With **Paper trading** on (Settings → Developer → Experimental), a **Paper trading** tab follows
-Copy Trading: try trades with pretend money at real market prices, never part of your net
-worth. See [Paper trading](paper-trading.md).
-
 ## Find your way around
 
 The tabs are **My holdings**, one tab for each of your watchlists, and **Topics & macro**.

@@ -15,6 +15,9 @@ GET    /api/paper/portfolios/{id}/activity          — ?cursor=&limit=
 GET    /api/paper/portfolios/{id}/performance       — ?range=1M|3M|1Y|ALL
 GET    /api/paper/portfolios/{id}/compare
 POST   /api/paper/portfolios/{id}/marks             — a price for an asset you price yourself
+GET    /api/paper/positions                         — ?instrument_id=: live paper positions in
+                                                      one asset, for the asset page (never summed
+                                                      into the real totals)
 GET    /api/paper/assets/search                     — ?q=: every kind
 
 Every route 404s while the ``paper_trading`` flag is off. Each validates, calls one service
@@ -157,6 +160,11 @@ def paper_compare(pid: str):
 @router.post("/api/paper/portfolios/{pid}/marks")
 def record_paper_mark(pid: str, body: MarkBody):
     return _run(paper.mark, pid, body.model_dump(exclude_none=True))
+
+
+@router.get("/api/paper/positions")
+def paper_positions_in_instrument(instrument_id: str = Query(..., min_length=1, max_length=80)):
+    return _run(paper.positions, instrument_id)
 
 
 @router.get("/api/paper/assets/search")

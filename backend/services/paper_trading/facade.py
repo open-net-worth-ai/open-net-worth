@@ -147,6 +147,10 @@ def mark(pid: str, body: dict) -> dict:
     return {**out, **SIMULATED}
 
 
+def positions(instrument_id: str) -> dict:
+    return views.positions_in(instrument_id)
+
+
 def search(q: str) -> dict:
     if len(q or "") > 80:
         raise ValidationError("Search is at most 80 characters.")

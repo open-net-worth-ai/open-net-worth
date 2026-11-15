@@ -25,6 +25,7 @@ ROUTES = [
     ("get", "/api/paper/portfolios/ppf_x/performance"),
     ("get", "/api/paper/portfolios/ppf_x/compare"),
     ("post", "/api/paper/portfolios/ppf_x/marks"),
+    ("get", "/api/paper/positions?instrument_id=inst_acme"),
     ("get", "/api/paper/assets/search?q=a"),
 ]
 

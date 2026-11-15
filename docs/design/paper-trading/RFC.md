@@ -1,4 +1,4 @@
-# Paper trading: technical solution
+# Paper Trading: technical solution
 
 Date: 2026-11-15 · Status: draft for the owner's approval · Companions: [`PRD.md`](PRD.md),
 [`mockups.html`](mockups.html)
@@ -11,7 +11,7 @@ path**. It never reaches a broker, never writes `accounts`, `transactions`, `pos
 `lots`, and no net-worth, budgeting or Intel reader imports it. Import-linter contracts and a
 property test enforce this. Every asset kind is an **adapter** behind one protocol (price, session,
 fill, value, lifecycle, reservation), so supporting "every kind of investable asset" means adding
-adapters, not branches. It lives in **Intelligence → Paper trading**, behind the `paper_trading`
+adapters, not branches. It lives in **Intelligence → Paper Trading**, behind the `paper_trading`
 flag.
 
 ADR to write at build time: `2026-11-xx-paper-trading-is-a-simulated-book-never-an-order-path`.
@@ -54,7 +54,7 @@ New import-linter contracts (CI-blocking, beside the existing five):
    imported only by `backend.api.paper_trading`, `backend.ai.tools.paper_trading`,
    `backend.services.automations` and the scheduler. Net worth, dashboard, investments_book,
    intel, briefing, returns, planning and the rest cannot see it.
-2. **Paper trading cannot reach a real write choke.** `backend.services.paper_trading` must not
+2. **Paper Trading cannot reach a real write choke.** `backend.services.paper_trading` must not
    import `services.ledger`, `services.lots`, `services.positions`, `services.accounts`,
    `services.planning`, `services.options`, `services.owned_assets*`, or anything under
    `aggregation`.
@@ -238,6 +238,7 @@ GET    /api/paper/portfolios/{id}/activity?cursor=
 GET    /api/paper/portfolios/{id}/performance?range=
 GET    /api/paper/portfolios/{id}/compare?range=
 POST   /api/paper/portfolios/{id}/marks            manual asset price
+GET    /api/paper/positions?instrument_id=   paper positions in one asset, for the asset page
 GET    /api/paper/assets/search?q=                 every kind: tickers, coins, metals, ccy, indices, ISIN, manual
 GET    /api/paper/options/chain?underlying=&expiry=   (P2)
 ```
@@ -352,18 +353,22 @@ process would, without those costs.
   `SegmentedControl`, `NumberField`, `MoneyField`, `Select`, `EmptyState`, `Sparkline`; Copy
   Trading's `YouVs` pattern for Compare; Investments' holdings row layout.
 - **Entry points.**
-  - Asset page: **Paper trade** button.
+  - Asset page: **Paper trade** button, and paper rows in the Position table.
   - Thesis card: **Test on paper**.
   - Copy Trading `PortfolioPage`: **Paper-copy**.
   - `cmdkAssemble`: two commands.
   - Chat tool-result card: a `paper` variant.
-- **Paper identity.**
-  - New tokens `--paper`, `--paper-ink`, `--paper-grid` go in the token source that
-    `build-tokens.mjs` reads (dark and light).
-  - Each class goes into `index.css` (`.paper-surface` graph-paper ground, `.paper-tag`,
-    `.paper-ticket`, `.paper-toast`), so `lint:classes` passes.
-  - The marker is a dashed outline plus the graph-paper ground, never colour alone, so it reads
-    in both themes and for colour-blind users.
+- **Paper identity** (mockups v2).
+  - There is no mode and no special background. One component, `PaperChip`, goes beside the
+    name of every paper object: portfolio, ticket, toast, chat card, automation summary, and
+    the asset page's Position rows.
+  - "Paper" is written into the labels.
+  - New tokens `--paper` and `--paper-ink` go in the token source that `build-tokens.mjs` reads
+    (dark and light). They are used only by the chip and the main paper action button.
+  - `.paper-chip` is defined in `index.css`.
+  - No borders except table rows; group with fills and space.
+- **Asset page Position table.** It gets paper rows from `GET /api/paper/positions?instrument_id=`
+  (a new read in `views.py`). Each row is labelled and never summed into the real totals.
 - **Data.** Every read goes through `useQueryCache` with keys under `paper`. Nothing is held in
   local state without `useDataVersion`.
 
@@ -401,7 +406,7 @@ process would, without those costs.
 | `test_paper_automation_simulation_only.py` | An MCP order tool and a real write are refused inside a `simulation_only` run |
 | `test_paper_flag_off.py` | 404s, refusals, jobs idle, data kept |
 | `test_demo_route_classification` | Picks up the new routes automatically |
-| vitest | Ticket field sets per kind; the paper marker on every paper surface |
+| vitest | Ticket field sets per kind; the Paper chip on every paper object; asset page totals exclude paper rows |
 | `make qa-e2e` (ports 8090–8099) | Create, trade, wait for the open, fill, start over; phone layout |
 
 ## 14. Delivery plan

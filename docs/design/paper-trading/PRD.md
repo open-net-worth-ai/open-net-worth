@@ -1,4 +1,4 @@
-# Paper trading: PRD
+# Paper Trading: PRD
 
 Date: 2026-11-15 · Status: draft for the owner's approval · Companions: [`RFC.md`](RFC.md)
 (technical solution), [`mockups.html`](mockups.html) (UI design)
@@ -76,7 +76,7 @@ adapters, tests and help text, behind the same flag.
 
 ## Where it lives
 
-**Intelligence → Paper trading**, a tab right after **Copy Trading** (owner's decision, 2026-11-15).
+**Intelligence → Paper Trading**, a tab right after **Copy Trading** (owner's decision, 2026-11-15).
 
 | Option | Verdict | Why |
 |---|---|---|
@@ -86,12 +86,14 @@ adapters, tests and help text, behind the same flag.
 | Paper as an account type | Rejected | The seven account types are the only classification axis, and every account counts in net worth. A paper account would need exceptions in net worth, cash, budgeting, Intel risk and the Dashboard. |
 | A new top-level tab | Not now | The primary navigation is full and this is an occasional tool. Promote it later if it gets used a lot. |
 
-Paper trading can be started from wherever ideas start. Each entry point opens the order ticket
+Paper Trading can be started from wherever ideas start. Each entry point opens the order ticket
 or the new-portfolio dialog already filled in:
 
-- **Asset page**: a **Paper trade** button beside the thesis card. The ticket shows the
+- **Asset page**: a **Paper trade** button beside **Add holding**. The ticket shows the
   thesis's view ("in your buy zone"). For an optionable stock, the ticket also offers its
-  options.
+  options. The Position table lists the asset's paper positions under the real ones. Each is on
+  its own row with the Paper chip and "not in your totals", and none is added into a real
+  figure. This is the one place paper shows up on a real-money screen.
 - **Copy Trading portfolio page**: **Paper-copy** beside **Auto-copy**.
 - **Thesis card**: **Test on paper** when the ticker has a buy zone.
 - **Lucius**: "paper trade 20 NVDA", "paper-sell a covered call on my paper AAPL", "start a
@@ -101,6 +103,24 @@ or the new-portfolio dialog already filled in:
 - **Command palette**: "New paper portfolio", "Paper trade…".
 
 ## The experience
+
+### How it looks
+
+Paper Trading is a feature of the platform, not a mode. There is no Real/Paper switch, no
+banner and no special background (owner's decision, 2026-11-15).
+
+- **The object is marked, not the app.** A paper portfolio carries one small **Paper** chip
+  wherever it appears.
+- **"Paper" is written into the labels**: Paper value, Paper order, Place paper buy.
+- **Paper pages use the same screens as Investments**: summary, chart, holdings.
+- **The app stays clean.** No borders except table rows; groups are made with fills and space.
+- **Short copy.** A figure gets a number and a short label ("Return +7.41%", "VT +3.08%"),
+  never a sentence. Comparisons go in the chart legend; detail (fill basis, quote time, reasons)
+  is one click away, on the order or in Activity.
+- **One new accent, gold (`--paper`, #d8c79a), used in two places only**: the chip and the
+  main paper action button (owner's decision, 2026-11-15).
+
+See `mockups.html` (v2) and `VISUAL_RESEARCH.md`.
 
 ### 1. Start a paper portfolio
 
@@ -176,20 +196,20 @@ One line under the button says what happens next, so nothing is discovered later
 | Limit not reached | "Waits until the price reaches 180.00. You can cancel it in Orders." |
 | Modelled price | "No live option quote. Priced by a model from AAPL's price and its volatility." |
 
-A filled order shows a toast in the paper style, not the usual success one: "Paper buy filled:
-20 NVDA at 187.51".
+A filled order shows the app's usual toast with the Paper chip in it: "Paper buy filled: 20 NVDA
+at 187.51".
 
 ### 3. Watch it play out
 
 The **portfolio page** has:
 
-- **Header**: the name, the Paper marker, its age ("Day 23"), and where it came from ("Copies
+- **Header**: the name, the Paper chip, one line saying "Pretend money at real prices. Not part
+  of your net worth.", its age ("Day 23"), and where it came from ("Copies
   Berkshire Hathaway" or "Run by Lucius: Buy-zone strategy"). A **⋯** menu holds Edit, Start
   over, Archive and Delete.
 - **Figures**: **Value**; **Return since start**, beside the benchmark and **your real
   investments** over the same days; **Cash** across currencies; **Open orders**.
-- **Chart**: three lines. The paper line is in the paper colour; the benchmark and your
-  investments are muted.
+- **Chart**: three lines: the paper portfolio, your investments and the benchmark.
 - **Tabs**:
   - **Holdings**: grouped by kind, like Investments → Holdings, with Trade on each row. Option
     rows show days to expiry and moneyness. Bond rows show yield and the next coupon. A manual
@@ -200,7 +220,7 @@ The **portfolio page** has:
   - **Compare**: correlation, worst fall, swings, return per risk, and overlap with your book.
     These are the figures Copy Trading's "You vs them" already shows.
 
-The **Paper trading** tab lists portfolios as cards. Each card shows the name, value, return
+The **Paper Trading** tab lists portfolios as cards. Each card shows the name, value, return
 since start against the benchmark, a sparkline, its source, and its count of open orders.
 Archived portfolios are under **Archived**.
 
@@ -323,6 +343,8 @@ The per-kind rules are in the asset table above. These rules are shared by every
   with the broker's MCP tools and their permissions.
 - **Paper money in any real figure**: net worth, cash on hand, budgeting, Intel risk,
   concentration, today's move, the Dashboard, the daily briefing, or a thesis's "held" state.
+  The asset page's Position table shows paper positions as separate, labelled rows only. Its
+  totals stay real.
 - **A broker's own paper account (Alpaca paper) as the engine.** It is US-only, needs an
   account, and covers only that broker's assets. "Every kind of asset" rules it out. The owner
   can still point a broker MCP at its own paper mode; that is a separate thing.
@@ -377,9 +399,10 @@ The per-kind rules are in the asset table above. These rules are shared by every
    values carry their label on every row, ticket, fill and chart tooltip.
 9. **Starting over keeps history.** After **Start over**, the old run is still under Archived,
    with all its orders and activity readable.
-10. **Paper always looks like paper.** The paper style appears on every paper surface: the
-    portfolio, the order ticket, the filled toast, the chat result card, and the Automation
-    run summary. No real-money surface uses it.
+10. **Paper is always labelled.** The Paper chip appears on every paper object, wherever it
+    shows up: the portfolio, the order ticket, the filled toast, the chat result card, the
+    Automation run summary, and its rows in the asset page's Position table. Its labels say
+    "paper" ("Paper value", "Place paper buy").
 11. **Lucius keeps paper and real apart.** Every result from a paper tool includes
     `"simulated": true`. No net-worth or portfolio answer includes paper figures; an eval case
     covers this.
@@ -400,7 +423,7 @@ The per-kind rules are in the asset table above. These rules are shared by every
 
 ## Open questions for the owner
 
-1. ~~**Placement.**~~ **Decided 2026-11-15 by the owner: Intelligence → Paper trading.**
+1. ~~**Placement.**~~ **Decided 2026-11-15 by the owner: Intelligence → Paper Trading.**
 2. **Lucius's default permission for paper orders.** Allow (recommended, no money moves), or
    Ask like every other write?
 3. **Public demo.** Recommend allowing reads and refusing paper writes, because every visitor

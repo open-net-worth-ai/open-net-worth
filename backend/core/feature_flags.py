@@ -262,11 +262,11 @@ FLAGS: tuple[Flag, ...] = (
     Flag(
         name="paper_trading",
         description=(
-            "Paper trading in Intelligence: try trades with pretend money at real market prices, "
+            "Paper Trading: try trades with pretend money at real market prices, through Lucius, "
             "for shares, funds, crypto, metals, currencies, indices and assets you price "
             "yourself. A paper portfolio never touches your accounts, net worth or budget, and "
-            "never sends an order to a broker. Lucius can place paper orders and read their "
-            "results. Off: the tab is hidden, and paper portfolios are kept."
+            "never sends an order to a broker. The Paper Trading screens are coming. Off: "
+            "Lucius's paper tools refuse, and paper portfolios are kept."
         ),
         default=False,
         owner="owner",

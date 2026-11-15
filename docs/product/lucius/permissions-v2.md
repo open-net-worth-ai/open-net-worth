@@ -49,7 +49,7 @@ a setting the day it appears:
 - **Paper trading runs (Always allow).** Creating a paper portfolio and placing, cancelling or
   pricing paper orders is pretend money that never reaches your book or a broker, so it doesn't
   stop for a card. Deleting a paper portfolio and its history still asks. See
-  [Paper trading](../features/paper-trading.md).
+  [Paper Trading](../features/paper-trading.md).
 - **Changing your book, or sending something out, asks (Ask).** Logging or editing a transaction,
   moving budget money, creating an account, turning a connector on or off, and sending an email, a
   Telegram message or a webhook.

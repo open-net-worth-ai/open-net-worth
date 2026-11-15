@@ -23,7 +23,7 @@ from backend.core.errors import OpenNetWorthError
 from backend.services.feature_flags import enabled as flag_enabled
 from backend.services.paper_trading import facade, results, views
 
-_OFF = "Paper trading is switched off on this install (Settings → Developer → Experimental)."
+_OFF = "Paper Trading is switched off on this install (Settings → Developer → Experimental)."
 _ABOUT = (
     "PAPER results are simulated — never the owner's money and never part of net worth; say "
     "'paper' when you quote an amount. Fills use the latest price the app saw plus slippage, "
@@ -83,7 +83,7 @@ def _one_portfolio(pid: str) -> dict:
 @tool(
     "get_paper_portfolios",
     description=(
-        "The owner's paper portfolios (Intelligence → Paper trading): each one's value, return "
+        "The owner's paper portfolios (Paper Trading): each one's value, return "
         "since start against its benchmark, cash and open orders; or one portfolio in full with "
         "its holdings, open orders and recent activity. " + _ABOUT
     ),
