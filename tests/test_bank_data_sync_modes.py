@@ -198,9 +198,15 @@ def test_no_ticked_account_is_the_accounts_step(bank):
 
 def test_the_schedule_defaults_to_the_provider_and_offers_only_what_reads_allow(bank):
     st = bank_data_sync.status("gocardless")
-    assert (st["interval_hours"], st["intervals"]) == (12, [6, 12, 24])
+    assert (st["interval_hours"], st["intervals"]) == (12, [6, 12, 24, 48, 168])
     plaid = PROVIDERS["plaid"]
-    assert bank_data_sync.settings.interval_choices(plaid) == [1, 6, 12, 24]
+    assert bank_data_sync.settings.interval_choices(plaid) == [1, 6, 12, 24, 48, 168]
+
+
+def test_a_bank_can_sync_as_rarely_as_once_a_week(bank):
+    bank_data_sync.set_mode("gocardless", "data")
+    assert bank_data_sync.set_interval("gocardless", 168)["interval_hours"] == 168
+    assert bank_data_sync.set_interval("gocardless", 48)["interval_hours"] == 48
 
 
 def test_a_new_schedule_moves_the_next_run_from_the_last_one(bank):
@@ -216,7 +222,10 @@ def test_a_new_schedule_moves_the_next_run_from_the_last_one(bank):
 def test_a_schedule_the_bank_cant_afford_is_refused(bank):
     from backend.core.errors import ValidationError
 
-    with pytest.raises(ValidationError, match="every 6, 12, 24 hours"):
+    with pytest.raises(
+        ValidationError,
+        match="every 6 hours, every 12 hours, once a day, every 2 days, once a week",
+    ):
         bank_data_sync.set_interval("gocardless", 1)
     assert bank_data_sync.status("gocardless")["interval_hours"] == 12
 

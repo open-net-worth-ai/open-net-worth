@@ -213,8 +213,8 @@ def set_interval(key: str, hours: int) -> dict:
     _require_on()
     p = settings.provider(key)
     if hours not in settings.interval_choices(p):
-        choices = ", ".join(str(h) for h in settings.interval_choices(p))
-        raise ValidationError(f"{p.label} can sync every {choices} hours.")
+        choices = ", ".join(settings.interval_label(h) for h in settings.interval_choices(p))
+        raise ValidationError(f"{p.label} can sync {choices}.")
     settings.save(key, interval_hours=hours)
     budget.reschedule(p)
     return status(key)
