@@ -1,12 +1,12 @@
 ---
 title: Web search
-description: Let Lucius search the web and read pages — works out of the box with DuckDuckGo; add a Tavily, Perplexity, Serper, Google or Firecrawl key for better results.
+description: Let Lucius search the web and read pages — works out of the box with DuckDuckGo; add a Tavily, Perplexity, Serper, Google, Firecrawl or Keenable key for better results.
 category: connectors
 order: 50
 audience: [user]
 status: stable
 related: [lucius/permissions, connectors/external-mcp, features/intel, connectors/web-search-reads-results]
-keywords: [web search, duckduckgo, tavily, perplexity, serper, google, programmable search, firecrawl, fetch page, api key, default provider, setup]
+keywords: [web search, duckduckgo, tavily, perplexity, serper, google, programmable search, firecrawl, keenable, fetch page, api key, default provider, setup]
 ---
 
 # Web search
@@ -28,6 +28,7 @@ only need this page if you want a different search provider.
 | **Serper** | Google's results, fast and low-cost. | [serper.dev/api-keys](https://serper.dev/api-keys) |
 | **Google Programmable Search** | Google's own search API. Needs an API key **and** a search engine ID. | See [Google Programmable Search](#google-programmable-search) |
 | **Firecrawl** | Search plus full-page reading, including pages that only render with JavaScript. Pick it if page reads come back empty or blocked. | [firecrawl.dev/app/api-keys](https://www.firecrawl.dev/app/api-keys) |
+| **Keenable** | Search with publish dates, and page reads through Keenable's own fetch as clean markdown. | [docs.keenable.ai/api-keys](https://docs.keenable.ai/api-keys) |
 
 The paid providers charge per search at their own rates; most have a free tier to start.
 
@@ -53,6 +54,10 @@ Google needs two values:
    API** for a project and create an **API key** under **APIs & Services → Credentials**.
 3. In the Google Programmable Search connector, paste the key into **API key** and the ID into
    **Search engine ID (cx)**, then **Save**.
+
+Google says existing Custom Search JSON API customers have until January 1, 2027 to move to
+another solution ([overview](https://developers.google.com/custom-search/v1/overview)). After
+that, switch the default to one of the other providers above.
 
 ## Check that it works
 

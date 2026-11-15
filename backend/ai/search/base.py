@@ -146,6 +146,12 @@ def _google_pse_factory(cfg: dict) -> SearchProvider:
     return GooglePseProvider(api_key=cfg["api_key"], cx=str(cfg.get("cx") or ""))
 
 
+def _keenable_factory(cfg: dict) -> SearchProvider:
+    from backend.ai.search.keenable_provider import KeenableProvider
+
+    return KeenableProvider(api_key=cfg["api_key"])
+
+
 def _duckduckgo_factory(cfg: dict) -> SearchProvider:
     from backend.ai.search.duckduckgo_provider import DuckDuckGoProvider
 
@@ -222,6 +228,14 @@ PROVIDER_REGISTRY: tuple = (
         docs_url="https://www.firecrawl.dev/app/api-keys",
         native_fetch=True,
         factory=_firecrawl_factory,
+    ),
+    ProviderSpec(
+        id="keenable",
+        label="Keenable",
+        hint="Web search and page reading built for AI agents.",
+        docs_url="https://docs.keenable.ai/api-keys",
+        native_fetch=True,
+        factory=_keenable_factory,
     ),
 )
 
