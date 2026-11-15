@@ -56,7 +56,8 @@ def _exchange_quotes(assets: list[PaperAsset], now: datetime) -> dict[str, Paper
             bid=float(snap["bid"]) * qpu if snap.get("bid") else None,
             ask=float(snap["ask"]) * qpu if snap.get("ask") else None,
             currency=(snap.get("currency") or a.currency).upper(),
-            as_of=_parse_ts(snap.get("quote_time") or st.get("quote_time")) or now,
+            # Unknown age stays unknown: it is never fresh, so an order waits rather than fill.
+            as_of=_parse_ts(snap.get("quote_time") or st.get("quote_time")),
             basis="synthetic" if a.kind == "index" else "quote",
             source="Yahoo",
             session_state=state,
@@ -97,7 +98,7 @@ def _crypto_quotes(assets: list[PaperAsset], now: datetime) -> dict[str, PaperQu
     if not ids:
         return {}
     try:
-        live = prices.fetch_live(ids, [], record_history=False, allow_stale=True)
+        live = prices.fetch_live(ids, [], record_history=False)
     except Exception:
         logger.info("paper: crypto quotes unavailable", exc_info=True)
         return {}
@@ -109,7 +110,7 @@ def _crypto_quotes(assets: list[PaperAsset], now: datetime) -> dict[str, PaperQu
         out[a.key] = PaperQuote(
             last=float(price),
             currency=a.currency,
-            as_of=_parse_ts((live.get("as_of") or {}).get(a.symbol)) or now,
+            as_of=_parse_ts((live.get("as_of") or {}).get(a.symbol)),
             basis="quote",
             source=str((live.get("providers") or {}).get(a.symbol) or "CoinGecko"),
             session_state="OPEN",

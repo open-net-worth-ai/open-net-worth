@@ -45,6 +45,28 @@ def _origin() -> str:
     return f"automation:{ctx.automation_id}" if ctx is not None else "lucius"
 
 
+MAX_ORDERS_PER_CALL = 20
+
+
+def _guard_target(row: dict) -> None:
+    """A paper Automation bound to a paper portfolio may write only that portfolio's runs (its
+    lineage, so a Start over keeps it bound)."""
+    from backend.core.errors import ValidationError
+    from backend.services.paper_trading import service
+
+    ctx = get_automation_approval()
+    if ctx is None or not ctx.simulation_only or not ctx.paper_portfolio_id:
+        return
+    try:
+        bound = service.portfolio(ctx.paper_portfolio_id)
+    except OpenNetWorthError:
+        bound = {"id": ctx.paper_portfolio_id, "lineage_id": None}
+    if row["id"] != bound["id"] and row.get("lineage_id") != bound.get("lineage_id"):
+        raise ValidationError(
+            f"This Automation trades only its own paper portfolio, not '{row.get('name')}'."
+        )
+
+
 def _dump(payload: Any):
     return json.dumps(payload, ensure_ascii=False, default=str), None
 
@@ -233,7 +255,10 @@ class PaperOrderInput(NestedInput):
 
 class PaperOrdersInput(ToolInput):
     portfolio: str = Field(description="The active paper portfolio, by name or id.")
-    orders: List[PaperOrderInput] = Field(description="The orders. Sells are placed first.")
+    orders: List[PaperOrderInput] = Field(
+        max_length=MAX_ORDERS_PER_CALL,
+        description=f"The orders, at most {MAX_ORDERS_PER_CALL}. Sells are placed first.",
+    )
 
 
 def _order_body(o: dict) -> dict:
@@ -283,6 +308,7 @@ async def preview_paper_orders(input_data: dict):
 
 def _place_all(input_data: dict) -> dict:
     row = facade.resolve_ref(input_data["portfolio"], active_only=True)
+    _guard_target(row)
     origin = _origin()
     out = []
     for o in _sells_first(input_data.get("orders") or []):
@@ -327,8 +353,13 @@ class CancelPaperOrdersInput(ToolInput):
 
 def _cancel_all(ids: list[str]) -> dict:
     out = []
+    from backend.services.paper_trading import service
+
     for oid in ids:
         try:
+            order = service.PaperOrderStore().find_by_id(str(oid))
+            if order:
+                _guard_target(service.portfolio(order["portfolio_id"]))
             out.append({"ok": True, "order": facade.cancel(oid)["order"]})
         except OpenNetWorthError as exc:
             out.append({"ok": False, "order_id": oid, "error": _err(exc)})
@@ -431,6 +462,7 @@ def _update_all(updates: list[dict]) -> dict:
     for u in updates:
         try:
             row = facade.resolve_ref(u["portfolio"])
+            _guard_target(row)
             if u.get("start_over"):
                 done = facade.start_over(row["id"])
                 out.append(
@@ -478,6 +510,7 @@ def _delete_all(refs: list[str]) -> dict:
     for ref in refs:
         try:
             row = facade.resolve_ref(ref)
+            _guard_target(row)
             facade.delete(row["id"])
             out.append({"ok": True, "deleted": row["name"], "id": row["id"]})
         except OpenNetWorthError as exc:
@@ -514,6 +547,7 @@ class RecordPaperMarksInput(ToolInput):
 
 def _marks(input_data: dict) -> dict:
     row = facade.resolve_ref(input_data["portfolio"], active_only=True)
+    _guard_target(row)
     out = []
     for m in input_data.get("marks") or []:
         try:

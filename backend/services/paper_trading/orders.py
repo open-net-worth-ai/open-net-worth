@@ -168,7 +168,9 @@ def plan(
     currency (an fx order: the currency paid for the one bought)."""
     adapter = kind_for(asset)
     if asset.kind != "fx":
-        asset = PaperAsset(**{**asset.__dict__, "extra": {**asset.extra, **_extra(order)}})
+        asset = PaperAsset(
+            **{**asset.__dict__, "extra": {**asset.extra, **_extra(order, settings)}}
+        )
     session = adapter.session(asset, fx_quote if asset.kind == "fx" else quote, now)
     if asset.key in book.frozen:
         return _rejected(session, f"Frozen: {book.frozen[asset.key]}. Settle it before trading.")
@@ -206,8 +208,9 @@ def plan(
     return _cover_buy(p, book, cash_res, asset, home, settings, fx_quote)
 
 
-def _extra(order: dict) -> dict:
-    return {"extended_ok": bool(order.get("extended_ok"))}
+def _extra(order: dict, settings: dict) -> dict:
+    """Pre/post-market fills: allowed by the order itself or by the portfolio's setting."""
+    return {"extended_ok": bool(order.get("extended_ok") or settings.get("extended_hours"))}
 
 
 def _reference_price(order: dict, quote: PaperQuote | None) -> float | None:

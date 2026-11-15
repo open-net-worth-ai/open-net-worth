@@ -41,6 +41,21 @@ class Book:
             total += unit * float(lot["remaining_qty"])
         return total
 
+    def cost_home(self, asset_key: str, current_rate: float | None) -> float | None:
+        """Remaining cost in the home currency: each lot at the rate stamped when it was bought,
+        so a foreign holding's P&L includes the currency's move; a lot with no stamp (an opening
+        copy) uses ``current_rate``. None when a lot can be valued neither way."""
+        total = 0.0
+        for lot in self.lots.get(asset_key, []):
+            qty = float(lot["remaining_qty"])
+            if qty <= _EPS:
+                continue
+            rate = lot.get("fx_rate") or current_rate
+            if not rate:
+                return None
+            total += (lot_math.effective_unit_cost(lot) or 0.0) * qty * float(rate)
+        return total
+
     def realized_by_currency(self) -> dict[str, float]:
         out: dict[str, float] = {}
         for r in self.realized:
@@ -68,6 +83,8 @@ def _buy(book: Book, ev: dict) -> None:
             "unit_cost": float(ev.get("price") or 0.0),
             "fees": float(payload.get("commission") or 0.0),
             "cost_currency": payload.get("currency") or "",
+            # Home-currency rate at the fill (the historical-rate lock), when the event has one.
+            "fx_rate": ev.get("fx_rate"),
         }
     )
 

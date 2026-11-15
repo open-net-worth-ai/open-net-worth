@@ -21,7 +21,3 @@ class CryptoKind(BaseKind):
         last = float(quote.last or 0.0)
         s = last * slip(settings)
         return (last + s, s, 0.0) if side == "buy" else (last - s, s, 0.0)
-
-    def decide(self, order, quote, session, settings, now):
-        # Around the clock: a crypto quote is never held back as stale while one exists.
-        return super().decide(order, quote, session, settings, now)

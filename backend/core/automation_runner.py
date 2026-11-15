@@ -34,6 +34,9 @@ class AutomationApprovalContext:
     # workspace write — every external MCP tool and every real write included — whatever its
     # instructions say. Set only from the stored Automation, never by a tool or the model.
     simulation_only: bool = False
+    # The paper portfolio a paper Automation is bound to, if any: its paper writes may touch only
+    # that portfolio's lineage (its runs across Start over).
+    paper_portfolio_id: str | None = None
 
 
 _approval_context: ContextVar[AutomationApprovalContext | None] = ContextVar(
@@ -69,6 +72,7 @@ class AutomationRunnerRequest:
     always_allowed: list[dict] = field(default_factory=list)
     blocked: list[str] = field(default_factory=list)
     simulation_only: bool = False
+    paper_portfolio_id: str | None = None
     # The rule that woke the run (stored trigger + names of what it points at) and the last
     # run that completed — the instructions carry no timing, so the run learns both here.
     configured_trigger: dict = field(default_factory=dict)

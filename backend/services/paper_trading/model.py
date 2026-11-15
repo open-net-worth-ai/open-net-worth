@@ -58,8 +58,7 @@ DEFAULT_SETTINGS: dict = {
     "fractional": True,
     "extended_hours": False,
     "auto_convert": True,
-    "fund_distributions": "cash",
-    "metal_storage_pct": 0.0,
+    "fund_distributions": "cash",  # or "reinvest": a fund's distribution buys more units
 }
 
 

@@ -31,12 +31,14 @@ def _value_points(values: list[dict], value_now: float | None) -> list[dict]:
     return pts
 
 
-def _flows(row: dict, book: Book) -> list[tuple[str, float]]:
-    """Pocket convention: money added is negative, money taken out positive."""
-    home = row["home_currency"]
+def _flows(row: dict, book: Book, rates: dict | None = None) -> list[tuple[str, float]]:
+    """Pocket convention: money added is negative, money taken out positive. A foreign leg is
+    valued at ``rates`` (price of one unit in home)."""
+    from backend.services.paper_trading.valuation import flow_amount_home
+
     out = []
     for f in book.flows:
-        amt = sum(float(v) for c, v in (f.get("cash_delta") or {}).items() if c == home)
+        amt = flow_amount_home(f, row["home_currency"], rates)
         if amt:
             out.append((str(f.get("at") or "")[:10], -amt))
     return out

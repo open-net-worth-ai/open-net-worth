@@ -46,6 +46,9 @@ from backend.services.paper_trading.model import (
 logger = logging.getLogger(__name__)
 
 _CREATORS = ("owner", "lucius")
+# Every open order is re-quoted each engine tick: a ceiling keeps one runaway run from flooding
+# the shared market-data quota the real book is priced from.
+MAX_OPEN_ORDERS = 100
 _SETTING_KEYS = frozenset(DEFAULT_SETTINGS)
 
 
@@ -133,12 +136,13 @@ def _created_by(change: dict) -> str:
     raise ValidationError("origin is owner, lucius or automation:<id>.")
 
 
-def _create(change: dict) -> dict:
+def _prepare(change: dict) -> tuple[dict, dict]:
+    """(the new portfolio row, its opening) — everything read and priced BEFORE any lock."""
     from backend.services.paper_trading import seed
 
     home = str(change.get("home_currency") or "").upper() or seed.base_currency()
     start = str(change.get("start_with") or "cash")
-    opening = seed.opening(change, home, _now())  # fetched before the lock
+    opening = seed.opening(change, home, _now())
     now = _now()
     row = {
         "id": new_id("ppf"),
@@ -162,18 +166,28 @@ def _create(change: dict) -> dict:
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
+    return row, opening
+
+
+def _insert(row: dict, opening: dict, *, conn: Connection) -> None:
+    """Insert a prepared run inside the caller's transaction, under the active-run cap."""
+    active = [p for p in PaperPortfolioStore().all(conn=conn) if p.get("status") == "active"]
+    if len(active) >= MAX_ACTIVE_PORTFOLIOS:
+        raise ConflictError(
+            f"You can have up to {MAX_ACTIVE_PORTFOLIOS} active paper portfolios. "
+            "Archive one first."
+        )
+    PaperPortfolioStore().insert(row, conn=conn)
+    for ctr in opening["contracts"]:
+        PaperContractStore().insert(ctr, conn=conn)
+    _append(row["id"], opening["events"], conn=conn)
+
+
+def _create(change: dict) -> dict:
+    row, opening = _prepare(change)
     with locked_unit_of_work(*ALL_TABLES) as conn:
-        active = [p for p in PaperPortfolioStore().all(conn=conn) if p.get("status") == "active"]
-        if len(active) >= MAX_ACTIVE_PORTFOLIOS:
-            raise ConflictError(
-                f"You can have up to {MAX_ACTIVE_PORTFOLIOS} active paper portfolios. "
-                "Archive one first."
-            )
-        PaperPortfolioStore().insert(row, conn=conn)
-        for ctr in opening["contracts"]:
-            PaperContractStore().insert(ctr, conn=conn)
-        _append(row["id"], opening["events"], conn=conn)
-        _snapshot(row, now, conn=conn)
+        _insert(row, opening, conn=conn)
+    _snapshot_quietly(row)
     return row
 
 
@@ -218,12 +232,13 @@ def _archive(change: dict) -> dict:
 def _start_over(change: dict) -> dict:
     """Archive this run and start the next one the same way it started (same cash, same
     settings, the same copy re-read at today's prices). The old run keeps every order, event
-    and value row, readable under Archived."""
+    and value row, readable under Archived. The new run is prepared first (a copy that can no
+    longer be made fails here, leaving the old run active); then the archive and the insert are
+    ONE transaction, re-checked inside it, so two start-overs can never make two runs."""
     old = portfolio(change.get("id"))
     _require_active(old)
     spec = old.get("start_spec") or {"start_with": "cash", "cash": 10_000.0}
-    archived = _archive({"id": old["id"]})
-    new = _create(
+    row, opening = _prepare(
         {
             **spec,
             "name": old["name"],
@@ -236,15 +251,33 @@ def _start_over(change: dict) -> dict:
             "automation_id": old.get("automation_id"),
         }
     )
-    return {"portfolio": new, "archived": archived}
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        current = portfolio(old["id"], conn=conn)
+        _require_active(current)
+        archived = PaperPortfolioStore().update_by_id(
+            old["id"],
+            {**_archive_patch(old["id"], conn=conn), "updated_at": _now().isoformat()},
+            conn=conn,
+        )
+        _insert(row, opening, conn=conn)
+    _snapshot_quietly(row)
+    return {"portfolio": row, "archived": archived}
 
 
 def _delete(change: dict) -> dict:
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = portfolio(change.get("id"), conn=conn)
+        contracts = {
+            str(e.get("asset_key"))[4:]
+            for e in PaperEventStore().for_portfolio(row["id"], conn=conn)
+            if str(e.get("asset_key") or "").startswith("ctr:")
+        }
         for store in (PaperEventStore(), PaperOrderStore(), PaperValueStore()):
             for child in store.for_portfolio(row["id"], conn=conn):
                 store.delete(child["id"], conn=conn)
+        # A contract is minted for one portfolio's asset; none outlives it.
+        for ctr_id in contracts:
+            PaperContractStore().delete(ctr_id, conn=conn)
         PaperPortfolioStore().delete(row["id"], conn=conn)
     return row
 
@@ -318,12 +351,18 @@ def _place(change: dict) -> dict:
     order = orders.normalize(change.get("order") or {}, asset, row["home_currency"])
     now = _now()
     quote, fxq = _quotes_for(row, asset, order, derive(row["id"]), now)
+    _refuse_triggered_stop(order, quote)
     origin = str(change.get("origin") or "owner")
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = portfolio(row["id"], conn=conn)
         _require_active(row)
         bk = derive(row["id"], conn=conn)
         open_orders = [o for o in portfolio_orders(row["id"], conn=conn) if o["status"] == "open"]
+        if len(open_orders) >= MAX_OPEN_ORDERS:
+            raise ConflictError(
+                f"A paper portfolio can have up to {MAX_OPEN_ORDERS} open orders. "
+                "Cancel some first."
+            )
         p = orders.plan(
             portfolio=row,
             settings=settings_of(row),
@@ -358,6 +397,22 @@ def _place(change: dict) -> dict:
         "preview": views.preview(row, bk, asset, order, p, quote, fxq, now, stance),
         "toast": views.toast(record),
     }
+
+
+def _refuse_triggered_stop(order: dict, quote) -> None:
+    """A stop already past the price when placed is refused, as a broker would: a buy stop goes
+    above the price, a sell stop below it. (Placed and then crossed, it triggers as usual.)"""
+    if order.get("order_type") != "stop" or quote is None or not quote.last:
+        return
+    stop, last = float(order["stop_price"]), float(quote.last)
+    if order["side"] == "buy" and last >= stop:
+        raise ValidationError(
+            f"A buy stop goes above the price ({last:,.2f}). Use a market or limit order."
+        )
+    if order["side"] == "sell" and last <= stop:
+        raise ValidationError(
+            f"A sell stop goes below the price ({last:,.2f}). Use a market or limit order."
+        )
 
 
 def _home_rate(row: dict, asset: PaperAsset, fxq) -> float | None:
@@ -525,30 +580,41 @@ def _lifecycle(change: dict) -> dict:
     return {"written": written}
 
 
-def _snapshot(row: dict, now: datetime, *, conn: Connection | None = None) -> dict | None:
+def _snapshot(row: dict, now: datetime) -> dict | None:
+    """Upsert today's value row — only when EVERY holding is priced. A row written while a
+    provider is down would record a fall that never happened and corrupt the return for good."""
     from backend.services.paper_trading import valuation
 
-    bk = derive(row["id"], conn=conn)
-    val = valuation.value(row, bk, now, fetch_quotes=conn is None)
+    bk = derive(row["id"])
+    val = valuation.value(row, bk, now)
+    if val["unpriced"]:
+        logger.info(
+            "paper: no value row for %s — %d holdings unpriced", row["id"], len(val["unpriced"])
+        )
+        return None
     day = user_today().isoformat()
-    flow = valuation.flows_home(row, bk, since=day)
     doc = {
         "id": f"{row['id']}:{day}",
         "portfolio_id": row["id"],
         "date": day,
         "value_home": val["value_home"],
         "cash_home": val["cash_home"],
-        "net_flow_home": flow,
+        "net_flow_home": valuation.flows_home(row, bk, since=day, rates=val["rates"]),
         "bases": val["by_basis"],
     }
-    if val["value_home"] is None:
-        return None
-    if conn is not None:
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        if (portfolio(row["id"], conn=conn) or {}).get("status") != "active":
+            return None
         PaperValueStore().upsert(doc, conn=conn)
-    else:
-        with locked_unit_of_work(*ALL_TABLES) as c:
-            PaperValueStore().upsert(doc, conn=c)
     return doc
+
+
+def _snapshot_quietly(row: dict) -> None:
+    """The opening value row, priced outside the lock; a failure leaves it to the daily job."""
+    try:
+        _snapshot(row, _now())
+    except Exception:  # a missing price must never fail the create that already committed
+        logger.info("paper: opening value row for %s deferred", row["id"], exc_info=True)
 
 
 def snapshot_values(pid: str) -> dict | None:

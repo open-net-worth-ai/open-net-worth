@@ -137,6 +137,7 @@ async def automation_runner(
             session_id=request.session_id,
             mode=request.permission_mode,
             simulation_only=request.simulation_only,
+            paper_portfolio_id=request.paper_portfolio_id,
             **_approval_tool_lists(request),
         )
     )
@@ -727,6 +728,7 @@ async def _stream_continuation(
                 session_id=request.session_id,
                 mode=request.permission_mode,
                 simulation_only=request.simulation_only,
+                paper_portfolio_id=request.paper_portfolio_id,
                 **_approval_tool_lists(request),
             )
         )

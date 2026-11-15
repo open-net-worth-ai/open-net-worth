@@ -83,8 +83,18 @@ def test_paper_writes_and_reads_run_in_a_paper_automation(paper_db, v2):
         ("get_paper_results", True),
         ("place_paper_orders", True),
         ("delete_paper_portfolios", True),  # still paper; it asks by its own seed
-        ("remember_fact", True),  # the workspace
-        ("get_net_worth", True),  # a read
+        ("get_net_worth", True),  # a local read
+        ("get_live_prices", True),
+        ("remember_fact", False),  # memory and skills are read by later, real turns
+        ("create_skill", False),
+        ("save_code_as_skill", False),
+        ("fetch_page", False),  # a model-chosen URL leaves the machine
+        ("web_search", False),
+        ("x_search", False),
+        ("tavily_search", False),  # every connector tool, reads included
+        ("plaid_list_accounts", False),
+        ("alpaca_get_status", False),
+        ("yahoo_get_ticker_prices", False),
         ("add_transactions", False),
         ("create_account", False),
         ("set_followed_portfolios", False),
@@ -149,6 +159,65 @@ def test_simulation_only_is_fixed_at_creation(paper_db):
     assert edited["simulation_only"] is True
     request = request_for_run(edited, {"id": "run1", "session_id": "s1"})
     assert request.simulation_only is True
+
+
+def test_a_paper_portfolio_binding_makes_it_paper_only_whatever_the_client_says(paper_db):
+    from backend.services.automations.service import apply_automation_change
+
+    created = apply_automation_change(
+        {
+            "op": "create",
+            "automation": _automation(simulation_only=False, paper_portfolio_id="ppf_x"),
+        }
+    )
+    assert created["simulation_only"] is True
+
+
+def test_lucius_can_create_a_paper_only_automation_but_never_clear_it():
+    from backend.ai.tools.automations import _AI_UPDATABLE_FIELDS, _create_spec
+
+    spec = _create_spec({**_automation(), "simulation_only": True})
+    assert spec["simulation_only"] is True
+    assert "simulation_only" not in _create_spec({**_automation(), "simulation_only": False})
+    assert "simulation_only" not in _AI_UPDATABLE_FIELDS
+
+
+def test_a_bound_paper_automation_writes_only_its_own_portfolio(paper_db):
+    from backend.services.paper_trading.service import apply_paper_change
+
+    mine = apply_paper_change(
+        {"op": "create", "name": "Mine", "cash": 1000, "home_currency": "USD"}
+    )["portfolio"]
+    apply_paper_change({"op": "create", "name": "Other", "cash": 1000, "home_currency": "USD"})
+    token = bind_automation_approval(
+        AutomationApprovalContext(
+            automation_id="auto_paper",
+            run_id="r1",
+            session_id="s1",
+            mode="skip",
+            simulation_only=True,
+            paper_portfolio_id=mine["id"],
+        )
+    )
+    try:
+        order = [{"asset": "inst:inst_acme", "side": "buy", "quantity": 1}]
+        other = _call("place_paper_orders", {"portfolio": "Other", "orders": order})
+        own = _call("place_paper_orders", {"portfolio": "Mine", "orders": order})
+        # Start over keeps the binding: the new run is the same lineage.
+        _call("update_paper_portfolios", {"updates": [{"portfolio": "Mine", "start_over": True}]})
+        again = _call("place_paper_orders", {"portfolio": "Mine", "orders": order})
+    finally:
+        reset_automation_approval(token)
+    assert "only its own paper portfolio" in other["error"]
+    assert own["results"][0]["ok"] and again["results"][0]["ok"]
+
+
+def test_an_order_batch_is_capped():
+    from backend.ai.tools.paper_trading import MAX_ORDERS_PER_CALL
+
+    many = [{"asset": "ACME", "side": "buy", "quantity": 1}] * (MAX_ORDERS_PER_CALL + 1)
+    text, _ = asyncio.run(execute_tool("place_paper_orders", {"portfolio": "x", "orders": many}))
+    assert "error" in json.loads(text)
 
 
 def test_an_automation_is_not_simulation_only_unless_created_so(paper_db):

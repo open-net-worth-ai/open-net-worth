@@ -3,13 +3,17 @@
 A paper Automation (its stored ``simulation_only`` flag, bound into the run's
 ``AutomationApprovalContext``) may call only:
 
-* a read — a registry tool that declares no ``mutates=`` and no ``external_effect=``;
-* a simulated write — every domain it writes is in ``SIMULATION_DOMAINS`` (paper), or Lucius's
-  own workspace (``WORKSPACE_DOMAINS``: memory, skills, artifacts, notifications).
+* a LOCAL read — a registry tool that declares no ``mutates=``, no ``external_effect=`` and no
+  ``connector=``, and is not one of the free-form outbound reads (``OUTBOUND_READS``: a web
+  search or a page fetch, whose query or URL the model chooses);
+* a simulated write — every domain it writes is ``paper``, ``artifacts`` or
+  ``notification_log``.
 
 Everything else is REFUSED at dispatch, before any permission engine, Auto judge or approval
-card: every real write, every tool that acts outside the install, and every external MCP tool
-(a broker's ``place_order`` included). It reads the run's flag, never the tool's arguments or
+card: every real write, every tool that acts outside the install, every connector tool (a bank,
+broker or REST API read included, so nothing leaves with the owner's credentials), every
+external MCP tool (a broker's ``place_order`` included), and every write to memory or skills —
+what a paper run leaves there would be read by later, real turns (``PERSISTENT_INSTRUCTIONS``). It reads the run's flag, never the tool's arguments or
 the instructions, so an edited or injected instruction cannot widen it, and it holds whichever
 permission engine (``permissions_v2`` on or off) is pinned. ADR
 ``2026-11-15-paper-trading-is-a-simulated-book-never-an-order-path``.
@@ -23,6 +27,12 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Untagged reads whose query or URL the model writes and sends off the machine.
+OUTBOUND_READS = frozenset({"fetch_page", "web_search", "x_search", "search_institutions"})
+# Writes that later turns read as instructions: never from a paper run.
+PERSISTENT_INSTRUCTIONS = frozenset({"save_code_as_skill"})
+_SIM_WRITE_DOMAINS = frozenset({"paper", "artifacts", "notification_log"})
+
 
 def active() -> bool:
     from backend.core.automation_runner import get_automation_approval
@@ -33,15 +43,22 @@ def active() -> bool:
 
 def allows(tool_name: str) -> bool:
     """Whether a ``simulation_only`` run may call ``tool_name`` (pure registry read)."""
-    from backend.ai._confirm_gate_v2 import SIMULATION_DOMAINS, WORKSPACE_DOMAINS
-    from backend.ai.tools.registry import has_external_effect, is_registered, written_domains
+    from backend.ai._confirm_gate_v2 import SIMULATION_DOMAINS
+    from backend.ai.tools.registry import (
+        has_external_effect,
+        is_registered,
+        tool_connector,
+        written_domains,
+    )
 
     if not is_registered(tool_name):  # an external MCP tool, or no such tool
         return False
-    if has_external_effect(tool_name):
+    if has_external_effect(tool_name) or tool_connector(tool_name):
+        return False
+    if tool_name in OUTBOUND_READS or tool_name in PERSISTENT_INSTRUCTIONS:
         return False
     domains = set(written_domains(tool_name))
-    return domains <= (SIMULATION_DOMAINS | WORKSPACE_DOMAINS)
+    return domains <= (_SIM_WRITE_DOMAINS | SIMULATION_DOMAINS)
 
 
 def refusal(tool_name: str) -> Optional[tuple[str, None]]:

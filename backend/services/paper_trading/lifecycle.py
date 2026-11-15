@@ -63,29 +63,34 @@ def drafts_for(
     ident = key.split(":", 1)[1]
     out: list[dict] = []
     split_days = {s["date"] for s in actions.get("splits") or []}
-    for s in actions.get("splits") or []:
+    # Each split this run emits is folded into the working ledger before a later dividend is
+    # sized: a run that catches up over a split pays the dividend on the post-split quantity.
+    working = list(events)
+    for s in sorted(actions.get("splits") or [], key=lambda x: x["date"]):
         d = s["date"]
-        if not (start < d <= today) or _held_on(events, key, d) <= 0:
+        if not (start < d <= today) or _held_on(working, key, d) <= 0:
             continue
-        out.append(
-            {
-                "kind": "split",
-                "at": f"{d}T00:00:00+00:00",
-                "asset_key": key,
-                "payload": {
-                    "ratio": s["ratio"],
-                    "label": s.get("label") or f"{s['ratio']:g}:1",
-                    "before": d,
-                },
-                "idem_key": f"split:{ident}:{d}",
-            }
-        )
+        draft = {
+            "id": f"draft-split-{d}",
+            "kind": "split",
+            "at": f"{d}T00:00:00+00:00",
+            "asset_key": key,
+            "payload": {
+                "ratio": s["ratio"],
+                "label": s.get("label") or f"{s['ratio']:g}:1",
+                "before": d,
+            },
+            "idem_key": f"split:{ident}:{d}",
+        }
+        out.append({k: v for k, v in draft.items() if k != "id"})
+        working = sorted(working + [draft], key=lambda e: str(e.get("at") or ""))
     kind = "distribution" if asset.kind == "fund_nav" else "dividend"
+    closes = {c["date"]: c["close"] for c in actions.get("closes") or []}
     for dv in actions.get("dividends") or []:
         d = dv["date"]
         if not (start < d <= today):
             continue
-        qty = _held_on(events, key, d)
+        qty = _held_on(working, key, d)
         if qty <= 0:
             continue
         amount = round(qty * float(dv["amount"]), 8)
@@ -96,15 +101,26 @@ def drafts_for(
                 "asset_key": key,
                 "cash_delta": {ccy: amount},
                 "price": float(dv["amount"]),
-                "payload": {
-                    "per_unit": float(dv["amount"]),
-                    "quantity": qty,
-                    "gross": True,
-                    "reinvest": distributions == "reinvest",
-                },
+                "payload": {"per_unit": float(dv["amount"]), "quantity": qty, "gross": True},
                 "idem_key": f"div:{ident}:{d}",
             }
         )
+        nav = closes.get(d)
+        if kind == "distribution" and distributions == "reinvest" and nav:
+            # Reinvested at that day's NAV: the cash just paid buys more units.
+            out.append(
+                {
+                    "kind": "buy",
+                    "at": f"{d}T00:00:01+00:00",
+                    "asset_key": key,
+                    "quantity_delta": round(amount / nav, 6),
+                    "cash_delta": {ccy: -amount},
+                    "price": nav,
+                    "price_basis": "nav",
+                    "payload": {"currency": ccy, "commission": 0.0, "reinvested": True},
+                    "idem_key": f"drip:{ident}:{d}",
+                }
+            )
     out += _freezes(asset, actions.get("closes") or [], events, split_days, start, today)
     return out
 
@@ -113,7 +129,6 @@ def _freezes(asset, closes, events, split_days, start, today) -> list[dict]:
     key = asset.key
     ident = key.split(":", 1)[1]
     out: list[dict] = []
-    seen = [c for c in closes if c["date"] > start]
     for prev, nxt in zip(closes, closes[1:]):
         if nxt["date"] <= start or nxt["date"] > today or nxt["date"] in split_days:
             continue
@@ -128,7 +143,7 @@ def _freezes(asset, closes, events, split_days, start, today) -> list[dict]:
                     f"freeze:gap:{ident}:{nxt['date']}",
                 )
             )
-    if closes and seen is not None:
+    if closes:
         last = closes[-1]["date"]
         gap = sum(1 for d in _weekdays(last, today)) - 1
         if gap >= STALE_SESSIONS:

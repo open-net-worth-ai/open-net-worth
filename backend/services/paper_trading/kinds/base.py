@@ -121,7 +121,7 @@ class BaseKind:
             return Wait(self.closed_reason(session))
         if quote is None or not quote.last:
             return Wait("No price for it yet. It fills once one arrives.")
-        if not session.always_open and is_stale(quote, now):
+        if is_stale(quote, now):
             seen = quote.as_of.strftime("%H:%M") if quote.as_of else "the open"
             return Wait(f"No fresh price since {seen}. It fills once one arrives.")
         return self.decide_priced(order, quote, settings, session)

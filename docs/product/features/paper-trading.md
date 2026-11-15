@@ -59,8 +59,11 @@ estimates. Paper results are not a track record.
 Paper orders are **Always allow** by default — no money moves. Deleting a paper portfolio and
 its history asks first. Change either in **Settings → Permissions**.
 
-An Automation created as **Paper only** can read, write paper and keep Lucius's own notes, and
-nothing else: every other write and every connector tool — a broker's order tool included — is
-refused, whatever its instructions say. This is fixed when the Automation is created.
+An Automation created as **Paper only** — ask Lucius for one, or tie an Automation to a paper
+portfolio — can read your book, trade paper, and save artifacts, and nothing else. It cannot
+write to your real book, use any connector (a bank, a broker or a REST API — a broker's order tool
+included), search the web or fetch a page, or change Lucius's memory or skills, whatever its
+instructions say. One tied to a paper portfolio trades only that portfolio (and its later runs
+after **Start over**). This is fixed when the Automation is created.
 
 On the public demo, paper portfolios can be read but not changed.

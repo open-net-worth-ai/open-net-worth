@@ -104,6 +104,18 @@ class CreateAutomationInput(ToolInput):
     effort: Optional[Literal["low", "medium", "high", "xhigh", "max", "ultra"]] = None
     status: Optional[Literal["active", "paused"]] = None
     max_runs: Optional[int] = Field(default=None, ge=1, description="Optional positive run cap.")
+    simulation_only: Optional[bool] = Field(
+        default=None,
+        description=(
+            "True makes a PAPER-ONLY Automation: it can read, place and manage paper orders and "
+            "nothing else (no real write, no connector, no web, no broker). Set it for any "
+            "paper-trading Automation. Fixed once created."
+        ),
+    )
+    paper_portfolio_id: Optional[str] = Field(
+        default=None,
+        description="The paper portfolio this Automation trades (implies simulation_only).",
+    )
 
 
 class AutomationUpdateInput(NestedInput):
@@ -179,6 +191,12 @@ _AUTOMATION_UPDATES_PREVIEW: PreviewAdapter = _AutomationUpdatesPreview()
 def _create_spec(input_data: dict) -> dict:
     spec = {key: input_data[key] for key in _AI_UPDATABLE_FIELDS if input_data.get(key) is not None}
     spec["execution"] = {"kind": "lucius"}
+    # Create-only, and only ever switched ON: a paper-only Automation (ai.simulation_guard).
+    # Never in _AI_UPDATABLE_FIELDS, so no update can turn it off.
+    if input_data.get("simulation_only") is True or input_data.get("paper_portfolio_id"):
+        spec["simulation_only"] = True
+        if input_data.get("paper_portfolio_id"):
+            spec["paper_portfolio_id"] = str(input_data["paper_portfolio_id"])
     return spec
 
 

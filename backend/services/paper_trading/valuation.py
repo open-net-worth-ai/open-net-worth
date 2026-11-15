@@ -32,7 +32,7 @@ def holdings(
         native = kind_for(a).value(qty, q) if q else None
         rate = rates.get(a.currency)
         value_home = native * rate if native is not None and rate else None
-        cost_home = cost * rate if rate else (cost if a.currency == home else None)
+        cost_home = book.cost_home(a.key, rate or (1.0 if a.currency == home else None))
         if value_home is None and not fetch_quotes and a.currency == home:
             value_home = cost
         basis = q.basis if q else kind_for(a).basis
@@ -111,14 +111,27 @@ def value(row: dict, book: Book, now: datetime, *, fetch_quotes: bool = True) ->
     }
 
 
-def flows_home(row: dict, book: Book, *, since: str | None = None) -> float:
+def flow_amount_home(flow: dict, home: str, rates: dict[str, float] | None) -> float:
+    """One deposit or withdrawal in the home currency; a foreign leg at ``rates`` (price of one
+    unit in home). A leg with no rate is left out rather than counted 1:1."""
+    total = 0.0
+    for ccy, amount in (flow.get("cash_delta") or {}).items():
+        rate = 1.0 if ccy == home else (rates or {}).get(ccy)
+        if rate:
+            total += float(amount) * float(rate)
+    return total
+
+
+def flows_home(
+    row: dict, book: Book, *, since: str | None = None, rates: dict[str, float] | None = None
+) -> float:
     """Net deposits less withdrawals in home currency (on or after ``since``)."""
     home = row["home_currency"]
     total = 0.0
     for f in book.flows:
         if since and str(f.get("at") or "")[:10] < since:
             continue
-        total += sum(float(v) for c, v in (f.get("cash_delta") or {}).items() if c == home)
+        total += flow_amount_home(f, home, rates)
     return round(total, 2)
 
 
