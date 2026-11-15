@@ -477,7 +477,7 @@ def test_a_members_whole_history_starts_the_quarter_before_their_first_trade():
     assert performance._history_start({"activity": []}) is None
 
 
-def test_preview_route_and_its_demo_lock(client, monkeypatch):
+def test_preview_route_is_open_on_the_demo(client, monkeypatch):
     from backend.api.demo_lockdown import is_demo_locked
 
     monkeypatch.setattr(service, "preview_summary", lambda kind, ref: {"name": ref})
@@ -490,13 +490,13 @@ def test_preview_route_and_its_demo_lock(client, monkeypatch):
     assert full.json() == {"page": "7"}
     bad = client.get("/api/followed-portfolios/preview", params={"kind": "senator", "ref": "7"})
     assert bad.status_code == 422
-    assert is_demo_locked("GET", "/api/followed-portfolios/preview")
+    assert not is_demo_locked("GET", "/api/followed-portfolios/preview")
     monkeypatch.setattr(service, "preview_returns", lambda kind, ref: {"returns": ref})
     got = client.get(
         "/api/followed-portfolios/preview/returns", params={"kind": "fund_13f", "ref": "7"}
     )
     assert got.json() == {"returns": "7"}
-    assert is_demo_locked("GET", "/api/followed-portfolios/preview/returns")
+    assert not is_demo_locked("GET", "/api/followed-portfolios/preview/returns")
 
 
 def test_unfollow_deletes(source):
@@ -602,14 +602,16 @@ def test_flag_off_hides_every_route_and_refuses_every_tool(client):
     assert FollowedPortfolioStore().all() == []
 
 
-def test_demo_refuses_every_write_and_the_directory():
+def test_copy_trading_is_open_on_the_demo():
+    from backend.ai.tools.registry import _DEMO_REFUSED_TOOLS
     from backend.api.demo_lockdown import is_demo_locked
 
-    assert is_demo_locked("GET", "/api/followed-portfolios/directory")
-    assert is_demo_locked("POST", "/api/followed-portfolios")
-    assert is_demo_locked("POST", "/api/followed-portfolios/fol_1/refresh")
-    assert is_demo_locked("DELETE", "/api/followed-portfolios/fol_1")
     assert not is_demo_locked("GET", "/api/followed-portfolios")
+    assert not is_demo_locked("GET", "/api/followed-portfolios/directory")
+    assert not is_demo_locked("POST", "/api/followed-portfolios")
+    assert not is_demo_locked("POST", "/api/followed-portfolios/fol_1/refresh")
+    assert not is_demo_locked("DELETE", "/api/followed-portfolios/fol_1")
+    assert "set_followed_portfolios" not in _DEMO_REFUSED_TOOLS
 
 
 # ── the Lucius tools ────────────────────────────────────────────────────────────────
@@ -632,15 +634,17 @@ def test_tools_search_follow_read_refresh_and_unfollow(source):
     assert call("get_followed_portfolios")["follows"] == []
 
 
-def test_a_search_is_refused_on_the_public_demo(source, monkeypatch):
-    from backend.ai.tools import followed_portfolios as tool_module
+def test_lucius_searches_and_follows_on_the_public_demo(source, monkeypatch):
+    from backend.core import config
 
-    class Demo:
-        demo_mode = True
-
-    monkeypatch.setattr(tool_module, "get_settings", lambda: Demo())
-    assert "disabled on the public demo" in call("get_followed_portfolios", search="acme")["error"]
-    assert call("get_followed_portfolios") == {"follows": []}
+    real = config.get_settings()
+    monkeypatch.setattr(config, "get_settings", lambda: real.model_copy(update={"demo_mode": True}))
+    monkeypatch.setattr(service, "directory", lambda q: {"results": [{"name": q}]})
+    assert call("get_followed_portfolios", search="acme") == {"results": [{"name": "acme"}]}
+    made = call(
+        "set_followed_portfolios", follow_portfolios=[{"kind": "fund_13f", "source_ref": "1"}]
+    )
+    assert made["results"][0]["ok"] is True
 
 
 def test_tool_reports_each_failure_without_stopping(source):

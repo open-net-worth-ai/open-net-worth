@@ -121,9 +121,6 @@ _LOCKED: tuple[_Rule, ...] = (
     ),
     *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
-    # A directory search, a preview and a follow make this server call SEC / the House Clerk; the writes
-    # are refused by default (not in ``_WRITABLE``), the search needs its own line.
-    *_rules(_ANY, r"^/api/followed-portfolios/(directory|preview|preview/returns)$"),
     # Actual reads a saved server on a GET too: a budget list signs in and answers with names.
     *_rules(_ANY, r"^/api/actual-budget(/.*)?$"),
     # The REST connector's list shows each API's address (a credential), and reading an OpenAPI
@@ -155,6 +152,11 @@ _WRITABLE: tuple[re.Pattern[str], ...] = tuple(
         r"^/api/commitments(/.*)?$",
         r"^/api/dashboard/layout$",
         r"^/api/equity(/.*)?$",
+        # Copy Trading is open (owner decision 2026-11-16): searching, previewing and following
+        # call only SEC, the House Clerk and OpenFIGI — fixed hosts, paced under their fair-use
+        # limits — and a follow is a row in the demo's own book. Auto-copy stays shut: it is an
+        # Automation, and broker orders go through connectors, both locked above.
+        r"^/api/followed-portfolios(/.*)?$",
         r"^/api/investment-theses(/[^/]+)?$",
         r"^/api/(income|options|lots|positions|disposals|instruments|rebalance|recurring)(/.*)?$",
         r"^/api/intel/(assets|signals)(/.*)?$",
