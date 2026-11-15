@@ -120,6 +120,11 @@ class ProviderSpec:
     extra_fields: tuple = field(default_factory=tuple)
     # Whether a usable instance requires an API key (all current providers do).
     needs_api_key: bool = True
+    # A key-free provider that still accepts an optional key (You.com: higher limits with one).
+    optional_api_key: bool = False
+    # A key-free provider is normally on by default (DuckDuckGo). False keeps it off until the
+    # user turns it on, so no query goes to it without an explicit choice.
+    enabled_by_default: bool = True
 
 
 def _tavily_factory(cfg: dict) -> SearchProvider:
@@ -144,6 +149,12 @@ def _google_pse_factory(cfg: dict) -> SearchProvider:
     from backend.ai.search.google_pse_provider import GooglePseProvider
 
     return GooglePseProvider(api_key=cfg["api_key"], cx=str(cfg.get("cx") or ""))
+
+
+def _youcom_factory(cfg: dict) -> SearchProvider:
+    from backend.ai.search.youcom_provider import YouComProvider
+
+    return YouComProvider(api_key=str(cfg.get("api_key") or ""))
 
 
 def _duckduckgo_factory(cfg: dict) -> SearchProvider:
@@ -222,6 +233,18 @@ PROVIDER_REGISTRY: tuple = (
         docs_url="https://www.firecrawl.dev/app/api-keys",
         native_fetch=True,
         factory=_firecrawl_factory,
+    ),
+    ProviderSpec(
+        id="youcom",
+        label="You.com",
+        hint="Web and news results with page snippets. An API key raises the daily limit.",
+        docs_url="https://you.com/platform",
+        native_fetch=False,
+        # Works with no key (the keyless tier); a key is optional. Off until the user turns it on.
+        needs_api_key=False,
+        optional_api_key=True,
+        enabled_by_default=False,
+        factory=_youcom_factory,
     ),
 )
 

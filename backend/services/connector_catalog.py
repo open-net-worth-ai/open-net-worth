@@ -221,9 +221,14 @@ def _search_required(connector_id: str) -> list[str]:
 
 
 def search_default_enabled(connector_id: str) -> bool:
-    """A key-free provider with no required extra field is on by default (DuckDuckGo)."""
+    """A key-free provider with no required extra field is on by default (DuckDuckGo), unless
+    its catalog entry sets ``enabled_by_default: False`` (You.com)."""
     provider = _search_provider(connector_id)
-    return not provider.get("needs_api_key", True) and not _search_required(connector_id)
+    return (
+        not provider.get("needs_api_key", True)
+        and not _search_required(connector_id)
+        and provider.get("enabled_by_default", True)
+    )
 
 
 def _search_configured(row: Row, have: Have) -> bool:

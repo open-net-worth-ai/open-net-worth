@@ -344,6 +344,23 @@
       }
     },
     {
+      "id": "web_search:youcom",
+      "name": "You.com",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search"
+      ],
+      "publisher": "You.com",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
       "id": "mcp-playwright",
       "name": "Playwright MCP",
       "families": [

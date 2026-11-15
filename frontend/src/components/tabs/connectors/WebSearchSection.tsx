@@ -48,10 +48,14 @@ interface ProviderEntry {
   hint: string
   docs_url: string
   needs_api_key: boolean
+  // Key-free, but accepts an optional key (You.com: a key raises the daily limit).
+  optional_api_key?: boolean
   native_fetch: boolean
   extra_fields: ExtraField[]
   enabled: boolean
   has_key: boolean
+  // A key is actually stored (`has_key` is always true for a key-free provider).
+  key_saved?: boolean
   is_active: boolean
 }
 
@@ -124,7 +128,7 @@ export function WebSearchSection({ providerId }: { providerId: string }) {
   }
 
   const apiKeyReveal = useSecretReveal({
-    saved: !!provider?.has_key,
+    saved: provider?.optional_api_key ? !!provider.key_saved : !!provider?.has_key,
     value: apiKey,
     onChange: setApiKey,
     reveal: useCallback(
@@ -137,7 +141,9 @@ export function WebSearchSection({ providerId }: { providerId: string }) {
   // Save button never rendered even before the footer move. `ready: false` keeps the footer's
   // Save permanently disabled rather than offering a write with nothing to write; leaving is
   // the `‹ <name>` back control, as it is on every other form.
-  const savable = !!provider && (provider.needs_api_key || provider.extra_fields.length > 0)
+  const savable =
+    !!provider &&
+    (provider.needs_api_key || !!provider.optional_api_key || provider.extra_fields.length > 0)
   const apiKeyValid = !provider || !provider.needs_api_key || !!apiKey.trim() || !!provider.has_key
   const apiKeyTouched = useTouched()
   useConnectorSave({
@@ -183,12 +189,13 @@ export function WebSearchSection({ providerId }: { providerId: string }) {
   }
 
   const needsKey = provider.needs_api_key
+  const optionalKey = !needsKey && !!provider.optional_api_key
 
   return (
     <Stack gap="--space-4">
       {/* Rendered ONLY for a keyed provider: the hint says what is distinctive about it, and a
           key-free provider's distinctive fact is already the badge below. */}
-      {needsKey && (
+      {(needsKey || optionalKey) && (
         <Text size="sm" tone="faint">
           {provider.hint}{' '}
           {provider.docs_url && (
@@ -217,11 +224,11 @@ export function WebSearchSection({ providerId }: { providerId: string }) {
         </Cluster>
       )}
 
-      {needsKey && (
+      {(needsKey || optionalKey) && (
         <FormField
-          label="API key"
+          label={optionalKey ? 'API key (optional)' : 'API key'}
           htmlFor={`conn-search-key-${providerId}`}
-          required
+          required={needsKey}
           help={apiKeyReveal.caption || undefined}
           error={
             apiKeyReveal.error ||
@@ -231,7 +238,9 @@ export function WebSearchSection({ providerId }: { providerId: string }) {
           <PasswordField
             id={`conn-search-key-${providerId}`}
             value={apiKey}
-            placeholder={provider.has_key ? '••••••••' : 'paste the API key'}
+            placeholder={
+              (optionalKey ? provider.key_saved : provider.has_key) ? '••••••••' : 'paste the API key'
+            }
             onChange={(e) => setApiKey(e.target.value)}
             onBlur={apiKeyTouched.onBlur}
             {...apiKeyReveal.fieldProps}

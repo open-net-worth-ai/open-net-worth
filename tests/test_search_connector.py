@@ -21,6 +21,7 @@ _PROVIDER_IDS = {
     "serper",
     "google_pse",
     "firecrawl",
+    "youcom",
 }
 
 
@@ -42,10 +43,19 @@ def test_one_card_per_provider_in_tools_family():
         assert v.kind == "web_search"
         assert v.pausable is True
     # The keyed providers have no key yet → not_configured.
-    for pid in _PROVIDER_IDS - {"duckduckgo"}:
+    for pid in _PROVIDER_IDS - {"duckduckgo", "youcom"}:
         assert by_id[f"web_search:{pid}"].status == "not_configured"
     # DuckDuckGo is key-free + enabled-by-default → active out of the box.
     assert by_id["web_search:duckduckgo"].status == "active"
+    # You.com is key-free but off until the user turns it on.
+    assert by_id["web_search:youcom"].enabled is False
+    assert by_id["web_search:youcom"].status != "active"
+
+
+def test_youcom_turns_on_without_a_key():
+    v = C.set_connector_enabled("web_search:youcom", True)
+    assert v.enabled is True
+    assert v.status == "active"
 
 
 def test_no_secret_leak():

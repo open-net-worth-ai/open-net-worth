@@ -46,6 +46,7 @@ def test_catalog_includes_keyfree_duckduckgo_first(store):
         "serper",
         "google_pse",
         "firecrawl",
+        "youcom",
     ]
     ddg = next(p for p in pub["providers"] if p["id"] == "duckduckgo")
     assert ddg["needs_api_key"] is False
@@ -253,3 +254,14 @@ def test_the_environment_is_never_read(store, monkeypatch):
     assert store.provider_runtime_config("serper")["api_key"] == ""
     assert store.has_key("serper") is False
     assert store.get()["providers"]["serper"] == {"enabled": True, "api_key": ""}
+
+
+def test_youcom_is_keyfree_but_off_by_default(store):
+    assert store.is_enabled("youcom") is False
+    assert "youcom" not in store.enabled_providers()
+    store.update_provider("youcom", {"enabled": True})
+    assert "youcom" in store.enabled_providers()
+    assert store.default_provider() == "youcom"
+    assert store.provider_runtime_config("youcom")["api_key"] == ""
+    store.update_provider("youcom", {"api_key": "ydc-key"})
+    assert store.provider_runtime_config("youcom")["api_key"] == "ydc-key"
