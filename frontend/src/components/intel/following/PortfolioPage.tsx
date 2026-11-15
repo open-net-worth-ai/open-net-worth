@@ -78,8 +78,8 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // Your own book: every table marks the stocks you hold.
   const { heldSet } = usePortfolioTickerMaps()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
-  // The installed app has no browser back swipe and a phone shows no crumb, so the page gets
-  // the app's own edge swipe back to the list (as a Documents item does).
+  // The installed app has no browser back swipe, so on a phone the page also gets the app's own
+  // edge swipe back to the list (as a Documents item does).
   useEdgeSwipeBack(pageRoot, onBack, isMobile && isStandaloneApp() && !!page.data)
   const returns = usePreviewReturns(portfolio.kind, portfolio.source_ref, page.data != null)
   const slow = useSlow(page.initialLoading)
@@ -230,7 +230,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   if (page.initialLoading)
     return (
       <>
-        <PageSkeleton name={portfolio.name} onBack={onBack} crumb={!isMobile} />
+        <PageSkeleton name={portfolio.name} onBack={onBack} />
         {slow && (
           <FetchBanner
             title={COPY.fetchPageTitle(portfolio.kind, portfolio.name)}
@@ -244,9 +244,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       <div className="fol-page">
         {/* A page that failed still offers the way back: the address remembers it, so without
             this a portfolio that cannot load was a dead end. */}
-        {!isMobile && (
-          <Crumb name={portfolio.name || COPY.crumbThis(portfolio.kind)} onBack={onBack} />
-        )}
+        <Crumb name={portfolio.name || COPY.crumbThis(portfolio.kind)} onBack={onBack} />
         <ErrorState
           title={COPY.loadFailedTitle}
           message={COPY.pageErrorBody}
@@ -350,9 +348,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       className="fol-page"
       style={{ ['--fol-tabs-h' as string]: `${tabsHeight - headHidden}px` } as React.CSSProperties}
     >
-      {/* A phone goes back with the edge swipe, so the crumb's line goes to the page (owner,
-          2026-11-16); the installed app, which has no browser swipe, gets one of its own. */}
-      {!isMobile && <Crumb name={follow.name} onBack={onBack} />}
+      {/* On a phone too (owner, 2026-11-16: hiding it was undone); the installed app, which has
+          no browser swipe, also gets the app's own edge swipe back. */}
+      <Crumb name={follow.name} onBack={onBack} />
       {error && <div className="fol-note fol-note--bad">{error}</div>}
       <Toast message={notice} onDone={() => setNotice(null)} />
       {/* The name, its actions and the tabs stay in view together while the page scrolls

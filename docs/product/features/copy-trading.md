@@ -74,8 +74,8 @@ there are), sort them, or search by fund or member name. On a phone, or in a nar
 filter and the sort are in the **Filter** button beside the search.
 
 Click a card to open it. Above the page, **Copy Trading / its name** goes back to the list; on a
-phone there is no such line: swipe from the left edge to go back (the installed app has its own
-swipe for it). The header is the portfolio's name and who runs it (dropped on a phone). Under it are three tabs: **Trading
+phone you can also swipe from the left edge (the installed app has its own swipe for it). The
+header is the portfolio's name and who runs it (dropped on a phone). Under it are three tabs: **Trading
 Activity**, **Overview** and **You vs. …** (named for the portfolio, e.g. **You vs. Berkshire
 Hathaway**). The range under the charts (1W … All, 1Y at first, the window the gallery card
 shows) is one setting for the whole page: change it on one tab and the other follows.
