@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.db.telegram_config_store import TelegramConfigStore
@@ -46,11 +46,18 @@ def telegram_status():
     }
 
 
+def _public_with_connection() -> dict:
+    from backend.connectors.telegram import bot as telegram_bot
+
+    return TelegramConfigStore().public() | {"connection": telegram_bot.connection_state()}
+
+
 @router.get("/api/telegram/config")
 def get_telegram_config():
     """Full (non-secret) Telegram config for the Configure form. The bot token is
-    surfaced only as ``has_bot_token``."""
-    return TelegramConfigStore().public()
+    surfaced only as ``has_bot_token``; ``bot_username`` and ``connection``
+    (connected | connecting | off) drive the form's "your bot is online" step."""
+    return _public_with_connection()
 
 
 @router.put("/api/telegram/config")
@@ -59,7 +66,21 @@ async def update_telegram_config(body: TelegramConfigPatch):
     enabled changes take effect live (no restart). The bot token is write-only;
     a blank value keeps the saved one."""
     changes = body.model_dump(exclude_none=True)
-    TelegramConfigStore().update(changes)
+    from backend.connectors.telegram import botapi
+
+    token = (body.bot_token or "").strip()
+    username = None
+    if token:
+        # A token Telegram refuses is never saved: a "Connected" bot that can't log in was the
+        # silent failure at the end of the old setup. Unreachable is not refusal — that saves.
+        try:
+            username = await botapi.check_token(token)
+        except botapi.BotTokenRejected as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    store = TelegramConfigStore()
+    store.update(changes)
+    if token:
+        store.set_bot_username(username)
 
     # Hot-reload the connector (stop + start) so the new config is live. Best-effort:
     # a reload failure (e.g. a bad token) must not fail the save — the config is already
@@ -68,7 +89,7 @@ async def update_telegram_config(body: TelegramConfigPatch):
 
     reloaded = await telegram_bot.reload_best_effort()
 
-    return TelegramConfigStore().public() | {
+    return _public_with_connection() | {
         "_applied": list(changes.keys()),
         "reloaded": reloaded,
     }

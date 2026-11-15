@@ -127,6 +127,7 @@ async def _connect(token: str) -> None:
     _app = _build_app(token)
     await _app.initialize()
     await _app.start()
+    _remember_username(_app.bot.username)
 
     # Register the command list so Telegram shows the "/" autocomplete panel + menu button.
     # Best-effort — a failure here must never block the connector from starting.
@@ -154,6 +155,13 @@ def _build_app(token: str):
         filters,
     )
 
+    # concurrent_updates(True): dispatch each update in its own task. REQUIRED for /stop —
+    # otherwise a long turn hogs the (default) sequential dispatcher and a /stop sent mid-turn
+    # queues behind it, firing only after the turn already finished (the exact failure mode in
+    # OpenClaw #20600 / Hermes #26813). The turn-batching critical section in handle_message
+    # has no await between its _text_batches read and write, so it stays race-free under
+    # cooperative scheduling; same-session turns are still serialized by assistant.run's lock.
+    from backend.connectors.telegram import botapi
     from backend.connectors.telegram.handlers import (
         handle_approvals,
         handle_callback,
@@ -175,13 +183,15 @@ def _build_app(token: str):
         handle_toolstream,
     )
 
-    # concurrent_updates(True): dispatch each update in its own task. REQUIRED for /stop —
-    # otherwise a long turn hogs the (default) sequential dispatcher and a /stop sent mid-turn
-    # queues behind it, firing only after the turn already finished (the exact failure mode in
-    # OpenClaw #20600 / Hermes #26813). The turn-batching critical section in handle_message
-    # has no await between its _text_batches read and write, so it stays race-free under
-    # cooperative scheduling; same-session turns are still serialized by assistant.run's lock.
-    app = Application.builder().token(token).concurrent_updates(True).build()
+    urls = botapi.base_urls()
+    app = (
+        Application.builder()
+        .token(token)
+        .base_url(urls["base_url"])
+        .base_file_url(urls["base_file_url"])
+        .concurrent_updates(True)
+        .build()
+    )
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(CommandHandler("help", handle_help))
     app.add_handler(CommandHandler("id", handle_id))
@@ -201,6 +211,19 @@ def _build_app(token: str):
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_error_handler(handle_error)
     return app
+
+
+def _remember_username(username: str | None) -> None:
+    """Record the bot's @username for the setup form's "Open @bot" link. Best-effort: a bot
+    that is up must never be torn down over a bookkeeping write."""
+    if not username:
+        return
+    try:
+        from backend.db.telegram_config_store import TelegramConfigStore
+
+        TelegramConfigStore().set_bot_username(username)
+    except Exception:  # noqa: BLE001
+        log.warning("could not record the Telegram bot username", exc_info=True)
 
 
 async def _teardown_partial() -> None:
@@ -375,6 +398,32 @@ async def _stop_locked() -> bool:
         "Telegram connector stopped" if ok else "Telegram connector stop completed with errors"
     )
     return ok
+
+
+async def send_text(chat_id: int | str, text: str) -> bool:
+    """Send one plain message to ``chat_id`` through the live bot. False when the bot is not
+    connected or the send fails — callers treat it as best-effort."""
+    app = _app
+    if app is None or not getattr(app, "running", False):
+        return False
+    try:
+        await app.bot.send_message(chat_id=int(chat_id), text=text)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Telegram send to %s failed: %s", chat_id, type(exc).__name__)
+        return False
+
+
+def connection_state() -> str:
+    """``connected`` (polling), ``connecting`` (the retry supervisor is still trying) or ``off``
+    (paused, no token, or a non-primary boot that never polls) — for the setup form."""
+    if _telegram_disabled():
+        return "off"
+    if _app is not None and getattr(_app, "running", False):
+        return "connected"
+    if _task is not None and not _task.done():
+        return "connecting"
+    return "off"
 
 
 def is_running() -> bool:

@@ -809,6 +809,24 @@ def _no_tool_call_flusher_thread(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_telegram_token_check(request, monkeypatch):
+    """Saving a Telegram token asks Telegram who it belongs to (``getMe``). No test may reach
+    Telegram: the check answers as an unreachable Telegram would (``None`` — the save lands, no
+    username). A test that needs a verdict patches its own; tests of the check itself mark
+    themselves ``real_telegram_token_check`` and fake the Bot instead."""
+    if "real_telegram_token_check" in request.keywords:
+        yield
+        return
+    from backend.connectors.telegram import botapi
+
+    async def _offline(_token):
+        return None
+
+    monkeypatch.setattr(botapi, "check_token", _offline)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_site_identity_lookup(request, monkeypatch):
     """Stop every MCP discovery from fetching a REAL website for its display name/icon.
 

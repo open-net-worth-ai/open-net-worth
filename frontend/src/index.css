@@ -9222,6 +9222,71 @@ body.hide-amounts .mask * {
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
+  /* Telegram setup — three numbered steps (token, who can chat, say hi), so the one Save
+     reads as the middle of a sequence rather than the end of a form. */
+  .tg-step {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: var(--space-3);
+  }
+  .tg-step__num {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-pill);
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tg-step--done .tg-step__num {
+    background: var(--good);
+    border-color: var(--good);
+    color: var(--bg);
+  }
+  .tg-step__title {
+    line-height: 24px;
+  }
+  .tg-callout {
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+  }
+  .tg-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .tg-status__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--good);
+    flex: none;
+  }
+  .tg-status .ui-btn__spinner {
+    width: 11px;
+    height: 11px;
+    border-width: 1.5px;
+  }
+  /* An <a> wearing the button classes: the global link colour would otherwise win over the
+     button's own text colour (blue on the dark primary button). */
+  .tg-open-link {
+    text-decoration: none;
+    align-self: flex-start;
+  }
+  .tg-open-link.btn-primary,
+  .tg-open-link.btn-primary:hover {
+    color: var(--ink-on-cta);
+  }
+  .tg-open-link.btn-secondary,
+  .tg-open-link.btn-secondary:hover {
+    color: var(--text);
+  }
   /* Regional guidance blurb shown above data-source cards — slightly indented and with
    a left border so it reads as an informational aside, not a card or body text. */
   .conn-dir__regional-guide {

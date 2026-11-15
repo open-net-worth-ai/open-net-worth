@@ -446,7 +446,15 @@ export function ConnectorDetail({
         onClose={onClose}
         size="lg"
         footer={
-          save ? (
+          // A saved connector whose form holds no edits gets Done, not a greyed-out Save:
+          // after a successful save the only control left used to be a dead button, with the
+          // way out hidden in the `‹ <name>` title (2026-11-15). Done appears only when there is
+          // nothing to lose; a never-saved form keeps Save, so Done can't read as "set up".
+          save && !save.dirty && !save.saving && entry.configured ? (
+            <Btn variant="primary" onClick={leaveConfig}>
+              Done
+            </Btn>
+          ) : save ? (
             <Btn variant="primary" disabled={!save.dirty || save.saving} onClick={saveConfig}>
               {save.saving ? 'Saving…' : 'Save'}
             </Btn>

@@ -491,7 +491,31 @@ BOT_COMMANDS: list[tuple[str, str]] = [
 ]
 
 
-async def _not_approved(update: Update, *, discovery: bool) -> None:
+def _sender_label(update: Update) -> str:
+    """ "Ada Lovelace (@ada)" — who a pairing request is from, as the approval list shows it."""
+    user = getattr(update, "effective_user", None)
+    if user is None:
+        return ""
+    name = " ".join(
+        p for p in (getattr(user, "first_name", ""), getattr(user, "last_name", "")) if p
+    )
+    handle = getattr(user, "username", "") or ""
+    if name and handle:
+        return f"{name} (@{handle})"
+    return name or (f"@{handle}" if handle else "")
+
+
+def _inbound_from(update: Update) -> InboundMessage:
+    chat_id = str(update.effective_chat.id)
+    return InboundMessage(
+        channel_id=chat_id,
+        sender_id=chat_id,
+        text=getattr(update.message, "text", "") or "",
+        raw_meta={"sender_label": _sender_label(update)},
+    )
+
+
+async def _not_approved(update: Update, bot, *, discovery: bool) -> None:
     """Reply to a not-yet-approved sender instead of the old silent drop (owner review,
     2026-08-22). Silent under ``disabled`` on purpose — that policy's whole contract is "ignore
     everything", so replying there would contradict its own definition.
@@ -503,7 +527,16 @@ async def _not_approved(update: Update, *, discovery: bool) -> None:
     explanation on every single one."""
     from backend.db.telegram_config_store import TelegramConfigStore
 
-    if TelegramConfigStore().access_policy() == "disabled":
+    policy = TelegramConfigStore().access_policy()
+    if policy == "disabled":
+        return
+    if policy == "pairing":
+        # Under Pairing EVERY message from an unknown sender is a pairing request — /start
+        # included. It used to answer "send this number to whoever set up this bot" and record
+        # nothing, so the first thing anyone does in Telegram (tap Start) left the owner's
+        # Pending approvals empty. The seam's own pairing path records the request, replies
+        # with the code and rate-limits it; no turn runs for a sender who isn't allowed.
+        await handle_inbound(_TelegramAdapter(bot), _inbound_from(update))
         return
     if discovery:
         await update.message.reply_text(
@@ -516,7 +549,7 @@ async def _not_approved(update: Update, *, discovery: bool) -> None:
 
 async def handle_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _policy_allows_turn(update.effective_chat.id):
-        await _not_approved(update, discovery=True)
+        await _not_approved(update, ctx.bot, discovery=True)
         return
     await update.message.reply_text(
         "Hi! I'm Lucius, your personal wealth assistant — I have access to your accounts, "
@@ -534,7 +567,7 @@ async def handle_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def handle_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _policy_allows_turn(update.effective_chat.id):
-        await _not_approved(update, discovery=True)
+        await _not_approved(update, ctx.bot, discovery=True)
         return
     await update.message.reply_text(
         "I'm Lucius — your personal wealth assistant, with access to your full financial "
@@ -549,7 +582,7 @@ async def handle_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 async def handle_effort(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     args = ctx.args or []
     if not args or args[0] not in VALID_EFFORTS:
@@ -619,7 +652,7 @@ async def handle_approvals(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
     """Show or set how much Lucius asks before acting in this chat."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     refusal = _approval_refusal(chat_id, chat_id)
     if refusal:
@@ -648,7 +681,7 @@ async def handle_streaming(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
     sets it. Persisted on the channel config, so it applies to the very next turn."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     from backend.db.telegram_config_store import TelegramConfigStore
 
@@ -674,7 +707,7 @@ async def handle_toolstream(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
     turn (edited in place, deleted when the answer lands) and quiet is a fair preference."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     from backend.db.telegram_config_store import TelegramConfigStore
 
@@ -701,7 +734,7 @@ async def handle_model(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """Show or switch this Telegram conversation's provider-pinned model."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     from backend.ai import conversation
     from backend.db.model_config_store import ModelConfigStore
@@ -759,7 +792,7 @@ async def handle_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """One-line runtime state: model, provider, effort, streaming + today's AI spend."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     from backend.ai import conversation
     from backend.db.model_config_store import ModelConfigStore
@@ -794,7 +827,7 @@ async def handle_cost(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """Today's and 30-day AI spend (tokens + USD)."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     from backend.services.cost import cost_summary
 
@@ -818,7 +851,7 @@ async def handle_suggestions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
     call per turn). ``/suggestions`` shows state; ``on``/``off`` sets it."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     from backend.db.telegram_config_store import TelegramConfigStore
 
@@ -841,7 +874,7 @@ async def handle_new(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     bandwidth win. (Was also reachable as /clear, dropped 2026-07-20 — one command, not two.)"""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     from backend.services import conversation_approval
 
@@ -872,7 +905,7 @@ async def handle_stop(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     so it isn't queued behind it (the failure mode OpenClaw #20600 / Hermes #26813 hit)."""
     chat_id = update.effective_chat.id
     if not _policy_allows_turn(chat_id):
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
     stopped = turn_registry.stop(CONNECTOR, str(chat_id))
     log.info("/stop for chat_id=%s — stopped=%s", chat_id, stopped)
@@ -912,12 +945,23 @@ def _quoted_message(message) -> "QuotedMessage | None":
 
 
 async def _dispatch_text(
-    bot, chat_id: int, message_id: int, text: str, *, react: bool = True, reply_to=None
+    bot,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    *,
+    react: bool = True,
+    reply_to=None,
+    sender_label: str = "",
 ) -> None:
     """React/type (policy-aware, once) then route the text through the inbound seam."""
     adapter = _TelegramAdapter(bot)
     inbound = InboundMessage(
-        channel_id=str(chat_id), sender_id=str(chat_id), text=text, reply_to=reply_to
+        channel_id=str(chat_id),
+        sender_id=str(chat_id),
+        text=text,
+        reply_to=reply_to,
+        raw_meta={"sender_label": sender_label} if sender_label else {},
     )
     if react and adapter.is_allowed(str(chat_id)):
         try:
@@ -952,6 +996,7 @@ async def _flush_text_batch(chat_id: int, bot) -> None:
         "".join(batch["parts"]),
         react=False,
         reply_to=batch.get("reply_to"),
+        sender_label=batch.get("sender_label", ""),
     )
 
 
@@ -971,6 +1016,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
             update.message.message_id,
             text,
             reply_to=_quoted_message(update.message),
+            sender_label=_sender_label(update),
         )
         return
 
@@ -981,6 +1027,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
             "task": None,
             "message_id": update.message.message_id,
             "reply_to": _quoted_message(update.message),
+            "sender_label": _sender_label(update),
         }
         adapter = _TelegramAdapter(ctx.bot)
         if adapter.is_allowed(str(chat_id)):  # react once, on the first fragment
@@ -1035,7 +1082,7 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     username = update.effective_user.username or update.effective_user.first_name or "unknown"
     if not _policy_allows_turn(chat_id):
         log.warning("rejected photo from @%s (chat_id=%s)", username, chat_id)
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
 
     photo = update.message.photo[-1]  # largest available size
@@ -1127,6 +1174,7 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             # An album is several Updates; the person replied from ONE of them, so keep
             # the first quote seen rather than letting a later frame clear it.
             "reply_to": _quoted_message(update.message),
+            "sender_label": _sender_label(update),
         }
     )
 
@@ -1179,7 +1227,7 @@ async def handle_document(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
     username = update.effective_user.username or update.effective_user.first_name or "unknown"
     if not _policy_allows_turn(chat_id):
         log.warning("rejected document from @%s (chat_id=%s)", username, chat_id)
-        await _not_approved(update, discovery=False)
+        await _not_approved(update, ctx.bot, discovery=False)
         return
 
     doc = update.message.document
