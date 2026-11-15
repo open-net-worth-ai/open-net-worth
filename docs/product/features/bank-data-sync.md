@@ -163,12 +163,13 @@ in the ledger changes until you choose.
 
 | Bank | Default | You can choose |
 |---|---|---|
-| GoCardless, Enable Banking | Every 12 hours | Every 6 or 12 hours, or once a day |
-| Plaid | Every 6 hours | Every hour, every 6 or 12 hours, or once a day |
+| GoCardless, Enable Banking | Every 12 hours | Every 6 or 12 hours, once a day, every 2 days, or once a week |
+| Plaid | Every 6 hours | Every hour, every 6 or 12 hours, once a day, every 2 days, or once a week |
 
 Change it under **Schedule** on the sync's page (or in step 3 of setup). A bank that allows 4
 reads a day is never offered more than 4 runs a day. The next run moves to your last sync plus
-the new interval.
+the new interval. A run never misses rows however long the gap: each account reads from its
+newest booked transaction.
 
 **Sync now** runs it at once. GoCardless and Enable Banking banks usually allow only **4 reads
 per account per day**, and every read counts — scheduled, **Sync now**, or Lucius fetching the

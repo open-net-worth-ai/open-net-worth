@@ -33,10 +33,12 @@ export function nextRunLine(status: BankSyncStatus): string {
   return `Next sync: ${fScheduleWhen(status.next_run_at)}`
 }
 
-/** "Every hour" / "Every 6 hours" / "Once a day". */
+/** "Every hour" / "Every 6 hours" / "Once a day" / "Every 2 days" / "Once a week". */
 export function everyLabel(hours: number): string {
   if (hours === 1) return 'Every hour'
   if (hours === 24) return 'Once a day'
+  if (hours === 168) return 'Once a week'
+  if (hours % 24 === 0) return `Every ${hours / 24} days`
   return `Every ${hours} hours`
 }
 

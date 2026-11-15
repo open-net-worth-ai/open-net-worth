@@ -55,7 +55,20 @@ def get(key: str) -> dict:
     }
 
 
-_INTERVALS = (1, 6, 12, 24)
+_INTERVALS = (1, 6, 12, 24, 48, 168)
+
+
+def interval_label(hours: int) -> str:
+    """How a schedule reads in a sentence: "every 6 hours", "once a week"."""
+    if hours == 1:
+        return "every hour"
+    if hours == 24:
+        return "once a day"
+    if hours == 168:
+        return "once a week"
+    if hours % 24 == 0:
+        return f"every {hours // 24} days"
+    return f"every {hours} hours"
 
 
 def interval_choices(p) -> list[int]:
