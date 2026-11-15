@@ -47,6 +47,9 @@ export interface SnippetContext {
   token: string
   launch: McpLaunch
   variant: StdioVariant
+  /** `remote` only: the generic `mcp-remote` bridge through npx, so nothing from Open Net
+   *  Worth is installed on the AI app's computer. */
+  npx?: boolean
 }
 
 export interface McpClientGuide {
@@ -85,9 +88,28 @@ function stdioServer(ctx: SnippetContext, type?: 'stdio'): Record<string, unknow
     : { ONW_BASE_URL: ctx.origin, ONW_API_TOKEN: ctx.token }
   // A path this server found is a path on THIS machine, never on the AI app's.
   const remote = ctx.variant === 'remote' && !ctx.launch.desktop
+  if (remote && ctx.npx) return { ...head, ...npxServer(ctx) }
   const command = remote ? 'onw' : ctx.launch.command
   const args = remote ? ['mcp'] : ctx.launch.args
   return { ...head, command, args, env }
+}
+
+/** `mcp-remote` through npx. The token rides in env, referenced as `${ONW_AUTH}`, because some
+ *  apps split an argument that contains a space. */
+function npxServer(ctx: SnippetContext): Record<string, unknown> {
+  const insecure = ctx.origin.startsWith('http://') ? ['--allow-http'] : []
+  return {
+    command: 'npx',
+    args: [
+      '-y',
+      'mcp-remote',
+      `${ctx.origin}/mcp`,
+      ...insecure,
+      '--header',
+      'Authorization:${ONW_AUTH}',
+    ],
+    env: { ONW_AUTH: `Bearer ${ctx.token}` },
+  }
 }
 
 const remoteServer = (ctx: SnippetContext) => ({
@@ -169,12 +191,20 @@ Authorization: Bearer ${ctx.token}`,
 ]
 
 /** One plain sentence on what the stdio `command` is and when it needs a hand. */
-export function launchNote(launch: McpLaunch, variant: StdioVariant): string {
+export function launchNote(launch: McpLaunch, variant: StdioVariant, npx = false): string {
   if (launch.desktop) {
     return (
       'The command is the Python bundled inside this app — nothing else to install. This app ' +
       'picks a new address each time it starts, so the bridge finds it through ONW_ROOT (your ' +
       'book folder); Open Net Worth must be running. If you move the app, copy the config again.'
+    )
+  }
+  if (variant === 'remote' && npx && !launch.desktop) {
+    return (
+      'Runs mcp-remote, a generic MCP bridge with no Open Net Worth code, through npx — needs ' +
+      'Node.js on the computer running the AI app, and nothing else. Copy this config from that ' +
+      'computer, so the address is one it can reach. If your AI app can\'t find "npx", use the ' +
+      'full path printed by `which npx` (Windows: `where npx`).'
     )
   }
   if (variant === 'remote') {

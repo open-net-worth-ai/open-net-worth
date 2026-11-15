@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
-import { Btn, Panel, useSectionBusy } from '../ds'
+import { Btn, Panel, Toggle, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
 import {
   FALLBACK_LAUNCH,
@@ -33,6 +33,7 @@ export function McpSection({ toast, openSection }: SectionProps) {
   const [client, setClient] = useState('claude-desktop')
   // null until the user picks: the default follows what the server reports (Docker → remote).
   const [picked, setPicked] = useState<StdioVariant | null>(null)
+  const [npx, setNpx] = useState(false)
   const { data: tokenData, initialLoading: loadingToken } = useCachedFetchState<{ token: string }>(
     '/api/auth/api-token',
     () => getJson<{ token: string }>('/api/auth/api-token'),
@@ -52,11 +53,13 @@ export function McpSection({ toast, openSection }: SectionProps) {
   const local = g.transport === 'local'
   const showVariants = local && !launch.desktop
   const ctx = { origin, launch, variant: showVariants ? variant : ('installed' as const) }
+  const showNpx = showVariants && ctx.variant === 'remote'
+  const ctxFull = { ...ctx, npx: showNpx && npx }
   // The DISPLAYED snippet masks the token; only the clipboard gets the real one. Rendering
   // a full-access bearer as page text put it in reach of the Lucius screen snapshot, which
   // walks visible text and ships it to the model provider and into the saved transcript.
-  const snippet = g.snippet({ ...ctx, token: TOKEN_MASK })
-  const copyable = g.snippet({ ...ctx, token })
+  const snippet = g.snippet({ ...ctxFull, token: TOKEN_MASK })
+  const copyable = g.snippet({ ...ctxFull, token })
 
   return (
     <Panel
@@ -121,9 +124,15 @@ export function McpSection({ toast, openSection }: SectionProps) {
             ))}
           </div>
         ) : null}
+        {showNpx ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9 }}>
+            <Toggle on={npx} onChange={setNpx} label="Use npx instead" />
+            <span className="rd-help">Use npx instead (mcp-remote, needs Node.js)</span>
+          </div>
+        ) : null}
         {local ? (
           <span className="rd-help" style={{ display: 'block', lineHeight: 1.55, marginTop: 9 }}>
-            {launchNote(launch, ctx.variant)}
+            {launchNote(launch, ctx.variant, ctxFull.npx)}
           </span>
         ) : null}
         {/* data-ctx-secret keeps this region out of the screen snapshot entirely — belt as

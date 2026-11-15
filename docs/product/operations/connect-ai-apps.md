@@ -108,7 +108,8 @@ Open Net Worth tools: each time the AI app connects, it asks your instance for t
 new tools appear on their own. It depends only on the MCP standard itself.
 
 If you'd rather install nothing from Open Net Worth on that computer, the generic `mcp-remote`
-bridge does the same job. It needs Node.js:
+bridge does the same job. It needs Node.js. Turn on **Use npx instead** under **Docker or another
+computer** and **Copy config** gives you this, with your token filled in:
 
 ```json
 {

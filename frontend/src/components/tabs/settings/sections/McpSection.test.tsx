@@ -72,6 +72,23 @@ describe('Settings → MCP', () => {
     expect(screen.getByText(/uv tool install open-net-worth/)).toBeTruthy()
   })
 
+  it('"Use npx instead" shows only for that choice and swaps in mcp-remote, token masked', async () => {
+    serve({ ...INSTALLED, command: 'onw', command_found: false, container: true })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    const { container } = render(<McpSection toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('switch', { name: 'Use npx instead' }))
+    const code = container.querySelector('.rd-code')!.textContent!
+    expect(code).toContain('mcp-remote')
+    expect(code).toContain(TOKEN_MASK)
+    expect(code).not.toContain('real-secret-token')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy config' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalled())
+    expect(writeText.mock.calls[0]![0]).toContain('Bearer real-secret-token')
+    fireEvent.click(screen.getByRole('tab', { name: 'Installed (onw)' }))
+    expect(screen.queryByRole('switch', { name: 'Use npx instead' })).toBeNull()
+  })
+
   it('a path this server found never reaches the "another computer" config', async () => {
     serve(INSTALLED)
     const { container } = render(<McpSection toast={vi.fn()} />)

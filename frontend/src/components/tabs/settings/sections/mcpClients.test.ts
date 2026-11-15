@@ -87,6 +87,30 @@ describe('MCP client snippets', () => {
     }
   })
 
+  it('"Use npx instead" builds the mcp-remote config, token in env, never the onw bridge', () => {
+    const server = firstBlock(snippet('claude-desktop', ctx({ variant: 'remote', npx: true })))
+      .mcpServers['open-net-worth']
+    expect(server).toEqual({
+      command: 'npx',
+      args: [
+        '-y',
+        'mcp-remote',
+        `${ORIGIN}/mcp`,
+        '--allow-http',
+        '--header',
+        'Authorization:${ONW_AUTH}',
+      ],
+      env: { ONW_AUTH: 'Bearer TOK' },
+    })
+    const https = ctx({ origin: 'https://onw.example.com', variant: 'remote', npx: true })
+    const httpsServer = firstBlock(snippet('cursor', https)).mcpServers['open-net-worth']
+    expect(httpsServer.args).not.toContain('--allow-http')
+    // npx applies to the "another computer" choice only.
+    const installed = firstBlock(snippet('claude-desktop', ctx({ npx: true })))
+    expect(installed.mcpServers['open-net-worth'].command).toBe('onw')
+    expect(launchNote(FALLBACK_LAUNCH, 'remote', true)).toMatch(/Node\.js/)
+  })
+
   it('a container install defaults to "Docker or another computer"', () => {
     expect(defaultVariant({ ...FALLBACK_LAUNCH, container: true })).toBe('remote')
     expect(defaultVariant(FALLBACK_LAUNCH)).toBe('installed')
