@@ -153,11 +153,13 @@ def search(q: str) -> dict:
     return {"results": assets.search(q), **SIMULATED}
 
 
-def qa_market(market: str | None, prices: dict | None, fx: dict | None) -> dict:
+def qa_market(
+    market: str | None, prices: dict | None, fx: dict | None, opens_in_s: float | None = None
+) -> dict:
     """QA only: set the deterministic paper market, then retry open orders against it."""
     from backend.services.paper_trading import engine, qa_quotes
 
-    state = qa_quotes.set_state(market, prices, fx)
+    state = qa_quotes.set_state(market, prices, fx, opens_in_s)
     return {"market": state, "tick": engine.tick()}
 
 

@@ -114,7 +114,9 @@ def paper_db(db_isolated, monkeypatch):
     monkeypatch.setattr(service, "_now", lambda: NOW)
     monkeypatch.setattr(engine, "_now", lambda: NOW)
     seed_instruments()
-    monkeypatch.setattr(qa_quotes, "_state", {"market": "open", "prices": {}, "fx": {}})
+    monkeypatch.setattr(
+        qa_quotes, "_state", {"market": "open", "prices": {}, "fx": {}, "opens_at": None}
+    )
     qa_quotes.set_state("open", PRICES, {"JPYUSD": 0.0067, "EURUSD": 1.08, "USDEUR": 0.925})
     with flags(paper_trading=True):
         yield

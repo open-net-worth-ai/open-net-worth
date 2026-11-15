@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import hashlib
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from backend.core.config import get_settings
 from backend.services.paper_trading.model import PaperAsset, PaperQuote
 
 _lock = threading.Lock()
-_state: dict = {"market": "open", "prices": {}, "fx": {}}
+_state: dict = {"market": "open", "prices": {}, "fx": {}, "opens_at": None}
 
 
 def _assert_qa() -> None:
@@ -20,11 +20,22 @@ def _assert_qa() -> None:
         raise RuntimeError("QA paper quotes are disabled outside QA mode")
 
 
-def set_state(market: str | None = None, prices: dict | None = None, fx: dict | None = None):
+def set_state(
+    market: str | None = None,
+    prices: dict | None = None,
+    fx: dict | None = None,
+    opens_in_s: float | None = None,
+):
+    """``opens_in_s`` closes the market now and opens it that many seconds later, so an
+    end-to-end run can place a market order, wait for the open and watch the engine fill it."""
     _assert_qa()
     with _lock:
         if market in ("open", "closed"):
             _state["market"] = market
+            _state["opens_at"] = None
+        if opens_in_s is not None:
+            _state["market"] = "closed"
+            _state["opens_at"] = datetime.now(timezone.utc) + timedelta(seconds=float(opens_in_s))
         if prices:
             _state["prices"].update({k.upper(): float(v) for k, v in prices.items() if v})
         if fx:
@@ -33,7 +44,20 @@ def set_state(market: str | None = None, prices: dict | None = None, fx: dict | 
 
 
 def snapshot() -> dict:
-    return {"market": _state["market"], "prices": dict(_state["prices"]), "fx": dict(_state["fx"])}
+    opens = _state.get("opens_at")
+    return {
+        "market": _market(),
+        "opens_at": opens.isoformat() if opens else None,
+        "prices": dict(_state["prices"]),
+        "fx": dict(_state["fx"]),
+    }
+
+
+def _market() -> str:
+    opens = _state.get("opens_at")
+    if opens is not None and datetime.now(timezone.utc) >= opens:
+        _state["market"], _state["opens_at"] = "open", None
+    return _state["market"]
 
 
 def price_for(symbol: str) -> float:
@@ -46,7 +70,8 @@ def price_for(symbol: str) -> float:
 
 def quotes(assets: list[PaperAsset], now: datetime) -> dict[str, PaperQuote]:
     _assert_qa()
-    is_open = _state["market"] == "open"
+    is_open = _market() == "open"
+    opens = _state.get("opens_at")
     out: dict[str, PaperQuote] = {}
     for a in assets:
         last = round(price_for(a.symbol) * (a.quote_per_unit or 1.0), 6)
@@ -63,7 +88,7 @@ def quotes(assets: list[PaperAsset], now: datetime) -> dict[str, PaperQuote]:
             source="QA fixture",
             session_state="REGULAR" if (is_open or always) else "CLOSED",
             is_open=is_open or always,
-            next_open=None if is_open else now + timedelta(hours=1),
+            next_open=None if is_open else (opens or now + timedelta(hours=1)),
             timezone="America/New_York",
             navs={now.date().isoformat(): last} if a.kind == "fund_nav" and is_open else {},
         )

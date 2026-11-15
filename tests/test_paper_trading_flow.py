@@ -41,3 +41,15 @@ def test_create_trade_wait_fill_start_over(paper_client):
     assert old["orders"][0]["status"] == "filled"
     new = paper_client.get(f"/api/paper/portfolios/{over['portfolio']['id']}").json()
     assert new["holdings"] == [] and new["figures"]["cash_home"] == 10_000
+
+
+def test_the_qa_market_opens_on_its_own_after_the_delay(paper_db, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    qa_quotes.set_state(opens_in_s=60)
+    assert qa_quotes.snapshot()["market"] == "closed"
+    later = datetime.now(timezone.utc) + timedelta(seconds=61)
+    monkeypatch.setattr(
+        qa_quotes, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: later)})
+    )
+    assert qa_quotes.snapshot()["market"] == "open"

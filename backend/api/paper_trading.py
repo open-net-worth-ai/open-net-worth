@@ -175,6 +175,7 @@ class QaMarketBody(BaseModel):
     market: Literal["open", "closed"] | None = None
     prices: dict[str, float] | None = None
     fx: dict[str, float] | None = None
+    opens_in_s: float | None = Field(None, ge=0, le=3600)
 
 
 def _attest(x_onw_qa_nonce: str | None = Header(default=None)) -> None:
@@ -185,5 +186,4 @@ def _attest(x_onw_qa_nonce: str | None = Header(default=None)) -> None:
 
 @qa_router.post("/api/qa/paper/market", dependencies=[Depends(_attest)])
 def set_qa_paper_market(body: QaMarketBody):
-    out = paper.qa_market(body.market, body.prices, body.fx)
-    return out
+    return paper.qa_market(body.market, body.prices, body.fx, body.opens_in_s)

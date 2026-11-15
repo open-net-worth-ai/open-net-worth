@@ -1,0 +1,87 @@
+# Spec: Paper trading phase 1 — create a paper portfolio, place a market order while the market
+# is closed, wait for the open and see the fill, start over and keep history; desktop and phone.
+# The setup script turns the paper_trading flag on and closes the deterministic QA paper market
+# for 75 seconds (it opens on its own; the fill engine ticks every 60 s).
+id: PAPER-TRADING
+title: "Paper trading — create, market order waits for the open, fill, start over, phone"
+setup_script: paper_market_opens_soon.py
+max_steps: 60
+timeout_seconds: 600
+acceptance_ids:
+  - PT-01
+  - PT-02
+  - PT-03
+  - PT-04
+  - PT-05
+  - PT-06
+  - PT-07
+
+acceptance_criteria:
+  - PT-01: 'Intelligence shows a "Paper trading" tab right after "Copy Trading"; it lists paper portfolios as cards and has a "New paper portfolio" action.'
+  - PT-02: 'New paper portfolio with Cash only 10,000 creates a portfolio that opens at once, shows a "Paper" marker, Value 10,000 and Cash 10,000.'
+  - PT-03: 'The order ticket (Trade) is on the paper style; a market buy of 5 shares while the market is closed shows a line starting "Market closed. Fills at the next open" before placing, and after placing the order is open in Orders with that reason.'
+  - PT-04: 'After waiting for the open (about two minutes) the order is filled: Holdings shows the 5 shares, Activity shows "Bought 5 … at …", and the order shows its fill price.'
+  - PT-05: 'Start over archives the run and opens a new one with 10,000 cash and no holdings; the old run is listed under "Archived" and opening it still shows its filled order and activity.'
+  - PT-06: 'At a phone width (390 px) the paper list, the portfolio page and the order ticket (as a bottom sheet) fit without horizontal scrolling and keep the Paper marker.'
+  - PT-07: 'No real-money figure changed: the Dashboard net worth is the same before and after.'
+
+browser_use_task: |
+  Navigate to {app_url} and wait for the page to load.
+
+  Step 1 — Open the Dashboard. Record: NET_WORTH_BEFORE = the net worth figure shown.
+
+  Step 2 — Click "Intelligence" in the sidebar. Wait 2 seconds.
+  Record: PAPER_TAB_AFTER_COPY = "yes" if the tabs show "Paper trading" immediately after "Copy Trading".
+  Click "Paper trading". Take a screenshot labeled "PT-01_list.png".
+  Record: NEW_ACTION = "yes" if a "New paper portfolio" button or card is visible.
+
+  Step 3 — Click "New paper portfolio". Type "QA paper run" as the name. Choose "Cash only" and the
+  10,000 preset. Create it. Wait 2 seconds. Take a screenshot labeled "PT-02_created.png".
+  Record: OPENED = "yes" if the new portfolio's page opened.
+  Record: PAPER_MARKER = "yes" if a "Paper" tag/marker is visible in its header.
+  Record: VALUE_TEXT = the Value figure. Record: CASH_TEXT = the Cash figure.
+
+  Step 4 — Click "Trade". In the ticket choose "Buy", search "ACME" (or "AAPL" if ACME is not
+  found) and pick it, enter 5 shares, order type Market. Wait 2 seconds for the preview.
+  Take a screenshot labeled "PT-03_ticket.png".
+  Record: TICKET_LINE = the one line of text under the place button.
+  Click the place button ("Place paper buy"). Wait 2 seconds.
+  Open the "Orders" sub-tab. Record: ORDER_STATE = the open order's status text and reason.
+
+  Step 5 — Wait 60 seconds, then wait 60 more seconds. Reload the page and reopen this portfolio
+  if needed. Open "Holdings". Take a screenshot labeled "PT-04_filled.png".
+  Record: HOLDING_QTY = the quantity of the bought holding.
+  Open "Activity". Record: ACTIVITY_ROW = the text of the newest activity row.
+  Open "Orders". Record: FILLED = "yes" if the order now shows as filled with a price.
+
+  Step 6 — Open the portfolio's ⋯ menu or actions and click "Start over"; confirm.
+  Wait 2 seconds. Record: NEW_RUN_CASH = the Cash figure of the run now shown.
+  Record: NEW_RUN_EMPTY = "yes" if Holdings is empty.
+  Go back to the Paper trading list and open "Archived". Record: ARCHIVED_LISTED = "yes" if
+  "QA paper run" is listed there. Open it. Record: ARCHIVED_HISTORY = "yes" if its Activity
+  still shows the "Bought 5" row. Take a screenshot labeled "PT-05_archived.png".
+
+  Step 7 — Resize the window to 390 px wide (phone). Open the Paper trading list, then the new
+  "QA paper run", then click "Trade". Take screenshots labeled "PT-06_phone_list.png",
+  "PT-06_phone_page.png" and "PT-06_phone_ticket.png".
+  Record: PHONE_NO_HSCROLL = "yes" if none of the three screens scrolls sideways.
+  Record: PHONE_MARKER = "yes" if the Paper marker is visible on the page and the ticket.
+  Close the ticket and restore the desktop width.
+
+  Step 8 — Open the Dashboard. Record: NET_WORTH_AFTER = the net worth figure shown.
+
+  Judge each AC:
+  PT-01 passes if PAPER_TAB_AFTER_COPY and NEW_ACTION are yes.
+  PT-02 passes if OPENED and PAPER_MARKER are yes and VALUE_TEXT and CASH_TEXT read 10,000.
+  PT-03 passes if TICKET_LINE starts with "Market closed. Fills at the next open" and
+  ORDER_STATE is open with that reason.
+  PT-04 passes if HOLDING_QTY is 5, ACTIVITY_ROW starts with "Bought 5" and FILLED is yes.
+  PT-05 passes if NEW_RUN_CASH reads 10,000 and NEW_RUN_EMPTY, ARCHIVED_LISTED and
+  ARCHIVED_HISTORY are yes.
+  PT-06 passes if PHONE_NO_HSCROLL and PHONE_MARKER are yes.
+  PT-07 passes if NET_WORTH_AFTER equals NET_WORTH_BEFORE.
+  Start your final answer with PASS only if every AC passed, else FAIL; then give PASS/FAIL per
+  AC with the values you recorded.
+
+expected:
+  pass_condition: "result contains 'PASS'"
