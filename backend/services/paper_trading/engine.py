@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from backend.core import data_events
 from backend.db.paper_store import PaperOrderStore, PaperPortfolioStore
-from backend.services import feature_flags
+from backend.services.feature_flags import enabled as flag_enabled
 from backend.services.paper_trading import assets, quotes, service
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def _now() -> datetime:
 
 
 def enabled() -> bool:
-    return feature_flags.enabled(FLAG)
+    return flag_enabled(FLAG)
 
 
 def tick(now: datetime | None = None) -> dict:
