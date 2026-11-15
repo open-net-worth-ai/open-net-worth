@@ -259,6 +259,20 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 16),
         remove_by=date(2027, 3, 1),
     ),
+    Flag(
+        name="paper_trading",
+        description=(
+            "Paper trading in Intelligence: try trades with pretend money at real market prices, "
+            "for shares, funds, crypto, metals, currencies, indices and assets you price "
+            "yourself. A paper portfolio never touches your accounts, net worth or budget, and "
+            "never sends an order to a broker. Lucius can place paper orders and read their "
+            "results. Off: the tab is hidden, and paper portfolios are kept."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 15),
+        remove_by=date(2027, 5, 15),
+    ),
 )
 
 
