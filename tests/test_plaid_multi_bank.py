@@ -173,6 +173,7 @@ def test_completing_a_link_adds_the_bank_with_its_name(store, monkeypatch):
     replies = {
         "/link/token/get": {"link_sessions": [session]},
         "/item/public_token/exchange": {"access_token": "access-i2", "item_id": "i2"},
+        "/item/get": {"item": {"institution_id": "ins_2", "institution_name": "Chase"}},
     }
     monkeypatch.setattr(
         svc.httpx, "post", lambda url, **k: _Resp(replies[url.split(".plaid.com", 1)[1]])
@@ -380,12 +381,17 @@ def test_finishing_update_mode_exchanges_nothing_and_keeps_the_same_item(store, 
         svc.httpx,
         "post",
         _recorder(
-            {"/link/token/get": {"link_sessions": [{"finished_at": "2026-10-29T00:00:00Z"}]}}, calls
+            {
+                "/link/token/get": {"link_sessions": [{"finished_at": "2026-10-29T00:00:00Z"}]},
+                "/item/get": {"item": {}},
+            },
+            calls,
         ),
     )
     out = svc.complete_hosted_link()
     assert out["status"] == "linked" and out["mode"] == "update"
-    assert [p for p, _ in calls] == ["/link/token/get"]  # no public-token exchange
+    # no public-token exchange; /item/get only refreshes the consent end
+    assert [p for p, _ in calls] == ["/link/token/get", "/item/get"]
     assert [i["item_id"] for i in store.items()] == ["i1"]  # same Item, same token
     assert store.public()["banks"][0]["needs_reconnect"] is False
     assert store.pending_link_bank() is None and store.link_token() == ""

@@ -591,7 +591,12 @@ def _record_item(store: PlaidConfigStore, item: dict, info: dict, account_ids: l
 
 
 def fetch_transactions_get(
-    store: PlaidConfigStore, *, start_date: str, end_date: str, raise_if_all_fail: bool = True
+    store: PlaidConfigStore,
+    *,
+    start_date: str,
+    end_date: str,
+    raise_if_all_fail: bool = True,
+    check_history: bool = True,
 ) -> dict:
     """``/transactions/get`` for EVERY linked bank, merged. Each account carries its bank's
     name (``_institution``). One bank failing (an expired login, say) never sinks the others:
@@ -615,7 +620,9 @@ def fetch_transactions_get(
     cut_short: set[str] = set()
     errors: dict[str, ValidationError] = {}
     holders: dict[str, list[str]] = {}
-    needs_history = start_date < (user_today() - timedelta(days=_RECENT_DAYS)).isoformat()
+    needs_history = (
+        check_history and start_date < (user_today() - timedelta(days=_RECENT_DAYS)).isoformat()
+    )
     for item in items:
         bank = item.get("institution_name") or "a linked bank"
         key = bank_key(item.get("item_id") or "")
@@ -932,7 +939,9 @@ def fetch_window(
     if accounts_only:
         # A single-day window minimizes (never eliminates — Plaid has no explicit
         # accounts-only endpoint) the transaction rows an accounts-only caller pays for.
-        fetched = fetch_transactions_get(store, start_date=before, end_date=before)
+        fetched = fetch_transactions_get(
+            store, start_date=before, end_date=before, check_history=False
+        )
     else:
         fetched = fetch_transactions_get(
             store, start_date=since, end_date=before, raise_if_all_fail=not account
