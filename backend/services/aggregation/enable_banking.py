@@ -646,8 +646,8 @@ def fetch_session_accounts(
         uid = _account_uid(entry) if isinstance(entry, dict) else str(entry or "").strip()
         if uid and uid not in uids:
             uids.append(uid)
+    known = {_account_uid(a): a for a in data.get("accounts_data") or [] if isinstance(a, dict)}
     if wanted is not None:
-        known = {_account_uid(a): a for a in data.get("accounts_data") or [] if isinstance(a, dict)}
         uids = [u for u in uids if wanted(known.get(u) or {"uid": u})]
 
     def with_details(uid: str) -> dict:
@@ -656,7 +656,14 @@ def fetch_session_accounts(
         except (ExternalServiceError, ValueError) as exc:
             logger.warning("enable_banking account details failed: %s", exc)
             details = None
-        return {**details, "uid": uid} if isinstance(details, dict) else {"uid": uid}
+        # The details never carry ``identification_hash``: keep the session's, which is what
+        # finds a renewed account's stable id again.
+        identity = (
+            {"identification_hash": known[uid]["identification_hash"]}
+            if (known.get(uid, {}).get("identification_hash"))
+            else {}
+        )
+        return {**(details if isinstance(details, dict) else {}), **identity, "uid": uid}
 
     # Listing every account: each one's details AND balance in the same round (the balance
     # needs only the session's uid), not one round after the other — ~1.5 s less on the sandbox.

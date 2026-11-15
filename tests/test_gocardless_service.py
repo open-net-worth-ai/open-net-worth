@@ -103,6 +103,18 @@ class FakeGoCardless:
                 return httpx.Response(200, json={})
             return httpx.Response(200, json=self.requisitions[rid])
         for acc in (ACC, ACC2, ACC3):
+            if path == f"/accounts/{acc}/balances/":
+                return httpx.Response(
+                    200,
+                    json={
+                        "balances": [
+                            {
+                                "balanceType": "closingBooked",
+                                "balanceAmount": {"amount": "100.00", "currency": "EUR"},
+                            }
+                        ]
+                    },
+                )
             if path == f"/accounts/{acc}/details/":
                 return httpx.Response(
                     200,
@@ -385,8 +397,8 @@ def test_fetch_window_maps_booked_and_pending_rows(fake):
             "name": "ACME Current",
             "mask": "1234",
             "currency": "EUR",
-            "balance": None,
-            "cleared_balance": None,
+            "balance": 100.0,
+            "cleared_balance": 100.0,
             "working_balance": None,
             "available_to_spend": None,
             "account_type": "cash",
