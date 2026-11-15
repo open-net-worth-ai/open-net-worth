@@ -105,7 +105,8 @@ starts from your book's base currency. A budget that states a currency keeps it,
 doesn't appear.
 
 The notes above the tabs show what would stop the import first, then the first three things worth
-knowing, or the first one on a phone. **Show more notes** opens the rest.
+knowing, or the first one on a phone. The starter categories it removes come first among those, so
+you always see them. **Show more notes** opens the rest.
 
 ## What comes across, and how
 
