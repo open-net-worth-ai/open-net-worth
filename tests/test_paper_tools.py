@@ -185,3 +185,26 @@ def test_paper_writes_are_refused_on_the_public_demo():
 
     assert set(WRITES) <= _DEMO_REFUSED_TOOLS
     assert not set(PAPER_TOOLS[:4]) & _DEMO_REFUSED_TOOLS
+
+
+def test_the_paper_rule_is_in_the_prompt_only_while_the_flag_is_on():
+    from backend.ai import prompts
+
+    with flags(paper_trading=True):
+        assert prompts._paper_rule() == prompts.PAPER_RULE
+        assert "never the owner's money" in prompts.PAPER_RULE
+    with flags(paper_trading=False):
+        assert prompts._paper_rule() == ""
+
+
+def test_a_net_worth_answer_after_paper_trades_holds_no_paper_figure(paper_db):
+    before = call("get_net_worth")
+    call("create_paper_portfolio", name="Big", cash=9_999_999, home_currency="USD")
+    call(
+        "place_paper_orders",
+        portfolio="Big",
+        orders=[{"asset": "inst:inst_acme", "side": "buy", "quantity": 1000}],
+    )
+    after = call("get_net_worth")
+    assert after == before
+    assert "9999999" not in json.dumps(after) and "paper" not in json.dumps(after).lower()
