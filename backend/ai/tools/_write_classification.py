@@ -95,6 +95,14 @@ READ_ONLY_TOOLS = frozenset(
         # Reads the stored follows (a `search` calls the public filing sources, writes nothing).
         "get_followed_portfolios",
         "get_investment_theses",
+        # Paper trading reads: derived from the paper event ledger, priced with
+        # record_history=False; they write nothing. preview_paper_orders runs the same planner
+        # as a placement with no write — at most it registers a shared, ownerless instrument row
+        # for a ticker the app had not seen (reference data, as a watchlist search does).
+        "get_paper_activity",
+        "get_paper_portfolios",
+        "get_paper_results",
+        "preview_paper_orders",
         # Composes services.asset_detail.read_asset_detail (called with
         # record_price_history=False, persist_exchange=False — see that function's own
         # docstring for the two write side effects those flags exist to opt out of) +

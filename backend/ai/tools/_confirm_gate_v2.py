@@ -89,13 +89,19 @@ def is_gated_tool(tool_name: str) -> bool:
     can set a read to Ask or a write to Always allow.
     """
     from backend.ai import _confirm_gate_v2 as _policy
-    from backend.ai.tools.registry import has_external_effect, is_write_tool, written_domains
+    from backend.ai.tools.registry import (
+        has_external_effect,
+        is_destructive,
+        is_write_tool,
+        written_domains,
+    )
 
     return _policy.needs_approval(
         tool_name,
         writes=is_write_tool(tool_name),
         domains=written_domains(tool_name),
         external_effect=has_external_effect(tool_name),
+        destructive=is_destructive(tool_name),
     )
 
 

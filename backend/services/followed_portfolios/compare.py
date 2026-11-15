@@ -179,3 +179,9 @@ def _risk(row: dict, *, since: str | None, band: str | None) -> dict:
         # only over the part you have.
         "yours_since": min((d for d, v in mine.items() if v is not None), default=None),
     }
+
+
+def your_weights(band: str | None = None) -> dict[str, float]:
+    """Your invested book as ``{symbol: weight}`` — the same side "You vs them" compares, for
+    any other comparison (a paper portfolio's Compare tab)."""
+    return _your_weights(band)[0]

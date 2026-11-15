@@ -84,6 +84,9 @@ from tests.db.conftest import (  # noqa: F401
     seed_stub_accounts,  # noqa: F401
 )
 
+# Paper trading's isolated-book + QA-market fixtures, visible to every test file the same way.
+from tests.paper_helpers import paper_client, paper_db  # noqa: E402,F401
+
 
 def drop_stored_review(statement_id: str) -> None:
     """Take a statement's next preview down the RECOMPUTE path. A reopen returns the stored review

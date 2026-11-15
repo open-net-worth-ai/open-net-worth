@@ -4964,13 +4964,22 @@ async def _run_turn(
                                         # stage keys its PendingPlanStore entry on the SAME id
                                         # this tool_use will be resolved against.
                                         set_tool_use_id(tu["id"])
-                                        (
-                                            text_result,
-                                            proposed,
-                                            _mcp_image_ids,
-                                        ) = await _permission_engine().dispatch_external(
-                                            _ext, tool_name, tu["input"]
-                                        )
+                                        from backend.ai import simulation_guard
+
+                                        _sim = simulation_guard.refusal(tool_name)
+                                        if _sim is not None:
+                                            # A paper-only Automation never reaches an
+                                            # external MCP tool, whatever the engine.
+                                            text_result, proposed = _sim
+                                            _mcp_image_ids = []
+                                        else:
+                                            (
+                                                text_result,
+                                                proposed,
+                                                _mcp_image_ids,
+                                            ) = await _permission_engine().dispatch_external(
+                                                _ext, tool_name, tu["input"]
+                                            )
                                 else:
                                     text_result, proposed = await execute_tool(
                                         tool_name, tu["input"], tool_use_id=tu["id"]

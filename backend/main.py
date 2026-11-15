@@ -175,6 +175,8 @@ from backend.api.networth_history import router as networth_history_router
 from backend.api.news_sources import router as news_sources_router
 from backend.api.notification_log import router as notification_log_router
 from backend.api.options import router as options_router
+from backend.api.paper_trading import qa_router as paper_trading_qa_router
+from backend.api.paper_trading import router as paper_trading_router
 from backend.api.payees import router as payees_router
 from backend.api.plaid_api import router as plaid_router
 from backend.api.plan_outlook import router as plan_outlook_router
@@ -1183,6 +1185,7 @@ app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
 app.include_router(investment_theses_router)
 app.include_router(followed_portfolios_router)
+app.include_router(paper_trading_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)
@@ -1237,6 +1240,7 @@ app.include_router(matches_router)
 app.include_router(market_data_router)
 if _settings.onw_qa_mode:
     app.include_router(market_data_qa_router)
+    app.include_router(paper_trading_qa_router)
 app.include_router(memory_router)
 app.include_router(equity_router)
 app.include_router(income_router)

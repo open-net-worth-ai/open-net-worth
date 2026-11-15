@@ -29,6 +29,11 @@ class AutomationApprovalContext:
     # Tools this Automation's owner BLOCKED for it — refused at dispatch whatever the tool's
     # global value, checked before ``always_allowed_tools``.
     blocked_tools: frozenset[str] = frozenset()
+    # A paper-trading Automation (ADR 2026-11-15-paper-trading-is-a-simulated-book-never-an-order-
+    # path): dispatch refuses every tool that is not a read, a simulated (paper) write or a
+    # workspace write — every external MCP tool and every real write included — whatever its
+    # instructions say. Set only from the stored Automation, never by a tool or the model.
+    simulation_only: bool = False
 
 
 _approval_context: ContextVar[AutomationApprovalContext | None] = ContextVar(
@@ -63,6 +68,7 @@ class AutomationRunnerRequest:
     permission_mode: str = "manual"
     always_allowed: list[dict] = field(default_factory=list)
     blocked: list[str] = field(default_factory=list)
+    simulation_only: bool = False
     # The rule that woke the run (stored trigger + names of what it points at) and the last
     # run that completed — the instructions carry no timing, so the run learns both here.
     configured_trigger: dict = field(default_factory=dict)

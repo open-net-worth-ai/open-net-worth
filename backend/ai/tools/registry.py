@@ -53,6 +53,7 @@ class Tool:
     precheck: Optional[Precheck] = None
     external_effect: bool = False
     unavailable: Optional[Callable[[], Optional[str]]] = None
+    destructive: bool = False
 
 
 _REGISTRY: dict[str, Tool] = {}
@@ -81,6 +82,7 @@ def tool(
     precheck: Optional[Precheck] = None,
     external_effect: bool = False,
     unavailable: Optional[Callable[[], Optional[str]]] = None,
+    destructive: bool = False,
 ) -> Callable[[Handler], Handler]:
     """Register an async tool handler under ``name``. Raises on duplicate name.
 
@@ -145,6 +147,11 @@ def tool(
     hard-refused at dispatch, below, before its handler ever runs — on top of, not instead of,
     the ``effective_level`` permission check every tool gets.
 
+    ``destructive`` marks a write that permanently removes something the owner cannot get back
+    (deleting a whole paper portfolio and its history). It only matters inside a domain that is
+    otherwise seeded Always allow (``ai._confirm_gate_v2.SIMULATION_DOMAINS``): there it keeps the
+    tool seeded Ask. The old gate never reads it.
+
     ``precheck`` runs the handler's own cheap refusals (a semantic check the type-only schema
     validation below cannot express — an Automation trigger's shape) on the raw arguments and
     RAISES on a call the handler would refuse. ``ai.tools._confirm_gate.stage_generic`` calls
@@ -177,6 +184,7 @@ def tool(
             precheck,
             external_effect,
             unavailable,
+            destructive,
         )
         _validator_for.cache_clear()  # a name queried before registration cached a None
         return fn
@@ -502,10 +510,21 @@ def written_domains(name: str) -> tuple[str, ...]:
     return t.mutates if t is not None else ()
 
 
+def is_registered(name: str) -> bool:
+    """Whether ``name`` is a tool of this registry (an external MCP tool is not)."""
+    return name in _REGISTRY
+
+
 def may_change_something(name: str) -> bool:
     """Whether running ``name`` can change data or send something out. A tool this registry
     doesn't know (an external MCP server's) counts: nothing vouches that it only reads."""
     return name not in _REGISTRY or bool(written_domains(name)) or has_external_effect(name)
+
+
+def is_destructive(name: str) -> bool:
+    """Whether ``name`` declares ``destructive=`` — ``False`` for an unknown tool."""
+    t = _REGISTRY.get(name)
+    return bool(t and t.destructive)
 
 
 def has_external_effect(name: str) -> bool:
@@ -996,6 +1015,13 @@ async def _dispatch_call(
         # PREVIOUS dispatch's narrowing, which ``_active_call`` still holds by design.
         _record_call(name, invoked, input_data, unknown, started, ())
         return unknown, None
+    from backend.ai import simulation_guard
+
+    simulated = simulation_guard.refusal(name)
+    if simulated is not None:
+        # A paper-only Automation: refused before any permission engine, judge or card.
+        _record_call(name, invoked, input_data, simulated[0], started, ())
+        return simulated
     refusal, input_data = _refusal_before_gate(name, entry, input_data, gate)
     if refusal is not None:
         _record_call(name, invoked, input_data, refusal, started, ())
@@ -1069,6 +1095,13 @@ _DEMO_REFUSED_TOOLS = frozenset(
     {
         # Its request reaches every open app, and on the demo those are other visitors'.
         "read_screen",
+        # Paper trading writes: every visitor shares one book, so the demo reads paper only.
+        "create_paper_portfolio",
+        "update_paper_portfolios",
+        "delete_paper_portfolios",
+        "place_paper_orders",
+        "cancel_paper_orders",
+        "record_paper_marks",
         "list_checkpoints",
         "restore_checkpoint",
         "get_recent_logs",

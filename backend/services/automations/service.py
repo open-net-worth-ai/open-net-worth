@@ -120,6 +120,9 @@ def validate_automation(
         "effort": effort,
         "max_runs": max_runs,
         "provenance": dict(provenance),
+        # Fixed at creation: not in _EDITABLE_FIELDS, so no update can switch it off (or on).
+        "simulation_only": bool(clean.get("simulation_only")),
+        "paper_portfolio_id": str(clean.get("paper_portfolio_id") or "").strip() or None,
     }
 
 
