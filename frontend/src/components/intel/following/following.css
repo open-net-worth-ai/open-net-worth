@@ -1635,6 +1635,15 @@ div.fol-row-main {
   box-shadow: 0 0 0 var(--space-4) var(--bg);
 }
 
+/* On a phone the pinned card draws its chart shorter — the real chart, markers and all, still in
+   view while the table scrolls under it, with room left for the rows (owner, 2026-11-16: at full
+   height it left room for four). */
+@container fol-page (width < 640px) {
+  .fol-act-card {
+    --fol-chart-h: 120px;
+  }
+}
+
 /* The way back to Famous Portfolios, on the name's own line. */
 .fol-back-icon {
   all: unset;

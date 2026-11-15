@@ -119,6 +119,9 @@ Jun 30**) or any single quarter. Filter a fund's moves by **New**, **Increase**,
 **Sold out**, or a member's by **Bought** and **Sold**. Each row shows the date, the change in
 dollars with a bar for its size, and the change in shares.
 
+While you scroll the table, that chart stays in view above it. On a phone the portfolio's name
+scrolls away, only the tabs and the chart stay, and the chart is drawn shorter so more rows fit.
+
 Above the table, with no row picked, a chart shows the portfolio over the same period, with **B**
 and **S** markers on its moves. A quarter's change has no trade day (a fund reports its holdings
 at each quarter-end, not when it traded), so its marker sits on the day it was **disclosed**,

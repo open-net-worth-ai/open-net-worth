@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { Skeleton } from '../../ui'
-import { ActivityChart, CHART_HEIGHT, type ChartColors } from './ActivityChart'
+import { ActivityChart, CHART_BOX, type ChartColors } from './ActivityChart'
 import { tradeMarkers } from './tradeMarkers'
 import type { ActivityRow, ChartTrade } from './activityRows'
 import { usePriceHistory } from './useFollowing'
@@ -69,7 +69,7 @@ export function TradeChart({ row, trades, bars, from }: Props) {
     },
     [pts, trades, row.symbol],
   )
-  if (hist.initialLoading) return <Skeleton height={CHART_HEIGHT} />
+  if (hist.initialLoading) return <Skeleton height={CHART_BOX} />
   return (
     <ActivityChart
       points={points}

@@ -154,11 +154,17 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // After every render: the tabs do not exist while the page shows its skeleton, so a measure
   // made once, on mount, read 0 and the chart pinned over them.
   const [tabsHeight, setTabsHeight] = useState(0)
+  const [headHidden, setHeadHidden] = useState(0)
   // No dependency list on purpose (every render), and no loop: it sets only a changed height.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const h = tabsRef.current?.offsetHeight ?? 0
     if (h !== tabsHeight) setTabsHeight(h)
+    // On a phone only the tabs stay pinned: the name and its actions scroll away (owner,
+    // 2026-11-16), so the block pins this much higher, out of sight.
+    const tabs = tabsRef.current?.querySelector<HTMLElement>('.ui-page-tabs')
+    const hide = narrow && tabs ? tabs.offsetTop : 0
+    if (hide !== headHidden) setHeadHidden(hide)
   })
   // Each tab keeps its own scroll (owner, 2026-11-14): back to a tab is back where you were in
   // it, and a tab not yet opened starts at its top, just under the pinned name and tabs. Since
@@ -184,7 +190,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
           parseFloat(getComputedStyle(bar.parentElement!).rowGap || '0') +
           parseFloat(style.marginTop || '0')
         : 0
-      const stickAt = Math.max(0, natural - tabsTop)
+      const stickAt = Math.max(0, natural - (tabsTop - headHidden))
       restoreTo.current = tabScroll.current[next] ?? Math.min(scroller.scrollTop, stickAt)
     }
     setTab(next)
@@ -335,14 +341,14 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     <div
       ref={pageRef}
       className="fol-page"
-      style={{ ['--fol-tabs-h' as string]: `${tabsHeight}px` } as React.CSSProperties}
+      style={{ ['--fol-tabs-h' as string]: `${tabsHeight - headHidden}px` } as React.CSSProperties}
     >
       <Crumb name={follow.name} onBack={onBack} />
       {error && <div className="fol-note fol-note--bad">{error}</div>}
       <Toast message={notice} onDone={() => setNotice(null)} />
       {/* The name, its actions and the tabs stay in view together while the page scrolls
           (owner, 2026-11-14), at every width. */}
-      <div ref={tabsRef} className="fol-tabs-sticky" style={{ top: tabsTop }}>
+      <div ref={tabsRef} className="fol-tabs-sticky" style={{ top: tabsTop - headHidden }}>
         <header className="fol-head">
           <div className="fol-id">
             <h2 className="fol-title">

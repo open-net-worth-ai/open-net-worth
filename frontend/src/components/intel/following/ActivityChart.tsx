@@ -17,6 +17,9 @@ import { formatAxisPrice, hexAlpha, niceTicks, tipPlacement, toTime } from '../a
 // Half an axis label's height: a label whose middle is closer to the plot's edge sticks out.
 const AXIS_LABEL_HALF = 6
 export const CHART_HEIGHT = 200
+/** The chart's height as CSS: the page may set `--fol-chart-h` (a phone's pinned Trading Activity
+ *  card draws it shorter so the table below has room — owner, 2026-11-16). */
+export const CHART_BOX = `var(--fol-chart-h, ${CHART_HEIGHT}px)`
 const BARS_HEIGHT = 80
 const LABEL_GAP_PX = 60
 // A label is centred on its arrow: this close to an edge it would be cut off.
@@ -249,12 +252,18 @@ export function ActivityChart({
       // A round value just past the line's high or low maps outside the plot: its label was drawn
       // over the figures above the chart ("140.00" under a $83 price). Only labels inside it.
       const height = el.clientHeight
+      // As many labels as the height has room for: four on a full chart, two on a phone's short
+      // pinned one, where four stacked on top of each other (owner, 2026-11-16).
+      const wanted = Math.max(2, Math.min(4, Math.floor(height / 50)))
+      let lastY = -Infinity
       setTicks(
-        niceTicks(range.from, range.to, 4).flatMap((value) => {
+        niceTicks(range.from, range.to, wanted).flatMap((value) => {
           const y = line.priceToCoordinate(value)
-          return y == null || y < AXIS_LABEL_HALF || y > height - AXIS_LABEL_HALF
-            ? []
-            : [{ y, label: fmt(value) }]
+          if (y == null || y < AXIS_LABEL_HALF || y > height - AXIS_LABEL_HALF) return []
+          // Never two labels closer than two label heights.
+          if (Math.abs(y - lastY) < AXIS_LABEL_HALF * 4) return []
+          lastY = y
+          return [{ y, label: fmt(value) }]
         }),
       )
       const y = refLine ? line.priceToCoordinate(refLine.value) : null
@@ -287,13 +296,13 @@ export function ActivityChart({
   }, [points, markers, refLine, percent, bars, compare, mine, range?.from, range?.to, themeName])
 
   // No prices: the chart's space stays, empty, so the page below never moves for it.
-  if (points.length < 2) return <div style={{ height: CHART_HEIGHT }} aria-hidden="true" />
+  if (points.length < 2) return <div style={{ height: CHART_BOX }} aria-hidden="true" />
   return (
     <div className="fol-tc-wrap" role="img" aria-label={label}>
       <div
         ref={hostRef}
         className="fol-tc"
-        style={{ height: bars?.length ? CHART_HEIGHT + BARS_HEIGHT : CHART_HEIGHT }}
+        style={{ height: bars?.length ? `calc(${CHART_BOX} + ${BARS_HEIGHT}px)` : CHART_BOX }}
       />
       {ticks.map((t) => (
         <span

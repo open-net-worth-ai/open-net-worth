@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStickTop } from './useStickTop'
-import { SegmentedControl } from '../../ui'
+import { SegmentedControl, Skeleton } from '../../ui'
 import { useAssetNav } from '../../../state/assetNav'
 import { FilterChips, ToolSelect } from './Controls'
 import { NameCell } from './NameCell'
@@ -44,7 +44,25 @@ interface Props {
   onRange: (key: string) => void
 }
 
-function Spotlight({
+const PRICE_RETRIES = 3
+const PRICE_RETRY_MS = 2000
+
+/** A price request that failed asks again a few times, quietly, before the card gives up. */
+function usePriceRetry(hist: { error: unknown; data: unknown; refresh: () => Promise<unknown> }) {
+  const tries = useRef(0)
+  const failed = hist.error != null && !hist.data
+  const { refresh } = hist
+  useEffect(() => {
+    if (!failed || tries.current >= PRICE_RETRIES) return
+    const timer = setTimeout(() => {
+      tries.current += 1
+      void refresh().catch(() => undefined)
+    }, PRICE_RETRY_MS)
+    return () => clearTimeout(timer)
+  }, [failed, refresh])
+}
+
+export function Spotlight({
   row,
   follow,
   benchmark,
@@ -57,6 +75,12 @@ function Spotlight({
   from: string
 }) {
   const since = useSinceFiled(row.symbol, benchmark, from)
+  // Prices still on their way (or a request that failed for a moment) are a placeholder, never
+  // "No price since it was filed": that is said only once the prices are in and show no move
+  // (owner, 2026-11-16: the message flashed before the figures arrived).
+  const hist = usePriceHistory(row.symbol)
+  const priceLoading = hist.initialLoading || (hist.error != null && !hist.data)
+  usePriceRetry(hist)
   const trades = useMemo(() => exactTrades(follow, row.symbol), [follow, row.symbol])
   return (
     <div className="fol-spot">
@@ -64,7 +88,9 @@ function Spotlight({
           the stock's move large, the benchmark and its price small beside it. The stock is the
           block's title; Copy trade sits on that title's line. */}
       <div className="fol-spot-figrow">
-        {since.stock == null ? (
+        {since.stock == null && priceLoading ? (
+          <Skeleton width={180} height={28} />
+        ) : since.stock == null ? (
           <p className="fol-spot-sub">{COPY.noPriceSince}</p>
         ) : (
           // One line, as All Moves' own figure is one line, so picking a move never shifts the
@@ -350,7 +376,19 @@ function useKeepRowInPlace(card: React.RefObject<HTMLElement | null>) {
     if (!el) return
     const observer = new ResizeObserver(hold)
     observer.observe(el)
-    return () => observer.disconnect()
+    // The reader's own scroll wins at once: holding the row for its 2 s while a finger moved
+    // the page fought them, the page jerking back under the finger (owner, 2026-11-16).
+    const letGo = () => {
+      anchor.current = null
+    }
+    const opts = { capture: true, passive: true }
+    for (const type of ['touchstart', 'wheel', 'keydown'] as const)
+      window.addEventListener(type, letGo, opts)
+    return () => {
+      observer.disconnect()
+      for (const type of ['touchstart', 'wheel', 'keydown'] as const)
+        window.removeEventListener(type, letGo, opts)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hold reads only refs and the DOM
   }, [])
   return (key: string) => {
