@@ -61,7 +61,8 @@ function followRoutes() {
     router.go(next, !!o.replace)
   })
 }
-vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => false }))
+const phone = vi.hoisted(() => ({ on: false }))
+vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => phone.on }))
 const openAsset = vi.hoisted(() => vi.fn())
 vi.mock('../../../state/assetNav', () => ({ useAssetNav: () => ({ openAsset }) }))
 // The owner's own book holds one of the fund's stocks.
@@ -181,6 +182,17 @@ describe('Discover', () => {
     expect(crumb.textContent).toContain('Acme Capital')
     fireEvent.click(within(crumb).getByRole('button', { name: COPY.backToAll }))
     expect(await screen.findByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeTruthy()
+  })
+
+  it('shows no breadcrumb on a phone, which goes back with the edge swipe', async () => {
+    phone.on = true
+    try {
+      setup()
+      await open('Acme Capital')
+      expect(screen.queryByRole('navigation', { name: COPY.breadcrumbLabel })).toBeNull()
+    } finally {
+      phone.on = false
+    }
   })
 })
 

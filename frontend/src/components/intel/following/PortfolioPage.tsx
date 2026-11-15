@@ -12,6 +12,7 @@ import {
 } from '../../../api/followedPortfolios'
 import { COPY, askPrompt } from './following.copy'
 import { useIsMobile } from '../../../hooks/useIsMobile'
+import { isStandaloneApp, useEdgeSwipeBack } from '../../../hooks/useEdgeSwipeBack'
 import { usePortfolioTickerMaps } from '../usePortfolioTickerMaps'
 import { ActivityTab } from './ActivityTab'
 import { activitySections, hasActivity as anyActivity, missedQuarter } from './activityRows'
@@ -59,7 +60,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // anywhere (found walking the flow, 2026-11-14).
   const [narrow, setNarrow] = useState(false)
   const pageObserver = useRef<ResizeObserver | null>(null)
+  const pageRoot = useRef<HTMLDivElement | null>(null)
   const pageRef = useCallback((el: HTMLDivElement | null) => {
+    pageRoot.current = el
     pageObserver.current?.disconnect()
     pageObserver.current = null
     if (!el) return
@@ -75,6 +78,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // Your own book: every table marks the stocks you hold.
   const { heldSet } = usePortfolioTickerMaps()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
+  // The installed app has no browser back swipe and a phone shows no crumb, so the page gets
+  // the app's own edge swipe back to the list (as a Documents item does).
+  useEdgeSwipeBack(pageRoot, onBack, isMobile && isStandaloneApp() && !!page.data)
   const returns = usePreviewReturns(portfolio.kind, portfolio.source_ref, page.data != null)
   const slow = useSlow(page.initialLoading)
   const seconds = useElapsed(page.initialLoading)
@@ -183,13 +189,12 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       // The window's own scroller sits at 0 on screen whatever its scroll; an inner pane does not.
       const viewTop =
         scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top
-      const natural = crumb
-        ? crumb.getBoundingClientRect().bottom -
-          viewTop +
-          scroller.scrollTop +
-          parseFloat(getComputedStyle(bar.parentElement!).rowGap || '0') +
-          parseFloat(style.marginTop || '0')
-        : 0
+      // Under the crumb, or — on a phone, which has none — at the page's own top.
+      const above = crumb
+        ? crumb.getBoundingClientRect().bottom +
+          parseFloat(getComputedStyle(bar.parentElement!).rowGap || '0')
+        : (bar.parentElement?.getBoundingClientRect().top ?? 0)
+      const natural = above - viewTop + scroller.scrollTop + parseFloat(style.marginTop || '0')
       const stickAt = Math.max(0, natural - (tabsTop - headHidden))
       restoreTo.current = tabScroll.current[next] ?? Math.min(scroller.scrollTop, stickAt)
     }
@@ -225,7 +230,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   if (page.initialLoading)
     return (
       <>
-        <PageSkeleton name={portfolio.name} onBack={onBack} />
+        <PageSkeleton name={portfolio.name} onBack={onBack} crumb={!isMobile} />
         {slow && (
           <FetchBanner
             title={COPY.fetchPageTitle(portfolio.kind, portfolio.name)}
@@ -239,7 +244,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       <div className="fol-page">
         {/* A page that failed still offers the way back: the address remembers it, so without
             this a portfolio that cannot load was a dead end. */}
-        <Crumb name={portfolio.name || COPY.crumbThis(portfolio.kind)} onBack={onBack} />
+        {!isMobile && (
+          <Crumb name={portfolio.name || COPY.crumbThis(portfolio.kind)} onBack={onBack} />
+        )}
         <ErrorState
           title={COPY.loadFailedTitle}
           message={COPY.pageErrorBody}
@@ -343,7 +350,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       className="fol-page"
       style={{ ['--fol-tabs-h' as string]: `${tabsHeight - headHidden}px` } as React.CSSProperties}
     >
-      <Crumb name={follow.name} onBack={onBack} />
+      {/* A phone goes back with the edge swipe, so the crumb's line goes to the page (owner,
+          2026-11-16); the installed app, which has no browser swipe, gets one of its own. */}
+      {!isMobile && <Crumb name={follow.name} onBack={onBack} />}
       {error && <div className="fol-note fol-note--bad">{error}</div>}
       <Toast message={notice} onDone={() => setNotice(null)} />
       {/* The name, its actions and the tabs stay in view together while the page scrolls
