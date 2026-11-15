@@ -252,12 +252,18 @@ export function ActivityChart({
       // A round value just past the line's high or low maps outside the plot: its label was drawn
       // over the figures above the chart ("140.00" under a $83 price). Only labels inside it.
       const height = el.clientHeight
+      // As many labels as the height has room for: four on a full chart, two on a phone's short
+      // pinned one, where four stacked on top of each other (owner, 2026-11-16).
+      const wanted = Math.max(2, Math.min(4, Math.floor(height / 50)))
+      let lastY = -Infinity
       setTicks(
-        niceTicks(range.from, range.to, 4).flatMap((value) => {
+        niceTicks(range.from, range.to, wanted).flatMap((value) => {
           const y = line.priceToCoordinate(value)
-          return y == null || y < AXIS_LABEL_HALF || y > height - AXIS_LABEL_HALF
-            ? []
-            : [{ y, label: fmt(value) }]
+          if (y == null || y < AXIS_LABEL_HALF || y > height - AXIS_LABEL_HALF) return []
+          // Never two labels closer than two label heights.
+          if (Math.abs(y - lastY) < AXIS_LABEL_HALF * 4) return []
+          lastY = y
+          return [{ y, label: fmt(value) }]
         }),
       )
       const y = refLine ? line.priceToCoordinate(refLine.value) : null
