@@ -194,7 +194,8 @@ function UndoneRun({
   const [open, setOpen] = useState(false)
   const rows = item.detail.rows ?? []
   const n = rows.length
-  const one = n === 1
+  const first = rows[0]
+  const one = n === 1 && first !== undefined
   const at = item.detail.run_at ? new Date(item.detail.run_at) : null
   const when = at && !isNaN(at.getTime()) ? ` from ${fDate(at)}, ${fTime(at)}` : ''
   const listId = `bs-undone-${item.id}`
@@ -208,7 +209,7 @@ function UndoneRun({
       {one ? (
         <dl className="bs-review-rows">
           <dt>From the bank</dt>
-          <dd>{undoneRow(rows[0])}</dd>
+          <dd>{undoneRow(first)}</dd>
         </dl>
       ) : (
         <>
