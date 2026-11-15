@@ -29,6 +29,8 @@ import { Toast } from '../../tabs/accounts/Toast'
 import type { PortfolioRef } from './Discover'
 import { listAutomations, updateAutomation, type Automation } from '../../../api/automations'
 import { activeAutoCopies } from './autoCopy'
+import { createPaperPortfolio } from '../../../api/paperTrading'
+import { useFlag } from '../../../hooks/useFlag'
 
 type Tab = 'activity' | 'holdings' | 'compare'
 const DEFAULT_RANGE = '1Y'
@@ -129,6 +131,8 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     } as never)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Paper-copy shows only while Paper Trading is on.
+  const paperOn = useFlag('paper_trading') === true
   const [confirming, setConfirming] = useState(false)
   // Stopping watching warns about a running Auto-copy of this portfolio and offers to pause it
   // (owner, 2026-11-14): left on, it would run every week against a portfolio no longer followed.
@@ -288,9 +292,32 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       search: { template: 'copy-followed-portfolio', for: follow.name } as never,
     } as never)
   }
+  // Paper-copy (flag `paper_trading`): a paper portfolio bought at this one's current weights,
+  // with pretend money, then opened in Paper Trading. It watches the portfolio first, as
+  // Auto-copy does, because a paper copy starts from a followed portfolio.
+  const paperCopy = async () => {
+    setError(null)
+    try {
+      const id = followId ?? (await followPortfolio(portfolio.kind, portfolio.source_ref)).follow.id
+      const out = await createPaperPortfolio({
+        name: follow.name,
+        start_with: 'followed',
+        followed_id: id,
+      })
+      void navigate({
+        to: '/intel',
+        search: { sub: 'paper-trading', paper: out.portfolio.id } as never,
+      } as never)
+    } catch (e) {
+      setError(errorText(e))
+    }
+  }
   const menu = [
     // On a phone the call to action lives here: the header keeps only the name.
     ...(narrow || isMobile ? [{ label: COPY.copyCta, onSelect: () => void copyPortfolio() }] : []),
+    ...(paperOn && (narrow || isMobile)
+      ? [{ label: COPY.paperCopyCta, onSelect: () => void paperCopy() }]
+      : []),
     ...(onAskLucius
       ? [
           {
@@ -394,7 +421,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
           </div>
           {/* Lucius does the copying (an automation that trades your broker account to match), so
               it is the app's Lucius action: the primary button in Lucius's colour with its Spark. */}
-          <div className="fol-cta">
+          <div className="fol-cta paper-actions">
             <Tooltip label={COPY.copyPitch}>
               <Button
                 size="sm"
@@ -406,6 +433,13 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
                 {COPY.copyCta}
               </Button>
             </Tooltip>
+            {paperOn && (
+              <Tooltip label={COPY.paperCopyPitch}>
+                <Button size="sm" variant="paper" onClick={() => void paperCopy()}>
+                  {COPY.paperCopyCta}
+                </Button>
+              </Tooltip>
+            )}
           </div>
         </header>
         <PageTabs

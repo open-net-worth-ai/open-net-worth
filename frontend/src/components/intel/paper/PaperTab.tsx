@@ -1,25 +1,43 @@
 import '../following/following.css'
 
 import { useState } from 'react'
-import { Button, EmptyState } from '../../ui'
+import { Button, EmptyState, ErrorState, TabSkeleton } from '../../ui'
 import { NewPortfolioDialog } from './NewPortfolioDialog'
 import { PaperCard } from './PaperCard'
 import { PaperPortfolioPage } from './PaperPortfolioPage'
-import { resetPrototype, usePaperPortfolios } from './paperStore'
+import { usePaperList } from './usePaper'
 
-/** Intelligence › Paper Trading: your paper portfolios as cards, open one, trade on paper.
- *  PROTOTYPE: reads an in-browser store (paperStore.ts), not the API yet. */
-export function PaperTab() {
-  const all = usePaperPortfolios()
-  const [openId, setOpenId] = useState<string | null>(null)
+/** Intelligence › Paper Trading: your paper portfolios as cards; open one to trade on paper. */
+export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void }) {
+  const list = usePaperList()
+  // `?paper=<id>` opens that portfolio (Copy Trading's Paper-copy lands here with it).
+  const [openId, setOpenId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('paper'),
+  )
   const [creating, setCreating] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const live = all.filter((p) => !p.archived)
-  const archived = all.filter((p) => p.archived)
-  const open = all.find((p) => p.id === openId)
 
-  if (open) return <PaperPortfolioPage p={open} onBack={() => setOpenId(null)} onOpen={setOpenId} />
+  if (openId)
+    return (
+      <PaperPortfolioPage
+        id={openId}
+        onBack={() => setOpenId(null)}
+        onOpen={setOpenId}
+        onAskLucius={onAskLucius}
+      />
+    )
+  if (list.initialLoading)
+    return <TabSkeleton variant="holdings" label="Loading paper portfolios" header={false} />
+  if (!list.data)
+    return (
+      <ErrorState
+        title="Paper portfolios didn't load"
+        message="Check that the app is running, then try again."
+        onRetry={() => void list.refresh()}
+      />
+    )
 
+  const { portfolios, archived } = list.data
   const dialog = (
     <NewPortfolioDialog
       open={creating}
@@ -31,7 +49,7 @@ export function PaperTab() {
     />
   )
 
-  if (live.length === 0)
+  if (portfolios.length === 0 && archived.length === 0)
     return (
       <div className="fol-page">
         <EmptyState
@@ -48,6 +66,7 @@ export function PaperTab() {
       </div>
     )
 
+  const shown = showArchived ? archived : portfolios
   return (
     <div className="fol-page">
       <section className="fol-sec" aria-label="Paper portfolios">
@@ -57,22 +76,20 @@ export function PaperTab() {
             New paper portfolio
           </Button>
         </div>
-        <div className="fol-cards">
-          {(showArchived ? archived : live).map((p) => (
-            <PaperCard key={p.id} p={p} onOpen={() => setOpenId(p.id)} />
-          ))}
-        </div>
+        {shown.length > 0 ? (
+          <div className="fol-cards">
+            {shown.map((p) => (
+              <PaperCard key={p.id} p={p} onOpen={() => setOpenId(p.id)} />
+            ))}
+          </div>
+        ) : (
+          <p className="fol-by">No active paper portfolios</p>
+        )}
         {archived.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => setShowArchived((v) => !v)}>
             {showArchived ? 'Back to active' : `Archived runs (${archived.length})`}
           </Button>
         )}
-        <div className="paper-proto">
-          Prototype data, kept in this browser.
-          <Button variant="ghost" size="sm" onClick={resetPrototype}>
-            Reset prototype
-          </Button>
-        </div>
       </section>
       {dialog}
     </div>

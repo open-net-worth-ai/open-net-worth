@@ -56,9 +56,11 @@ def card(row: dict, *, live: bool = True) -> dict:
     """One portfolio as the list shows it: value, return since start, a sparkline."""
     values = PaperValueStore().for_portfolio(row["id"])
     bk = service.derive(row["id"])
+    holdings: list[dict] = []
     if live and row.get("status") == "active":
         val = valuation.value(row, bk, _now())
         value, cash_home = val["value_home"], val["cash_home"]
+        holdings = val["holdings"]
     else:
         last = values[-1] if values else {}
         value, cash_home = last.get("value_home"), last.get("cash_home")
@@ -86,8 +88,28 @@ def card(row: dict, *, live: bool = True) -> dict:
         "sparkline": [{"date": v["date"], "value": v["value_home"]} for v in values[-60:]]
         + ([{"date": user_today().isoformat(), "value": value}] if value is not None else []),
         "settings": row.get("settings") or {},
+        # What the card's ring and trade lines show: its largest holdings by weight (a live
+        # card only) and its two newest buys or sells.
+        "holdings_count": len(holdings),
+        "weights": _card_weights(holdings),
+        "recent_trades": [
+            {"label": t["label"], "side": t["kind"], "symbol": t["symbol"], "at": t["at"]}
+            for t in activity(row["id"], limit=2, kinds=["buy", "sell"])["activity"]
+        ],
         **SIMULATED,
     }
+
+
+def _card_weights(holdings: list[dict], top: int = 8) -> list[dict]:
+    ranked = sorted(
+        (h for h in holdings if h.get("weight") is not None),
+        key=lambda h: h["weight"],
+        reverse=True,
+    )
+    return [
+        {"symbol": h.get("symbol") or h.get("name") or "?", "weight": h["weight"]}
+        for h in ranked[:top]
+    ]
 
 
 def list_portfolios() -> dict:

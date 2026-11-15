@@ -1,6 +1,6 @@
 ---
 title: Paper Trading
-description: Try trades with pretend money at real market prices, through Lucius, without touching your real book or reaching a broker. The screens are coming.
+description: Try trades with pretend money at real market prices, in Intelligence or through Lucius, without touching your real book or reaching a broker.
 category: features
 order: 96
 audience: [user]
@@ -16,11 +16,47 @@ let Lucius run a strategy for a few weeks before it gets a real account. Paper r
 your money and never part of your net worth, cash, budget or Investments figures, and nothing
 here ever sends an order to a broker.
 
-> **Coming soon.** The Paper Trading screens in Intelligence are still being designed. Today
-> paper trading works through Lucius, behind **Settings → Developer → Experimental → Paper
-> Trading** (off by default).
+It is the **Paper Trading** tab in **Intelligence**, after Copy Trading. To try it, turn on
+**Settings → Developer → Experimental → Paper Trading** (off by default).
 
-## What you can do now, through Lucius
+## Start a paper portfolio
+
+Open **Intelligence → Paper Trading** and click **New paper portfolio**. Give it a name, then
+start with:
+
+- **Cash**: the same amount as your investments, 10,000, 100,000, or another amount.
+- **A copy of my holdings**: today's holdings at today's prices.
+- **A portfolio I follow**: its current weights, bought with the cash you choose. On a Copy
+  Trading portfolio, **Paper-copy** does this in one click.
+
+Each paper portfolio is a card with a **Paper** tag, its return against the benchmark, its two
+newest trades and a ring of what it holds.
+
+## Trade on paper
+
+Open a portfolio and click **Paper trade** (or **Trade** on a holding). Type a symbol, such as
+AAPL, BTC or VWCE.DE, and leave the field: the app looks it up and names it under the field.
+Choose **Market**, **Limit** or **Stop**, enter the quantity, and add **Why** if you like. The
+preview shows the price it would fill at, the total and your paper cash after, and one line
+says what happens next ("Fills now…", "Market closed. Fills at the next open…"). Click
+**Place paper buy** or **Place paper sell**.
+
+An order that waits shows under **Orders** with what it waits for, and you can cancel it there.
+The page picks up a fill on its own, without a reload.
+
+The page shows your **Paper value**, **Return** (beside the benchmark) and **Paper cash**, a
+chart of the portfolio against your real investments and the benchmark, then **Holdings**,
+**Orders** and **Activity** (every trade, with its note).
+
+- **Go live** asks Lucius to help you do it for real: he compares it with what you hold and
+  drafts the trades for your broker, and asks before placing anything.
+- **⋯ → Start over** keeps the old run under **Archived runs** and starts again with the same
+  cash. **⋯ → Delete** removes it and its history, and asks first.
+
+On an asset's **Position** tab, **On paper** lists your paper positions in it, apart from your
+real ones and never added to them.
+
+## Through Lucius
 
 Ask Lucius to:
 

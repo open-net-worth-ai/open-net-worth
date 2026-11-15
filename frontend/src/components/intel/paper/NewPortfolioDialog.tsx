@@ -1,13 +1,10 @@
 import { useState } from 'react'
-import { Button, FormField, Modal, NumberField, RadioGroup, TextField } from '../../ui'
-import { createPortfolio } from './paperStore'
+import { Button, FormField, Modal, NumberField, RadioGroup, Select, TextField } from '../../ui'
+import { fCurrency } from '../../../utils/format'
+import { createPaperPortfolio } from '../../../api/paperTrading'
+import { usePaperDefaults } from './usePaper'
 
-const PRESETS = [
-  { value: '10000', label: '10,000' },
-  { value: '100000', label: '100,000' },
-  { value: 'mine', label: 'Same as your investments (240,000)' },
-  { value: 'other', label: 'Another amount' },
-]
+type StartWith = 'cash' | 'holdings' | 'followed'
 
 export function NewPortfolioDialog({
   open,
@@ -18,11 +15,41 @@ export function NewPortfolioDialog({
   onClose: () => void
   onCreated: (id: string) => void
 }) {
-  const [name, setName] = useState('Paper portfolio')
+  const defaults = usePaperDefaults(open).data
+  const ccy = defaults?.base_currency ?? 'USD'
+  const [name, setName] = useState('')
+  const [startWith, setStartWith] = useState<StartWith>('cash')
   const [preset, setPreset] = useState('mine')
   const [other, setOther] = useState('')
-  const cash = preset === 'mine' ? 240000 : preset === 'other' ? Number(other) : Number(preset)
-  const ok = name.trim() !== '' && cash > 0
+  const [followedId, setFollowedId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const mine = defaults?.default_cash ?? 10000
+  const cash = preset === 'mine' ? mine : preset === 'other' ? Number(other) : Number(preset)
+  const needsCash = startWith !== 'holdings'
+  const followed = defaults?.followed ?? []
+  const ok = (!needsCash || cash > 0) && (startWith !== 'followed' || !!followedId) && !busy
+  const whole = (n: number) => fCurrency(n, ccy, { maximumFractionDigits: 0 })
+
+  async function create() {
+    setBusy(true)
+    setError(null)
+    try {
+      const out = await createPaperPortfolio({
+        name: name.trim() || 'Paper portfolio',
+        start_with: startWith,
+        ...(needsCash ? { cash } : {}),
+        ...(startWith === 'followed' ? { followed_id: followedId } : {}),
+      })
+      onCreated(out.portfolio.id)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <Modal
       open={open}
@@ -34,11 +61,7 @@ export function NewPortfolioDialog({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="paper"
-            disabled={!ok}
-            onClick={() => onCreated(createPortfolio(name.trim(), cash))}
-          >
+          <Button variant="paper" disabled={!ok} loading={busy} onClick={() => void create()}>
             Create
           </Button>
         </>
@@ -46,13 +69,65 @@ export function NewPortfolioDialog({
     >
       <div className="paper-form">
         <FormField label="Name" htmlFor="pp-name">
-          <TextField id="pp-name" value={name} onChange={(e) => setName(e.target.value)} />
+          <TextField
+            id="pp-name"
+            placeholder="Paper portfolio"
+            value={name}
+            maxLength={80}
+            onChange={(e) => setName(e.target.value)}
+          />
         </FormField>
-        <FormField label="Paper cash">
-          <RadioGroup name="pp-cash" options={PRESETS} value={preset} onChange={setPreset} />
+        <FormField label="Start with">
+          <RadioGroup
+            name="pp-start"
+            value={startWith}
+            onChange={(v) => setStartWith(v as StartWith)}
+            options={[
+              { value: 'cash', label: 'Cash' },
+              {
+                value: 'holdings',
+                label: 'A copy of my holdings',
+                description: "Today's holdings at today's prices",
+              },
+              {
+                value: 'followed',
+                label: 'A portfolio I follow',
+                description: followed.length
+                  ? 'Its current weights'
+                  : 'Follow one in Copy Trading first',
+                disabled: followed.length === 0,
+              },
+            ]}
+          />
         </FormField>
-        {preset === 'other' && (
-          <FormField label="Amount" htmlFor="pp-amount">
+        {startWith === 'followed' && (
+          <FormField label="Portfolio" htmlFor="pp-followed">
+            <Select
+              id="pp-followed"
+              placeholder="Choose a portfolio"
+              value={followedId}
+              onChange={(e) => setFollowedId(e.target.value)}
+              options={followed.map((f) => ({ value: f.id, label: f.name }))}
+            />
+          </FormField>
+        )}
+        {needsCash && (
+          <FormField label="Paper cash">
+            <RadioGroup
+              name="pp-cash"
+              value={preset}
+              onChange={setPreset}
+              options={[
+                { value: 'mine', label: `Same as your investments (${whole(mine)})` },
+                { value: '10000', label: whole(10000) },
+                { value: '100000', label: whole(100000) },
+                { value: 'other', label: 'Another amount' },
+              ]}
+            />
+          </FormField>
+        )}
+        {needsCash && preset === 'other' && (
+          <FormField label={`Amount (${ccy})`} htmlFor="pp-amount">
             <NumberField
               id="pp-amount"
               min={1}
@@ -61,6 +136,7 @@ export function NewPortfolioDialog({
             />
           </FormField>
         )}
+        {error && <div className="paper-next bad">{error}</div>}
       </div>
     </Modal>
   )

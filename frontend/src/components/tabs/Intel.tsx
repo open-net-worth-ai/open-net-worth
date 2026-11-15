@@ -48,7 +48,8 @@ function withFollowing<T extends { key: string }>(tabs: T[]): (T | typeof FOLLOW
   return [...tabs.slice(0, at), FOLLOWING_TAB, ...tabs.slice(at)]
 }
 
-/** PROTOTYPE: Paper Trading right after Copy Trading (or after My holdings without it). */
+/** Paper Trading (flag `paper_trading`) sits right after Copy Trading, or after My holdings
+ *  when Copy Trading is off. */
 function withPaper<T extends { key: string }>(tabs: T[]): (T | typeof PAPER_TAB)[] {
   const ct = tabs.findIndex((t) => t.key === 'copy-trading')
   const at = ct >= 0 ? ct + 1 : tabs.findIndex((t) => t.key === 'holdings') + 1
@@ -172,6 +173,12 @@ function IntelFeed({
   useEffect(() => {
     if (tab === 'copy-trading' && followingFlag === false) setTab('holdings')
   }, [tab, followingFlag, setTab])
+  // Paper Trading likewise: behind `paper_trading`, never stranded when the flag goes off.
+  const paperFlag = useFlag('paper_trading')
+  const paperOn = paperFlag === true
+  useEffect(() => {
+    if (tab === 'paper-trading' && paperFlag === false) setTab('holdings')
+  }, [tab, paperFlag, setTab])
   // The sidebar card shows the tab's list: My holdings on Holdings, the list on a list tab (none
   // on Topics & macro — topics are in no list; its lead card lists and adds them).
   const activeListId = tabListId ?? watchlists.find((w) => w.is_auto_sync)?.id ?? 'default'
@@ -289,7 +296,7 @@ function IntelFeed({
             ariaLabel="Intelligence view"
             value={tab}
             onChange={nav.setTab}
-            tabs={withPaper(followingOn ? withFollowing(tabs) : tabs)}
+            tabs={((t) => (paperOn ? withPaper(t) : t))(followingOn ? withFollowing(tabs) : tabs)}
           />
           <button
             type="button"
@@ -310,9 +317,9 @@ function IntelFeed({
         )}
         {/* A flag switched off while this tab was remembered shows nothing here: the effect
             above is already sending the visit back to My holdings. */}
-        {tab === 'paper-trading' && (
+        {tab === 'paper-trading' && paperOn && (
           <div role="tabpanel" className="fol-shell">
-            <PaperTab />
+            <PaperTab onAskLucius={onChatSuggest} />
           </div>
         )}
         {tab !== 'copy-trading' && tab !== 'paper-trading' && (
