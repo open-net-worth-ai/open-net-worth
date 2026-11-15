@@ -16,7 +16,8 @@ import { WatchPulseCard } from '../intel/WatchPulseCard'
 import { IntelFeedPanel } from '../intel/IntelFeedPanel'
 import { TopicsStrip } from '../intel/TopicsStrip'
 import { TickerDesk } from '../intel/TickerDesk'
-import { FOLLOWING_TAB, listIdOf, tabOfList, tabOfStory } from '../intel/intelTabs'
+import { FOLLOWING_TAB, PAPER_TAB, listIdOf, tabOfList, tabOfStory } from '../intel/intelTabs'
+import { PaperTab } from '../intel/paper/PaperTab'
 import { FollowingTab } from '../intel/following/FollowingTab'
 import { useFlag } from '../../hooks/useFlag'
 import { useWatchPulse } from '../../hooks/useWatchPulse'
@@ -45,6 +46,13 @@ import { useWatchlistRemoval } from '../intel/useWatchlistRemoval'
 function withFollowing<T extends { key: string }>(tabs: T[]): (T | typeof FOLLOWING_TAB)[] {
   const at = tabs.findIndex((t) => t.key === 'holdings') + 1
   return [...tabs.slice(0, at), FOLLOWING_TAB, ...tabs.slice(at)]
+}
+
+/** PROTOTYPE: Paper Trading right after Copy Trading (or after My holdings without it). */
+function withPaper<T extends { key: string }>(tabs: T[]): (T | typeof PAPER_TAB)[] {
+  const ct = tabs.findIndex((t) => t.key === 'copy-trading')
+  const at = ct >= 0 ? ct + 1 : tabs.findIndex((t) => t.key === 'holdings') + 1
+  return [...tabs.slice(0, at), PAPER_TAB, ...tabs.slice(at)]
 }
 
 const HOLDINGS_MESSAGE =
@@ -281,7 +289,7 @@ function IntelFeed({
             ariaLabel="Intelligence view"
             value={tab}
             onChange={nav.setTab}
-            tabs={followingOn ? withFollowing(tabs) : tabs}
+            tabs={withPaper(followingOn ? withFollowing(tabs) : tabs)}
           />
           <button
             type="button"
@@ -302,7 +310,12 @@ function IntelFeed({
         )}
         {/* A flag switched off while this tab was remembered shows nothing here: the effect
             above is already sending the visit back to My holdings. */}
-        {tab !== 'copy-trading' && (
+        {tab === 'paper-trading' && (
+          <div role="tabpanel" className="fol-shell">
+            <PaperTab />
+          </div>
+        )}
+        {tab !== 'copy-trading' && tab !== 'paper-trading' && (
           <div className={`intel-layout${tab === 'macro' ? ' intel-layout--solo' : ''}`}>
             <div className="intel-feed">
               <div

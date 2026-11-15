@@ -87,6 +87,10 @@ export const tokenGroups = [
       ['primary', '#3b86dd', '#2666b8'],
       ['violet', '#7C6CF5', '#5D4BD8'],
       ['lucius', 'var(--ink)'],
+      // Paper Trading's one accent (owner, 2026-11-15): the Paper tag and the main paper
+      // action only. Gold; on a light page a darker gold so the tag's text passes 4.5:1.
+      ['paper', '#d8c79a', '#7a6420'],
+      ['paper-ink', '#1b1810', '#fffaf0'],
       ['act-teal', '#22b8cf', '#0d7f92'],
       ['accent', 'var(--primary)'],
       // The main call to action is INK, not blue: near-black on a light page, near-white on
