@@ -1517,4 +1517,6 @@ if __name__ == "__main__":
     # `uvicorn backend.main:app ...` CLI usage is unaffected.
     import uvicorn
 
-    uvicorn.run(app, host=_settings.host, port=_settings.port)
+    from backend.core.config import SERVER_EVENT_LOOP
+
+    uvicorn.run(app, host=_settings.host, port=_settings.port, loop=SERVER_EVENT_LOOP)

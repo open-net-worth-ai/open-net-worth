@@ -108,6 +108,13 @@ from dotenv import load_dotenv
 
 from backend.core.errors import ConfigurationError
 
+# The server's event loop, for every launch path (``python -m backend.main``, ``onw start``, the
+# Makefile). Never uvloop: on Linux it starts each child process with a bare ``fork()`` and then
+# runs Python's after-fork hooks in the copy of a busy multi-threaded server, and on a Docker host
+# that child segfaulted in libc's ``pthread_join`` before Claude Code ever ran, every spawn until a
+# restart (issue #131). The standard loop's subprocesses go through CPython's own spawn path.
+SERVER_EVENT_LOOP = "asyncio"
+
 # Load .env from the project root regardless of where the process is launched.
 # main.py also calls load_dotenv(), but settings may be read before main runs
 # (e.g. tests, scripts, or any module that imports backend.paths first), so we
