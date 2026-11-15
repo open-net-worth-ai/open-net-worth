@@ -1955,9 +1955,11 @@
     margin-top: 6px;
     width: 100%;
   }
-  /* /phone-setup — the page a phone opens from Settings → Phone shortcuts (no session). The
-     shell only: Container centres it, ui/ primitives draw everything inside. */
-  .phone-setup {
+  /* /phone-setup — the page a phone opens from Settings → Phone shortcuts (no session) — and
+     /oauth/consent, where a hosted AI app sends the owner to approve a connection. The shell
+     only: Container centres it, ui/ primitives draw everything inside. */
+  .phone-setup,
+  .oauth-consent {
     min-height: 100dvh;
     padding: calc(var(--safe-t) + var(--space-8)) calc(var(--safe-r) + var(--space-6))
       calc(var(--safe-b) + var(--space-9)) calc(var(--safe-l) + var(--space-6));

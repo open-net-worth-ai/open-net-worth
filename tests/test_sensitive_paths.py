@@ -257,6 +257,12 @@ def test_non_restorable_tables_matches_db_resident_non_restorable_files():
         # why those files keep their entries above.
         "connectors",
         "connector_secrets",
+        # The inbound MCP OAuth server (flag mcp_oauth): DB-native credentials, SECRET (so
+        # non-restorable) — a restore must never bring a revoked connected app back.
+        "mcp_oauth_clients",
+        "mcp_oauth_pending",
+        "mcp_oauth_grants",
+        "mcp_oauth_tokens",
     }
 
     # 1. Each file is still (deliberately) present in NON_RESTORABLE_FILES — core.

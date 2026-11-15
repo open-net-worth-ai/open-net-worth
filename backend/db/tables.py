@@ -1592,3 +1592,76 @@ news_deliveries = Table(
     Index("ix_news_deliveries_status", "status"),
     Index("ix_news_deliveries_story_id", "story_id"),
 )
+
+# ── Inbound MCP OAuth server (flag mcp_oauth, revision 202611161200) ─────────────────────
+# The app as its own authorization server for `<PUBLIC_URL>/mcp`. Every table here holds a
+# credential or a single-use credential step, so all four are SECRET (core.sensitive: SQL-denied
+# to Lucius, deleted from a sanitised backup, never restored) and checkpoint-EXCLUDED (a /rewind
+# must never bring a revoked token back). Secrets are stored only as SHA-256 hashes.
+mcp_oauth_clients = Table(
+    "mcp_oauth_clients",
+    metadata,
+    Column("client_id", Text, primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("secret_hash", Text, nullable=False),
+    Column("redirect_uris", JSON, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("revoked_at", Text, nullable=True),
+)
+
+mcp_oauth_pending = Table(
+    "mcp_oauth_pending",
+    metadata,
+    Column("id_hash", Text, primary_key=True),
+    Column("kind", Text, nullable=False),
+    Column("client_id", Text, nullable=False),
+    Column("client_name", Text, nullable=False),
+    Column("client_host", Text, nullable=False),
+    Column("redirect_uri", Text, nullable=False),
+    Column("code_challenge", Text, nullable=False),
+    Column("requested_scopes", Text, nullable=False),
+    Column("granted_scopes", Text, nullable=False, server_default=text("''")),
+    Column("resource", Text, nullable=False),
+    Column("state", Text, nullable=True),
+    Column("grant_id", Text, nullable=True),
+    Column("created_at", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("used_at", Text, nullable=True),
+    CheckConstraint("kind IN ('request','code')", name=conv("ck_mcp_oauth_pending_kind")),
+)
+
+mcp_oauth_grants = Table(
+    "mcp_oauth_grants",
+    metadata,
+    Column("grant_id", Text, primary_key=True),
+    Column("client_id", Text, nullable=False),
+    Column("client_name", Text, nullable=False),
+    Column("client_host", Text, nullable=False),
+    Column("redirect_uri", Text, nullable=False),
+    Column("scopes", Text, nullable=False),
+    Column("resource", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("last_used_at", Text, nullable=True),
+    Column("expires_at", Text, nullable=False),
+    Column("revoked_at", Text, nullable=True),
+    Column("revoke_reason", Text, nullable=True),
+)
+
+mcp_oauth_tokens = Table(
+    "mcp_oauth_tokens",
+    metadata,
+    Column("token_hash", Text, primary_key=True),
+    Column(
+        "grant_id",
+        Text,
+        ForeignKey("mcp_oauth_grants.grant_id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("kind", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("rotated_at", Text, nullable=True),
+    Column("replaced_by_hash", Text, nullable=True),
+    CheckConstraint("kind IN ('access','refresh')", name=conv("ck_mcp_oauth_tokens_kind")),
+    Index("ix_mcp_oauth_tokens_grant", "grant_id"),
+)

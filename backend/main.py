@@ -162,6 +162,8 @@ from backend.api.matches import router as matches_router
 from backend.api.mcp_client_api import router as mcp_client_router
 from backend.api.mcp_connect_api import router as mcp_connect_router
 from backend.api.mcp_oauth_api import router as mcp_oauth_router
+from backend.api.mcp_oauth_server import router as mcp_oauth_server_router
+from backend.api.mcp_oauth_settings import router as mcp_oauth_settings_router
 from backend.api.memory import router as memory_router
 from backend.api.mentionables import router as mentionables_router
 from backend.api.mentions_resolve import router as mentions_resolve_router
@@ -1253,6 +1255,8 @@ app.include_router(investments_xray_router)
 app.include_router(mcp_router)
 app.include_router(mcp_client_router)
 app.include_router(mcp_oauth_router)
+app.include_router(mcp_oauth_server_router)
+app.include_router(mcp_oauth_settings_router)
 app.include_router(config_router)
 app.include_router(feature_flags_router)
 app.include_router(sql_query_router)

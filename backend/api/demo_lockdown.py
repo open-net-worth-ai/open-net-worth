@@ -89,6 +89,12 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/mcp-oauth(/.*)?$",
         r"^/api/mcp-clients/oauth(/.*)?$",
         r"^/mcp(/.*)?$",
+        # the inbound MCP OAuth server (flag mcp_oauth): a visitor must never connect a cloud
+        # app to the shared demo book, or read and change who is connected
+        r"^/oauth(/.*)?$",
+        r"^/\.well-known/oauth-.*$",
+        r"^/api/oauth(/.*)?$",
+        r"^/api/mcp/oauth(/.*)?$",
     ),
     *_rules(
         _WRITE, r"^/api/mcp-clients(/.*)?$", r"^/api/extensions(/.*)?$", r"^/api/skills(/.*)?$"

@@ -153,6 +153,13 @@ SECRET_TABLES: frozenset[str] = frozenset(
     {
         "secret_config",
         "connector_secrets",
+        # The inbound MCP OAuth server (flag mcp_oauth): hashed tokens, owner-created client
+        # secrets, single-use codes and the grants they belong to. A restore must never bring a
+        # revoked grant back, and none of it may leave in a download.
+        "mcp_oauth_clients",
+        "mcp_oauth_pending",
+        "mcp_oauth_grants",
+        "mcp_oauth_tokens",
     }
 )
 

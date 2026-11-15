@@ -105,8 +105,8 @@ const loadShortcutsSection = () => import('./settings/sections/ShortcutsSection'
 const ShortcutsSection = lazyChunk(() =>
   loadShortcutsSection().then((m) => ({ default: m.ShortcutsSection })),
 )
-const loadMcpSection = () => import('./settings/sections/McpSection')
-const McpSection = lazyChunk(() => loadMcpSection().then((m) => ({ default: m.McpSection })))
+const loadMcpSection = () => import('./settings/sections/McpOAuthPanel')
+const McpSection = lazyChunk(() => loadMcpSection().then((m) => ({ default: m.McpPage })))
 const loadDeveloperSection = () => import('./settings/sections/DeveloperSectionSwitch')
 const DeveloperSection = lazyChunk(() =>
   loadDeveloperSection().then((m) => ({ default: m.DeveloperSectionSwitch })),
@@ -235,7 +235,7 @@ const SECTION_TERMS: Record<Section, string> = {
   help: 'help docs documentation guide manual support how to getting started',
   shortcuts:
     'iphone ios android apple pay shortcut phone spend log home screen tap to pay tasker macrodroid capture setup code',
-  mcp: 'mcp claude desktop cursor vs code copilot chatgpt cline continue client external ai apps api token connect stdio onw',
+  mcp: 'mcp claude desktop cursor vs code copilot chatgpt cline continue client external ai apps api token connect stdio onw oauth claude.ai connector connected apps revoke',
   developer:
     'extensions logs script skills python code execution sql database query queries read-only lucius reads',
 }
