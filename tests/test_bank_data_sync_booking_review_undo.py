@@ -89,7 +89,7 @@ def test_a_card_payment_read_from_both_sides_is_one_transfer(bank):
     (transfer,) = _live("transfer")
     assert (transfer["from_account_id"], transfer["to_account_id"]) == (main, card)
     assert transfer["from_amount"] == transfer["to_amount"] == 300.00
-    assert {e["ref"] for e in transfer["external_refs"]} >= {"o1", "i1"}
+    assert {e["ref"].split(":")[-1] for e in transfer["external_refs"]} >= {"o1", "i1"}
     assert transfer["needs_review"] is True
     again = _run()  # both refs are known: nothing books twice
     assert again["counts"]["booked"] == 0 and len(_live()) == 1
@@ -440,10 +440,12 @@ def test_book_again_on_an_undone_card_payment_returns_one_transfer(bank):
     assert (transfer["from_account_id"], transfer["to_account_id"]) == (main, card)
 
 
-def _promoted_by_a_run(bank):
+def _promoted_by_a_run(bank, **typed_fields):
     main = linked_account("ACME Current", ACC_MAIN)
     _card()
-    typed = _typed("expense", from_account_id=main, from_amount=120.0, from_currency="GBP")
+    typed = _typed(
+        "expense", from_account_id=main, from_amount=120.0, from_currency="GBP", **typed_fields
+    )
     bank.booked[ACC_SAVER] = [txn(120.00, days_ago(1), "ACME PAYMENT THANK YOU", tid="i1")]
     return typed, _run()
 
@@ -469,8 +471,11 @@ def test_undoing_a_promotion_does_not_bring_back_a_row_you_deleted(bank):
 
 
 def test_a_promoted_row_you_changed_in_the_same_fields_is_left_alone_and_said_so(bank):
-    typed, run = _promoted_by_a_run(bank)
-    ledger_service.update_transaction(typed["id"], {"cleared": False})  # the promotion cleared it
+    # Another connector's uncleared row: the promotion clears it, so clearing is a promoted field.
+    typed, run = _promoted_by_a_run(
+        bank, cleared=False, external_refs=[{"source": "plaid", "ref": "plaid-1"}]
+    )
+    ledger_service.update_transaction(typed["id"], {"cleared": False})
 
     result = _undo(run)
 

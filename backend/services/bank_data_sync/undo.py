@@ -122,13 +122,9 @@ def _check_undoable(provider: str, run_id: str) -> dict:
         raise ConflictError("This sync booked and removed nothing, so there is nothing to undo.")
     if batch.get("status") == "rolled_back":
         raise ConflictError("This sync is already undone.")
-    later = [
-        b
-        for b in ledger_service.import_batches.all()
-        if b.get("provider") == provider
-        and b.get("status") == "active"
-        and (b.get("created_at") or "") > (batch.get("created_at") or "")
-    ]
+    ordered = ledger_service.import_batches.all()  # in the order they were recorded
+    after = ordered[[b.get("id") for b in ordered].index(batch["id"]) + 1 :]
+    later = [b for b in after if b.get("provider") == provider and b.get("status") == "active"]
     if later:
         raise ConflictError("A later sync changed your book too. Undo that one first.")
     return batch
