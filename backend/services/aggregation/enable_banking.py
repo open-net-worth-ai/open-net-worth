@@ -911,11 +911,8 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
     date_str = _txn_date(eb_txn)
     description = _txn_description(eb_txn)
     txn_id = _txn_id(eb_txn)
-    ref = (
-        f"{account_uid}:{txn_id}"
-        if txn_id
-        else derived_ref(account_uid, date_str, amount, currency, _ref_text(eb_txn))
-    )
+    content_hash = derived_ref(account_uid, date_str, amount, currency, _ref_text(eb_txn))
+    ref = f"{account_uid}:{txn_id}" if txn_id else content_hash
     # A row booked under 0.1.49 carries the ref it had then; the fetch still knows it by it.
     old_ref = _ref_0149(eb_txn, account_uid, date_str, amount, currency)
     original_amount, original_currency = _original_charge(eb_txn, currency)
@@ -934,7 +931,25 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,
         "ref_aliases": [old_ref] if old_ref != ref else [],
+        "_content_hash": content_hash,
     }
+
+
+def with_hash_aliases(rows: list[dict]) -> list[dict]:
+    """One account's rows from one read, each also known by its content hash when it has an
+    entry_reference: a row booked while the bank gave it none (a pending row, often) is then
+    recognised, not booked again. Only a hash no other row in the read shares — for two
+    identical charges the hash can't say which is which, and the wrong guess hides a real one;
+    those fall to the duplicate check, which asks."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.get("_content_hash") or ""] = counts.get(row.get("_content_hash") or "", 0) + 1
+    for row in rows:
+        content_hash = row.pop("_content_hash", None)
+        ref = row["external_refs"][0]["ref"]
+        if content_hash and content_hash != ref and counts[content_hash] == 1:
+            row["ref_aliases"] = [*row["ref_aliases"], content_hash]
+    return rows
 
 
 def _bank_label(bank: dict, banks: list[dict]) -> Optional[str]:
@@ -1120,10 +1135,8 @@ def fetch_window(
             continue
         complete = complete and account_complete
         currency_hint = _account_currency(eb_account)
-        for eb_txn in txns:
-            row = _txn_to_row(eb_txn, account_uid, currency_hint)
-            if row is not None:
-                rows.append(row)
+        built = (_txn_to_row(eb_txn, account_uid, currency_hint) for eb_txn in txns)
+        rows.extend(with_hash_aliases([row for row in built if row is not None]))
     return FetchWindow(accounts=accounts, rows=rows, complete=complete, warnings=warnings)
 
 

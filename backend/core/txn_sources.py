@@ -167,6 +167,20 @@ _LEGACY_SHORTCUT_NAMESPACE = "ios-shortcut"
 _LEGACY_SHORTCUT_TRIGGERS = frozenset({"wallet-tap", "notif"})
 
 
+#: What a connector's content-hash ref starts with (``providers.derived_ref``): a key built
+#: from the row's own date, amount and wording because the bank gave it no id. It is filed
+#: under an authoritative namespace, but it is NOT a native id — the same payment re-hashes
+#: to a different key when anything it hashes shifts (a pending row booking on another day,
+#: a bank re-wording it), so two such keys never prove two events. ADR
+#: ``2026-09-02-the-emitter-is-the-unit-of-identity-not-the-namespace``, amendment 2026-11-16.
+CONTENT_HASH_REF_PREFIX = "derived:"
+
+
+def is_content_hash_ref(ref: object) -> bool:
+    """True for a connector's content-hash ref (see ``CONTENT_HASH_REF_PREFIX``)."""
+    return isinstance(ref, str) and ref.startswith(CONTENT_HASH_REF_PREFIX)
+
+
 def is_authoritative_source(source: str | None) -> bool:
     """True when refs under this namespace are native per-event identifiers (not content
     hashes) — so two distinct refs from the same source ARE two distinct real events
