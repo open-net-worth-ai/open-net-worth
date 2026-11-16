@@ -44,9 +44,9 @@ ensure_default_trust_store()
 # we do it once in lifespan rather than at module level.
 _log = logging.getLogger("backend")
 
-# Held open for the process lifetime by the ONE worker that owns the scheduler (see lifespan) —
-# module-level so the fd (and thus the advisory lock) is never garbage-collected.
-_SCHEDULER_LOCK_HANDLE = None
+# Held for the process lifetime (see lifespan) — module-level so the lock's fd is never
+# garbage-collected while this worker owns the scheduler.
+_SCHEDULER_OWNERSHIP = None
 
 
 def _raise_fd_limit(target: int = 4096) -> None:
@@ -706,20 +706,14 @@ async def lifespan(app: FastAPI):
 
     _log_auth_first_run_notice()
 
-    # Scheduler in ONE worker only. Under uvicorn --workers every worker runs this lifespan, but
-    # the periodic jobs (price checks, RSS polls, AI news screens, digests) must fire ONCE — not
-    # per worker, or N workers means N× the background load and AI cost. The first worker to grab
-    # an advisory lock owns the scheduler; the rest skip it. Single-worker: that one worker always
-    # wins, so behaviour is unchanged.
-    global _SCHEDULER_LOCK_HANDLE
-    try:
-        from backend.core.file_lock import lock_exclusive
-        from backend.core.paths import DATA_DIR
+    # Scheduler in ONE worker only — the holder of scheduler.lock (backend/scheduler_owner.py).
+    # A worker that loses the race keeps retrying, so a restart that overlaps the old process's
+    # shutdown still ends up with a scheduler once the old one lets go.
+    from backend.core.paths import DATA_DIR
+    from backend.scheduler_owner import SchedulerOwnership
 
-        _SCHEDULER_LOCK_HANDLE = open(DATA_DIR / "scheduler.lock", "a+", encoding="utf-8")
-        lock_exclusive(_SCHEDULER_LOCK_HANDLE)
+    def _start_periodic_jobs() -> None:
         start()
-        _log.info("scheduler: started (this worker owns the scheduler lock)")
         # Memory is written when a conversation goes idle and tidied once a day. Like the
         # scheduler this must run in ONE worker, or every worker would extract the same chat.
         # Skipped under ONW_QA_MODE — an isolated QA run must not spend model calls.
@@ -731,11 +725,10 @@ async def lifespan(app: FastAPI):
             app.state.memory_sweep_task = asyncio.create_task(
                 memory_sweep_loop(), name="memory-sweep"
             )
-    except (OSError, BlockingIOError):
-        if _SCHEDULER_LOCK_HANDLE is not None:
-            _SCHEDULER_LOCK_HANDLE.close()
-            _SCHEDULER_LOCK_HANDLE = None
-        _log.info("scheduler: another worker owns it — periodic jobs skipped in this worker")
+
+    global _SCHEDULER_OWNERSHIP
+    _SCHEDULER_OWNERSHIP = SchedulerOwnership(DATA_DIR / "scheduler.lock", _start_periodic_jobs)
+    _SCHEDULER_OWNERSHIP.claim()
     # Register the always-on in-app notification channel up front. It registers as a side
     # effect of importing services.notify (the bell-icon feed); without this it would only
     # appear after the first notify() call, so /api/notify-channels (the "Send to" picker)
@@ -901,6 +894,8 @@ async def lifespan(app: FastAPI):
 
     yield
     mark_closing()
+    if _SCHEDULER_OWNERSHIP is not None:
+        await _SCHEDULER_OWNERSHIP.stop_retrying()
     # Cancel every in-flight server-owned turn (concurrent-conversations RFC Phase 3) BEFORE
     # tearing down the Automation adapters — a graceful shutdown journals "cancelled" for
     # each one, so recover_interrupted_turns() has nothing stale to correct on the next boot.
@@ -929,9 +924,9 @@ async def lifespan(app: FastAPI):
     from backend.core.instance_lock import release as _release_instance
 
     stop()
-    if _SCHEDULER_LOCK_HANDLE is not None:
-        _SCHEDULER_LOCK_HANDLE.close()
-        _SCHEDULER_LOCK_HANDLE = None
+    if _SCHEDULER_OWNERSHIP is not None:
+        await _SCHEDULER_OWNERSHIP.release()
+        _SCHEDULER_OWNERSHIP = None
     # Bounded wait on the boot-connect task: cancelling it wouldn't actually interrupt a
     # blocking spawn already running in its worker thread (asyncio.to_thread cancellation is
     # cooperative-only), so this just gives it a short window to finish naturally before
