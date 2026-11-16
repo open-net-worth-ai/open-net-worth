@@ -14,14 +14,12 @@ from pydantic import Field
 
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import NestedInput, ToolInput, schema_of
-from backend.core.config import get_settings
 from backend.core.errors import OpenNetWorthError
 from backend.services.feature_flags import enabled as flag_enabled
 from backend.services.followed_portfolios import service
 from backend.services.followed_portfolios.model import DEFAULT_TOP_N, MAX_TOP_N
 
 _OFF = "Followed portfolios are switched off on this install (Settings → Developer → Experimental)."
-_NO_SEARCH_ON_DEMO = "Searching for a portfolio to follow is disabled on the public demo."
 _MAX_ACTIVITY = 15
 _ABOUT = (
     "Filings are old by design: a 13F is filed up to 45 days after quarter end and a House "
@@ -110,8 +108,6 @@ async def get_followed_portfolios(input_data: dict):
     if refused := _refusal():
         return refused
     if input_data.get("search") is not None:
-        if get_settings().demo_mode:  # a search makes this server call SEC / the House Clerk
-            return json.dumps({"error": _NO_SEARCH_ON_DEMO}), None
         found = await asyncio.to_thread(service.directory, input_data["search"])
         return json.dumps(found, ensure_ascii=False), None
     listed = await asyncio.to_thread(_listed, input_data.get("portfolios"), input_data.get("top_n"))

@@ -36,6 +36,7 @@ vi.mock('../utils/chatStore', () => ({
 
 import { useConversations } from './useConversations'
 import { authFetch } from '../api/client'
+import { startFreshConversation } from '../utils/freshConversation'
 
 const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
 
@@ -317,8 +318,13 @@ describe('useConversations: model reconciliation', () => {
   })
 })
 
+// A brand-new instance has no conversations. The boot used to mint one AND save it (PATCH),
+// so the server listed an empty "New conversation" — and since a saved conversation is not a
+// draft, first run's fresh start opened a SECOND one for the onboarding welcome ("Getting
+// started"), leaving the empty row behind in the sidebar (owner, 2026-11-14). The boot now
+// opens a draft, which reaches the server only with its first message (`ensurePersisted`).
 describe('useConversations: cold boot with nothing to restore', () => {
-  it('mints one conversation when the server confirms the account is EMPTY', async () => {
+  it('opens an unsaved draft when the server confirms the account is EMPTY', async () => {
     mockAuthFetch.mockImplementation(async (url: string) => {
       if (url === '/api/sessions') return jsonOk([])
       return jsonOk({ ok: true })
@@ -327,13 +333,38 @@ describe('useConversations: cold boot with nothing to restore', () => {
     const { result } = renderHook(() => useConversations())
     await waitFor(() => expect(result.current.activeId).not.toBe(''))
 
-    expect(result.current.conversations).toHaveLength(1)
-    expect(result.current.conversations[0]?.title).toBe('New conversation')
-    expect(patchedSessionIds()).toEqual([result.current.activeId])
+    expect(patchedSessionIds()).toEqual([])
+    expect(result.current.conversations).toEqual([])
     expect(localStorage.getItem(ACTIVE_KEY)).toBe(result.current.activeId)
+    expect(JSON.parse(localStorage.getItem(PENDING_KEY) || '{}').id).toBe(result.current.activeId)
   })
 
-  it('mints one conversation when the listing fails and there is nothing saved either', async () => {
+  it('lets a fresh start reuse that draft instead of opening a second conversation', async () => {
+    mockAuthFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/sessions') return jsonOk([])
+      return jsonOk({ ok: true })
+    })
+
+    const { result } = renderHook(() => useConversations())
+    await waitFor(() => expect(result.current.activeId).not.toBe(''))
+    const draftId = result.current.activeId
+
+    act(() => {
+      const { conversations, activeId, createConversation } = result.current
+      startFreshConversation({
+        conversations,
+        activeId,
+        createConversation: () => createConversation(),
+      })
+    })
+
+    expect(result.current.activeId).toBe(draftId)
+    act(() => result.current.ensurePersisted(draftId))
+    expect(patchedSessionIds()).toEqual([draftId])
+    expect(result.current.conversations.map((c) => c.id)).toEqual([draftId])
+  })
+
+  it('opens an unsaved draft when the listing fails and there is nothing saved either', async () => {
     // Nothing to protect here — the composer still needs a real id to write into.
     mockAuthFetch.mockImplementation(async (url: string) => {
       if (url === '/api/sessions') throw new TypeError('Failed to fetch')
@@ -343,7 +374,29 @@ describe('useConversations: cold boot with nothing to restore', () => {
     const { result } = renderHook(() => useConversations())
     await waitFor(() => expect(result.current.activeId).not.toBe(''))
 
-    expect(result.current.conversations).toHaveLength(1)
+    expect(patchedSessionIds()).toEqual([])
+    expect(result.current.conversations).toEqual([])
+  })
+})
+
+describe('useConversations: deleting the last conversation', () => {
+  it('opens an unsaved draft instead of saving an empty one', async () => {
+    localStorage.setItem(ACTIVE_KEY, SAVED_ID)
+    mockAuthFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/sessions') return jsonOk([serverRow(SAVED_ID, 'Only thread')])
+      return jsonOk({ ok: true })
+    })
+
+    const { result } = renderHook(() => useConversations())
+    await waitFor(() => expect(result.current.conversations[0]?.title).toBe('Only thread'))
+
+    await act(async () => result.current.deleteConversation(SAVED_ID))
+
+    expect(patchedSessionIds()).toEqual([])
+    expect(result.current.conversations).toEqual([])
+    expect(result.current.activeId).not.toBe(SAVED_ID)
+    expect(result.current.activeId).not.toBe('')
+    expect(JSON.parse(localStorage.getItem(PENDING_KEY) || '{}').id).toBe(result.current.activeId)
   })
 })
 
@@ -392,6 +445,28 @@ describe('useConversations: cold boot with an unpersisted (persist:false) draft'
 
     expect(result.current.activeId).toBe(DRAFT_ID)
     expect(patchedSessionIds()).toEqual([])
+  })
+
+  // The server titles the onboarding welcome "Getting started" when its send arrives, and an
+  // automatic title yields to nothing but a stronger writer — so a promotion PATCH carrying
+  // the placeholder, landing just after, renamed the welcome back to "New conversation".
+  it('ensurePersisted never sends the placeholder title, so it cannot overwrite a real one', async () => {
+    mockAuthFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/sessions') return jsonOk([serverRow('conv-newer', 'Newer thread')])
+      return jsonOk({ ok: true })
+    })
+
+    const { result } = renderHook(() => useConversations())
+    await waitFor(() => expect(result.current.conversations).toHaveLength(1))
+
+    act(() => result.current.ensurePersisted(DRAFT_ID))
+
+    const promote = mockAuthFetch.mock.calls.find(
+      ([url, init]) =>
+        url === `/api/sessions/${DRAFT_ID}` &&
+        (init as RequestInit | undefined)?.method === 'PATCH',
+    )
+    expect(JSON.parse(String((promote?.[1] as RequestInit | undefined)?.body))).toEqual({})
   })
 
   it('ensurePersisted clears the pending marker so a LATER refresh no longer special-cases it', async () => {
@@ -483,7 +558,8 @@ describe('useConversations: a public demo visitor with only shared, read-only ru
     )
     expect(result.current.activeId).not.toBe('run-1')
     expect(result.current.conversations.find((c) => c.id === 'run-1')?.readOnly).toBe(true)
-    expect(patchedSessionIds()).toContain(result.current.activeId)
+    expect(result.current.activeId).not.toBe('')
+    expect(patchedSessionIds()).toEqual([])
   })
 
   it('still opens the newest conversation when nothing is read-only', async () => {

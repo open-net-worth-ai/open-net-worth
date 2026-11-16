@@ -177,6 +177,10 @@ something, the retry adds your message again so Lucius still knows what was done
 
 ## The conversation list
 
+A new conversation joins the list when you send its first message. That includes the one a fresh
+install opens with and the one that replaces your last conversation when you delete it, so neither
+leaves an empty **New conversation** behind.
+
 Each conversation in the history list (and in the **Automation runs** group) shows where it
 stands:
 

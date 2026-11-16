@@ -111,3 +111,17 @@ The public sources shape the feature more than the code does:
 - **One delay figure.** `view()` returns `delay_days` (today minus the newest information: 13F
   quarter-end or Form 4 trade for a fund, newest counted trade for a member, file date for an ETF)
   and `delay_basis` (`quarterly`, `trades`, `daily`) so every surface words it the same way.
+
+## Amendment 2026-11-16 — Copy Trading is open on the public demo
+
+- **Owner decision:** the demo must show Copy Trading working, so nothing in it is locked there
+  any more. The directory, previews, follow, unfollow, refresh and ticker routes are open to a
+  visitor (`^/api/followed-portfolios(/.*)?$` in `demo_lockdown._WRITABLE`), and Lucius may
+  search (`get_followed_portfolios`) and follow (`set_followed_portfolios`).
+- **Why the old refusal was not worth it:** every call goes to a fixed list of hosts (SEC, the
+  House Clerk, ARK, OpenFIGI), never a URL a visitor chose, and SEC and OpenFIGI requests are
+  already paced under their free limits. Previews are cached for 12 hours, and the featured ones
+  are warmed at start. A follow is a row in the demo's own book, which resets daily. The worst
+  case of many visitors is slow answers, not harm.
+- **Still shut:** Auto-copy is an Automation, and orders go through broker connectors; both stay
+  locked on the demo by their own rules.

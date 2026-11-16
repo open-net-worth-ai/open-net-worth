@@ -1102,8 +1102,6 @@ _DEMO_REFUSED_TOOLS = frozenset(
         "remove_news_sources",
         "set_news_sources_enabled",
         "scan_intel",
-        # Following or refreshing makes this server fetch from SEC / the House Clerk.
-        "set_followed_portfolios",
         "search_past_conversations",
         "read_past_conversation",
     }

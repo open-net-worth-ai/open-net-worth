@@ -43,7 +43,6 @@ import logging
 import os
 import re
 import shutil
-import signal
 import time
 from typing import AsyncGenerator, Optional
 
@@ -51,6 +50,7 @@ from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError
 from backend.core.report_redact import redact_text
 
+from . import cli_exit
 from .cli_tool_protocol import write_image_files  # noqa: F401 — LiveTurn calls it via this module
 from .codex_home import has_login, isolated_home
 
@@ -587,31 +587,9 @@ class AppServerClient:
             live.close()
 
 
-_SIGNAL_HINTS = {
-    "SIGKILL": "usually the system ran out of memory, or a container limit stopped it",
-    "SIGSEGV": "Codex crashed; a different Codex version may not",
-    "SIGILL": "this Codex build may not support this processor",
-}
-
-
 def describe_exit(returncode: Optional[int]) -> str:
-    """How a child ended, in words an operator can act on. A signal is the usual silent death:
-    nothing reaches stderr, so without this a crash, a memory kill and a missing file all read
-    as the same "not running" (2026-11-11, a Docker install no fresh container reproduced).
-    A shell-style code above 128 is read as that signal too: the npm launcher passes it on."""
-    if returncode is None:
-        return "was still running but never answered"
-    signum = -returncode if returncode < 0 else returncode - 128 if returncode > 128 else 0
-    if not signum:
-        return f"exited with code {returncode}"
-    try:
-        name = signal.Signals(signum).name
-    except ValueError:
-        name = f"signal {signum}"
-    detail = [f"exit code {returncode}"] if returncode > 0 else []
-    if name in _SIGNAL_HINTS:
-        detail.append(_SIGNAL_HINTS[name])
-    return f"was stopped by {name}" + (f" ({'; '.join(detail)})" if detail else "")
+    """How a Codex child ended — see :func:`cli_exit.describe_exit`."""
+    return cli_exit.describe_exit(returncode, label="Codex")
 
 
 async def _exit_summary(proc: Optional[asyncio.subprocess.Process]) -> str:

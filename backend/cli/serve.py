@@ -173,6 +173,7 @@ def _serve(app, settings, installer, service: bool) -> int:
     from backend.ai import turns
     from backend.cli.self_update import AutoUpgrader, find_installer, restart_this_process
     from backend.cli.upgrade_request import RequestWatcher, request_path, stop_path
+    from backend.core.config import SERVER_EVENT_LOOP
 
     writes = _WritesInFlight(app)
     server = uvicorn.Server(
@@ -180,6 +181,7 @@ def _serve(app, settings, installer, service: bool) -> int:
             writes,
             host=settings.host,
             port=settings.port,
+            loop=SERVER_EVENT_LOOP,
             timeout_graceful_shutdown=_SHUTDOWN_GRACE_SECONDS if installer else None,
         )
     )
