@@ -11,6 +11,7 @@ loops on a bank that said no."""
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,7 @@ from backend.services.aggregation.providers import Provider
 
 NAMESPACE = "bank_data_sync"
 WINDOW = timedelta(hours=24)
+logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _MINUTES = re.compile(r"resets in about (\d+) min")
 
@@ -110,12 +112,32 @@ def interval(p: Provider) -> timedelta:
     return timedelta(hours=settings.interval_hours(p))
 
 
+# A run that failed for one of these waits for the user (a day), not for the bank.
+WAITS_FOR_USER = ("auth_error", "reconnect_needed", "account_gone")
+
+
+def access_renewed(key: str) -> None:
+    """A bank of ``key`` was just linked, reconnected or renewed: a sync waiting a day for the
+    user is due at the next tick instead (review 2026-11-15: after Reconnect the schedule still
+    waited up to 24 h). Best effort — never fails the link that called it."""
+
+    def wake(entry: dict) -> None:
+        if entry.get("last_status") in WAITS_FOR_USER:
+            entry["next_due_at"] = _iso(now())
+            entry["failures"] = 0
+
+    try:
+        mutate(key, wake)
+    except Exception:  # noqa: BLE001 — scheduling only; the link stands
+        logger.warning("bank_data_sync: %s could not be woken after a renewal", key, exc_info=True)
+
+
 def backoff(p: Provider, status: str, failures: int, error: Optional[str]) -> timedelta:
     """How long to wait after a failed run. Never shorter than 30 minutes, never a loop."""
     if status == "rate_limited":
         match = _MINUTES.search(error or "")
         return timedelta(minutes=int(match.group(1)) + 5) if match else timedelta(hours=12)
-    if status in ("auth_error", "reconnect_needed", "account_gone"):  # waits for the user
+    if status in WAITS_FOR_USER:
         return timedelta(hours=24)
     return min(interval(p), timedelta(minutes=30) * (2 ** max(0, failures - 1)))
 

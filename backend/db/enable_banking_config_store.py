@@ -209,6 +209,20 @@ class EnableBankingConfigStore(AggregatorConfigStore):
             self._write(c, [b for b in banks if b["key"] != key])
         return gone["session_id"]
 
+    def set_account_ids(self, key: str, account_ids: list[str]) -> None:
+        """A bank's accounts by their ids HERE (``account_id``: the first uid each was seen
+        under), so a renewed bank is still found by the accounts linked to it."""
+        with self._unit(None) as c:
+            banks = self.banks(conn=c)
+            if any(b["key"] == key for b in banks):
+                self._write(
+                    c,
+                    [
+                        {**b, "account_ids": list(account_ids)} if b["key"] == key else b
+                        for b in banks
+                    ],
+                )
+
     def mark_access_ended(self, keys: list[str], reason: Optional[str], *, conn=None) -> None:
         """Flag banks whose consent no longer answers (``None`` clears it — the bank answered
         again); renewing one replaces it unflagged."""

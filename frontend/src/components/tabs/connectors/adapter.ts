@@ -149,6 +149,13 @@ function kindOf(c: Connector): string {
 }
 
 /** The connector's public settings and state; its shape differs per kind. */
+/** A bank connector with a bank waiting for the user: Plaid's `reconnect_needed` list, or the
+ *  count Enable Banking and GoCardless send (`banks_need_sign_in`). */
+function aBankNeedsSignIn(cfg: Record<string, unknown>): boolean {
+  const plaid = cfg.reconnect_needed
+  return (Array.isArray(plaid) && plaid.length > 0) || Number(cfg.banks_need_sign_in ?? 0) > 0
+}
+
 function configOf(c: Connector): Record<string, unknown> {
   return c.config ?? {}
 }
@@ -211,7 +218,9 @@ export function statusOf(c: Connector): {
   const cfg = configOf(c)
   const lastStatus = str(cfg, 'last_status')
   // A bank that wants its sign-in renewed: the keys are fine, nothing syncs until Reconnect.
-  if (lastStatus === 'reconnect_needed') {
+  // Read from each bank too: another bank's good read overwrites `last_status`, which left the
+  // list saying "Connected" while one bank waited for a sign-in (UAT 2026-11-14).
+  if (lastStatus === 'reconnect_needed' || aBankNeedsSignIn(cfg)) {
     return { statusText: 'Sign-in needed', tone: 'warn', attention: true }
   }
   if (ERROR_STATUSES.has(c.status) || ERROR_STATUSES.has(lastStatus)) {

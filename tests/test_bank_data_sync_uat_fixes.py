@@ -184,6 +184,8 @@ def test_plaid_one_account_read_raises_when_its_bank_failed(monkeypatch):
             "warnings": ["First ACME: its sign-in expired — reconnect it on the Plaid page"],
             "complete": False,
             "error": expired,
+            "errors": {"bank_a": expired},
+            "holders": {"bank_a": ["acme-expired"], "bank_b": ["acme-other"]},
         },
     )
     with pytest.raises(ValidationError):

@@ -4,7 +4,7 @@ import { fDate, fScheduleWhen, getBaseCurrency, timeAgo } from '../../../../util
 import { fCur } from '../../accounts/format'
 import { Button, Checkbox, ConfirmDialog, Modal } from '../../../ui'
 import { useNavigate } from '@tanstack/react-router'
-import { Clock3, Wallet } from 'lucide-react'
+import { Clock3, Plus, Wallet } from 'lucide-react'
 import { ConnectorAccountsList } from '../../connectors/ConnectorAccountsList'
 import { ConnectorPanel } from '../../connectors/ConnectorPanel'
 import { useConnectors } from '../../connectors/useConnectors'
@@ -70,7 +70,9 @@ export function AccountBoxes({
                   id={`bs-${p}-${a.account_id}`}
                   label={
                     <>
-                      {a.bank_name || a.name}
+                      <span className="bs-acct-nm" title={a.bank_name || a.name}>
+                        {a.bank_name || a.name}
+                      </span>
                       {a.mask && <span className="bs-acct-mask">{`•••${a.mask}`}</span>}
                     </>
                   }
@@ -146,9 +148,16 @@ export function LinkAccountsButton({
           </Button>
         </div>
       ) : (
-        <button type="button" className="a3-linkbtn" onClick={() => setOpen(true)}>
-          Link more accounts
-        </button>
+        <div>
+          <Button
+            size="sm"
+            variant="ghost"
+            iconLeft={<Plus size={13} aria-hidden="true" />}
+            onClick={() => setOpen(true)}
+          >
+            Link accounts
+          </Button>
+        </div>
       )}
       {open && (
         <Modal
@@ -364,15 +373,15 @@ function BalanceGap({
         title={`Bank ${money(bank)} · Your book ${money(book)}`}
         onClick={() => setOpen(true)}
       >
-        {`${money(Math.abs(bank - book))} off the bank`}
+        {`Off by ${money(Math.abs(bank - book))}`}
       </button>
       <ConfirmDialog
         data={
           open
             ? {
-                title: 'Use the bank’s balance?',
-                body: `The bank says ${money(bank)}; your book’s cleared balance is ${money(book)}. Your Starting Balance moves by the difference, so they match. Your transactions don’t change.`,
-                confirmLabel: 'Use the bank’s balance',
+                title: 'Match the bank’s balance?',
+                body: `Bank ${money(bank)} · Your book ${money(book)}. Your Starting Balance moves by ${money(bank - book)}; your transactions stay as they are.`,
+                confirmLabel: 'Match the bank',
               }
             : null
         }

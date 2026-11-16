@@ -8,7 +8,9 @@
   (``attach_external_refs``), no money moves.
 * dismiss — the ledger stays as it is. A dismissed ``duplicate``/``posted`` keeps holding its
   ref back, so the next run doesn't ask again.
-* book — ``duplicate`` only: it is a different transaction after all; book it on its own.
+* book — ``duplicate``: it is a different transaction after all; book it on its own. ``undone``
+  (the rows of a sync you undid, undo.py): "Book all again", or with ``ref`` "Book again" for
+  that one row; the item stays open while any row is left, and dismissing it forgets the rest.
 
 Every write runs under the audit surface ``bank_data_sync`` as the user's act."""
 
@@ -114,6 +116,8 @@ def _accept(item: dict) -> str:
     kind, detail = item.get("kind"), item.get("detail") or {}
     if kind not in _ACCEPT_KINDS:
         raise ValidationError("Unknown review item.")
+    if detail.get("undone"):
+        raise ValidationError("This was undone with its sync: book it again, or forget it.")
     txn = _live_txn(item)
 
     def apply() -> str:
@@ -140,16 +144,21 @@ def dismiss(item_id: str, seen: Optional[str] = None) -> dict:
         return _close(item, "dismissed", "kept")
 
 
-def book_separately(item_id: str, seen: Optional[str] = None) -> dict:
+def book_separately(item_id: str, seen: Optional[str] = None, ref: Optional[str] = None) -> dict:
     """A ``duplicate`` the user says is its own transaction: book it, past the duplicate guard
-    only (a deleted identity is still refused)."""
+    only (a deleted identity is still refused). An ``undone`` item books all its rows again, or
+    only the one ``ref`` names."""
     with _claimed(item_id, seen) as item:
+        if item.get("kind") == "undone":
+            return _book_undone_rows(item, ref)
         return _close(item, "accepted", _scoped(lambda: _book_separately(item)))
 
 
 def _book_separately(item: dict) -> str:
     if item.get("kind") != "duplicate":
         raise ValidationError("Only a possible duplicate can be booked separately.")
+    if (item.get("detail") or {}).get("undone"):  # held before undo held a run as one item
+        return _book_undone(item["provider"], [item.get("detail") or {}])
     draft = draft_for((item.get("detail") or {}).get("row") or {})
     if draft is None:
         raise ValidationError("This bank row has no account or amount to book.")
@@ -164,3 +173,54 @@ def _book_separately(item: dict) -> str:
         return "booked"
 
     return book()
+
+
+def _bookable(entry: dict) -> bool:
+    return all(draft_for(r) is not None for r in (entry.get("row"), entry.get("pair")) if r)
+
+
+def _book_undone_rows(item: dict, ref: Optional[str]) -> dict:
+    """Book again the rows of an undone run (all, or the one ``ref`` names). What is left stays
+    held in the item; once nothing is, the item is closed."""
+    detail = item.get("detail") or {}
+    rows = detail.get("rows") or []
+    picked = [e for e in rows if ref is None or ref in (e.get("refs") or [])]
+    if ref is not None and not picked:
+        raise NotFoundError("That row is no longer waiting here.")
+    picked = [e for e in picked if _bookable(e)]
+    if not picked:
+        raise ValidationError("These bank rows have no account or amount to book.")
+    _scoped(lambda: _book_undone(item["provider"], picked))
+    left = [e for e in rows if e not in picked]
+    if not left:
+        return _close(item, "accepted", "booked")
+    return BankSyncReviewStore().update_by_id(
+        item["id"], {"status": "open", "detail": {**detail, "rows": left}, "updated_at": _now()}
+    )
+
+
+def _book_undone(provider: str, entries: list[dict]) -> str:
+    """Book again rows held back by an undo, through the same pairing a run applies: a card
+    payment (an entry's ``row`` and ``pair``) comes back as a transfer, not income plus spending."""
+    from backend.services.bank_data_sync import card_payments
+
+    candidates = []
+    for entry in entries:
+        for row in (entry.get("row"), entry.get("pair")):
+            if not row:
+                continue
+            draft = draft_for(row)
+            if draft is None:
+                raise ValidationError("This bank row has no account or amount to book.")
+            candidates.append((row, draft))
+    types = {a["id"]: a.get("type") for a in ledger_service.accounts.all()}
+    candidates = card_payments.pair_within(candidates, types)
+    candidates, promoted = card_payments.promote_into_book(provider, candidates, types)
+    if candidates:
+        created, skipped = ledger_service.bulk_create_transactions(
+            [d for _, d in candidates], allow_duplicate=True, dedup_by_external_ref=True
+        )
+        if not created and not promoted:
+            reason = (skipped[0] if skipped else {}).get("_duplicate_reason")
+            raise ConflictError(reason or "It couldn't be booked: that bank row is booked already.")
+    return "booked"

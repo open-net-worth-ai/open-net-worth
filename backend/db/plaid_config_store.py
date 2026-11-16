@@ -56,8 +56,11 @@ DEFAULTS: dict = {
     "access_token": "",
     "item_id": "",
     # Every linked bank (a Plaid Item), write-only: ``[{item_id, access_token, institution_id,
-    # institution_name, custom_name, linked_at}]``. ``custom_name`` is the user's own name for
-    # the bank (wins over Plaid's). Set only through ``add_item``/``update_item``/``remove_item``.
+    # institution_name, custom_name, linked_at, accounts, account_ids, consent_expires_at,
+    # history_ready}]``. ``custom_name`` is the user's own name for the bank (wins over Plaid's);
+    # ``account_ids`` are the provider accounts it holds, ``consent_expires_at`` when Plaid says
+    # its sign-in ends, ``history_ready`` that Plaid has gathered its whole history. Set only through
+    # ``add_item``/``update_item``/``remove_item``.
     "items": [],
     # The Hosted Link session in flight (write-only): Hosted Link never shows the user a public
     # token, so the app reads it back from ``/link/token/get`` with this token.
@@ -152,6 +155,20 @@ class PlaidConfigStore(AggregatorConfigStore):
         """Every linked bank. A store from before multi-bank holds one bare
         ``access_token``/``item_id`` pair — that reads as a single, unnamed item."""
         return _items_of(self.get(conn=conn))
+
+    def banks(self) -> list[dict]:
+        """Each linked bank's access, no secret: ``{key, name, consent_expires_at, account_ids}``
+        — when Plaid says its sign-in lapses (``None`` for a bank with no expiry) and the
+        provider account ids it holds, as recorded at link and on every successful read."""
+        return [
+            {
+                "key": bank_key(i.get("item_id") or ""),
+                "name": bank_name(i),
+                "consent_expires_at": i.get("consent_expires_at"),
+                "account_ids": list(i.get("account_ids") or []),
+            }
+            for i in self.items()
+        ]
 
     def access_token(self) -> str:
         """The FIRST linked bank's access token (``""`` when none) — for a caller that predates

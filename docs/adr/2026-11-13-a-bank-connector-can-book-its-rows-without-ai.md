@@ -328,3 +328,97 @@ Still open from the same review: the 90-day catch-up floor for Plaid; first impo
 (Plaid history not ready, Enable Banking's page cap) counting as complete; Plaid error codes
 sent as HTTP 400; no warning before a Plaid consent expires; the Enable Banking expiry warning
 after a renewal; GoCardless renewals needing a manual relink; and no undo for a sync run.
+
+## Amendment 13 (2026-11-15: card payments are transfers; a sync run can be undone)
+
+**Card payments.** A card (`credit`) income and a `cash` expense of the same amount and
+currency, at most 3 days apart, one of them worded as a payment and the card side not a refund,
+unique in both directions and neither previously deleted by the user, book as ONE transfer,
+whichever side arrived first: two drafts of one run merge into one transfer draft; a row already
+in the book (typed, or from another connector) is promoted through
+`apply_import_transfer_pair_merge`. Pending legs never pair. With no counterpart the card row
+stays income on the card until the paying side appears and pairs with it: a transfer needs both
+legs, and an unpaired wrong guess would be silent where an unpaired row is visible
+(`bank_data_sync/card_payments.py`).
+
+**Undo.** A run that books or removes anything records an import batch under
+`bank_sync:{run_id}` (`create_batch(batch_id=)`) with `merges` (promoted rows' before-images),
+`deleted_ids` (pending rows it removed), the bank's view of each ref, and opening restores;
+`import_undo.undo_import` does the rest. The refs a user undid are held by ONE open `undone`
+review item per run ("Book all again" / "Forget them", or "Book again" on one row), never
+silently re-booked by the next sync; an item per row turned undoing a 60-row import into 60
+decisions. Only the latest run that
+changed the book is undoable; edits made since the run and pending rows settled since are not
+reverted. "Book again" on a transfer that was paired books its two refs as separate rows.
+
+**Review and payees.** Categorising a synced row in Review already teaches its payee (the
+ledger's first-write-wins learning); pinned by tests. Bank wording that carries a changing
+reference number mints a payee per number, so its default doesn't carry over: left as is.
+
+## Amendment 14 (2026-11-15: Plaid — history, consent end, per-account errors)
+
+- A first import waits for Plaid's whole history: a read reaching back past 30 days asks the
+  Item once for `/transactions/sync`'s `transactions_update_status`; until it is
+  `HISTORICAL_UPDATE_COMPLETE` the Item's accounts are `cut_short`, so the runner books nothing
+  and reads the whole history again (Amendment 12's cut-short rule). Kept per Item once ready.
+- A consent end is recorded per Item (`consent_expires_at`, from `/item/get` at link and
+  Reconnect, refreshed from the `item` object each `/transactions/get` returns) and exposed
+  through `access.banks`, so Plaid shows "renew soon" and "Access ended" like the other banks.
+- Each Item records its provider `account_ids`; a failed account read raises its own Item's
+  error, and an account no failed Item holds, with every other answering, is gone.
+
+## Amendment 15 (2026-11-15: GoCardless and Enable Banking follow-ups)
+
+- A GoCardless renewal keeps each account's id here: the new account is matched to the old by a
+  hash of bank and full IBAN (never the IBAN itself), and `api_account_ids` maps that id to the
+  new GoCardless one for API calls only, so links and booked refs are untouched. An account
+  without a readable IBAN keeps its new id and is named in a warning.
+- Listing GoCardless accounts reuses details and balances read within 6 hours; the sync's live
+  balance read refreshes them; a first import that gets no balance warns.
+- GoCardless consent expiry is the agreement's `accepted` plus `access_valid_for_days`, read
+  once when the requisition is linked.
+- Enable Banking asks for the bank's `maximum_consent_validity` (capped at 180 days, else 90),
+  and a one-account read fetches only the holding bank's session and that account's details.
+
+## Amendment 16 (2026-11-16: a row the bank re-keys on a live link)
+
+Banks change a row's id without any re-link (a GoCardless bank's `transactionId`, Plaid
+listing a posted row again under a new `transaction_id`, SimpleFIN id rotation — Actual Budget
+#8830, Sure #3436). The account's other rows keep their ids, so Amendment 7's re-link read
+never starts, and the same-emitter veto keeps the duplicate guard out: the row was booked a
+second time, and the old one reached Review as vanished.
+
+- Every WHOLE read of an account not being re-linked is matched as a re-link read is, more
+  strictly (`relink.reissued`): a row under an unknown ref is attached to a live booking from
+  the same connector, on the same account, whose refs the bank no longer lists — same signed
+  amount, same day only, never in the window's first two days (the bank may leave those out
+  for boundary reasons). Pending matches only pending; identical rows pair one to one, in order.
+- A `vanished` change is dropped while the bank still lists its booking under another of its
+  refs (`relink.still_listed`), so the old id never asks to delete the row it was moved to.
+- A new charge identical to one the bank still lists is booked as before: only an unlisted
+  booking can be matched. Like Amendment 7's re-link, the attached ref is not part of the run's
+  Undo.
+
+## Amendment 17 (2026-11-16: accuracy — own-account transfers, typed rows, Plaid persistent ids)
+
+From a review of Actual Budget, Sure/Maybe, Firefly III, beancount-import and GnuCash.
+
+- **Money between two of your own cash accounts is one transfer** (`card_payments`): an
+  `expense` out of one `cash` account and an `income` into ANOTHER, under the card-payment rule
+  (same amount and currency, `TRANSFER_PAIR_MAX_GAP_DAYS`, unique both ways, never a deleted
+  leg, never pending), with the wording test `_TRANSFER` in place of `_PAYMENT`. Only cash↔cash:
+  both are on the budget, so the transfer is budget-neutral. A move to a `loan`,
+  `fixed_deposit` or `investment` account leaves the budget and stays categorisable spending
+  until that is decided on its own.
+- **A bank row that is the one row you typed is matched, not asked about** (`typed_rows`), as
+  Actual, Sure and GnuCash do: settled bank row; a live single-leg row with NO external ref, not
+  a Starting Balance; same account, currency, signed amount to the cent and day; exactly one
+  such typed row and exactly one such bank row in the run. The ref is attached and the row
+  cleared; the user's fields stay. It runs before the ledger write, so a row typed in other
+  words (below the duplicate guard's bar) is no longer booked a second time. Refs are
+  append-only, so Undo leaves the ref. A row with a ref from any source is never claimed.
+- **Plaid accounts are followed by `persistent_account_id`** (`follow`, as Sure does): it is
+  remembered from each listing; when a linked id is no longer listed and exactly one listed,
+  unlinked account carries the same persistent id, the link moves to it and it is read in the
+  same run as a re-link read (Amendment 7's matching). Two candidates, or none, is still "the
+  bank no longer lists this account".

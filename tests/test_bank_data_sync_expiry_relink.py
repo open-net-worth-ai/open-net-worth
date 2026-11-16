@@ -379,3 +379,70 @@ def test_plaid_a_reply_too_large_is_refused(db_isolated, monkeypatch):
         plaid_svc._post(store, "/transactions/get", {})
     assert "refused" in str(err.value)
     assert plaid_svc.classify_error(err.value) == "connect_error"
+
+
+# ── A bank that re-keys a row on a live link (no re-link) never books it twice ──────────────
+# GoCardless documents a bank's transactionId as changeable, Plaid can list a posted row again
+# under a new transaction_id, SimpleFIN banks rotate ids (Actual Budget #8830, Sure #3436). The
+# account's other rows keep their ids, so this is not a re-link read.
+
+
+def _reviews(kind: str) -> list[dict]:
+    from backend.services import bank_data_sync
+
+    return [r for r in bank_data_sync.list_reviews("gocardless") if r["kind"] == kind]
+
+
+def test_a_row_the_bank_re_keys_is_matched_not_booked_again_nor_vanished(bank):
+    keep = txn(-1.00, days_ago(1), "ACME PARKING", tid="k1")
+    bank.booked[ACC_MAIN] = [txn(-5.00, days_ago(4), "ACME BAKERY", tid="r1"), keep]
+    _run()
+    bank.booked[ACC_MAIN] = [txn(-5.00, days_ago(4), "ACME BAKERY", tid="r1-new"), keep]
+
+    result = _run()
+    assert result["counts"]["booked"] == 0
+    assert result["counts"]["relinked"] == 1
+    [bakery] = [t for t in _live(bank.account) if t["description"] == "ACME BAKERY"]
+    refs = {e["ref"] for e in bakery["external_refs"]}
+    assert refs >= {f"{ACC_MAIN}:r1", f"{ACC_MAIN}:r1-new"}
+
+    _run()  # the old id's second complete miss: it is still listed, under its new id
+    assert _reviews("vanished") == []
+    assert len(_live(bank.account)) == 2
+
+
+def test_identical_rows_the_bank_re_keys_pair_one_to_one(bank):
+    keep = txn(-1.00, days_ago(1), "ACME PARKING", tid="k1")
+    twins = [txn(-2.40, days_ago(3), "ACME COFFEE", tid=f"c{i}") for i in (1, 2)]
+    bank.booked[ACC_MAIN] = [*twins, keep]
+    _run()
+    bank.booked[ACC_MAIN] = [
+        txn(-2.40, days_ago(3), "ACME COFFEE", tid=f"c{i}-new") for i in (1, 2, 3)
+    ] + [keep]
+
+    result = _run()
+    assert result["counts"]["relinked"] == 2
+    assert result["counts"]["booked"] == 1, "a third, real coffee is still booked"
+    assert len(_live(bank.account)) == 4
+
+
+def test_a_new_charge_like_a_row_the_bank_still_lists_is_booked(bank):
+    first = txn(-5.00, days_ago(4), "ACME BAKERY", tid="b1")
+    bank.booked[ACC_MAIN] = [first]
+    _run()
+    bank.booked[ACC_MAIN] = [first, txn(-5.00, days_ago(4), "ACME BAKERY", tid="b2")]
+
+    result = _run()
+    assert result["counts"]["relinked"] == 0
+    assert len(_live(bank.account)) == 2
+
+
+def test_a_re_keyed_amount_on_another_day_is_not_taken_for_the_old_row(bank):
+    keep = txn(-1.00, days_ago(1), "ACME PARKING", tid="k1")
+    bank.booked[ACC_MAIN] = [txn(-5.00, days_ago(5), "ACME BAKERY", tid="d1"), keep]
+    _run()
+    bank.booked[ACC_MAIN] = [txn(-5.00, days_ago(3), "ACME BAKERY", tid="d2"), keep]
+
+    result = _run()
+    assert result["counts"]["relinked"] == 0
+    assert result["counts"]["booked"] == 1

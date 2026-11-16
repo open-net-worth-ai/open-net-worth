@@ -72,7 +72,7 @@ def _duplicate_item(bank) -> dict:
     ledger_service.create_transaction(
         {
             "kind": "expense",
-            "date": days_ago(4),
+            "date": days_ago(5),  # a day off: it asks rather than matching (typed_rows.py)
             "description": "ACME BOOKS",
             "from_account_id": bank.account,
             "from_amount": 18.00,

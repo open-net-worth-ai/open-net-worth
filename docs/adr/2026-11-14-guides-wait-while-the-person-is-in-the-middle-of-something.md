@@ -23,12 +23,13 @@ Busy is declared, not guessed from the DOM:
 
 1. **A visit that arrived with a purpose shows no guide.** If the page was LOADED from a deep link
    or a provider's return — the bank callback path, or a `connector`, `txn`, `batch`, `state`,
-   `code` or `ref` parameter — the person came to do that one thing. The load address is read
+   `code`, `ref` or `sync` parameter — the person came to do that one thing. The load address is read
    from the browser's navigation entry, not the current address: the app tidies those
    parameters away before the guide code may even load.
 2. **A flow that is mid-way holds guides.** `holdGuides()` when it starts, the returned function
    when it is done; guides wait 1.5 s more, so a dialog that opens as the flow ends comes first.
-   The connector screen holds them while it finishes an Enable Banking or GoCardless return.
+   The connector screen holds them while it finishes an Enable Banking or GoCardless return, and a
+   bank's sync page (`useHoldGuides`) while it is shown.
 
 `guidesHeld()` is checked beside `modalOpen()` by every guide (`FeatureIntro`, `OnceTour`). A new
 guide kind checks it too; a new flow that leaves the screen bare while it works holds guides.
