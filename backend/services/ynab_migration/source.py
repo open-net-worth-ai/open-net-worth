@@ -11,6 +11,7 @@ from typing import Callable
 from backend.core.errors import ExternalServiceError
 from backend.db.ynab_config_store import YnabConfigStore
 from backend.services.aggregation import ynab as ynab_service
+from backend.services.ynab_migration import raw_rows
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ def fetch_plan(
         "groups": nest_groups(plan),
         "transactions": nest_transactions(plan),
         "months": (plan.get("months") or []) if with_budget else [],
+        "raw_rows": raw_rows.from_plan(plan),
     }
 
 

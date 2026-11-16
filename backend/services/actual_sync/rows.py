@@ -18,7 +18,8 @@ _TABLES = {
     "accounts": "id, name, offbudget, closed, tombstone",
     "transactions": (
         "id, isParent, isChild, acct, category, amount, description, notes, date, "
-        "starting_balance_flag, transferred_id, tombstone, cleared, parent_id, reconciled"
+        "starting_balance_flag, transferred_id, tombstone, cleared, parent_id, reconciled, "
+        "financial_id, imported_description, sort_order"
     ),
     "payees": "id, name, transfer_acct, tombstone",
     "payee_mapping": "id, targetId",

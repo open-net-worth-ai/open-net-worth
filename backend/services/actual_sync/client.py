@@ -516,6 +516,12 @@ class Copy:
     def plan(self) -> dict:
         return shape.plan_from_rows(self.rows())
 
+    def read(self) -> tuple[shape.Rows, dict]:
+        """The tables as read, and the plan they make: what a read that keeps Actual's own rows
+        needs, from ONE read of the copy."""
+        rows = self.rows()
+        return rows, shape.plan_from_rows(rows)
+
     @property
     def session(self) -> Any:
         """The library's session on this copy: what a write changes before ``commit``."""

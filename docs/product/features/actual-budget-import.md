@@ -121,6 +121,9 @@ knowing, or the first one on a phone. **Show more notes** opens the rest.
   named "Credit Card Payments (Actual)". The name itself is kept for this app's own group. Actual
   has no card payment categories, and a card payment there is a plain transfer.
 - **Future-dated transactions** come across with their dates.
+- **What Actual held** is kept with each transaction. Open one and its drawer's **Source** section
+  shows Actual's own row, with a split's lines under it. Each sync refreshes it, and transactions
+  imported before this was kept get theirs on the next sync.
 - **Tags** in a note, written `#groceries`, become the transaction's tags here. The note itself is
   kept as it is. When a note changes in Actual, its new tags are added and the ones you added here
   stay. A tag you remove here comes back only if the note changes again in Actual. Transactions
