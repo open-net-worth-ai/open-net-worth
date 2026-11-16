@@ -26,6 +26,27 @@ vi.mock('@tanstack/react-router', () => ({
   useRouter: () => undefined,
 }))
 
+// The open review items a test needs; null = the one bank-changed item most tests read.
+let reviewItems: unknown[] | null = null
+
+function duplicateItem(n: number) {
+  return {
+    id: `bsr_d${n}`,
+    provider: 'gocardless',
+    provider_label: 'GoCardless',
+    kind: 'duplicate',
+    ref: `derived:${n}`,
+    txn_id: `t${n}`,
+    created_at: '2026-11-13T10:00:00+00:00',
+    updated_at: '2026-11-13T10:00:00+00:00',
+    detail: {
+      reason: 'same amount, similar description, near date',
+      current: { date: '2026-11-12', amount: -3.4, currency: 'EUR', description: `ACME CAFE ${n}` },
+      row: { date: '2026-11-13', amount: -3.4, currency: 'EUR', description: `ACME CAFE ${n}` },
+    },
+  }
+}
+
 const reply = (body: unknown, status = 200) =>
   Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) })
 
@@ -179,6 +200,8 @@ beforeEach(() => {
           },
         ],
       })
+    if (url.startsWith('/api/bank-sync/reviews?') && reviewItems)
+      return reply({ items: reviewItems })
     if (url.startsWith('/api/bank-sync/reviews?'))
       return reply({
         items: [
@@ -206,6 +229,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  reviewItems = null
   cleanup()
   clearQueryCache()
   authFetch.mockReset()
@@ -345,6 +369,32 @@ describe('with bank_data_sync on', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Book all 3 again' }))
     await waitFor(() => expect(JSON.parse(sent.at(-1)!.body!).ref).toBeUndefined())
+  })
+
+  it('a review shows each amount in its currency', async () => {
+    render(<BankSyncReviews provider="gocardless" />)
+    expect(await screen.findByText(/£27\.50/)).toBeTruthy()
+    expect(screen.getByText(/£25\.00/)).toBeTruthy()
+  })
+
+  it('a long review list shows its first three, the rest one click away', async () => {
+    reviewItems = [1, 2, 3, 4, 5].map(duplicateItem)
+    render(<BankSyncReviews provider="gocardless" />)
+    expect(await screen.findAllByRole('listitem')).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 5' }))
+    expect(screen.getAllByRole('listitem')).toHaveLength(5)
+  })
+
+  it('every possible duplicate is linked at once, only after you confirm', async () => {
+    reviewItems = [1, 2, 3, 4, 5].map(duplicateItem)
+    render(<BankSyncReviews provider="gocardless" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Same transaction for all 5' }))
+    expect(sent).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Same transaction for all' }))
+    await waitFor(() => expect(sent).toHaveLength(5))
+    expect(sent.map((r) => r.url)).toEqual(
+      [1, 2, 3, 4, 5].map((n) => `/api/bank-sync/reviews/bsr_d${n}/accept`),
+    )
   })
 
   it('accounts are grouped under the bank each one is at', () => {

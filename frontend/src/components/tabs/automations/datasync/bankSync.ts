@@ -83,6 +83,9 @@ export interface BankRowView {
   amount?: number
   currency?: string
   description?: string
+  /** What a purchase in another currency cost there (a bank row only). */
+  original_amount?: number | null
+  original_currency?: string | null
 }
 
 export interface BankReview {

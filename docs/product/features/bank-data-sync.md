@@ -210,6 +210,12 @@ applies that on its own. It waits under **Needs your review**, on the sync's pag
 If you edited a transaction by hand, the review says so before you replace your edit. Nothing
 in the ledger changes until you choose.
 
+Each amount shows its currency, with the original charge in brackets for a purchase made in
+another currency. A long list shows its first three; **Show all** opens the rest. When several
+transactions look like ones already in your book (a bank that re-dates many rows at once does
+this), **Same transaction for all** links every one of them after you confirm. Book any that are
+really separate charges first.
+
 ## How often it runs
 
 | Bank | Default | You can choose |
