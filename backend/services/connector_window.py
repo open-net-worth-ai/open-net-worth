@@ -22,7 +22,7 @@ Two ways a fetch silently lost transactions (found 2026-11-13, GoCardless e2e):
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 from backend.core.user_time import user_today
@@ -30,8 +30,27 @@ from backend.services import ledger as ledger_service
 from backend.services.aggregation.providers import DERIVED_PREFIX, Provider
 
 #: How far back a catch-up may reach — what PSD2 banks serve once consent is older than a few
-#: minutes. An explicit ``since`` is never capped.
+#: minutes. A provider that serves more (``Provider.history_days``: Plaid, 730) reaches that far.
+#: An explicit ``since`` is never capped.
 MAX_CATCH_UP_DAYS = 90
+
+
+def _catch_up(
+    provider: Provider, newest: Optional[date], today: date, subject: str
+) -> tuple[str, Optional[str]]:
+    """``(since, warning)`` for a catch-up from the ``newest`` booked day: ``lookback_days``
+    before it, never further back than the provider serves; ``warning`` names a gap left."""
+    anchor = min(newest, today) if newest else today
+    start = anchor - timedelta(days=provider.lookback_days)
+    days = max(MAX_CATCH_UP_DAYS, provider.history_days or 0)
+    floor = today - timedelta(days=days)
+    if start >= floor:
+        return start.isoformat(), None
+    return floor.isoformat(), (
+        f"Nothing was booked {subject} from {provider.label} since {anchor.isoformat()} — longer "
+        f"than the {days} days the bank serves. Rows before {floor.isoformat()} can't be fetched; "
+        "check against a statement."
+    )
 
 
 def default_window(
@@ -39,25 +58,16 @@ def default_window(
 ) -> tuple[str, str, Optional[str]]:
     """``(since, before, warning)``. Without ``since``: ``lookback_days`` before the newest
     booked row from this provider (today when nothing is booked yet, never later than
-    today), and never more than ``MAX_CATCH_UP_DAYS`` back — ``warning`` then says rows in
-    the gap may be lost."""
+    today), and never further back than the provider serves (``_catch_up``) — ``warning``
+    then says rows in the gap may be lost."""
     today = user_today()
     resolved_before = before or today.isoformat()
     if since:
         return since, resolved_before, None
-    newest = ledger_service.newest_booked_date(provider.key)
-    anchor = min(newest, today) if newest else today
-    start = anchor - timedelta(days=provider.lookback_days)
-    floor = today - timedelta(days=MAX_CATCH_UP_DAYS)
-    warning = None
-    if start < floor:
-        warning = (
-            f"Nothing was booked from {provider.label} since {anchor.isoformat()} — longer than "
-            f"the {MAX_CATCH_UP_DAYS} days banks serve. Rows before {floor.isoformat()} can't be "
-            "fetched automatically; check the account against a statement."
-        )
-        start = floor
-    return start.isoformat(), resolved_before, warning
+    start, warning = _catch_up(
+        provider, ledger_service.newest_booked_date(provider.key), today, "into any account"
+    )
+    return start, resolved_before, warning
 
 
 def account_window(
@@ -66,8 +76,8 @@ def account_window(
     """``(since, before, warning, first_import)`` for ONE linked app account — the AI-free bank
     sync reads accounts one at a time, so an account unticked or never imported does not widen
     another's window. Never imported from this provider → its backfill (``history_since``);
-    otherwise ``lookback_days`` before that account's newest booked row, never more than
-    ``MAX_CATCH_UP_DAYS`` back. ``history_read``: its history was read before and the bank had
+    otherwise ``lookback_days`` before that account's newest booked row, never further back
+    than the provider serves. ``history_read``: its history was read before and the bank had
     nothing, so no row says so — it catches up from today rather than re-reading it all."""
     today = user_today()
     before = today.isoformat()
@@ -75,19 +85,13 @@ def account_window(
         if history_read:
             return (today - timedelta(days=provider.lookback_days)).isoformat(), before, None, False
         return history_since(provider), before, None, True
-    newest = ledger_service.newest_booked_date(provider.key, account_id)
-    anchor = min(newest, today) if newest else today
-    start = anchor - timedelta(days=provider.lookback_days)
-    floor = today - timedelta(days=MAX_CATCH_UP_DAYS)
-    warning = None
-    if start < floor:
-        warning = (
-            f"Nothing was booked into this account from {provider.label} since "
-            f"{anchor.isoformat()} — longer than the {MAX_CATCH_UP_DAYS} days banks serve. Rows "
-            f"before {floor.isoformat()} can't be fetched; check it against a statement."
-        )
-        start = floor
-    return start.isoformat(), before, warning, False
+    start, warning = _catch_up(
+        provider,
+        ledger_service.newest_booked_date(provider.key, account_id),
+        today,
+        "into this account",
+    )
+    return start, before, warning, False
 
 
 def history_since(provider: Provider) -> str:

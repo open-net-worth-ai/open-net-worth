@@ -408,7 +408,9 @@ def test_an_expired_sign_in_marks_only_that_bank_for_reconnect_and_says_so(store
     window = svc.fetch_window(store, "2026-10-01", "2026-10-29", None)
     banks = {b["institution_name"]: b["needs_reconnect"] for b in store.public()["banks"]}
     assert banks == {"Wells Fargo": True, "Chase": False}
-    assert window.warnings == ["Wells Fargo: its sign-in expired — reconnect it on the Plaid page"]
+    assert window.warnings == [
+        "Wells Fargo: the bank needs you to sign in again — Reconnect it on the Plaid page"
+    ]
 
     monkeypatch.setattr(svc.httpx, "post", _per_bank())  # the bank answers again
     svc.fetch_window(store, "2026-10-01", "2026-10-29", None)

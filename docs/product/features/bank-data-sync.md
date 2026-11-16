@@ -33,8 +33,8 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
    1. **Choose accounts.** Each bank has a card listing its accounts in two columns: **At the bank**
       (the bank's account and its last digits) and **In your book** (the account it books into;
       click it to open it). Every one is ticked. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
-      (or **Link more accounts**) links a bank account here, as a new account or to one you have,
-      without going back to the connector.
+      (under the list) links a bank account here, as a new account or to one you have, without
+      going back to the connector.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
       so today's balance doesn't change. While it runs, the step names the account it's reading
@@ -109,7 +109,8 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
 - **First sync of an account:** books the history your bank serves, then moves the account's
   Starting Balance back to the oldest row, so the history counts and **today's balance doesn't
   change**. A new account is then set to the bank's own balance (below). (Cash and card accounts
-  only.)
+  only.) If the bank sends only part of the history, nothing is booked yet: the next sync reads
+  it all again, so no history is left out.
 
 A run books all its new transactions in one go: if something fails, nothing from that run is
 booked, and the next run tries again.
@@ -123,8 +124,9 @@ balance is its own request, which banks limit separately, about as often as tran
   settled balance from that same read when its history comes in, so it matches from the start —
   whatever was or wasn't in the balance you typed or the app filled in when you added it.
 - **Any other account** is never changed for you. When its cleared balance and the bank's
-  disagree, its row says so — "Bank €1,500.00 · Your book €1,487.50" — with **Use the bank's
-  balance**, which moves the account's Starting Balance by the difference.
+  disagree, its row says **Off by €12.50**. Click it to see both figures ("Bank €1,500.00 · Your
+  book €1,487.50") and **Match the bank**, which moves the account's Starting Balance by the
+  difference.
 
 A card or loan's balance is money owed, so it's compared as a negative figure whichever way the
 bank reports it. GoCardless and Enable Banking say which figure is settled, and that's the one
@@ -177,8 +179,8 @@ bank in chat. Once an account's reads
 are used, it says when its next read is, **Sync now** waits, and so does the schedule.
 
 If the bank refuses (its daily limit, expired access), the sync waits instead of retrying: until
-the limit resets, or a day for expired access. The connector page shows what the bank said.
-Renew the bank's access on the connector page if it expired. A bank whose access ended or was
+the limit resets, or until you renew expired access. The connector page shows what the bank
+said. Renew (or Reconnect) the bank on the connector page, and the sync runs again right away. A bank whose access ended or was
 revoked only holds up its own accounts: your other banks still sync. If the bank refuses just
 one account, that account is tried again later and the rest are read as usual.
 

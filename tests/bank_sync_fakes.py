@@ -43,6 +43,8 @@ class FakeBank:
         # What the bank says each account holds, in the listing's own terms (provider account
         # id → e.g. ``{"cleared_balance": 990.0}`` or ``{"balance": 990.0}``); none by default.
         self.balances: dict[str, dict] = {}
+        # Accounts whose read the bank cuts short (a page cap): ``complete=False``.
+        self.cut_short: set[str] = set()
 
     def fetch_window(self, store, since, before, account, *, accounts_only=False):
         ids = [a for a in self.booked if account is None or a == account]
@@ -73,7 +75,7 @@ class FakeBank:
                 row = gocardless_svc._txn_to_row(t, a, "GBP", pending=True)
                 if row and since <= row["date"] <= before:
                     rows.append(row)
-        return FetchWindow(accounts=accounts, rows=rows)
+        return FetchWindow(accounts=accounts, rows=rows, complete=not (set(ids) & self.cut_short))
 
 
 def configure_gocardless() -> None:
