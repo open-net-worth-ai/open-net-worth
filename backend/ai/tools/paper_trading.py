@@ -242,6 +242,12 @@ class PaperOrderInput(NestedInput):
     tif: Optional[Literal["day", "gtc"]] = Field(
         default=None, description="Good for today (default) or until cancelled."
     )
+    extended_ok: Optional[bool] = Field(
+        default=None,
+        description="Stocks and ETFs: also fill pre- and after-market, not only in the regular "
+        "session. Only when the owner asks for it; the portfolio's extended_hours setting does "
+        "the same for every order.",
+    )
     note: Optional[str] = Field(
         default=None, description="Why — the journal note shown on the trade (280 characters)."
     )

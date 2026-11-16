@@ -2421,6 +2421,9 @@ def _snapshot_from_quote(q: dict) -> dict | None:
         "bid": _finite_positive(q.get("bid")),
         "ask": _finite_positive(q.get("ask")),
         "quote_time": _epoch_to_iso_utc(q.get("regularMarketTime")),
+        # The pre/post-market print with its own time (phantom copies of the close dropped):
+        # a paper order allowed outside the regular session fills against it.
+        "extended": _extended_hours_from_quote(q, str(q.get("marketState") or "").upper()),
         "quote_type": q.get("quoteType") or None,
     }
     return {k: v for k, v in raw.items() if v is not None}

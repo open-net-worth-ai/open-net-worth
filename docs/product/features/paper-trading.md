@@ -84,6 +84,9 @@ estimates. Paper results are not a track record.
 - A **market** order fills at once while its market is open, else at the first price after the
   next open. A **mutual fund** fills at the NAV of the cut-off it met (16:00 New York). Crypto
   fills at any hour.
+- A stock or ETF trades in the regular session only, unless you tick **Pre- and after-market
+  too** on the ticket. Then it can fill pre- and after-market at that session's latest price.
+  Ask Lucius to do the same, for one order or for every order in a portfolio.
 - A **limit** fills when the price reaches it; a **stop** becomes a market order when the price
   reaches it. An order good for today expires at its session's close.
 - A quote older than 20 minutes in an open market is not used: the order waits and says why.

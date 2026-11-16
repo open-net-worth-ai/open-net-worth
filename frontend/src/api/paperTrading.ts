@@ -172,6 +172,7 @@ export interface OrderDraft {
   limit_price?: number
   stop_price?: number
   tif?: 'day' | 'gtc'
+  extended_ok?: boolean
   note?: string
 }
 

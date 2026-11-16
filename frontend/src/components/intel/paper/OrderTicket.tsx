@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Button,
+  Checkbox,
   FormField,
   Modal,
   NumberField,
@@ -55,6 +56,7 @@ export function OrderTicket({
   const [price, setPrice] = useState('')
   const [tif, setTif] = useState<'day' | 'gtc'>('day')
   const [note, setNote] = useState('')
+  const [extended, setExtended] = useState(false)
   // The server's answer for one draft. A preview counts only while the form still says what it
   // was asked for, so an edit never shows the previous draft's figures.
   const [answer, setAnswer] = useState<{
@@ -66,6 +68,8 @@ export function OrderTicket({
   const [busy, setBusy] = useState(false)
 
   const isFund = asset?.kind === 'fund_nav'
+  // Only stocks and ETFs have a pre- and after-market session.
+  const canExtend = asset?.kind === 'listed'
   const orderType: OrderType = isFund ? 'nav' : type
   const quantity = Number(qty)
   const level = Number(price)
@@ -78,6 +82,7 @@ export function OrderTicket({
           ...(orderType === 'limit' ? { limit_price: level } : {}),
           ...(orderType === 'stop' ? { stop_price: level } : {}),
           tif,
+          ...(canExtend && extended ? { extended_ok: true } : {}),
           ...(note.trim() ? { note: note.trim() } : {}),
         }
       : null
@@ -255,6 +260,14 @@ export function OrderTicket({
             </FormField>
           )}
         </div>
+        {canExtend && (
+          <Checkbox
+            id="pt-extended"
+            label="Pre- and after-market too"
+            checked={extended}
+            onChange={(e) => setExtended(e.target.checked)}
+          />
+        )}
         <FormField label="Why (optional)" htmlFor="pt-note">
           <TextArea
             id="pt-note"

@@ -34,6 +34,19 @@ def _parse_ts(value) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def _extended_print(snap: dict, state: str) -> tuple[float, datetime] | None:
+    """(price, time) of the pre/post-market print while the exchange is in that session — the
+    price an order allowed outside the regular session fills at, timed by its own trade, not
+    the regular close. None in the regular session or with no real, timed print."""
+    if state not in ("PRE", "POST"):
+        return None
+    ext = snap.get("extended") or {}
+    price, at = ext.get("price"), _parse_ts(ext.get("as_of"))
+    if not price or at is None:
+        return None
+    return float(price), at
+
+
 def _exchange_quotes(assets: list[PaperAsset], now: datetime) -> dict[str, PaperQuote]:
     symbols = sorted({a.symbol for a in assets if a.symbol})
     if not symbols:
@@ -51,13 +64,16 @@ def _exchange_quotes(assets: list[PaperAsset], now: datetime) -> dict[str, Paper
             continue
         qpu = a.quote_per_unit or 1.0
         state = str(st.get("state") or snap.get("market_state") or "UNKNOWN").upper()
+        ext = _extended_print(snap, state)
         out[a.key] = PaperQuote(
-            last=float(snap["price"]) * qpu,
-            bid=float(snap["bid"]) * qpu if snap.get("bid") else None,
-            ask=float(snap["ask"]) * qpu if snap.get("ask") else None,
+            last=(ext[0] if ext else float(snap["price"])) * qpu,
+            # Outside the regular session the book's top is not the extended print's, so an
+            # extended fill prices from the print plus slippage, never a stale bid/ask.
+            bid=float(snap["bid"]) * qpu if snap.get("bid") and not ext else None,
+            ask=float(snap["ask"]) * qpu if snap.get("ask") and not ext else None,
             currency=(snap.get("currency") or a.currency).upper(),
             # Unknown age stays unknown: it is never fresh, so an order waits rather than fill.
-            as_of=_parse_ts(snap.get("quote_time") or st.get("quote_time")),
+            as_of=ext[1] if ext else _parse_ts(snap.get("quote_time") or st.get("quote_time")),
             basis="synthetic" if a.kind == "index" else "quote",
             source="Yahoo",
             session_state=state,
