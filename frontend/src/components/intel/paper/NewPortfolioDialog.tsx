@@ -61,7 +61,7 @@ export function NewPortfolioDialog({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="paper" disabled={!ok} loading={busy} onClick={() => void create()}>
+          <Button variant="primary" disabled={!ok} loading={busy} onClick={() => void create()}>
             Create
           </Button>
         </>

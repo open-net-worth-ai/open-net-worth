@@ -140,7 +140,7 @@ export function Gallery() {
   const [worth, setWorth] = useState<number | null>(14800)
   const [paid, setPaid] = useState<number | null>(null)
 
-  const variants: ButtonVariant[] = ['primary', 'secondary', 'danger', 'ghost', 'paper']
+  const variants: ButtonVariant[] = ['primary', 'secondary', 'danger', 'ghost']
   const sizes: ButtonSize[] = ['md', 'sm']
 
   return (
@@ -503,8 +503,6 @@ export function Gallery() {
         <div className="ui-gallery__row">
           <Tag>accent</Tag>
           <Tag tone="muted">muted</Tag>
-          <Tag tone="warn">warn</Tag>
-          <Tag tone="paper">Paper</Tag>
           <Tag onRemove={() => {}}>removable</Tag>
         </div>
       </Section>

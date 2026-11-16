@@ -21,13 +21,16 @@ It is the **Paper Trading** tab in **Intelligence**, after Copy Trading. To try 
 
 ## Start a paper portfolio
 
-Open **Intelligence → Paper Trading** and click **New paper portfolio**. Give it a name, then
+Open **Intelligence → Paper Trading** and click **Create manually**. Give it a name, then
 start with:
 
 - **Cash**: the same amount as your investments, 10,000, 100,000, or another amount.
 - **A copy of my holdings**: today's holdings at today's prices.
 - **A portfolio I follow**: its current weights, bought with the cash you choose. On a Copy
   Trading portfolio, **Paper-copy** does this in one click.
+
+Or click **Create with Lucius** and describe the idea you want to test. Lucius suggests the
+starting cash and the first trades, then creates the portfolio.
 
 Each paper portfolio is a card with a **Paper** tag, its return against the benchmark, its two
 newest trades and a ring of what it holds.

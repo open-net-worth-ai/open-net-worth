@@ -160,7 +160,7 @@ describe('Paper Trading', () => {
     api.list.mockResolvedValue({ portfolios: [], archived: [] })
     render(<PaperTab />)
     expect(await screen.findByText('Try an idea before you put money in')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'New paper portfolio' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Create manually' })).toBeTruthy()
   })
 
   it('lists each paper portfolio as a card carrying the Paper tag', async () => {

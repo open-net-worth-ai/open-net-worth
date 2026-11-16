@@ -156,13 +156,13 @@ export function OrderTicket({
       size="md"
       title={
         <span className="paper-title">
-          Paper order <Tag tone="paper">Paper</Tag>
+          Paper order <Tag>Paper</Tag>
         </span>
       }
       subtitle={portfolioName}
       footer={
         <Button
-          variant="paper"
+          variant="primary"
           fullWidth
           loading={busy}
           disabled={!draft || !preview || rejected}

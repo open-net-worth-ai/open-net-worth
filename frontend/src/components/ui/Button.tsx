@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'paper'
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 export type ButtonSize = 'sm' | 'md' | 'dense'
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -16,8 +16,6 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   secondary: 'btn-secondary',
   danger: 'btn-danger',
   ghost: 'ui-btn--ghost',
-  // The main action on a Paper Trading surface (pretend money): primary, in the paper accent.
-  paper: 'btn-primary btn-primary--paper',
 }
 
 /**

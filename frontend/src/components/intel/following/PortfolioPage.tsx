@@ -435,7 +435,7 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
             </Tooltip>
             {paperOn && (
               <Tooltip label={COPY.paperCopyPitch}>
-                <Button size="sm" variant="paper" onClick={() => void paperCopy()}>
+                <Button size="sm" variant="primary" onClick={() => void paperCopy()}>
                   {COPY.paperCopyCta}
                 </Button>
               </Tooltip>

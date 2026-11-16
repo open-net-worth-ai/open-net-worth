@@ -16,7 +16,7 @@ export function PaperPositionsPanel({ instrumentId }: { instrumentId: string | u
       className="asd-pos-accounts"
       title={
         <span className="paper-title">
-          On paper <Tag tone="paper">Paper</Tag>
+          On paper <Tag>Paper</Tag>
         </span>
       }
     >

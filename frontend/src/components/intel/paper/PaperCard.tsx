@@ -15,7 +15,7 @@ export function PaperCard({ p, onOpen }: { p: Card; onOpen: () => void }) {
     <button type="button" className="fol-card" onClick={onOpen} aria-label={`Open ${p.name}`}>
       <div className="fol-card-main">
         <div className="fol-card-name paper-card-name">
-          {p.name} <Tag tone="paper">Paper</Tag>
+          {p.name} <Tag>Paper</Tag>
         </div>
         <div className="fol-card-who">
           {p.source_label}

@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
 import { X } from '../../ui/icons'
 
-/** `warn`: a caution about what the chip sits beside (an estimate, a missing report).
- *  `paper`: marks a Paper Trading object (pretend money), wherever it appears. */
-export type TagTone = 'accent' | 'muted' | 'warn' | 'paper'
+/** `warn`: a caution about what the chip sits beside (an estimate, a missing report). */
+export type TagTone = 'accent' | 'muted' | 'warn'
 
 export interface TagProps {
   children: ReactNode

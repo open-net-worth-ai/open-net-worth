@@ -99,7 +99,7 @@ export function PaperPortfolioPage({
           <div className="fol-id">
             <h2 className="fol-title paper-title">
               <span className="fol-title-name">{p.name}</span>
-              <Tag tone="paper">Paper</Tag>
+              <Tag>Paper</Tag>
               <span className="fol-title-by">
                 {p.source_label} · Day {p.day_count}
                 {p.run_no > 1 ? ` · Run ${p.run_no}` : ''}
@@ -125,7 +125,7 @@ export function PaperPortfolioPage({
                   Go live
                 </Button>
               )}
-              <Button size="sm" variant="paper" onClick={() => setTicket({})}>
+              <Button size="sm" variant="primary" onClick={() => setTicket({})}>
                 Paper trade
               </Button>
             </div>

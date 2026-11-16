@@ -2,6 +2,7 @@ import '../following/following.css'
 
 import { useState } from 'react'
 import { Button, EmptyState, ErrorState, TabSkeleton } from '../../ui'
+import { Spark } from '../../../lucius/identity'
 import { NewPortfolioDialog } from './NewPortfolioDialog'
 import { PaperCard } from './PaperCard'
 import { PaperPortfolioPage } from './PaperPortfolioPage'
@@ -38,6 +39,23 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
     )
 
   const { portfolios, archived } = list.data
+  // Lucius has its own create tool, so it can set one up from an idea in plain words.
+  const withLucius = onAskLucius && (
+    <Button
+      size="sm"
+      variant="primary"
+      className="fi-lucius"
+      iconLeft={<Spark size={15} ariaHidden />}
+      onClick={() =>
+        onAskLucius(
+          'Set up a paper portfolio with me. Ask what idea I want to test, suggest the ' +
+            'starting cash and the first trades, then create it.',
+        )
+      }
+    >
+      Create with Lucius
+    </Button>
+  )
   const dialog = (
     <NewPortfolioDialog
       open={creating}
@@ -57,9 +75,12 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
           title="Try an idea before you put money in"
           body="Trade with pretend money at real prices. Never in your net worth."
           action={
-            <Button variant="paper" onClick={() => setCreating(true)}>
-              New paper portfolio
-            </Button>
+            <div className="paper-actions">
+              {withLucius}
+              <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+                Create manually
+              </Button>
+            </div>
           }
         />
         {dialog}
@@ -72,9 +93,12 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
       <section className="fol-sec" aria-label="Paper portfolios">
         <div className="paper-toolbar">
           <span className="fol-by">Never in your net worth</span>
-          <Button variant="paper" size="sm" onClick={() => setCreating(true)}>
-            New paper portfolio
-          </Button>
+          <div className="paper-actions">
+            {withLucius}
+            <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+              Create manually
+            </Button>
+          </div>
         </div>
         {shown.length > 0 ? (
           <div className="fol-cards">
