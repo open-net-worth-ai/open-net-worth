@@ -115,6 +115,10 @@ REVIEWED_SAFE = frozenset(
     POST /api/equity/grants/{grant_id}/tranches/{tranche_id}/vest
     POST /api/equity/vest-events/{vest_event_id}/release
     POST /api/equity/vest-events/{vest_event_id}/undo
+    POST /api/followed-portfolios
+    DELETE /api/followed-portfolios/{follow_id}
+    POST /api/followed-portfolios/{follow_id}/refresh
+    POST /api/followed-portfolios/{follow_id}/ticker
     POST /api/inbox/signals/dismiss-all
     POST /api/inbox/signals/{signal_id}/dismiss
     POST /api/income

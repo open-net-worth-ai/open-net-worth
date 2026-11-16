@@ -128,10 +128,34 @@ def test_installed_launch_prefers_the_onw_beside_the_interpreter(root, tmp_path,
     info = mcp_connect.connect_info()
     assert (info["command"], info["command_found"]) == (str(bindir / "onw"), True)
     assert info["desktop"] is False and info["root"] is None
+    assert info["container"] is False
+
+
+def test_container_launch_names_no_path_of_its_own(root, tmp_path, monkeypatch):
+    """In Docker the AI app runs on the host, where no path inside the container exists."""
+    monkeypatch.delenv("ONW_DESKTOP_MODE", raising=False)
+    monkeypatch.setattr(config, "_settings", None)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "onw").write_text("#!/bin/sh\n")
+    monkeypatch.setattr(sys, "executable", str(bindir / "python3"))
+    monkeypatch.setattr(mcp_connect, "in_container", lambda: True)
+    info = mcp_connect.connect_info()
+    assert info["container"] is True
+    assert (info["command"], info["args"], info["command_found"]) == ("onw", ["mcp"], False)
+    assert info["source_root"] is None and info["root"] is None
 
 
 def test_connect_info_route():
     from backend.main import app
 
     body = TestClient(app).get("/api/mcp/connect-info").json()
-    assert set(body) == {"desktop", "command", "args", "command_found", "root", "source_root"}
+    assert set(body) == {
+        "desktop",
+        "command",
+        "args",
+        "command_found",
+        "root",
+        "source_root",
+        "container",
+    }

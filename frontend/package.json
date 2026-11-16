@@ -28,6 +28,7 @@
     "e2e:crypto-market-data": "node qa/crypto-market-data-failover.mjs",
     "e2e:gocardless-bank-link": "node qa/gocardless-bank-link.mjs",
     "e2e:email-logging": "node qa/email-logging.mjs",
+    "e2e:telegram-setup": "node qa/telegram-setup.mjs",
     "test": "vitest run"
   },
   "dependencies": {

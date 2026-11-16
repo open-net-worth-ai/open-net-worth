@@ -5,6 +5,8 @@ process is the bundled Python, which has the package installed — so ``<it> -m 
 works from anywhere, and the bundled ``onw`` script does not (its shebang names the build
 folder). Any other install has ``onw`` beside its interpreter when it is a ``uv tool`` or a
 checkout's venv; an absolute path matters because GUI apps rarely inherit the shell's PATH.
+In a container no path in here exists on the user's computer, so it reports ``container`` and
+names no command: the AI app runs ``onw`` installed on ITS computer, pointed at this address.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.core.config import get_settings, instance_root
+from backend.core.container import in_container
 from backend.core.shipped_assets import REPO_ROOT
 
 
@@ -39,6 +42,17 @@ def connect_info() -> dict:
             # The desktop port changes per launch; the bridge reads it from this folder's lock.
             "root": str(instance_root()),
             "source_root": None,
+            "container": False,
+        }
+    if in_container():
+        return {
+            "desktop": False,
+            "command": "onw",
+            "args": ["mcp"],
+            "command_found": False,
+            "root": None,
+            "source_root": None,
+            "container": True,
         }
     onw = _onw_beside_interpreter()
     return {
@@ -48,4 +62,5 @@ def connect_info() -> dict:
         "command_found": onw is not None,
         "root": None,
         "source_root": _source_checkout(),
+        "container": False,
     }

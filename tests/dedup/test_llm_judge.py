@@ -254,3 +254,38 @@ async def test_real_llm_judges_obvious_duplicate(isolate, monkeypatch):
 
     out = await match_review.judge_reviews_async()
     assert out["judged"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_two_bank_content_hashes_are_never_auto_merged(isolate, monkeypatch):
+    # Two identical coffees from two separate bank syncs: the bank gave neither an id, so each
+    # is keyed by a hash of its content. They may be one payment or two; a human decides.
+    acct, txns, reviews, _ = isolate
+
+    def coffee(ref: str, on: str) -> dict:
+        return _arrange_create(
+            {
+                "date": on,
+                "kind": "expense",
+                "description": "ACME CAFE",
+                "from_account_id": acct["id"],
+                "from_amount": 3.00,
+                "from_currency": "SGD",
+                "external_refs": [{"source": "enable_banking", "ref": ref}],
+                "source": "ai",
+                "batch_id": f"bank_sync:{ref}",
+            }
+        )
+
+    coffee("derived:aaaaaaaaaaaaaaaa", "2026-05-01")
+    incoming = coffee("derived:bbbbbbbbbbbbbbbb", "2026-05-02")
+    match_review.review_created_rows([incoming])
+    assert reviews.pending(), "the pair must reach review at all"
+    monkeypatch.setattr(match_review, "_policy", lambda: "auto_high")
+    _fake_llm("same")
+
+    out = await match_review.judge_reviews_async()
+
+    assert out["auto_merged"] == 0
+    assert not txns.find_by_id(incoming["id"]).get("merged_into")
+    assert len(reviews.pending()) == 1

@@ -360,13 +360,11 @@ const CASES: ProviderCase[] = [
       kind: 'telegram',
       config: {},
     }),
-    fields: ['Bot token', 'Allowed chat IDs'],
+    // A new bot starts on Pairing, which needs no chat ID — that box appears once it's saved.
+    fields: ['Bot token', 'Who can chat'],
     saveLabel: 'Save',
     saveUrl: '/api/telegram/config',
-    fillBeforeSave: [
-      { label: 'Bot token', value: 'test-bot-token' },
-      { label: 'Allowed chat IDs', value: '123456789' },
-    ],
+    fillBeforeSave: [{ label: 'Bot token', value: 'test-bot-token' }],
   },
   {
     name: 'Web search (Tavily)',

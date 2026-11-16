@@ -721,7 +721,7 @@ async def chat(req: ChatRequest, request: Request):
     # Onboarding opens with a hidden trigger and Lucius speaking first, so there is no first
     # message of the person's to write a title from; it would stay "New conversation" for good.
     if _is_opening_message and (_original_user_text or "").strip() == ONBOARDING_INIT:
-        session_titles.set_title(session_id, "Getting started", auto=True)
+        session_titles.name_from_server(session_id, "Getting started")
     if turns.inline_for_tests():
         assert handle.task is not None
         await handle.task

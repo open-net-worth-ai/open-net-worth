@@ -1014,7 +1014,7 @@ async def test_a_new_image_turn_evicts_oldest_history_images_instead_of_failing(
 
 
 @pytest.mark.asyncio
-async def test_one_shot_broken_stdin_cleans_up_the_child_and_workdir(tmp_path, monkeypatch):
+async def test_one_shot_broken_stdin_hands_the_child_on_for_its_exit_report(tmp_path, monkeypatch):
     workdir = tmp_path / "claude-broken-stdin"
 
     class _Stdin:
@@ -1050,11 +1050,12 @@ async def test_one_shot_broken_stdin_cleans_up_the_child_and_workdir(tmp_path, m
     monkeypatch.setattr(ccp.asyncio, "create_subprocess_exec", fake_spawn)
     monkeypatch.setattr(ccp, "_kill", fake_kill)
 
-    with pytest.raises(OSError, match="broken stdin"):
-        await ClaudeCliProvider(cli_path="claude")._spawn(["claude"], "hello")
+    # A closed input is the CLI going away, not a spawn failure: the process is handed on so
+    # _events reports its exit status and stderr (and cleans up in its own `finally`).
+    got, got_dir = await ClaudeCliProvider(cli_path="claude")._spawn(["claude"], "hello")
 
-    assert killed == [proc]
-    assert not workdir.exists()
+    assert got is proc and got_dir == str(workdir)
+    assert killed == []
 
 
 @pytest.mark.asyncio

@@ -73,8 +73,9 @@ the cards with **All**, **Watching**, **Funds**, **Politicians** and **ETFs** (e
 there are), sort them, or search by fund or member name. On a phone, or in a narrow pane, the
 filter and the sort are in the **Filter** button beside the search.
 
-Click a card to open it. The page's header is one line: **‹** (back to Copy Trading), the
-portfolio's name and who runs it (dropped on a phone). Under it are three tabs: **Trading
+Click a card to open it. Above the page, **Copy Trading / its name** goes back to the list; on a
+phone you can also swipe from the left edge (the installed app has its own swipe for it). The
+header is the portfolio's name and who runs it (dropped on a phone). Under it are three tabs: **Trading
 Activity**, **Overview** and **You vs. …** (named for the portfolio, e.g. **You vs. Berkshire
 Hathaway**). The range under the charts (1W … All, 1Y at first, the window the gallery card
 shows) is one setting for the whole page: change it on one tab and the other follows.
@@ -118,6 +119,9 @@ Under them is everything they did, newest first, over the period you pick. The p
 Jun 30**) or any single quarter. Filter a fund's moves by **New**, **Increase**, **Decrease** and
 **Sold out**, or a member's by **Bought** and **Sold**. Each row shows the date, the change in
 dollars with a bar for its size, and the change in shares.
+
+While you scroll the table, that chart stays in view above it. On a phone the portfolio's name
+scrolls away, only the tabs and the chart stay, and the chart is drawn shorter so more rows fit.
 
 Above the table, with no row picked, a chart shows the portfolio over the same period, with **B**
 and **S** markers on its moves. A quarter's change has no trade day (a fund reports its holdings
