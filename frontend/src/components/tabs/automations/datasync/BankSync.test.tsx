@@ -581,8 +581,8 @@ describe('with bank_data_sync on', () => {
     authFetch.mockImplementation(() => reply({ connectors: [] }))
     render(
       <ConnectorNextStep
-        provider="simplefin"
-        providerLabel="SimpleFIN"
+        provider="lunch_money"
+        providerLabel="Lunch Money"
         linkedCount={1}
         unlinkedCount={0}
       />,

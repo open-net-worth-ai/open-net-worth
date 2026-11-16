@@ -247,10 +247,10 @@ def _via(monkeypatch, source, entry, **kwargs):
 def test_feed_12_simplefin_balance_string_is_applied_and_a_points_currency_is_refused(
     book, monkeypatch
 ):
-    from backend.services.aggregation import simplefin
+    from backend.services.aggregation import simplefin_feed as simplefin
 
     wire = {"id": "ref-1", "name": "Brokerage", "balance": "123456.78", "currency": "USD"}
-    common = simplefin._account_to_common(wire)
+    common = simplefin.account_to_common(wire)
     assert (common["balance"], common["currency"]) == (123456.78, "USD")
     x = _account(name="SF", type_="investment", total=0.0)
     link_account(x["id"], "ref-1", source="simplefin")
@@ -260,9 +260,7 @@ def test_feed_12_simplefin_balance_string_is_applied_and_a_points_currency_is_re
 
     y = _account(name="SF points", type_="investment", total=5000.0)
     link_account(y["id"], "ref-2", source="simplefin")
-    points = simplefin._account_to_common(
-        {**wire, "id": "ref-2", "currency": "https://b.example/p"}
-    )
+    points = simplefin.account_to_common({**wire, "id": "ref-2", "currency": "https://b.example/p"})
     _via(monkeypatch, "simplefin", {**points, "provider_account_id": "ref-2"})
     fake = providers.PROVIDERS["simplefin"]
     fake.balances = {"ref-1": common, "ref-2": {**points, "provider_account_id": "ref-2"}}
