@@ -29,7 +29,9 @@ def account_to_common(sf_account: dict, connections: dict[str, str] | None = Non
         "provider_account_id": str(sf_account.get("id") or ""),
         "name": display,
         "mask": None,
-        "currency": currency_of(sf_account),
+        # As the Bridge names it (a points URL stays one): a figure in another currency must
+        # never be taken for the account's. Booking reads ``row_currency``.
+        "currency": str(sf_account.get("currency") or "").strip().upper() or None,
         "balance": balance,
         "institution": org_name or None,
     }
