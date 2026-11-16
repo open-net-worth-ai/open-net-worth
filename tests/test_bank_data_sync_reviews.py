@@ -105,12 +105,12 @@ def test_a_vanished_row_waits_for_review_and_is_deleted_only_on_accept(bank):
     assert _run()["counts"]["booked"] == 0
 
 
-def test_a_row_matching_a_hand_typed_one_asks_instead_of_booking(bank):
+def test_a_row_near_a_hand_typed_one_asks_instead_of_booking(bank):
     main = linked_account("ACME Current", ACC_MAIN)
     ledger_service.create_transaction(
         {
             "kind": "expense",
-            "date": days_ago(4),
+            "date": days_ago(5),  # a day off: not certain, so it asks (typed_rows.py)
             "description": "ACME BOOKS",
             "from_account_id": main,
             "from_amount": 18.00,
@@ -140,7 +140,7 @@ def test_a_duplicate_can_be_booked_as_its_own_transaction(bank):
     ledger_service.create_transaction(
         {
             "kind": "expense",
-            "date": days_ago(4),
+            "date": days_ago(5),  # a day off: not certain, so it asks (typed_rows.py)
             "description": "ACME BOOKS",
             "from_account_id": main,
             "from_amount": 18.00,
@@ -161,7 +161,7 @@ def test_a_dismissed_duplicate_is_not_asked_again_or_booked(bank):
     ledger_service.create_transaction(
         {
             "kind": "expense",
-            "date": days_ago(4),
+            "date": days_ago(5),  # a day off: not certain, so it asks (typed_rows.py)
             "description": "ACME BOOKS",
             "from_account_id": main,
             "from_amount": 18.00,

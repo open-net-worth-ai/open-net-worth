@@ -398,3 +398,27 @@ second time, and the old one reached Review as vanished.
 - A new charge identical to one the bank still lists is booked as before: only an unlisted
   booking can be matched. Like Amendment 7's re-link, the attached ref is not part of the run's
   Undo.
+
+## Amendment 17 (2026-11-16: accuracy — own-account transfers, typed rows, Plaid persistent ids)
+
+From a review of Actual Budget, Sure/Maybe, Firefly III, beancount-import and GnuCash.
+
+- **Money between two of your own cash accounts is one transfer** (`card_payments`): an
+  `expense` out of one `cash` account and an `income` into ANOTHER, under the card-payment rule
+  (same amount and currency, `TRANSFER_PAIR_MAX_GAP_DAYS`, unique both ways, never a deleted
+  leg, never pending), with the wording test `_TRANSFER` in place of `_PAYMENT`. Only cash↔cash:
+  both are on the budget, so the transfer is budget-neutral. A move to a `loan`,
+  `fixed_deposit` or `investment` account leaves the budget and stays categorisable spending
+  until that is decided on its own.
+- **A bank row that is the one row you typed is matched, not asked about** (`typed_rows`), as
+  Actual, Sure and GnuCash do: settled bank row; a live single-leg row with NO external ref, not
+  a Starting Balance; same account, currency, signed amount to the cent and day; exactly one
+  such typed row and exactly one such bank row in the run. The ref is attached and the row
+  cleared; the user's fields stay. It runs before the ledger write, so a row typed in other
+  words (below the duplicate guard's bar) is no longer booked a second time. Refs are
+  append-only, so Undo leaves the ref. A row with a ref from any source is never claimed.
+- **Plaid accounts are followed by `persistent_account_id`** (`follow`, as Sure does): it is
+  remembered from each listing; when a linked id is no longer listed and exactly one listed,
+  unlinked account carries the same persistent id, the link moves to it and it is read in the
+  same run as a re-link read (Amendment 7's matching). Two candidates, or none, is still "the
+  bank no longer lists this account".

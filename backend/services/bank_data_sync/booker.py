@@ -22,7 +22,7 @@ from typing import Optional
 
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
-from backend.services.bank_data_sync import card_payments, pending, relink, reviews
+from backend.services.bank_data_sync import card_payments, pending, relink, reviews, typed_rows
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,8 @@ class Booked:
     linked_refs: int = 0
     # Rows of an account linked again under a new id, matched to the bookings they already are.
     relinked: int = 0
+    # Bank rows matched to the one row you typed for them (typed_rows.py), not asked about.
+    claimed: int = 0
     # Pending rows: booked uncleared, settled (now cleared), dropped by the bank (removed).
     pending: int = 0
     settled: int = 0
@@ -315,6 +317,7 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     candidates, out.promoted = card_payments.promote_into_book(provider, candidates, types)
     out.card_payments = len(out.promoted)
     out.booked_views = {r: views[r] for s in out.promoted for r in s["refs"] if r in views}
+    candidates, out.claimed = typed_rows.claim_all(candidates)
     if not candidates:
         return out
     created, skipped = ledger_service.bulk_create_transactions(

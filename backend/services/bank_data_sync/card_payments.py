@@ -22,7 +22,15 @@ promoted to the transfer by the ledger's own pair merge. So the answer doesn't d
 side arrived first. A pending or still-unsettled leg is never paired; it pairs when it settles
 (its booking is a normal row until then). A card payment with NO counterpart in the book (the
 paying account isn't synced) stays what the bank says, income on the card: a transfer needs both
-legs, and the other one, when it arrives, pairs with it."""
+legs, and the other one, when it arrives, pairs with it.
+
+Money moved between two of your own CASH accounts (checking to savings) is the same double count
+— spending in one, income in the other — and pairs by the same rule (Amendment 17): an
+``expense`` out of one ``cash`` account and an ``income`` into ANOTHER, the same amount and
+currency, at most the same few days apart, unique both ways, and the wording of one side says it
+is a transfer (``_TRANSFER``) while the receiving side doesn't say refund. Both accounts are on
+the budget, so the transfer moves no budget money. A move to a loan, a deposit or an investment
+account is not paired: it leaves the budget, and booked as spending it is still categorised."""
 
 from __future__ import annotations
 
@@ -42,6 +50,12 @@ _PAYMENT = re.compile(
     r"\b(payments?|pymts?|pmts?|auto-?pay|bill ?pay|thank you|card services|credit card|crd)\b",
     re.IGNORECASE,
 )
+_TRANSFER = re.compile(
+    r"\b(transfers?|xfers?|trf|tfr|internal|own account|standing order|sweep|savings|round ?ups?)\b",
+    re.IGNORECASE,
+)
+# The account types a paired inflow may land in: a card (its payment) or another cash account.
+_INFLOW_TYPES = frozenset({"credit", "cash"})
 _REFUND = re.compile(r"\b(refund|return|reversal|chargeback|cash-?back|rewards?)\b", re.IGNORECASE)
 
 
@@ -57,9 +71,10 @@ def _text(row: dict) -> str:
 
 
 def _is_card(row: dict, types: dict) -> bool:
+    """The receiving side: income into a card (its payment) or into a cash account."""
     return (
         row.get("kind") == "income"
-        and types.get(row.get("to_account_id")) == "credit"
+        and types.get(row.get("to_account_id")) in _INFLOW_TYPES
         and not row.get("splits")
     )
 
@@ -72,9 +87,12 @@ def _is_cash(row: dict, types: dict) -> bool:
     )
 
 
-def _pays(card: dict, cash: dict) -> bool:
-    """Do these two rows read as the two sides of one card payment?"""
+def _pays(card: dict, cash: dict, types: dict) -> bool:
+    """Do these two rows read as the two sides of one card payment, or of one move between two
+    of your cash accounts?"""
     if card.get("to_currency") != cash.get("from_currency"):
+        return False
+    if card.get("to_account_id") == cash.get("from_account_id"):
         return False
     try:
         if abs(float(card["to_amount"]) - float(cash["from_amount"])) > _TOL:
@@ -84,15 +102,17 @@ def _pays(card: dict, cash: dict) -> bool:
     a, b = _day(card.get("date")), _day(cash.get("date"))
     if not a or not b or abs(a - b) > _GAP:
         return False
+    said = _PAYMENT if types.get(card.get("to_account_id")) == "credit" else _TRANSFER
     return bool(
-        (_PAYMENT.search(_text(card)) or _PAYMENT.search(_text(cash)))
-        and not _REFUND.search(_text(card))
+        (said.search(_text(card)) or said.search(_text(cash))) and not _REFUND.search(_text(card))
     )
 
 
-def _unique_pairs(cards: list[dict], cashes: list[dict]) -> list[tuple[int, int]]:
+def _unique_pairs(cards: list[dict], cashes: list[dict], types: dict) -> list[tuple[int, int]]:
     """Index pairs ``(card, cash)`` that match each other and nothing else."""
-    wants = {i: [j for j, b in enumerate(cashes) if _pays(a, b)] for i, a in enumerate(cards)}
+    wants = {
+        i: [j for j, b in enumerate(cashes) if _pays(a, b, types)] for i, a in enumerate(cards)
+    }
     taken: dict[int, list[int]] = {}
     for i, js in wants.items():
         for j in js:
@@ -135,7 +155,7 @@ def pair_within(candidates: list[tuple[dict, dict]], types: dict) -> list[tuple[
     cashes = [(r, d) for r, d in settled if _is_cash(d, types)]
     gone: set[int] = set()
     merged: list[tuple[dict, dict]] = []
-    for i, j in _unique_pairs([d for _, d in cards], [d for _, d in cashes]):
+    for i, j in _unique_pairs([d for _, d in cards], [d for _, d in cashes], types):
         card, cash = cards[i], cashes[j]
         if _deleted_before(card[1], cash[1]):
             continue
@@ -183,9 +203,9 @@ def promote_into_book(
         drafts = [(r, d) for r, d in settled if want(d, types) and any(d is k[1] for k in kept)]
         rows = [t for t in pool if other(t, types)]
         pairs = (
-            _unique_pairs([d for _, d in drafts], rows)
+            _unique_pairs([d for _, d in drafts], rows, types)
             if want is _is_card
-            else [(j, i) for i, j in _unique_pairs(rows, [d for _, d in drafts])]
+            else [(j, i) for i, j in _unique_pairs(rows, [d for _, d in drafts], types)]
         )
         for i, j in pairs:
             row, draft = drafts[i]

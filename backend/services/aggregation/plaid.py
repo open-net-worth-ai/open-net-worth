@@ -789,6 +789,9 @@ def _account_to_common(account: dict) -> dict:
         "account_type": _suggested_account_type(account),
         # Which linked bank the account sits at — several banks share one Plaid connector.
         "institution": account.get("_institution") or None,
+        # The same across a re-consent that re-issues ``account_id`` (Chase, PNC, US Bank): the
+        # bank data sync follows a linked account to its new id by it (bank_data_sync/follow.py).
+        "persistent_id": account.get("persistent_account_id") or None,
     }
 
 
