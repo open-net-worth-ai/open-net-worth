@@ -38,9 +38,10 @@ Keep the token private — anyone who has it can control your bot.
 3. **Choose who can chat** — pick one:
    - **Pairing — new senders ask for approval.** Selected for a new connector, and the quickest
      way in: you message the bot and approve yourself in the app, with no second save.
-   - **Allowlist — only the IDs you list.** Only the chat IDs you type into **Allowed chat IDs**
-     can reach Lucius. A blank list means nobody can.
-4. Click **Save**. The app checks the token with Telegram first: if Telegram doesn't recognise
+   - **Allowlist — only the IDs you list.** Only the chats you add under **Allowed chats** can
+     reach Lucius. An empty list means nobody can.
+4. Click **Save and connect** — it appears under the token as soon as you paste one (the
+   **Save** at the bottom of the form does the same). The app checks the token with Telegram first: if Telegram doesn't recognise
    it, the form says so under **Bot token** and nothing is saved. Otherwise the bot comes online
    within a few seconds and the form shows **Online as @your_bot**.
 
@@ -62,11 +63,27 @@ same place. The bot's reply tells them to send you the code.
 
 **With Allowlist:**
 
-1. Send `/id` to your bot. It replies with your chat ID (a number).
-2. Type that number into **Allowed chat IDs** and click **Save**. Separate several IDs with
-   commas. A group chat's ID starts with `-`.
+1. In Telegram, open your bot (the form has an **Open @your_bot in Telegram** button) and send it
+   the message `/id`. It replies with your chat ID, a number like `123456789`. Anyone else you
+   want to let in does the same from their own Telegram.
+2. Type that number into **Add a chat ID** and click **Add**. It works right away — no Save
+   needed — and the row shows who the ID belongs to, so a typo shows at once. A group chat's ID
+   starts with `-`.
 
-Once nothing is left to save, the button at the bottom of the form reads **Done**.
+While something on screen still needs saving, the form says **Save so your changes take effect**
+beside the Save button. Once nothing is left to save, that button reads **Done**.
+
+**Approved chats** (or **Allowed chats**) lists everyone who can chat: their Telegram name and
+@username — or a group's title — with the chat ID under it. Names are asked from Telegram while
+the bot is online and never stored. The number is what grants access; an ID Telegram doesn't
+know for this bot (a typo, or someone who never opened it) is marked so you can check it.
+
+## Switching to another bot
+
+Paste the new bot's token into **Bot token** and click **Save and switch bot**. The people you
+already approved stay approved — a chat ID belongs to the person, not the bot — but Telegram
+won't let a bot message someone first, so each of them opens the new bot and taps **Start**
+once. Until they do, the list can't show their name.
 
 ## 4. Check that it works
 
@@ -117,10 +134,12 @@ so: nothing has run, and you can answer it in the app.
   including your financial data. Only approve chats you control.
 - In a group chat, everyone in the group can talk to Lucius and tap approval buttons. Prefer a
   private chat with the bot.
-- To remove someone, delete their ID from **Approved chat IDs** / **Allowed chat IDs** and click
-  **Save**.
+- To remove someone, click **Remove** on their row and confirm. It takes effect at once — no
+  Save needed — and the bot stops answering them.
 - **Pause** on the connector's page stops the bot answering anyone until you click **Resume**.
-  **⋯ → Remove connector** deletes the token and shuts the bot out completely.
+  **⋯ → Remove connector** deletes the token and shuts the bot out completely. Clearing the
+  **Bot token** box does neither: the box is write-only, and leaving it blank keeps the saved
+  token.
 
 ## Where your token is stored
 
@@ -136,7 +155,7 @@ token into **Bot token** and click **Save**.
 
 **The bot doesn't reply at all**
 - Check the connector isn't paused (its page shows **Resume** if it is).
-- Under **Allowlist**, your chat ID must be in **Allowed chat IDs**. Send `/id` to the bot and
+- Under **Allowlist**, your chat ID must be in **Allowed chats**. Send `/id` to the bot and
   compare.
 - Check the line under **Bot token**: it should read **Online as @your_bot**. If it says the bot
   isn't running, the token may have been revoked — paste it again from @BotFather.
@@ -145,7 +164,7 @@ token into **Bot token** and click **Save**.
   bot for each.
 
 **"Hi! You'll need to be added before I can help…"** — your chat isn't approved. That reply
-includes your chat ID: add it to **Allowed chat IDs**, or switch to Pairing and approve the
+includes your chat ID: add it under **Allowed chats**, or switch to Pairing and approve the
 request.
 
 **"Hi! You're not approved to chat with me yet. Pairing code: …"** — approve that code under

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Stack, Text } from '../../ui'
+import { Button, Stack, Text } from '../../ui'
 import { PendingApprovals, type AccessPolicy, type PendingRow } from './ChatAccessPolicy'
 
 // The pieces of the Telegram setup that are not form fields: the numbered step frame, the
@@ -44,11 +44,11 @@ function botLink(username: string): string {
   return `https://t.me/${encodeURIComponent(username)}`
 }
 
-function OpenBotLink({ username, quiet = false }: { username: string; quiet?: boolean }) {
+function OpenBotLink({ username }: { username: string }) {
   if (!username) return null
   return (
     <a
-      className={`ui-btn ${quiet ? 'btn-secondary' : 'btn-primary'} ui-btn--sm tg-open-link`}
+      className="ui-btn ui-btn--sm tg-open-link"
       href={botLink(username)}
       target="_blank"
       rel="noreferrer"
@@ -61,14 +61,19 @@ function OpenBotLink({ username, quiet = false }: { username: string; quiet?: bo
 function StatusLine({
   tone,
   size = 'xs',
+  badge = false,
   children,
 }: {
   tone: 'good' | 'muted' | 'warn'
   size?: 'xs' | 'sm'
+  badge?: boolean
   children: ReactNode
 }) {
   return (
-    <span role="status" className={`ui-text ui-text--${size} ui-text--${tone} tg-status`}>
+    <span
+      role="status"
+      className={`ui-text ui-text--${size} ui-text--${tone} tg-status${badge ? ' tg-status--badge' : ''}`}
+    >
       {children}
     </span>
   )
@@ -77,8 +82,9 @@ function StatusLine({
 /** One line under the token: is the bot actually up, and as whom. */
 export function BotStatus({ connection, username }: { connection: Connection; username: string }) {
   if (connection === 'connected') {
+    // A badge, not a caption: "your bot is live" is the moment setup turns the corner.
     return (
-      <StatusLine tone="good">
+      <StatusLine tone="good" size="sm" badge>
         <span className="tg-status__dot" aria-hidden="true" />
         {username ? `Online as @${username}` : 'Online'}
       </StatusLine>
@@ -119,10 +125,8 @@ export function BeforeSaveHint({
 }) {
   let text: string
   if (!firstSave) {
-    text =
-      policy === 'allowlist'
-        ? 'Save to switch to Allowlist — only the chat IDs below will reach Lucius.'
-        : 'Save to switch to Pairing — anyone new who messages your bot will ask you first.'
+    // Switching to Allowlist needs no line here: its step shows how to get a chat ID instead.
+    text = 'Save to switch to Pairing — anyone new who messages your bot will ask you first.'
   } else {
     text =
       policy === 'allowlist'
@@ -155,8 +159,7 @@ export function ConnectStep({
       <div className="tg-callout">
         <Stack gap="--space-3">
           <Text size="sm">
-            Open {bot} in Telegram and send <code>/id</code>. It replies with your chat ID — paste
-            it into <strong>Allowed chat IDs</strong> below and Save.
+            Have each person send <code>/id</code> to {bot}, then add the number it replies with.
           </Text>
           <OpenBotLink username={username} />
         </Stack>
@@ -180,15 +183,51 @@ export function ConnectStep({
             <Stack gap="--space-3">
               <Text size="sm">
                 {peopleIn === 0
-                  ? `Open ${bot} in Telegram and tap Start. Your request shows up here — approve it and you're in.`
-                  : `To add someone, have them open ${bot} and tap Start. Their request shows up here to approve.`}
+                  ? `Open ${bot} and tap Start, then approve yourself here.`
+                  : `To add someone, have them open ${bot} and tap Start.`}
               </Text>
-              <OpenBotLink username={username} quiet={peopleIn > 0} />
+              <OpenBotLink username={username} />
               {peopleIn === 0 && <Waiting label="Waiting for your first message…" />}
             </Stack>
           </div>
         }
       />
     </Stack>
+  )
+}
+
+/** Right under a token that isn't saved yet: the footer's Save is easy to miss, and nothing
+ *  past step 1 can happen until the bot is running — so the next move sits where the eye is.
+ *  On a bot that's already set up, a new token means switching bots: say what that does to
+ *  the people already approved (their chat IDs carry over; Telegram won't let a bot message
+ *  someone first, so each of them opens the new bot once). */
+export function SaveTokenNudge({
+  switching,
+  saving,
+  onSave,
+}: {
+  switching: boolean
+  saving: boolean
+  onSave: () => void
+}) {
+  return (
+    <div className="tg-callout">
+      <Stack gap="--space-3">
+        <Text size="sm">
+          {switching
+            ? 'Saving switches Lucius to this new bot. Everyone approved below stays approved — they just open the new bot in Telegram and tap Start once.'
+            : 'Next: save to bring your bot online. Then you can choose who chats with it and say hi.'}
+        </Text>
+        <Button
+          variant="primary"
+          size="sm"
+          loading={saving}
+          onClick={onSave}
+          className="tg-nudge-save"
+        >
+          {switching ? 'Save and switch bot' : 'Save and connect'}
+        </Button>
+      </Stack>
+    </div>
   )
 }

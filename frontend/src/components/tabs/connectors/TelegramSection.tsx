@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { Stack, Text, FormField, TextField, PasswordField, useSecretReveal } from '../../ui'
+import { Stack, Text, FormField, PasswordField, useSecretReveal } from '../../ui'
 import { AccessPolicyField, type AccessPolicy, type PendingRow } from './ChatAccessPolicy'
-import { unrevealed, useConnectorSave, useTouched } from './formSave'
+import { unrevealed, useConnectorSave, useConnectorWrote, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
-import { BeforeSaveHint, BotStatus, ConnectStep, SetupStep, type Connection } from './TelegramSteps'
+import { ChatList, parseChatIds } from './TelegramChats'
+import {
+  BeforeSaveHint,
+  BotStatus,
+  ConnectStep,
+  SaveTokenNudge,
+  SetupStep,
+  type Connection,
+} from './TelegramSteps'
 
 // Telegram connector config over /api/telegram/config (per-provider plane), mirroring the
 // SMTP channel section. A blank token field leaves the saved one unchanged; the
@@ -49,7 +57,7 @@ interface TelegramForm {
 // see TelegramConfigStore.reset()), just no longer selectable here.
 const PICKABLE_POLICIES: AccessPolicy[] = ['pairing', 'allowlist']
 
-const POLL_BOT_MS = 2000
+const POLL_BOT_MS = 1000
 
 /** The form as the server last returned it — both the seed for `load()` and the baseline
  *  the footer's Save compares against, so the two can never drift apart.
@@ -71,6 +79,14 @@ function formOf(c: TelegramConfig): TelegramForm {
   }
 }
 
+/** Names for the saved chat IDs — read live from Telegram through the running bot. */
+async function fetchChatLabels(ids: string): Promise<Record<string, string>> {
+  const r = await authFetch(`/api/telegram/chats?ids=${encodeURIComponent(ids)}`)
+  if (!r.ok) return {}
+  const d = (await r.json()) as { labels?: Record<string, string> }
+  return d.labels || {}
+}
+
 async function fetchConfig(): Promise<TelegramConfig> {
   const r = await authFetch('/api/telegram/config')
   if (!r.ok) throw new Error(String(r.status))
@@ -86,7 +102,12 @@ export function TelegramSection() {
   // A token Telegram refused is reported ON the token field, not at the bottom of the form.
   const [tokenRefused, setTokenRefused] = useState<string | null>(null)
   const [justApproved, setJustApproved] = useState<{ who: string; welcomed: boolean } | null>(null)
+  const [chatLabels, setChatLabels] = useState<Record<string, string>>({})
+  // IDs Telegram has ANSWERED for — a name missing from one of these is worth a warning; one
+  // still being looked up is not (it flashed "doesn't know this ID" before the name came).
+  const [checkedIds, setCheckedIds] = useState<string[]>([])
   const cfgRef = useRef<TelegramConfig | null>(null)
+  const wrote = useConnectorWrote()
 
   function adopt(c: TelegramConfig) {
     cfgRef.current = c
@@ -128,6 +149,30 @@ export function TelegramSection() {
     return () => clearInterval(id)
   }, [botComingUp, refresh])
 
+  const botOnline = !!cfg?.enabled && cfg.connection === 'connected'
+  const shownIds = form ? parseChatIds(form.allowed_chat_ids).join(',') : ''
+  useEffect(() => {
+    // While the bot reconnects (a new token, a resume) keep the names already on screen —
+    // clearing them flashed every row back to a bare number.
+    if (!botOnline) return
+    if (!shownIds) {
+      setChatLabels({})
+      setCheckedIds([])
+      return
+    }
+    let gone = false
+    fetchChatLabels(shownIds)
+      .then((l) => {
+        if (gone) return
+        setChatLabels(l)
+        setCheckedIds(shownIds.split(','))
+      })
+      .catch(() => {})
+    return () => {
+      gone = true
+    }
+  }, [botOnline, shownIds, cfg?.bot_username])
+
   async function save(): Promise<boolean> {
     if (!form || !cfg) return false
     setSaving(true)
@@ -160,6 +205,39 @@ export function TelegramSection() {
     } finally {
       setSaving(false)
     }
+  }
+
+  /** Add or take off ONE chat NOW — like Approve, no Save — touching nothing else the user has
+   *  unsaved: the PUT carries only the allowlist, and the form's own list gets the same edit. */
+  async function writeChat(id: string, add: boolean): Promise<boolean> {
+    if (!cfg) return false
+    setSaveErr(null)
+    const saved = cfg.allowed_chat_ids || []
+    const next = add ? [...saved.filter((x) => x !== id), id] : saved.filter((x) => x !== id)
+    const verb = add ? 'add' : 'remove'
+    try {
+      const r = await authFetch('/api/telegram/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowed_chat_ids: next.join(', ') }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setSaveErr(d.detail || `Could not ${verb} that chat.`)
+        return false
+      }
+    } catch {
+      setSaveErr(`Could not ${verb} that chat — could not reach the server.`)
+      return false
+    }
+    setForm((f) => {
+      if (!f) return f
+      const ids = parseChatIds(f.allowed_chat_ids).filter((x) => x !== id)
+      return { ...f, allowed_chat_ids: (add ? [...ids, id] : ids).join(', ') }
+    })
+    refresh()
+    wrote()
+    return true
   }
 
   const setToken = useCallback((v: string) => {
@@ -210,14 +288,11 @@ export function TelegramSection() {
   const onApproved = (row: PendingRow, welcomed: boolean) => {
     setJustApproved({ who: row.sender_label || row.sender_id, welcomed })
     refresh()
+    wrote()
   }
 
   return (
     <Stack gap="--space-5">
-      <Text size="sm" tone="faint">
-        Ask questions, send photos, and approve changes from your own Telegram bot — the same things
-        Lucius can do in the app.
-      </Text>
       {cfg.configured && !cfg.enabled && (
         <Text size="xs" tone="warn">
           Currently paused — saving here won&apos;t resume it. Use Resume on the connector card to
@@ -225,19 +300,28 @@ export function TelegramSection() {
         </Text>
       )}
 
+      {/* Once a step is done its how-to goes: a set-up bot's form is its settings, not a guide
+          (owner, 2026-11-16 — "full of text"). */}
       <SetupStep n={1} title="Create your bot" done={cfg.configured}>
-        <Text size="sm" tone="faint">
-          In Telegram, message{' '}
-          <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">
-            @BotFather
-          </a>
-          , send <code>/newbot</code>, pick a name, and paste the token it gives you.
-        </Text>
+        {!cfg.configured && (
+          <Text size="sm" tone="faint">
+            In Telegram, message{' '}
+            <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">
+              @BotFather
+            </a>
+            , create a new bot with <code>/newbot</code>, and paste the token it gives you.
+          </Text>
+        )}
         <FormField
           label="Bot token"
           htmlFor="conn-tg-token"
           required
-          help={token.caption || 'Looks like 123456789:ABC-DEF…'}
+          help={
+            token.caption ||
+            (cfg.has_bot_token
+              ? 'To switch bots, paste a new token from @BotFather.'
+              : 'Looks like 123456789:ABC-DEF…')
+          }
           error={
             tokenRefused ||
             token.error ||
@@ -253,7 +337,15 @@ export function TelegramSection() {
             {...token.fieldProps}
           />
         </FormField>
-        {live && <BotStatus connection={cfg.connection ?? 'off'} username={username} />}
+        {unrevealed(form.bot_token, token).trim() && !tokenRefused ? (
+          <SaveTokenNudge
+            switching={cfg.configured}
+            saving={saving}
+            onSave={() => void save().then((ok) => ok && wrote())}
+          />
+        ) : (
+          live && <BotStatus connection={cfg.connection ?? 'off'} username={username} />
+        )}
       </SetupStep>
 
       <SetupStep n={2} title="Choose who can chat" done={cfg.configured}>
@@ -266,14 +358,22 @@ export function TelegramSection() {
 
       <SetupStep
         n={3}
-        title={peopleIn ? 'People who can chat' : 'Say hi to your bot'}
+        title={
+          peopleIn
+            ? 'People who can chat'
+            : form.access_policy === 'allowlist'
+              ? 'Add who can chat'
+              : 'Say hi to your bot'
+        }
         done={peopleIn > 0}
       >
-        {!cfg.configured || form.access_policy !== savedPolicy ? (
-          <BeforeSaveHint policy={form.access_policy} firstSave={!cfg.configured} />
+        {!cfg.configured ? (
+          <BeforeSaveHint policy={form.access_policy} firstSave />
+        ) : form.access_policy !== savedPolicy && form.access_policy === 'pairing' ? (
+          <BeforeSaveHint policy="pairing" firstSave={false} />
         ) : live ? (
           <ConnectStep
-            policy={savedPolicy}
+            policy={form.access_policy}
             username={username}
             peopleIn={peopleIn}
             justApproved={justApproved}
@@ -284,22 +384,21 @@ export function TelegramSection() {
         {/* Still shown under Pairing: it's the SAME list approvals write into, so it is where
             you review — or revoke — who got in (2026-08-22). */}
         {(cfg.configured || form.access_policy === 'allowlist') && (
-          <FormField
-            label={form.access_policy === 'pairing' ? 'Approved chat IDs' : 'Allowed chat IDs'}
-            htmlFor="conn-tg-allowed"
-            help={
-              form.access_policy === 'pairing'
-                ? 'Fills in as you approve. Remove an ID and Save to revoke it.'
-                : 'Separate several with commas. A group chat ID starts with -. Blank means no one can reach Lucius.'
+          <ChatList
+            title={form.access_policy === 'pairing' ? 'Approved chats' : 'Allowed chats'}
+            ids={parseChatIds(form.allowed_chat_ids)}
+            labels={chatLabels}
+            checkedIds={checkedIds}
+            savedIds={cfg.allowed_chat_ids || []}
+            regainAccess={
+              savedPolicy === 'pairing'
+                ? 'To let them back in, they message the bot again and you approve them.'
+                : 'To let them back in, add their chat ID again and Save.'
             }
-          >
-            <TextField
-              id="conn-tg-allowed"
-              value={form.allowed_chat_ids}
-              placeholder="123456789, -100987654321"
-              onChange={(e) => set('allowed_chat_ids', e.target.value)}
-            />
-          </FormField>
+            onChange={(ids) => set('allowed_chat_ids', ids.join(', '))}
+            onRevoke={(id) => writeChat(id, false)}
+            onAdd={cfg.configured ? (id) => writeChat(id, true) : undefined}
+          />
         )}
       </SetupStep>
 

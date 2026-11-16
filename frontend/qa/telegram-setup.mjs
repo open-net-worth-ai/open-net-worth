@@ -300,7 +300,7 @@ async function main() {
       for (const title of ['Create your bot', 'Choose who can chat', 'Say hi to your bot'])
         await page.getByRole('region', { name: title }).waitFor()
       await page.getByText(/Click Save to bring your bot online/).waitFor()
-      assert.equal(await page.getByLabel(/chat IDs/).count(), 0)
+      assert.equal(await page.getByLabel('Add a chat ID').count(), 0)
       await shot('01-new-connector')
     })
 
@@ -364,7 +364,10 @@ async function main() {
         await until(
           'the approved chat ID in the form',
           async () =>
-            (await page.getByLabel('Approved chat IDs').inputValue()) === String(FRIEND.id),
+            (await page
+              .getByRole('list', { name: 'Approved chats' })
+              .getByText(String(FRIEND.id))
+              .count()) > 0,
         )
         const cfg = await api(baseUrl, '/api/telegram/config')
         assert.deepEqual(cfg.allowed_chat_ids, [String(FRIEND.id)])

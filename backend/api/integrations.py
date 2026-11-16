@@ -60,6 +60,18 @@ def get_telegram_config():
     return _public_with_connection()
 
 
+@router.get("/api/telegram/chats")
+async def get_telegram_chat_names(ids: Optional[str] = None):
+    """Who each chat ID is ("Ada Lovelace (@ada)", a group's title), read live from Telegram
+    through the running bot and never stored. ``ids`` (comma-separated) names the IDs on screen,
+    saved or not; without it, the saved allowlist. Non-numeric entries are dropped and at most
+    50 are looked up. An ID Telegram can't name is left out."""
+    from backend.connectors.telegram import bot as telegram_bot
+
+    wanted = None if ids is None else [i.strip() for i in ids.split(",") if i.strip()]
+    return {"labels": await telegram_bot.chat_labels_for(wanted)}
+
+
 @router.put("/api/telegram/config")
 async def update_telegram_config(body: TelegramConfigPatch):
     """Persist a Telegram config change, then hot-reload the bot so token / allowed-chat /
@@ -78,16 +90,21 @@ async def update_telegram_config(body: TelegramConfigPatch):
         except botapi.BotTokenRejected as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     store = TelegramConfigStore()
+    was_enabled = bool(store.get().get("enabled"))
     store.update(changes)
     if token:
         store.set_bot_username(username)
 
-    # Hot-reload the connector (stop + start) so the new config is live. Best-effort:
-    # a reload failure (e.g. a bad token) must not fail the save — the config is already
-    # persisted and the next restart picks it up. ONW_DISABLE_TELEGRAM is honored inside.
+    # Hot-reload the connector (stop + start) only when the RUNNING bot has to change: a new
+    # token, or it was switched on/off. Who can chat and the allowed list are read from the store
+    # on every message, so restarting for them only dropped the bot offline for a few seconds
+    # on every Add/Remove (owner, 2026-11-16). Best-effort: a reload failure (e.g. a bad token)
+    # must not fail the save — the config is persisted and the next restart picks it up.
+    # ONW_DISABLE_TELEGRAM is honored inside.
     from backend.connectors.telegram import bot as telegram_bot
 
-    reloaded = await telegram_bot.reload_best_effort()
+    needs_reload = bool(token) or ("enabled" in changes and bool(changes["enabled"]) != was_enabled)
+    reloaded = await telegram_bot.reload_best_effort() if needs_reload else False
 
     return _public_with_connection() | {
         "_applied": list(changes.keys()),

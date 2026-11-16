@@ -145,6 +145,18 @@ async def _connect(token: str) -> None:
     log.info("Telegram connector started (polling mode)")
 
 
+async def chat_labels_for(chat_ids: list[str] | None = None) -> dict[str, str]:
+    """Names for ``chat_ids`` — the saved allowlist when ``None`` — looked up through the running
+    bot (``{}`` when it's off). The form passes the IDs on screen, so one just added gets its
+    name before it is saved."""
+    from backend.connectors.telegram.chat_names import chat_labels
+    from backend.db.telegram_config_store import TelegramConfigStore
+
+    bot = _app.bot if _app is not None else None
+    ids = TelegramConfigStore().allowed_chat_ids() if chat_ids is None else chat_ids
+    return await chat_labels(bot, ids)
+
+
 def _build_app(token: str):
     """The Application with every handler registered — no network I/O."""
     from telegram.ext import (

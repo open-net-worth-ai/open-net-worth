@@ -239,7 +239,9 @@ export function ConnectorDetail({
   const configuring = configuringId === entry.id
   // The config view's footer is the credential form's OWN Save (see ./formSave) — there is
   // one primary action per screen, and it writes rather than dismissing.
-  const formSave = useConnectorSaveHost()
+  // A write the form makes on its own (Telegram's "Save and connect", Approve, Add) refetches
+  // like the footer Save does — the header badge read "Not connected" over a live bot.
+  const formSave = useConnectorSaveHost(() => onConfigClosed?.())
   const navigate = useNavigate()
   const automateKey = templateKeyForConnector(entry.kind)
   const openTemplate = (key: string) =>
@@ -455,9 +457,18 @@ export function ConnectorDetail({
               Done
             </Btn>
           ) : save ? (
-            <Btn variant="primary" disabled={!save.dirty || save.saving} onClick={saveConfig}>
-              {save.saving ? 'Saving…' : 'Save'}
-            </Btn>
+            // Something on screen only takes effect on Save: say so beside it, where the eye
+            // already is (owner, 2026-11-16 — a lit-up Save alone didn't read as "not done yet").
+            <>
+              {save.dirty && !save.saving && (
+                <span className="cn-foot-hint" role="status">
+                  Save so your changes take effect
+                </span>
+              )}
+              <Btn variant="primary" disabled={!save.dirty || save.saving} onClick={saveConfig}>
+                {save.saving ? 'Saving…' : 'Save'}
+              </Btn>
+            </>
           ) : (
             // A form that publishes no save (still loading, or failed to load) gets the
             // plain dismiss — offering Save over a form with nothing in it would be a lie.

@@ -313,3 +313,19 @@ async def test_full_seam_pairing_unknown_no_reaction_no_turn(pairing_env, monkey
     # The pairing code reply IS sent (as a send_message call)
     assert len(code_replies) == 1
     assert "not approved" in code_replies[0].lower() or "55555" in str(code_replies)
+
+
+def test_removing_the_connector_clears_its_pending_requests():
+    from backend.db.pairing_store import PairingStore
+    from backend.db.telegram_config_store import TelegramConfigStore
+    from backend.services.connectors import remove_connector
+
+    TelegramConfigStore().update({"bot_token": "1:t", "enabled": True})
+    store = PairingStore()
+    store.record("telegram", "111", sender_label="Ada Lovelace (@ada)")
+    store.record("discord", "222")
+
+    remove_connector("telegram")
+
+    assert store.list_pending("telegram") == []
+    assert len(store.list_pending("discord")) == 1

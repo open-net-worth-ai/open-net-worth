@@ -20,12 +20,7 @@ const POLICY_OPTIONS = [
   { value: 'allowlist', label: 'Allowlist — only the IDs you list' },
 ]
 
-const POLICY_HELP: Record<AccessPolicy, string> = {
-  pairing: 'Anyone who messages your bot asks first. You approve them here.',
-  allowlist: 'Only the chat IDs you list can reach Lucius.',
-  open: 'Anyone who can reach the bot can talk to Lucius and read your finances. Only use this while testing.',
-  disabled: 'Every incoming message is ignored. The bot stays connected but never answers.',
-}
+// No help line under the picker: each option's label already says what it does.
 
 export function AccessPolicyField({
   idPrefix,
@@ -37,7 +32,7 @@ export function AccessPolicyField({
   onChange: (v: AccessPolicy) => void
 }) {
   return (
-    <FormField label="Who can chat" htmlFor={`${idPrefix}-policy`} help={POLICY_HELP[value]}>
+    <FormField label="Who can chat" htmlFor={`${idPrefix}-policy`}>
       <Select
         id={`${idPrefix}-policy`}
         value={value}
@@ -133,8 +128,7 @@ export function PendingApprovals({
           Pending approvals ({rows.length})
         </Text>
         <Text size="xs" tone="faint">
-          Check the code matches the one the bot sent. Approve and they can chat with Lucius right
-          away; reject to clear the request.
+          Check the code matches the one the bot sent.
         </Text>
         <Stack gap="--space-2">
           {rows.map((row) => (

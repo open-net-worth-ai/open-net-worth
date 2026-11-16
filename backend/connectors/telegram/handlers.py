@@ -19,6 +19,7 @@ from backend.connectors.chat.run import handle_inbound
 from backend.connectors.msgfmt import render as render_dialect
 from backend.connectors.processor import format_permission_card, process_message
 from backend.connectors.telegram.auth import is_allowed
+from backend.connectors.telegram.chat_names import display_label
 from backend.services.model_selection import ModelChoice
 
 log = logging.getLogger("backend.connectors.telegram")
@@ -493,16 +494,7 @@ BOT_COMMANDS: list[tuple[str, str]] = [
 
 def _sender_label(update: Update) -> str:
     """ "Ada Lovelace (@ada)" — who a pairing request is from, as the approval list shows it."""
-    user = getattr(update, "effective_user", None)
-    if user is None:
-        return ""
-    name = " ".join(
-        p for p in (getattr(user, "first_name", ""), getattr(user, "last_name", "")) if p
-    )
-    handle = getattr(user, "username", "") or ""
-    if name and handle:
-        return f"{name} (@{handle})"
-    return name or (f"@{handle}" if handle else "")
+    return display_label(getattr(update, "effective_user", None))
 
 
 def _inbound_from(update: Update) -> InboundMessage:
