@@ -114,6 +114,10 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   account and **Link** the new one, the next sync matches what the bank lists to the
   transactions already in your book (same amount, same day or within three days) and books
   only what's really new. The run says how many it matched.
+- **Never books a transaction twice when the bank changes its id.** Some banks give an
+  existing transaction a new identity from one sync to the next. When a sync finds a
+  transaction under an id it has never seen, with the same amount on the same day as one in
+  your book that the bank no longer lists, it treats the two as one and books nothing new.
 - **Keeps foreign charges' original amount and currency** beside the amount your account was
   charged.
 - **Files a credit-card payment as one transfer,** not as income on the card plus spending in

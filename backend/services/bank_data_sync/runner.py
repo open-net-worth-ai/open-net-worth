@@ -154,9 +154,10 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
         out.warnings.append(f"{name}: {warning}")
     out.warnings.extend(f"{name}: {w}" for w in result.get("warnings") or [])
     quiet = pending.quiet_refs(p.key)
-    changes = [c for c in result.get("changes") or [] if str(c.get("ref") or "") not in quiet]
-    out.counts["to_review"] += reviews.record_changes(p.key, changes, run_id)
     rows = [r for r in result.get("transactions") or [] if r.get("linked_account_id") == app_id]
+    changes = [c for c in result.get("changes") or [] if str(c.get("ref") or "") not in quiet]
+    changes = relink.still_listed(p.key, changes, result.get("transactions") or [])
+    out.counts["to_review"] += reviews.record_changes(p.key, changes, run_id)
     out.rows.extend(rows)
     if whole:
         # Pending bookings the bank no longer lists are dropped only after a whole read: one

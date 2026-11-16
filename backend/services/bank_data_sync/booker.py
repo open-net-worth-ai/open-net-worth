@@ -242,13 +242,15 @@ def book(
     pending→posted link — runs under the audit surface ``bank_data_sync``. ``read``: account id
     → the window start it was read from, for dropping a pending row the bank no longer lists.
     ``relinked``: accounts read from a new bank id this run, whose rows are first matched to the
-    bookings they already are (``relink.carry``). Raises only when that write failed (then
-    nothing was booked)."""
+    bookings they already are (``relink.carry``); a row the bank re-keyed on an account read
+    whole is matched the same way (``relink.reissued``). Raises only when that write failed
+    (then nothing was booked)."""
     from backend.core import audit_context
 
     token = audit_context.set_audit_scope("system", SURFACE, note=f"run:{run_id}")
     try:
         matched = relink.carry(provider, rows, relinked or set())
+        matched += relink.reissued(provider, rows, read or {}, relinked or set())
         out = _book(provider, rows, run_id=run_id, batch_id=batch_id)
         out.relinked = matched
         if read:

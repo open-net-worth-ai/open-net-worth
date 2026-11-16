@@ -379,3 +379,22 @@ reference number mints a payee per number, so its default doesn't carry over: le
   once when the requisition is linked.
 - Enable Banking asks for the bank's `maximum_consent_validity` (capped at 180 days, else 90),
   and a one-account read fetches only the holding bank's session and that account's details.
+
+## Amendment 16 (2026-11-16: a row the bank re-keys on a live link)
+
+Banks change a row's id without any re-link (a GoCardless bank's `transactionId`, Plaid
+listing a posted row again under a new `transaction_id`, SimpleFIN id rotation — Actual Budget
+#8830, Sure #3436). The account's other rows keep their ids, so Amendment 7's re-link read
+never starts, and the same-emitter veto keeps the duplicate guard out: the row was booked a
+second time, and the old one reached Review as vanished.
+
+- Every WHOLE read of an account not being re-linked is matched as a re-link read is, more
+  strictly (`relink.reissued`): a row under an unknown ref is attached to a live booking from
+  the same connector, on the same account, whose refs the bank no longer lists — same signed
+  amount, same day only, never in the window's first two days (the bank may leave those out
+  for boundary reasons). Pending matches only pending; identical rows pair one to one, in order.
+- A `vanished` change is dropped while the bank still lists its booking under another of its
+  refs (`relink.still_listed`), so the old id never asks to delete the row it was moved to.
+- A new charge identical to one the bank still lists is booked as before: only an unlisted
+  booking can be matched. Like Amendment 7's re-link, the attached ref is not part of the run's
+  Undo.
