@@ -92,7 +92,6 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
     <div className="fol-page">
       <section className="fol-sec" aria-label="Paper portfolios">
         <div className="paper-toolbar">
-          <span className="fol-by">Never in your net worth</span>
           <div className="paper-actions">
             {withLucius}
             <Button variant="primary" size="sm" onClick={() => setCreating(true)}>

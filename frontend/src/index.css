@@ -21268,38 +21268,9 @@ body.hide-amounts .mf-lbl-amt {
 .paper-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--space-5);
   margin-bottom: var(--space-6);
-}
-.paper-chart {
-  background: var(--surface2);
-  border-radius: var(--radius-xl);
-  padding: var(--space-6) var(--space-6) var(--space-4);
-  margin: var(--space-5) 0 var(--space-6);
-}
-.paper-chart svg {
-  width: 100%;
-  height: calc(var(--space-9) * 5.5);
-  display: block;
-}
-.paper-legend {
-  display: flex;
-  gap: var(--space-6);
-  flex-wrap: wrap;
-  font-size: var(--text-sm);
-  color: var(--muted);
-}
-.paper-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.paper-legend i {
-  width: var(--space-5);
-  height: var(--space-0);
-  border-radius: var(--radius-pill);
-  display: inline-block;
 }
 .paper-preview {
   background: var(--bg-2);

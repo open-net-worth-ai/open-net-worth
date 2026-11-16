@@ -47,9 +47,10 @@ says what happens next ("Fills nowâ€¦", "Market closed. Fills at the next openâ€
 An order that waits shows under **Orders** with what it waits for, and you can cancel it there.
 The page picks up a fill on its own, without a reload.
 
-The page shows your **Paper value**, **Return** (beside the benchmark) and **Paper cash**, a
-chart of the portfolio against your real investments and the benchmark, then **Holdings**,
-**Orders** and **Activity** (every trade, with its note).
+The page shows your **Paper value** (holdings plus cash) and **Cash left** (not yet invested),
+then **Performance**: the return since you started, beside your real investments and the
+benchmark, with a chart once the portfolio has a few days of history. Below are **Holdings**,
+**Orders** and **Activity** (every trade, with its **Why**).
 
 - **Go live** asks Lucius to help you do it for real: he compares it with what you hold and
   drafts the trades for your broker, and asks before placing anything.

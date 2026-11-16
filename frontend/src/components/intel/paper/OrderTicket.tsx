@@ -284,7 +284,7 @@ export function OrderTicket({
             <span>{preview.price != null ? preview.price.toFixed(2) : '—'}</span>
             <span className="k tot">Total</span>
             <span className="tot">{money(preview.estimate.total)}</span>
-            <span className="k">Paper cash after</span>
+            <span className="k">Cash left after</span>
             <span>
               {preview.cash_after_home != null
                 ? fCurrency(preview.cash_after_home, homeCurrency)

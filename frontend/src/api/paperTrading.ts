@@ -134,6 +134,8 @@ export interface PaperPerformance {
     paper: number | null
     benchmark: number | null
     yours: number | null
+    /** The run's starting money, the day before it began. */
+    start?: boolean
   }[]
   return_pct: number | null
   benchmark: { symbol: string; return_pct: number | null }

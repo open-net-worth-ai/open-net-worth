@@ -147,24 +147,12 @@ export function PaperPortfolioPage({
           <div className="fol-sec">
             <div className="fol-keyfigs">
               <div className="fol-ret3">
+                {/* The returns are Performance's, right below: each figure is said once. */}
                 <Figure label="Paper value" value={money(f.value)} />
-                <Figure
-                  label="Return"
-                  value={signedPct(f.return_pct)}
-                  tone={toneOf(f.return_pct)}
-                  sub={
-                    f.benchmark_return_pct != null
-                      ? `${p.benchmark} ${signedPct(f.benchmark_return_pct)}`
-                      : undefined
-                  }
-                />
-                <Figure label="Paper cash" value={money(f.cash_home)} />
-              </div>
-              <div className="fol-cautions">
-                <span className="fol-by">Not in your net worth</span>
+                <Figure label="Cash left" value={money(f.cash_home)} />
               </div>
             </div>
-            <PaperChart id={id} benchmark={p.benchmark} />
+            <PaperChart id={id} name={p.name} benchmark={p.benchmark} orders={data.orders} />
             {data.holdings.length > 0 ? (
               <SortTable
                 label={`${p.name} holdings`}
@@ -204,7 +192,7 @@ export function PaperPortfolioPage({
               <div key={a.id} className="paper-feed-item">
                 <div>
                   <div>{a.label}</div>
-                  {a.note && <div className="note">“{a.note}”</div>}
+                  {a.note && <div className="note">Why: {a.note}</div>}
                 </div>
                 <div className="when">{fDate(a.at, 'short', 'auto')}</div>
               </div>

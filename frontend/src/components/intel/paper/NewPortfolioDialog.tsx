@@ -112,7 +112,7 @@ export function NewPortfolioDialog({
           </FormField>
         )}
         {needsCash && (
-          <FormField label="Paper cash">
+          <FormField label="Starting cash">
             <RadioGroup
               name="pp-cash"
               value={preset}

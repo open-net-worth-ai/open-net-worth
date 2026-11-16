@@ -31,17 +31,64 @@ def _value_points(values: list[dict], value_now: float | None) -> list[dict]:
     return pts
 
 
-def _flows(row: dict, book: Book, rates: dict | None = None) -> list[tuple[str, float]]:
+def _flows(
+    row: dict, book: Book, rates: dict | None = None, *, from_start: bool = False
+) -> list[tuple[str, float]]:
     """Pocket convention: money added is negative, money taken out positive. A foreign leg is
-    valued at ``rates`` (price of one unit in home)."""
+    valued at ``rates`` (price of one unit in home). ``from_start``: the run's starting money
+    is the line's first point (`_start_point`), so it is not also a deposit into it."""
     from backend.services.paper_trading.valuation import flow_amount_home
 
     out = []
     for f in book.flows:
+        if from_start and f.get("opening"):
+            continue
         amt = flow_amount_home(f, row["home_currency"], rates)
         if amt:
             out.append((str(f.get("at") or "")[:10], -amt))
     return out
+
+
+def _start_day(row: dict) -> str:
+    return str(row.get("started_at") or "")[:10] or user_today().isoformat()
+
+
+def _start_point(row: dict, book: Book) -> dict | None:
+    """The run's starting money, dated the day before it started, so the line and the return
+    begin when the portfolio was created — day one's move counted, a chart from day one."""
+    home = row["home_currency"]
+    legs = [
+        (ccy, float(amt))
+        for f in book.flows
+        if f.get("opening")
+        for ccy, amt in (f.get("cash_delta") or {}).items()
+    ]
+    # A foreign leg has no rate here: no start point beats a start valued too low.
+    if not legs or any(ccy != home for ccy, _ in legs):
+        return None
+    opening = sum(amt for _, amt in legs)
+    if opening <= 0:
+        return None
+    before = date.fromisoformat(_start_day(row)) - timedelta(days=1)
+    return {"date": before.isoformat(), "value": round(opening, 2), "start": True}
+
+
+def _points_from_start(
+    row: dict, book: Book, values: list[dict], value_now: float | None
+) -> list[dict]:
+    points = _value_points(values, value_now)
+    first = _start_point(row, book)
+    return ([first] if first else []) + [
+        p for p in points if not first or p["date"] > first["date"]
+    ]
+
+
+def _line(row: dict, book: Book, values: list[dict], value_now: float | None):
+    """(points, flows) for the return: from the run's start when its starting money is known,
+    else from the first daily value as before."""
+    first = _start_point(row, book)
+    points = _points_from_start(row, book, values, value_now)
+    return points, _flows(row, book, from_start=first is not None)
 
 
 def _path(points: list[dict], flows: list[tuple[str, float]]) -> list[tuple[str, float]]:
@@ -90,10 +137,12 @@ def _your_line(start: str) -> dict[str, float]:
 def summary(
     row: dict, book: Book, values: list[dict], value_now: float | None, *, with_yours: bool = False
 ) -> dict:
-    points = _value_points(values, value_now)
-    path = _path(points, _flows(row, book))
+    points, flows = _line(row, book, values, value_now)
+    path = _path(points, flows)
     ret = path[-1][1] if len(path) > 1 else (0.0 if path else None)
-    start = str(row.get("started_at") or "")[:10] or user_today().isoformat()
+    # The benchmark and your line start where the paper line does: the day before the run when
+    # it starts from its starting money (that day's close is the last price before it).
+    start = points[0]["date"] if points else _start_day(row)
     end = points[-1]["date"] if points else user_today().isoformat()
     bench = _relative(_benchmark_closes(str(row.get("benchmark") or "")), start, end)
     out = {"return_pct": ret, "benchmark_return_pct": bench}
@@ -109,12 +158,12 @@ def series(
 ) -> dict:
     """The chart: the paper line, the benchmark and your investments, each a cumulative
     fraction from the range's first day."""
-    points = _value_points(values, value_now)
+    points, flows = _line(row, book, values, value_now)
     days = RANGES.get(rng.upper())
     if days is not None and points:
         cut = (user_today() - timedelta(days=days)).isoformat()
         points = [p for p in points if p["date"] >= cut] or points[-1:]
-    path = dict(_path(points, _flows(row, book)))
+    path = dict(_path(points, flows))
     start = points[0]["date"] if points else user_today().isoformat()
     closes = _benchmark_closes(str(row.get("benchmark") or ""))
     yours = _your_line(start)
@@ -126,7 +175,9 @@ def series(
                 "value": p["value"],
                 "paper": path.get(p["date"], 0.0),
                 "benchmark": _relative(closes, start, p["date"]),
-                "yours": yours.get(p["date"]),
+                # Your line is rebased to this day, so it is 0 here even on a day with no mark.
+                "yours": 0.0 if p["date"] == start and yours else yours.get(p["date"]),
+                "start": bool(p.get("start")),
             }
         )
     last = out[-1] if out else {}

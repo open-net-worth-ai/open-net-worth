@@ -161,7 +161,14 @@ def apply(book: Book, ev: dict) -> None:
     kind = ev.get("kind")
     _add_cash(book, ev.get("cash_delta"))
     if kind in ("deposit", "withdraw"):
-        book.flows.append({"at": ev.get("at"), "cash_delta": ev.get("cash_delta") or {}})
+        book.flows.append(
+            {
+                "at": ev.get("at"),
+                "cash_delta": ev.get("cash_delta") or {},
+                # The run's starting money: performance starts from it, not as a deposit.
+                "opening": bool((ev.get("payload") or {}).get("opening")),
+            }
+        )
     elif kind == "buy":
         _buy(book, ev)
     elif kind == "sell":
