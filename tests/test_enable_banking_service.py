@@ -1010,8 +1010,12 @@ def test_no_bank_answering_is_an_error_never_an_empty_ok(monkeypatch):
         raise svc.ConsentEndedError("Enable Banking no longer knows this consent (HTTP 404)")
 
     monkeypatch.setattr(svc, "fetch_session_accounts", _ended)
-    with pytest.raises(ValidationError, match="No bank could be read. ACME Bank: access ended"):
+    # Every bank's consent ended: renew them (reconnect_needed), not the app's key (auth_error).
+    with pytest.raises(
+        ExternalServiceError, match="No bank could be read. ACME Bank: access ended"
+    ) as exc:
         svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert svc.classify_error(exc.value) == "reconnect_needed"
     assert svc.classify_error(ValidationError("x")) == "auth_error"
 
 
@@ -1103,7 +1107,8 @@ def test_a_renewal_keeps_ids_even_when_the_accounts_were_never_listed(monkeypatc
     sessions = {"SESS-OLD": old, "SESS-NEW": new}
     deleted: list[str] = []
     _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old, deleted=deleted, sessions=sessions)
-    assert _store().get()["account_identities"] == {}  # nothing listed yet
+    _store()._record({"account_identities": None})  # a book linked before they were recorded
+    assert _store().get()["account_identities"] == {}
     _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, deleted=deleted, sessions=sessions)
     after = _window_with(monkeypatch, {"SESS-NEW": new}, [])
     assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
@@ -1269,6 +1274,7 @@ def test_renewing_a_closed_consent_still_keeps_its_accounts_ids(monkeypatch):
     _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old)
     store = _store()
     store.mark_access_ended([store.banks()[0]["key"]], "ended")
+    store._record({"account_identities": None})  # a book linked before they were recorded
     assert store.get()["account_identities"] == {}
     _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, sessions={"SESS-OLD": old})
     after = _window_with(monkeypatch, {"SESS-NEW": new}, [])
