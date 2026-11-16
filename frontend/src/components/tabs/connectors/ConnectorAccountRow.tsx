@@ -11,6 +11,12 @@ import { fCur } from '../accounts/format'
 import { TYPE_COLOR, TYPE_ICON } from '../accounts/categories'
 import { isOwed, shownBalance, type ProviderAccountRow } from './accountRows'
 
+/** " · Enable Banking" for an account already linked through another connector. */
+function linkedElsewhere(a: Account): string | null {
+  const labels = (a.externalIds ?? []).map((e) => e.providerLabel || e.source)
+  return labels.length ? `· ${labels.join(', ')}` : null
+}
+
 interface Props {
   row: ProviderAccountRow
   linkedName: string
@@ -37,6 +43,12 @@ export function ConnectorAccountRow({
   const [picking, setPicking] = useState(false)
   const type = row.account_type
   const linked = !!row.linked_account_id
+  // One book account may hold one account per connector, so one linked elsewhere is offered —
+  // after the free ones and named for its connector, so a pick is never a blind one. A bank
+  // account only goes into a book account of its own currency.
+  const options = accounts.filter(
+    (a) => !row.currency || !a.currency || a.currency.toUpperCase() === row.currency.toUpperCase(),
+  )
 
   return (
     <div className={`conn-acct-row${linked ? ' conn-acct-row--linked' : ''}`}>
@@ -84,8 +96,9 @@ export function ConnectorAccountRow({
               aria-label={`Link ${row.name} to an account`}
             >
               <AddAccountSelect
-                accounts={accounts}
+                accounts={options}
                 value=""
+                note={linkedElsewhere}
                 autoOpen
                 advance={() => {}}
                 onChange={(id) => {
@@ -109,7 +122,7 @@ export function ConnectorAccountRow({
             >
               Add
             </Button>
-            {accounts.length > 0 && (
+            {options.length > 0 && (
               <Button
                 size="sm"
                 variant="ghost"

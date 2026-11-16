@@ -177,14 +177,16 @@ def test_a_foreign_charge_keeps_its_original_amount_and_currency(bank):
     assert row["original_currency"] == "EUR"
 
 
-def test_pending_rows_are_not_booked(bank):
+def test_a_pending_row_is_booked_uncleared(bank):
+    """Amendment 3: a pending row is booked uncleared (it counts in the working balance), then
+    cleared when the bank settles it — no longer skipped."""
     main = linked_account("ACME Current", ACC_MAIN)
     bank.pending[ACC_MAIN] = [txn(-15.00, days_ago(0), "ACME TAXI", tid="p1")]
     settings.save("gocardless", mode="data")
     result = _run()
-    assert result["counts"]["booked"] == 0
-    assert result["counts"]["pending_skipped"] == 1
-    assert _live(main) == []
+    assert result["counts"]["booked"] == 1
+    [booked] = _live(main)
+    assert booked.get("cleared") is not True
 
 
 def test_payee_default_categorises_hint_only_when_it_exists_and_none_is_created(bank):
@@ -268,6 +270,3 @@ def test_flag_off_changes_nothing(bank):
         bank_data_sync.status("gocardless")
     with pytest.raises(NotFoundError):
         bank_data_sync.run_now("gocardless")
-    bank_data_sync.refuse_automation_beside_data_sync(
-        {"name": "Sync GoCardless", "instructions": "Fetch new GoCardless transactions"}
-    )

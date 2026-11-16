@@ -70,7 +70,9 @@ export function AccountBoxes({
                   id={`bs-${p}-${a.account_id}`}
                   label={
                     <>
-                      {a.bank_name || a.name}
+                      <span className="bs-acct-nm" title={a.bank_name || a.name}>
+                        {a.bank_name || a.name}
+                      </span>
                       {a.mask && <span className="bs-acct-mask">{`•••${a.mask}`}</span>}
                     </>
                   }

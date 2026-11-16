@@ -423,6 +423,9 @@ def test_feed_18_a_failed_bank_is_marked_for_reconnect_and_the_other_still_answe
         def mark_reconnect(self, *, needed, ok):
             _Store.reconnect = (set(needed), set(ok))
 
+        def update_item(self, item_id, fields):
+            return {}
+
     monkeypatch.setattr(plaid, "_post", post)
     out = plaid.fetch_balances(_Store())
     assert out["complete"] is False and [a["provider_account_id"] for a in out["accounts"]] == [

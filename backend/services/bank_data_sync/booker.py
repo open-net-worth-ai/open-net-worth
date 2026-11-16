@@ -22,7 +22,7 @@ from typing import Optional
 
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
-from backend.services.bank_data_sync import pending, relink, reviews
+from backend.services.bank_data_sync import card_payments, pending, relink, reviews
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +44,25 @@ class Booked:
     pending: int = 0
     settled: int = 0
     pending_removed: int = 0
+    # Card payments booked as ONE transfer (card_payments.py): new rows, and rows already in the
+    # book promoted to it (``promoted`` holds their before-images, for Undo).
+    card_payments: int = 0
+    promoted: list[dict] = field(default_factory=list)
+    # Ids of the pending bookings this run took off the book, and the bank's own view of every
+    # row it booked or folded into a booking, by ref: what Undo needs (undo.py).
+    removed_ids: list[str] = field(default_factory=list)
+    removed_entries: dict[str, dict] = field(default_factory=dict)
+    booked_views: dict[str, dict] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
 
 def _ref(row: dict) -> str:
     refs = row.get("external_refs") or []
     return str(refs[0].get("ref") or "") if refs and isinstance(refs[0], dict) else ""
+
+
+def _refs_of(txn: dict) -> list[str]:
+    return [str((e or {}).get("ref") or "") for e in txn.get("external_refs") or []]
 
 
 def draft_for(row: dict) -> Optional[dict]:
@@ -229,13 +242,15 @@ def book(
     pending→posted link — runs under the audit surface ``bank_data_sync``. ``read``: account id
     → the window start it was read from, for dropping a pending row the bank no longer lists.
     ``relinked``: accounts read from a new bank id this run, whose rows are first matched to the
-    bookings they already are (``relink.carry``). Raises only when that write failed (then
-    nothing was booked)."""
+    bookings they already are (``relink.carry``); a row the bank re-keyed on an account read
+    whole is matched the same way (``relink.reissued``). Raises only when that write failed
+    (then nothing was booked)."""
     from backend.core import audit_context
 
     token = audit_context.set_audit_scope("system", SURFACE, note=f"run:{run_id}")
     try:
         matched = relink.carry(provider, rows, relinked or set())
+        matched += relink.reissued(provider, rows, read or {}, relinked or set())
         out = _book(provider, rows, run_id=run_id, batch_id=batch_id)
         out.relinked = matched
         if read:
@@ -244,7 +259,10 @@ def book(
             for row in rows:
                 if row.get("pending") and row.get("linked_account_id") in seen:
                     seen[row["linked_account_id"]].add(_ref(row))
-            out.pending_removed = pending.drop_vanished(entries, seen, read)
+            gone = pending.drop_vanished(entries, seen, read)
+            out.pending_removed = len(gone)
+            out.removed_ids.extend(g["entry"]["txn_id"] for g in gone)
+            out.removed_entries.update({g["ref"]: g["entry"] for g in gone})
             pending.save(provider, entries)
         return out
     finally:
@@ -277,7 +295,7 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
                 continue
             if row.get("booked_txn_id") and settled == "none":
                 continue  # already booked (the window is read whole, booked rows included)
-            if ref in held:
+            if ref in held or row.get("supersedes_ref") in held:
                 out.held += 1
                 continue
             if _settle_superseding(provider, row, known, run_id, out):
@@ -291,12 +309,20 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     pending.save(provider, entries)  # what settled above is settled, whatever follows
     candidates, errors = _with_categories(candidates)
     out.errors.extend(errors)
+    views = {_ref(row): _row_view(row) for row, _ in candidates}
+    types = {a["id"]: a.get("type") for a in ledger_service.accounts.all()}
+    candidates = card_payments.pair_within(candidates, types)
+    candidates, out.promoted = card_payments.promote_into_book(provider, candidates, types)
+    out.card_payments = len(out.promoted)
+    out.booked_views = {r: views[r] for s in out.promoted for r in s["refs"] if r in views}
     if not candidates:
         return out
     created, skipped = ledger_service.bulk_create_transactions(
         [d for _, d in candidates], batch_id=batch_id, dedup_by_external_ref=True
     )
     out.created = created
+    out.booked_views |= {r: views[r] for t in created for r in _refs_of(t) if r in views}
+    out.card_payments += sum(1 for t in created if t.get("kind") == "transfer")
     pending.remember(entries, created, pending_rows)
     out.pending = sum(
         1

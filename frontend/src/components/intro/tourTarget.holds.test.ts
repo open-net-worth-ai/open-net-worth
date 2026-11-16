@@ -41,6 +41,16 @@ describe('guidesHeld', () => {
     expect(guidesHeld()).toBe(false)
   })
 
+  it('holds the whole visit that arrived by a sync deep link', () => {
+    const entry = { name: 'http://localhost/automations?view=sync&sync=bank-plaid' }
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([entry] as never)
+    vi.resetModules()
+    return import('./tourTarget').then((m) => {
+      expect(m.guidesHeld()).toBe(true)
+      vi.restoreAllMocks()
+    })
+  })
+
   it('holds the whole visit that arrived by a link or a bank return', () => {
     arriveWithPurposeForTests()
     expect(guidesHeld()).toBe(true)

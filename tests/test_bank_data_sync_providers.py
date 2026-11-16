@@ -94,7 +94,7 @@ def _eb_txn(amount: float, indicator: str, ref: str, status: str = "BOOK") -> di
     }
 
 
-def test_enable_banking_books_posted_rows_once_and_leaves_pending(eb):
+def test_enable_banking_books_every_row_once_pending_uncleared(eb):
     eb["rows"] = [
         _eb_txn(19.99, "DBIT", "e1"),
         _eb_txn(1200.00, "CRDT", "e2"),
@@ -103,10 +103,11 @@ def test_enable_banking_books_posted_rows_once_and_leaves_pending(eb):
     result = runner.run_now(
         PROVIDERS["enable_banking"], "manual", runner.opted_accounts("enable_banking")
     )
-    assert result["counts"]["booked"] == 2
-    assert result["counts"]["pending_skipped"] == 1
-    kinds = sorted(t["kind"] for t in _live(eb["account"]))
-    assert kinds == ["expense", "income"]
+    # Amendment 3: the pending one is booked too, uncleared, and cleared once it settles.
+    assert result["counts"]["booked"] == 3
+    live = _live(eb["account"])
+    assert sorted(t["kind"] for t in live) == ["expense", "expense", "income"]
+    assert sum(1 for t in live if not t.get("cleared")) == 1
     again = runner.run_now(
         PROVIDERS["enable_banking"], "manual", runner.opted_accounts("enable_banking")
     )

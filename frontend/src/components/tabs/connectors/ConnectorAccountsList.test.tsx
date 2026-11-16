@@ -41,14 +41,16 @@ function mockRoutes({
   accountsResponse,
   onPut,
   onPost,
+  book = appAccounts,
 }: {
   accountsResponse: unknown
+  book?: unknown[]
   onPut?: (url: string, body: unknown) => void
   onPost?: (body: unknown) => void
 }) {
   mockAuthFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url === '/api/connectors/plaid/accounts') return Promise.resolve(okJson(accountsResponse))
-    if (url === '/api/accounts' && !init) return Promise.resolve(okJson(appAccounts))
+    if (url === '/api/accounts' && !init) return Promise.resolve(okJson(book))
     if (init?.method === 'PUT') {
       onPut?.(url, JSON.parse(init.body as string))
       return Promise.resolve(okJson({}))
@@ -255,6 +257,78 @@ describe('ConnectorAccountsList — link (CDS-UI-5)', () => {
     expect(putBody).toEqual({
       external_ids: [{ source: 'plaid', ref: 'p1', name: 'Checking', mask: '1234' }],
     })
+  })
+})
+
+describe('ConnectorAccountsList — the Link picker', () => {
+  const eb = {
+    source: 'enable_banking',
+    ref: 'e1',
+    name: 'X',
+    mask: '',
+    provider_label: 'Enable Banking',
+  }
+  const acct = (id: string, name: string, currency: string, external_ids: unknown[] = []) => ({
+    ...appAccounts[0]!,
+    id,
+    name,
+    currency,
+    external_ids,
+  })
+
+  it('lists free accounts first, names the connector of a linked one, and drops other currencies', async () => {
+    mockRoutes({
+      accountsResponse: {
+        status: 'ok',
+        accounts: [
+          {
+            provider_account_id: 'p1',
+            name: 'Checking',
+            mask: '1234',
+            currency: 'USD',
+            balance: null,
+            linked_account_id: null,
+          },
+        ],
+      },
+      book: [
+        acct('a_linked', 'Aaa Linked', 'USD', [eb]),
+        acct('a_free', 'Zzz Free', 'USD'),
+        acct('a_eur', 'Euro Account', 'EUR'),
+      ],
+    })
+    render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Link Checking to an existing account' }),
+    )
+    const picker = await screen.findByRole('group', { name: 'Link Checking to an account' })
+    const names = within(picker)
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+      .filter((t) => /Zzz|Aaa|Euro/.test(t ?? ''))
+    expect(names).toEqual(['Zzz Free', 'Aaa Linked· Enable Banking'])
+  })
+
+  it('offers no Link when no account has the bank account’s currency', async () => {
+    mockRoutes({
+      accountsResponse: {
+        status: 'ok',
+        accounts: [
+          {
+            provider_account_id: 'p1',
+            name: 'Checking',
+            mask: '1234',
+            currency: 'USD',
+            balance: null,
+            linked_account_id: null,
+          },
+        ],
+      },
+      book: [acct('a_eur', 'Euro Account', 'EUR')],
+    })
+    render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
+    await screen.findByRole('button', { name: 'Add' })
+    expect(screen.queryByRole('button', { name: /to an existing account/ })).toBeNull()
   })
 })
 

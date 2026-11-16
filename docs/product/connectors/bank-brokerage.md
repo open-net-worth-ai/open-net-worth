@@ -156,6 +156,10 @@ transactions to the ones already booked instead of booking them again. Opened a 
 bank you already linked? Click **Add accounts** on that bank to pick it; existing links are
 untouched.
 
+Some banks give Plaid access only for a set time. When Plaid tells the app when that ends, the
+bank's card in the [sync without AI](../features/bank-data-sync.md) turns amber two weeks ahead
+with **Reconnect**, and red once it has ended.
+
 You can also ask Lucius — "reconnect my Chase account" — from the app or a chat channel such as
 Telegram. He asks your approval, then sends you a **Sign in to Chase again** link to Plaid's own
 page. You sign in there yourself: Lucius never sees your bank password or a security code. Tell
@@ -276,12 +280,22 @@ linking again; the other banks keep fetching. Click **Link again** on that bank 
 To renew a bank before it expires, click **Renew**: the old access keeps working until you
 finish at the bank, so you lose nothing if you stop halfway.
 
+Access runs from the day you approve it at the bank, not from the day you started linking. Once
+a renewal is approved, each account is matched to the one it replaces by its IBAN and currency, so its link
+to your account and every transaction already booked carry on as they were: nothing to unlink or
+link again. (Open Net Worth keeps only a fingerprint of the IBAN.) An account the bank gives no
+IBAN for, or accounts that share one IBAN and currency, are named in a warning; link those by hand.
+
 **Banks limit how often you can fetch.** Many allow only four reads per account per day. (With
 [Bank sync without AI](../features/bank-data-sync.md), each account shows the reads it has
 left today.) The
 **Sync GoCardless** template runs twice a day, which leaves room for one fetch you ask for
 yourself. If you hit the limit, the connector shows **rate limited** with roughly when the limit
 resets. Wait until then; you don't need to link again.
+
+Opening the connector page shows each account's name and balance from the last time they were
+read, not live: it asks the bank again only after about six hours, so looking at the page never
+uses up the reads a sync needs. A sync that gets no balance from the bank says so in its warnings.
 
 ## Lunch Flow
 

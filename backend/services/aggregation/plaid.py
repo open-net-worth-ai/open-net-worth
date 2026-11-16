@@ -38,12 +38,14 @@ recomputed from the native leg there, never fabricated here).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
 from backend.core.errors import ValidationError
+from backend.core.user_time import user_today
 from backend.db.plaid_config_store import PlaidConfigStore, bank_key, bank_name
 from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
@@ -221,8 +223,18 @@ def _complete_update_mode(store: PlaidConfigStore, bank: str, data: dict) -> dic
         message = error.get("display_message") or error.get("error_message") or "Plaid ended it"
         raise ValidationError(f"The bank wasn't reconnected: {message}")
     store.mark_reconnect(needed=set(), ok={bank})
-    _wake_sync()
     item = store.item_by_key(bank) or {}
+    if item:
+        # A renewed sign-in has a new end date (or none): the old one would warn of an expiry
+        # that no longer comes.
+        store.update_item(
+            item.get("item_id") or "",
+            {
+                "consent_expires_at": None,
+                **_consent_fields(_item_info(store, item["access_token"])),
+            },
+        )
+    _wake_sync()
     return {
         "status": "linked",
         "mode": "update",
@@ -253,6 +265,8 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
     inst = institution or {}
     name = str(inst.get("name") or "").strip()
     inst_id = str(inst.get("institution_id") or "").strip()
+    info = _item_info(store, access_token)
+    listed = _listed_accounts(store, access_token)
     entry = {
         "item_id": item_id,
         "access_token": access_token,
@@ -260,11 +274,14 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
         "institution_name": name,
         # Which accounts this sign-in covers (mask + subtype, nothing secret): how a later link
         # at the same bank tells a renewal from a second sign-in, even once this one has expired.
-        "accounts": _account_marks(store, access_token),
+        "accounts": _account_marks(listed),
+        # Plaid's own ids for them: which bank an account's failed read belongs to.
+        "account_ids": _account_ids(listed),
+        **_consent_fields(info),
     }
     store.add_item(entry)
     if not name:
-        named = name_bank(store, entry, _item_info(store, access_token))
+        named = name_bank(store, entry, info)
         name = named.get("institution_name") or ""
         inst_id = named.get("institution_id") or inst_id
     # Linking a bank that is already linked may be a re-link (a fresh sign-in of the same
@@ -280,7 +297,10 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
                 continue
             theirs = {
                 _mark_key(m)
-                for m in (old.get("accounts") or _account_marks(store, old["access_token"]))
+                for m in (
+                    old.get("accounts")
+                    or _account_marks(_listed_accounts(store, old["access_token"]))
+                )
             }
             if mine and theirs and mine & theirs:
                 _retire_item(store, old)
@@ -313,19 +333,37 @@ def _wake_sync() -> None:
     budget.access_renewed("plaid")
 
 
-def _account_marks(store: PlaidConfigStore, access_token: str) -> list[dict]:
-    """An Item's accounts as ``{mask, subtype}`` (``/accounts/get``). ``[]`` when they can't be
+def _listed_accounts(store: PlaidConfigStore, access_token: str) -> list[dict]:
+    """An Item's accounts as Plaid lists them (``/accounts/get``). ``[]`` when they can't be
     read (an expired sign-in): then nothing is compared and nothing is revoked."""
     try:
         data = _post(store, "/accounts/get", {"access_token": access_token})
     except Exception as exc:  # noqa: BLE001 — best effort: recording accounts never fails a link
         logger.info("plaid: an Item's accounts couldn't be read to compare: %s", type(exc).__name__)
         return []
+    return [a for a in data.get("accounts") or [] if isinstance(a, dict)]
+
+
+def _account_marks(accounts: list[dict]) -> list[dict]:
+    """``{mask, subtype}`` of each account that has a mask."""
     return [
         {"mask": str(a.get("mask") or ""), "subtype": str(a.get("subtype") or "")}
-        for a in data.get("accounts") or []
-        if isinstance(a, dict) and a.get("mask")
+        for a in accounts
+        if a.get("mask")
     ]
+
+
+def _account_ids(accounts: list[dict]) -> list[str]:
+    return sorted({str(a["account_id"]) for a in accounts if a.get("account_id")})
+
+
+def _consent_fields(info: dict) -> dict:
+    """The Item's consent end (``/item/get`` → ``item.consent_expiration_time``) as an entry
+    field; empty when Plaid's answer doesn't say (the key is absent), ``None`` when the Item has
+    no expiry."""
+    if "consent_expiration_time" not in info:
+        return {}
+    return {"consent_expires_at": info.get("consent_expiration_time") or None}
 
 
 def _mark_key(mark: dict) -> tuple[str, str]:
@@ -503,12 +541,72 @@ def _fetch_item(
     }
 
 
-def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date: str) -> dict:
+# Plaid's first answer after a link covers only about the last 30 days; the rest of the history
+# follows once its historical update finishes (``transactions_update_status``).
+_RECENT_DAYS = 30
+_HISTORY_DONE = "HISTORICAL_UPDATE_COMPLETE"
+# A "not ready yet" answer is trusted this long: the bank sync reads accounts one at a time and
+# each read loops over every Item, so one run asks an Item once, not once per account.
+_NOT_READY_TTL = 15 * 60
+
+
+def _history_ready(store: PlaidConfigStore, item: dict) -> bool:
+    """Whether Plaid has finished gathering this Item's whole history. One cheap
+    ``/transactions/sync`` (``count`` 1, no cursor) states it as ``transactions_update_status``;
+    once it says complete that is kept on the Item and never asked again. A failed call, or a
+    status short of complete, is "not yet" — remembered for 15 minutes, then asked again; the read
+    is retried, never booked half."""
+    if item.get("history_ready"):
+        return True
+    item_id = item.get("item_id") or ""
+    if time.time() - float(item.get("history_checked_at") or 0) < _NOT_READY_TTL:
+        return False
+    try:
+        data = _post(
+            store, "/transactions/sync", {"access_token": item["access_token"], "count": 1}
+        )
+    except ValidationError as exc:
+        logger.info("plaid: an Item's update status couldn't be read: %s", exc)
+        store.update_item(item_id, {"history_checked_at": time.time()})
+        return False
+    status = data.get("transactions_update_status")
+    if status is not None and status != _HISTORY_DONE:
+        store.update_item(item_id, {"history_checked_at": time.time()})
+        return False
+    store.update_item(item_id, {"history_ready": True, "history_checked_at": None})
+    return True
+
+
+def _record_item(store: PlaidConfigStore, item: dict, info: dict, account_ids: list[str]) -> None:
+    """Keep what a successful read says about an Item — its consent end and which accounts it
+    holds — on the Item itself, written only when it changed (no call of its own: both ride
+    on the ``/transactions/get`` answer)."""
+    fields = {
+        k: v
+        for k, v in {**_consent_fields(info), "account_ids": account_ids}.items()
+        if item.get(k) != v and (v or k in item)
+    }
+    if fields:
+        store.update_item(item.get("item_id") or "", fields)
+
+
+def fetch_transactions_get(
+    store: PlaidConfigStore,
+    *,
+    start_date: str,
+    end_date: str,
+    raise_if_all_fail: bool = True,
+    check_history: bool = True,
+) -> dict:
     """``/transactions/get`` for EVERY linked bank, merged. Each account carries its bank's
     name (``_institution``). One bank failing (an expired login, say) never sinks the others:
     its error becomes a warning naming the bank and the result is marked incomplete; only when
-    every bank fails does this raise. Returns ``{transactions[], accounts{id: account},
-    warnings[], complete, error}`` (``error``: the first bank's failure, or None)."""
+    every bank fails does this raise (unless ``raise_if_all_fail`` is off, which leaves that
+    to the caller). A window reaching back past the last ~30 days also needs each bank's whole
+    history to be gathered: until Plaid says so, that bank's accounts are ``cut_short``.
+    Returns ``{transactions[], accounts{id: account}, warnings[], complete, cut_short,
+    errors{bank_key: error}, holders{bank_key: [account ids]}, error}`` (``error``: the first
+    bank's failure, or None)."""
     items = store.items()
     if not items:
         raise ValidationError("Plaid is not linked (no access token)")
@@ -520,19 +618,28 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
     first_error: Optional[ValidationError] = None
     needed, answered = set(), set()
     cut_short: set[str] = set()
+    errors: dict[str, ValidationError] = {}
+    holders: dict[str, list[str]] = {}
+    needs_history = (
+        check_history and start_date < (user_today() - timedelta(days=_RECENT_DAYS)).isoformat()
+    )
     for item in items:
         bank = item.get("institution_name") or "a linked bank"
         key = bank_key(item.get("item_id") or "")
+        holders[key] = list(item.get("account_ids") or [])
         try:
             got = _fetch_item(store, item["access_token"], start_date=start_date, end_date=end_date)
         except ValidationError as exc:
             first_error = first_error or exc
+            errors[key] = exc
             if exc.context.get("plaid_error_code") in _UPDATE_MODE_CODES:
                 needed.add(key)
             warnings.append(f"{bank}: {_plain(exc)}")
             complete = False
             continue
         answered.add(key)
+        holders[key] = sorted(got["accounts"])
+        _record_item(store, item, got.get("item") or {}, holders[key])
         item = name_bank(store, item, got.get("item") or {})
         transactions.extend(got["transactions"])
         for acct_id, acct in got["accounts"].items():
@@ -543,20 +650,28 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
                 **acct,
                 "_institution": item.get("institution_name") or bank_name(item),
             }
-        complete = complete and not got["truncated"]
-        if got["truncated"]:
+        waiting = needs_history and not _history_ready(store, item)
+        complete = complete and not got["truncated"] and not waiting
+        if got["truncated"] or waiting:
             cut_short.update(got["accounts"])
+        if waiting:
+            warnings.append(
+                f"{bank}: Plaid is still gathering its history — the sync tries again soon"
+            )
     store.mark_reconnect(needed=needed, ok=answered)
-    if first_error is not None and len(warnings) == len(items):
+    if raise_if_all_fail and first_error is not None and len(errors) == len(items):
         raise first_error
     return {
         "transactions": transactions,
         "accounts": accounts,
         "warnings": warnings,
         "complete": complete,
-        # Accounts at a bank whose read hit the page cap: one account's read is whole unless
-        # it is one of these (another bank failing doesn't cut THIS account's read short).
+        # Accounts at a bank whose read hit the page cap or whose history isn't gathered yet:
+        # one account's read is whole unless it is one of these (another bank failing doesn't
+        # cut THIS account's read short).
         "cut_short": cut_short,
+        "errors": errors,
+        "holders": holders,
         "error": first_error,
     }
 
@@ -586,6 +701,7 @@ def fetch_balances(store: PlaidConfigStore) -> dict:
             complete = False
             continue
         answered.add(key)
+        _record_item(store, item, {}, _account_ids(data.get("accounts") or []))
         institution = item.get("institution_name") or bank_name(item)
         for acct in data.get("accounts") or []:
             accounts.append(_account_to_common({**acct, "_institution": institution}))
@@ -792,6 +908,18 @@ def _txn_to_row(plaid_txn: dict, account: dict, account_id: str) -> dict | None:
     }
 
 
+def _error_of(fetched: dict, account: str) -> Optional[ValidationError]:
+    """The failure of the bank holding ``account``, from a read that didn't list it. The bank
+    that recorded the account is the one; a failed bank that never recorded its accounts might
+    hold it, so its error stands in. ``None`` when no failed bank can hold it — every bank that
+    could answered without it, so the account is gone from Plaid."""
+    errors, holders = fetched.get("errors") or {}, fetched.get("holders") or {}
+    for key, error in errors.items():
+        if account in holders.get(key, ()):
+            return error
+    return next((e for k, e in errors.items() if not holders.get(k)), None)
+
+
 def fetch_window(
     store: PlaidConfigStore,
     since: str,
@@ -811,19 +939,23 @@ def fetch_window(
     if accounts_only:
         # A single-day window minimizes (never eliminates — Plaid has no explicit
         # accounts-only endpoint) the transaction rows an accounts-only caller pays for.
-        fetched = fetch_transactions_get(store, start_date=before, end_date=before)
+        fetched = fetch_transactions_get(
+            store, start_date=before, end_date=before, check_history=False
+        )
     else:
-        fetched = fetch_transactions_get(store, start_date=since, end_date=before)
+        fetched = fetch_transactions_get(
+            store, start_date=since, end_date=before, raise_if_all_fail=not account
+        )
     accounts_by_id = fetched["accounts"]
     accounts = [_account_to_common(a) for a in accounts_by_id.values()]
 
     warnings = fetched.get("warnings") or []
     if account and not accounts_only:
-        # ONE account asked for (the bank data sync reads one at a time): its own bank failing
-        # is this read's failure, never an "ok" with nothing in it — that dropped its pending
+        # ONE account asked for (the bank data sync reads one at a time): ITS bank failing is
+        # this read's failure, never an "ok" with nothing in it — that dropped its pending
         # rows and showed it synced (UAT 2026-11-14). Another bank's trouble isn't its own.
         if account not in accounts_by_id:
-            error = fetched.get("error")
+            error = _error_of(fetched, account)
             if error is not None:
                 raise ValidationError(_plain(error), **error.context) from None
         else:

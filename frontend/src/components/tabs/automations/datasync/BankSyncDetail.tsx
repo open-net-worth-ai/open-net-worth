@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { fDateTime } from '../../../../utils/format'
+import { useHoldGuides } from '../../../intro/tourTarget'
 import { ErrorState, Loading } from '../../../ui'
 import { BankRunReport } from './BankRunReport'
 import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
@@ -15,6 +16,8 @@ import './bankSync.css'
 // anything to review and the settings on the left, the run history on the right.
 
 export function BankSyncDetail({ provider, onBack }: { provider: string; onBack: () => void }) {
+  // The person came to set up or run this sync: no guide starts on top of it (ADR 2026-11-14).
+  useHoldGuides()
   // Re-read every two seconds only while a run is in progress.
   const [poll, setPoll] = useState(false)
   const sync = useBankSync(provider, true, poll)
@@ -55,7 +58,7 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
   const status = sync.data
   if (status.stage === 'done')
     return (
-      <div className="a3-wrap" data-od-id="bank-sync-detail">
+      <div className="a3-wrap bs-detail" data-od-id="bank-sync-detail">
         {crumb}
         <BankSyncHead status={status} />
         <div className="a3-cols">

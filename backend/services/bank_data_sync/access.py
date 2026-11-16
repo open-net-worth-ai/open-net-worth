@@ -4,7 +4,8 @@ that silently stops reading on that day is the failure the page's per-bank line 
 off, so the date is read from what the connector already stores, never asked of the bank.
 
 ``banks(p)`` → ``[{name, ends_at, ended, renew_soon, account_ids}]`` with ``account_ids`` the provider's
-account ids. A provider that grants no expiring access (Plaid) has none to report."""
+account ids. A provider that grants no expiring access (SimpleFIN) has none to report; Plaid's
+is the consent end it states for an Item that has one."""
 
 from __future__ import annotations
 
@@ -65,6 +66,11 @@ def banks(p: Provider) -> list[dict]:
                 b.get("status") in ENDED,
                 b.get("account_ids"),
             )
+            for b in stored
+        ]
+    if p.key == "plaid":
+        return [
+            _row(b["name"], b.get("consent_expires_at"), False, b.get("account_ids"))
             for b in stored
         ]
     return []

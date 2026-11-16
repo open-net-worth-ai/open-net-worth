@@ -6,7 +6,7 @@ order: 172
 audience: [user]
 status: beta
 related: [connectors/bank-brokerage, lucius/automations, features/categories-payees, features/accounts]
-keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc]
+keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc, undo, card payment]
 ---
 
 # Bank sync without AI
@@ -34,7 +34,8 @@ It works with **GoCardless**, **Enable Banking** and **Plaid**.
       (the bank's account and its last digits) and **In your book** (the account it books into;
       click it to open it). Every one is ticked. Untick one to leave it out: it's never read from the bank or booked. **Link accounts**
       (under the list) links a bank account here, as a new account or to one you have, without
-      going back to the connector.
+      going back to the connector. **Link** lists only accounts in the bank account's currency,
+      the ones not linked to another connector first; **Unlink** undoes a wrong pick.
    2. **Import history.** Books the history your bank serves (90 days for most European banks)
       into the ticked accounts, and moves each account's Starting Balance back to its oldest row,
       so today's balance doesn't change. While it runs, the step names the account it's reading
@@ -51,8 +52,10 @@ Once it's set up, the page shows a switch to turn it on or off, the next sync an
 below them, the accounts, the schedule, anything that needs your review, and the run history.
 Each bank has its own card, its accounts inside. Its top right says how it stands: a green dot
 and when it last synced (hover for until when the bank lets the app read it). European banks
-grant that access for a set time (often 90 or 180 days): two weeks before it ends the dot turns
-amber with **Renew**, and once it has ended, or the bank wants you to sign in again, it turns red
+grant that access for a set time (often 90 or 180 days; Enable Banking links ask for the
+bank's own longest), and so do some US and Canadian banks through Plaid: two weeks before it
+ends the dot turns amber with **Renew** (**Reconnect** for Plaid), and once it has ended, or the
+bank wants you to sign in again, it turns red
 with **Renew** or **Reconnect**. Either opens the connector's own setup.
 
 In **Accounts**, every account the sync keeps has a link icon after its name: green while it
@@ -65,6 +68,20 @@ problems. Click a transaction there to open its details, or **View in register**
 everything that run booked in the Accounts register. When some of what it booked has no
 category, **Categorize with Lucius** puts a request for exactly those transactions (how many,
 their dates and accounts) in Lucius's box, in a new conversation, for you to send.
+
+**Undo this run** (in the same footer) takes back a sync that went wrong, such as one that
+booked duplicates. It removes what the run booked, brings back the pending transactions the bank
+dropped (a pending one that a settled transaction replaced stays gone, so it isn't counted
+twice), puts a card payment it folded into a transaction you'd typed back to what that was,
+and returns an account's start to where it was before a first import moved it, so your balances
+are what they were. The bank's rows are not booked again by the next sync: they wait together, as one item under
+**Needs your review**, with **Book all again** and **Forget them** (which keeps them out for
+good); **Show the transactions** lists them, each with its own **Book again**. Only
+the most recent sync that changed your book can be undone, and a pending transaction the bank
+settled stays settled. A transaction you changed since is left as you changed it, and the run
+says so, as it does when a sync couldn't be saved for Undo or an account's start couldn't be put
+back.
+
 The connector page shows one line (on or off, and the next sync) and **Manage**, which opens
 that page.
 
@@ -97,15 +114,31 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   account and **Link** the new one, the next sync matches what the bank lists to the
   transactions already in your book (same amount, same day or within three days) and books
   only what's really new. The run says how many it matched.
+- **Never books a transaction twice when the bank changes its id.** Some banks give an
+  existing transaction a new identity from one sync to the next. When a sync finds a
+  transaction under an id it has never seen, with the same amount on the same day as one in
+  your book that the bank no longer lists, it treats the two as one and books nothing new.
 - **Keeps foreign charges' original amount and currency** beside the amount your account was
   charged.
+- **Files a credit-card payment as one transfer,** not as income on the card plus spending in
+  checking (which would inflate both reports). When the card gets a payment and one of your
+  checking-type accounts has an outflow of the same amount within three days, and either one is
+  worded like a payment, they become a single transfer, whichever the sync read first, and
+  whether the other side came from another bank connector or you typed it (a row you typed is only used once you have cleared it). A match must be
+  unique: if two rows could be the other side, nothing is paired. Merchant refunds, and
+  anything you deleted before, are never paired. A payment whose other side isn't in your book
+  stays income on the card until it is; then the two pair. The run says how many it filed.
 - **Puts each transaction in your review queue,** as YNAB books a bank's transactions
   unapproved: it counts in your balances straight away, and waits in **Review** until you
   approve it. Settling a pending one later doesn't undo an approval.
 - **Categorises without AI:** your [Automations](../lucius/automations.md) rules and each payee's
   default category apply, as they do to any new transaction. Otherwise, if the bank gives a
   merchant category that's exactly the name of one of your categories, that one is used. No
-  category is ever created; anything else stays **Uncategorized**.
+  category is ever created; anything else stays **Uncategorized**. When you give a synced
+  transaction a category in **Review**, its payee keeps it as its default (if the payee has none
+  yet; an existing default is never overwritten), so the next sync files that payee by itself.
+  A bank that puts a store or reference number in the wording ("ACME GROCER 1234") gives each
+  number its own payee: merge those in **Payees** and the default follows.
 - **First sync of an account:** books the history your bank serves, then moves the account's
   Starting Balance back to the oldest row, so the history counts and **today's balance doesn't
   change**. A new account is then set to the bank's own balance (below). (Cash and card accounts
@@ -189,7 +222,12 @@ transactions stay on your book, and its history isn't marked as imported. Its ca
 **Sign-in needed** (with **Reconnect**) or **Last sync failed** (hover for why), and so does the
 mark beside its accounts. When one connector holds several banks, the others still sync, and
 the run says how many accounts it couldn't read; one bank's problem never shows on another's
-accounts.
+accounts. With several Plaid banks failing at once, each account shows the reason of its own
+bank.
+
+Right after you link a Plaid bank, Plaid is still gathering its older transactions. The first
+import waits for that: nothing is booked and the account says it couldn't be read in full, then
+the sync tries again, until Plaid has the whole history.
 
 An account the bank no longer lists (it was closed, or the bank was linked again and its
 accounts have new identities) isn't read either. Its card says **Account not at the bank** with

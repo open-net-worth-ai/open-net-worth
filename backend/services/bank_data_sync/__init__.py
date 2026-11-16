@@ -6,7 +6,8 @@ routes answer 404, the scheduler tick does nothing, and no connector is in data 
 Lucius Automation books bank rows, as before. On, the two are independent.
 
 Modules: ``settings`` (mode, opt-outs), ``budget`` (read budget + schedule),
-``booker`` (rows → one ledger write), ``reviews`` (the review list), ``runner`` (one run),
+``booker`` (rows → one ledger write; ``card_payments`` files a card payment as one transfer),
+``reviews`` (the review list), ``runner`` (one run), ``undo`` (undo a run),
 ``followup`` (the optional Lucius categorisation)."""
 
 from __future__ import annotations
@@ -331,6 +332,15 @@ def list_runs(key: str) -> list[dict]:
     return [r for r in import_runs.list_runs(key) if r.get("kind") == "sync"]
 
 
+def undo_run(key: str, run_id: str) -> dict:
+    """Undo one sync run: its rows removed, what it removed restored, its rows held for review."""
+    _require_on()
+    settings.provider(key)
+    from backend.services.bank_data_sync import undo
+
+    return undo.undo_run(key, run_id)
+
+
 # ── the review list ─────────────────────────────────────────────────────────────────
 
 
@@ -361,12 +371,13 @@ def dismiss_review(item_id: str, seen: Optional[str] = None) -> dict:
     return review_actions.dismiss(item_id, seen)
 
 
-def book_review(item_id: str, seen: Optional[str] = None) -> dict:
-    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409)."""
+def book_review(item_id: str, seen: Optional[str] = None, ref: Optional[str] = None) -> dict:
+    """``seen`` is the item's ``updated_at`` as shown: a newer version is refused (409). ``ref``
+    books one row of an undone sync again; without it, all of them."""
     _require_on()
     from backend.services.bank_data_sync import review_actions
 
-    return review_actions.book_separately(item_id, seen)
+    return review_actions.book_separately(item_id, seen, ref)
 
 
 async def run_followups() -> int:

@@ -224,10 +224,11 @@ class ImportBatchStore:
         import_session_id: str | None = None,
         statement_ref_id: str | None = None,
         *,
+        batch_id: str | None = None,
         conn: Connection | None = None,
     ) -> dict:
         batch = {
-            "id": new_id("imp"),
+            "id": batch_id or new_id("imp"),
             "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "description": description,
             "source_account_id": source_account_id,

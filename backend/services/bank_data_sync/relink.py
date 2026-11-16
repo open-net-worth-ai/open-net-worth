@@ -13,12 +13,24 @@ from this connector whose own refs the bank no longer lists — same signed amou
 first, then the nearest within ``_NEAR`` days, never one row twice — and the new ref is attached
 to it instead of booking it. A pending row matches only a pending booking (its tracked entry
 moves to the new ref, so it is not dropped as vanished), a settled row only a settled one. What
-nothing matches is new and is booked as usual."""
+nothing matches is new and is booked as usual.
+
+A bank can also change a row's id with no re-link at all: GoCardless documents its banks'
+``transactionId`` as changeable, Plaid can drop a posted row and list it again under a new
+``transaction_id``, and SimpleFIN banks rotate ids (Actual Budget #8830, Sure #3436). The
+account's other rows keep their ids, so ``looks_relinked`` stays False, the same-emitter veto
+(``matching._same_source_event_veto``) keeps the duplicate guard out, and the row was booked a
+second time while the old one went to Review as vanished. So every WHOLE read is also matched
+the same way, more strictly (``reissued``): only an account's rows dated inside the window it
+was read from (away from its first days, which a bank may leave out for boundary reasons), and
+only the same signed amount on the SAME day. Identical rows pair one to one, in order. A row
+the bank no longer lists while it lists the same booking under its new ref is not vanished
+(``still_listed``)."""
 
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from backend.services import ledger as ledger_service
 from backend.services.bank_data_sync import budget, pending
@@ -27,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 _TOL = 0.005
 _NEAR = 3
+# A row dated in the first days of a read may be missing for the bank's own boundary reasons
+# (``connector_snapshots._EDGE_MARGIN_DAYS``), not because its id changed.
+_EDGE_DAYS = 2
 
 
 def read_as(provider: str) -> dict[str, str]:
@@ -119,18 +134,61 @@ def carry(provider: str, rows: list[dict], relinked: set[str]) -> int:
     many were matched. Runs inside the booker's audit scope."""
     if not relinked:
         return 0
-    listed = _listed(rows)
-    pool = _candidates(provider, relinked, listed)
+    pool = _candidates(provider, relinked, _listed(rows))
+    return _attach(provider, rows, relinked, pool, (0, _NEAR), "bank_data_sync: linked again")
+
+
+def reissued(provider: str, rows: list[dict], read: dict[str, str], skip: set[str]) -> int:
+    """Attach each row the bank listed under a NEW id to the booking it already is, for the
+    accounts read whole this run (``read``: account id → window start) and not re-linked
+    (``skip``, matched by ``carry``). Same signed amount, same day, a booking the bank no longer
+    lists, inside the window. Returns how many were matched."""
+    accounts = set(read) - skip
+    if not any(_unbooked(r, accounts) for r in rows):
+        return 0
+    pool: dict[str, list[dict]] = {}
+    for account, txns in _candidates(provider, accounts, _listed(rows)).items():
+        start = _day(read[account])
+        if start is None:
+            continue
+        floor = (start + timedelta(days=_EDGE_DAYS)).isoformat()
+        pool[account] = [t for t in txns if str(t.get("date") or "")[:10] >= floor]
+    reason = "bank_data_sync: the bank changed the row's id"
+    return _attach(provider, rows, set(pool), pool, (0,), reason)
+
+
+def still_listed(provider: str, changes: list[dict], rows: list[dict]) -> list[dict]:
+    """``changes`` without a ``vanished`` one whose booking the bank still lists under another
+    of its refs — the old id of a row it re-keyed, matched by ``reissued``."""
+    known = ledger_service.known_external_refs(provider)
+    live = {known.get((provider, ref)) for ref in _listed(rows)} - {None}
+    return [
+        c for c in changes if not (c.get("kind") == "vanished" and c.get("booked_txn_id") in live)
+    ]
+
+
+def _unbooked(row: dict, accounts: set[str]) -> bool:
+    return (
+        row.get("linked_account_id") in accounts
+        and not row.get("booked_txn_id")
+        and bool(_ref(row))
+    )
+
+
+def _attach(
+    provider: str,
+    rows: list[dict],
+    accounts: set[str],
+    pool: dict[str, list[dict]],
+    nears: tuple[int, ...],
+    reason: str,
+) -> int:
     entries = pending.tracked(provider)
     pending_by_txn = {e.get("txn_id"): k for k, e in entries.items() if not e.get("settled")}
-    todo = [
-        r
-        for r in rows
-        if r.get("linked_account_id") in relinked and not r.get("booked_txn_id") and _ref(r)
-    ]
+    todo = [r for r in rows if _unbooked(r, accounts)]
     used: set[str] = set()
     matched = 0
-    for near in (0, _NEAR):
+    for near in nears:
         for row in todo:
             if row.get("booked_txn_id"):
                 continue
@@ -139,14 +197,15 @@ def carry(provider: str, rows: list[dict], relinked: set[str]) -> int:
                 continue
             used.add(txn["id"])
             ledger_service.attach_external_refs(
-                txn["id"], row.get("external_refs") or [], reason="bank_data_sync: linked again"
+                txn["id"], row.get("external_refs") or [], reason=reason
             )
             row["booked_txn_id"], row["_relinked"] = txn["id"], True
             old_key = pending_by_txn.get(txn["id"])
             if row.get("pending") and old_key in entries:
                 entries[_ref(row)] = entries.pop(old_key)
             matched += 1
-    pending.save(provider, entries)
+    if matched:
+        pending.save(provider, entries)
     return matched
 
 
