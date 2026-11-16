@@ -149,6 +149,16 @@ def set_title(session_id: str, title: str, *, auto: bool) -> bool:
         return False
 
 
+def name_from_server(session_id: str, title: str) -> bool:
+    """A title the server picks for a conversation it opens itself (the onboarding welcome).
+    Written like the client's automatic one, so a rename still wins, and announced like an AI
+    title — no client asked for it, so none knows to re-read the listing otherwise."""
+    written = set_title(session_id, title, auto=True)
+    if written:
+        _recent[session_id] = time.time()
+    return written
+
+
 def title_from_request(session_id: str, request: str) -> bool:
     """Name a call from its first real request. Its opening words are a greeting, and every call
     came out titled "Hi, Lucius. How are you doing?" (owner, 2026-11-07). Best-effort, like any title;

@@ -20,8 +20,8 @@ import threading
 import time
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
+from backend.core import container
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import CliNotSignedInError
 from backend.core.process_tree import kill_tree, spawn_kwargs
@@ -39,7 +39,6 @@ _TIMEOUT_SECONDS = 5.0
 # a failed turn clears it; a "no" is rechecked soon, because someone may be signing in right now.
 _SIGNED_IN_TTL_SECONDS = 60.0
 _OTHER_TTL_SECONDS = 10.0
-_CONTAINER_MARKERS = ("/.dockerenv", "/run/.containerenv")
 
 _ARGV = {
     "codex_cli": ("login", "status"),
@@ -160,4 +159,4 @@ def not_signed_in_error(label: str) -> CliNotSignedInError:
 
 def in_container() -> bool:
     """Whether a sign-in has to happen inside a container, which changes the command to run."""
-    return any(Path(marker).exists() for marker in _CONTAINER_MARKERS)
+    return container.in_container()

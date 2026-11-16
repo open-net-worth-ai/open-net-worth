@@ -12,6 +12,7 @@ import {
 } from '../../../api/followedPortfolios'
 import { COPY, askPrompt } from './following.copy'
 import { useIsMobile } from '../../../hooks/useIsMobile'
+import { isStandaloneApp, useEdgeSwipeBack } from '../../../hooks/useEdgeSwipeBack'
 import { usePortfolioTickerMaps } from '../usePortfolioTickerMaps'
 import { ActivityTab } from './ActivityTab'
 import { activitySections, hasActivity as anyActivity, missedQuarter } from './activityRows'
@@ -59,7 +60,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // anywhere (found walking the flow, 2026-11-14).
   const [narrow, setNarrow] = useState(false)
   const pageObserver = useRef<ResizeObserver | null>(null)
+  const pageRoot = useRef<HTMLDivElement | null>(null)
   const pageRef = useCallback((el: HTMLDivElement | null) => {
+    pageRoot.current = el
     pageObserver.current?.disconnect()
     pageObserver.current = null
     if (!el) return
@@ -75,6 +78,9 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // Your own book: every table marks the stocks you hold.
   const { heldSet } = usePortfolioTickerMaps()
   const page = usePreviewPage(portfolio.kind, portfolio.source_ref)
+  // The installed app has no browser back swipe, so on a phone the page also gets the app's own
+  // edge swipe back to the list (as a Documents item does).
+  useEdgeSwipeBack(pageRoot, onBack, isMobile && isStandaloneApp() && !!page.data)
   const returns = usePreviewReturns(portfolio.kind, portfolio.source_ref, page.data != null)
   const slow = useSlow(page.initialLoading)
   const seconds = useElapsed(page.initialLoading)
@@ -154,11 +160,17 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
   // After every render: the tabs do not exist while the page shows its skeleton, so a measure
   // made once, on mount, read 0 and the chart pinned over them.
   const [tabsHeight, setTabsHeight] = useState(0)
+  const [headHidden, setHeadHidden] = useState(0)
   // No dependency list on purpose (every render), and no loop: it sets only a changed height.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const h = tabsRef.current?.offsetHeight ?? 0
     if (h !== tabsHeight) setTabsHeight(h)
+    // On a phone only the tabs stay pinned: the name and its actions scroll away (owner,
+    // 2026-11-16), so the block pins this much higher, out of sight.
+    const tabs = tabsRef.current?.querySelector<HTMLElement>('.ui-page-tabs')
+    const hide = narrow && tabs ? tabs.offsetTop : 0
+    if (hide !== headHidden) setHeadHidden(hide)
   })
   // Each tab keeps its own scroll (owner, 2026-11-14): back to a tab is back where you were in
   // it, and a tab not yet opened starts at its top, just under the pinned name and tabs. Since
@@ -177,14 +189,13 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
       // The window's own scroller sits at 0 on screen whatever its scroll; an inner pane does not.
       const viewTop =
         scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top
-      const natural = crumb
-        ? crumb.getBoundingClientRect().bottom -
-          viewTop +
-          scroller.scrollTop +
-          parseFloat(getComputedStyle(bar.parentElement!).rowGap || '0') +
-          parseFloat(style.marginTop || '0')
-        : 0
-      const stickAt = Math.max(0, natural - tabsTop)
+      // Under the crumb, or — on a phone, which has none — at the page's own top.
+      const above = crumb
+        ? crumb.getBoundingClientRect().bottom +
+          parseFloat(getComputedStyle(bar.parentElement!).rowGap || '0')
+        : (bar.parentElement?.getBoundingClientRect().top ?? 0)
+      const natural = above - viewTop + scroller.scrollTop + parseFloat(style.marginTop || '0')
+      const stickAt = Math.max(0, natural - (tabsTop - headHidden))
       restoreTo.current = tabScroll.current[next] ?? Math.min(scroller.scrollTop, stickAt)
     }
     setTab(next)
@@ -335,14 +346,16 @@ export function PortfolioPage({ portfolio, onBack, onChanged, onAskLucius }: Pro
     <div
       ref={pageRef}
       className="fol-page"
-      style={{ ['--fol-tabs-h' as string]: `${tabsHeight}px` } as React.CSSProperties}
+      style={{ ['--fol-tabs-h' as string]: `${tabsHeight - headHidden}px` } as React.CSSProperties}
     >
+      {/* On a phone too (owner, 2026-11-16: hiding it was undone); the installed app, which has
+          no browser swipe, also gets the app's own edge swipe back. */}
       <Crumb name={follow.name} onBack={onBack} />
       {error && <div className="fol-note fol-note--bad">{error}</div>}
       <Toast message={notice} onDone={() => setNotice(null)} />
       {/* The name, its actions and the tabs stay in view together while the page scrolls
           (owner, 2026-11-14), at every width. */}
-      <div ref={tabsRef} className="fol-tabs-sticky" style={{ top: tabsTop }}>
+      <div ref={tabsRef} className="fol-tabs-sticky" style={{ top: tabsTop - headHidden }}>
         <header className="fol-head">
           <div className="fol-id">
             <h2 className="fol-title">

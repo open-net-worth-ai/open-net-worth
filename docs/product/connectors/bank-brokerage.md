@@ -520,7 +520,11 @@ The schedule and the wording are yours to change. Each run:
   transaction, and used to recognise the same purchase when its receipt arrives by email.
 - **Never books the same transaction twice.** One it already booked is skipped. Two genuinely
   separate identical transactions (two £3.00 coffees at the same place on one day) are booked as
-  two.
+  two. Some banks give a transaction no id of their own, so it is recognised by its date, amount
+  and wording. If one of those changes when the bank lists it again (a pending charge that books
+  a day later, say), it is shown to you as a possible duplicate of the one already booked rather
+  than booked a second time. The same happens when two identical transactions arrive in separate
+  syncs: you confirm it's a second one.
 - **Uses the linked account** for each transaction, and asks you about any account that isn't
   linked instead of guessing.
 - **Categorises everything it books.** A payee with a default category keeps it. Otherwise

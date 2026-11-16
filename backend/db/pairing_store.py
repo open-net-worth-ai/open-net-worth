@@ -134,6 +134,16 @@ class PairingStore(PayloadTableStore):
         """The pending row for ``(connector, sender_id)`` or ``None``."""
         return self._read_raw().get(_key(connector, sender_id))
 
+    def clear(self, connector: str) -> int:
+        """Drop every pending row for ``connector`` (it was removed — a re-added bot must not
+        show the old bot's requests). Returns how many were dropped."""
+        items = self._read_raw()
+        keep = {k: v for k, v in items.items() if v.get("connector") != connector}
+        dropped = len(items) - len(keep)
+        if dropped:
+            self._write_raw(keep)
+        return dropped
+
     def remove(self, connector: str, sender_id: str) -> bool:
         """Drop the pending row for ``(connector, sender_id)`` (after approve/reject). Returns
         True if a row was removed."""

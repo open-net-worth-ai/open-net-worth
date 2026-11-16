@@ -248,6 +248,22 @@
   }
 }
 
+/* Telegram's "Open @bot in Telegram": a clear button, not an accent link */
+.cn-page a.tg-open-link,
+.cn-page a.tg-open-link:hover {
+  align-self: flex-start;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
+}
+@media (hover: hover) {
+  .cn-page a.tg-open-link:hover {
+    border-color: var(--text);
+  }
+}
+
 /* The bank step's button is a link styled as a button (BankHandoff): it keeps the button's own
    text colour and border, not the page's accent link look above. */
 .cn-page a.bank-handoff-go.btn-primary,
@@ -1952,6 +1968,14 @@
   flex: none;
 }
 
+/* "Save so your changes take effect", left of Save while the form holds unsaved edits. */
+.cn-page .rd-modal-foot .cn-foot-hint {
+  align-self: center;
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* The preview's action, moved into the footer on a phone (DirectoryModal): the sheet's ONE
    action, so it spans the footer rather than hanging off its right edge. */
 .cn-page .rd-modal-foot .cn-foot-action {
@@ -2150,6 +2174,10 @@
   }
   .cn-page .rd-modal-foot {
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  /* A phone's footer is one full-width button; the hint would squeeze it. */
+  .cn-page .rd-modal-foot .cn-foot-hint {
+    display: none;
   }
   /* a lone footer button does not stretch full width — only multi-button footers split evenly */
   .cn-page .rd-modal-foot .rd-btn:not(:only-child) {

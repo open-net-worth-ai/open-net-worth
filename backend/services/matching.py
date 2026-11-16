@@ -34,6 +34,7 @@ from backend.core.txn_sources import (
     ext_ref_emitters,
     ext_ref_pairs,
     is_authoritative_source,
+    is_content_hash_ref,
     primary_source,
 )
 from backend.db.transaction_store import txn_text
@@ -507,17 +508,43 @@ def _collision_sources(a: dict, b: dict) -> set[str]:
     sources on which these two rows LOOK like two distinct events.
 
     After a merge the canonical carries absorbed pairs in ``external_refs[]``; the full ref set
-    is read so a post-merge second event is still caught (F03)."""
+    is read so a post-merge second event is still caught (F03).
+
+    A connector's content-hash ref (``derived:…``) is not an id, so it never counts: the same
+    payment hashes to a new key when the bank moves its date or wording, and two such keys
+    were vetoed straight into a double booking with no one asked. Such a pair is scored like
+    any other, and two genuinely identical charges from one read stay apart by ``_same_feed``."""
 
     def _auth_by_source(row: dict) -> dict[str, set[str]]:
+        by: dict[str, set[str]] = {}
+        for src, ref in _full_ref_set(row):
+            if is_authoritative_source(src) and not is_content_hash_ref(ref):
+                by.setdefault(src, set()).add(ref)
+        return by
+
+    src_a, src_b = _auth_by_source(a), _auth_by_source(b)
+    return {src for src in src_a if src in src_b and not (src_a[src] & src_b[src])}
+
+
+def rests_on_content_hashes(a: dict, b: dict) -> bool:
+    """True when, under some authoritative namespace both rows share, each carries only
+    content-hash refs and none match. ``_collision_sources`` no longer lets such a pair veto
+    itself, so it is scored — but nothing from the bank says whether two identical charges are
+    one or two, so it is never AUTO-merged: a human decides (``match_review``'s judge)."""
+
+    def _by_source(row: dict) -> dict[str, set[str]]:
         by: dict[str, set[str]] = {}
         for src, ref in _full_ref_set(row):
             if is_authoritative_source(src):
                 by.setdefault(src, set()).add(ref)
         return by
 
-    src_a, src_b = _auth_by_source(a), _auth_by_source(b)
-    return {src for src in src_a if src in src_b and not (src_a[src] & src_b[src])}
+    src_a, src_b = _by_source(a), _by_source(b)
+    for src in src_a.keys() & src_b.keys():
+        refs_a, refs_b = src_a[src], src_b[src]
+        if not refs_a & refs_b and all(is_content_hash_ref(r) for r in refs_a | refs_b):
+            return True
+    return False
 
 
 def _distinct_same_source_event(a: dict, b: dict) -> bool:

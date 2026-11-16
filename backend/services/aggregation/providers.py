@@ -42,12 +42,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from backend.core.txn_sources import CONTENT_HASH_REF_PREFIX
 from backend.services.connector_catalog import CATALOG
 
 logger = logging.getLogger(__name__)
 
 #: What every content-derived ref starts with — a ref keyed on the row's content, not an id.
-DERIVED_PREFIX = "derived:"
+DERIVED_PREFIX = CONTENT_HASH_REF_PREFIX
 
 
 def derived_ref(

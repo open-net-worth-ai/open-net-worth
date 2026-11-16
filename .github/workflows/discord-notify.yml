@@ -1,0 +1,65 @@
+name: Discord notify
+
+# pull_request_target (not pull_request) so a PR from a FORK can still read the webhook secret.
+# That trigger is only safe because this job:
+#   - never checks out, builds or runs any PR code (no actions/checkout at all), and
+#   - never interpolates PR/issue text into a shell: jq reads the event JSON file itself and
+#     JSON-encodes every field, so a title like `$(curl …)` is just a string.
+# Keep it that way — adding a checkout or a `${{ github.event.* }}` inside `run:` turns this into
+# a secret-exfiltration hole for anyone who can open a PR.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+  issues:
+    types: [opened, reopened]
+
+permissions: {}
+
+jobs:
+  notify:
+    # Only outside contributors: skip anyone with a role on the repo (owner/member/collaborator)
+    # and any bot. `if:` is evaluated by Actions, never by a shell, so reading event fields is safe.
+    if: >-
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                github.event.pull_request.author_association || github.event.issue.author_association)
+      && (github.event.pull_request.user || github.event.issue.user).type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Post to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::notice::DISCORD_WEBHOOK_URL secret is not set; skipping."
+            exit 0
+          fi
+          payload=$(jq --arg ev "$GITHUB_EVENT_NAME" '
+            def clip($n): if length > $n then .[:$n - 1] + "…" else . end;
+            ($ev == "pull_request_target") as $pr
+            | (if $pr then .pull_request else .issue end) as $it
+            | (if $pr then "PR" else "Issue" end) as $kind
+            | {
+                username: "GitHub",
+                allowed_mentions: {parse: []},
+                embeds: [{
+                  title: ("\($kind) #\($it.number) \(.action): \($it.title)" | clip(256)),
+                  url: $it.html_url,
+                  description: (($it.body // "_No description._") | clip(700)),
+                  color: (if $pr then 3447003 else 15105570 end),
+                  author: {name: $it.user.login, url: $it.user.html_url, icon_url: $it.user.avatar_url},
+                  fields: (
+                    if $pr then
+                      [ {name: "Branch", value: ("\($it.head.label) → \($it.base.ref)" | clip(1024)), inline: true},
+                        {name: "Size", value: "+\($it.additions) −\($it.deletions) · \($it.changed_files) files", inline: true} ]
+                      + (if $it.draft then [{name: "Draft", value: "yes", inline: true}] else [] end)
+                    else
+                      ([$it.labels[]?.name] | join(", ")) as $labels
+                      | if $labels == "" then [] else [{name: "Labels", value: ($labels | clip(1024)), inline: true}] end
+                    end),
+                  timestamp: $it.created_at
+                }]
+              }' "$GITHUB_EVENT_PATH")
+          curl -fsS --retry 3 --retry-delay 5 \
+            -H 'Content-Type: application/json' \
+            -d "$payload" "$DISCORD_WEBHOOK_URL"

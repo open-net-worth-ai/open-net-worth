@@ -9222,6 +9222,126 @@ body.hide-amounts .mask * {
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
+  /* Telegram setup — three numbered steps (token, who can chat, say hi), so the one Save
+     reads as the middle of a sequence rather than the end of a form. */
+  .tg-step {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: var(--space-3);
+  }
+  .tg-step__num {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-pill);
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tg-step--done .tg-step__num {
+    background: var(--good);
+    border-color: var(--good);
+    color: var(--bg);
+  }
+  .tg-step__title {
+    line-height: 24px;
+  }
+  .tg-callout {
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+  }
+  .tg-nudge-save {
+    align-self: flex-start;
+  }
+  /* The Add button takes the input's height, not its own: side by side, a shorter button
+     reads as a different control. */
+  .tg-add-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+  .tg-add-row .ui-input {
+    flex: 1;
+    min-width: 0;
+  }
+  .tg-add-row .ui-btn {
+    padding-block: 0;
+  }
+  /* Enabled, it looks like the Open button — the plain secondary button reads as disabled on the
+     dark sheet. Only an empty box leaves it faint. */
+  .tg-add-row .ui-btn:not(:disabled) {
+    color: var(--text);
+    font-weight: 700;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
+  }
+  .tg-add-row .ui-btn:not(:disabled):hover {
+    border-color: var(--text);
+  }
+  .tg-chat-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .tg-chat-list__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+  }
+  .tg-chat-list__row + .tg-chat-list__row {
+    border-top: 1px solid var(--line);
+  }
+  .tg-chat-list__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .tg-chat-list__id {
+    font-variant-numeric: tabular-nums;
+  }
+  .tg-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .tg-status--badge {
+    align-self: flex-start;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-pill);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--good) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--good) 40%, transparent);
+  }
+  .tg-status--badge .tg-status__dot {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent);
+  }
+  .tg-status__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--good);
+    flex: none;
+  }
+  .tg-status .ui-btn__spinner {
+    width: 11px;
+    height: 11px;
+    border-width: 1.5px;
+  }
+  /* Clear, outlined button; its colour and border are set in connectors.css, where the page's
+     unlayered `.cn-page a` rule would otherwise paint it accent blue. */
+  .tg-open-link {
+    align-self: flex-start;
+  }
   /* Regional guidance blurb shown above data-source cards — slightly indented and with
    a left border so it reads as an informational aside, not a card or body text. */
   .conn-dir__regional-guide {

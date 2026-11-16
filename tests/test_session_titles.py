@@ -214,6 +214,16 @@ def test_only_the_opening_message_is_titled(client):
     assert scheduled == [("s-post", "why is my cash off since the import?")]
 
 
+def test_the_onboarding_welcome_is_titled_and_announced(client):
+    """The welcome is named by the server when it opens, which no client asked for — so the
+    live poll must announce it, or the sidebar shows the placeholder until a reload."""
+    c, _ = client
+    _send(c, "s-welcome", "__ONBOARDING_INIT__")
+
+    assert _meta("s-welcome")["title"] == "Getting started"
+    assert "s-welcome" in session_titles.recently_titled()
+
+
 def test_patch_without_auto_is_a_rename(client):
     c, _ = client
     SessionStore().write_title("s-patch", "New conversation", source="auto")
