@@ -6,7 +6,7 @@ order: 172
 audience: [user]
 status: beta
 related: [connectors/bank-brokerage, lucius/automations, features/categories-payees, features/accounts]
-keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc, undo, card payment]
+keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, simplefin, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc, undo, card payment]
 ---
 
 # Bank sync without AI
@@ -20,11 +20,11 @@ what's new.
 > (**Bank sync without AI**); while it is off, only a Lucius Automation books bank transactions, as
 > before.
 
-It works with **GoCardless**, **Enable Banking** and **Plaid**.
+It works with **GoCardless**, **Enable Banking**, **Plaid** and **SimpleFIN**.
 
 ## Turn it on
 
-1. Open **Automations → Data Sync**. GoCardless, Enable Banking and Plaid are there beside YNAB
+1. Open **Automations → Data Sync**. GoCardless, Enable Banking, Plaid and SimpleFIN are there beside YNAB
    and Actual: under **Add a data sync** until their connector is set up, then as a card. Or, on a
    connector's page, click **Set up sync** under its **Data import and sync** heading.
 2. The bank's own page walks you through it. A bank not connected yet starts with **Connect
@@ -181,7 +181,8 @@ bank reports it. GoCardless and Enable Banking say which figure is settled, and 
 compared with your cleared balance. Plaid sends a single figure that leaves out pending
 payments, so it's compared with your cleared balance too. Plaid may send a figure that's a few
 hours old: if it's behind, the row shows the difference rather than your balance silently
-changing.
+changing. SimpleFIN sends one figure that may include pending payments, so it's compared with
+your working balance.
 
 Banks report their balances in the same terms your accounts use, both on the connector's
 **Accounts** list and when Lucius lists a bank's accounts:
@@ -215,6 +216,7 @@ in the ledger changes until you choose.
 |---|---|---|
 | GoCardless, Enable Banking | Every 12 hours | Every 6 or 12 hours, once a day, every 2 days, or once a week |
 | Plaid | Every 6 hours | Every hour, every 6 or 12 hours, once a day, every 2 days, or once a week |
+| SimpleFIN | Every 12 hours | Every 6 or 12 hours, once a day, every 2 days, or once a week |
 
 Change it under **Schedule** on the sync's page (or in step 3 of setup). A bank that allows 4
 reads a day is never offered more than 4 runs a day. The next run moves to your last sync plus
@@ -225,6 +227,15 @@ newest booked transaction.
 per account per day**, and every read counts — scheduled, **Sync now**, or Lucius fetching the
 bank in chat. Once an account's reads
 are used, it says when its next read is, **Sync now** waits, and so does the schedule.
+
+**SimpleFIN** allows about 24 requests a day for your whole connection, and SimpleFIN Bridge
+refreshes from your banks once a day, so syncing more often brings nothing new. A run asks for
+all your SimpleFIN accounts in one request, and each account is read at most **6 times a day**.
+When SimpleFIN Bridge says a bank needs you to sign in again, the account shows **Sign-in
+needed**: fix the connection at [SimpleFIN Bridge](https://bridge.simplefin.org), and the next
+run reads it. If the Bridge says it is asked too often, or that your subscription needs paying,
+the run stops and says so. A SimpleFIN account kept in points or miles rather than a currency is
+not booked.
 
 If the bank refuses (its daily limit, expired access), the sync waits instead of retrying: until
 the limit resets, or until you renew expired access. The connector page shows what the bank

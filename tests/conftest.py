@@ -280,6 +280,15 @@ def _no_real_codex_catalog_fetch(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _simplefin_feed_per_test():
+    """SimpleFIN shares one answer between a run's per-account reads for a couple of minutes
+    (``simplefin._feed``): start every test without one."""
+    from backend.services.aggregation import simplefin
+
+    simplefin._forget_shared()
+
+
+@pytest.fixture(autouse=True)
 def _mention_corpus_per_test():
     """The mention picker's corpus memo is keyed on the data epoch, which a test that writes a
     store's file directly or swaps a module's path never moves — start every test empty."""

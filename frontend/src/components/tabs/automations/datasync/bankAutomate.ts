@@ -8,7 +8,7 @@ import { bankSyncSearch, useBankSync } from './bankSync'
 // without a bank sync, which keeps its single Automate button.
 
 // The connectors that have a bank sync (backend ``settings.capable_providers``).
-const BANK_SYNC_KINDS = new Set(['gocardless', 'enable_banking', 'plaid'])
+const BANK_SYNC_KINDS = new Set(['gocardless', 'enable_banking', 'plaid', 'simplefin'])
 
 /** Whether `provider` has a bank sync to offer (the flag on, and a bank that has one). */
 export function useHasBankSync(provider: string): boolean {

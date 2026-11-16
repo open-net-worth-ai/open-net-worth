@@ -214,6 +214,12 @@ PROVIDERS: dict[str, Provider] = {
             note="US/CA banks + cards; linked by claiming a one-time setup token.",
             lookback_days=14,
             history_days=90,
+            data_sync=True,
+            # The Bridge allows about 24 requests a day per connection and refreshes from the
+            # banks once a day: 12 h, and at most 6 reads an account a day. One run is one
+            # request per window slice for every account together (simplefin._feed).
+            sync_interval_hours=12,
+            daily_reads=6,
             _fetch=("backend.services.aggregation.simplefin", "fetch_window"),
             _classify=("backend.services.aggregation.simplefin", "classify_error"),
             _store=("backend.db", "SimpleFinConfigStore"),

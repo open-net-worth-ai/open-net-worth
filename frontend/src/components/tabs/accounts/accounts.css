@@ -4024,6 +4024,12 @@ select.acct-addin {
   gap: 8px;
 }
 /* grouped account picker (inline add row) */
+/* The Link picker's line beside an account another link already holds (a bank sync link). */
+.acct-acctsel-note {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+}
 .acct-acctsel {
   position: relative;
   width: 100%;

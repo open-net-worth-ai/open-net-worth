@@ -422,3 +422,29 @@ From a review of Actual Budget, Sure/Maybe, Firefly III, beancount-import and Gn
   unlinked account carries the same persistent id, the link moves to it and it is read in the
   same run as a re-link read (Amendment 7's matching). Two candidates, or none, is still "the
   bank no longer lists this account".
+
+## Amendment 18 (2026-11-16: SimpleFIN joins the bank sync)
+
+SimpleFIN (US/Canada, through SimpleFIN Bridge, which reads banks through MX) is the fourth
+data-sync provider, built on its protocol docs and on how Actual Budget and Sure read it.
+
+- **Request budget.** The Bridge allows about 24 requests a day per connection (past that it
+  warns, then turns the access URL off), and refreshes from banks once a day. The sync reads one
+  account at a time, so a window is fetched ONCE for every account (no `account=` filter) and
+  shared by the run's per-account reads for two minutes (`simplefin._feed`). Default every 12
+  hours, at most 6 reads an account a day (`daily_reads=6`).
+- **Windows** are at most 44 days (the Bridge refuses over 45, and a 45-day slice across a clock
+  change is an hour over), `end-date` exclusive.
+- **Protocol v2** (`version=2`): `errlist` codes and `connections` (an account's bank name).
+  `gen.auth` and a 402/403 are the user's to fix (`auth_error`); `con.auth` on the account's
+  connection is that bank's sign-in at the Bridge (`reconnect_needed`, nothing booked);
+  rate-limit text stops the run (`rate_limited`); `act.*` and unscoped v1 strings leave the
+  account's read incomplete (no first import, no pending dropped, no vanished rows). v1 `errors`
+  repeating an `errlist` message are said once.
+- **Pending** is the `pending` flag, or `posted` 0 beside a `transacted_at`; a missing `posted`
+  is not pending. There is no pending → posted link, so it settles by amount (Amendment 3), and
+  ids the bank re-issues are matched by Amendment 16.
+- **Currency.** An account in a custom currency (a URL: points, miles) is not booked; one naming
+  no currency books in the base currency, as before. Its single `balance` is not taken as
+  settled (`balance_is_settled` stays False).
+- A claimed setup token wakes a sync waiting for the user (`budget.access_renewed`).
