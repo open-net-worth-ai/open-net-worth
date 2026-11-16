@@ -89,7 +89,8 @@ from the chat; see [Voice calls](../connectors/voice-calls.md). **Actual Budget*
 by default: see [Import from Actual Budget](actual-budget-import.md). And **Investment accounts valued by
 Brokerage total or Live holdings**: a typed or synced total that holdings are carved out of; see
 [Accounts](accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).
-These are on by default and can be turned off here: Permissions v2, [Web search reads its
+These are on by default and can be turned off here: Permissions v2, Voice calls,
+[Copy Trading](copy-trading.md) (**Followed portfolios**), the [YNAB data sync](imports-and-sync.md), [Web search reads its
 results](../connectors/web-search-reads-results.md), [Lucius decides which Intel news reaches
 you](intel.md#let-lucius-decide-what-reaches-your-phone-experimental), Lucius looking into each
 [price alert](intel.md), and [Bank sync without AI](bank-data-sync.md).

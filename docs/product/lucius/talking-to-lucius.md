@@ -22,7 +22,7 @@ no need to be formal.
   shortcuts](../reference/keyboard-shortcuts.md)).
 - **On your phone** — through [Telegram](../connectors/telegram.md), once it's set up.
 - **Out loud** — press the Call button in the chat for a [voice call](../connectors/voice-calls.md)
-  (experimental, off by default).
+  (experimental, on by default; nothing happens until it's set up).
 
 Lucius needs an AI model first. If he asks to be set up, see [Connecting an AI
 provider](../getting-started/connecting-an-ai-provider.md).

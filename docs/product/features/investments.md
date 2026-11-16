@@ -135,7 +135,7 @@ The app records the trade and takes no view on how it's taxed.
 ## Links to Intel
 
 - A small number beside a ticker means Intel has live stories about it (highlighted when one is
-  unread). Tap it to open Intel at the newest story.
+  unread). Tap it to open Intelligence at the newest story.
 - Concentration and today's move are calculated once and shared, so Investments' risk card and
   Intel's risk stories always agree — including for a stock you hold at two brokers.
 
