@@ -64,8 +64,24 @@ def list_pairing(connector: Optional[str] = None):
     return {"requests": rows}
 
 
+_WELCOME = (
+    "You're in ✅ Ask me anything — for example, \"What's my net worth?\" "
+    "Send /help to see what I can do."
+)
+
+
+async def _welcome(connector: str, sender_id: str) -> bool:
+    """Tell a just-approved sender they're in — the pairing reply promised it. Best-effort: an
+    approval never fails because the bot couldn't deliver a courtesy message."""
+    if connector != "telegram":
+        return False
+    from backend.connectors.telegram import bot as telegram_bot
+
+    return await telegram_bot.send_text(sender_id, _WELCOME)
+
+
 @router.post("/api/chat-pairing/approve")
-def approve_pairing(body: PairingActionBody):
+async def approve_pairing(body: PairingActionBody):
     """Approve a pending sender → append to the channel allowlist + clear the pending row.
 
     404 on an unknown connector; 404 if there is no pending request for that sender (so a stale
@@ -79,7 +95,14 @@ def approve_pairing(body: PairingActionBody):
     added = adapter.add_allowed_sender(body.sender_id)
     store.remove(body.connector, body.sender_id)
     log.info("approved pairing %s sender=%s (added=%s)", body.connector, body.sender_id, added)
-    return {"ok": True, "connector": body.connector, "sender_id": body.sender_id, "added": added}
+    welcomed = await _welcome(body.connector, body.sender_id)
+    return {
+        "ok": True,
+        "connector": body.connector,
+        "sender_id": body.sender_id,
+        "added": added,
+        "welcomed": welcomed,
+    }
 
 
 @router.post("/api/chat-pairing/reject")

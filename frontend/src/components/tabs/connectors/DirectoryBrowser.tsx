@@ -132,6 +132,14 @@ export function DirectoryBrowser({
     return () => body.removeEventListener('scroll', onScroll)
   }, [])
 
+  // A new tab, chip or search is a new list: start it at the top. Kept scroll left the shorter
+  // list a few pixels under the sticky header, and the old cards could show through the fade
+  // below it for a frame (owner, 2026-11-16).
+  useEffect(() => {
+    const body = headRef.current?.closest('.rd-modal-body')
+    if (body) body.scrollTop = 0
+  }, [family, category, query])
+
   return (
     // Header to list is 16px, the same step as every gap inside the list — all of it OUTSIDE the
     // header. Padding inside it is solid sheet colour, which showed as a dark band between the

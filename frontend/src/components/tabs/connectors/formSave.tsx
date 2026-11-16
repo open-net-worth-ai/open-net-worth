@@ -56,6 +56,16 @@ type Publish = (state: ConnectorSaveState | null) => void
 
 const PublishContext = createContext<Publish | null>(null)
 
+/** Tells the page a form wrote on its OWN (an inline Save button, an Approve) rather than through
+ *  the footer — so the header's Connected badge and the list behind refresh the same way. */
+const WroteContext = createContext<(() => void) | null>(null)
+
+/** For a form: call the returned function after any write it makes outside the footer Save. */
+export function useConnectorWrote(): () => void {
+  const wrote = useContext(WroteContext)
+  return useCallback(() => wrote?.(), [wrote])
+}
+
 export interface ConnectorSaveHost {
   /** Present once a form has published one. `null` → render the plain Done footer. */
   state: { dirty: boolean; saving: boolean; error: boolean } | null
@@ -66,7 +76,10 @@ export interface ConnectorSaveHost {
 }
 
 /** The modal side: hold the active form's save state and expose it to the footer. */
-export function useConnectorSaveHost(): ConnectorSaveHost {
+export function useConnectorSaveHost(onWrote?: () => void): ConnectorSaveHost {
+  const wroteRef = useRef(onWrote)
+  wroteRef.current = onWrote
+  const wrote = useCallback(() => wroteRef.current?.(), [])
   const [state, setState] = useState<{ dirty: boolean; saving: boolean; error: boolean } | null>(
     null,
   )
@@ -96,9 +109,11 @@ export function useConnectorSaveHost(): ConnectorSaveHost {
 
   const Provider = useCallback(
     ({ children }: { children: ReactNode }) => (
-      <PublishContext.Provider value={publish}>{children}</PublishContext.Provider>
+      <PublishContext.Provider value={publish}>
+        <WroteContext.Provider value={wrote}>{children}</WroteContext.Provider>
+      </PublishContext.Provider>
     ),
-    [publish],
+    [publish, wrote],
   )
 
   return useMemo(() => ({ state, run, Provider }), [state, run, Provider])
