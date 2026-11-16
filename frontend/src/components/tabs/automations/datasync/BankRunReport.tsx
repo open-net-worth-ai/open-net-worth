@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Check, Sparkles } from 'lucide-react'
 import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
-import { useChatComposer } from '../../../../state/chatComposer'
+import { useChatComposerOptional } from '../../../../state/chatComposer'
 import { invalidateQueryCache, useQueryCache } from '../../../../state/queryCache'
 import { fDate, getBaseCurrency } from '../../../../utils/format'
 import { fCur } from '../../accounts/format'
@@ -296,9 +296,9 @@ function UndoRun({
  *  box, in a new conversation, for the user to send. */
 function CategorizeWithLucius({ r, onClose }: { r: RunRecord; onClose: () => void }) {
   const booked = useBooked(r.id)
-  const composer = useChatComposer()
+  const composer = useChatComposerOptional() // only an offer: no chat here, no button
   const open = (booked.data ?? []).filter((t) => !t.category)
-  if (!open.length) return null
+  if (!open.length || !composer) return null
   const dates = open.map((t) => t.date).sort()
   const first = dates[0]!
   const last = dates[dates.length - 1]!

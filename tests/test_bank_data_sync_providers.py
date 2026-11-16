@@ -216,3 +216,64 @@ def test_a_pending_row_that_posts_at_another_amount_waits_for_review(plaid):
     assert row["from_amount"] == pytest.approx(36.0)
     assert "pl-chk:post-1" in {e["ref"] for e in row["external_refs"]}
     assert _run_plaid()["counts"]["booked"] == 0
+
+
+# ── Plaid: an account the bank gives a new id is followed by its persistent id ──────────────
+
+
+def test_plaid_an_account_given_a_new_id_is_followed_not_lost(plaid, monkeypatch):
+    ids = {"pl-chk": "pers-chk", "pl-sav": "pers-sav"}
+
+    def fetch_window(store, since, before, account, *, accounts_only=False):
+        accounts = [
+            {"provider_account_id": a, "name": f"ACME {a}", "currency": "USD", "persistent_id": p}
+            for a, p in ids.items()
+        ]
+        if accounts_only:
+            return FetchWindow(accounts=accounts)
+        rows = [
+            plaid_svc._txn_to_row(t, {"currency": "USD"}, t["account_id"])
+            for t in plaid["txns"]
+            if not account or t["account_id"] == account
+        ]
+        return FetchWindow(accounts=accounts, rows=[r for r in rows if r])
+
+    monkeypatch.setattr(plaid_svc, "fetch_window", fetch_window)
+    plaid["txns"] = [_plaid_txn("t1", 25.0)]
+    _run_plaid()
+
+    # Chase-style re-consent: the account is listed again under a new account_id, every row
+    # under a new transaction_id, the persistent id unchanged.
+    ids.pop("pl-chk")
+    ids["pl-chk-2"] = "pers-chk"
+    plaid["txns"] = [
+        _plaid_txn("t1-again", 25.0, account="pl-chk-2"),
+        _plaid_txn("t2", 9.0, account="pl-chk-2"),
+    ]
+    result = _run_plaid()
+
+    assert result["counts"]["relinked"] == 1, "the history already booked was booked again"
+    assert result["counts"]["booked"] == 1
+    assert len(_live(plaid["chk"])) == 2
+    [row] = [a for a in accounts_service.all_account_rows() if a["id"] == plaid["chk"]]
+    assert [e["ref"] for e in row["external_ids"] if e.get("source") == "plaid"] == ["pl-chk-2"]
+
+
+def test_plaid_an_account_with_two_possible_successors_is_not_guessed(plaid, monkeypatch):
+    ids = {"pl-chk": "pers-chk"}
+
+    def fetch_window(store, since, before, account, *, accounts_only=False):
+        accounts = [
+            {"provider_account_id": a, "name": f"ACME {a}", "currency": "USD", "persistent_id": p}
+            for a, p in ids.items()
+        ]
+        return FetchWindow(accounts=accounts, rows=[])
+
+    monkeypatch.setattr(plaid_svc, "fetch_window", fetch_window)
+    _run_plaid()
+    ids.clear()
+    ids.update({"pl-new-1": "pers-chk", "pl-new-2": "pers-chk"})
+
+    result = _run_plaid()
+
+    assert result["status"] == "account_gone"

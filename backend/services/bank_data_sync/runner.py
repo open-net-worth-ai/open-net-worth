@@ -22,6 +22,7 @@ from backend.services.bank_data_sync import (
     balances,
     booker,
     budget,
+    follow,
     pending,
     relink,
     reviews,
@@ -38,6 +39,7 @@ CUT_SHORT_MESSAGE = (
     "the bank sent only part of the history, so nothing was booked yet — the next sync reads it "
     "all again"
 )
+FOLLOWED_MESSAGE = "the bank gave this account a new id, so the sync followed it there."
 GONE_MESSAGE = (
     "the bank no longer lists this account, so nothing was read. If you linked the bank again, "
     "Unlink this account and Link the bank's current one to it."
@@ -133,6 +135,13 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
         out.states[app_id] = {"status": status, "error": error}
         return status
     listed = {str(a.get("provider_account_id") or "") for a in result.get("accounts") or []}
+    follow.remember(p.key, result.get("accounts") or [])
+    if pid not in listed and not account.get("_followed"):
+        moved = follow.successor(p.key, pid, result.get("accounts") or [])
+        if moved and follow.move_link(p.key, app_id, pid, moved):
+            out.warnings.append(f"{name}: {FOLLOWED_MESSAGE}")
+            again = {**account, "provider_account_id": moved, "_followed": True}
+            return _fetch_account(p, again, run_id, out)
     if pid not in listed:
         # The bank answered without this account: it was closed, or the bank was linked again
         # and the account has a new id. Read as "done · 0 rows" it silently never synced again
@@ -258,9 +267,11 @@ def _outcome(counts: dict, status: str) -> str:
         )
     if counts.get("card_payments"):
         n = counts["card_payments"]
-        parts.append(f"{n} card payment{'s' if n != 1 else ''} filed as a transfer")
+        parts.append(f"{n} move{'s' if n != 1 else ''} between your accounts filed as a transfer")
     if counts.get("relinked"):
         parts.append(f"{counts['relinked']} already in your book, matched to the bank's new ids")
+    if counts.get("claimed"):
+        parts.append(f"{counts['claimed']} matched to transactions you entered")
     if counts.get("settled"):
         parts.append(f"{counts['settled']} cleared")
     if counts.get("pending_removed"):
@@ -301,6 +312,7 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     counts["held"] = result.held
     counts["linked"] = result.linked_refs
     counts["relinked"] = result.relinked
+    counts["claimed"] = result.claimed
     counts["pending"] = result.pending
     counts["settled"] = result.settled
     counts["pending_removed"] = result.pending_removed

@@ -228,8 +228,9 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
         return
       }
       expect(await screen.findByRole('region', { name: 'GoCardless sync' })).toBeTruthy()
-      expect(screen.getByText(/^Not set up · /)).toBeTruthy()
-      expect(screen.getByText(/every 12 hours/)).toBeTruthy()
+      expect(
+        screen.getByText('Bring in your history, then new transactions every 12 hours.'),
+      ).toBeTruthy()
       expect(screen.queryByRole('checkbox')).toBeNull() // the details live on the sync's own page
       fireEvent.click(screen.getByRole('button', { name: 'Set up sync' }))
       expect(navigate).toHaveBeenCalledWith(
@@ -271,7 +272,8 @@ describe('with bank_data_sync on', () => {
 
   it('lists each linked account with its own Sync box, and reads only once they run out', async () => {
     render(<BankSyncSettings status={status({ mode: 'data', stage: 'done' })} />)
-    const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
+    // The box is named for the account at the bank; the book account is the button beside it.
+    const box = await screen.findByRole('checkbox', { name: /Current Account/ })
     expect((box as HTMLInputElement).checked).toBe(true)
     expect(screen.getByRole('button', { name: 'ACME Current' })).toBeTruthy()
     expect(screen.getByText('•••0001')).toBeTruthy()
@@ -296,10 +298,14 @@ describe('with bank_data_sync on', () => {
         method: 'POST',
       }),
     )
-    const imported = status({ stage: 'sync' })
+    // The import's own run, newer than the one before the tap, ends the wait.
+    const imported = status({
+      stage: 'sync',
+      last_run: { id: 'r-import', status: 'done' } as BankSyncStatus['last_run'],
+    })
     imported.accounts![0]!.imported = true
     rerender(<BankSyncSetup status={imported} />)
-    expect(screen.getByText(/^Imported/)).toBeTruthy()
+    expect(screen.getByText('History imported')).toBeTruthy()
     expect(screen.queryByText(/Lucius/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
     await waitFor(() =>
@@ -487,12 +493,11 @@ describe('with bank_data_sync on', () => {
 
   it('a run report says what it did and lists what it booked', async () => {
     render(<BankRunReport runId="r1" onClose={() => {}} />)
-    expect(
-      await screen.findByText('1 booked · 1 already in your book · 1 still pending at the bank'),
-    ).toBeTruthy()
-    expect(screen.getByText('Scheduled · took 5s · read 3 from the bank')).toBeTruthy()
+    expect(await screen.findByText('1 booked')).toBeTruthy()
+    expect(screen.getByText('1 already in your book · 1 still pending at the bank')).toBeTruthy()
+    expect(screen.getByText(/· 5s · scheduled$/)).toBeTruthy()
     expect(await screen.findByText('ACME Grocery')).toBeTruthy()
-    expect(screen.getByText('ACME Current · Uncategorized')).toBeTruthy()
+    expect(screen.getByText('Uncategorized')).toBeTruthy()
   })
 
   it('a run report opens the register filtered to the run, and each row closes into its drawer', async () => {
@@ -506,8 +511,9 @@ describe('with bank_data_sync on', () => {
         search: expect.objectContaining({ batch: 'bank_sync:r1' }),
       }),
     )
+    // A row opens its drawer over the report, which stays open beneath it.
     fireEvent.click(await screen.findByRole('button', { name: 'Open ACME Grocery' }))
-    expect(onClose).toHaveBeenCalledTimes(2)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('a run that changed the book can be undone, once you have read what it will do', async () => {
@@ -601,7 +607,7 @@ describe('with bank_data_sync on', () => {
     const tile = screen.getByRole('button', { name: 'Set up Plaid' })
     expect(tile.textContent).toContain('Every 6 hours')
     fireEvent.click(tile)
-    expect(onOpen).toHaveBeenCalledWith('bank:plaid')
+    expect(onOpen).toHaveBeenCalledWith('bank-plaid')
   })
 
   it('a bank not set up starts with Connect, the way the budget apps do', () => {
@@ -622,6 +628,6 @@ describe('with bank_data_sync on', () => {
     const card = screen.getByRole('article', { name: 'GoCardless bank sync' })
     expect(card.textContent).toContain('2 to review')
     fireEvent.click(card)
-    expect(onOpen).toHaveBeenCalledWith('bank:gocardless')
+    expect(onOpen).toHaveBeenCalledWith('bank-gocardless')
   })
 })

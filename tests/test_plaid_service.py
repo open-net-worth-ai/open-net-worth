@@ -249,6 +249,7 @@ class TestNormalizeHelpers:
             "available_to_spend": None,
             "account_type": None,
             "institution": None,
+            "persistent_id": None,
         }
 
     @pytest.mark.parametrize(
@@ -485,6 +486,7 @@ class TestFetchWindow:
                 "available_to_spend": None,
                 "account_type": None,
                 "institution": None,
+                "persistent_id": None,
             }
         ]
         assert len(window.rows) == 1

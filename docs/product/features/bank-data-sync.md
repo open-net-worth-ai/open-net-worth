@@ -114,6 +114,10 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   account and **Link** the new one, the next sync matches what the bank lists to the
   transactions already in your book (same amount, same day or within three days) and books
   only what's really new. The run says how many it matched.
+- **Follows a Plaid account to its new identity.** Some US banks (Chase, PNC, US Bank) give
+  their accounts new identities when you sign in again. When Plaid shows the same account under
+  a new identity, the sync moves your link to it on its own, matches what's already in your book,
+  and says so on the run, instead of stopping with "the bank no longer lists this account".
 - **Never books a transaction twice when the bank changes its id.** Some banks give an
   existing transaction a new identity from one sync to the next. When a sync finds a
   transaction under an id it has never seen, with the same amount on the same day as one in
@@ -128,6 +132,17 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   unique: if two rows could be the other side, nothing is paired. Merchant refunds, and
   anything you deleted before, are never paired. A payment whose other side isn't in your book
   stays income on the card until it is; then the two pair. The run says how many it filed.
+- **Files money moved between two of your own cash accounts as one transfer,** such as checking
+  to savings, by the same rules: the same amount out of one and into the other within three
+  days, one side worded like a transfer ("transfer", "standing order", "savings"…), and no other
+  row that could be either side. Both accounts stay on your budget, so the transfer moves no
+  budget money. A payment to a loan or into an investment account is not paired: it still books
+  as spending you can categorise.
+- **Matches a transaction you typed yourself without asking,** when nothing else could be it:
+  the bank's row is settled, and it's the only one in your book with no bank behind it on that
+  account, for the same amount, on the same day. The bank's details are linked to your row, it
+  is marked cleared, and your category, payee and memo stay. Two you typed alike, or two the bank
+  sent alike, are never folded together: they wait in **Review** as a possible duplicate.
 - **Puts each transaction in your review queue,** as YNAB books a bank's transactions
   unapproved: it counts in your balances straight away, and waits in **Review** until you
   approve it. Settling a pending one later doesn't undo an approval.
