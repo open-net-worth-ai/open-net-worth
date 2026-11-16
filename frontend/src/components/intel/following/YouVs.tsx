@@ -340,95 +340,98 @@ function SpreadColumn({
         ]}
       />
       {/* Two lists, each under its own heading, so sectors and holdings never run together
-          (owner, 2026-11-13). */}
-      <div className="fol-vs-subhead">{COPY.sectorsTitle}</div>
-      <ul className="fol-vs-sectors" aria-label={COPY.sectorsOf(label)}>
-        {listed.map((s, i) => {
-          const isOpen = openSectors.has(s.sector)
-          const members = s.holdings ?? []
-          return (
-            <li key={s.sector}>
-              {/* Tap a sector to list the stocks in it; tap a stock to open it. */}
+          (owner, 2026-11-13). Each is ONE child of the column: the pair shares its rows
+          (subgrid), so both sides' "Top 5 holdings" start on the same line. */}
+      <div className="fol-vs-part">
+        <div className="fol-vs-subhead">{COPY.sectorsTitle}</div>
+        <ul className="fol-vs-sectors" aria-label={COPY.sectorsOf(label)}>
+          {listed.map((s, i) => {
+            const isOpen = openSectors.has(s.sector)
+            const members = s.holdings ?? []
+            return (
+              <li key={s.sector}>
+                {/* Tap a sector to list the stocks in it; tap a stock to open it. */}
+                <button
+                  type="button"
+                  className="fol-vs-rest"
+                  aria-expanded={isOpen}
+                  disabled={members.length === 0}
+                  onClick={() => toggleSector(s.sector)}
+                >
+                  <div className="fol-vs-sector-head">
+                    <span className="fol-vs-rest-l">
+                      <Text size="sm" tone="muted" truncate>
+                        {s.sector}
+                      </Text>
+                      {members.length > 0 && (
+                        <ChevronDown
+                          size={14}
+                          aria-hidden="true"
+                          className={isOpen ? 'fol-vs-chev is-open' : 'fol-vs-chev'}
+                        />
+                      )}
+                    </span>
+                    <Text size="sm">{pctOf(i)}</Text>
+                  </div>
+                  <Meter
+                    size="sm"
+                    value={s.weight * 100}
+                    color={colorOf.get(s.sector)}
+                    tone={colorOf.has(s.sector) ? undefined : 'neutral'}
+                    ariaLabel={`${s.sector} ${pctOf(i)}`}
+                  />
+                </button>
+                {isOpen && (
+                  <SectorMembers
+                    sector={s.sector}
+                    members={members}
+                    onOpen={(sym) => openAsset({ ticker: sym, label: sym })}
+                  />
+                )}
+              </li>
+            )
+          })}
+          {folded && (
+            <li>
               <button
                 type="button"
                 className="fol-vs-rest"
-                aria-expanded={isOpen}
-                disabled={members.length === 0}
-                onClick={() => toggleSector(s.sector)}
+                aria-expanded={false}
+                onClick={() => setOpen(true)}
               >
                 <div className="fol-vs-sector-head">
+                  {/* "Rest" like any sector; "5 more" in the accent with its chevron: a link. */}
                   <span className="fol-vs-rest-l">
-                    <Text size="sm" tone="muted" truncate>
-                      {s.sector}
+                    <Text size="sm" tone="muted">
+                      {COPY.sectorsRest}
                     </Text>
-                    {members.length > 0 && (
-                      <ChevronDown
-                        size={14}
-                        aria-hidden="true"
-                        className={isOpen ? 'fol-vs-chev is-open' : 'fol-vs-chev'}
-                      />
-                    )}
+                    <span className="fol-vs-more">
+                      {COPY.sectorsMore(restOf.length)}
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </span>
                   </span>
-                  <Text size="sm">{pctOf(i)}</Text>
+                  <Text size="sm">{restPct}</Text>
                 </div>
                 <Meter
                   size="sm"
-                  value={s.weight * 100}
-                  color={colorOf.get(s.sector)}
-                  tone={colorOf.has(s.sector) ? undefined : 'neutral'}
-                  ariaLabel={`${s.sector} ${pctOf(i)}`}
+                  value={rest * 100}
+                  tone="neutral"
+                  ariaLabel={`${COPY.sectorsRest} ${restPct}`}
                 />
               </button>
-              {isOpen && (
-                <SectorMembers
-                  sector={s.sector}
-                  members={members}
-                  onOpen={(sym) => openAsset({ ticker: sym, label: sym })}
-                />
-              )}
             </li>
-          )
-        })}
-        {folded && (
-          <li>
-            <button
-              type="button"
-              className="fol-vs-rest"
-              aria-expanded={false}
-              onClick={() => setOpen(true)}
-            >
-              <div className="fol-vs-sector-head">
-                {/* "Rest" like any sector; "5 more" in the accent with its chevron: a link. */}
-                <span className="fol-vs-rest-l">
-                  <Text size="sm" tone="muted">
-                    {COPY.sectorsRest}
-                  </Text>
-                  <span className="fol-vs-more">
-                    {COPY.sectorsMore(restOf.length)}
-                    <ChevronDown size={14} aria-hidden="true" />
-                  </span>
-                </span>
-                <Text size="sm">{restPct}</Text>
-              </div>
-              <Meter
-                size="sm"
-                value={rest * 100}
-                tone="neutral"
-                ariaLabel={`${COPY.sectorsRest} ${restPct}`}
-              />
-            </button>
-          </li>
+          )}
+        </ul>
+        {open && restOf.length > 0 && (
+          <button type="button" className="fol-spot-link" onClick={() => setOpen(false)}>
+            {COPY.sectorsLess}
+          </button>
         )}
-      </ul>
-      {open && restOf.length > 0 && (
-        <button type="button" className="fol-spot-link" onClick={() => setOpen(false)}>
-          {COPY.sectorsLess}
-        </button>
-      )}
+      </div>
       {/* Then its five largest holdings, in the sectors' own style (owner, 2026-11-13): what
           each side is really betting on, in shares, comparable at any size. */}
       {spread.top.length > 0 && (
-        <>
+        <div className="fol-vs-part">
           <div className="fol-vs-subhead fol-vs-subhead--next">{COPY.topFiveTitle}</div>
           <ul className="fol-vs-sectors" aria-label={COPY.topFiveOf(label)}>
             {spread.top.map((t) => (
@@ -459,7 +462,7 @@ function SpreadColumn({
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
     </div>
   )
