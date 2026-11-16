@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { fAmountNative, fDate } from '../../../../utils/format'
-import { Button, ErrorState } from '../../../ui'
+import { fCurrency, fDate } from '../../../../utils/format'
+import { Button, ConfirmDialog, ErrorState } from '../../../ui'
 import { bankSyncSend, useBankReviews, type BankReview, type BankRowView } from './bankSync'
 import './bankSync.css'
 
@@ -14,13 +14,22 @@ const ACTIONS: Record<BankReview['kind'], { accept: string; dismiss: string }> =
   duplicate: { accept: 'Same transaction', dismiss: 'Ignore it' },
 }
 
+// A long list shows its first few, so the sync's own settings stay in reach below it.
+const SHOWN = 3
+
+function money(v: BankRowView): string {
+  if (typeof v.amount !== 'number') return ''
+  const sign = v.amount > 0 ? '+' : ''
+  const amount = `${sign}${fCurrency(Math.abs(v.amount), v.currency ?? '')}`
+  const o = v.original_amount
+  if (typeof o !== 'number' || !v.original_currency || v.original_currency === v.currency)
+    return amount
+  return `${amount} (${fCurrency(Math.abs(o), v.original_currency)})`
+}
+
 function row(v: BankRowView | null | undefined): string {
   if (!v) return 'gone from your book'
-  const amount = typeof v.amount === 'number' ? fAmountNative(Math.abs(v.amount), v.currency) : ''
-  const sign = typeof v.amount === 'number' && v.amount > 0 ? '+' : ''
-  return [v.date ? fDate(v.date) : '', v.description || '', `${sign}${amount}`]
-    .filter(Boolean)
-    .join(' · ')
+  return [v.date ? fDate(v.date) : '', v.description || '', money(v)].filter(Boolean).join(' · ')
 }
 
 function headline(item: BankReview): string {
@@ -38,6 +47,8 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
   const reviews = useBankReviews(provider)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [confirmAll, setConfirmAll] = useState(false)
   // Shown only when there is something to decide, as the budget apps' page does.
   if (reviews.initialLoading) return null
   if (reviews.error && !reviews.data)
@@ -50,6 +61,29 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
     )
   const items = reviews.data ?? []
   if (items.length === 0) return null
+
+  const duplicates = items.filter((i) => i.kind === 'duplicate')
+  const shown = showAll ? items : items.slice(0, SHOWN)
+
+  // One at a time, as the cards' own buttons: each is checked by the server as it would be alone,
+  // and the first refusal stops the rest and says how far it got.
+  async function linkAll() {
+    setConfirmAll(false)
+    setBusy('all')
+    setError(null)
+    let linked = 0
+    try {
+      for (const item of duplicates) {
+        await bankSyncSend(`/reviews/${item.id}/accept`, 'POST', { updated_at: item.updated_at })
+        linked += 1
+      }
+    } catch (e) {
+      const why = e instanceof Error ? e.message : 'That didn’t work.'
+      setError(`Linked ${linked} of ${duplicates.length}. ${why}`)
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function decide(item: BankReview, action: 'accept' | 'dismiss' | 'book') {
     setBusy(`${item.id}:${action}`)
@@ -72,16 +106,51 @@ export function BankSyncReviews({ provider }: { provider: string | null }) {
         <span className="count">{items.length}</span>
       </div>
       <div className="a3-block-note">Nothing here changes until you choose.</div>
+      {duplicates.length > 1 && (
+        <div className="bs-actions">
+          <Button
+            size="sm"
+            disabled={busy !== null}
+            loading={busy === 'all'}
+            onClick={() => setConfirmAll(true)}
+          >
+            Same transaction for all {duplicates.length}
+          </Button>
+        </div>
+      )}
       {error && (
         <div className="a3-action-error" role="alert">
           {error}
         </div>
       )}
       <ul className="bs-reviews" aria-label="Bank changes to review">
-        {items.map((item) => (
+        {shown.map((item) => (
           <ReviewRow key={item.id} item={item} busy={busy} onDecide={decide} />
         ))}
       </ul>
+      {items.length > SHOWN && (
+        <div className="bs-actions">
+          <Button size="sm" variant="ghost" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? 'Show fewer' : `Show all ${items.length}`}
+          </Button>
+        </div>
+      )}
+      <ConfirmDialog
+        data={
+          confirmAll
+            ? {
+                title: `Link all ${duplicates.length} to transactions already in your book?`,
+                body:
+                  'Each bank row is linked to the transaction it was matched to, and none is ' +
+                  'booked again. Two identical charges really can be two payments: book any of ' +
+                  'those separately first.',
+                confirmLabel: 'Same transaction for all',
+              }
+            : null
+        }
+        onConfirm={() => void linkAll()}
+        onCancel={() => setConfirmAll(false)}
+      />
     </section>
   )
 }
