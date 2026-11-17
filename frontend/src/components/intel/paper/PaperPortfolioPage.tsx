@@ -5,6 +5,7 @@ import { fCurrency, fDate } from '../../../utils/format'
 import { SortTable, type Column } from '../following/SortTable'
 import { NameCell } from '../following/NameCell'
 import { SectorPie } from '../following/SectorPie'
+import { COPY } from '../following/following.copy'
 import { Crumb } from '../following/Crumb'
 import { signedPct, toneOf } from '../following/following.format'
 import { Toast } from '../../tabs/accounts/Toast'
@@ -81,6 +82,7 @@ export function PaperPortfolioPage({
   const ccy = p.home_currency
   const money = (n: number | null) => (n == null ? '—' : fCurrency(n, ccy))
   const archived = p.status !== 'active'
+  const shownHoldings = sector ? data.holdings.filter((h) => h.sector === sector) : data.holdings
   const run = async (fn: () => Promise<unknown>, done?: string) => {
     try {
       await fn()
@@ -187,10 +189,18 @@ export function PaperPortfolioPage({
                 />
               </div>
             )}
+            {data.holdings.length > 0 && (
+              // Copy Trading's title; a picked sector names itself instead.
+              <h2 className="fol-sec-title">
+                {sector
+                  ? `${sector} (${shownHoldings.length})`
+                  : COPY.allHoldingsTitle(data.holdings.length)}
+              </h2>
+            )}
             {data.holdings.length > 0 ? (
               <SortTable
                 label={`${p.name} holdings`}
-                rows={sector ? data.holdings.filter((h) => h.sector === sector) : data.holdings}
+                rows={shownHoldings}
                 rowKey={(h) => h.asset_key}
                 initialSort="value"
                 // A row opens its asset's own page, as on Holdings. A currency or a contract
