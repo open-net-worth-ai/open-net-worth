@@ -82,7 +82,10 @@ def test_luc_04_and_16_update_accounts_is_a_gated_write_on_every_surface(book):
     assert policy.needs_approval("update_accounts", writes=True)
     for surface in ("web", "connector:telegram"):  # the one confirm mechanism, any surface
         assert policy.can_render_card(surface)
-    out = call("update_accounts", updates=[{"account_id": k, "value_source": "holdings"}])
+    out = call(
+        "update_accounts",
+        updates=[{"account_id": k, "value_source": "holdings", "keep_untracked_as_cash": False}],
+    )
     assert out["ok"] and out["account"]["value_switch"]["adjustment"] == -4980.0
     assert out["account"]["value_switch"]["value_after"] == 3020.0 and _value(k) == 3020.0
 
@@ -90,7 +93,10 @@ def test_luc_04_and_16_update_accounts_is_a_gated_write_on_every_surface(book):
 @pytest.mark.flags(allow_brokerage_total_valuation=False)
 def test_luc_05_flag_off_update_accounts_refuses_a_value_source(book):
     _, k, _ = _typed_01()
-    out = call("update_accounts", updates=[{"account_id": k, "value_source": "holdings"}])
+    out = call(
+        "update_accounts",
+        updates=[{"account_id": k, "value_source": "holdings", "keep_untracked_as_cash": False}],
+    )
     assert out["ok"] is False and "value_source" in out["error"] + "value_source"
     assert "value_source" not in ledger_service.accounts.find_by_id(k)
     assert _value(k) == 11020.0  # the old rule: unchanged

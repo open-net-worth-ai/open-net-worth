@@ -169,6 +169,7 @@ export default function AccountModal({
   const valueFlag = useFlag('allow_brokerage_total_valuation') === true
   const [valueSource, setValueSource] = useState<ValueSource>('total')
   const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(null)
+  const [keepAsCash, setKeepAsCash] = useState<boolean | null>(null)
   const money = (n: number) => fCur(n, form.currency, { cents: true })
   const institutionOptions: InstitutionOption[] = institutions.map((institution) =>
     typeof institution === 'string'
@@ -223,6 +224,7 @@ export default function AccountModal({
       setExternalIds(account.externalIds ?? [])
       if (account.valuation) setValueSource(account.valuation.source)
       setSwitchPreview(null)
+      setKeepAsCash(null)
       const type = (ACCOUNT_TYPES as readonly string[]).includes(account.type)
         ? (account.type as AccountType)
         : 'cash'
@@ -311,6 +313,11 @@ export default function AccountModal({
       setSaveErr('Enter a valid current balance.')
       return
     }
+    const switching = mode === 'edit' && !!valuation && valueSource !== valuation.source
+    if (switching && switchPreview?.needs_choice && keepAsCash === null) {
+      setSaveErr('Say whether the money already in this account is cash or holdings.')
+      return
+    }
     setSaving(true)
     setSaveErr('')
     if (mode === 'add') {
@@ -361,7 +368,11 @@ export default function AccountModal({
         ...rest
       }: AccountCreate = payload
       const update: AccountUpdate = { ...(rest as AccountUpdate) }
-      if (valuation && valueSource !== valuation.source) update.value_source = valueSource
+      if (valuation && valueSource !== valuation.source) {
+        update.value_source = valueSource
+        if (switchPreview?.needs_choice && keepAsCash !== null)
+          update.keep_untracked_as_cash = keepAsCash
+      }
       try {
         await onSave(update, account.id)
       } catch (err) {
@@ -941,10 +952,13 @@ export default function AccountModal({
                       valuation={valuation}
                       value={valueSource}
                       preview={switchPreview}
+                      keepAsCash={keepAsCash}
+                      onKeepAsCash={setKeepAsCash}
                       money={money}
                       onChange={(next) => {
                         setValueSource(next)
                         setSwitchPreview(null)
+                        setKeepAsCash(null)
                         if (next !== valuation.source)
                           void fetchSwitchPreview(account.id, next).then(setSwitchPreview)
                       }}
@@ -1011,6 +1025,9 @@ interface SwitchPreview {
   holdings: number
   untracked: number
   total: number
+  /** The balance is big enough that only the owner can say whether it is cash. */
+  needs_choice?: boolean
+  /** What clearing it would book — until the owner says it is cash. */
   adjustment: number
   value_after: number
 }
@@ -1030,6 +1047,8 @@ interface ValueSourceSectionProps {
   valuation: NonNullable<Account['valuation']>
   value: ValueSource
   preview: SwitchPreview | null
+  keepAsCash: boolean | null
+  onKeepAsCash: (next: boolean) => void
   money: (n: number) => string
   onChange: (next: ValueSource) => void
 }
@@ -1040,6 +1059,8 @@ function ValueSourceSection({
   valuation,
   value,
   preview,
+  keepAsCash,
+  onKeepAsCash,
   money,
   onChange,
 }: ValueSourceSectionProps) {
@@ -1083,18 +1104,41 @@ function ValueSourceSection({
             You can choose once the first total arrives.
           </Text>
         )}
-        {value !== valuation.source && preview && (
-          <Text size="xs" tone={preview.adjustment !== 0 ? 'bad' : 'faint'}>
+        {value !== valuation.source && preview && !preview.needs_choice && (
+          <Text size="xs" tone="faint">
             {value === 'total'
               ? `The value stays ${money(preview.total)}. Your holdings become a breakdown of that total${
                   syncing ? `, and ${valuation.provider}’s next total replaces it` : ''
                 }.`
-              : preview.adjustment === 0
-                ? preview.untracked !== 0
-                  ? `The ${money(preview.untracked)} that’s untracked will count as cash in this account.`
-                  : `The value stays ${money(preview.total)}.`
-                : `This account will be worth ${money(preview.value_after)}, because that’s all the holdings you’ve added. Add your holdings first, or keep Brokerage total.`}
+              : preview.untracked !== 0
+                ? `The ${money(preview.untracked)} that’s untracked will count as cash in this account.`
+                : `The value stays ${money(preview.total)}.`}
           </Text>
+        )}
+        {value === 'holdings' && value !== valuation.source && preview?.needs_choice && (
+          <Stack gap="--space-1">
+            <Text size="xs">
+              {`This account has ${money(preview.untracked)} that isn’t in a holding. What is it?`}
+            </Text>
+            <RadioGroup
+              name={`acct-keep-${account.id}`}
+              ariaLabel="What the money already in this account is"
+              value={keepAsCash === null ? '' : keepAsCash ? 'cash' : 'clear'}
+              onChange={(next) => onKeepAsCash(next === 'cash')}
+              options={[
+                {
+                  value: 'cash',
+                  label: 'Cash',
+                  description: `It stays as this account’s cash. The value stays ${money(preview.total)}.`,
+                },
+                {
+                  value: 'clear',
+                  label: 'Holdings I haven’t added yet',
+                  description: `It’s removed, so the account is worth ${money(preview.value_after)}: only the holdings you’ve added. Add the rest afterwards.`,
+                },
+              ]}
+            />
+          </Stack>
         )}
       </Stack>
     </section>

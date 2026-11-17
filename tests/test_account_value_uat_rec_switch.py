@@ -102,7 +102,9 @@ def test_rec_07_neither_figure_is_refused(client):
 @ON
 def test_rec_08_real_total_on_a_live_holdings_account_is_refused(client):
     _, k = _typed_01()
-    accounts_service.update_account(k, {"value_source": "holdings"})
+    accounts_service.update_account(
+        k, {"value_source": "holdings", "keep_untracked_as_cash": False}
+    )
     res = client.post(f"/api/accounts/{k}/reconcile", json={"real_total": 9000})
     assert res.status_code == 422 and "Brokerage total" in res.json()["detail"]
 
@@ -204,7 +206,9 @@ def test_switch_03_to_07_the_two_percent_boundary_to_the_cent(book, total, adjus
     )
     rows_before = len(carve_rows(k))
     side: dict = {}
-    accounts_service.update_account(k, {"value_source": "holdings"}, side_effects=side)
+    accounts_service.update_account(
+        k, {"value_source": "holdings", "keep_untracked_as_cash": False}, side_effects=side
+    )
     assert ledger_service.accounts.find_by_id(k)["value_source"] == "holdings"
     assert _value(k) == value_after and len(carve_rows(k)) == rows_before + (1 if adjustment else 0)
     if adjustment:
@@ -217,7 +221,9 @@ def test_switch_08_an_account_with_no_holdings_loses_its_whole_untracked_total(b
     k = _account(name="Cash-like", type_="investment", total=8000.0)["id"]
     preview = av.preview_switch(ledger_service.accounts.find_by_id(k), "holdings")
     assert preview["adjustment"] == -8000.0 and preview["value_after"] == 0.0
-    accounts_service.update_account(k, {"value_source": "holdings"})
+    accounts_service.update_account(
+        k, {"value_source": "holdings", "keep_untracked_as_cash": False}
+    )
     assert _value(k) == 0.0
 
 
@@ -227,7 +233,8 @@ def test_switch_13_a_switch_with_an_opening_balance_edit_never_double_counts(cli
     against the edited book, so the untracked part it clears is the whole 5,980.00."""
     _, k = _typed_01()
     out = client.put(
-        f"/api/accounts/{k}", json={"value_source": "holdings", "initial_balance": 9000}
+        f"/api/accounts/{k}",
+        json={"value_source": "holdings", "keep_untracked_as_cash": False, "initial_balance": 9000},
     ).json()
     assert out["value_source"] == "holdings"
     assert out["value_switch"]["untracked"] == 5980.0
@@ -240,7 +247,13 @@ def test_switch_14_refusals_and_unknown_ids(client):
     r = ref_book()
     cash = r["checking"]["id"]
     k = r["k401"]["id"]
-    assert client.put(f"/api/accounts/{cash}", json={"value_source": "holdings"}).status_code == 422
+    assert (
+        client.put(
+            f"/api/accounts/{cash}",
+            json={"value_source": "holdings", "keep_untracked_as_cash": False},
+        ).status_code
+        == 422
+    )
     assert client.put(f"/api/accounts/{k}", json={"value_source": "bogus"}).status_code == 422
     assert (
         client.get(f"/api/accounts/{cash}/value-switch", params={"to": "holdings"}).status_code
@@ -261,7 +274,9 @@ def test_switch_15_a_linked_account_switched_to_live_holdings_only_compares_afte
     _add_holding(x["id"], _instrument())
     plaid.balances["pa-1"] = 0.0
     sync.run()  # held
-    accounts_service.update_account(x["id"], {"value_source": "holdings"})
+    accounts_service.update_account(
+        x["id"], {"value_source": "holdings", "keep_untracked_as_cash": False}
+    )
     assert _value(x["id"]) == 3020.0  # the 120,436.78 untracked part was cleared
     from backend.core.errors import ValidationError
 
@@ -285,7 +300,9 @@ def test_switch_16_a_euro_account_previews_and_books_in_euros(eur_book):
         10000.0,
     )
     assert (preview["adjustment"], preview["value_after"]) == (-7254.55, 2745.45)
-    accounts_service.update_account(k, {"value_source": "holdings"})
+    accounts_service.update_account(
+        k, {"value_source": "holdings", "keep_untracked_as_cash": False}
+    )
     assert _value(k) == 2745.45 and signed(carve_rows(k)[-1], k) == -7254.55
     assert carve_rows(k)[-1]["from_currency"] == "EUR"
     assert figures()["nw"] == 3020.0  # 2,745.45 EUR x 1.10 = 3,019.995 -> 3,020.00

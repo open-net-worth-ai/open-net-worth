@@ -384,12 +384,14 @@ def update_account(
         changes.update(_link_fill(existing, raw_ids))
         changes["external_ids"] = normalized
     new_source = changes.pop("value_source", None)
+    keep_as_cash = changes.pop("keep_untracked_as_cash", None)
     plan = None
     if new_source is not None:
         from backend.services import account_value
 
-        # Refused up front (wrong type, flag off, bad value) so a refused switch writes nothing.
-        plan = account_value.plan_switch(existing, new_source)
+        # Refused up front (wrong type, flag off, bad value, an unanswered cash-or-holdings
+        # question) so a refused switch writes nothing.
+        plan = account_value.plan_switch(existing, new_source, keep_as_cash)
     tables = (accounts_table, institutions_table)
     if plan is not None:
         tables += (transactions_table, txn_audit_table)

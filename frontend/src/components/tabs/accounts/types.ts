@@ -472,7 +472,11 @@ export interface AccountCreate {
   apy?: number | null
 }
 
-export type AccountUpdate = Partial<Omit<AccountCreate, 'type' | 'currency'>>
+export type AccountUpdate = Partial<Omit<AccountCreate, 'type' | 'currency'>> & {
+  /** A switch to Live holdings: the untracked part is cash (kept) or not-yet-added holdings
+   *  (cleared). Required when it is more than a small remainder. */
+  keep_untracked_as_cash?: boolean
+}
 
 export interface ReconcileData {
   /** The balance — or, on a Brokerage total account, `real_total` instead. */

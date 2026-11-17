@@ -305,7 +305,7 @@ def test_account_ids_reads_a_stored_source_without_touching_holdings(offline, mo
     cash = _account(name="Checking", type_="cash", total=1.0)
     from backend.services import account_value
 
-    monkeypatch.setattr(account_value, "held_account_ids", lambda *a: pytest.fail("read"))
+    monkeypatch.setattr(account_value, "_vested_rows", lambda *a: pytest.fail("read"))
     rows = [ledger_service.accounts.find_by_id(a["id"]) for a in (total, live, cash)]
     assert untracked_holdings.account_ids(rows) == frozenset({total["id"]})
 

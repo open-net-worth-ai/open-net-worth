@@ -83,19 +83,6 @@ def _vested_rows() -> list[dict]:
     return [r for r in positions_service.hydrated() if r.get("vesting_state") != "unvested"]
 
 
-def held_account_ids(rows: list[dict] | None = None) -> set[str]:
-    """Accounts holding at least one vested unit — priced or not."""
-    out: set[str] = set()
-    for r in _vested_rows() if rows is None else rows:
-        try:
-            qty = float(r.get("quantity") or 0)
-        except (TypeError, ValueError):
-            qty = 0.0
-        if qty > 0 and r.get("account_id"):
-            out.add(r["account_id"])
-    return out
-
-
 def holdings_value(account: dict, rows: list[dict] | None = None) -> float:
     """The account's vested holdings at last-known prices, in the ACCOUNT's own currency — the
     same canonical per-row fold net worth uses (``ledger.row_base_value``). ``rows``: hydrated
@@ -142,34 +129,18 @@ def _row_value(row: dict, currency: str, fold) -> float:
 # ── which source an account uses ──────────────────────────────────────────────────────
 
 
-def default_source(account: dict, *, held: set[str], rows: list[dict]) -> str:
-    """An account that already holds something keeps Live holdings, and so does a linked one at
-    an institution split across several accounts. Everything else starts as Brokerage total."""
-    if account.get("id") in held:
-        return HOLDINGS
-    if balance_link(account) and siblings(account, rows):
-        return HOLDINGS
-    return TOTAL
-
-
-def source_of(
-    account: dict, *, held: set[str] | None = None, rows: list[dict] | None = None
-) -> str:
+def source_of(account: dict) -> str:
+    """The stored source, else Live holdings: an account from before the choice existed was
+    worth its holdings plus its balance, and stays so until its owner picks Brokerage total.
+    Never guessed from holdings — a brokerage's cash account holds none and is still cash
+    (ADR 2026-11-10, amendment 4)."""
     stored = account.get("value_source")
-    if stored in SOURCES:
-        return stored
-    if held is None:
-        held = held_account_ids()
-    if rows is None:
-        from backend.services.accounts import all_account_rows
-
-        rows = all_account_rows()
-    return default_source(account, held=held, rows=rows)
+    return stored if stored in SOURCES else HOLDINGS
 
 
 def ensure_source(account: dict) -> str:
     """The account's source, STORED if it wasn't yet — the first write that depends on it fixes
-    it, so a later holding can never flip a Brokerage total account to Live holdings."""
+    it, so the account's reading no longer rests on a default."""
     source = source_of(account)
     if account.get("value_source") != source:
         from backend.services import ledger as ledger_service
@@ -235,16 +206,13 @@ def decorate(accounts: list[dict]) -> list[dict]:
     from backend.services.accounts import all_account_rows
 
     rows = all_account_rows()
-    vested: list[dict] | None = None
-    if any(applies(a) for a in accounts):
-        vested = _vested_rows()
-    held = held_account_ids(vested)
+    vested = _vested_rows()
     out = []
     for a in accounts:
         if not applies(a):
             out.append(a)
             continue
-        source = source_of(a, held=held, rows=rows)
+        source = source_of(a)
         row = {
             **a,
             "value_source": source,
@@ -568,20 +536,28 @@ def validate_source(value: object) -> str:
     return str(value)
 
 
-def switch_effect(account: dict, new_source: str) -> dict:
+def switch_effect(account: dict, new_source: str, keep_as_cash: Optional[bool] = None) -> dict:
     """What switching ``account`` to ``new_source`` will do, without writing: the booking a
-    switch to Live holdings makes, and the account's value after it (native)."""
+    switch to Live holdings makes, and the account's value after it (native).
+
+    Only the owner knows whether a Brokerage total account's balance is cash or investments not
+    yet added — an account with no holdings looks the same either way. So a switch to Live
+    holdings whose balance is more than a small remainder needs ``keep_as_cash``: True keeps it
+    as the account's cash, False clears it. ``needs_choice`` says the question applies; until
+    it is answered, ``adjustment`` shows what clearing would book."""
     holdings = holdings_value(account)
     untracked = round(ledger_balance(account["id"]), 2)
     total = round(holdings + untracked, 2)
-    zero = 0.0
+    clear = 0.0
     if new_source == HOLDINGS and untracked != 0:
         small = untracked > 0 and total > 0 and untracked <= total * SMALL_REMAINDER
-        zero = 0.0 if small else -untracked
+        clear = 0.0 if small else -untracked
+    zero = 0.0 if keep_as_cash else clear
     return {
         "holdings": holdings,
         "untracked": untracked,
         "total": total,
+        "needs_choice": clear != 0,
         "adjustment": round(zero, 2),
         "value_after": round(total + zero, 2),
     }
@@ -611,12 +587,22 @@ def preview_switch(account: dict, new_source: str) -> dict:
     return {**switch_effect(account, new_source), "from": current, "to": new_source}
 
 
-def plan_switch(account: dict, new_source: object) -> dict:
+def plan_switch(account: dict, new_source: object, keep_as_cash: Optional[bool] = None) -> dict:
     """What a switch will write, read BEFORE the write's transaction opens (it values the
-    holdings): ``check_switch``'s refusals plus ``switch_effect``."""
+    holdings): ``check_switch``'s refusals plus ``switch_effect``. A balance whose meaning only
+    the owner knows is never cleared by default: the switch is refused until ``keep_as_cash``
+    says which it is."""
     new_source = check_switch(account, new_source)
     current = source_of(account)
-    effect = switch_effect(account, new_source) if current != new_source else {"adjustment": 0.0}
+    if current == new_source:
+        return {"adjustment": 0.0, "from": current, "to": new_source}
+    effect = switch_effect(account, new_source, keep_as_cash)
+    if effect["needs_choice"] and keep_as_cash is None:
+        raise ValidationError(
+            f"Say what the {account_currency(account)} {effect['untracked']:,.2f} in this "
+            "account is: keep_untracked_as_cash=true if it is cash, false if it is investments "
+            "not added as holdings yet (it is then cleared)."
+        )
     return {**effect, "from": current, "to": new_source}
 
 

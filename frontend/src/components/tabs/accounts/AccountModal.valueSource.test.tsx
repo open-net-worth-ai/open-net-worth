@@ -68,6 +68,7 @@ interface Preview {
   holdings: number
   untracked: number
   total: number
+  needs_choice?: boolean
   adjustment: number
   value_after: number
 }
@@ -264,7 +265,14 @@ describe('UI-19: "Value this account by"', () => {
   })
 
   it('does not warn about siblings for an unlinked total, or once Live holdings is picked', async () => {
-    serve({ holdings: 3020, untracked: 4980, total: 8000, adjustment: -4980, value_after: 3020 })
+    serve({
+      holdings: 3020,
+      untracked: 4980,
+      total: 8000,
+      needs_choice: true,
+      adjustment: -4980,
+      value_after: 3020,
+    })
     renderEdit(acct({ value_siblings: ['Brokerage Y'] }))
     expect(screen.queryByText(/Counted twice/)).toBeNull()
     cleanup()
@@ -291,15 +299,27 @@ describe('the switch preview, both directions (SWITCH-01/03/04/08/17)', () => {
     fireEvent.click(screen.getByLabelText(label))
   }
 
-  it('to Live holdings with a large untracked part: red zeroing text, to the cent', async () => {
-    serve({ holdings: 3020, untracked: 4980, total: 8000, adjustment: -4980, value_after: 3020 })
+  it('to Live holdings with a large untracked part: asks whether it is cash, both outcomes to the cent', async () => {
+    serve({
+      holdings: 3020,
+      untracked: 4980,
+      total: 8000,
+      needs_choice: true,
+      adjustment: -4980,
+      value_after: 3020,
+    })
     renderEdit(acct())
-    expect(screen.queryByText(/This account will be worth/)).toBeNull()
+    expect(screen.queryByText(/isn’t in a holding/)).toBeNull()
     await pick(/Live holdings/)
-    const text =
-      'This account will be worth $3,020.00, because that’s all the holdings you’ve added. Add your holdings first, or keep Brokerage total.'
-    const node = await screen.findByText(text)
-    expect(node.className).toContain('bad')
+    await screen.findByText('This account has $4,980.00 that isn’t in a holding. What is it?')
+    expect(
+      screen.getByText('It stays as this account’s cash. The value stays $8,000.00.'),
+    ).toBeTruthy()
+    expect(screen.getByText(/It’s removed, so the account is worth \$3,020\.00/)).toBeTruthy()
+    expect((screen.getByLabelText(/^Cash/) as HTMLInputElement).checked).toBe(false)
+    expect(
+      (screen.getByLabelText(/Holdings I haven’t added yet/) as HTMLInputElement).checked,
+    ).toBe(false)
     expect(previewCalls()).toEqual(['/api/accounts/acc_1/value-switch?to=holdings'])
   })
 
@@ -321,12 +341,18 @@ describe('the switch preview, both directions (SWITCH-01/03/04/08/17)', () => {
     expect(await screen.findByText('The value stays $8,000.00.')).toBeTruthy()
   })
 
-  it('SWITCH-08: with no holdings, clearing the whole typed 8,000.00 is shown as worth $0.00, in red', async () => {
-    serve({ holdings: 0, untracked: 8000, total: 8000, adjustment: -8000, value_after: 0 })
+  it('SWITCH-08: with no holdings, clearing the whole typed 8,000.00 is shown as worth $0.00', async () => {
+    serve({
+      holdings: 0,
+      untracked: 8000,
+      total: 8000,
+      needs_choice: true,
+      adjustment: -8000,
+      value_after: 0,
+    })
     renderEdit(acct({ balance: 8000, balance_base: 8000 }, 0))
     await pick(/Live holdings/)
-    const node = await screen.findByText(/This account will be worth \$0\.00, because/)
-    expect(node.className).toContain('bad')
+    expect(await screen.findByText(/It’s removed, so the account is worth \$0\.00/)).toBeTruthy()
   })
 
   it('the preview money is in the account’s own currency (EUR)', async () => {
@@ -334,12 +360,14 @@ describe('the switch preview, both directions (SWITCH-01/03/04/08/17)', () => {
       holdings: 2745.45,
       untracked: 7254.55,
       total: 10000,
+      needs_choice: true,
       adjustment: -7254.55,
       value_after: 2745.45,
     })
     renderEdit(acct({ currency: 'EUR', balance: 7254.55, balance_base: 7980.01 }))
     await pick(/Live holdings/)
-    expect(await screen.findByText(/This account will be worth €2,745\.45, because/)).toBeTruthy()
+    expect(await screen.findByText(/It’s removed, so the account is worth €2,745\.45/)).toBeTruthy()
+    expect(screen.getByText(/The value stays €10,000\.00/)).toBeTruthy()
   })
 
   it('back to Brokerage total from Live holdings: the value stays, holdings become a breakdown', async () => {
@@ -378,12 +406,19 @@ describe('the switch preview, both directions (SWITCH-01/03/04/08/17)', () => {
   })
 
   it('picking the original option again clears the preview', async () => {
-    serve({ holdings: 3020, untracked: 4980, total: 8000, adjustment: -4980, value_after: 3020 })
+    serve({
+      holdings: 3020,
+      untracked: 4980,
+      total: 8000,
+      needs_choice: true,
+      adjustment: -4980,
+      value_after: 3020,
+    })
     renderEdit(acct())
     await pick(/Live holdings/)
-    await screen.findByText(/This account will be worth/)
+    await screen.findByText(/isn’t in a holding/)
     await pick(/Brokerage total/)
-    await waitFor(() => expect(screen.queryByText(/This account will be worth/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/isn’t in a holding/)).toBeNull())
     expect(previewCalls()).toHaveLength(1)
   })
 
@@ -411,7 +446,14 @@ describe('saving a switch', () => {
   }
 
   it('sends value_source only when it changed', async () => {
-    serve({ holdings: 3020, untracked: 4980, total: 8000, adjustment: -4980, value_after: 3020 })
+    serve({
+      holdings: 3020,
+      untracked: 4980,
+      total: 8000,
+      needs_choice: true,
+      adjustment: -4980,
+      value_after: 3020,
+    })
     const unchanged = renderEdit(acct())
     fireEvent.click(saveButton())
     await waitFor(() => expect(unchanged).toHaveBeenCalledTimes(1))
@@ -421,15 +463,52 @@ describe('saving a switch', () => {
 
     const changed = renderEdit(acct())
     fireEvent.click(screen.getByLabelText(/Live holdings/))
-    await screen.findByText(/This account will be worth/)
+    await screen.findByText(/isn’t in a holding/)
+    fireEvent.click(screen.getByLabelText(/^Cash/))
     fireEvent.click(saveButton())
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(1))
-    expect(changed.mock.calls[0]![0]).toMatchObject({ value_source: 'holdings' })
+    expect(changed.mock.calls[0]![0]).toMatchObject({
+      value_source: 'holdings',
+      keep_untracked_as_cash: true,
+    })
     expect(changed.mock.calls[0]![1]).toBe('acc_1')
   })
 
+  it('never saves a switch whose cash-or-holdings question is unanswered', async () => {
+    serve({
+      holdings: 3020,
+      untracked: 4980,
+      total: 8000,
+      needs_choice: true,
+      adjustment: -4980,
+      value_after: 3020,
+    })
+    const onSave = renderEdit(acct())
+    fireEvent.click(screen.getByLabelText(/Live holdings/))
+    await screen.findByText(/isn’t in a holding/)
+    fireEvent.click(saveButton())
+    expect(
+      await screen.findByText('Say whether the money already in this account is cash or holdings.'),
+    ).toBeTruthy()
+    expect(onSave).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByLabelText(/Holdings I haven’t added yet/))
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0]![0]).toMatchObject({
+      value_source: 'holdings',
+      keep_untracked_as_cash: false,
+    })
+  })
+
   it('switching away and back sends no value_source', async () => {
-    serve({ holdings: 3020, untracked: 4980, total: 8000, adjustment: -4980, value_after: 3020 })
+    serve({
+      holdings: 3020,
+      untracked: 4980,
+      total: 8000,
+      needs_choice: true,
+      adjustment: -4980,
+      value_after: 3020,
+    })
     const onSave = renderEdit(acct())
     fireEvent.click(screen.getByLabelText(/Live holdings/))
     fireEvent.click(screen.getByLabelText(/Brokerage total/))
@@ -438,9 +517,8 @@ describe('saving a switch', () => {
     expect(onSave.mock.calls[0]![0]).not.toHaveProperty('value_source')
   })
 
-  // SWITCH-18 asks that the dialog never save a switch blind. Today a failed preview still lets
-  // Save through with value_source set (the server then clears the untracked part). Pinned as
-  // the CURRENT behaviour; flagged to the owner in the report, not asserted as a defect.
+  // A failed preview still lets Save through with value_source set; the server then refuses a
+  // switch that would clear money until keep_untracked_as_cash answers (amendment 3).
   it('SWITCH-18 (current behaviour): Save still sends the switch when the preview failed', async () => {
     serve('fail')
     const onSave = renderEdit(acct())

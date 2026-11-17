@@ -201,14 +201,32 @@ def test_more_holdings_and_removing_one_never_move_the_total(book):
 
 
 @pytest.mark.flags(allow_brokerage_total_valuation=True)
-def test_an_existing_empty_account_does_not_flip_at_its_first_holding(book, monkeypatch):
-    """Regression (prototype 2026-11-09): re-deciding the default at every read flipped the
-    account to Live holdings the moment it held something, counting 11,020."""
+def test_an_existing_account_with_no_stored_source_reads_as_live_holdings(book):
+    """Amendment 3: never guessed. An account from before the choice existed was worth its
+    holdings plus its balance, and still is until its owner picks Brokerage total."""
     acct = _account()
     ledger_service.accounts.update_by_id(acct["id"], {"value_source": None})
+    assert _hydrated(acct["id"])["value_source"] == "holdings"
     _add_holding(acct["id"], _instrument())
-    assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "total"
-    assert _value(acct["id"]) == 8000.0
+    assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "holdings"
+    assert _value(acct["id"]) == 11020.0
+
+
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
+def test_a_brokerage_cash_account_with_no_stored_source_stays_cash(book):
+    """Regression (2026-11-17): a brokerage split into a holdings account and a cash account —
+    the cash account holds nothing, and the old default read its cash as untracked holdings."""
+    from backend.services import untracked_holdings
+
+    shares = _account(name="Broker", type_="investment", total=0.0, value_source="holdings")
+    cash = _account(name="Broker (EUR cash)", type_="investment", total=2500.0)
+    _add_holding(shares["id"], _instrument())
+    ledger_service.accounts.update_by_id(cash["id"], {"value_source": None})
+    rows = [ledger_service.accounts.find_by_id(a["id"]) for a in (shares, cash)]
+    assert untracked_holdings.account_ids(rows) == frozenset()
+    view = _hydrated(cash["id"])
+    assert view["value_source"] == "holdings" and "value_breakdown" not in view
+    assert _value(cash["id"]) == 2500.0
 
 
 @pytest.mark.flags(allow_brokerage_total_valuation=True)
@@ -297,17 +315,48 @@ def test_switch_to_live_holdings_clears_a_large_untracked_part(book):
     preview = av.preview_switch(ledger_service.accounts.find_by_id(acct["id"]), "holdings")
     assert preview["adjustment"] == -4980.0 and preview["value_after"] == 3020.0
     side: dict = {}
-    accounts_service.update_account(acct["id"], {"value_source": "holdings"}, side_effects=side)
+    accounts_service.update_account(
+        acct["id"], {"value_source": "holdings", "keep_untracked_as_cash": False}, side_effects=side
+    )
     assert side["value_switch"]["adjustment"] == -4980.0
     assert _value(acct["id"]) == 3020.0
     assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "holdings"
 
 
 @pytest.mark.flags(allow_brokerage_total_valuation=True)
+def test_switch_to_live_holdings_asks_before_clearing_and_writes_nothing_unanswered(book):
+    from backend.core.errors import ValidationError
+
+    acct = _account()
+    preview = av.preview_switch(ledger_service.accounts.find_by_id(acct["id"]), "holdings")
+    assert preview["needs_choice"] is True and preview["adjustment"] == -8000.0
+    with pytest.raises(ValidationError, match="keep_untracked_as_cash"):
+        accounts_service.update_account(acct["id"], {"value_source": "holdings"})
+    assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "total"
+    assert _value(acct["id"]) == 8000.0
+
+
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
+def test_switch_to_live_holdings_keeps_the_balance_as_cash_when_told_it_is_cash(book):
+    acct = _account()
+    side: dict = {}
+    accounts_service.update_account(
+        acct["id"],
+        {"value_source": "holdings", "keep_untracked_as_cash": True},
+        side_effects=side,
+    )
+    assert side["value_switch"]["adjustment"] == 0.0 and side["value_switch"]["txn_id"] is None
+    assert ledger_service.accounts.find_by_id(acct["id"])["value_source"] == "holdings"
+    assert _value(acct["id"]) == 8000.0
+
+
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
 def test_switch_to_live_holdings_keeps_a_small_untracked_part_as_cash(book):
     acct = _account(total=3080.0)  # 3,020 tracked + 60 untracked (≤ 2%)
     _add_holding(acct["id"], _instrument())
-    accounts_service.update_account(acct["id"], {"value_source": "holdings"})
+    accounts_service.update_account(
+        acct["id"], {"value_source": "holdings", "keep_untracked_as_cash": False}
+    )
     assert _value(acct["id"]) == 3080.0
     accounts_service.update_account(acct["id"], {"value_source": "total"})
     assert _value(acct["id"]) == 3080.0  # back to Brokerage total writes nothing
