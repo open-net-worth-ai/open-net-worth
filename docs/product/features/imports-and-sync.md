@@ -136,6 +136,9 @@ time.
   it. How often: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only. Below them,
   the last sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs review"), or why it failed.
   A sync that's due shows **Next sync: within a minute**: the app checks every minute.
+- **What YNAB held.** Open a synced or imported transaction and its drawer's **Source** section
+  shows the row as YNAB sent it, with a split's lines under it. Each sync refreshes it, and
+  transactions imported before this was kept get theirs on the next sync.
 - **Red flag in YNAB.** Every transaction the sync adds or changes in YNAB gets YNAB's red flag, so
   you can spot what came from Open Net Worth there.
 - **Direction.** **From YNAB** brings YNAB's changes in and never writes to YNAB; **To YNAB** sends

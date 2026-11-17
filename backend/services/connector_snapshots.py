@@ -17,7 +17,8 @@ has moved away from the snapshot's own ``before``/last-known values — ADR 2026
 so the sync automation can apply a provider correction without ever overriding an edit the
 user made by hand.
 
-Four write paths, all called from ``ai/tools/<provider>_fetch_transactions`` (L2):
+Five write paths. Four are called from ``ai/tools/<provider>_fetch_transactions`` (L2); the fifth,
+``stash_synced``, from a budget app's import and two-way sync (``budget_app_snapshots``):
   - ``stash_rows`` — every fetched row, one call per fetch. Diffs against what is already
     stored and returns the changes a caller should surface to the model.
   - ``note_missing`` — called once per COMPLETE window fetch (``window.complete`` — never a
@@ -26,6 +27,8 @@ Four write paths, all called from ``ai/tools/<provider>_fetch_transactions`` (L2
   - ``promote`` — called from the ledger write choke (``services.ledger._promote_source_
     snapshots``) right after a row books successfully, mirroring
     ``email_snapshots.promote_for_email``.
+  - ``stash_synced`` — the raw rows a YNAB / Actual read returned: new or changed rows only,
+    no change report, no aging out, no pruning.
   - ``prune_unreferenced`` — bounds UNREFERENCED (never-booked) rows per source; called
     automatically at the end of ``stash_rows``, exactly like ``email_snapshots.stash_snapshots``
     calls its own prune.
@@ -256,6 +259,8 @@ def _prepare_stash(
                 to_insert.append(_new_snapshot_row(source, key, ref, row, content_hash, now))
                 continue
             patch = {"last_seen_at": now, "missed_fetches": 0}
+            if not existing.get("provider_account_id") and row.get("provider_account_id"):
+                patch["provider_account_id"] = row["provider_account_id"]
             if existing.get("content_hash") != content_hash:
                 patch.update(
                     {
@@ -306,6 +311,62 @@ def stash_rows(source: str, rows: list[dict]) -> list[dict]:
         _snapshots.bulk_patch(to_patch, conn=conn)
     prune_unreferenced(source, keep=_UNREFERENCED_KEEP)
     return changes
+
+
+def _synced_patch(existing: dict, row: dict, content_hash: str, booked: bool, now: str) -> dict:
+    """What a budget app's sync read changes in a stored row. Its raw is the app's own row, so ANY
+    difference counts (a note or a cleared flag moves no hashed field); the hash fields move with
+    their own ``changed_at``. ``last_seen_at`` is left alone when nothing changed: a run re-reads
+    thousands of unchanged rows."""
+    patch: dict = {}
+    if existing.get("raw") != row.get("raw"):
+        patch["raw"] = row.get("raw")
+    if existing.get("content_hash") != content_hash:
+        patch.update(
+            normalized=row.get("normalized") or {}, content_hash=content_hash, changed_at=now
+        )
+    if not existing.get("provider_account_id") and row.get("provider_account_id"):
+        patch["provider_account_id"] = row["provider_account_id"]
+    if patch:
+        patch["last_seen_at"] = now
+    if booked and not existing.get("referenced"):
+        patch["referenced"] = True
+    return patch
+
+
+def stash_synced(source: str, rows: list[dict], booked_refs: set[str]) -> None:
+    """Keep the raw rows a budget app's sync (or its import) read, in ONE transaction, writing only
+    rows that are new or changed. Unlike ``stash_rows`` it reports no changes (the sync detects its
+    own), never ages a row out (it has its own delete handling), never prunes (the sync's mirror
+    already holds the same set) and marks every row in ``booked_refs`` referenced, so a row booked
+    before this read existed gains its evidence too. A fetch tool stashing the same ref later finds
+    the row unchanged: both build ``normalized`` the same way."""
+    if not rows:
+        return
+    now = _now()
+    existing_by_ref = {r["ref"]: r for r in _snapshots.by_source(source)}
+    to_insert: list[dict] = []
+    to_patch: dict[str, dict] = {}
+    seen: set[str] = set()
+    for row in rows:
+        ref = str(row.get("ref") or "").strip()
+        if not ref or ref in seen:
+            continue
+        seen.add(ref)
+        content_hash = _content_hash(row.get("normalized") or {})
+        existing = existing_by_ref.get(ref)
+        if existing is None:
+            new = _new_snapshot_row(source, snapshot_key(source, ref), ref, row, content_hash, now)
+            to_insert.append({**new, "referenced": ref in booked_refs})
+        elif patch := _synced_patch(existing, row, content_hash, ref in booked_refs, now):
+            to_patch[snapshot_key(source, ref)] = patch
+
+    from backend.db.engine import locked_unit_of_work
+    from backend.db.tables import connector_snapshots as connector_snapshots_table
+
+    with locked_unit_of_work(connector_snapshots_table) as conn:
+        _snapshots.bulk_insert(to_insert, conn=conn)
+        _snapshots.bulk_patch(to_patch, conn=conn)
 
 
 def _missing_candidate(
@@ -439,18 +500,20 @@ def snapshots_for_transaction(txn_id: str) -> list[dict] | None:
 
 
 def _connector_pairs(txn: dict) -> list[tuple[str, str]]:
-    # Only a connector-fetch provider ever stashes a snapshot (``connector_fetch``). Every other
+    # Only a connector-fetch provider or a budget app's sync ever stashes a snapshot. Every other
     # namespace — statement fingerprints, the iOS shortcuts' idempotency keys, vest ids, a ref
     # Lucius coined — is an identity with no evidence behind it, so listing it would only ever
     # say "Snapshot unavailable" (owner report 2026-10-19: every iOS-captured row did).
     from backend.services.aggregation.providers import PROVIDERS
+    from backend.services.budget_app import all_apps
 
+    stashing = set(PROVIDERS) | {app.source for app in all_apps()}
     pairs: list[tuple[str, str]] = []
     for entry in txn.get("external_refs") or []:
         if not isinstance(entry, dict):
             continue
         source, ref = entry.get("source"), str(entry.get("ref") or "").strip()
-        if not ref or source not in PROVIDERS:
+        if not ref or source not in stashing:
             continue
         pair = (source, ref)
         if pair not in pairs:

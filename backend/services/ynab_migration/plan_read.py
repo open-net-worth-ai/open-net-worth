@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 
 from backend.core.errors import ValidationError
+from backend.services import budget_app_snapshots
 from backend.services.budget_app import current
 from backend.services.ynab_migration import mapping, settle
 
@@ -39,6 +40,8 @@ def read(run, store, plan_id: str, recheck_of: str | None) -> tuple[dict, dict]:
 
 def load_plan(run, store, plan_id: str, choice: dict, kind: str) -> dict:
     summary, data = read(run, store, plan_id, choice.get("recheck_of"))
+    if kind == "import":
+        budget_app_snapshots.stash(data.get("raw_rows") or [])
     currency, asked = settle.currency(summary, data, choice.get("currency"), kind)
     run.progress("mapping")
     # A tracking budget's figures aren't envelopes: nothing of its months comes across.

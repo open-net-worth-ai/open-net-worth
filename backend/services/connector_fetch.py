@@ -181,7 +181,7 @@ def _sanitize_extra(extra: dict) -> dict:
     return out
 
 
-def _sanitize_raw(value: object, *, _depth: int = 0) -> object:
+def sanitize_raw(value: object, *, _depth: int = 0) -> object:
     """Recursively sanitize every STRING LEAF of a provider's raw evidence dict (S-F3) —
     ``raw`` is stashed unsanitized-and-unbounded today, but it is readable by Lucius via
     ``run_sql_query`` against the ``connector_snapshots`` table, so it is exactly as
@@ -195,9 +195,9 @@ def _sanitize_raw(value: object, *, _depth: int = 0) -> object:
     if isinstance(value, str):
         return sanitize_untrusted(value, max_len=_RAW_LEAF_MAX_LEN)
     if isinstance(value, dict):
-        return {k: _sanitize_raw(v, _depth=_depth + 1) for k, v in value.items()}
+        return {k: sanitize_raw(v, _depth=_depth + 1) for k, v in value.items()}
     if isinstance(value, list):
-        return [_sanitize_raw(v, _depth=_depth + 1) for v in value]
+        return [sanitize_raw(v, _depth=_depth + 1) for v in value]
     return value
 
 
@@ -549,7 +549,7 @@ def _fetch(
         {
             "ref": _row_ref(r),
             "provider_account_id": r.get("provider_account_id"),
-            "raw": _sanitize_raw(r.get("raw")),
+            "raw": sanitize_raw(r.get("raw")),
             "normalized": {
                 "date": r.get("date"),
                 "amount": r.get("amount"),
