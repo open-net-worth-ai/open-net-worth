@@ -388,6 +388,49 @@ def _fmt_agent_tool_catalog(allowed_tools: Optional[list]) -> str:
     return "\n".join(["", header, body])
 
 
+_VISUALS_GUIDE = """
+VISUALS IN A REPLY — show_visual draws a small chart, figures or a timeline inside the reply.
+When the answer has a shape, DRAW IT — that is the default, not an extra:
+- "where did my money go / what did I spend on" → chart bar of the categories
+- "this month vs last" / "compare X and Y" → stats (now, compare = then) + chart bar, two series
+- "how is my net worth / portfolio trending" → chart line
+- "what's my allocation / am I concentrated" → chart stack
+- "how's my budget" → chart progress (spent vs target)
+- "when do I vest / what bills are coming" → timeline
+- "what moved my net worth / why did X change" → your own drawing: a waterfall, start → each
+  driver (up good, down bad) → end
+- "where does my income go" → your own drawing: income split into spending groups and saving
+- "this month vs last by category" → chart bar, two series (both months' rows)
+- "am I on track / what if" → stats: one tile per figure that moved (odds, safe age, median
+  pot), value = the what-if run, compare = the saved-plan run ("args": {} picks the run with
+  no arguments), compare_label "Your plan"
+Don't draw a single figure, a yes or no, or advice. Read first, then call show_visual with
+references to those results. With standard blocks, the text is one or two sentences: the
+takeaway and anything the picture can't say — never the figures it already shows. WHAT-IFS: on
+Plan › Outlook, stage the what-if with run_screen_command; elsewhere draw it and also stage it,
+so they can open it in Outlook.
+YOUR OWN DRAWING (code, alone or beside blocks) — SVG or HTML you write, for any shape: a
+waterfall, a flow, a scatter, a trend with marked events, an interactive explainer. It runs in
+its own frame: scripts, <style>, libraries from a CDN, images and links all work, and the frame
+grows to fit. Two conventions:
+- Colour with the theme so light and dark mode both work: var(--ink) var(--muted) var(--line)
+  var(--good) var(--bad) var(--accent) var(--bg), or the classes iv-c1…iv-c6 (series), iv-good,
+  iv-bad, iv-muted (fill + stroke; iv-nofill for a line), iv-line (grid), text iv-t, iv-ts,
+  iv-th.
+- Draw for a 680-wide column: <svg viewBox="0 0 680 H" width="100%">.
+"""
+
+
+def _visuals_block() -> str:
+    """The VISUALS paragraph while the ``inline_visuals`` flag is on; nothing when it is off."""
+    from backend.services.feature_flags import enabled
+
+    try:
+        return _VISUALS_GUIDE if enabled("inline_visuals") else ""
+    except Exception:  # an unreadable flag must not break the prompt — fall back to off
+        return ""
+
+
 def _budget_method_line() -> str:
     """The book's budget method and the tool that reads it. ``get_budget_month`` is Zero-Based's
     table whatever the method, so a 50/30/20 book asked "how's my budget?" was answered in Ready
@@ -713,6 +756,11 @@ if the user seems ready to add their first account or holding, call activate_ski
         else ""
     )
 
+    visuals_block = _visuals_block()
+    closing_reminder = "Keep replies short: lead with the answer, stop when it is answered." + (
+        " If the answer has a shape, draw it with show_visual." if visuals_block else ""
+    )
+
     # The prompt is split into a STABLE instruction body (cached across turns) and
     # a VOLATILE snapshot (date, live portfolio, FX, memory). They are joined with
     # CACHE_SPLIT_MARKER; the provider caches everything before it. Keep all data
@@ -784,6 +832,15 @@ Examples of correct calibration:
         with the key figures is right.
 A wall of text in reply to a greeting is a FAILURE, even if every number in it is correct.
 
+ANSWER LENGTH — the person is busy; give them the answer, not the working.
+- Lead with the answer itself in the first sentence: the figure, the yes or no, the verdict.
+- A fact or a single figure: 1–3 sentences. A comparison or an analysis: a short lead plus at
+  most about 6 one-line bullets. Go longer only when they ask for detail or a walkthrough.
+- One figure per point; name the two or three things that matter most, not everything you read.
+- Headings only for an answer with three or more distinct parts. Never nest bullets.
+- No preamble ("Great question", "Let me look"), no closing recap, no list of things you could
+  do next — at most one short question when a real choice is theirs.
+{visuals_block}
 GROUNDING — THE RECORDS ARE THE SOURCE OF TRUTH
 The data stores are the single source of truth: the ledger (transactions), lots + realized
 events, positions, accounts, and rules. Your memory, notes, and narrative are NOT.
@@ -874,7 +931,8 @@ The FINANCIAL PROFILE below is already current — call get_profile only for a f
 {tool_catalog_block}
 {mcp_instructions_block}
 {rest_instructions_block}
-{onboarding_block}"""
+{onboarding_block}
+{closing_reminder}"""
 
     # ── SEMI-STABLE half: memory, skills, profile, FIRE — changes only on
     # memory extraction or profile/skill edits, not every turn (~30K chars).

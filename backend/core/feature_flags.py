@@ -199,6 +199,18 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 13),
         remove_by=date(2027, 3, 1),
     ),
+    Flag(
+        name="inline_visuals",
+        description=(
+            "Lucius can answer with a small chart, figures or a timeline inside its reply when "
+            "a picture says it better: a trend, a breakdown, a comparison. Every number in it "
+            "comes straight from the app's own data. Off: replies are text and tables only."
+        ),
+        default=True,
+        owner="owner",
+        added=date(2026, 11, 17),
+        remove_by=date(2027, 3, 1),
+    ),
 )
 
 

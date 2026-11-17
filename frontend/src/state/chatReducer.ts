@@ -932,6 +932,8 @@ export async function consumeEventStream(
           // Compact reference only (id/title/filename/type/size) — ArtifactCard fetches
           // the document bytes from /api/artifacts/{id} on mount.
           appendBlock(ownerId, { type: 'artifact', artifact: event.artifact })
+        } else if (event.type === 'visual') {
+          appendBlock(ownerId, { type: 'visual', visual: event.visual })
         } else if (event.type === 'mcp_image') {
           // An external-MCP tool captured an image — same AttachmentThumb a chat photo
           // upload renders, backed by GET /api/uploads/{ref_id}/image.

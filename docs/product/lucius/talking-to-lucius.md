@@ -6,7 +6,7 @@ order: 20
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/mentions, lucius/permissions, lucius/models-and-cost]
-keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone, upload, file types, supported files, excel, xlsx, xls, csv, ofx, qif, word, docx]
+keywords: [chat, prompting, visual, visuals, chart, graph, timeline, response detail, brief, detailed, short answers, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone, upload, file types, supported files, excel, xlsx, xls, csv, ofx, qif, word, docx]
 ---
 
 # How to talk to Lucius
@@ -110,9 +110,41 @@ finishes. If a file can't be uploaded, the message stays in the box and a note t
 file and why: a type Lucius can't read (with the list above), a password-protected file, a file
 over 25 MB, or a dropped connection. Nothing is sent without it by accident.
 
+## Charts and figures in a reply
+
+When an answer has a shape, Lucius draws it right in his reply instead of describing it: a bar
+chart for *"where did my money go this month?"*, a line for *"how is my net worth trending?"*,
+headline figures side by side for *"what if I saved $1,000 more a month?"*, a timeline for *"show
+my vesting schedule"*. He doesn't draw a single figure, a yes or no, or advice, and the text
+around a picture gives the takeaway rather than repeating its numbers.
+
+When none of those shapes fits — what moved your net worth from January to now, how your income
+splits into spending and saving, a trend with the day you changed jobs marked — Lucius draws the
+picture himself. These drawings are his own work, like a sentence he writes: the figures in them
+come from what he read, but he wrote them in, so check one that matters against the screen it
+came from. A drawing can be interactive (hover a point to see its value) and can use charting
+libraries from the internet. It runs in its own walled-off frame, so it can't act as you in the
+app.
+
+In the standard charts every number comes straight from your data — Lucius points at what he
+read and the app copies the figures in, so he can't mistype one. A few things are written under
+the picture for you:
+
+- **What-if — …** names each assumption he changed and its value in your saved plan, so a what-if
+  is never mistaken for your plan. To try other numbers yourself, open it in **Plan › Outlook**
+  from the chip under the reply.
+- **Projection — not booked** marks a cash-flow forecast.
+- **Largest 6 of 35** means he kept the biggest rows and left the smallest out.
+
+Hiding amounts hides them in the standard charts. Lucius's own drawings are not masked — they
+show their figures even when amounts are hidden. On
+[Telegram](../connectors/telegram.md) a standard chart's figures arrive as a few lines of text,
+and a drawing as a note to open the chat in the app. To turn them off, see **Settings → Developer → Experimental**
+(*Inline visuals*).
+
 ## Ask for a file when you want to keep it
 
-Charts and reports appear right in the chat. When you'd rather have a file, say which kind:
+A chart in a reply lives in the conversation. When you'd rather have a file, say which kind:
 
 - *"Make that a PDF"* → a printable, paginated document.
 - *"Give me September's transactions as a spreadsheet"* → an Excel file (.xlsx) with dates,
@@ -132,8 +164,10 @@ interactive page — tap a bar or slide along a line to read the exact figure.
 
 ## Short answers by default
 
-Lucius keeps replies short and won't recite your whole portfolio, budget or memory unless you ask.
-Want everything? Say so: *"give me a full breakdown of…"*.
+Lucius leads with the answer and stops when it's answered: a figure gets a sentence or two, an
+analysis a short list. He won't recite your whole portfolio, budget or memory unless you ask.
+Want everything? Say so: *"give me a full breakdown of…"*, or change **Response detail** in
+**Settings → Chat**.
 
 ## He can see what you're looking at
 
@@ -172,6 +206,8 @@ something, the retry adds your message again so Lucius still knows what was done
 - **Show cost per turn** — the tokens, price and model under each reply.
 - **Group reasoning into one block** — show Lucius's thinking as one block above the answer,
   instead of step by step.
+- **Response detail** — **Brief** (the answer and its key figure), **Normal** (the default) or
+  **Detailed** (the reasoning and the figures behind it too).
 - **Multi-turn chat** — let you send another message while Lucius is still answering; it's
   woven into the same reply. Off, **Send** waits until he's done.
 

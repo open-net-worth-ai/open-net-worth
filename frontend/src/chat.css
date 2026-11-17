@@ -2728,6 +2728,236 @@
   .screen-ctx__attach--on {
     background: color-mix(in srgb, var(--lucius) 20%, transparent);
   }
+
+  /* ── Inline visual (show_visual): tiles, charts, bars, timeline in the chat column ───── */
+  .msg-visual-wrap {
+    width: 100%;
+    min-width: 0;
+    margin-top: 8px;
+  }
+  .ivis {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+  }
+  .ivis-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .ivis-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+  }
+  .ivis-tile {
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-2);
+  }
+  .ivis-tile-label {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .ivis-tile-value {
+    margin-top: 2px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .ivis-tile-compare {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .ivis-chart {
+    position: relative;
+    height: 200px;
+    min-width: 0;
+  }
+  .ivis-rows,
+  .ivis-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .ivis-row {
+    display: grid;
+    grid-template-columns: minmax(60px, 30%) 1fr auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .ivis-row-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+  .ivis-row-value {
+    text-align: right;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .ivis-row-of {
+    color: var(--muted);
+  }
+  .ivis-div-track {
+    position: relative;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--bg-2);
+  }
+  .ivis-div-track::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    left: 50%;
+    width: 1px;
+    background: var(--line-strong);
+  }
+  .ivis-div-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 3px;
+  }
+  .ivis-div-bar.pos {
+    background: var(--pos);
+  }
+  .ivis-div-bar.neg {
+    background: var(--neg);
+  }
+  .ivis-stack-bar {
+    display: flex;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: var(--bg-2);
+  }
+  .ivis-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .ivis-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .ivis-legend-item i {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .ivis-legend-value {
+    color: var(--ink);
+  }
+  .ivis-prog {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+  }
+  .ivis-prog-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ivis-prog-track {
+    display: block;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: var(--bg-2);
+  }
+  .ivis-prog-fill {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--primary);
+  }
+  .ivis-prog-fill.over {
+    background: var(--warn);
+  }
+  .ivis-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+  }
+  .ivis-timeline li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: baseline;
+    padding-left: 10px;
+    border-left: 2px solid var(--line-strong);
+  }
+  .ivis-tl-date {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .ivis-tl-label {
+    min-width: 0;
+    color: var(--ink);
+  }
+  .ivis-tl-value {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .ivis-caption {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  .ivis-followups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ivis-chip {
+    padding: 5px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .ivis-chip:hover {
+    background: var(--bg-2);
+  }
+  /* Lucius's own drawing (show_visual `code`): a sandboxed frame that grows to its content
+     (visual/VisualDrawing.tsx, visual/drawingFrame.ts). No cap, no clip, no mask — the owner
+     kept only the limits Claude's own drawing tool has (2026-11-18). */
+  .ivis-frame {
+    display: block;
+    width: 100%;
+    height: 160px;
+    border: 0;
+    background: transparent;
+  }
 } /* end @layer legacy */
 
 /* ── Write-receipt chip (WriteReceiptChip) ─────────────────────────────────────

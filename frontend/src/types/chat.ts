@@ -581,6 +581,7 @@ export type MessageBlock =
   | { type: 'change'; change: ProposedChange }
   | { type: 'duplicate_review'; duplicates: PotentialDuplicate[]; batchId?: string }
   | { type: 'artifact'; artifact: ArtifactRef }
+  | { type: 'visual'; visual: VisualSpec }
   | { type: 'receipt'; receipt: WriteReceipt }
   | {
       type: 'screen_command'
@@ -689,4 +690,50 @@ export interface Message {
   // messages delivered in the same event-loop tick are still guaranteed strictly
   // increasing (see `nextTimestamp`), so display order never ties.
   ts?: number
+}
+
+/** How a visual's raw numbers are written. The client only formats them — it never derives one. */
+export type VisualFormat = 'money' | 'number' | 'percent' | 'percent_points'
+
+export interface VisualTile {
+  label: string
+  value: number
+  compare?: number | null
+  compare_label?: string | null
+  format?: VisualFormat
+  currency?: string | null
+}
+
+export type VisualChartKind = 'line' | 'bar' | 'diverging' | 'stack' | 'progress'
+
+export type VisualBlock =
+  | { type: 'stats'; tiles: VisualTile[] }
+  | {
+      type: 'chart'
+      kind: VisualChartKind
+      format?: VisualFormat
+      currency?: string | null
+      labels: string[]
+      series: { name: string; values: (number | null)[] }[]
+      targets?: (number | null)[] | null
+    }
+  | {
+      type: 'timeline'
+      format?: VisualFormat | null
+      currency?: string | null
+      items: { date: string; label: string; value?: number | null }[]
+    }
+
+/** The resolved spec `show_visual` returns (backend ai/visual_spec.py) — live `visual` SSE event
+ *  and the reloaded transcript block carry the same shape. */
+export interface VisualSpec {
+  id: string
+  title?: string | null
+  as_of?: string
+  caption?: string[]
+  follow_ups?: string[]
+  /** Reference blocks — absent when the visual is Lucius's own drawing (`code`). */
+  blocks?: VisualBlock[]
+  /** SVG / HTML Lucius wrote itself; drawn only through `visual/sanitize.ts`. */
+  code?: string
 }

@@ -87,6 +87,18 @@ async def _deliver_artifact(connector, channel_id: str, art: dict) -> None:
         log.warning("[%s] artifact delivery failed: %s", channel_id, type(exc).__name__)
 
 
+async def _deliver_visual(connector, channel_id: str, spec: dict) -> None:
+    """An inline visual on a channel: its figures as plain text. Best-effort, never raises."""
+    try:
+        from backend.services.visual_text import render_text
+
+        text = render_text(spec)
+        if text:
+            await connector.send_text(channel_id, text)
+    except Exception as exc:  # noqa: BLE001 — a delivery failure must not break the turn
+        log.warning("[%s] visual delivery failed: %s", channel_id, type(exc).__name__)
+
+
 async def _deliver_mcp_images(connector, channel_id: str, attachments: list[dict]) -> None:
     """Deliver an external-MCP tool's captured image(s) (a screenshot, e.g.) to a connector as
     a native photo, or a one-line text note on a channel without media support. Mirrors
@@ -799,6 +811,12 @@ async def pump_channel_turn(
                 # file support (base send_document raises) degrades to a one-line text note.
                 await flush_prose()
                 await _deliver_artifact(connector, channel_id, event.get("artifact") or {})
+
+            elif etype == "visual":
+                # A show_visual call: a channel can't draw it, so it gets the same figures as
+                # text, in order with the prose around it.
+                await flush_prose()
+                await _deliver_visual(connector, channel_id, event.get("visual") or {})
 
             elif etype == "mcp_image":
                 # An external-MCP tool captured an image (a screenshot, e.g.). Same shape as
