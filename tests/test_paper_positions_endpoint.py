@@ -68,6 +68,24 @@ def test_paper_positions_in_one_instrument(paper_client, monkeypatch):
     } <= set(row)
     assert row["simulated"] is True and row["value_home"] > 0
 
+    trades = out["trades"]
+    # Each trade names its portfolio; an archived run's history is not shown.
+    assert sorted(t["portfolio_name"] for t in trades) == ["A", "B"]
+    assert all(t["kind"] == "buy" and t["label"].startswith("Bought") for t in trades)
+
+    # A position sold out keeps its history: the trade list still has both of A's trades.
+    apply_paper_change(
+        {
+            "op": "place",
+            "portfolio_id": a["portfolio"]["id"],
+            "order": {"asset_key": "inst:inst_acme", "side": "sell", "quantity": 3},
+        }
+    )
+    out = paper_client.get("/api/paper/positions", params={"instrument_id": "inst_acme"}).json()
+    assert {r["portfolio_name"] for r in out["positions"]} == {"B"}
+    a_trades = [t for t in out["trades"] if t["portfolio_name"] == "A"]
+    assert [t["kind"] for t in a_trades] == ["sell", "buy"]  # newest first
+
     assert _real_figures() == before  # the real position and net worth are unchanged
 
 

@@ -6,7 +6,7 @@ returns authority, and nothing here feeds back into it."""
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from backend.core.config import get_settings
 from backend.core.user_time import user_today
@@ -16,7 +16,7 @@ from backend.services.paper_trading.book import Book
 
 logger = logging.getLogger(__name__)
 
-RANGES = {"1M": 31, "3M": 92, "1Y": 366, "ALL": None}
+RANGES = {"1W": 8, "1M": 31, "3M": 92, "1Y": 366, "ALL": None}
 
 
 def _value_points(values: list[dict], value_now: float | None) -> list[dict]:
@@ -153,12 +153,71 @@ def summary(
     return out
 
 
+# The intraday line covers the first week: the daily line is a handful of points until then, and
+# the five-day intraday bars reach no further back.
+INTRADAY_DAILY_POINTS = 6
+
+
+def _intraday(row: dict, book: Book, events: list[dict] | None, points, flows, value_now):
+    """The first week through the day, while the daily line is too short to be a chart; None
+    when that does not apply or there are no intraday prices to draw it with."""
+    from backend.services.paper_trading import intraday
+
+    first = points[0] if points else None
+    if (
+        events is None
+        or not first
+        or not first.get("start")
+        or len(points) > INTRADAY_DAILY_POINTS
+        or flows
+    ):
+        return None
+    closes = _benchmark_closes(str(row.get("benchmark") or ""))
+    before = [d for d in closes if d <= first["date"]]
+    try:
+        out = intraday.line(
+            row,
+            events,
+            opening=first["value"],
+            start_day=_start_day(row),
+            value_now=value_now,
+            bench_base=closes[max(before)] if before else None,
+            now=datetime.now(timezone.utc),
+        )
+    except Exception:
+        logger.info("paper: intraday line unavailable", exc_info=True)
+        return None
+    return out or None
+
+
 def series(
-    row: dict, book: Book, values: list[dict], value_now: float | None, rng: str = "ALL"
+    row: dict,
+    book: Book,
+    values: list[dict],
+    value_now: float | None,
+    rng: str = "ALL",
+    *,
+    events: list[dict] | None = None,
 ) -> dict:
     """The chart: the paper line, the benchmark and your investments, each a cumulative
-    fraction from the range's first day."""
+    fraction from the range's first day. In the first days, with ``events``, the line is
+    drawn through the day instead (``intraday``)."""
     points, flows = _line(row, book, values, value_now)
+    through_day = _intraday(row, book, events, points, flows, value_now)
+    if through_day:
+        last = through_day[-1]
+        yours = _your_line(points[0]["date"])
+        days = [d for d in yours if d <= points[-1]["date"]]
+        return {
+            "series": through_day,
+            "intraday": True,
+            "return_pct": last["paper"],
+            "benchmark": {"symbol": row.get("benchmark"), "return_pct": last["benchmark"]}
+            if row.get("benchmark")
+            else None,
+            "yours_return_pct": yours[max(days)] if days else None,
+            "simulated": True,
+        }
     days = RANGES.get(rng.upper())
     if days is not None and points:
         cut = (user_today() - timedelta(days=days)).isoformat()
@@ -188,6 +247,7 @@ def series(
         if row.get("benchmark")
         else None,
         "yours_return_pct": last.get("yours"),
+        "intraday": False,
         "simulated": True,
     }
 

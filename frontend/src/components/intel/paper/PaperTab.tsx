@@ -1,6 +1,7 @@
 import '../following/following.css'
 
 import { useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Button, EmptyState, ErrorState, TabSkeleton } from '../../ui'
 import { Spark } from '../../../lucius/identity'
 import { NewPortfolioDialog } from './NewPortfolioDialog'
@@ -11,10 +12,17 @@ import { usePaperList } from './usePaper'
 /** Intelligence › Paper Trading: your paper portfolios as cards; open one to trade on paper. */
 export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void }) {
   const list = usePaperList()
-  // `?paper=<id>` opens that portfolio (Copy Trading's Paper-copy lands here with it).
-  const [openId, setOpenId] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get('paper'),
-  )
+  // The open portfolio lives in the address (`?paper=<id>`), as Copy Trading's does: a reload
+  // or a shared link opens it again, and Back returns to the list. Copy Trading's Paper-copy
+  // lands here with it.
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as { paper?: string }
+  const openId = search.paper || null
+  const setOpenId = (id: string | null) =>
+    void navigate({
+      to: '/intel',
+      search: ((prev: Record<string, unknown>) => ({ ...prev, paper: id ?? undefined })) as never,
+    } as never)
   const [creating, setCreating] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
 

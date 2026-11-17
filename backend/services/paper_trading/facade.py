@@ -53,7 +53,13 @@ def delete(pid: str) -> dict:
 
 
 def _order_change(pid: str, body: dict, origin: str) -> dict:
-    return {"portfolio_id": pid, "order": body, "origin": origin}
+    order = {k: v for k, v in body.items() if k != "override_mandate"}
+    return {
+        "portfolio_id": pid,
+        "order": order,
+        "origin": origin,
+        "override_mandate": bool(body.get("override_mandate")),
+    }
 
 
 def preview(pid: str, body: dict) -> dict:
@@ -85,7 +91,8 @@ def performance_series(pid: str, rng: str = "ALL") -> dict:
     bk = service.derive(pid)
     live = row.get("status") == "active"
     value = valuation.value(row, bk, datetime.now(timezone.utc), fetch_quotes=live)["value_home"]
-    return performance.series(row, bk, PaperValueStore().for_portfolio(pid), value, rng)
+    values = PaperValueStore().for_portfolio(pid)
+    return performance.series(row, bk, values, value, rng, events=service.events(pid))
 
 
 def _paper_weights(holdings: list[dict]) -> dict[str, float]:

@@ -7,6 +7,7 @@ import { NameCell } from '../following/NameCell'
 import { Crumb } from '../following/Crumb'
 import { signedPct, toneOf } from '../following/following.format'
 import { Toast } from '../../tabs/accounts/Toast'
+import { useAssetNav } from '../../../state/assetNav'
 import {
   cancelPaperOrder,
   deletePaperPortfolio,
@@ -16,11 +17,14 @@ import {
   type PaperHolding,
   type PaperOrder,
 } from '../../../api/paperTrading'
+import { EditPortfolioDialog } from './EditPortfolioDialog'
+import { MandateTab } from './MandateTab'
 import { OrderTicket } from './OrderTicket'
 import { PaperChart } from './PaperChart'
+import { PaperSource } from './PaperSource'
 import { usePaperPage } from './usePaper'
 
-type Tab = 'holdings' | 'orders' | 'activity'
+type Tab = 'holdings' | 'orders' | 'activity' | 'mandate'
 
 const assetOfHolding = (h: PaperHolding): PaperAsset => ({
   asset_key: h.asset_key,
@@ -48,6 +52,8 @@ export function PaperPortfolioPage({
   const [ticket, setTicket] = useState<{ asset?: PaperAsset; side?: OrderSide } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<'over' | 'delete' | null>(null)
+  const [editing, setEditing] = useState(false)
+  const { openAsset } = useAssetNav()
   const [pollOpen, setPollOpen] = useState(false)
   const page = usePaperPage(id, pollOpen)
   const data = page.data
@@ -81,6 +87,7 @@ export function PaperPortfolioPage({
     }
   }
   const menu = [
+    { label: 'Edit', onSelect: () => setEditing(true) },
     ...(archived ? [] : [{ label: 'Start over', onSelect: () => setConfirm('over') }]),
     { label: 'Delete', tone: 'danger' as const, onSelect: () => setConfirm('delete') },
   ]
@@ -101,7 +108,13 @@ export function PaperPortfolioPage({
               <span className="fol-title-name">{p.name}</span>
               <Tag>Paper</Tag>
               <span className="fol-title-by">
-                {p.source_label} · Day {p.day_count}
+                {p.source && (
+                  <>
+                    <PaperSource source={p.source} />
+                    {' · '}
+                  </>
+                )}
+                Day {p.day_count}
                 {p.run_no > 1 ? ` · Run ${p.run_no}` : ''}
                 {archived ? ' · Archived' : ''}
               </span>
@@ -139,6 +152,7 @@ export function PaperPortfolioPage({
             { key: 'holdings', label: 'Holdings' },
             { key: 'orders', label: 'Orders', badge: f.open_orders || undefined },
             { key: 'activity', label: 'Activity' },
+            { key: 'mandate', label: 'Mandate', badge: data.mandate?.broken || undefined },
           ]}
         />
       </div>
@@ -146,8 +160,8 @@ export function PaperPortfolioPage({
         {tab === 'holdings' && (
           <div className="fol-sec">
             <div className="fol-keyfigs">
-              <div className="fol-ret3">
-                {/* The returns are Performance's, right below: each figure is said once. */}
+              <div className="fol-ret3 paper-figs">
+                {/* The returns are Performance's, under its chart: each figure is said once. */}
                 <Figure label="Paper value" value={money(f.value)} />
                 <Figure label="Cash left" value={money(f.cash_home)} />
               </div>
@@ -159,6 +173,18 @@ export function PaperPortfolioPage({
                 rows={data.holdings}
                 rowKey={(h) => h.asset_key}
                 initialSort="value"
+                // A row opens its asset's own page, as on Holdings. A currency or a contract
+                // has no page of its own.
+                onRowClick={(h) => {
+                  const instrumentId = h.asset_key.startsWith('inst:') ? h.asset_key.slice(5) : ''
+                  if (instrumentId)
+                    openAsset({
+                      instrumentId,
+                      // A stock's ticker opens its quote; anything else opens by its id.
+                      ticker: h.kind === 'listed' ? (h.symbol ?? undefined) : undefined,
+                      label: h.name,
+                    })
+                }}
                 columns={holdingColumns(
                   (h, side) => setTicket({ asset: assetOfHolding(h), side }),
                   !archived,
@@ -199,6 +225,12 @@ export function PaperPortfolioPage({
             ))}
           </div>
         )}
+        {tab === 'mandate' && (
+          <MandateTab
+            status={data.mandate}
+            onEdit={archived ? undefined : () => setEditing(true)}
+          />
+        )}
       </div>
       {!archived && ticket && (
         // Rendered only while open, so each opening mounts a fresh form.
@@ -212,6 +244,18 @@ export function PaperPortfolioPage({
           onPlaced={(toast) => {
             setTicket(null)
             setNotice(toast)
+          }}
+        />
+      )}
+      {editing && (
+        <EditPortfolioDialog
+          id={id}
+          name={p.name}
+          mandate={p.mandate}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false)
+            setNotice('Saved')
           }}
         />
       )}
@@ -329,14 +373,17 @@ function holdingColumns(
       label: '',
       action: true,
       cell: (h) => (
-        <Button
-          size="dense"
-          variant="secondary"
-          disabled={!!h.frozen}
-          onClick={() => trade(h, 'sell')}
-        >
-          Trade
-        </Button>
+        // The row opens the asset's page: Trade is its own click.
+        <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <Button
+            size="dense"
+            variant="secondary"
+            disabled={!!h.frozen}
+            onClick={() => trade(h, 'sell')}
+          >
+            Trade
+          </Button>
+        </span>
       ),
     })
   return cols

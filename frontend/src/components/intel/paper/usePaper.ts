@@ -12,10 +12,10 @@ import {
   paperPerformanceKey,
   paperPositionsKey,
   type PaperDefaults,
+  type PaperInAsset,
   type PaperList,
   type PaperPage,
   type PaperPerformance,
-  type PaperPositionRow,
 } from '../../../api/paperTrading'
 
 /** The engine fills waiting orders on its own every minute; a screen showing open orders asks
@@ -49,10 +49,10 @@ export function usePaperDefaults(enabled: boolean): QueryCacheResult<PaperDefaul
   return useQueryCache(paperDefaultsKey, fetchPaperDefaults, { enabled })
 }
 
-/** Paper positions in one instrument, for the asset page's Position table. */
+/** One instrument on paper — its positions and its trades — for the asset page. */
 export function usePaperPositions(instrumentId: string | undefined, enabled: boolean) {
   const version = usePaperVersion()
-  return useQueryCache<PaperPositionRow[]>(
+  return useQueryCache<PaperInAsset>(
     paperPositionsKey(instrumentId ?? ''),
     () => fetchPaperPositions(instrumentId ?? ''),
     { version, enabled: enabled && !!instrumentId },

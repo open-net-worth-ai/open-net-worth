@@ -7,8 +7,10 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from backend.core.user_time import user_today
+from backend.db.automation_store import AutomationStore
+from backend.db.followed_portfolio_store import FollowedPortfolioStore
 from backend.db.paper_store import MAX_ACTIVE_PORTFOLIOS, PaperPortfolioStore, PaperValueStore
-from backend.services.paper_trading import assets, performance, service, valuation
+from backend.services.paper_trading import assets, mandate, performance, service, valuation
 from backend.services.paper_trading.book import Book
 from backend.services.paper_trading.kinds.base import fmt_price, quote_age
 from backend.services.paper_trading.model import (
@@ -28,14 +30,40 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def source_label(row: dict) -> str:
+def source(row: dict) -> dict | None:
+    """Where the portfolio came from, as the header says it — or None when that adds nothing.
+
+    An Automation is named because it trades on its own; a copy names what it copied, linked
+    while that still exists. A cash start, or who clicked Create, says nothing worth a line."""
     by = str(row.get("created_by") or "owner")
-    origin = (row.get("origin") or {}).get("label") or "Cash"
-    if by.startswith("automation:") and row.get("automation_name"):
-        return f"Run by Lucius: {row['automation_name']}"
-    if by == "lucius":
-        return f"{origin} · started by Lucius"
-    return origin
+    if by.startswith("automation:"):
+        auto_id = by.split(":", 1)[1]
+        auto = AutomationStore().find_by_id(auto_id)
+        name = (auto or {}).get("name")
+        return {
+            "kind": "automation",
+            "label": f"Run by Lucius: {name}" if name else "Run by an Automation",
+            "automation_id": auto_id if auto else None,
+        }
+    origin = row.get("origin") or {}
+    kind = origin.get("kind") or "cash"
+    if kind == "holdings":
+        return {"kind": "holdings", "label": origin.get("label") or "Copy of my holdings"}
+    if kind == "followed":
+        fol = FollowedPortfolioStore().find_by_id(str(origin.get("ref") or ""))
+        out: dict = {
+            "kind": "followed",
+            "label": origin.get("label") or "Copies a followed portfolio",
+        }
+        if fol:
+            out["followed"] = {"kind": fol.get("kind"), "source_ref": fol.get("source_ref")}
+        return out
+    return None
+
+
+def source_label(row: dict) -> str:
+    src = source(row)
+    return src["label"] if src else ""
 
 
 def day_count(row: dict) -> int:
@@ -74,6 +102,7 @@ def card(row: dict, *, live: bool = True) -> dict:
         "benchmark": row.get("benchmark"),
         "origin": row.get("origin") or {"kind": "cash", "ref": None, "label": "Cash"},
         "created_by": row.get("created_by") or "owner",
+        "source": source(row),
         "source_label": source_label(row),
         "run_no": row.get("run_no") or 1,
         "lineage_id": row.get("lineage_id"),
@@ -88,6 +117,7 @@ def card(row: dict, *, live: bool = True) -> dict:
         "sparkline": [{"date": v["date"], "value": v["value_home"]} for v in values[-60:]]
         + ([{"date": user_today().isoformat(), "value": value}] if value is not None else []),
         "settings": row.get("settings") or {},
+        "mandate": row.get("mandate"),
         # What the card's ring and trade lines show: its largest holdings by weight (a live
         # card only) and its two newest buys or sells.
         "holdings_count": len(holdings),
@@ -146,6 +176,7 @@ def order_view(o: dict) -> dict:
             "origin",
             "from_currency",
             "nav_date",
+            "mandate_breaches",
         )
     } | {"fill": fill, **SIMULATED}
 
@@ -283,6 +314,7 @@ def page(pid: str) -> dict:
         },
         "holdings": val["holdings"],
         "holding_groups": valuation.kind_groups(val["holdings"]),
+        "mandate": mandate.status(row.get("mandate"), val),
         "orders": [order_view(o) for o in open_ + recent],
         "activity": activity(pid, limit=50)["activity"],
         **SIMULATED,
@@ -428,5 +460,32 @@ def positions_in(instrument_id: str) -> dict:
         "instrument_id": key.split(":", 1)[1],
         "symbol": assets.describe(asset)["symbol"],
         "positions": rows,
+        "trades": trades_in(key),
         **SIMULATED,
     }
+
+
+TRADE_KINDS = ("buy", "sell", "dividend", "distribution", "split", "freeze", "mark")
+MAX_TRADES = 200
+
+
+def trades_in(key: str) -> list[dict]:
+    """Every trade in one asset across ACTIVE paper portfolios, newest first — a position sold
+    out is still in its history. The opening copy of a portfolio counts as a buy."""
+    out: list[dict] = []
+    names: dict[str, tuple[str, str]] | None = None
+    for row in PaperPortfolioStore().all():
+        if row.get("status") != "active":
+            continue
+        evs = [e for e in service.events(row["id"]) if e.get("asset_key") == key]
+        evs = [e for e in evs if e.get("kind") in TRADE_KINDS]
+        if not evs:
+            continue
+        names = names or _names(evs[:1])
+        # Newest first already, so two trades in the same second stay in the order they happened.
+        for e in reversed(evs):
+            out.append(
+                {**event_view(e, names), "portfolio_id": row["id"], "portfolio_name": row["name"]}
+            )
+    out.sort(key=lambda t: str(t.get("at") or ""), reverse=True)
+    return out[:MAX_TRADES]

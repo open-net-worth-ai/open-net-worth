@@ -29,6 +29,12 @@ _ABOUT = (
     "'paper' when you quote an amount. Fills use the latest price the app saw plus slippage, "
     "spread or premium; a value labelled Synthetic or Your price is an estimate."
 )
+_MANDATE_DOC = (
+    "The portfolio's mandate (all optional): goal (its aim in words), max_position_pct (max % "
+    "of the portfolio in one holding), min_cash_pct, max_positions, stop_loss_pct (a holding "
+    "down this much from cost is flagged), universe (the only symbols it may buy). A buy that "
+    "breaks one is refused unless the owner agrees to break it."
+)
 _MAX_ACTIVITY = 50
 _MAX_HOLDINGS = 40
 _MAX_ORDERS = 20
@@ -98,6 +104,8 @@ def _one_portfolio(pid: str) -> dict:
         "holdings_total": len(page["holdings"]),
         "open_orders": [o for o in page["orders"] if o["status"] == "open"][:_MAX_ORDERS],
         "recent_activity": page["activity"][:10],
+        # Its goal and limits, each kept or not right now. Trade within them.
+        "mandate": page.get("mandate"),
         "simulated": True,
     }
 
@@ -257,6 +265,11 @@ class PaperOrderInput(NestedInput):
     price: Optional[float] = Field(
         default=None, description="Assets priced by the owner only: the price to trade at."
     )
+    override_mandate: Optional[bool] = Field(
+        default=None,
+        description="Place a buy that breaks the portfolio's mandate anyway. ONLY after the "
+        "owner, told which rule it breaks, said yes in this conversation. Never in an Automation.",
+    )
 
 
 class PaperOrdersInput(ToolInput):
@@ -410,6 +423,7 @@ class CreatePaperPortfolioInput(ToolInput):
         "metal_premium_buy_pct, metal_discount_sell_pct, fractional, auto_convert, "
         "extended_hours, commission {fixed, pct}.",
     )
+    mandate: Optional[Dict[str, Any]] = Field(default=None, description=_MANDATE_DOC)
 
 
 def _create(input_data: dict) -> dict:
@@ -452,6 +466,11 @@ class PaperPortfolioUpdate(NestedInput):
     name: Optional[str] = None
     benchmark: Optional[str] = None
     settings: Optional[Dict[str, Any]] = Field(default=None, description="Fill settings to change.")
+    mandate: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Replace the whole mandate ({} clears it); ask the owner first. Its fields "
+        "are create_paper_portfolio's mandate.",
+    )
     archive: Optional[bool] = Field(default=None, description="True archives it (kept, readable).")
     start_over: Optional[bool] = Field(
         default=None,
@@ -481,6 +500,8 @@ def _update_all(updates: list[dict]) -> dict:
                 )
                 continue
             body = {k: u[k] for k in ("name", "benchmark", "settings") if u.get(k) is not None}
+            if u.get("mandate") is not None:
+                body["mandate"] = u["mandate"] or None
             if u.get("archive"):
                 body["status"] = "archived"
             card = facade.update(row["id"], body)["portfolio"]

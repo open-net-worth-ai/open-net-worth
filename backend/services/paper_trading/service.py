@@ -32,7 +32,7 @@ from backend.db.paper_store import (
     PaperPortfolioStore,
     PaperValueStore,
 )
-from backend.services.paper_trading import assets, orders, quotes, thesis
+from backend.services.paper_trading import assets, mandate, orders, quotes, thesis, valuation
 from backend.services.paper_trading import book as book_mod
 from backend.services.paper_trading.model import (
     DEFAULT_SETTINGS,
@@ -150,6 +150,7 @@ def _prepare(change: dict) -> tuple[dict, dict]:
         "home_currency": home,
         "benchmark": str(change.get("benchmark") or seed.default_benchmark()),
         "settings": _clean_settings(change.get("settings")),
+        "mandate": mandate.clean(change.get("mandate")),
         "origin": {"kind": start, "ref": change.get("followed_id"), "label": opening["label"]},
         "status": "active",
         "lineage_id": change.get("lineage_id") or new_id("plin"),
@@ -208,6 +209,10 @@ def _update(change: dict) -> dict:
                 **(row.get("settings") or {}),
                 **_clean_settings(change["settings"]),
             }
+        if "mandate" in change:
+            # Present = replace (null clears it); absent = leave it as it is.
+            _require_active(row)
+            patch["mandate"] = mandate.clean(change["mandate"])
         if change.get("status") == "archived" and row.get("status") == "active":
             patch.update(_archive_patch(row["id"], conn=conn))
         patch["updated_at"] = _now().isoformat()
@@ -238,19 +243,17 @@ def _start_over(change: dict) -> dict:
     old = portfolio(change.get("id"))
     _require_active(old)
     spec = old.get("start_spec") or {"start_with": "cash", "cash": 10_000.0}
-    row, opening = _prepare(
-        {
-            **spec,
-            "name": old["name"],
-            "home_currency": old["home_currency"],
-            "benchmark": old.get("benchmark"),
-            "settings": old.get("settings") or {},
-            "lineage_id": old.get("lineage_id"),
-            "run_no": int(old.get("run_no") or 1) + 1,
-            "origin": old.get("created_by") or "owner",
-            "automation_id": old.get("automation_id"),
-        }
-    )
+    try:
+        row, opening = _prepare_next_run(old, spec)
+    except NotFoundError as exc:
+        if spec.get("start_with") != "followed":
+            raise
+        # Its source was unfollowed: say so to the person, not the follow lookup's Lucius text.
+        raise ConflictError(
+            f"{(old.get('origin') or {}).get('label') or 'This copy'}: you no longer follow that "
+            "portfolio, so it can't be copied again. Follow it again in Copy Trading, or start a "
+            "new paper portfolio with cash."
+        ) from exc
     with locked_unit_of_work(*ALL_TABLES) as conn:
         current = portfolio(old["id"], conn=conn)
         _require_active(current)
@@ -262,6 +265,23 @@ def _start_over(change: dict) -> dict:
         _insert(row, opening, conn=conn)
     _snapshot_quietly(row)
     return {"portfolio": row, "archived": archived}
+
+
+def _prepare_next_run(old: dict, spec: dict) -> tuple[dict, dict]:
+    return _prepare(
+        {
+            **spec,
+            "name": old["name"],
+            "home_currency": old["home_currency"],
+            "benchmark": old.get("benchmark"),
+            "settings": old.get("settings") or {},
+            "mandate": old.get("mandate"),
+            "lineage_id": old.get("lineage_id"),
+            "run_no": int(old.get("run_no") or 1) + 1,
+            "origin": old.get("created_by") or "owner",
+            "automation_id": old.get("automation_id"),
+        }
+    )
 
 
 def _delete(change: dict) -> dict:
@@ -339,7 +359,50 @@ def preview(change: dict) -> dict:
         fx_quote=fxq,
         now=now,
     )
-    return views.preview(row, bk, asset, order, p, quote, fxq, now, thesis.stance(asset, p, bk))
+    out = views.preview(row, bk, asset, order, p, quote, fxq, now, thesis.stance(asset, p, bk))
+    out["mandate_breaches"] = _mandate_breaches(row, asset, order, p, fxq, bk, now)
+    return out
+
+
+def _mandate_breaches(row, asset, order, p, fxq, bk, now) -> list[dict]:
+    """The mandate rules this BUY would break, valued at the live book. Outside any lock."""
+    if not row.get("mandate") or order["side"] != "buy" or isinstance(p.decision, Reject):
+        return []
+    rate = _home_rate(row, asset, fxq)
+    if rate is None or not p.total:
+        return []
+    val = valuation.value(row, bk, now)
+    return mandate.check_buy(row["mandate"], val, asset, p.total * rate)
+
+
+def _pre_trade_check(change, row, asset, order, quote, fxq, now) -> list[dict]:
+    """A buy that breaks the mandate is refused unless the owner chose to break it — and never
+    for an Automation, which has no one to ask. Returns the breaches the owner accepted."""
+    if not row.get("mandate") or order["side"] != "buy":
+        return []
+    bk = derive(row["id"])
+    p = orders.plan(
+        portfolio=row,
+        settings=settings_of(row),
+        book=bk,
+        open_orders=[o for o in portfolio_orders(row["id"]) if o["status"] == "open"],
+        asset=asset,
+        order=order,
+        quote=quote,
+        fx_quote=fxq,
+        now=now,
+    )
+    breaches = _mandate_breaches(row, asset, order, p, fxq, bk, now)
+    if not breaches:
+        return []
+    origin = str(change.get("origin") or "owner")
+    if origin.startswith("automation:") or not change.get("override_mandate"):
+        raise ConflictError(
+            "This buy breaks the portfolio's mandate: "
+            + " ".join(b["message"] for b in breaches)
+            + ("" if origin.startswith("automation:") else " Place it anyway to break it.")
+        )
+    return breaches
 
 
 def _place(change: dict) -> dict:
@@ -352,6 +415,7 @@ def _place(change: dict) -> dict:
     now = _now()
     quote, fxq = _quotes_for(row, asset, order, derive(row["id"]), now)
     _refuse_triggered_stop(order, quote)
+    accepted = _pre_trade_check(change, row, asset, order, quote, fxq, now)
     origin = str(change.get("origin") or "owner")
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = portfolio(row["id"], conn=conn)
@@ -376,6 +440,9 @@ def _place(change: dict) -> dict:
         )
         stance = thesis.stance(asset, p, bk)
         record = _order_record(row, asset, order, p, now, origin)
+        if accepted:
+            # Kept on the order, so a later review can see which trades broke the mandate.
+            record["mandate_breaches"] = [b["message"] for b in accepted]
         if isinstance(p.decision, Fill):
             if ctr:
                 PaperContractStore().insert(ctr, conn=conn)

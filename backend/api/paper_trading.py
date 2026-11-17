@@ -12,7 +12,7 @@ POST   /api/paper/portfolios/{id}/orders/preview    — what placing would do, n
 POST   /api/paper/portfolios/{id}/orders            — place
 DELETE /api/paper/orders/{order_id}                 — cancel
 GET    /api/paper/portfolios/{id}/activity          — ?cursor=&limit=
-GET    /api/paper/portfolios/{id}/performance       — ?range=1M|3M|1Y|ALL
+GET    /api/paper/portfolios/{id}/performance       — ?range=1W|1M|3M|1Y|ALL
 GET    /api/paper/portfolios/{id}/compare
 POST   /api/paper/portfolios/{id}/marks             — a price for an asset you price yourself
 GET    /api/paper/positions                         — ?instrument_id=: live paper positions in
@@ -61,6 +61,7 @@ class CreateBody(BaseModel):
     home_currency: str | None = Field(None, min_length=3, max_length=3)
     benchmark: str | None = Field(None, max_length=20)
     settings: dict[str, Any] | None = None
+    mandate: dict[str, Any] | None = None
 
 
 class UpdateBody(BaseModel):
@@ -68,6 +69,8 @@ class UpdateBody(BaseModel):
     benchmark: str | None = Field(None, max_length=20)
     settings: dict[str, Any] | None = None
     status: Literal["archived"] | None = None
+    # Sent = replace it (null clears it); not sent = leave it.
+    mandate: dict[str, Any] | None = None
 
 
 class OrderBody(BaseModel):
@@ -84,6 +87,8 @@ class OrderBody(BaseModel):
     note: str | None = Field(None, max_length=280)
     from_currency: str | None = Field(None, min_length=3, max_length=3)
     price: float | None = None
+    # Place a buy that breaks the mandate anyway (the owner chose to, after the preview said so).
+    override_mandate: bool = False
 
 
 class MarkBody(BaseModel):
@@ -114,7 +119,7 @@ def get_paper_portfolio(pid: str):
 
 @router.patch("/api/paper/portfolios/{pid}")
 def update_paper_portfolio(pid: str, body: UpdateBody):
-    return _run(paper.update, pid, body.model_dump(exclude_none=True))
+    return _run(paper.update, pid, body.model_dump(exclude_unset=True))
 
 
 @router.post("/api/paper/portfolios/{pid}/start-over")
@@ -148,7 +153,7 @@ def paper_activity(pid: str, cursor: int = Query(0, ge=0), limit: int = Query(50
 
 
 @router.get("/api/paper/portfolios/{pid}/performance")
-def paper_performance(pid: str, range: Literal["1M", "3M", "1Y", "ALL"] = "ALL"):  # noqa: A002
+def paper_performance(pid: str, range: Literal["1W", "1M", "3M", "1Y", "ALL"] = "ALL"):  # noqa: A002
     return _run(paper.performance_series, pid, range)
 
 

@@ -12,7 +12,14 @@ import {
   type Time,
 } from 'lightweight-charts'
 import { useTheme } from '../../../theme'
-import { formatAxisPrice, hexAlpha, niceTicks, tipPlacement, toTime } from '../assetPriceChartLwc'
+import {
+  formatAxisPrice,
+  hexAlpha,
+  niceTicks,
+  tickMarkFormatterFor,
+  tipPlacement,
+  toTime,
+} from '../assetPriceChartLwc'
 
 // Half an axis label's height: a label whose middle is closer to the plot's edge sticks out.
 const AXIS_LABEL_HALF = 6
@@ -54,12 +61,15 @@ interface Props {
   range?: { from: string; to: string }
   /** What the hover tooltip says for a day; it floats over the plot, so the layout never moves. */
   tip?: (date: string) => ReactNode
+  /** Points are moments (ISO times), not days: the axis shows times and the tooltip gets the
+   *  full ISO time back. */
+  intraday?: boolean
   label: string
 }
 
-const isoOf = (t: Time) =>
+const isoOf = (t: Time, intraday?: boolean) =>
   typeof t === 'number'
-    ? new Date(t * 1000).toISOString().slice(0, 10)
+    ? new Date(t * 1000).toISOString().slice(0, intraday ? undefined : 10)
     : typeof t === 'string'
       ? t
       : `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
@@ -76,6 +86,7 @@ export function ActivityChart({
   mine,
   range,
   tip,
+  intraday,
   label,
 }: Props) {
   // The chart is built once per data change; it reads the newest tooltip through this ref.
@@ -95,8 +106,11 @@ export function ActivityChart({
   // The axis is drawn INSIDE the plot, as on Intel's price chart: no gutter pushing it in.
   const [ticks, setTicks] = useState<{ y: number; label: string }[]>([])
   const [refTag, setRefTag] = useState<{ y: number; label: string } | null>(null)
-  const fmt = (n: number) =>
-    percent ? `${n >= 0 ? '+' : '−'}${Math.abs(n * 100).toFixed(0)}%` : formatAxisPrice(n, 2)
+  // A span under 5% gets a decimal: whole percents repeated a label ("−2%", "−2%").
+  const fmt = (n: number, span = 1) =>
+    percent
+      ? `${n >= 0 ? '+' : '−'}${Math.abs(n * 100).toFixed(span < 0.05 ? 1 : 0)}%`
+      : formatAxisPrice(n, 2)
 
   useEffect(() => {
     const el = hostRef.current
@@ -128,7 +142,15 @@ export function ActivityChart({
         scaleMargins: { top: 0.08, bottom: 0.06 },
       },
       // The line runs to the right edge: the axis labels sit inside the plot, nothing needs room.
-      timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true, rightOffset: 0 },
+      timeScale: {
+        borderVisible: false,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        rightOffset: 0,
+        ...(intraday
+          ? { timeVisible: true, tickMarkFormatter: tickMarkFormatterFor(undefined) }
+          : {}),
+      },
       // The tooltip says the day and the figures: the engine's own axis labels would repeat it.
       crosshair: {
         mode: CrosshairMode.Magnet,
@@ -263,7 +285,7 @@ export function ActivityChart({
           // Never two labels closer than two label heights.
           if (Math.abs(y - lastY) < AXIS_LABEL_HALF * 4) return []
           lastY = y
-          return [{ y, label: fmt(value) }]
+          return [{ y, label: fmt(value, range.to - range.from) }]
         }),
       )
       const y = refLine ? line.priceToCoordinate(refLine.value) : null
@@ -274,7 +296,7 @@ export function ActivityChart({
     chart.subscribeCrosshairMove((p) => {
       if (!tipRef.current || p.point == null || p.time == null) return setHover(null)
       setHover({
-        date: isoOf(p.time),
+        date: isoOf(p.time, intraday),
         x: p.point.x,
         y: p.point.y,
         w: el.clientWidth,
@@ -293,7 +315,19 @@ export function ActivityChart({
       chart.timeScale().unsubscribeSizeChange(resized)
       chart.remove()
     }
-  }, [points, markers, refLine, percent, bars, compare, mine, range?.from, range?.to, themeName])
+  }, [
+    points,
+    markers,
+    refLine,
+    percent,
+    bars,
+    compare,
+    mine,
+    range?.from,
+    range?.to,
+    intraday,
+    themeName,
+  ])
 
   // No prices: the chart's space stays, empty, so the page below never moves for it.
   if (points.length < 2) return <div style={{ height: CHART_BOX }} aria-hidden="true" />

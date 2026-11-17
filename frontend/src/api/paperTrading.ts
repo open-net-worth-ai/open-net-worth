@@ -11,6 +11,37 @@ export type OrderSide = 'buy' | 'sell'
 export type OrderType = 'market' | 'limit' | 'stop' | 'nav'
 export type OrderStatus = 'open' | 'filled' | 'cancelled' | 'rejected' | 'expired'
 
+export interface PaperSource {
+  kind: 'holdings' | 'followed' | 'automation'
+  label: string
+  /** The followed portfolio it copied, while you still follow it. */
+  followed?: { kind: 'fund_13f' | 'house_member' | 'etf_daily'; source_ref: string }
+  /** The Automation that runs it, while it still exists. */
+  automation_id?: string | null
+}
+
+/** A paper portfolio's goal and limits; a field left out is no limit. */
+export interface PaperMandate {
+  goal?: string
+  max_position_pct?: number
+  min_cash_pct?: number
+  max_positions?: number
+  stop_loss_pct?: number
+  universe?: string[]
+}
+
+/** The mandate against the book as it stands now. */
+export interface MandateStatus {
+  goal: string | null
+  rules: { rule: string; label: string; limit: string; ok: boolean; detail: string | null }[]
+  broken: number
+}
+
+export interface MandateBreach {
+  rule: string
+  message: string
+}
+
 export interface PaperCard {
   id: string
   name: string
@@ -19,6 +50,8 @@ export interface PaperCard {
   benchmark: string
   origin: { kind: 'cash' | 'holdings' | 'followed'; ref: string | null; label: string }
   created_by: string
+  /** Where it came from, as the header says it; null for a cash start. */
+  source: PaperSource | null
   source_label: string
   run_no: number
   started_at: string
@@ -30,6 +63,7 @@ export interface PaperCard {
   benchmark_return_pct: number | null
   open_orders: number
   sparkline: { date: string; value: number }[]
+  mandate: PaperMandate | null
   holdings_count: number
   weights: { symbol: string; weight: number }[]
   recent_trades: { label: string; side: OrderSide; symbol: string | null; at: string }[]
@@ -94,6 +128,8 @@ export interface PaperOrder {
   note: string | null
   origin: string
   fill: PaperFill | null
+  /** The mandate rules this order broke, when the owner placed it anyway. */
+  mandate_breaches?: string[] | null
 }
 
 export interface PaperEvent {
@@ -125,6 +161,7 @@ export interface PaperPage {
   holding_groups: { kind: PaperKind; label: string; holdings: PaperHolding[] }[]
   orders: PaperOrder[]
   activity: PaperEvent[]
+  mandate: MandateStatus | null
 }
 
 export interface PaperPerformance {
@@ -140,6 +177,8 @@ export interface PaperPerformance {
   return_pct: number | null
   benchmark: { symbol: string; return_pct: number | null }
   yours_return_pct: number | null
+  /** The first days, drawn through the day: each point's `date` is an ISO time. */
+  intraday?: boolean
 }
 
 export interface PaperDefaults {
@@ -176,6 +215,7 @@ export interface OrderDraft {
   tif?: 'day' | 'gtc'
   extended_ok?: boolean
   note?: string
+  override_mandate?: boolean
 }
 
 export interface PaperPreview {
@@ -198,6 +238,8 @@ export interface PaperPreview {
   cash_after_home: number | null
   thesis: { stance: string; label: string } | null
   warnings: string[]
+  /** The mandate rules this buy would break; placing it then needs `override_mandate`. */
+  mandate_breaches?: MandateBreach[]
 }
 
 export interface PaperPositionRow {
@@ -207,6 +249,18 @@ export interface PaperPositionRow {
   value_home: number | null
   currency: string
   return_pct: number | null
+}
+
+/** A trade in one asset, with the paper portfolio it was made in. */
+export interface PaperTrade extends PaperEvent {
+  portfolio_id: string
+  portfolio_name: string
+}
+
+/** One asset on paper: where it is held now, and every trade in it (newest first). */
+export interface PaperInAsset {
+  positions: PaperPositionRow[]
+  trades: PaperTrade[]
 }
 
 export const PAPER_KEY = '/api/paper'
@@ -261,8 +315,8 @@ export const fetchPaperPerformance = (id: string, range: string) =>
 export const fetchPaperDefaults = () => readJson<PaperDefaults>(paperDefaultsKey)
 export const fetchPaperSearch = async (q: string) =>
   (await readJson<{ results: PaperAsset[] }>(paperSearchKey(q))).results
-export const fetchPaperPositions = async (instrumentId: string) =>
-  (await readJson<{ positions: PaperPositionRow[] }>(paperPositionsKey(instrumentId))).positions
+export const fetchPaperPositions = (instrumentId: string) =>
+  readJson<PaperInAsset>(paperPositionsKey(instrumentId))
 
 /** An order names its asset by `asset_key` when the app knows it, else by the search result
  *  (the server resolves it). */
@@ -289,6 +343,11 @@ export const createPaperPortfolio = (body: {
 
 export const startOverPaperPortfolio = (id: string) =>
   send<{ portfolio: PaperCard }>(`${paperPageKey(id)}/start-over`, 'POST')
+
+export const updatePaperPortfolio = (
+  id: string,
+  body: { name?: string; benchmark?: string; mandate?: PaperMandate | null },
+) => send<unknown>(paperPageKey(id), 'PATCH', body)
 
 export const deletePaperPortfolio = (id: string) => send<unknown>(paperPageKey(id), 'DELETE')
 

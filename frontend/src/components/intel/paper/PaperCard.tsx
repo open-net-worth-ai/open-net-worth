@@ -18,8 +18,9 @@ export function PaperCard({ p, onOpen }: { p: Card; onOpen: () => void }) {
           {p.name} <Tag>Paper</Tag>
         </div>
         <div className="fol-card-who">
-          {p.source_label}
-          {p.run_no > 1 ? ` · Run ${p.run_no}` : ''}
+          {/* A cash start names nothing; the line keeps its height so cards stay aligned. */}
+          {[p.source_label, p.run_no > 1 ? `Run ${p.run_no}` : ''].filter(Boolean).join(' · ') ||
+            ' '}
         </div>
         <div className="fol-card-ret">
           <span className={toneOf(p.return_pct)}>{signedPct(p.return_pct)}</span>

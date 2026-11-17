@@ -10956,6 +10956,11 @@
         "additionalProperties": true,
         "type": "object",
         "description": "Fill settings over the defaults: slippage_bps, fx_spread_pct, metal_premium_buy_pct, metal_discount_sell_pct, fractional, auto_convert, extended_hours, commission {fixed, pct}."
+      },
+      "mandate": {
+        "additionalProperties": true,
+        "type": "object",
+        "description": "The portfolio's mandate (all optional): goal (its aim in words), max_position_pct (max % of the portfolio in one holding), min_cash_pct, max_positions, stop_loss_pct (a holding down this much from cost is flagged), universe (the only symbols it may buy). A buy that breaks one is refused unless the owner agrees to break it."
       }
     },
     "type": "object",
@@ -11136,6 +11141,10 @@
             "price": {
               "type": "number",
               "description": "Assets priced by the owner only: the price to trade at."
+            },
+            "override_mandate": {
+              "type": "boolean",
+              "description": "Place a buy that breaks the portfolio's mandate anyway. ONLY after the owner, told which rule it breaks, said yes in this conversation. Never in an Automation."
             }
           },
           "required": [
@@ -11223,6 +11232,10 @@
             "price": {
               "type": "number",
               "description": "Assets priced by the owner only: the price to trade at."
+            },
+            "override_mandate": {
+              "type": "boolean",
+              "description": "Place a buy that breaks the portfolio's mandate anyway. ONLY after the owner, told which rule it breaks, said yes in this conversation. Never in an Automation."
             }
           },
           "required": [
@@ -11301,6 +11314,11 @@
               "additionalProperties": true,
               "type": "object",
               "description": "Fill settings to change."
+            },
+            "mandate": {
+              "additionalProperties": true,
+              "type": "object",
+              "description": "Replace the whole mandate ({} clears it); ask the owner first. Its fields are create_paper_portfolio's mandate."
             },
             "archive": {
               "type": "boolean",

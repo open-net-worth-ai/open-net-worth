@@ -5,6 +5,31 @@ import type * as Api from '../../../api/paperTrading'
 
 // The holdings' name cells can open an asset's page; the test has no router behind them.
 vi.mock('../../../state/assetNav', () => ({ useAssetNav: () => ({ openAsset: () => {} }) }))
+// The address bar: the open portfolio lives in `?paper=`, so navigating changes what useSearch
+// returns (as Copy Trading's tests do it).
+const router = vi.hoisted(() => {
+  let search: Record<string, unknown> = {}
+  const subs = new Set<() => void>()
+  return {
+    get: () => search,
+    subscribe: (f: () => void) => (subs.add(f), () => void subs.delete(f)),
+    navigate(o: { search?: unknown }) {
+      search =
+        typeof o.search === 'function'
+          ? (o.search as (p: Record<string, unknown>) => Record<string, unknown>)(search)
+          : ((o.search as Record<string, unknown>) ?? {})
+      subs.forEach((f) => f())
+    },
+    reset: () => void (search = {}),
+  }
+})
+vi.mock('@tanstack/react-router', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    useNavigate: () => router.navigate,
+    useSearch: () => useSyncExternalStore(router.subscribe, router.get),
+  }
+})
 
 const card = {
   id: 'ppf_1',
@@ -14,7 +39,8 @@ const card = {
   benchmark: 'SPY',
   origin: { kind: 'cash', ref: null, label: 'Cash' },
   created_by: 'owner',
-  source_label: 'Cash',
+  source: null,
+  source_label: '',
   run_no: 1,
   started_at: '2026-11-01T00:00:00Z',
   archived_at: null,
@@ -25,6 +51,7 @@ const card = {
   benchmark_return_pct: 0.01,
   open_orders: 0,
   sparkline: [],
+  mandate: null,
   holdings_count: 1,
   weights: [{ symbol: 'NVDA', weight: 0.04 }],
   recent_trades: [
@@ -81,6 +108,7 @@ const page = {
       thesis: null,
     },
   ],
+  mandate: null,
 }
 
 const api = vi.hoisted(() => ({
@@ -88,6 +116,7 @@ const api = vi.hoisted(() => ({
   place: vi.fn(),
   preview: vi.fn(),
   search: vi.fn(),
+  update: vi.fn(),
 }))
 vi.mock('../../../api/paperTrading', async (importOriginal) => {
   const real = await importOriginal<typeof Api>()
@@ -115,6 +144,7 @@ vi.mock('../../../api/paperTrading', async (importOriginal) => {
     fetchPaperSearch: api.search,
     previewPaperOrder: api.preview,
     placePaperOrder: api.place,
+    updatePaperPortfolio: api.update,
   }
 })
 
@@ -124,6 +154,7 @@ import { invalidateQueryCache } from '../../../state/queryCache'
 describe('Paper Trading', () => {
   beforeEach(() => {
     invalidateQueryCache(() => true)
+    router.reset()
     api.list.mockResolvedValue({ portfolios: [card], archived: [] })
     api.search.mockResolvedValue([
       {
@@ -152,6 +183,7 @@ describe('Paper Trading', () => {
       thesis: null,
       warnings: [],
     })
+    api.update.mockResolvedValue({})
     api.place.mockResolvedValue({ order: {}, toast: 'Paper buy filled: 5 NVDA at 187.46' })
   })
   afterEach(cleanup)
@@ -221,5 +253,65 @@ describe('Paper Trading', () => {
     expect(
       (screen.getByRole('button', { name: 'Place paper buy' }) as HTMLButtonElement).disabled,
     ).toBe(true)
+  })
+  it('renames a portfolio from its Edit dialog', async () => {
+    render(<PaperTab />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'More actions for Buy-zone strategy' }),
+    )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+    const field = screen.getByLabelText('Name')
+    fireEvent.change(field, { target: { value: '  Dip buys  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith('ppf_1', { name: 'Dip buys' }))
+  })
+
+  it('sets a mandate from the Edit dialog, blank fields meaning no limit', async () => {
+    render(<PaperTab />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Mandate' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Set a mandate' }))
+    fireEvent.change(screen.getByLabelText('Goal'), { target: { value: ' Beat SPY ' } })
+    fireEvent.change(screen.getByLabelText(/Max per holding/), { target: { value: '15' } })
+    fireEvent.change(screen.getByLabelText(/May buy only/), { target: { value: 'acme, nvda' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith('ppf_1', {
+        mandate: { goal: 'Beat SPY', max_position_pct: 15, universe: ['ACME', 'NVDA'] },
+      }),
+    )
+  })
+
+  it('says which mandate rule a buy breaks, and places it only as "Place anyway"', async () => {
+    api.preview.mockResolvedValue({
+      ...(await api.preview()),
+      mandate_breaches: [
+        {
+          rule: 'max_position_pct',
+          message: 'NVDA would be 22% of the portfolio; the mandate allows 15%.',
+        },
+      ],
+    })
+    render(<PaperTab />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Paper trade' }))
+    const symbol = screen.getByLabelText('Symbol')
+    fireEvent.change(symbol, { target: { value: 'NVDA' } })
+    await act(async () => {
+      fireEvent.blur(symbol)
+    })
+    fireEvent.change(screen.getByLabelText('Shares'), { target: { value: '120' } })
+    expect(
+      await screen.findByText('NVDA would be 22% of the portfolio; the mandate allows 15%.'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Place anyway' }))
+    await waitFor(() =>
+      expect(api.place).toHaveBeenLastCalledWith(
+        'ppf_1',
+        expect.anything(),
+        expect.objectContaining({ quantity: 120, override_mandate: true }),
+      ),
+    )
   })
 })

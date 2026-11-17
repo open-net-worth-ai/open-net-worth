@@ -136,7 +136,11 @@ export function OrderTicket({
     if (!asset || !draft) return
     setBusy(true)
     try {
-      const out = await placePaperOrder(portfolioId, asset, draft)
+      // Placing with the mandate's warnings on screen is the owner's choice to break it.
+      const out = await placePaperOrder(portfolioId, asset, {
+        ...draft,
+        ...(breaches.length > 0 ? { override_mandate: true } : {}),
+      })
       onPlaced(out.toast)
     } catch (e) {
       setPlaceError({ key: draftKey, message: (e as Error).message })
@@ -146,6 +150,7 @@ export function OrderTicket({
   }
 
   const rejected = preview?.decision === 'reject'
+  const breaches = (!rejected && preview?.mandate_breaches) || []
   const money = (n: number) => fCurrency(n, preview?.estimate?.currency ?? homeCurrency)
   const unitLabel = asset?.unit
     ? `Quantity (${asset.unit})`
@@ -173,7 +178,11 @@ export function OrderTicket({
           disabled={!draft || !preview || rejected}
           onClick={() => void place()}
         >
-          {side === 'buy' ? 'Place paper buy' : 'Place paper sell'}
+          {breaches.length > 0
+            ? 'Place anyway'
+            : side === 'buy'
+              ? 'Place paper buy'
+              : 'Place paper sell'}
         </Button>
       }
     >
@@ -295,6 +304,14 @@ export function OrderTicket({
         {(previewError || preview?.reason || preview?.next_line) && (
           <div className={`paper-next${previewError || rejected ? ' bad' : ''}`}>
             {previewError ?? (rejected ? preview?.reason : preview?.next_line)}
+          </div>
+        )}
+        {breaches.length > 0 && (
+          <div className="paper-breach" role="alert">
+            <strong>Breaks this portfolio's mandate</strong>
+            {breaches.map((b) => (
+              <span key={b.rule}>{b.message}</span>
+            ))}
           </div>
         )}
         {preview?.warnings.map((w) => (

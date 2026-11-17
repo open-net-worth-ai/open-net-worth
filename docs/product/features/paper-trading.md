@@ -35,6 +35,10 @@ starting cash and the first trades, then creates the portfolio.
 Each paper portfolio is a card with a **Paper** tag, its return against the benchmark, its two
 newest trades and a ring of what it holds.
 
+A copy is a snapshot: it buys once, when you create it, and never follows your holdings or the
+followed portfolio afterwards. The line under its name says what it copied (**Copies …** opens
+that Copy Trading portfolio while you still follow it), or which Automation runs it.
+
 ## Trade on paper
 
 Open a portfolio and click **Paper trade** (or **Trade** on a holding). Type a symbol, such as
@@ -49,16 +53,46 @@ The page picks up a fill on its own, without a reload.
 
 The page shows your **Paper value** (holdings plus cash) and **Cash left** (not yet invested),
 then **Performance**: the return since you started, beside your real investments and the
-benchmark, with a chart once the portfolio has a few days of history. Below are **Holdings**,
-**Orders** and **Activity** (every trade, with its **Why**).
+benchmark. In its first days the chart follows the day as it went, from the benchmark's last
+close before you started; your investments, which have daily values only, show as a figure
+until the chart turns daily after the first week. Pick **1W**, **1M**, **3M**, **1Y** or **All**
+under the chart. Below are **Holdings** (click a row to open that asset's page), **Orders** and
+**Activity** (every trade, with its **Why**).
 
 - **Go live** asks Lucius to help you do it for real: he compares it with what you hold and
   drafts the trades for your broker, and asks before placing anything.
+- **⋯ → Edit** renames the portfolio and sets its **mandate** (below).
 - **⋯ → Start over** keeps the old run under **Archived runs** and starts again with the same
-  cash. **⋯ → Delete** removes it and its history, and asks first.
+  cash; a copy copies its source again as it is today. A copy of a portfolio you no longer
+  follow can't start over until you follow it again. **⋯ → Delete** removes it and its history, and asks first.
+
+## Give it a mandate
+
+A mandate is what a fund writes down before it trades: what the portfolio is for and the limits
+every buy keeps. Set it in **⋯ → Edit** (or **Set a mandate** on the **Mandate** tab). Every
+field is optional; a blank one is no limit.
+
+- **Goal**: what it is for, in your words ("Beat the S&P 500 over a year with a few AI names").
+- **Max per holding**: the most of the portfolio in one holding, in %.
+- **Min cash**: the least cash to keep, in %.
+- **Max holdings**: how many different holdings it may have.
+- **Stop loss**: a holding down this much from what it cost is flagged.
+- **May buy only**: the symbols it may buy; blank buys anything.
+
+Before a buy is placed it is checked against the mandate. If it breaks a limit, the ticket says
+which one ("ACME would be 22% of the portfolio; the mandate allows 15%") and the button becomes
+**Place anyway**. A sell is never checked: it only moves a portfolio back towards its limits.
+
+The **Mandate** tab shows the goal and each limit against the portfolio as it is now: **Kept**,
+or what breaks it. Prices move, so a limit can break without a trade; the tab's badge counts the
+broken ones. **Start over** keeps the mandate.
+
+Lucius reads the mandate whenever he works on the portfolio and trades within it. He breaks a
+limit only after he tells you which one and you say yes; an Automation never can.
 
 On an asset's **Position** tab, **On paper** lists your paper positions in it, apart from your
-real ones and never added to them.
+real ones and never added to them, then every paper trade in it, newest first: the date, the paper
+portfolio, the trade and its **Why**. A position you sold out of keeps its trades there.
 
 ## Through Lucius
 
