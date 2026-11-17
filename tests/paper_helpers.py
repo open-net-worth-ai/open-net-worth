@@ -91,6 +91,9 @@ PRICES = {
 }
 
 
+SECTORS = {"ACME": "Technology", "9999.T": "Industrials"}
+
+
 def seed_instruments() -> None:
     store = InstrumentStore()
     for inst in INSTRUMENTS:
@@ -114,6 +117,14 @@ def paper_db(db_isolated, monkeypatch):
     monkeypatch.setattr(service, "_now", lambda: NOW)
     monkeypatch.setattr(engine, "_now", lambda: NOW)
     seed_instruments()
+    # Sectors come from a cache filled over the network: the tests read a fixed one instead.
+    from backend.services import prices
+
+    monkeypatch.setattr(
+        prices,
+        "company_sectors",
+        lambda syms, fetch_missing=False: {s: SECTORS[s] for s in syms if s in SECTORS},
+    )
     monkeypatch.setattr(
         qa_quotes, "_state", {"market": "open", "prices": {}, "fx": {}, "opens_at": None}
     )

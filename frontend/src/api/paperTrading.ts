@@ -24,6 +24,7 @@ export interface PaperSource {
 export interface PaperMandate {
   goal?: string
   max_position_pct?: number
+  max_sector_pct?: number
   min_cash_pct?: number
   max_positions?: number
   stop_loss_pct?: number
@@ -94,6 +95,8 @@ export interface PaperHolding {
   frozen: string | null
   marked_on: string | null
   weight: number | null
+  /** Its sector, as Copy Trading names it (a fund, crypto or a metal is its own). */
+  sector?: string
 }
 
 export interface PaperFill {
@@ -162,6 +165,12 @@ export interface PaperPage {
   orders: PaperOrder[]
   activity: PaperEvent[]
   mandate: MandateStatus | null
+  /** Each sector's share of what is invested, largest first. */
+  sectors?: {
+    sector: string
+    weight: number
+    holdings: { symbol: string | null; weight: number }[]
+  }[]
 }
 
 export interface PaperPerformance {

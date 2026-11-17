@@ -56,7 +56,8 @@ then **Performance**: the return since you started, beside your real investments
 benchmark. In its first days the chart follows the day as it went, from the benchmark's last
 close before you started; your investments, which have daily values only, show as a figure
 until the chart turns daily after the first week. Pick **1W**, **1M**, **3M**, **1Y** or **All**
-under the chart. Below are **Holdings** (click a row to open that asset's page), **Orders** and
+under the chart. **By sector** rings what it holds, as on Copy Trading (cash left out); tap a
+sector to list only its holdings. Below are **Holdings** (click a row to open that asset's page), **Orders** and
 **Activity** (every trade, with its **Why**).
 
 - **Go live** asks Lucius to help you do it for real: he compares it with what you hold and
@@ -74,6 +75,8 @@ field is optional; a blank one is no limit.
 
 - **Goal**: what it is for, in your words ("Beat the S&P 500 over a year with a few AI names").
 - **Max per holding**: the most of the portfolio in one holding, in %.
+- **Max per sector**: the most of the portfolio in one sector, in %. A fund, crypto and metals
+  are each a slice of their own; a stock whose sector isn't known yet is never held back by it.
 - **Min cash**: the least cash to keep, in %.
 - **Max holdings**: how many different holdings it may have.
 - **Stop loss**: a holding down this much from what it cost is flagged.

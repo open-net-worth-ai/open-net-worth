@@ -10960,7 +10960,7 @@
       "mandate": {
         "additionalProperties": true,
         "type": "object",
-        "description": "The portfolio's mandate (all optional): goal (its aim in words), max_position_pct (max % of the portfolio in one holding), min_cash_pct, max_positions, stop_loss_pct (a holding down this much from cost is flagged), universe (the only symbols it may buy). A buy that breaks one is refused unless the owner agrees to break it."
+        "description": "The portfolio's mandate (all optional): goal (its aim in words), max_position_pct (max % of the portfolio in one holding), max_sector_pct (in one sector), min_cash_pct, max_positions, stop_loss_pct (a holding down this much from cost is flagged), universe (the only symbols it may buy). A buy that breaks one is refused unless the owner agrees to break it."
       }
     },
     "type": "object",

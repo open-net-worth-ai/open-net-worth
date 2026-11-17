@@ -120,3 +120,30 @@ def test_edit_replaces_or_clears_it_and_start_over_keeps_it(paper_db):
     assert nxt["mandate"] == {"min_cash_pct": 5.0}
     cleared = apply_paper_change({"op": "update", "id": nxt["id"], "mandate": None})["portfolio"]
     assert cleared["mandate"] is None and views.page(nxt["id"])["mandate"] is None
+
+
+# ── sectors ─────────────────────────────────────────────────────────────────────────────────
+
+
+def test_the_page_breaks_holdings_down_by_sector(paper_db):
+    pid = _new()["id"]
+    _buy(pid, 10)  # ACME, Technology: 1,000
+    _buy(pid, 10, key="inst:inst_coin")  # 500
+    _buy(pid, 25, key="inst:inst_fund")  # a mutual fund, its own slice: 1,000
+    page = views.page(pid)
+    got = {s["sector"]: round(s["weight"], 2) for s in page["sectors"]}
+    assert got == {"Technology": 0.4, "Funds & ETFs": 0.4, "Crypto": 0.2}
+    assert {h["symbol"]: h["sector"] for h in page["holdings"]}["ACME"] == "Technology"
+
+
+def test_a_buy_over_the_sector_cap_is_flagged_and_other_sectors_are_not(paper_db):
+    pid = _new({"max_sector_pct": 25})["id"]
+    _buy(pid, 20)  # Technology at 20%
+    pv = preview(pid, {"asset_key": "inst:inst_acme", "side": "buy", "quantity": 10})
+    assert [b["message"] for b in pv["mandate_breaches"]] == [
+        "Technology would be 30% of the portfolio; the mandate allows 25% per sector."
+    ]
+    other = preview(pid, {"asset_key": "inst:inst_acmej", "side": "buy", "quantity": 1})
+    assert other["mandate_breaches"] == []
+    st = {r["rule"]: r for r in views.page(pid)["mandate"]["rules"]}
+    assert st["max_sector_pct"]["ok"]

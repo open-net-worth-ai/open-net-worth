@@ -4,6 +4,7 @@ import { Spark } from '../../../lucius/identity'
 import { fCurrency, fDate } from '../../../utils/format'
 import { SortTable, type Column } from '../following/SortTable'
 import { NameCell } from '../following/NameCell'
+import { SectorPie } from '../following/SectorPie'
 import { Crumb } from '../following/Crumb'
 import { signedPct, toneOf } from '../following/following.format'
 import { Toast } from '../../tabs/accounts/Toast'
@@ -53,6 +54,8 @@ export function PaperPortfolioPage({
   const [notice, setNotice] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<'over' | 'delete' | null>(null)
   const [editing, setEditing] = useState(false)
+  // A sector picked on the ring lists only its holdings, as on Copy Trading.
+  const [sector, setSector] = useState<string | null>(null)
   const { openAsset } = useAssetNav()
   const [pollOpen, setPollOpen] = useState(false)
   const page = usePaperPage(id, pollOpen)
@@ -167,10 +170,27 @@ export function PaperPortfolioPage({
               </div>
             </div>
             <PaperChart id={id} name={p.name} benchmark={p.benchmark} orders={data.orders} />
+            {(data.sectors?.length ?? 0) > 1 && (
+              <div className="fol-panel">
+                <h2 className="fol-sec-title">By sector</h2>
+                <SectorPie
+                  tiles={(data.sectors ?? []).map((s) => ({
+                    key: s.sector,
+                    label: s.sector,
+                    weight: s.weight,
+                    change: null,
+                  }))}
+                  picked={sector}
+                  onPick={setSector}
+                  bySector
+                  label="Holdings by sector. Tap a sector to list only its holdings."
+                />
+              </div>
+            )}
             {data.holdings.length > 0 ? (
               <SortTable
                 label={`${p.name} holdings`}
-                rows={data.holdings}
+                rows={sector ? data.holdings.filter((h) => h.sector === sector) : data.holdings}
                 rowKey={(h) => h.asset_key}
                 initialSort="value"
                 // A row opens its asset's own page, as on Holdings. A currency or a contract

@@ -32,7 +32,15 @@ from backend.db.paper_store import (
     PaperPortfolioStore,
     PaperValueStore,
 )
-from backend.services.paper_trading import assets, mandate, orders, quotes, thesis, valuation
+from backend.services.paper_trading import (
+    assets,
+    mandate,
+    orders,
+    quotes,
+    sectors,
+    thesis,
+    valuation,
+)
 from backend.services.paper_trading import book as book_mod
 from backend.services.paper_trading.model import (
     DEFAULT_SETTINGS,
@@ -372,7 +380,11 @@ def _mandate_breaches(row, asset, order, p, fxq, bk, now) -> list[dict]:
     if rate is None or not p.total:
         return []
     val = valuation.value(row, bk, now)
-    return mandate.check_buy(row["mandate"], val, asset, p.total * rate)
+    sector_of = None
+    if row["mandate"].get("max_sector_pct") is not None:
+        bought = {"asset_key": asset.key, "kind": asset.kind, "symbol": asset.symbol}
+        sector_of = sectors.of_holdings([*val["holdings"], bought])
+    return mandate.check_buy(row["mandate"], val, asset, p.total * rate, sector_of)
 
 
 def _pre_trade_check(change, row, asset, order, quote, fxq, now) -> list[dict]:

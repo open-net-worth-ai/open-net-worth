@@ -31,7 +31,8 @@ _ABOUT = (
 )
 _MANDATE_DOC = (
     "The portfolio's mandate (all optional): goal (its aim in words), max_position_pct (max % "
-    "of the portfolio in one holding), min_cash_pct, max_positions, stop_loss_pct (a holding "
+    "of the portfolio in one holding), max_sector_pct (in one sector), min_cash_pct, "
+    "max_positions, stop_loss_pct (a holding "
     "down this much from cost is flagged), universe (the only symbols it may buy). A buy that "
     "breaks one is refused unless the owner agrees to break it."
 )
@@ -106,6 +107,7 @@ def _one_portfolio(pid: str) -> dict:
         "recent_activity": page["activity"][:10],
         # Its goal and limits, each kept or not right now. Trade within them.
         "mandate": page.get("mandate"),
+        "sectors": [{k: s[k] for k in ("sector", "weight")} for s in page.get("sectors") or []],
         "simulated": True,
     }
 

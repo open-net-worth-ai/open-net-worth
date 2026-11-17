@@ -20,7 +20,7 @@ Status: proposal, not built. Paper first; nothing here touches the real book or 
 |---|---|---|
 | Mandate | Nothing at portfolio level. | **Mandate** on a paper portfolio (below). |
 | Thesis per position | Per-ticker investment theses already exist (buy zone, stop, trim, fair value), and each paper fill already records its stance at trade time (`paper_trading/thesis.py`). | Add "what would prove it wrong" and a review date; reuse as is. |
-| Pitch and approve | You ask Lucius in chat. | Autopilot **Suggest** mode: proposals you approve. |
+| Pitch and approve | You ask Lucius in chat. | Manual: you (or chat) decide. Auto: the mandate is the approval, and Lucius trades within it. |
 | Pre-trade check | Cash and quantity checks only. | Deterministic mandate check in the paper choke: refuse or flag an order that breaks a limit. Server code, never the model's judgement. |
 | Execute | The paper fill engine. | Nothing new. |
 | Monitor | Price alerts, Intel. | Autopilot's triggers: schedule, buy zone reached, stop hit, drawdown, drift past band. |
@@ -28,8 +28,10 @@ Status: proposal, not built. Paper first; nothing here touches the real book or 
 
 ## 1. Mandate: the thesis of the portfolio
 
-Stored on the paper portfolio (`settings.mandate`, additive), edited in **⋯ → Edit** and shown as a
-**Mandate** tab on the page. Lucius reads it on every paper turn about this portfolio.
+**Built (2026-11-18).** Stored on the paper portfolio (`mandate`, additive), edited in **⋯ → Edit**
+and shown as a **Mandate** tab on the page. Lucius reads it on every paper turn about this
+portfolio. Built: goal, max per holding, max per sector, min cash, max holdings, stop loss (flags
+only), may-buy list. Not yet: rebalance band, review cadence.
 
 - **Goal**, in words: "Beat QQQ over a year with AI infrastructure names."
 - **Benchmark** (exists).
@@ -45,19 +47,19 @@ refused.
 
 ## 2. Autopilot: a feature of the paper portfolio, not an Automation
 
-On the portfolio page, an **Autopilot** control with three states:
+On the portfolio page, an **Autopilot** control with two modes (owner, 2026-11-18: either manual
+or auto, no in-between "suggest" step):
 
-| State | What happens |
+| Mode | What happens |
 |---|---|
-| **Off** (default) | Only you and chat requests trade. Today's behaviour. |
-| **Suggest** | On each review, Lucius writes a short memo and proposes trades. They wait as **Proposals** on the page: Approve, Edit, Reject. Nothing fills until you approve. |
-| **Auto** | Same memo; the trades that pass the mandate check are placed. You see them in Activity, each with its Why and the memo it came from. |
+| **Manual** (default) | Only you and chat requests trade. Today's behaviour. |
+| **Auto** | On each review Lucius writes a short memo and places the trades that pass the mandate check. You see them in Activity, each with its Why and the memo it came from. |
 
 - **When it runs**: the mandate's review cadence, plus triggers: a holding reaches its buy zone,
   trim level or stop; drawdown past the limit; a weight drifts past its band; earnings.
 - **Hard limits** (server-side, not the model): only this portfolio; only within the mandate; max
   trades per run; one run at a time; a model-cost ceiling per month; pause on two failed runs.
-- **Kill switch**: Off stops it at once; open orders it placed stay until you cancel them.
+- **Kill switch**: Manual stops it at once; open orders it placed stay until you cancel them.
 - **Every run leaves a memo** (what it looked at, what it decided, which rule each trade cites,
   and "no trades" runs too), so the review step has something to read.
 
@@ -67,8 +69,7 @@ it lives on, and is deleted with, the portfolio.
 
 ## Order to build
 
-1. **Mandate** (fields, Edit, Mandate tab, Lucius reads it, pre-trade check). Useful without
-   autopilot: it makes your own and Lucius's chat trades consistent.
-2. **Autopilot Suggest** with proposals and memos.
-3. **Autopilot Auto**, once Suggest's proposals look right.
+1. **Mandate**: built, with a per-sector limit and the By sector ring.
+2. **Autopilot** (Manual / Auto) with memos and its hard limits.
+3. **Rebalance band** and review cadence on the mandate, read by the autopilot's reviews.
 4. **Review**: decision journal, mandate-breach log, thesis hit rate, You vs Lucius.

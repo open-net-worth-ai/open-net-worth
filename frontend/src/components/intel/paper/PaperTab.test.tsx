@@ -267,6 +267,31 @@ describe('Paper Trading', () => {
     await waitFor(() => expect(api.update).toHaveBeenCalledWith('ppf_1', { name: 'Dip buys' }))
   })
 
+  it('draws holdings by sector, and a picked sector lists only its holdings', async () => {
+    const coin = { ...holding, asset_key: 'inst:coin', symbol: 'ACOIN', name: 'Acme Coin' }
+    Object.assign(page, {
+      holdings: [
+        { ...holding, sector: 'Technology' },
+        { ...coin, sector: 'Crypto' },
+      ],
+      sectors: [
+        { sector: 'Technology', weight: 0.6, holdings: [] },
+        { sector: 'Crypto', weight: 0.4, holdings: [] },
+      ],
+    })
+    try {
+      render(<PaperTab />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
+      expect(await screen.findByText('By sector')).toBeTruthy()
+      expect(screen.getByText('Acme Coin')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Technology, 60.0%' }))
+      await waitFor(() => expect(screen.queryByText('Acme Coin')).toBeNull())
+      expect(screen.getByText('NVIDIA Corporation')).toBeTruthy()
+    } finally {
+      Object.assign(page, { holdings: [holding], sectors: undefined })
+    }
+  })
+
   it('sets a mandate from the Edit dialog, blank fields meaning no limit', async () => {
     render(<PaperTab />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))

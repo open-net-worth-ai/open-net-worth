@@ -2,11 +2,17 @@ import { useState } from 'react'
 import { Button, FormField, Modal, NumberField, TextArea, TextField } from '../../ui'
 import { updatePaperPortfolio, type PaperMandate } from '../../../api/paperTrading'
 
-type Limit = 'max_position_pct' | 'min_cash_pct' | 'max_positions' | 'stop_loss_pct'
+type Limit =
+  | 'max_position_pct'
+  | 'max_sector_pct'
+  | 'min_cash_pct'
+  | 'max_positions'
+  | 'stop_loss_pct'
 
 // The section's intro says what each limit does; per-field info tips overflowed the dialog.
 const LIMITS: { key: Limit; label: string; step: string }[] = [
   { key: 'max_position_pct', label: 'Max per holding (%)', step: 'any' },
+  { key: 'max_sector_pct', label: 'Max per sector (%)', step: 'any' },
   { key: 'min_cash_pct', label: 'Min cash (%)', step: 'any' },
   { key: 'max_positions', label: 'Max holdings', step: '1' },
   { key: 'stop_loss_pct', label: 'Stop loss (%)', step: 'any' },
@@ -18,6 +24,7 @@ const draftOf = (m: PaperMandate | null): Draft => ({
   goal: m?.goal ?? '',
   universe: (m?.universe ?? []).join(', '),
   max_position_pct: m?.max_position_pct?.toString() ?? '',
+  max_sector_pct: m?.max_sector_pct?.toString() ?? '',
   min_cash_pct: m?.min_cash_pct?.toString() ?? '',
   max_positions: m?.max_positions?.toString() ?? '',
   stop_loss_pct: m?.stop_loss_pct?.toString() ?? '',

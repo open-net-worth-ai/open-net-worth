@@ -17,6 +17,7 @@ MAX_UNIVERSE = 50
 # key → (label, low, high, integer)
 _LIMITS: dict[str, tuple[str, float, float, bool]] = {
     "max_position_pct": ("Max per holding", 1, 100, False),
+    "max_sector_pct": ("Max per sector", 1, 100, False),
     "min_cash_pct": ("Min cash", 0, 99, False),
     "max_positions": ("Max holdings", 1, 200, True),
     "stop_loss_pct": ("Stop loss", 1, 95, False),
@@ -69,9 +70,16 @@ def _symbol(asset_or_row) -> str:
     return str(asset_or_row.get("symbol") or "").upper()
 
 
-def check_buy(mandate: dict | None, val: dict, asset: PaperAsset, amount_home: float) -> list[dict]:
+def check_buy(
+    mandate: dict | None,
+    val: dict,
+    asset: PaperAsset,
+    amount_home: float,
+    sector_of: dict[str, str] | None = None,
+) -> list[dict]:
     """Each rule this buy would break, from the live valuation ``val`` and the order's cost in
-    the home currency. Empty when it keeps the mandate (or there is none)."""
+    the home currency. ``sector_of`` ({asset_key: sector}, the bought asset included) is needed
+    only for a sector limit. Empty when it keeps the mandate (or there is none)."""
     if not mandate or asset.kind == "fx":
         return []
     out: list[dict] = []
@@ -98,6 +106,7 @@ def check_buy(mandate: dict | None, val: dict, asset: PaperAsset, amount_home: f
                     f"the mandate allows {cap:g}%.",
                 }
             )
+    out += _sector_breach(mandate, held, asset, amount_home, total, sector_of)
     floor = mandate.get("min_cash_pct")
     if floor is not None and total > 0:
         cash_after = float(val.get("cash_home") or 0.0) - amount_home
@@ -120,7 +129,35 @@ def check_buy(mandate: dict | None, val: dict, asset: PaperAsset, amount_home: f
     return out
 
 
-def status(mandate: dict | None, val: dict) -> dict | None:
+def _sector_weights(held: list[dict], sector_of: dict[str, str]) -> dict[str, float]:
+    by: dict[str, float] = {}
+    for h in held:
+        sector = sector_of.get(h["asset_key"], "Other")
+        by[sector] = by.get(sector, 0.0) + float(h.get("value_home") or 0.0)
+    return by
+
+
+def _sector_breach(mandate, held, asset, amount_home, total, sector_of) -> list[dict]:
+    cap = mandate.get("max_sector_pct")
+    if cap is None or total <= 0 or not sector_of:
+        return []
+    sector = sector_of.get(asset.key, "Other")
+    # "Other" is what has no known sector yet: capping it would refuse a buy for a lookup.
+    if sector == "Other":
+        return []
+    after = _sector_weights(held, sector_of).get(sector, 0.0) + amount_home
+    if after / total <= cap / 100 + 1e-9:
+        return []
+    return [
+        {
+            "rule": "max_sector_pct",
+            "message": f"{sector} would be {_pct(after / total)} of the portfolio; "
+            f"the mandate allows {cap:g}% per sector.",
+        }
+    ]
+
+
+def status(mandate: dict | None, val: dict, sector_of: dict[str, str] | None = None) -> dict | None:
     """The mandate against the book as it stands: each rule, kept or not, and the holdings that
     break it. Prices drift, so a portfolio can break a limit no trade broke."""
     if not mandate:
@@ -147,6 +184,14 @@ def status(mandate: dict | None, val: dict) -> dict | None:
             if h.get("weight") is not None and h["weight"] > cap / 100 + 1e-9
         ]
         rules.append(_rule("max_position_pct", "Max per holding", f"{cap:g}%", over, "Over"))
+    sector_cap = mandate.get("max_sector_pct")
+    if sector_cap is not None and total > 0:
+        over = [
+            f"{s} {_pct(v / total)}"
+            for s, v in sorted(_sector_weights(held, sector_of or {}).items(), key=lambda x: -x[1])
+            if s != "Other" and v / total > sector_cap / 100 + 1e-9
+        ]
+        rules.append(_rule("max_sector_pct", "Max per sector", f"{sector_cap:g}%", over, "Over"))
     floor = mandate.get("min_cash_pct")
     if floor is not None and total > 0:
         share = float(val.get("cash_home") or 0.0) / total

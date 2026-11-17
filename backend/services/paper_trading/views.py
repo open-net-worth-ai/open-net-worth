@@ -10,7 +10,14 @@ from backend.core.user_time import user_today
 from backend.db.automation_store import AutomationStore
 from backend.db.followed_portfolio_store import FollowedPortfolioStore
 from backend.db.paper_store import MAX_ACTIVE_PORTFOLIOS, PaperPortfolioStore, PaperValueStore
-from backend.services.paper_trading import assets, mandate, performance, service, valuation
+from backend.services.paper_trading import (
+    assets,
+    mandate,
+    performance,
+    sectors,
+    service,
+    valuation,
+)
 from backend.services.paper_trading.book import Book
 from backend.services.paper_trading.kinds.base import fmt_price, quote_age
 from backend.services.paper_trading.model import (
@@ -291,6 +298,9 @@ def page(pid: str) -> dict:
     all_orders = service.portfolio_orders(pid)
     open_ = [o for o in all_orders if o.get("status") == "open"]
     recent = [o for o in reversed(all_orders) if o.get("status") != "open"][:50]
+    sector_of = sectors.of_holdings(val["holdings"])
+    for h in val["holdings"]:
+        h["sector"] = sector_of.get(h["asset_key"], "Other")
     return {
         "portfolio": card(row, live=False)
         | {
@@ -314,7 +324,9 @@ def page(pid: str) -> dict:
         },
         "holdings": val["holdings"],
         "holding_groups": valuation.kind_groups(val["holdings"]),
-        "mandate": mandate.status(row.get("mandate"), val),
+        # By sector, as Copy Trading draws it: each sector's share of what is invested.
+        "sectors": sectors.breakdown(val["holdings"], sector_of),
+        "mandate": mandate.status(row.get("mandate"), val, sector_of),
         "orders": [order_view(o) for o in open_ + recent],
         "activity": activity(pid, limit=50)["activity"],
         **SIMULATED,
