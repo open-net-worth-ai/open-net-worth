@@ -9,6 +9,7 @@ import {
   CrosshairMode,
   LineStyle,
   type SeriesMarker,
+  type TickMarkType,
   type Time,
 } from 'lightweight-charts'
 import { useTheme } from '../../../theme'
@@ -28,6 +29,14 @@ export const CHART_HEIGHT = 200
  *  card draws it shorter so the table below has room — owner, 2026-11-16). */
 export const CHART_BOX = `var(--fol-chart-h, ${CHART_HEIGHT}px)`
 const BARS_HEIGHT = 80
+
+/** The through-the-day chart puts its start (when the run began) one step before the first bar,
+ *  which can be hours later, so the two time labels sat on top of each other ("05:00 PM08:00
+ *  PM"). The start keeps no axis label; its tooltip already says "Start". */
+function startless(format: (time: Time, type: TickMarkType) => string, points: { date: string }[]) {
+  const start = points.length ? toTime(points[0]!.date) : null
+  return (time: Time, type: TickMarkType) => (time === start ? '' : format(time, type))
+}
 const LABEL_GAP_PX = 60
 // A label is centred on its arrow: this close to an edge it would be cut off.
 const EDGE_PX = 28
@@ -148,7 +157,10 @@ export function ActivityChart({
         fixRightEdge: true,
         rightOffset: 0,
         ...(intraday
-          ? { timeVisible: true, tickMarkFormatter: tickMarkFormatterFor(undefined) }
+          ? {
+              timeVisible: true,
+              tickMarkFormatter: startless(tickMarkFormatterFor(undefined), points),
+            }
           : {}),
       },
       // The tooltip says the day and the figures: the engine's own axis labels would repeat it.
