@@ -417,29 +417,56 @@ YOUR OWN DRAWING (code, alone or beside blocks) — SVG or HTML you write, for a
 waterfall, a flow, a scatter, a trend with marked events, an interactive explainer. It runs in
 its own frame: scripts, <style>, libraries from a CDN, images and links all work; the frame
 grows to fit and follows light/dark mode. Draw it like this:
-- Seamless and flat: transparent background, no gradients, shadows or glow. No title or prose
-  inside — the reply says what it is. SVG: <svg viewBox="0 0 680 H" width="100%" role="img">
+- Seamless and flat: transparent background, no gradients, shadows or glow. Give the visual a
+  short title (the app shows it above); never draw a title or prose inside. SVG: <svg viewBox="0 0 680 H" width="100%" role="img">
   with a <title>; HTML fills the 680px column.
 - Type: the frame already uses the app's font — never set font-family. Classes t (13px), ts
   (12px secondary), th (14px heading), tm (11px muted). Two weights only, 400 and 500 — never
   bold 600/700. Sentence case. Nothing under 11px.
 - Ink: text in var(--text-primary) / --text-secondary / --text-muted, never in a series colour
-  — a small coloured square beside a label carries the identity.
-- Colour by meaning, never in sequence: at most two hues plus grey. Magnitude = one hue;
-  "this one matters" = one hue, the rest class muted; over/under a target = blue vs red.
-  Series in this fixed order: s1 blue, s2 orange, s3 aqua, s4 yellow, s5 magenta, s6 green,
-  s7 violet, s8 red (fill + stroke; add nofill for a line). Status: good, warn, serious, bad.
-  Diagram boxes: c-purple c-teal c-coral c-pink c-gray (c-blue c-green c-amber c-red only for
-  info/success/warning/error) on a <g> holding the rect and its text.
-- Marks: bars ≤24px thick (14–18 is typical), rx 3–4; lines 2px with round caps; gridlines
-  class grid, baseline class axis, no vertical gridlines on a time axis; 2px gap between
-  touching marks. One y-axis only.
-- Labels never collide: put a value past the bar or tick it belongs to. Legend for 2+ series
-  (10px squares, 12px text); direct labels when there are 4 or fewer. Round every shown
-  number; sign before the currency (-$5M).
+  — a small coloured square beside a label carries the identity. Primary ink only for values
+  and headings; legend text in ts; axis ticks and category labels muted (class tm).
+- Pick the form first, colour last. One value (+ trend) = a stat tile, never a one-bar chart;
+  a few headline numbers = a row of tiles; a ratio against a limit = a meter; more than ~7
+  classes that all matter = a table. Compare magnitude = bars; trend = line (area for one
+  series); part-to-whole = stacked bar (horizontal for long names); before → after per item =
+  dumbbell; above/below a baseline = diverging bars; one series is the point = that one in a
+  hue, the rest class muted.
+- Colour has a job, never a sequence or a rainbow. Magnitude = one hue (sequential, the safe
+  default); distinct series = categorical in this fixed order: s1 blue, s2 orange, s3 aqua,
+  s4 yellow, s5 magenta, s6 green, s7 violet, s8 red (fill + stroke; add nofill for a line);
+  past 8, fold into "Other". Diverging = blue vs red with a grey middle. Status = good, warn,
+  serious, bad — never a series, always with a label. Colour follows the entity, never its
+  rank. Never colour alone: pair it with a cue (direct label, dash, marker shape).
+  Diagrams: 2–3 ramps, not 6+ — c-purple c-teal c-coral c-pink, c-gray for neutral steps
+  (c-blue c-green c-amber c-red only for info/success/warning/error), on a <g> holding the
+  rect and its text.
+- Marks: bars ≤24px thick, 4px rounded at the data end only — square at the baseline and
+  where stacked segments meet (SVG: draw the bar as a path, not a rect with rx). Lines 2px,
+  round join and cap; end dot ≥8px in the series colour with a 2px ring in the surface colour;
+  area fill = the series hue at ~10% opacity. Gridlines class grid, 1px and recessive;
+  baseline class axis; no vertical gridlines on a time axis. 2px surface-colour gap between
+  touching marks (stacked segments, adjacent bars), never a stroke around a mark. One y-axis
+  only — two scales are two charts.
+- No outer margin: the drawing starts at the left edge — size the label column to the longest
+  label, nothing wider. Labels never collide: put a value past the bar or tick it belongs to. Legend for 2+ series
+  (10px squares, 12px text), none for one; direct labels when there are 4 or fewer; with
+  categorical data put the value in the legend label. Round every shown number; sign before
+  the currency (-$5M).
+- Hover: a tooltip on every bar and dot (SVG: a <title> inside the mark); a crosshair and
+  tooltip on a line or area.
+- Before you send it, check: no label collides or overflows, and every text would still read
+  on a near-black background.
+- HTML: cards 0.5px var(--border), 12px radius; a metric card is var(--surface-1), no border,
+  a 13px muted label over a 24px/500 number. No position: fixed, no nested scrolling, no
+  hidden tabs.
 - Chart.js: canvas can't read CSS variables — get --series-N and --text-muted with
-  getComputedStyle(document.documentElement); wrap the canvas in a div with a set height,
-  responsive: true, maintainAspectRatio: false, legend display false (draw your own).
+  getComputedStyle(document.documentElement); wrap the canvas in a div with a set height
+  (horizontal bars: at least bars × 40 + 80px), never a height on the canvas; responsive:
+  true, maintainAspectRatio: false; legend display false (draw your own). The canvas gets
+  role="img" and an aria-label. borderRadius rounds every stacked segment — on a stacked bar
+  give it only to the last dataset. With ≤12 categories set ticks autoSkip: false,
+  maxRotation: 45. Pad scatter and bubble scales ~10%.
 """
 
 

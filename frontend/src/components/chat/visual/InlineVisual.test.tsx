@@ -172,12 +172,12 @@ describe('InlineVisual', () => {
     expect(flat.querySelector('.ivis-tile-delta--flat')).toBeTruthy()
   })
 
-  it('shows the title above blocks but not above a drawing, which has its own heading', () => {
+  it('shows the title above blocks and above a drawing', () => {
     const withBlocks = render(<InlineVisual visual={FIXTURE} />).container
     expect(withBlocks.querySelector('.ivis-title')!.textContent).toBe('Spending, Nov vs Oct')
     const drawing = { id: 'vis_2', title: 'Spending', code: '<svg></svg>' } as VisualSpec
     const alone = render(<InlineVisual visual={drawing} />).container
-    expect(alone.querySelector('.ivis-title')).toBeNull()
+    expect(alone.querySelector('.ivis-title')!.textContent).toBe('Spending')
     expect(alone.querySelector('iframe.ivis-frame')!.getAttribute('title')).toBe('Spending')
   })
 

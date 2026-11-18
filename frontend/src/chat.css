@@ -2740,10 +2740,6 @@
     flex-direction: column;
     gap: 12px;
     min-width: 0;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--panel);
     position: relative;
   }
   /* The ⋯ copy/download menu (visual/VisualMenu.tsx): top right, shown on hover or focus, always
@@ -2775,8 +2771,8 @@
   }
   .ivis-title {
     margin: 0;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 500;
     color: var(--ink);
   }
   .ivis-stats {
