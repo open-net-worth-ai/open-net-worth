@@ -11,6 +11,33 @@ from backend.services.paper_trading.book import Book
 from backend.services.paper_trading.kinds import kind_for
 from backend.services.paper_trading.model import BASIS_LABEL, KIND_LABEL, KIND_ORDER
 
+# The last good price per unit (native) and FX rate this process saw. A holding whose quote is
+# missing or unusable this moment (stale in an open market, a source down, the first seconds
+# after a restart) keeps its last price instead of counting as nothing: one missing quote once
+# drew a portfolio at -71% (2026-11-19). With no price seen yet, it is valued at its cost.
+_LAST_PRICE: dict[str, float] = {}
+_LAST_RATE: dict[str, float] = {}
+
+
+def _rate(rates: dict[str, float], ccy: str) -> tuple[float | None, bool]:
+    """(rate, estimated): the live rate, else the last one seen."""
+    rate = rates.get(ccy)
+    if rate:
+        _LAST_RATE[ccy] = rate
+        return rate, False
+    last = _LAST_RATE.get(ccy)
+    return last, last is not None
+
+
+def _fallback_native(key: str, qty: float, cost: float) -> tuple[float | None, str | None]:
+    """A holding with no usable quote: its last good price, else its cost. Never nothing."""
+    if not qty:
+        return None, None
+    last = _LAST_PRICE.get(key)
+    if last is not None:
+        return last * qty, "last"
+    return (cost, "cost") if cost else (None, None)
+
 
 def holdings(
     row: dict, book: Book, now: datetime, *, fetch_quotes: bool = True
@@ -30,7 +57,16 @@ def holdings(
         qty = book.quantity(a.key)
         cost = book.cost(a.key)
         native = kind_for(a).value(qty, q) if q else None
-        rate = rates.get(a.currency)
+        estimated = None
+        if native is not None and qty:
+            _LAST_PRICE[a.key] = native / qty
+        elif fetch_quotes:
+            native, estimated = _fallback_native(a.key, qty, cost)
+        rate, rate_estimated = (
+            _rate(rates, a.currency) if fetch_quotes else (rates.get(a.currency), False)
+        )
+        if rate_estimated and native is not None:
+            estimated = estimated or "last"
         value_home = native * rate if native is not None and rate else None
         cost_home = book.cost_home(a.key, rate or (1.0 if a.currency == home else None))
         if value_home is None and not fetch_quotes and a.currency == home:
@@ -54,6 +90,8 @@ def holdings(
                 "pnl_pct": round((value_home - cost_home) / cost_home, 6)
                 if value_home is not None and cost_home
                 else None,
+                # "last" (its last good price) or "cost" when no usable quote came this time.
+                "estimated": estimated,
                 "frozen": book.frozen.get(a.key),
                 "marked_on": (mark or {}).get("at", "")[:10] or None,
             }
@@ -107,6 +145,8 @@ def value(row: dict, book: Book, now: datetime, *, fetch_quotes: bool = True) ->
         "unrealized_home": unrealized,
         "realized_home": round(realized, 2),
         "unpriced": [h["asset_key"] for h in hold if h["value_home"] is None],
+        # Valued at a last price or at cost this time: fine to show, never to store.
+        "estimated": [h["asset_key"] for h in hold if h.get("estimated")],
         "rates": rates,
     }
 

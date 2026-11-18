@@ -121,6 +121,11 @@ def paper_db(db_isolated, monkeypatch):
     from backend.services.paper_trading import autopilot_run
 
     monkeypatch.setattr(autopilot_run, "_now", lambda: NOW)
+    # Each test starts with no last-seen prices or rates (valuation's fallback memory).
+    from backend.services.paper_trading import valuation
+
+    monkeypatch.setattr(valuation, "_LAST_PRICE", {})
+    monkeypatch.setattr(valuation, "_LAST_RATE", {})
     seed_instruments()
     # Sectors come from a cache filled over the network: the tests read a fixed one instead.
     from backend.services import prices

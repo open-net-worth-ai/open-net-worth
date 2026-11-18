@@ -698,10 +698,9 @@ def _snapshot(row: dict, now: datetime) -> dict | None:
 
     bk = derive(row["id"])
     val = valuation.value(row, bk, now)
-    if val["unpriced"]:
-        logger.info(
-            "paper: no value row for %s — %d holdings unpriced", row["id"], len(val["unpriced"])
-        )
+    missing = val["unpriced"] + val["estimated"]
+    if missing:
+        logger.info("paper: no value row for %s — %d holdings unpriced", row["id"], len(missing))
         return None
     day = user_today().isoformat()
     doc = {

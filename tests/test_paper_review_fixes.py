@@ -79,6 +79,37 @@ def test_no_value_row_is_written_while_a_holding_is_unpriced(paper_db, monkeypat
     assert PaperValueStore().for_portfolio(pid) == before
 
 
+def test_a_missing_quote_keeps_the_last_price_never_zero(paper_db, monkeypatch):
+    """One missing quote once drew a portfolio at -71% (2026-11-19): a holding with no usable
+    quote keeps its last good price, so the figure and the chart barely move, and it says so."""
+    from backend.services.paper_trading import valuation
+
+    pid = _new()["id"]
+    order = {"asset_key": "inst:inst_acme", "side": "buy", "quantity": 10}
+    apply_paper_change({"op": "place", "portfolio_id": pid, "order": order})
+    row, bk = service.portfolio(pid), service.derive(pid)
+    good = valuation.value(row, bk, NOW)
+    monkeypatch.setattr(quotes, "fetch", lambda *a, **k: {})  # the provider is down
+    down = valuation.value(row, bk, NOW)
+    assert down["value_home"] == pytest.approx(good["value_home"])
+    [acme] = down["holdings"]
+    assert acme["estimated"] == "last" and down["estimated"] == ["inst:inst_acme"]
+
+
+def test_no_quote_since_a_restart_is_valued_at_cost(paper_db, monkeypatch):
+    from backend.services.paper_trading import valuation
+
+    pid = _new()["id"]
+    order = {"asset_key": "inst:inst_acme", "side": "buy", "quantity": 10}
+    apply_paper_change({"op": "place", "portfolio_id": pid, "order": order})
+    monkeypatch.setattr(valuation, "_LAST_PRICE", {})  # as just after a restart
+    monkeypatch.setattr(quotes, "fetch", lambda *a, **k: {})
+    val = valuation.value(service.portfolio(pid), service.derive(pid), NOW)
+    [acme] = val["holdings"]
+    assert acme["estimated"] == "cost"
+    assert val["value_home"] == pytest.approx(10_000, abs=2)  # cash spent + the holding at cost
+
+
 def test_a_new_run_has_its_opening_value_row(paper_db):
     pid = _new()["id"]
     [row] = PaperValueStore().for_portfolio(pid)
