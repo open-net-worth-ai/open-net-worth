@@ -105,11 +105,14 @@ The **Autopilot** tab's switch sets who trades a paper portfolio:
 
 Autopilot needs a mandate: it is what you approve in advance. Every review:
 
-- reads the portfolio, then checks the news on its holdings, your investment thesis for each
-  one that has it, and the chart and company figures of anything that moved a lot or is near a
-  limit, before it decides anything;
-- trades only this paper portfolio, and reads nothing beyond prices, your theses and Intel (no
-  real accounts, no connectors, no web);
+- reads the portfolio, then checks the last two weeks' headlines for each holding (from its own
+  news feeds, so a name you hold only on paper is covered too; nothing is saved to Intel), your
+  investment thesis for each one that has it, and the chart and company figures of anything that
+  moved a lot or is near a limit, before it decides anything;
+- ends with a memo Lucius writes for you, plus what he is watching next. A review that ends
+  without one counts as failed;
+- trades only this paper portfolio, and reads nothing beyond prices, its holdings' headlines,
+  your theses and Intel (no real accounts, no connectors, no web search or browsing);
 - can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
   such as a holding past its stop loss or over its cap.
 

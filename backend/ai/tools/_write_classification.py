@@ -100,6 +100,9 @@ READ_ONLY_TOOLS = frozenset(
         # as a placement with no write — at most it registers a shared, ownerless instrument row
         # for a ticker the app had not seen (reference data, as a watchlist search does).
         "get_paper_activity",
+        # Reads each paper holding's own news feeds (fixed Google News / Yahoo addresses built
+        # by code, never the model) and stores nothing.
+        "get_paper_news",
         "get_paper_portfolios",
         "get_paper_results",
         "preview_paper_orders",

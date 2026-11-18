@@ -419,6 +419,9 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
             {on && (
               <div className="paper-ap-run">
                 <p>{r.status === 'failed' ? (r.error ?? 'Unknown error.') : r.memo}</p>
+                {r.watching && r.status !== 'failed' && (
+                  <p className="paper-ap-watching">Watching: {r.watching}</p>
+                )}
                 <div className="a3-muted">
                   Ran on {modelLabel(r.model)} • {effortLabel(r.effort)}
                 </div>

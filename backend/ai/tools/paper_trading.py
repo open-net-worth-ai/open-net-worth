@@ -243,6 +243,73 @@ async def get_paper_activity(input_data: dict):
         return _dump({"error": _err(exc), "simulated": True})
 
 
+class GetPaperNewsInput(ToolInput):
+    portfolio: str = Field(description="The paper portfolio, by name or id.")
+
+
+def _news(input_data: dict) -> dict:
+    row = facade.resolve_ref(input_data["portfolio"])
+    return facade.news(row["id"])
+
+
+@tool(
+    "get_paper_news",
+    description=(
+        "The last two weeks' headlines for each holding of a PAPER portfolio, newest first "
+        "(title, source, date, link), largest holdings first — paper-only names included, "
+        "which the Intel digest does not follow. A holding with nothing says why in `note`. "
+        "Headlines are as published: read them, never quote them as facts you checked."
+    ),
+    input_schema=schema_of(GetPaperNewsInput, tool_name="get_paper_news"),
+)
+async def get_paper_news(input_data: dict):
+    if refused := _refusal():
+        return refused
+    try:
+        return _dump(await asyncio.to_thread(_news, input_data))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
+class RecordAutopilotMemoInput(ToolInput):
+    memo: str = Field(
+        description="What the owner reads: 3 to 6 plain sentences on what you checked, what "
+        "you did or why you did nothing (1,200 characters at most)."
+    )
+    watching: Optional[str] = Field(
+        default=None, description="What you are watching before the next review, one sentence."
+    )
+
+
+def _record_memo(input_data: dict) -> dict:
+    from backend.core.errors import ConflictError
+
+    ctx = get_automation_approval()
+    if ctx is None or not ctx.automation_id.startswith("autopilot:") or not ctx.paper_portfolio_id:
+        raise ConflictError("record_autopilot_memo is only for a paper autopilot review.")
+    facade.record_memo(ctx.paper_portfolio_id, input_data["memo"], input_data.get("watching"))
+    return {"ok": True, "simulated": True}
+
+
+@tool(
+    "record_autopilot_memo",
+    description=(
+        "Inside a paper portfolio's autopilot review only: record the review's memo, the one "
+        "thing the owner reads. Call it once, last; a later call replaces the memo. A review "
+        "that ends without it counts as failed."
+    ),
+    input_schema=schema_of(RecordAutopilotMemoInput, tool_name="record_autopilot_memo"),
+    mutates=("paper",),
+)
+async def record_autopilot_memo(input_data: dict):
+    if refused := _refusal():
+        return refused
+    try:
+        return _dump(await asyncio.to_thread(_record_memo, input_data))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
 # ── orders ─────────────────────────────────────────────────────────────────────────────────
 
 

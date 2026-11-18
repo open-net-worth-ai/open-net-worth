@@ -56,6 +56,26 @@ def set_autopilot(pid: str, body: dict) -> dict:
     return {"autopilot": autopilot.view(row), **SIMULATED}
 
 
+def news(pid: str) -> dict:
+    """Each holding's last two weeks of headlines, for an autopilot review."""
+    from backend.services.paper_trading import news as paper_news
+
+    page = views.page(pid)
+    return {
+        "portfolio": page["portfolio"]["name"],
+        "holdings": paper_news.for_holdings(page["holdings"]),
+        **SIMULATED,
+    }
+
+
+def record_memo(pid: str, memo: str, watching: str | None) -> dict:
+    """The running autopilot review's memo, recorded by Lucius."""
+    service.apply_paper_change(
+        {"op": "autopilot_memo", "id": pid, "memo": memo, "watching": watching}
+    )
+    return {"ok": True, **SIMULATED}
+
+
 def run_autopilot_now(pid: str) -> dict:
     """Review now: the scheduler's next pass (within a minute) runs it."""
     from backend.services.paper_trading import autopilot

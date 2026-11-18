@@ -760,6 +760,14 @@ def apply_paper_change(change: dict) -> dict:
         from backend.services.paper_trading import autopilot
 
         return {"portfolio": autopilot.apply_settings(change)}
+    if op == "autopilot_memo":
+        from backend.services.paper_trading import autopilot
+
+        return {
+            "portfolio": autopilot.save_memo(
+                change.get("id"), change.get("memo"), change.get("watching")
+            )
+        }
     if op == "autopilot_run_now":
         from backend.services.paper_trading import autopilot
 

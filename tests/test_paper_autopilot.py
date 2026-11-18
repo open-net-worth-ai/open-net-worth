@@ -14,7 +14,7 @@ import pytest
 from backend.core import headless_turn
 from backend.core.automation_runner import get_automation_approval
 from backend.core.errors import ConflictError, ValidationError
-from backend.services.paper_trading import autopilot, autopilot_run, views
+from backend.services.paper_trading import autopilot, autopilot_run, facade, views
 from backend.services.paper_trading.facade import place
 from backend.services.paper_trading.service import apply_paper_change
 
@@ -43,12 +43,15 @@ def lucius(monkeypatch):
 
     def install(act=None, memo="Bought a little ACME; watching its earnings.", fail=None):
         async def runner(prompt, **kw):
-            seen.update(prompt=prompt, ctx=get_automation_approval(), **kw)
+            ctx = get_automation_approval()
+            seen.update(prompt=prompt, ctx=ctx, **kw)
             if fail:
                 raise fail
             if act:
                 act()
-            return memo
+            if memo:  # as the model does: the memo tool, then a reply that is never kept
+                facade.record_memo(ctx.paper_portfolio_id, memo, "ACME's earnings")
+            return "Let me redo this properly with correct calls. Done."
 
         monkeypatch.setattr(headless_turn, "_runner", runner)
         return seen
@@ -203,3 +206,104 @@ def test_effort_is_low_medium_or_high(paper_db):
     pid = _new()["id"]
     with pytest.raises(ValidationError, match="Effort is low, medium or high"):
         _auto(pid, effort="max")
+
+
+# ── memo ────────────────────────────────────────────────────────────────────────────────────
+
+
+def test_the_memo_is_what_lucius_recorded_never_his_reply(paper_db, lucius):
+    pid = _new()["id"]
+    _auto(pid)
+    lucius(memo="Held everything: nothing broke a limit.")
+    _review(pid)
+    [run] = views.page(pid)["autopilot"]["runs"]
+    assert run["memo"] == "Held everything: nothing broke a limit."
+    assert run["watching"] == "ACME's earnings"
+    assert "redo this" not in run["memo"]
+
+
+def test_a_review_without_a_memo_fails(paper_db, lucius):
+    pid = _new()["id"]
+    _auto(pid)
+    lucius(memo=None)
+    _review(pid)
+    [run] = views.page(pid)["autopilot"]["runs"]
+    assert run["status"] == "failed"
+    assert run["error"] == "Lucius finished without writing his memo."
+
+
+def test_a_memo_is_recorded_only_during_a_review(paper_db):
+    pid = _new()["id"]
+    _auto(pid)
+    with pytest.raises(ConflictError, match="only during an autopilot review"):
+        facade.record_memo(pid, "Sneaky.", None)
+
+
+def test_the_memo_tool_refuses_outside_an_autopilot_review(paper_db):
+    from backend.ai.tools.paper_trading import record_autopilot_memo
+
+    text, _ = asyncio.run(record_autopilot_memo({"memo": "Hello"}))
+    assert "only for a paper autopilot review" in text
+
+
+# ── news ────────────────────────────────────────────────────────────────────────────────────
+
+RSS = b"""<?xml version="1.0"?><rss><channel>
+<item><title>Acme beats estimates</title><link>https://example.com/a</link>
+<pubDate>Tue, 17 Nov 2026 14:00:00 GMT</pubDate></item>
+<item><title>Acme beats estimates</title><link>https://example.com/a2</link>
+<pubDate>Tue, 17 Nov 2026 13:00:00 GMT</pubDate></item>
+<item><title>Old Acme story</title><link>https://example.com/b</link>
+<pubDate>Mon, 01 Sep 2026 09:00:00 GMT</pubDate></item>
+</channel></rss>"""
+
+
+class _Resp:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self, n):
+        return RSS
+
+
+def _holding(pid: str) -> None:
+    place(pid, {"asset_key": "inst:inst_acme", "side": "buy", "quantity": 5})
+
+
+def test_paper_news_reads_each_holdings_feeds(paper_db, monkeypatch):
+    from backend.services.paper_trading import news
+
+    asked: list[str] = []
+
+    def fake_open(url, **kw):
+        asked.append(url)
+        return _Resp()
+
+    monkeypatch.setattr(news, "pinned_urlopen", fake_open)
+    news._cache.clear()
+    pid = _new(None)["id"]
+    _holding(pid)
+    [acme] = facade.news(pid)["holdings"]
+    assert acme["symbol"] == "ACME" and acme["note"] is None
+    # Newest first, the same headline once, nothing older than two weeks.
+    assert [h["title"] for h in acme["headlines"]] == ["Acme beats estimates"]
+    # Only the holding's own feed addresses, built by code.
+    assert asked and all("news.google.com" in u or "yahoo.com" in u for u in asked)
+
+
+def test_a_holding_whose_feeds_fail_says_so(paper_db, monkeypatch):
+    from backend.services.paper_trading import news
+
+    def boom(url, **kw):
+        raise OSError("down")
+
+    monkeypatch.setattr(news, "pinned_urlopen", boom)
+    news._cache.clear()
+    pid = _new(None)["id"]
+    _holding(pid)
+    [acme] = facade.news(pid)["holdings"]
+    assert acme["headlines"] == []
+    assert acme["note"] == "Its news feeds could not be read just now."

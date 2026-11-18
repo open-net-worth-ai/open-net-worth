@@ -31,7 +31,8 @@ RUN_AT = time(10, 0)
 MAX_RUNS_KEPT = 20
 FAILURES_TO_PAUSE = 2
 MAX_INSTRUCTIONS = 600
-MAX_MEMO = 4000
+MAX_MEMO = 1200
+MAX_WATCHING = 300
 # A review stuck past this long is treated as dead (the server restarted mid-review).
 STALE_RUN = timedelta(minutes=30)
 
@@ -45,6 +46,8 @@ DEFAULT = {
     "effort": "medium",
     "next_run_at": None,
     "running_since": None,
+    # What Lucius recorded with record_autopilot_memo during the running review.
+    "memo_draft": None,
     "failures": 0,
     "paused_reason": None,
     "runs": [],
@@ -210,28 +213,59 @@ def finish(pid: str, record: dict) -> dict:
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = service.portfolio(pid, conn=conn)
         a = of(row)
+        draft = a.get("memo_draft") or {}
+        status = record["status"]
+        error = record.get("error")
+        # The memo is only what Lucius recorded with the memo tool — never his last reply,
+        # which carried his working ("Let me redo this properly…") into the log (2026-11-18).
+        if status == "done" and not draft.get("memo"):
+            status, error = "failed", "Lucius finished without writing his memo."
         entry = {
             "id": new_id("papr"),
             "started_at": a["running_since"] or record.get("started_at"),
             "finished_at": _now().isoformat(),
-            "status": record["status"],
-            "memo": str(record.get("memo") or "")[:MAX_MEMO],
+            "status": status,
+            "memo": str(draft.get("memo") or "")[:MAX_MEMO],
+            "watching": str(draft.get("watching") or "")[:MAX_WATCHING] or None,
             # What it ran on, so two models' reviews can be compared.
             "model": record.get("model") or "",
             "effort": record.get("effort") or "medium",
             "orders": record.get("orders") or [],
-            "error": record.get("error"),
+            "error": error,
         }
-        failures = a["failures"] + 1 if record["status"] == "failed" else 0
+        failures = a["failures"] + 1 if status == "failed" else 0
         paused = a["paused_reason"]
         if failures >= FAILURES_TO_PAUSE:
             paused = "Paused after two failed reviews in a row. Turn it on again to resume."
         a.update(
             running_since=None,
+            memo_draft=None,
             failures=failures,
             paused_reason=paused,
             runs=[*a["runs"], entry][-MAX_RUNS_KEPT:],
         )
+        return _save(row, a, conn=conn)
+
+
+def save_memo(pid: str, memo: str, watching: str | None) -> dict:
+    """Record the running review's memo (op "autopilot_memo"). Only during a review; a second
+    call replaces the first, so the memo is his final word."""
+    from backend.services.paper_trading import service
+
+    text = str(memo or "").strip()
+    if not text:
+        raise ValidationError("Write the memo: what you checked, what you did and why.")
+    if len(text) > MAX_MEMO:
+        raise ValidationError(f"Keep the memo under {MAX_MEMO} characters.")
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        row = service.portfolio(pid, conn=conn)
+        a = of(row)
+        if not a["running_since"]:
+            raise ConflictError("A memo is recorded only during an autopilot review.")
+        a["memo_draft"] = {
+            "memo": text,
+            "watching": str(watching or "").strip()[:MAX_WATCHING] or None,
+        }
         return _save(row, a, conn=conn)
 
 

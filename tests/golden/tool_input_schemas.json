@@ -11341,5 +11341,35 @@
       "updates"
     ],
     "type": "object"
+  },
+  "get_paper_news": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolio": {
+        "description": "The paper portfolio, by name or id.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "portfolio"
+    ],
+    "type": "object"
+  },
+  "record_autopilot_memo": {
+    "additionalProperties": false,
+    "properties": {
+      "memo": {
+        "description": "What the owner reads: 3 to 6 plain sentences on what you checked, what you did or why you did nothing (1,200 characters at most).",
+        "type": "string"
+      },
+      "watching": {
+        "type": "string",
+        "description": "What you are watching before the next review, one sentence."
+      }
+    },
+    "required": [
+      "memo"
+    ],
+    "type": "object"
   }
 }

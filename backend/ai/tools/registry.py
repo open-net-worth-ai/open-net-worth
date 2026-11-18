@@ -1102,6 +1102,7 @@ _DEMO_REFUSED_TOOLS = frozenset(
         "place_paper_orders",
         "cancel_paper_orders",
         "record_paper_marks",
+        "record_autopilot_memo",
         "list_checkpoints",
         "restore_checkpoint",
         "get_recent_logs",

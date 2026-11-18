@@ -54,6 +54,8 @@ export interface AutopilotRun {
   finished_at: string
   status: 'done' | 'failed'
   memo: string
+  /** What Lucius is watching before the next review. */
+  watching?: string | null
   orders: { id: string; label: string; status: string }[]
   error: string | null
   /** What it ran on: '' is the app's default model. */

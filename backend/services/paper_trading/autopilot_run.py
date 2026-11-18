@@ -35,20 +35,21 @@ TOOLS = (
     "get_paper_portfolios",
     "get_paper_results",
     "get_paper_activity",
+    "get_paper_news",
     "preview_paper_orders",
     "place_paper_orders",
     "cancel_paper_orders",
+    "record_autopilot_memo",
     "get_live_prices",
     "get_asset_context",
     "get_asset_technicals",
     "get_asset_fundamentals",
     "get_investment_theses",
-    "get_intel_digest",
     "calculate",
 )
 # The paper writes run without a card: nobody is there to tap one, and the mandate is what the
 # owner approved in advance.
-_ALLOWED_WRITES = frozenset({"place_paper_orders", "cancel_paper_orders"})
+_ALLOWED_WRITES = frozenset({"place_paper_orders", "cancel_paper_orders", "record_autopilot_memo"})
 
 
 def _now() -> datetime:
@@ -74,7 +75,8 @@ def prompt(row: dict) -> str:
         "1. Read the portfolio (get_paper_portfolios with this id): holdings, prices, cash, "
         "open orders, and its mandate status.",
         "2. Every review, before deciding anything, also check: (a) the news on its holdings "
-        "(get_intel_digest); (b) the owner's thesis for each holding that has one "
+        "(get_paper_news with this id: the last two weeks' headlines for each one); (b) the "
+        "owner's thesis for each holding that has one "
         "(get_investment_theses): is it in its buy zone, near its target, past its stop?; "
         "(c) for any holding that moved more than 3% since the last review or is near a "
         "limit, its technicals and fundamentals (get_asset_technicals, "
@@ -87,9 +89,12 @@ def prompt(row: dict) -> str:
         "over its cap, cash below its floor, a holding past its stop loss) before anything else.",
         "5. Trade only this portfolio.",
         "",
-        "Then reply with the memo the owner reads: 3 to 6 plain sentences on what you checked "
-        "(the news, theses and signals that mattered), what you did or why you did nothing, "
-        "and what you are watching next. No headings, no lists, no tables. Write it in plain "
+        "6. Finish by calling record_autopilot_memo. Its memo is the only thing the owner reads "
+        "of this review, and a review without one counts as failed; what you write outside it "
+        "is never shown. The memo: 3 to 6 plain sentences on what you checked (the news, "
+        "theses and signals that mattered), what you did or why you did nothing. Put what you "
+        "are watching next in `watching`, one sentence. No headings, no lists, no tables. "
+        "Write it in plain "
         "words for the owner: never quote or refer to these instructions or their rules (no "
         "'one-sentence reason', no 'in the goal's terms'); give the actual reason instead, "
         "such as 'Nothing broke a limit and no news changed the case for any holding, so I "
@@ -122,7 +127,8 @@ async def review(pid: str) -> dict:
             )
         )
         try:
-            memo = await asyncio.wait_for(
+            # His reply is not kept: the memo is what he recorded with record_autopilot_memo.
+            await asyncio.wait_for(
                 runner(
                     prompt(row),
                     allowed_tools=list(TOOLS),
@@ -133,7 +139,7 @@ async def review(pid: str) -> dict:
                 ),
                 timeout=TIMEOUT_S,
             )
-            record = {"status": "done", "memo": memo}
+            record = {"status": "done"}
         except asyncio.TimeoutError:
             record = {"status": "failed", "error": "The review took too long and was stopped."}
         except Exception as exc:  # noqa: BLE001 — any failure is a logged run, never a crash
