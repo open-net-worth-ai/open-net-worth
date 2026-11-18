@@ -10,11 +10,11 @@ type Limit =
   | 'stop_loss_pct'
 
 // The section's intro says what each limit does; per-field info tips overflowed the dialog.
-const LIMITS: { key: Limit; label: string; step: string }[] = [
+const LIMITS: { key: Limit; label: string; step: number | 'any' }[] = [
   { key: 'max_position_pct', label: 'Max per holding (%)', step: 'any' },
   { key: 'max_sector_pct', label: 'Max per sector (%)', step: 'any' },
   { key: 'min_cash_pct', label: 'Min cash (%)', step: 'any' },
-  { key: 'max_positions', label: 'Max holdings', step: '1' },
+  { key: 'max_positions', label: 'Max holdings', step: 1 },
   { key: 'stop_loss_pct', label: 'Stop loss (%)', step: 'any' },
 ]
 
