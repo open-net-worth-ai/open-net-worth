@@ -310,6 +310,7 @@ describe('Paper Trading', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Autopilot' }))
     expect(await screen.findByRole('button', { name: 'Set a mandate' })).toBeTruthy()
+    expect((screen.getByLabelText('Turn autopilot on') as HTMLInputElement).disabled).toBe(true)
     Object.assign(card, { mandate: { goal: 'Beat SPY', max_position_pct: 20 } })
     try {
       cleanup()
@@ -317,7 +318,8 @@ describe('Paper Trading', () => {
       render(<PaperTab />)
       fireEvent.click(await screen.findByRole('tab', { name: 'Autopilot' }))
       expect(screen.queryByRole('button', { name: 'Set a mandate' })).toBeNull()
-      fireEvent.click(screen.getByRole('tab', { name: 'Auto' }))
+      expect(screen.getByText('At most 20% in one holding')).toBeTruthy()
+      fireEvent.click(screen.getByLabelText('Turn autopilot on'))
       await waitFor(() =>
         expect(api.autopilot).toHaveBeenCalledWith('ppf_1', {
           mode: 'auto',

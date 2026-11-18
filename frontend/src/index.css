@@ -21292,69 +21292,62 @@ body.hide-amounts .mf-lbl-amt {
   gap: var(--space-9);
   min-width: 0;
 }
-/* The Autopilot tab, laid out as the other tabs are: the switch and its one line, the figures,
-   then Settings and Reviews. Reviews are rows split by a hairline: when and the outcome on the
-   left, the memo and its orders on the right. */
-.paper-autopilot-form {
-  max-width: 560px;
+/* The Autopilot tab borrows an Automation's page (automations.css: .a3-detail-bar, .a3-cols,
+   .a3-block, .a3-hist) so the two read alike. These are only what it adds: the mandate it works
+   within, and an open review's memo and trades under its history row. */
+.paper-ap {
+  display: grid;
+  gap: 22px;
 }
-.paper-ap-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-.fol-sec > .paper-next {
+.paper-ap-goal {
   margin: 0;
-  max-width: 70ch;
-}
-.fol-keyfigs > .fol-ret3.paper-ap-figs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-}
-.paper-ap-reviews {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.paper-ap-review {
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: var(--space-5);
-  padding: var(--space-5) 0;
-  border-top: 1px solid var(--line);
-}
-.paper-ap-review:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-.paper-ap-review-when {
-  display: grid;
-  align-content: start;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-}
-.paper-ap-outcome {
-  color: var(--muted);
-}
-.paper-ap-review-body {
-  display: grid;
-  gap: var(--space-2);
-}
-.paper-ap-review-body p {
-  margin: 0;
-  max-width: 72ch;
+  font-size: 13px;
   line-height: 1.6;
+  max-width: 62ch;
 }
-.paper-ap-review-body .paper-ap-review-order {
+.paper-ap-limits {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
   color: var(--muted);
-  font-size: var(--text-sm);
 }
-@media (max-width: 640px) {
-  .paper-ap-review {
+.paper-ap-run {
+  display: grid;
+  gap: 10px;
+  /* Under the row's text: the row's padding plus its dot and gap. */
+  padding: 4px 11px 14px 29px;
+}
+.paper-ap-run p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  max-width: 68ch;
+}
+.paper-ap-trades {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.paper-ap-chev {
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+.paper-ap-chev.on {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .paper-ap-chev {
+    transition: none;
+  }
+}
+@media (max-width: 860px) {
+  .paper-ap .a3-cols {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-2);
   }
 }
 /* The Mandate tab: the goal in the portfolio's own words, then each limit kept or broken. */
