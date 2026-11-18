@@ -349,7 +349,9 @@ class OpenAIProvider(AIProvider):
         return out
 
     @staticmethod
-    def _messages_to_openai(messages: List[dict], system: str, *, gemini: bool = False) -> list[dict]:
+    def _messages_to_openai(
+        messages: List[dict], system: str, *, gemini: bool = False
+    ) -> list[dict]:
         """Anthropic-shaped history → OpenAI chat messages.
 
         Anthropic content blocks (text / tool_use / tool_result) are flattened into
@@ -395,7 +397,9 @@ class OpenAIProvider(AIProvider):
                         )
                         signature = block.get("google_thought_signature")
                         if gemini and isinstance(signature, str) and signature:
-                            tool_calls[-1]["extra_content"] = {"google": {"thought_signature": signature}}
+                            tool_calls[-1]["extra_content"] = {
+                                "google": {"thought_signature": signature}
+                            }
                 msg: dict = {"role": "assistant", "content": "".join(text_parts) or None}
                 if tool_calls:
                     msg["tool_calls"] = tool_calls
@@ -687,7 +691,9 @@ class OpenAIProvider(AIProvider):
                             slot["id"] = call_id
                         extra = getattr(tc, "extra_content", None)
                         google = extra.get("google") if isinstance(extra, dict) else None
-                        signature = google.get("thought_signature") if isinstance(google, dict) else None
+                        signature = (
+                            google.get("thought_signature") if isinstance(google, dict) else None
+                        )
                         if isinstance(signature, str) and signature:
                             slot["google_thought_signature"] = signature
                         fn = getattr(tc, "function", None)
@@ -803,10 +809,14 @@ class OpenAIProvider(AIProvider):
                 try:
                     parsed = json.loads(slot["args"]) if slot["args"] else {}
                 except json.JSONDecodeError as exc:
-                    log.warning("tool_use args not valid JSON  tool=%s  error=%s", slot["name"], exc.msg)
+                    log.warning(
+                        "tool_use args not valid JSON  tool=%s  error=%s", slot["name"], exc.msg
+                    )
                     break
                 if not slot["id"] or not slot["name"] or not isinstance(parsed, dict):
-                    log.warning("tool_use missing id, name, or argument object  tool=%s", slot["name"])
+                    log.warning(
+                        "tool_use missing id, name, or argument object  tool=%s", slot["name"]
+                    )
                     break
                 call = {"type": "tool_use", "id": slot["id"], "name": slot["name"], "input": parsed}
                 if "google_thought_signature" in slot:
