@@ -334,6 +334,9 @@ def test_every_no_domain_write_tool_has_a_gating_verdict():
     Automation's own task checklist — turn-local, no store, no external effect, and the
     thing they report on is a run the owner already approved. A card there would ask for
     permission to draw a progress bar.
+    Ruling for save_code_as_skill (2026-11-18): UNGATED at the gate. It stages its OWN card in
+    chat, so a gate card would be a second one; it is a NO_DOMAIN write only so a read-scoped
+    inbound MCP caller (no card possible there) is refused (mcp_oauth security review).
     """
     from backend.ai import _confirm_gate as policy
     from tests.test_tool_domains import NO_DOMAIN_WRITE_TOOLS
@@ -346,6 +349,7 @@ def test_every_no_domain_write_tool_has_a_gating_verdict():
         "run_screen_command",
         "add_run_tasks",
         "update_run_task",
+        "save_code_as_skill",
     }
     assert set(NO_DOMAIN_WRITE_TOOLS) == policy.EXTERNAL_EFFECT_TOOLS | ungated
 

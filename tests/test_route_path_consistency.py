@@ -35,6 +35,11 @@ _EXEMPT_PREFIXES: tuple[str, ...] = (
     "/openapi.json",  # FastAPI built-in OpenAPI schema
     "/docs",  # FastAPI built-in Swagger UI
     "/redoc",  # FastAPI built-in ReDoc UI
+    # The inbound MCP OAuth server (flag mcp_oauth): RFC 8414 / RFC 9728 fix the discovery
+    # documents at /.well-known/oauth-*, and the metadata advertises /oauth/authorize, /token and
+    # /revoke to hosted apps — moving them under /api/ would break every registered client.
+    "/.well-known/oauth-",
+    "/oauth/",
 )
 
 # Exact-match exemptions (NOT prefixes — these paths are whole routes, never API).

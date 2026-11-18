@@ -225,6 +225,9 @@ _GATE_NEVER_AUTO_EXECUTE = frozenset(
         # so a guess is not a near-miss, it is a different instruction.
         "add_run_tasks",
         "update_run_task",
+        # Self-staged: it shows its own card, and wherever no card can be shown it writes a skill
+        # and its script file. Never run it on arguments the model guessed.
+        "save_code_as_skill",
     }
 )
 
