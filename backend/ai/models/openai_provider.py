@@ -803,9 +803,10 @@ class OpenAIProvider(AIProvider):
                 "input": parsed,
             }
 
-        # Some compatible endpoints send complete calls with a plain "stop".
+        # Some compatible endpoints send complete calls with a plain "stop"
+        # or close the stream without a finish reason.
         # Leave truncation and content filtering on their existing paths.
-        if finish_reason == "stop" and complete_tool_calls:
+        if finish_reason in (None, "stop") and complete_tool_calls:
             stop_reason = "tool_use"
         yield {"type": "done", "stop_reason": stop_reason}
 

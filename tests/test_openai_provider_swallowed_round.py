@@ -194,7 +194,12 @@ async def test_a_failed_retry_falls_back_to_the_empty_round():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("finish", "expected"),
-    [("stop", "tool_use"), ("length", "max_tokens"), ("content_filter", "end_turn")],
+    [
+        ("stop", "tool_use"),
+        (None, "tool_use"),
+        ("length", "max_tokens"),
+        ("content_filter", "end_turn"),
+    ],
 )
 async def test_structured_tool_call_finish_reason(finish, expected):
     events = await _events(_provider(_Completions(_real_call(finish=finish))))
@@ -206,8 +211,9 @@ async def test_structured_tool_call_finish_reason(finish, expected):
 
 
 @pytest.mark.asyncio
-async def test_clean_stop_does_not_dispatch_a_call_with_incomplete_arguments():
-    completions = _Completions(_real_call(finish="stop", arguments='{"query":'))
+@pytest.mark.parametrize("finish", [None, "stop"])
+async def test_incomplete_arguments_are_not_dispatched_without_tool_calls_finish(finish):
+    completions = _Completions(_real_call(finish=finish, arguments='{"query":'))
     events = await _events(_provider(completions))
 
     assert events[-1] == {"type": "done", "stop_reason": "end_turn"}
