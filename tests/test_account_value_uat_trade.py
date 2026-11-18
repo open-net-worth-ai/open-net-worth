@@ -213,7 +213,7 @@ def test_trade_15_a_refused_acquire_books_nothing_and_still_stores_the_source(bo
     )
     assert refused.get("error") and "value_carve_out" not in refused
     assert not carve_rows(k) and _value(k) == 8000.0
-    assert ledger_service.accounts.find_by_id(k)["value_source"] == "total"  # stored, harmless
+    assert ledger_service.accounts.find_by_id(k)["value_source"] == "holdings"  # never guessed
 
 
 @ON

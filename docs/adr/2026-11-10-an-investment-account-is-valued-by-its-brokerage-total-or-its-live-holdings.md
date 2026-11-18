@@ -55,7 +55,7 @@ account as `value_source`:
 Valuation stays **one formula**: holdings + ledger balance, on every surface. Only what the ledger
 balance means differs.
 
-1. **Default.** Each account gets its source once, and it's then stored. A later holding can never
+1. **Default** (replaced by Amendment 4). Each account gets its source once, and it's then stored. A later holding can never
    flip it.
    - A new account starts as Brokerage total. The Add account field for these types reads "Total
      value".
@@ -265,3 +265,31 @@ The release flag `investment_value_source` is renamed `allow_brokerage_total_val
 `ONW_FLAG_ALLOW_BROKERAGE_TOTAL_VALUATION`), so its name says what it turns on. Nothing else
 changes, and the account field `value_source` keeps its name. A value stored under the old name
 is no longer read: the flag reads as its default, off, until it is set again.
+
+## Amendment 4 (2026-11-18): no default is guessed, and a switch never clears money unasked
+
+**Found.** An owner keeps each brokerage as a holdings account plus one cash account per
+currency at the same institution. The cash accounts hold nothing, aren't linked, and had no stored
+source, so Decision 1 read them as Brokerage total: their settlement cash showed as
+**Untracked holdings** ("Not broken down") instead of cash. The only way out, switching to Live
+holdings, would have cleared that cash with an adjustment, because the switch assumed a Brokerage
+total balance is never cash.
+
+**Decision 1 is replaced.** An account with no stored source reads as **Live holdings**. Nothing is
+guessed from its holdings or links. A new account still stores Brokerage total at creation
+(`accounts._with_value_source`), so only accounts from before the choice existed are affected,
+and they read exactly as they did with the flag off. The first write that depends on the source
+still stores it.
+
+**Switching to Live holdings asks.** Whether an untracked part is cash or holdings not added yet
+is the owner's knowledge, so it is never assumed. Over the 2% remainder, `plan_switch` refuses
+until `keep_untracked_as_cash` answers it: true keeps it as the account's cash and books nothing,
+false clears it as before. The preview carries `needs_choice`. Edit account asks, with no answer
+preselected, and `update_accounts` takes the same field.
+
+**Why.** A wrong default is cheap to fix in one direction only. Live holdings → Brokerage total
+books nothing, while Brokerage total → Live holdings cleared the balance. So the default sits on
+the side that's free to leave. The cost: an older account whose typed balance really was a total
+(the 401(k) of the scenarios) counts as cash until the owner picks Brokerage total, as it did
+before the flag. An older linked account at a single institution also no longer follows the
+connector's total by default; it compares instead until Brokerage total is picked.

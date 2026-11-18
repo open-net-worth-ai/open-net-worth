@@ -26,23 +26,15 @@ LABEL = "Untracked holdings"
 
 
 def account_ids(accounts: list[dict]) -> frozenset[str]:
-    """The accounts whose ledger balance bands as ``untracked_holdings``. Read from each
-    account's CURRENT source, so a past chart point bands the way today's does and the chart
-    doesn't jump on the day the source is switched. Holdings and account rows are read once,
-    and only when some account has no stored source yet."""
-    candidates = [a for a in accounts if account_value.applies(a)]
-    if not candidates or not account_value.enabled():
+    """The accounts whose ledger balance bands as ``untracked_holdings``: those whose source is
+    Brokerage total, read from each account's CURRENT source, so a past chart point bands the
+    way today's does and the chart doesn't jump on the day the source is switched."""
+    if not account_value.enabled():
         return frozenset()
-    held: set[str] | None = None
-    rows: list[dict] | None = None
-    if any(a.get("value_source") not in account_value.SOURCES for a in candidates):
-        from backend.services.accounts import all_account_rows
-
-        held, rows = account_value.held_account_ids(), all_account_rows()
     return frozenset(
         a["id"]
-        for a in candidates
-        if account_value.source_of(a, held=held, rows=rows) == account_value.TOTAL
+        for a in accounts
+        if account_value.applies(a) and account_value.source_of(a) == account_value.TOTAL
     )
 
 

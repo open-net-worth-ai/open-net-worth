@@ -56,7 +56,10 @@ def test_rest_create_reads_back_brokerage_total_and_switches_with_a_preview(clie
         f"/api/accounts/{made['id']}/value-switch", params={"to": "holdings"}
     ).json()
     assert preview["adjustment"] == -4980.0 and preview["value_after"] == 3020.0
-    switched = client.put(f"/api/accounts/{made['id']}", json={"value_source": "holdings"}).json()
+    switched = client.put(
+        f"/api/accounts/{made['id']}",
+        json={"value_source": "holdings", "keep_untracked_as_cash": False},
+    ).json()
     assert (
         switched["value_source"] == "holdings" and switched["value_switch"]["adjustment"] == -4980.0
     )
@@ -83,7 +86,10 @@ def test_rest_reconcile_total_is_refused_on_a_cash_account(client):
 def test_rest_flag_off_refuses_value_source_and_confirm(client):
     acct = _account()
     assert (
-        client.put(f"/api/accounts/{acct['id']}", json={"value_source": "holdings"}).status_code
+        client.put(
+            f"/api/accounts/{acct['id']}",
+            json={"value_source": "holdings", "keep_untracked_as_cash": False},
+        ).status_code
         == 422
     )
     res = client.post(f"/api/accounts/{acct['id']}/value-sync/confirm", json={"accept": True})
@@ -131,7 +137,15 @@ def test_update_accounts_switches_and_reports_what_it_cleared(book):
     _add_holding(acct["id"], _instrument())
     out = _tool(
         account_tools.update_accounts,
-        {"updates": [{"account_id": acct["id"], "value_source": "holdings"}]},
+        {
+            "updates": [
+                {
+                    "account_id": acct["id"],
+                    "value_source": "holdings",
+                    "keep_untracked_as_cash": False,
+                }
+            ]
+        },
     )
     assert out["ok"] and out["account"]["value_switch"]["adjustment"] == -4980.0
 

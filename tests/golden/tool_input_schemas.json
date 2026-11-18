@@ -285,7 +285,11 @@
                 "holdings"
               ],
               "type": "string",
-              "description": "Investment/retirement: 'total' (worth the brokerage's total) or 'holdings' (holdings + cash). To 'holdings' clears an untracked part over 2% of the total; tell the user first (result: value_switch)."
+              "description": "Investment/retirement: 'total' (worth the brokerage's total) or 'holdings' (holdings + cash). To 'holdings' with an untracked part over 2% of the total needs keep_untracked_as_cash (result: value_switch)."
+            },
+            "keep_untracked_as_cash": {
+              "type": "boolean",
+              "description": "With value_source='holdings': is the untracked part cash (true, kept) or investments not added yet (false, cleared)? Ask the user; never guess."
             }
           },
           "required": [

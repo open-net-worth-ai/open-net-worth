@@ -145,6 +145,9 @@ class AccountUpdate(BaseModel):
     name: Optional[str] = None
     # How an investment/retirement account is valued (services.account_value, ADR 2026-11-10).
     value_source: Optional[Literal["total", "holdings"]] = None
+    # A switch to Live holdings: is the balance cash (True, kept) or investments not added yet
+    # (False, cleared)? Required when it is more than a small remainder (account_value).
+    keep_untracked_as_cash: Optional[bool] = None
     institution: Optional[str] = None
     initial_balance: Optional[float] = Field(default=None, allow_inf_nan=False)
     initial_balance_date: Optional[str] = None

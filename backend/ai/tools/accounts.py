@@ -602,8 +602,15 @@ class UpdateAccountItem(ToolInput):
         default=None,
         description=(
             "Investment/retirement: 'total' (worth the brokerage's total) or 'holdings' "
-            "(holdings + cash). To 'holdings' clears an untracked part over 2% of the total; "
-            "tell the user first (result: value_switch)."
+            "(holdings + cash). To 'holdings' with an untracked part over 2% of the total "
+            "needs keep_untracked_as_cash (result: value_switch)."
+        ),
+    )
+    keep_untracked_as_cash: Optional[bool] = Field(
+        default=None,
+        description=(
+            "With value_source='holdings': is the untracked part cash (true, kept) or "
+            "investments not added yet (false, cleared)? Ask the user; never guess."
         ),
     )
 
@@ -648,6 +655,8 @@ def _apply_one_account_update(item: dict, rows: list[dict]) -> dict:
         return {"error": accounts_service.ACCOUNT_CURRENCY_IMMUTABLE_MESSAGE}
 
     changes = {k: v for k, v in item.items() if k in _ACCOUNT_UPDATE_FIELDS and v is not None}
+    if changes.get("value_source") and item.get("keep_untracked_as_cash") is not None:
+        changes["keep_untracked_as_cash"] = bool(item["keep_untracked_as_cash"])
     opening_touched = "initial_balance" in item or "initial_balance_date" in item
 
     # An id-only item (no changeable field, and the opening-balance flag — the tool's ONE

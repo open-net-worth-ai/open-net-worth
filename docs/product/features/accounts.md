@@ -171,8 +171,10 @@ this account by**:
 
 **Which one an account starts with.** A new investment or retirement account starts as
 **Brokerage total**, and **Add account** asks for its **Total value**. An account you already had
-keeps **Live holdings** if it holds anything, and starts as **Brokerage total** if it doesn't.
-Once an account has a value source, adding a holding doesn't change it.
+before turning this on stays **Live holdings** — worth its holdings plus its balance, exactly as
+before — until you pick **Brokerage total** for it in **Edit account**. Nothing is guessed from
+what it holds, so a brokerage's cash account stays cash. Once an account has a value source,
+adding a holding doesn't change it.
 
 ### Adding holdings to a Brokerage total account
 
@@ -258,10 +260,16 @@ brokerage's next update").
 
 Switching to **Brokerage total** books nothing: the value stays, and your holdings become a
 breakdown of it. Switching to **Live holdings** keeps a small untracked part (2% of the total or
-less) as cash. A larger one isn't cash, so it's cleared with one adjustment. If your holdings are
-worth more than the total, the account's value rises to its holdings' value. Edit account says
-what the account will be worth before you save, and the switch is saved together with the rest
-of the edit, or not at all.
+less) as cash. For a larger one, Edit account asks what it is, showing what each answer leaves
+the account worth:
+
+- **Cash** — it stays as the account's cash, and the value doesn't change.
+- **Holdings I haven't added yet** — it's cleared with one adjustment, so the account is worth only
+  the holdings you've added. If your holdings are worth more than the total, the account's value
+  rises to its holdings' value.
+
+Nothing is cleared until you answer. The switch is saved together with the rest of the edit, or
+not at all.
 
 ## Import a statement or connect a bank
 
@@ -310,8 +318,9 @@ and its funding sources simply stop pointing at it.
 - Reconcile a balance, or mark a batch of transactions cleared. On a Brokerage total account
   he reconciles the total, and he reads its tracked and untracked parts, never mistaking the
   untracked part for cash.
-- Switch an investment account between Brokerage total and Live holdings, telling you first what
-  a switch to Live holdings clears.
+- Switch an investment account between Brokerage total and Live holdings. Before a switch to
+  Live holdings he asks whether the untracked part is cash or holdings not added yet, and he
+  never clears it without your answer.
 - Answer "what's my net worth?" account by account, or show how it changed over 1M, 3M, YTD,
   1Y or all time.
 
