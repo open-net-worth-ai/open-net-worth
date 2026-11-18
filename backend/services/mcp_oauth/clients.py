@@ -44,6 +44,17 @@ MAX_NAME_CHARS = 80
 _cimd_cache: dict[str, tuple[float, dict]] = {}
 
 
+def user_agent() -> str:
+    """Who is fetching. An app's identity host may refuse a default ``Python-urllib`` agent:
+    claude.ai's edge answers it 403 (live test, 2026-11-18)."""
+    from backend.core.version import app_version
+
+    return (
+        f"OpenNetWorth/{app_version()} mcp-oauth "
+        "(+https://github.com/open-net-worth-ai/open-net-worth)"
+    )
+
+
 @dataclass(frozen=True)
 class Client:
     client_id: str
@@ -90,7 +101,7 @@ def _fetch_cimd(client_id: str) -> dict:
     try:
         resp = pinned_urlopen(
             client_id,
-            headers={"Accept": "application/json"},
+            headers={"Accept": "application/json", "User-Agent": user_agent()},
             timeout=CIMD_TIMEOUT_S,
             max_redirects=0,
         )
@@ -98,11 +109,20 @@ def _fetch_cimd(client_id: str) -> dict:
             status = getattr(resp, "status", None) or getattr(resp, "code", None)
             raw = resp.read(CIMD_MAX_BYTES + 1)
     except Exception as exc:  # noqa: BLE001 — any fetch failure is a refusal, never a guess
-        logger.info(
-            "mcp oauth: client metadata fetch failed for %s: %s", client_id, type(exc).__name__
+        logger.warning(
+            "mcp oauth: client metadata fetch failed for %s: %s (HTTP status %s)",
+            client_id,
+            type(exc).__name__,
+            getattr(exc, "code", None),
         )
         raise ClientRefused("The app's identity document could not be read.") from exc
     if status != 200 or len(raw) > CIMD_MAX_BYTES:
+        logger.warning(
+            "mcp oauth: client metadata fetch for %s answered HTTP %s (%d bytes)",
+            client_id,
+            status,
+            len(raw),
+        )
         raise ClientRefused("The app's identity document could not be read.")
     try:
         doc = json.loads(raw)

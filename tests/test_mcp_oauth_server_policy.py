@@ -317,3 +317,90 @@ def test_an_approval_whose_code_was_never_redeemed_is_not_a_connected_app():
     assert grants.list_connected_apps() == []
     connect(client)
     assert len(grants.list_connected_apps()) == 1
+
+
+# ── fetching an app's identity document (CIMD) ───────────────────────────────────
+
+from backend.services.mcp_oauth import clients as _clients  # noqa: E402
+
+_REAL_FETCH = _clients._fetch_cimd  # captured before the autouse fixture swaps it out
+
+CLAUDE_CIMD_URL = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+# The shape claude.ai served in the live test (2026-11-18), synthetic name aside.
+CLAUDE_CIMD_DOC = {
+    "client_id": CLAUDE_CIMD_URL,
+    "client_name": "Claude",
+    "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+    "grant_types": [
+        "authorization_code",
+        "refresh_token",
+        "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    ],
+    "response_types": ["code"],
+    "token_endpoint_auth_method": "none",
+}
+
+
+class _Resp:
+    def __init__(self, status: int, body: bytes):
+        self.status, self._body = status, body
+
+    def read(self, n: int) -> bytes:
+        return self._body[:n]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _fake_urlopen(seen: dict, status: int = 200, body: dict | None = None):
+    import json as _json
+
+    def fake(url, *, headers=None, timeout=10, max_redirects=5, **_):
+        seen.update(url=url, headers=headers or {}, max_redirects=max_redirects)
+        if status != 200:
+            import urllib.error
+
+            raise urllib.error.HTTPError(url, status, "Forbidden", {}, None)
+        return _Resp(status, _json.dumps(body or CLAUDE_CIMD_DOC).encode())
+
+    return fake
+
+
+def test_the_identity_fetch_names_itself_and_never_follows_redirects(monkeypatch):
+    """claude.ai's edge answers urllib's default ``Python-urllib`` agent with 403 (live test,
+    2026-11-18), so the fetch must send a User-Agent of its own."""
+    import backend.core.pinned_http as pinned_http
+
+    seen: dict = {}
+    monkeypatch.setattr(pinned_http, "pinned_urlopen", _fake_urlopen(seen))
+    _clients.reset_cache_for_tests()
+    assert _REAL_FETCH(CLAUDE_CIMD_URL)["client_id"] == CLAUDE_CIMD_URL
+    agent = seen["headers"].get("User-Agent", "")
+    assert agent.startswith("OpenNetWorth/") and "urllib" not in agent.lower()
+    assert seen["max_redirects"] == 0
+
+
+def test_a_refused_identity_fetch_logs_its_http_status(monkeypatch, caplog):
+    import logging
+
+    import backend.core.pinned_http as pinned_http
+
+    monkeypatch.setattr(pinned_http, "pinned_urlopen", _fake_urlopen({}, status=403))
+    _clients.reset_cache_for_tests()
+    with caplog.at_level(logging.WARNING), pytest.raises(_clients.ClientRefused):
+        _REAL_FETCH(CLAUDE_CIMD_URL)
+    assert "HTTP status 403" in caplog.text
+
+
+@pytest.mark.flags(mcp_oauth=True)
+def test_claudes_real_metadata_shape_is_accepted(monkeypatch):
+    """Extra grant types (jwt-bearer) in the document are not a reason to refuse it."""
+    from tests.mcp_oauth_helpers import start
+
+    monkeypatch.setattr(_clients, "_fetch_cimd", lambda cid: dict(CLAUDE_CIMD_DOC))
+    _, challenge = pkce()
+    request_id = start(build_client(), challenge, client_id=CLAUDE_CIMD_URL)
+    assert request_id
