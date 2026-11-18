@@ -23,17 +23,22 @@ depth) — read both before a non-trivial change.
 
 ## Contributor License Agreement
 
-<!-- TODO(owner): decide and document the exact mechanism (a CLA-bot with a signed CLA text, or
-     a lightweight Developer Certificate of Origin sign-off convention like `git commit -s`) and
-     replace this paragraph with the concrete instructions once decided. Do not merge outside
-     contributions until this is resolved. -->
+Open Net Worth is licensed under AGPL-3.0, and the owner may want to offer it under other
+licenses as well, for example a commercial one. To keep that possible, every contributor signs the
+[Open Net Worth Individual Contributor License Agreement](CLA.md) once, before their first pull
+request is merged. You keep the copyright to your work; the agreement grants the project a
+license to use it, including under licenses other than the AGPL.
 
-Open Net Worth is licensed under AGPL-3.0, and the owner may want the option to dual-license the
-project commercially in the future. To keep that option open, contributions from outside the
-owner will need either a signed Contributor License Agreement or a Developer Certificate of
-Origin sign-off (mechanism **TODO — not yet decided**; this paragraph will be replaced with the
-concrete process). Until that's settled, please raise this in your PR rather than assuming
-either — the maintainer will confirm what's needed before merge.
+Signing takes a minute and happens on your pull request:
+
+1. Open your pull request as usual. The **CLA Assistant** check comments on it if you haven't
+   signed yet.
+2. Read [`CLA.md`](CLA.md), then follow the link in that comment and sign in with GitHub to
+   accept it.
+3. The check turns green, and covers every future pull request you open here.
+
+If you contribute as part of your job, make sure your employer allows it first (section 4 of the
+agreement). Questions about the agreement go in your pull request or an issue.
 
 ---
 
