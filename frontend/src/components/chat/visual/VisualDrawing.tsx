@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildDrawingDocument, MSG_HEIGHT, MSG_THEME, readTheme } from './drawingFrame'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { buildDrawingDocument, MSG_HEIGHT, MSG_MEASURE, MSG_THEME, readTheme } from './drawingFrame'
 
 // No `allow-same-origin`: the drawing's scripts get an opaque origin, never the app's session.
 const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals'
@@ -15,7 +15,9 @@ export function VisualDrawing({ code, title }: { code: string; title?: string | 
     [code],
   )
 
-  useEffect(() => {
+  // Layout effect, not effect: it must be listening before the frame's first report, which a
+  // long transcript's deferred effects used to miss. `onLoad` below asks again regardless.
+  useLayoutEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow) return
       const data = e.data as { type?: string; height?: unknown } | null
@@ -44,6 +46,7 @@ export function VisualDrawing({ code, title }: { code: string; title?: string | 
       title={title || 'Drawing'}
       sandbox={SANDBOX}
       srcDoc={doc}
+      onLoad={() => frame.current?.contentWindow?.postMessage({ type: MSG_MEASURE }, '*')}
       style={height ? { height } : undefined}
     />
   )

@@ -44,21 +44,29 @@ const CLASSES = `
 .iv-nofill{fill:none}
 `
 
-/** The frame's own script: report height whenever the drawing's size changes, take theme
- *  updates from the chat. Runs before the drawing's markup so a drawing that throws still
- *  reports its height. */
+export const MSG_MEASURE = 'onw-visual-measure'
+
+/** The frame's own script: report height whenever the drawing's size changes or the chat asks
+ *  (a report sent before the chat listens is lost — live, a long transcript left drawings at
+ *  their starting height for ~10s), and take theme updates. Runs before the drawing's markup
+ *  so a drawing that throws still reports its height. */
 const BRIDGE = `
 (function(){
-  var send=function(){parent.postMessage({type:'${MSG_HEIGHT}',height:Math.ceil(document.documentElement.scrollHeight)},'*')};
+  var d=document;
+  var height=function(){var b=d.body,h=d.documentElement;
+    return Math.ceil(Math.max(h.scrollHeight,b?b.scrollHeight:0,b?b.getBoundingClientRect().bottom:0))};
+  var send=function(){parent.postMessage({type:'${MSG_HEIGHT}',height:height()},'*')};
   window.addEventListener('message',function(e){
-    if(e.source!==parent||!e.data||e.data.type!=='${MSG_THEME}')return;
-    var s=document.documentElement.style,v=e.data.vars||{};
+    if(e.source!==parent||!e.data)return;
+    if(e.data.type==='${MSG_MEASURE}'){send();return}
+    if(e.data.type!=='${MSG_THEME}')return;
+    var s=d.documentElement.style,v=e.data.vars||{};
     for(var k in v)s.setProperty(k,v[k]);
   });
   window.addEventListener('load',send);
-  document.addEventListener('DOMContentLoaded',function(){
+  d.addEventListener('DOMContentLoaded',function(){
     send();
-    if(window.ResizeObserver)new ResizeObserver(send).observe(document.documentElement);
+    if(window.ResizeObserver){var ro=new ResizeObserver(send);ro.observe(d.documentElement);ro.observe(d.body)}
   });
 })();
 `
@@ -86,7 +94,7 @@ export function buildDrawingDocument(
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <base target="_blank">
-<style>:root{${root}}html,body{margin:0;padding:0;background:transparent}
+<style>:root{${root}}html,body{margin:0;padding:0;background:transparent}html{overflow-y:hidden}
 body{color:var(--ink);font-family:${font || 'system-ui,sans-serif'};font-size:13px;line-height:1.45}
 svg{max-width:100%;height:auto;display:block}${CLASSES}</style>
 <script>${BRIDGE}</script>
