@@ -126,8 +126,20 @@ export function PaperChart({
     },
     [series, moves, name, benchmark, intraday],
   )
-  // The first load holds the chart's place, so the page doesn't open as the table alone and then
-  // jump when the chart arrives.
+  const period = (
+    <div className="fol-tf fol-tf--under">
+      <div className="asd-tf-tabs">
+        <SegmentedControl
+          ariaLabel="Period"
+          options={RANGE_OPTIONS}
+          value={range}
+          onChange={setRange}
+        />
+      </div>
+    </div>
+  )
+  // The first load is the loaded panel with the chart and figures greyed: the same rows at the
+  // same heights, so nothing below it moves when the data arrives.
   if (!perf)
     return (
       <section className="fol-sec fol-act" aria-label={`${name} performance`} aria-busy="true">
@@ -136,6 +148,12 @@ export function PaperChart({
             <h2 className="fol-sec-title">Performance</h2>
           </div>
           <Skeleton height={CHART_BOX} />
+          <div className="fol-ret3">
+            <Figure label={name} line="main" loading />
+            <Figure label={YOURS} line="mine" loading />
+            <Figure label={benchmark} line="bench" loading />
+          </div>
+          {period}
         </div>
       </section>
     )
@@ -158,50 +176,45 @@ export function PaperChart({
         />
         {/* Below the chart, so the page's top row is only its two amounts. */}
         <div className="fol-ret3">
-          <div className="fol-ret3-item">
-            <span className="fol-ret3-l">
-              <i className="fol-line fol-line--main" aria-hidden="true" />
-              {name}
-            </span>
-            <span className={`fol-ret3-v ${toneOf(perf.return_pct)}`}>
-              {signedPct(perf.return_pct)}
-            </span>
-          </div>
+          <Figure label={name} line="main" value={perf.return_pct} />
           {perf.yours_return_pct != null && (
-            <div className="fol-ret3-item">
-              <span className="fol-ret3-l">
-                {/* The intraday chart reconstructs your investments at the same moments. */}
-                {mine.length > 0 && <i className="fol-line fol-line--mine" aria-hidden="true" />}
-                {YOURS}
-              </span>
-              <span className={`fol-ret3-v ${toneOf(perf.yours_return_pct)}`}>
-                {signedPct(perf.yours_return_pct)}
-              </span>
-            </div>
+            <Figure
+              label={YOURS}
+              line={mine.length > 0 ? 'mine' : undefined}
+              value={perf.yours_return_pct}
+            />
           )}
           {perf.benchmark?.return_pct != null && (
-            <div className="fol-ret3-item">
-              <span className="fol-ret3-l">
-                <i className="fol-line fol-line--bench" aria-hidden="true" />
-                {benchmark}
-              </span>
-              <span className={`fol-ret3-v ${toneOf(perf.benchmark.return_pct)}`}>
-                {signedPct(perf.benchmark.return_pct)}
-              </span>
-            </div>
+            <Figure label={benchmark} line="bench" value={perf.benchmark.return_pct} />
           )}
         </div>
-        <div className="fol-tf fol-tf--under">
-          <div className="asd-tf-tabs">
-            <SegmentedControl
-              ariaLabel="Period"
-              options={RANGE_OPTIONS}
-              value={range}
-              onChange={setRange}
-            />
-          </div>
-        </div>
+        {period}
       </div>
     </section>
+  )
+}
+
+/** One figure under the chart: its line's swatch, its name and its return; greyed while loading. */
+function Figure({
+  label,
+  line,
+  value,
+  loading,
+}: {
+  label: string
+  line?: 'main' | 'mine' | 'bench'
+  value?: number | null
+  loading?: boolean
+}) {
+  return (
+    <div className="fol-ret3-item">
+      <span className="fol-ret3-l">
+        {line && <i className={`fol-line fol-line--${line}`} aria-hidden="true" />}
+        {label}
+      </span>
+      <span className={`fol-ret3-v ${loading ? '' : toneOf(value)}`}>
+        {loading ? <Skeleton width={64} height="1em" /> : signedPct(value)}
+      </span>
+    </div>
   )
 }
