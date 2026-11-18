@@ -69,7 +69,7 @@ The block catalog stays for the shapes it covers, for channels and for weaker mo
 Same day, the owner removed every limit that Claude's own drawing tool does not have. A drawing
 now runs as written — scripts, styles, CDN libraries, images, links — in a sandboxed iframe
 without `allow-same-origin`, which is the one boundary kept: its scripts never run as the
-signed-in app. It may sit beside blocks; its title and follow-ups are uncapped and unchecked;
+signed-in app. It may sit beside blocks; its title is uncapped and unchecked and is not shown above it;
 it grows to fit; hidden amounts do not mask it. The prompt keeps two conventions only: theme
 colours and a 680-wide canvas. The earlier allowlist sanitiser was removed. Accepted risk:
 a prompt-injected drawing can load from or send to the internet.

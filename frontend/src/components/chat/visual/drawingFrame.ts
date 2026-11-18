@@ -26,6 +26,10 @@ export const THEME_VARS = [
 /** Message types between the frame and the chat. */
 export const MSG_HEIGHT = 'onw-visual-height'
 export const MSG_THEME = 'onw-visual-theme'
+/** Must match `MSG_RENDER` in backend/api/visuals.py, whose loader writes the posted document. */
+export const MSG_RENDER = 'onw-visual-render'
+/** The loader a drawing runs in, served with its own CSP (backend/api/visuals.py). */
+export const FRAME_URL = '/api/visuals/frame'
 
 const CLASSES = `
 .iv-t{fill:var(--ink);color:var(--ink);font-size:13px}

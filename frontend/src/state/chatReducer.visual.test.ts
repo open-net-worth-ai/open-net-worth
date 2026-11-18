@@ -15,7 +15,6 @@ const VISUAL = {
   id: 'vis_000000000001',
   title: null,
   caption: [],
-  follow_ups: [],
   blocks: [
     {
       type: 'stats',

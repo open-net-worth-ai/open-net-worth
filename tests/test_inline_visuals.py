@@ -559,11 +559,11 @@ _SVG = (
 
 
 def test_a_drawing_passes_through_with_its_own_figures(convo):
-    spec = visual_spec.resolve({"title": "Spending by week", "code": _SVG, "follow_ups": ["Why?"]})
+    spec = visual_spec.resolve({"title": "Spending by week", "code": _SVG})
     assert spec["code"] == _SVG
     assert "blocks" not in spec
     assert spec["caption"] == []
-    assert spec["follow_ups"] == ["Why?"]
+    assert "follow_ups" not in spec
 
 
 @pytest.mark.parametrize(
@@ -600,12 +600,17 @@ def test_a_drawing_can_sit_beside_blocks(convo):
     assert spec["blocks"][0]["tiles"][0]["value"] == 4180.0
 
 
-def test_a_drawing_title_and_follow_ups_are_its_own_words(convo):
+def test_a_drawing_title_is_its_own_words(convo):
     long_title = "Spent $4,180 in November — " + "detail " * 20
-    asks = [f"Question number {i} " + "word " * 30 for i in range(5)]
-    spec = visual_spec.resolve({"title": long_title, "code": _SVG, "follow_ups": asks})
+    spec = visual_spec.resolve({"title": long_title, "code": _SVG})
     assert spec["title"] == long_title.strip()
-    assert spec["follow_ups"] == [a.strip() for a in asks]
+
+
+def test_the_tool_offers_no_follow_ups():
+    import backend.ai.tools as tools
+
+    schema = next(t for t in tools.TOOL_SCHEMAS if t["name"] == "show_visual")
+    assert "follow_ups" not in schema["input_schema"]["properties"]
 
 
 def test_a_drawing_tells_a_channel_where_to_see_it():

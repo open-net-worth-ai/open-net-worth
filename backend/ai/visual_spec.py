@@ -21,12 +21,12 @@ from backend.ai.visual_sources import ToolCall
 FORMATS = ("money", "number", "percent", "percent_points")
 CHART_KINDS = ("line", "bar", "diverging", "stack", "progress")
 SINGLE_SERIES_KINDS = ("diverging", "stack", "progress")
-MAX_BLOCKS, MAX_TILES, MAX_SERIES, MAX_FOLLOW_UPS = 3, 4, 3, 3
+MAX_BLOCKS, MAX_TILES, MAX_SERIES = 3, 4, 3
 MAX_ROWS = {"line": 120, "bar": 24, "diverging": 24, "stack": 24, "progress": 24}
 MAX_TIMELINE = 20
 # Rows a breakdown may READ before it keeps its largest ones; a line keeps every point it shows.
 MAX_SOURCE_ROWS = 500
-LABEL_MAX, TITLE_MAX, FOLLOW_UP_MAX = 40, 60, 80
+LABEL_MAX, TITLE_MAX = 40, 60
 
 # An amount written into a label: a currency sign before digits, a thousands group, or a decimal.
 _AMOUNT_RE = re.compile(r"[$€£¥]\s?\d|\d{1,3}(?:,\d{3})+|\d+\.\d+|\d{5,}")
@@ -335,39 +335,25 @@ def resolve(request: dict) -> dict:
 
 def _drawing_envelope(request: dict) -> dict:
     """A visual carrying Lucius's own drawing (`code`). The owner kept only the limits Claude's
-    own drawing tool has (2026-11-18): its title and follow-ups are its own words, uncapped and
-    unchecked, and it may sit beside blocks."""
+    own drawing tool has (2026-11-18): its title is its own words, uncapped and unchecked, and
+    it may sit beside blocks."""
     try:
         code = visual_code.check(request.get("code"))
     except visual_code.VisualCodeError as exc:
         raise VisualSpecError(f"no drawing: {exc}") from exc
     title = request.get("title")
-    follow_ups = request.get("follow_ups") or []
-    if not isinstance(follow_ups, list):
-        raise VisualSpecError("follow_ups is a list of prompts")
     return {
         "id": "vis_" + secrets.token_hex(6),
         "title": str(title).strip() if title else None,
         "as_of": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-        "follow_ups": [str(f).strip() for f in follow_ups if str(f).strip()],
         "code": code,
     }
 
 
 def _envelope(request: dict) -> dict:
-    follow_ups = request.get("follow_ups") or []
-    if not isinstance(follow_ups, list) or len(follow_ups) > MAX_FOLLOW_UPS:
-        raise VisualSpecError(f"follow_ups takes at most {MAX_FOLLOW_UPS} prompts")
     title = request.get("title")
     return {
         "id": "vis_" + secrets.token_hex(6),
         "title": _label(title, "title", TITLE_MAX) if title else None,
         "as_of": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-        "follow_ups": [_follow_up(f) for f in follow_ups],
     }
-
-
-def _follow_up(text: Any) -> str:
-    if not isinstance(text, str) or not text.strip() or len(text.strip()) > FOLLOW_UP_MAX:
-        raise VisualSpecError(f"each follow-up is a prompt of 1–{FOLLOW_UP_MAX} characters")
-    return text.strip()

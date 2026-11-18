@@ -40,8 +40,7 @@ writes only labels, and labels may not carry amounts.
 ```jsonc
 {
   "title": "Spending, Nov vs Oct",          // optional, ≤ 60 chars, no amounts
-  "blocks": [Block, ...],                    // 1–3
-  "follow_ups": ["Break down dining"]        // optional, ≤ 3 prompts, each ≤ 80 chars
+  "blocks": [Block, ...]                     // 1–3
 }
 ```
 
@@ -104,7 +103,6 @@ Rules enforced server-side (each failure returns an error the model can fix):
   "title": "Spending, Nov vs Oct" | null,
   "as_of": "2026-11-17T09:30:00Z",
   "caption": ["What-if — monthly saving 3,000 (your plan: 2,000)"],   // may be []
-  "follow_ups": ["Break down dining"],
   "blocks": [
     {"type": "stats", "tiles": [
       {"label": "This month", "value": 4180.0, "compare": 3640.0 | null,
@@ -135,11 +133,21 @@ the theme's colours, a standard width. Everything else was removed on request.
   (`visual/VisualDrawing.tsx`, document built by `visual/drawingFrame.ts`): scripts, `<style>`,
   CDN libraries, images and links all work. The opaque origin is what keeps a script from
   acting as the signed-in app.
-- **Grows to fit:** a bridge script in the frame posts its height; no cap, no clip.
+- **Its own CSP, not the page's:** the frame loads `GET /api/visuals/frame`
+  (`backend/api/visuals.py`), an empty loader served with `sandbox allow-scripts …;
+  frame-ancestors 'self'`; the chat posts the drawing's document in and the loader writes it.
+  A `srcdoc` frame inherits the app page's `script-src 'self'` and ran nothing on a served
+  build — not the drawing's scripts, not the height report (found live on 8080, 2026-11-18;
+  the dev server sends no CSP). Same trap `/api/artifacts/{id}/frame` exists for.
+- **Grows to fit:** a bridge script in the frame posts its height; no cap, no clip. The frame
+  hides its own page scroll bar (it always grows to the full drawing).
+- **Title:** shown above blocks only; a drawing carries its own heading, so for a drawing the
+  title just names the frame.
 - **Theme:** the frame gets the app's CSS variables and the `iv-` classes at build time and
   live theme changes by `postMessage`.
-- **Server** (`ai/visual_code.py`) only requires a non-empty drawing. A drawing's title and
-  follow-ups are its own words: no amount guard, no length or count cap.
+- **Server** (`ai/visual_code.py`) only requires a non-empty drawing. A drawing's title is
+  its own words: no amount guard, no length cap. It is not shown above the drawing (the
+  drawing carries its own heading); it names the frame.
 - **Hidden amounts do not mask a drawing** (owner's choice).
 - **Prompt guidance** (VISUALS): colour with the theme, draw for a 680-wide column. Nothing else.
 - **Channels** get the title and a note to open the app.
@@ -159,8 +167,8 @@ the theme's colours, a standard width. Everything else was removed on request.
   blocks (same pattern as artifacts).
 - Channels: `connectors/processor.py` turns a `visual` event into text via
   `services/visual_text.render_text(spec)`.
-- Frontend: `frontend/src/components/chat/visual/` renders a `visual` block; follow-up chips send
-  the prompt as a user message.
+- Frontend: `frontend/src/components/chat/visual/` renders a `visual` block. There are no
+  follow-up chips (removed 2026-11-18: they duplicated the app's own suggested follow-ups).
 - Flag `inline_visuals` (default on). Off: the handler refuses and the prompt paragraph is not
   added — the old reply path is unchanged.
 

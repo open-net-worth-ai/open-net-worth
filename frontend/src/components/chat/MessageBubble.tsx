@@ -533,7 +533,7 @@ function renderGroupedBlock(
   if (block.type === 'visual') {
     return (
       <div key={i} className="msg-visual-wrap">
-        <InlineVisual visual={block.visual} onSendMessage={onSendMessage} />
+        <InlineVisual visual={block.visual} />
       </div>
     )
   }

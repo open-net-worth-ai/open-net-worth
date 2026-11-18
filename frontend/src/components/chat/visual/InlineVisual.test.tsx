@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { InlineVisual } from './InlineVisual'
 import { formatVisualValue } from './format'
 import type { VisualBlock, VisualSpec } from '../../../types/chat'
@@ -23,7 +23,6 @@ const FIXTURE: VisualSpec = {
   title: 'Spending, Nov vs Oct',
   as_of: '2026-11-17T09:30:00Z',
   caption: ['What-if — monthly saving 3,000 (your plan: 2,000)'],
-  follow_ups: ['Break down dining'],
   blocks: [
     {
       type: 'stats',
@@ -79,7 +78,7 @@ afterEach(() => {
 
 describe('InlineVisual', () => {
   it('renders title, tiles, chart, timeline and caption from the fixture', () => {
-    const { container } = render(<InlineVisual visual={FIXTURE} onSendMessage={vi.fn()} />)
+    const { container } = render(<InlineVisual visual={FIXTURE} />)
     expect(screen.getByText('Spending, Nov vs Oct')).toBeTruthy()
     expect(screen.getByText('S$4,180')).toBeTruthy()
     expect(container.querySelector('.ivis-tile-compare')?.textContent).toBe('vs Oct S$3,640')
@@ -96,9 +95,7 @@ describe('InlineVisual', () => {
   })
 
   it('renders a line chart through the same wrapper', () => {
-    render(
-      <InlineVisual visual={{ ...FIXTURE, blocks: [chart('line')] }} onSendMessage={vi.fn()} />,
-    )
+    render(<InlineVisual visual={{ ...FIXTURE, blocks: [chart('line')] }} />)
     expect((chartSpy.mock.calls[0]![0] as { type: string }).type).toBe('line')
   })
 
@@ -113,7 +110,6 @@ describe('InlineVisual', () => {
             chart('progress', { targets: [200, 100] }),
           ],
         }}
-        onSendMessage={vi.fn()}
       />,
     )
     expect(container.querySelectorAll('.ivis-div-bar.neg').length).toBe(1)
@@ -132,24 +128,23 @@ describe('InlineVisual', () => {
         FIXTURE.blocks[2]!,
       ],
     } as unknown as VisualSpec
-    render(<InlineVisual visual={bad} onSendMessage={vi.fn()} />)
+    render(<InlineVisual visual={bad} />)
     expect(screen.getByText('ACME vest')).toBeTruthy()
-    expect(
-      render(<InlineVisual visual={{} as VisualSpec} onSendMessage={vi.fn()} />).container
-        .innerHTML,
-    ).toBe('')
+    expect(render(<InlineVisual visual={{} as VisualSpec} />).container.innerHTML).toBe('')
   })
 
-  it('sends a follow-up chip as the next message', () => {
-    const send = vi.fn()
-    render(<InlineVisual visual={FIXTURE} onSendMessage={send} />)
-    fireEvent.click(screen.getByText('Break down dining'))
-    expect(send).toHaveBeenCalledWith('Break down dining')
+  it('shows the title above blocks but not above a drawing, which has its own heading', () => {
+    const withBlocks = render(<InlineVisual visual={FIXTURE} />).container
+    expect(withBlocks.querySelector('.ivis-title')!.textContent).toBe('Spending, Nov vs Oct')
+    const drawing = { id: 'vis_2', title: 'Spending', code: '<svg></svg>' } as VisualSpec
+    const alone = render(<InlineVisual visual={drawing} />).container
+    expect(alone.querySelector('.ivis-title')).toBeNull()
+    expect(alone.querySelector('iframe.ivis-frame')!.getAttribute('title')).toBe('Spending')
   })
 
   it('carries the money mask on tiles, timeline and caption figures, and masks canvas text', () => {
     const visual = { ...FIXTURE, caption: ['Plan saves S$3,000 a month'] }
-    const { container } = render(<InlineVisual visual={visual} onSendMessage={vi.fn()} />)
+    const { container } = render(<InlineVisual visual={visual} />)
     expect(container.querySelector('.ivis-tile-value')!.classList.contains('money')).toBe(true)
     expect(container.querySelector('.ivis-tl-value')!.classList.contains('money')).toBe(true)
     expect(container.querySelector('.ivis-caption .money')!.textContent).toBe('S$3,000')

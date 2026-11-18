@@ -731,9 +731,8 @@ export interface VisualSpec {
   title?: string | null
   as_of?: string
   caption?: string[]
-  follow_ups?: string[]
-  /** Reference blocks — absent when the visual is Lucius's own drawing (`code`). */
+  /** Reference blocks — absent when the visual is only Lucius's own drawing (`code`). */
   blocks?: VisualBlock[]
-  /** SVG / HTML Lucius wrote itself; drawn only through `visual/sanitize.ts`. */
+  /** SVG / HTML Lucius wrote itself; run in a sandboxed frame (`visual/VisualDrawing.tsx`). */
   code?: string
 }

@@ -87,7 +87,6 @@ _BLOCK = {
             "title": {"type": "string", "description": "Short title, no amounts"},
             "blocks": {"type": "array", "items": _BLOCK, "minItems": 1, "maxItems": 3},
             "code": {"type": "string", "description": "SVG or HTML fragment, instead of blocks"},
-            "follow_ups": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
         },
         "additionalProperties": False,
     },

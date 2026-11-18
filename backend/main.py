@@ -205,6 +205,7 @@ from backend.api.terminal import router as terminal_router
 from backend.api.tool_permissions import router as tool_permissions_router
 from backend.api.upload import router as upload_router
 from backend.api.vault import router as vault_router
+from backend.api.visuals import router as visuals_router
 from backend.api.voice import router as voice_router
 from backend.api.watchlist import router as watchlist_router
 from backend.api.ynab_api import router as ynab_router
@@ -1198,6 +1199,7 @@ app.include_router(enable_banking_router)
 app.include_router(gocardless_router)
 app.include_router(alpaca_router)
 app.include_router(artifacts_router)
+app.include_router(visuals_router)
 app.include_router(vault_router)
 app.include_router(assets_router)
 app.include_router(automations_router)

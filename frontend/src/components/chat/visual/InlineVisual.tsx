@@ -92,25 +92,19 @@ function renderBlock(block: VisualBlock, i: number) {
   }
 }
 
-/** A `show_visual` result in the chat column: optional title, the blocks stacked (or Lucius's
- *  own drawing, `code`), muted caption
- *  lines, then follow-up chips that send their text as the next message. An unknown block or a
- *  malformed one draws nothing — it never takes the bubble down with it. */
-export function InlineVisual({
-  visual,
-  onSendMessage,
-}: {
-  visual: VisualSpec
-  onSendMessage: (text: string) => void
-}) {
+/** A `show_visual` result in the chat column: the blocks stacked under their title, and/or
+ *  Lucius's own drawing (`code`), then muted caption lines. A drawing carries its own heading,
+ *  so the title is shown only above blocks; for a drawing it is just the frame's name (like
+ *  Claude's own drawing tool, whose title is never shown). An unknown or malformed block draws
+ *  nothing — it never takes the bubble down with it. */
+export function InlineVisual({ visual }: { visual: VisualSpec }) {
   const code = typeof visual?.code === 'string' ? visual.code : null
   if (!visual || (!code && !isArr(visual.blocks))) return null
   const blocks = isArr(visual.blocks) ? visual.blocks : []
   const captions = isArr(visual.caption) ? visual.caption : []
-  const followUps = isArr(visual.follow_ups) ? visual.follow_ups : []
   return (
     <section className="ivis" aria-label={visual.title || 'Visual'}>
-      {visual.title && <h4 className="ivis-title">{visual.title}</h4>}
+      {visual.title && blocks.length > 0 && <h4 className="ivis-title">{visual.title}</h4>}
       {blocks.map((b, i) => (
         <Guard key={i}>{renderBlock(b, i)}</Guard>
       ))}
@@ -124,15 +118,6 @@ export function InlineVisual({
           <MaskedText>{String(c)}</MaskedText>
         </p>
       ))}
-      {followUps.length > 0 && (
-        <div className="ivis-followups">
-          {followUps.map((f, i) => (
-            <button type="button" className="ivis-chip" key={i} onClick={() => onSendMessage(f)}>
-              {f}
-            </button>
-          ))}
-        </div>
-      )}
     </section>
   )
 }
