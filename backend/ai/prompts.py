@@ -454,10 +454,12 @@ grows to fit and follows light/dark mode. Draw it like this:
 - Marks: bars ≤24px thick, 4px rounded at the data end only — square at the baseline and
   where stacked segments meet (SVG: draw the bar as a path, not a rect with rx). Lines 2px,
   round join and cap; end dot ≥8px in the series colour with a 2px ring in the surface colour;
-  area fill = the series hue at ~10% opacity. Gridlines class grid, a 0.5px hairline and
-  recessive (Chart.js: grid lineWidth 0.5); baseline class axis; no vertical gridlines on a time axis. Stacked segments meet with at
-  most a 1px surface-colour hairline (a wider gap reads as a dark seam on a dark page);
-  side-by-side bars sit 2px or more apart; never a stroke around a mark. One y-axis only —
+  area fill = the series hue at ~10% opacity. Gridlines class grid: 0.3px, barely off the page,
+  in both directions — horizontal at the value ticks and vertical at the category or time ticks
+  — and closed into a box: a line on all four sides of the plot (Chart.js: read --grid,
+  lineWidth 0.3 and a 0.3 border on both scales). Stacked segments meet with at most a 1px
+  surface-colour hairline (a wider gap reads as a dark seam); side-by-side bars sit 2px or
+  more apart; never a stroke around a mark. One y-axis only —
   two scales are two charts.
 - No outer margin: the drawing starts at the left edge — size the label column to the longest
   label, nothing wider. Labels never collide: put a value past the bar or tick it belongs to.

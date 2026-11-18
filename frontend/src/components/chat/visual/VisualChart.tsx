@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTheme } from '../../../theme'
 import { paletteAt } from '../../../utils/constants'
-import { GRID, OvChart, TICK, axes, kTick, legend } from '../../tabs/overview/charts'
+import { OvChart, TICK, axes, kTick, legend } from '../../tabs/overview/charts'
 import type { VisualBlock } from '../../../types/chat'
 import { fDate, fMonth } from '../../../utils/format'
 import { formatVisualValue } from './format'
@@ -16,6 +16,7 @@ export function VisualChart({ block }: { block: ChartBlock }) {
   const sig = useMemo(() => JSON.stringify([block, resolved]), [block, resolved])
   const fmt = (v: unknown) => formatVisualValue(Number(v), format, currency, true)
   const isLine = kind === 'line'
+  const grid = resolved === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.07)'
   const shown = useMemo(() => displayLabels(labels), [labels])
 
   const config = {
@@ -46,16 +47,18 @@ export function VisualChart({ block }: { block: ChartBlock }) {
         // A bar is unreadable without its name, so bars label every category; a line's dates
         // thin out on their own.
         x: {
+          grid: { color: grid, lineWidth: 0.3, drawTicks: false },
+          border: { display: true, color: grid, width: 0.3 },
           ticks: isLine
             ? { color: TICK(), maxTicksLimit: 6, maxRotation: 0 }
             : { color: TICK(), autoSkip: false, maxRotation: 45 },
         },
-        // Hairline gridlines in chat (the screens keep their 1px): recessive, never louder
-        // than the data.
+        // A 0.3px grid both ways, closed into a box, a shade darker than the page in dark mode
+        // (owner, 2026-11-18) — the same lines as Lucius's own drawings (drawingStyle.ts).
         y: {
           ticks: { color: TICK(), callback: format === 'money' ? kTick : fmt },
-          grid: { color: GRID(), lineWidth: 0.5 },
-          border: { display: false },
+          grid: { color: grid, lineWidth: 0.3, drawTicks: false },
+          border: { display: true, color: grid, width: 0.3 },
         },
       }),
       plugins: {

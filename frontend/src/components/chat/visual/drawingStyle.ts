@@ -7,8 +7,9 @@
  * - Ink: --text-primary / --text-secondary / --text-muted, mapped from the app's own tokens.
  * - Series: --series-1…8 in a fixed order (blue, orange, aqua, yellow, magenta, green, violet,
  *   red), classes s1…s8. Status: good / warn / serious / bad.
- * - Chart chrome: --grid (hairline), --axis (baseline); classes grid / axis. Both are the app's
- *   own line colours, so a drawing's grid matches the standard charts and the cards.
+ * - Chart chrome: --grid (gridlines), --axis (baseline); classes grid / axis. A 0.3px line a shade
+ *   DARKER than the page in dark mode (lighter lines read as drawn on top — owner, 2026-11-18),
+ *   a few percent of ink in light mode.
  * - Diagram ramps: c-{purple,teal,coral,pink,gray,blue,green,amber,red} — light fill, darker
  *   stroke and text, flipped in dark mode.
  * - Text: t (13px), ts (12px secondary), th (14px, weight 500). Two weights only.
@@ -73,8 +74,8 @@ const series = Array.from(
 ).join('')
 
 export const DRAWING_CSS = `
-:root,[data-mode=dark]{${seriesVars(SERIES_DARK)}--grid:var(--border,#2c2c2a);--axis:var(--border-strong,#383835);--status-good:#0ca30c;--status-warning:#c98500;--status-serious:#d95926;--status-critical:#e66767}
-[data-mode=light]{${seriesVars(SERIES_LIGHT)}--grid:var(--border,#e1e0d9);--axis:var(--border-strong,#c3c2b7);--status-good:#0ca30c;--status-warning:#fab219;--status-serious:#ec835a;--status-critical:#d03b3b}
+:root,[data-mode=dark]{${seriesVars(SERIES_DARK)}--grid:rgba(0,0,0,0.6);--axis:rgba(0,0,0,0.7);--status-good:#0ca30c;--status-warning:#c98500;--status-serious:#d95926;--status-critical:#e66767}
+[data-mode=light]{${seriesVars(SERIES_LIGHT)}--grid:rgba(0,0,0,0.07);--axis:rgba(0,0,0,0.1);--status-good:#0ca30c;--status-warning:#fab219;--status-serious:#ec835a;--status-critical:#d03b3b}
 [data-mode=dark]{color-scheme:dark}[data-mode=light]{color-scheme:light}
 html,body{margin:0;padding:0;background:transparent}html{overflow-y:hidden}
 body{color:var(--text-primary);font-size:14px;line-height:1.6;font-weight:400}
@@ -92,8 +93,8 @@ ${series}
 .serious{fill:var(--status-serious);stroke:var(--status-serious);color:var(--status-serious)}
 .bad{fill:var(--status-critical);stroke:var(--status-critical);color:var(--status-critical)}
 .muted{fill:var(--text-muted);stroke:var(--text-muted);color:var(--text-muted)}
-.grid{fill:none;stroke:var(--grid);stroke-width:0.5}
-.axis{fill:none;stroke:var(--axis);stroke-width:1}
+.grid{fill:none;stroke:var(--grid);stroke-width:0.3}
+.axis{fill:none;stroke:var(--axis);stroke-width:0.3}
 .nofill{fill:none}
 ${ramps}
 table{border-collapse:collapse;font-size:13px}th,td{padding:4px 8px;border-bottom:0.5px solid var(--border);text-align:left}
