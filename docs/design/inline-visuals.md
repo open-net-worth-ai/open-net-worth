@@ -125,7 +125,7 @@ geometry (bar widths, axis scales).
 
 `show_visual` takes `code` — SVG or HTML the model writes itself, figures included — alone or
 beside `blocks`. The owner chose this over growing the catalog, chose **no** server check of the
-figures, and then kept **only the limits Claude's own drawing tool has**: a sandboxed frame,
+figures, and then kept **a minimal set of limits**: a sandboxed frame,
 the theme's colours, a standard width. Everything else was removed on request.
 
 - **Runs as written** in an `<iframe sandbox="allow-scripts allow-popups
@@ -149,7 +149,12 @@ the theme's colours, a standard width. Everything else was removed on request.
   its own words: no amount guard, no length cap. It is not shown above the drawing (the
   drawing carries its own heading); it names the frame.
 - **Hidden amounts do not mask a drawing** (owner's choice).
-- **Prompt guidance** (VISUALS): colour with the theme, draw for a 680-wide column. Nothing else.
+- **Style guide** (owner, 2026-11-18: a full design guide, not two lines). The
+  VISUALS paragraph tells the model how to draw — flat, no title inside, two font weights,
+  text in ink colours, colour by meaning (two hues plus grey), a fixed series order, thin
+  bars, hairline grids, labels that never collide, Chart.js notes — and the frame supplies the
+  matching classes and variables in light and dark (`visual/drawingStyle.ts`: `t ts th tm`,
+  `s1…s8`, `good warn serious bad muted`, `grid axis`, `c-{ramp}`). Guidance, never enforced.
 - **Channels** get the title and a note to open the app.
 
 ## Wiring
@@ -160,7 +165,7 @@ the theme's colours, a standard width. Everything else was removed on request.
 - Tool result (what the model sees and what a reload re-derives the block from):
   `{"shown": true, "visual": <resolved spec>, "note": "Already on screen — don't repeat its numbers."}`.
   A drawing's `code` is left out of the result (the model would pay for its own markup again
-  on every later round, as Claude's own drawing tool doesn't); the live event and a reload put
+  on every later round); the live event and a reload put
   it back from the call's arguments (`assistant._visual_from_result(result, args)`).
 - Stream: `_post_execute_events` emits `{"type": "visual", "tool_use_id", "visual"}`; the
   transcript rebuild appends `{"type": "visual", "visual": <spec>}` to the owning message's

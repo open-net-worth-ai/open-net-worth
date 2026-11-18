@@ -334,8 +334,8 @@ def resolve(request: dict) -> dict:
 
 
 def _drawing_envelope(request: dict) -> dict:
-    """A visual carrying Lucius's own drawing (`code`). The owner kept only the limits Claude's
-    own drawing tool has (2026-11-18): its title is its own words, uncapped and unchecked, and
+    """A visual carrying Lucius's own drawing (`code`). The owner kept only a minimal set of
+    limits (2026-11-18): its title is its own words, uncapped and unchecked, and
     it may sit beside blocks."""
     try:
         code = visual_code.check(request.get("code"))

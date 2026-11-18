@@ -94,8 +94,8 @@ function renderBlock(block: VisualBlock, i: number) {
 
 /** A `show_visual` result in the chat column: the blocks stacked under their title, and/or
  *  Lucius's own drawing (`code`), then muted caption lines. A drawing carries its own heading,
- *  so the title is shown only above blocks; for a drawing it is just the frame's name (like
- *  Claude's own drawing tool, whose title is never shown). An unknown or malformed block draws
+ *  so the title is shown only above blocks; for a drawing it is just the frame's name. An
+ *  unknown or malformed block draws
  *  nothing — it never takes the bubble down with it. */
 export function InlineVisual({ visual }: { visual: VisualSpec }) {
   const code = typeof visual?.code === 'string' ? visual.code : null

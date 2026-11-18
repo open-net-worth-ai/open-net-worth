@@ -1,27 +1,34 @@
 /**
  * The document a drawing Lucius wrote (`show_visual` with `code`) runs in. The markup goes in
  * as written — scripts, styles, CDN libraries, images and links all work (owner, 2026-11-18:
- * keep only the limits Claude's own drawing tool has). It runs in a sandboxed frame with no
+ * keep only a minimal set of limits). It runs in a sandboxed frame with no
  * `allow-same-origin`, so its scripts never run as the signed-in app.
  *
- * The parent hands the frame the app's theme (CSS variables + the `iv-` classes the prompt
- * names) and the frame reports its height so it grows to fit.
+ * The parent hands the frame the app's theme (its ink/border/surface variables and light or
+ * dark mode, styled by `drawingStyle.ts`) and the frame reports its height so it grows to fit.
  */
 
-export const THEME_VARS = [
-  '--ink',
-  '--muted',
-  '--line',
-  '--line-strong',
-  '--good',
-  '--bad',
-  '--accent',
-  '--bg',
-  '--bg-2',
-  '--surface',
-  '--surface2',
-  '--mono',
-] as const
+import { DRAWING_CSS } from './drawingStyle'
+
+/** The app's own tokens -> the names the drawing guide uses (the drawing style guide's names). */
+const TOKEN_MAP: Record<string, string> = {
+  '--text-primary': '--ink',
+  '--text-secondary': '--muted',
+  '--text-muted': '--muted',
+  '--border': '--line',
+  '--border-strong': '--line-strong',
+  '--surface-1': '--surface',
+  '--surface-2': '--surface2',
+  '--font-mono': '--mono',
+  // the app's own names stay too, for drawings written before the guide
+  '--ink': '--ink',
+  '--muted': '--muted',
+  '--line': '--line',
+  '--good': '--good',
+  '--bad': '--bad',
+  '--accent': '--accent',
+  '--bg': '--bg',
+}
 
 /** Message types between the frame and the chat. */
 export const MSG_HEIGHT = 'onw-visual-height'
@@ -30,23 +37,6 @@ export const MSG_THEME = 'onw-visual-theme'
 export const MSG_RENDER = 'onw-visual-render'
 /** The loader a drawing runs in, served with its own CSP (backend/api/visuals.py). */
 export const FRAME_URL = '/api/visuals/frame'
-
-const CLASSES = `
-.iv-t{fill:var(--ink);color:var(--ink);font-size:13px}
-.iv-ts{fill:var(--muted);color:var(--muted);font-size:11px}
-.iv-th{fill:var(--ink);color:var(--ink);font-size:14px;font-weight:600}
-.iv-line{fill:none;stroke:var(--line);stroke-width:1}
-.iv-c1{fill:#3b86dd;stroke:#3b86dd;color:#3b86dd}
-.iv-c2{fill:#34b08a;stroke:#34b08a;color:#34b08a}
-.iv-c3{fill:#e0a032;stroke:#e0a032;color:#e0a032}
-.iv-c4{fill:#9a7fd0;stroke:#9a7fd0;color:#9a7fd0}
-.iv-c5{fill:#22b8cf;stroke:#22b8cf;color:#22b8cf}
-.iv-c6{fill:#d4537e;stroke:#d4537e;color:#d4537e}
-.iv-good{fill:var(--good);stroke:var(--good);color:var(--good)}
-.iv-bad{fill:var(--bad);stroke:var(--bad);color:var(--bad)}
-.iv-muted{fill:var(--muted);stroke:var(--muted);color:var(--muted)}
-.iv-nofill{fill:none}
-`
 
 export const MSG_MEASURE = 'onw-visual-measure'
 
@@ -66,6 +56,7 @@ const BRIDGE = `
     if(e.data.type!=='${MSG_THEME}')return;
     var s=d.documentElement.style,v=e.data.vars||{};
     for(var k in v)s.setProperty(k,v[k]);
+    if(e.data.mode)d.documentElement.setAttribute('data-mode',e.data.mode);
   });
   window.addEventListener('load',send);
   d.addEventListener('DOMContentLoaded',function(){
@@ -75,15 +66,20 @@ const BRIDGE = `
 })();
 `
 
-/** The current value of each theme variable on the chat's own page. */
+/** The chat's theme as the drawing guide names it: its ink, border and surface variables. */
 export function readTheme(root: Element = document.documentElement): Record<string, string> {
   const css = getComputedStyle(root)
   const out: Record<string, string> = {}
-  for (const name of THEME_VARS) {
-    const value = css.getPropertyValue(name).trim()
+  for (const [name, source] of Object.entries(TOKEN_MAP)) {
+    const value = css.getPropertyValue(source).trim()
     if (value) out[name] = value
   }
   return out
+}
+
+/** Light or dark, from the app's own `color-scheme` (its default theme is dark). */
+export function readMode(root: Element = document.documentElement): 'light' | 'dark' {
+  return getComputedStyle(root).colorScheme.includes('dark') ? 'dark' : 'light'
 }
 
 /** The full HTML document for the frame. `font` is the chat's font stack. */
@@ -91,16 +87,16 @@ export function buildDrawingDocument(
   code: string,
   vars: Record<string, string>,
   font: string,
+  mode: 'light' | 'dark' = 'dark',
 ): string {
   const root = Object.entries(vars)
     .map(([k, v]) => `${k}:${v};`)
     .join('')
-  return `<!doctype html><html><head><meta charset="utf-8">
+  return `<!doctype html><html data-mode="${mode}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <base target="_blank">
-<style>:root{${root}}html,body{margin:0;padding:0;background:transparent}html{overflow-y:hidden}
-body{color:var(--ink);font-family:${font || 'system-ui,sans-serif'};font-size:13px;line-height:1.45}
-svg{max-width:100%;height:auto;display:block}${CLASSES}</style>
+<style>:root{${root}}${DRAWING_CSS}
+body{font-family:${font || 'system-ui,sans-serif'}}</style>
 <script>${BRIDGE}</script>
 </head><body>${code}</body></html>`
 }

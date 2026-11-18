@@ -61,12 +61,12 @@ costs tokens, misdraws, and — for money — can misstate a figure.
 
 ## Amendment 2026-11-18 — Lucius may also draw freeform
 
-The owner judged the fixed catalog too inflexible and chose the way Claude draws in its own chat:
+The owner judged the fixed catalog too inflexible and chose freeform drawing as well:
 `show_visual` also takes `code`, SVG or HTML the model writes itself, with its figures typed in
 and **not** checked by the server (owner's choice: a drawing is the model's own, like its text).
 The block catalog stays for the shapes it covers, for channels and for weaker models.
 
-Same day, the owner removed every limit that Claude's own drawing tool does not have. A drawing
+Same day, the owner removed every limit beyond a minimal set. A drawing
 now runs as written — scripts, styles, CDN libraries, images, links — in a sandboxed iframe
 without `allow-same-origin`, which is the one boundary kept: its scripts never run as the
 signed-in app. It may sit beside blocks; its title is uncapped and unchecked and is not shown above it;

@@ -411,13 +411,30 @@ Plan › Outlook, stage the what-if with run_screen_command; elsewhere draw it a
 so they can open it in Outlook.
 YOUR OWN DRAWING (code, alone or beside blocks) — SVG or HTML you write, for any shape: a
 waterfall, a flow, a scatter, a trend with marked events, an interactive explainer. It runs in
-its own frame: scripts, <style>, libraries from a CDN, images and links all work, and the frame
-grows to fit. Two conventions:
-- Colour with the theme so light and dark mode both work: var(--ink) var(--muted) var(--line)
-  var(--good) var(--bad) var(--accent) var(--bg), or the classes iv-c1…iv-c6 (series), iv-good,
-  iv-bad, iv-muted (fill + stroke; iv-nofill for a line), iv-line (grid), text iv-t, iv-ts,
-  iv-th.
-- Draw for a 680-wide column: <svg viewBox="0 0 680 H" width="100%">.
+its own frame: scripts, <style>, libraries from a CDN, images and links all work; the frame
+grows to fit and follows light/dark mode. Draw it like this:
+- Seamless and flat: transparent background, no gradients, shadows or glow. No title or prose
+  inside — the reply says what it is. SVG: <svg viewBox="0 0 680 H" width="100%" role="img">
+  with a <title>; HTML fills the 680px column.
+- Type: classes t (13px), ts (12px secondary), th (14px heading), tm (11px muted). Two weights
+  only, 400 and 500 — never bold 600/700. Sentence case. Nothing under 11px.
+- Ink: text in var(--text-primary) / --text-secondary / --text-muted, never in a series colour
+  — a small coloured square beside a label carries the identity.
+- Colour by meaning, never in sequence: at most two hues plus grey. Magnitude = one hue;
+  "this one matters" = one hue, the rest class muted; over/under a target = blue vs red.
+  Series in this fixed order: s1 blue, s2 orange, s3 aqua, s4 yellow, s5 magenta, s6 green,
+  s7 violet, s8 red (fill + stroke; add nofill for a line). Status: good, warn, serious, bad.
+  Diagram boxes: c-purple c-teal c-coral c-pink c-gray (c-blue c-green c-amber c-red only for
+  info/success/warning/error) on a <g> holding the rect and its text.
+- Marks: bars ≤24px thick (14–18 is typical), rx 3–4; lines 2px with round caps; gridlines
+  class grid, baseline class axis, no vertical gridlines on a time axis; 2px gap between
+  touching marks. One y-axis only.
+- Labels never collide: put a value past the bar or tick it belongs to. Legend for 2+ series
+  (10px squares, 12px text); direct labels when there are 4 or fewer. Round every shown
+  number; sign before the currency (-$5M).
+- Chart.js: canvas can't read CSS variables — get --series-N and --text-muted with
+  getComputedStyle(document.documentElement); wrap the canvas in a div with a set height,
+  responsive: true, maintainAspectRatio: false, legend display false (draw your own).
 """
 
 

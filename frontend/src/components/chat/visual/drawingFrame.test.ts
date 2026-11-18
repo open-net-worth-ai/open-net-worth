@@ -11,11 +11,18 @@ describe('buildDrawingDocument', () => {
     expect(doc).toContain(code)
   })
 
-  it('carries the theme variables, the iv- classes and the chat font', () => {
-    const doc = buildDrawingDocument('<svg></svg>', { '--ink': '#111', '--good': '#0a0' }, 'Inter')
-    expect(doc).toContain(':root{--ink:#111;--good:#0a0;}')
-    expect(doc).toContain('.iv-good{fill:var(--good)')
+  it('carries the theme, the mode, the guide classes and the chat font', () => {
+    const vars = { '--text-primary': '#111', '--border': '#ddd' }
+    const doc = buildDrawingDocument('<svg></svg>', vars, 'Inter', 'light')
+    expect(doc).toContain(':root{--text-primary:#111;--border:#ddd;}')
+    expect(doc).toContain('<html data-mode="light">')
+    expect(doc).toContain('[data-mode=light]{--series-1:#2a78d6')
+    expect(doc).toContain('.s1{fill:var(--series-1)')
+    expect(doc).toContain('.th{fill:var(--text-primary)')
+    expect(doc).toContain('[data-mode=light] .c-teal')
+    expect(doc).toContain('.iv-good{')
     expect(doc).toContain('font-family:Inter')
+    expect(doc).not.toMatch(/font-weight:\s*[67]00/)
   })
 
   it('reports its height and takes theme updates through the bridge script', () => {

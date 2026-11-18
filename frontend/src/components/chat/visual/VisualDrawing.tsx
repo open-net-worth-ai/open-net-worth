@@ -6,6 +6,7 @@ import {
   MSG_MEASURE,
   MSG_RENDER,
   MSG_THEME,
+  readMode,
   readTheme,
 } from './drawingFrame'
 
@@ -23,7 +24,13 @@ export function VisualDrawing({ code, title }: { code: string; title?: string | 
   const [height, setHeight] = useState(0)
   // Built once per drawing: a theme change is posted in, never a re-render that re-runs scripts.
   const doc = useMemo(
-    () => buildDrawingDocument(code, readTheme(), getComputedStyle(document.body).fontFamily),
+    () =>
+      buildDrawingDocument(
+        code,
+        readTheme(),
+        getComputedStyle(document.body).fontFamily,
+        readMode(),
+      ),
     [code],
   )
 
@@ -46,7 +53,10 @@ export function VisualDrawing({ code, title }: { code: string; title?: string | 
 
   useEffect(() => {
     const push = () =>
-      frame.current?.contentWindow?.postMessage({ type: MSG_THEME, vars: readTheme() }, '*')
+      frame.current?.contentWindow?.postMessage(
+        { type: MSG_THEME, vars: readTheme(), mode: readMode() },
+        '*',
+      )
     const watch = new MutationObserver(push)
     const opts = { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] }
     watch.observe(document.documentElement, opts)
