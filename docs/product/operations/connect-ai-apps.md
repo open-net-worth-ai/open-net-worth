@@ -242,7 +242,7 @@ book.
   again.
 
 **Another hosted app.** If an app asks for a client ID and secret, create them in **Settings → MCP
-→ OAuth → Other apps** (**Create client ID and secret**): enter the app's name and its redirect (callback) URL. The
+→ OAuth → Client ID and secret**: enter the app's name and its redirect (callback) URL. The
 secret is shown once, with **Copy client ID** and **Copy secret** buttons. An app shows under
 **Connected apps** once it has finished signing in.
 

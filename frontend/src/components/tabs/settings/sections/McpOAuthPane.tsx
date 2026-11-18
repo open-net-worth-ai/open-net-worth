@@ -134,13 +134,13 @@ function OtherApps({
   const [open, setOpen] = useState(false)
   const show = open || status.clients.length > 0
   return (
-    <Panel title="Other apps">
+    <Panel title="Client ID and secret">
       {show ? (
         <Credentials clients={status.clients} refresh={refresh} toast={toast} />
       ) : (
         <div className="mcp-other">
           <span className="rd-help">
-            If another app asks for a client ID and secret, create them here.
+            If an app asks for a client ID and secret, create them here.
           </span>
           <Btn size="xs" onClick={() => setOpen(true)}>
             Create client ID and secret
