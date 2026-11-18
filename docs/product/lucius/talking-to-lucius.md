@@ -124,7 +124,9 @@ picture himself. These drawings are his own work, like a sentence he writes: the
 come from what he read, but he wrote them in, so check one that matters against the screen it
 came from. A drawing can be interactive (hover a point to see its value) and can use charting
 libraries from the internet. It runs in its own walled-off frame, so it can't act as you in the
-app.
+app. With Claude models you watch it being drawn: shapes appear as Lucius writes them, and
+anything interactive switches on once the drawing is complete. Other models show it whole when
+it's done.
 
 In the standard charts every number comes straight from your data — Lucius points at what he
 read and the app copies the figures in, so he can't mistype one. A few things are written under

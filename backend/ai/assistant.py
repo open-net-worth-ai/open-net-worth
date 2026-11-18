@@ -4599,6 +4599,11 @@ async def _run_turn(
                 elif event["type"] == "tool_use":
                     pending_tool_uses.append(event)
 
+                elif event["type"] == "visual_draft":
+                    # A drawing still being written, shown live and never stored: the
+                    # finished show_visual call replaces it (models/visual_draft.py).
+                    yield event
+
                 elif event["type"] == "usage":
                     turn_input_tokens += event["input_tokens"]
                     turn_cache_creation_tokens += event.get("cache_creation_tokens", 0)

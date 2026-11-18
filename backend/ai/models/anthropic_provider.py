@@ -9,6 +9,7 @@ from backend.core.cost_context import get_cost_surface
 
 from .base import AIProvider, log_text_cap
 from .pricing import cost_usd_anthropic
+from .visual_draft import VisualDraft
 
 log = logging.getLogger(__name__)
 
@@ -232,6 +233,9 @@ class AnthropicProvider(AIProvider):
 
         _t0 = _time.monotonic()
         _ttft_ms: "float | None" = None
+        # The arguments of a show_visual call as they stream, drawn live (visual_draft.py).
+        visual = VisualDraft()
+        visual_args: "str | None" = None
 
         async with self.client.messages.stream(**kwargs) as stream:
             async for event in stream:
@@ -242,8 +246,16 @@ class AnthropicProvider(AIProvider):
                         yield {"type": "thinking_delta", "text": event.delta.thinking}
                     elif hasattr(event.delta, "text"):
                         yield {"type": "text_delta", "text": event.delta.text}
+                    elif visual_args is not None and hasattr(event.delta, "partial_json"):
+                        visual_args += event.delta.partial_json or ""
+                        if draft := visual.update(visual_args, named=True):
+                            yield draft
                 elif event.type == "content_block_start":
+                    visual_args = None
                     if event.content_block.type == "tool_use":
+                        if event.content_block.name == "show_visual":
+                            visual.reset()
+                            visual_args = ""
                         log.debug(
                             "tool_use_start  tool=%s  id=%s",
                             event.content_block.name,

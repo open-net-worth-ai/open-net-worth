@@ -119,21 +119,21 @@ function renderBlock(block: VisualBlock, i: number) {
  *  here; the prompt tells Lucius never to draw one inside a drawing. An unknown or malformed
  *  block draws
  *  nothing — it never takes the bubble down with it. */
-export function InlineVisual({ visual }: { visual: VisualSpec }) {
+export function InlineVisual({ visual, draft }: { visual: VisualSpec; draft?: boolean }) {
   const code = typeof visual?.code === 'string' ? visual.code : null
   if (!visual || (!code && !isArr(visual.blocks))) return null
   const blocks = isArr(visual.blocks) ? visual.blocks : []
   const captions = isArr(visual.caption) ? visual.caption : []
   return (
     <section className="ivis" aria-label={visual.title || 'Visual'}>
-      <VisualMenu title={visual.title} drawingOnly={blocks.length === 0} />
+      {!draft && <VisualMenu title={visual.title} drawingOnly={blocks.length === 0} />}
       {visual.title && <h4 className="ivis-title">{visual.title}</h4>}
       {blocks.map((b, i) => (
         <Guard key={i}>{renderBlock(b, i)}</Guard>
       ))}
       {code && (
         <Guard>
-          <VisualDrawing code={code} title={visual.title} />
+          <VisualDrawing code={code} title={visual.title} draft={draft} />
         </Guard>
       )}
       {captions.map((c, i) => (

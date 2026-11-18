@@ -9,7 +9,14 @@
 // arrives.
 
 import { guideFromResult, requestGuide } from './guideRequests'
-import type { Attachment, Message, MessageBlock, ProposedChange, TurnUsage } from '../types/chat'
+import type {
+  Attachment,
+  Message,
+  MessageBlock,
+  ProposedChange,
+  TurnUsage,
+  VisualSpec,
+} from '../types/chat'
 import { fetchEarlierMessages, saveMessages } from '../utils/chatStore'
 import { dispatchScreenCommand, emitDataChanged } from '../lucius/bus'
 import { authFetch } from '../api/client'
@@ -324,6 +331,63 @@ export function appendBlock(ownerId: string, block: MessageBlock): void {
 // An external-MCP tool captured an image (a screenshot, e.g.) — rendered the SAME way a
 // chat photo upload is (`m.attachments`, MessageBubble.tsx's `AttachmentThumb`), not as a
 // new block type.
+const isDraft = (b: MessageBlock) => b.type === 'visual' && !!b.draft
+const openDraft = (blocks: MessageBlock[]) =>
+  blocks.findLastIndex((b) => isDraft(b) && !(b.type === 'visual' && b.sealed))
+
+/** A drawing Lucius is still writing (`visual_draft`), drawn where it will land and grown in
+ *  place as more of it arrives. Never stored: the finished visual replaces it. */
+export function upsertVisualDraft(ownerId: string, title: unknown, code: string): void {
+  ensureAssistant(ownerId)
+  const block: MessageBlock = {
+    type: 'visual',
+    draft: true,
+    visual: { id: 'draft', title: typeof title === 'string' ? title : null, code },
+  }
+  updateOpenAssistant(ownerId, (m) => {
+    const blocks = [...(m.blocks || [])]
+    const i = openDraft(blocks)
+    if (i >= 0) blocks[i] = block
+    else blocks.push(block)
+    return { ...m, blocks }
+  })
+}
+
+/** The show_visual call is complete: its draft is kept for its result, and a further draft in
+ *  the same reply is a second drawing, never this one rewritten. */
+export function sealVisualDrafts(ownerId: string): void {
+  updateOpenAssistant(ownerId, (m) =>
+    m.blocks?.some((b) => isDraft(b) && !(b.type === 'visual' && b.sealed))
+      ? {
+          ...m,
+          blocks: m.blocks.map((b) =>
+            b.type === 'visual' && b.draft ? { ...b, sealed: true } : b,
+          ),
+        }
+      : m,
+  )
+}
+
+/** A finished visual takes its draft's place, so the drawing stays where it was drawn. Results
+ *  come back in call order, so it is the earliest draft. */
+export function placeVisual(ownerId: string, visual: VisualSpec): void {
+  ensureAssistant(ownerId)
+  updateOpenAssistant(ownerId, (m) => {
+    const blocks = [...(m.blocks || [])]
+    const i = visual.code ? blocks.findIndex(isDraft) : -1
+    if (i >= 0) blocks[i] = { type: 'visual', visual }
+    else blocks.push({ type: 'visual', visual })
+    return { ...m, blocks }
+  })
+}
+
+/** A draft whose call never finished (it failed, or the turn stopped) is taken away. */
+export function dropVisualDrafts(ownerId: string): void {
+  updateOpenAssistant(ownerId, (m) =>
+    m.blocks?.some(isDraft) ? { ...m, blocks: m.blocks.filter((b) => !isDraft(b)) } : m,
+  )
+}
+
 export function appendAttachments(ownerId: string, attachments: Attachment[]): void {
   ensureAssistant(ownerId)
   updateOpenAssistant(ownerId, (m) => ({
@@ -840,6 +904,7 @@ export async function consumeEventStream(
             appendText(ownerId, event.text)
           }
         } else if (event.type === 'tool_use_start') {
+          if (event.name === 'show_visual') sealVisualDrafts(ownerId)
           if (
             event.name !== 'web_search' &&
             event.name !== 'fetch_page' &&
@@ -932,8 +997,10 @@ export async function consumeEventStream(
           // Compact reference only (id/title/filename/type/size) — ArtifactCard fetches
           // the document bytes from /api/artifacts/{id} on mount.
           appendBlock(ownerId, { type: 'artifact', artifact: event.artifact })
+        } else if (event.type === 'visual_draft') {
+          if (typeof event.code === 'string') upsertVisualDraft(ownerId, event.title, event.code)
         } else if (event.type === 'visual') {
-          appendBlock(ownerId, { type: 'visual', visual: event.visual })
+          placeVisual(ownerId, event.visual)
         } else if (event.type === 'mcp_image') {
           // An external-MCP tool captured an image — same AttachmentThumb a chat photo
           // upload renders, backed by GET /api/uploads/{ref_id}/image.
@@ -1113,6 +1180,7 @@ export async function consumeEventStream(
         } else if (event.type === 'compacting_done') {
           chatSessions.apply(ownerId, (s) => (s.compacting ? { ...s, compacting: null } : s))
         } else if (event.type === 'turn_done') {
+          dropVisualDrafts(ownerId)
           // Defensive clear: compacting_done should already have cleared this, but a
           // dropped/reconnected SSE stream could lose that one event — a turn ending is
           // itself proof compacting (for this turn) is over, whether or not that event

@@ -66,6 +66,7 @@ from .cli_tool_protocol import (
     render_tool_manifest,
 )
 from .telemetry import record_structured_output_error
+from .visual_draft import VisualDraft
 
 log = logging.getLogger(__name__)
 
@@ -550,6 +551,7 @@ class ClaudeCliProvider(AIProvider):
             while True:
                 attempt += 1
                 scanner = ToolCallScanner()
+                visual = VisualDraft()
                 t0 = time.monotonic()
                 ttft_ms = None
                 usage_event = None
@@ -665,6 +667,12 @@ class ClaudeCliProvider(AIProvider):
                                         if visible:
                                             emitted_anything = True
                                             yield {"type": "text_delta", "text": visible}
+                                    # A drawing being written shows as it grows (visual_draft.py).
+                                    if not scanner.mid_block:
+                                        visual.reset()
+                                    elif draft := visual.update(scanner.block_text):
+                                        emitted_anything = True
+                                        yield draft
                             elif inner.get("type") == "message_delta":
                                 stop_reason = (inner.get("delta") or {}).get(
                                     "stop_reason"

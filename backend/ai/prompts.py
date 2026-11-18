@@ -426,6 +426,11 @@ grows to fit and follows light/dark mode. Draw it like this:
 - Ink: text in var(--text-primary) / --text-secondary / --text-muted, never in a series colour
   — a small coloured square beside a label carries the identity. Primary ink only for values
   and headings; legend text in ts; axis ticks and category labels muted (class tm).
+- It is drawn while you write it, so order the code to draw well as it arrives: a short
+  <style> first (under ~15 lines; prefer inline style="…"), then the content, <script> last
+  (scripts run only once the drawing is complete — load a library with <script src> before the
+  script that uses it). SVG: <defs> first, then the shapes. Show everything stacked — no tabs
+  or display: none sections.
 - Pick the form first, colour last. One value (+ trend) = a stat tile, never a one-bar chart;
   a few headline numbers = a row of tiles; a ratio against a limit = a meter; more than ~7
   classes that all matter = a table. Compare magnitude = bars; trend = line (area for one

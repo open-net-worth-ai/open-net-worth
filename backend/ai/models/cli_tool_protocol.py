@@ -757,6 +757,11 @@ class ToolCallScanner:
         """True while a call block has opened and not yet closed."""
         return self._in_block
 
+    @property
+    def block_text(self) -> str:
+        """The open call block written so far (after its opening tag), or "" outside one."""
+        return self._buf if self._in_block else ""
+
     def _eat_trailing_fence(self) -> bool:
         """Drop a lone ``` line at the head of the buffer. False = need more text to decide."""
         stripped = self._buf.lstrip(" \t\n")

@@ -581,7 +581,9 @@ export type MessageBlock =
   | { type: 'change'; change: ProposedChange }
   | { type: 'duplicate_review'; duplicates: PotentialDuplicate[]; batchId?: string }
   | { type: 'artifact'; artifact: ArtifactRef }
-  | { type: 'visual'; visual: VisualSpec }
+  /** `draft`: a drawing Lucius is still writing — live only, replaced by the finished one.
+   *  `sealed`: its call is complete, so a further draft is another drawing. */
+  | { type: 'visual'; visual: VisualSpec; draft?: boolean; sealed?: boolean }
   | { type: 'receipt'; receipt: WriteReceipt }
   | {
       type: 'screen_command'

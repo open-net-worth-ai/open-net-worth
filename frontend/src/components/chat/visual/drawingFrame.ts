@@ -39,6 +39,8 @@ export const MSG_RENDER = 'onw-visual-render'
 export const FRAME_URL = '/api/visuals/frame'
 
 export const MSG_MEASURE = 'onw-visual-measure'
+/** A drawing still being written: its markup so far, put in the page with no script run. */
+export const MSG_DRAFT = 'onw-visual-draft'
 /** Copy / download (visualExport.ts): the chat asks, the frame answers with a data URL. */
 export const MSG_EXPORT = 'onw-visual-export'
 export const MSG_EXPORTED = 'onw-visual-exported'
@@ -92,6 +94,8 @@ const BRIDGE = `
   window.addEventListener('message',function(e){
     if(e.source!==parent||!e.data)return;
     if(e.data.type==='${MSG_MEASURE}'){send();return}
+    if(e.data.type==='${MSG_DRAFT}'){d.body.innerHTML=String(e.data.html||'');return}
+    if(e.data.type==='${MSG_RENDER}'){d.open();d.write(String(e.data.html||''));d.close();return}
     if(e.data.type==='${MSG_EXPORT}'){exportIt(e.data);return}
     if(e.data.type!=='${MSG_THEME}')return;
     var s=d.documentElement.style,v=e.data.vars||{};
