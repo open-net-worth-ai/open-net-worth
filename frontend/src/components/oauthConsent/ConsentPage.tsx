@@ -22,7 +22,9 @@ type Load =
 
 const ERRORS = {
   expired: 'This request has expired. Start again from the app.',
-  failed: 'Something went wrong. Start again from the app.',
+  // The request is still good: the call didn't get a normal answer (a dropped connection, a
+  // tunnel or server hiccup), so trying again on this page is the fix.
+  failed: "Couldn't reach Open Net Worth. Try again.",
 } as const
 
 export function ConsentPage() {
@@ -238,9 +240,11 @@ function Decide({
     <form className="consent-form" onSubmit={submit}>
       <Pairing app={details} request={request} />
       <header className="consent-head">
-        <h1>Connect {app} to your book?</h1>
+        <h1>
+          Connect {app} to {brand.app_name}?
+        </h1>
         <p>
-          <strong>{details.app_host}</strong> is asking to use {brand.app_name}.
+          Requested by <strong>{details.app_host}</strong>
         </p>
       </header>
 

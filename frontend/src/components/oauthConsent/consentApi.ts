@@ -49,12 +49,17 @@ export async function decideConsent(body: {
   decision: 'allow' | 'deny'
   allow_write?: boolean
 }): Promise<DecideResult> {
-  const r = await fetch('/api/oauth/consent', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let r: Response
+  try {
+    r = await fetch('/api/oauth/consent', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    return { ok: false, reason: 'failed' }
+  }
   if (r.ok) return { ok: true, redirect: ((await r.json()) as { redirect: string }).redirect }
   if (r.status === 401) return { ok: false, reason: 'signin' }
   if (r.status === 404) return { ok: false, reason: 'expired' }

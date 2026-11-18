@@ -47,7 +47,7 @@ function consentPost(): Record<string, unknown> {
 
 it('names the app by the server label and its host, with a warning about forwarded links', async () => {
   render(<ConsentPage />)
-  expect(await screen.findByText('Connect Claude to your book?')).toBeTruthy()
+  expect(await screen.findByText('Connect Claude to Open Net Worth?')).toBeTruthy()
   expect(screen.getByText('claude.ai')).toBeTruthy()
   expect(screen.getByText(/If someone sent you this link, choose Deny/)).toBeTruthy()
   expect(fetchMock.mock.calls[0]![0]).toBe('/api/oauth/consent?request=req-abc')
@@ -67,7 +67,7 @@ it('asks to sign in first when this browser has no recent sign-in', async () => 
   expect(screen.queryByRole('button', { name: 'Allow read access' })).toBeNull()
   fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: 'pw' } })
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-  expect(await screen.findByText('Connect Claude to your book?')).toBeTruthy()
+  expect(await screen.findByText('Connect Claude to Open Net Worth?')).toBeTruthy()
   const login = fetchMock.mock.calls.find(([url]) => url === '/api/oauth/consent/sign-in')!
   expect(JSON.parse(String((login[1] as RequestInit).body))).toEqual({
     request: 'req-abc',
@@ -90,7 +90,7 @@ it('says so when the sign-in password is wrong', async () => {
 
 it('allows read-only by default with no password on the consent card', async () => {
   render(<ConsentPage />)
-  await screen.findByText('Connect Claude to your book?')
+  await screen.findByText('Connect Claude to Open Net Worth?')
   expect(document.querySelector('input[type="password"]')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Allow read access' }))
   await waitFor(() =>
@@ -114,7 +114,7 @@ it('offers no changes switch when the app only asked to read', async () => {
       : json(200, {}),
   )
   render(<ConsentPage />)
-  await screen.findByText('Connect Claude to your book?')
+  await screen.findByText('Connect Claude to Open Net Worth?')
   expect(screen.queryByLabelText(/Also let it make changes/)).toBeNull()
 })
 
@@ -139,4 +139,19 @@ it('explains an expired request', async () => {
   fetchMock.mockImplementation(() => json(404, { detail: 'expired' }))
   render(<ConsentPage />)
   expect(await screen.findByText('This request no longer works')).toBeTruthy()
+})
+
+it('says to try again when the approve call gets no normal answer, and lets you retry', async () => {
+  let calls = 0
+  fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+    if (!init || init.method !== 'POST') return json(200, DETAILS)
+    calls += 1
+    if (calls === 1) return Promise.reject(new TypeError('Failed to fetch'))
+    return json(200, { redirect: 'https://claude.ai/api/mcp/auth_callback?code=x' })
+  })
+  render(<ConsentPage />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Allow read access' }))
+  expect(await screen.findByText("Couldn't reach Open Net Worth. Try again.")).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Allow read access' }))
+  await waitFor(() => expect(assign).toHaveBeenCalled())
 })

@@ -209,9 +209,9 @@ password, and choose whether it may only read or may also make changes.
    click **Save**. The **OAuth** card shows **Ready** when everything is in place, or how many steps are left.
 4. Add the connector in the app, using the **Connector address** the panel shows
    (`https://your-address/mcp`; **Copy** puts it on your clipboard):
-   - **claude.ai:** open **Connectors** (under **Customize** or **Settings**) and choose **Add
-     custom connector**. Leave the advanced OAuth fields empty. The connector also works in Claude
-     on your phone and in Claude Desktop.
+   - **Claude:** open **Connectors** (under **Customize** or **Settings**) and choose **Add
+     custom connector**. Leave the advanced OAuth fields empty. Add it once and it works on the
+     web, on your phone and in Claude Desktop.
    - **ChatGPT:** with Developer mode on, add a custom MCP server (connector) with that URL and
      choose OAuth.
 5. A page from your own address opens. Check the address bar and type your Open Net Worth
