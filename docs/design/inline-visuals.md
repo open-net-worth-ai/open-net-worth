@@ -151,6 +151,9 @@ the theme's colours, a standard width. Everything else was removed on request.
   a ContextVar set by `assistant.run` to the live session history list.
 - Tool result (what the model sees and what a reload re-derives the block from):
   `{"shown": true, "visual": <resolved spec>, "note": "Already on screen — don't repeat its numbers."}`.
+  A drawing's `code` is left out of the result (the model would pay for its own markup again
+  on every later round, as Claude's own drawing tool doesn't); the live event and a reload put
+  it back from the call's arguments (`assistant._visual_from_result(result, args)`).
 - Stream: `_post_execute_events` emits `{"type": "visual", "tool_use_id", "visual"}`; the
   transcript rebuild appends `{"type": "visual", "visual": <spec>}` to the owning message's
   blocks (same pattern as artifacts).

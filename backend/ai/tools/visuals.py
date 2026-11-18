@@ -99,11 +99,14 @@ async def show_visual(input_data: dict):
         spec = visual_spec.resolve(input_data)
     except visual_spec.VisualSpecError as exc:
         return json.dumps({"error": str(exc)}), None
+    # A drawing's code is the model's own argument — echoing it back would make the model pay
+    # for it again on every later round. The chat takes it from the call (assistant.py).
+    shown = {k: v for k, v in spec.items() if k != "code"}
     return (
         json.dumps(
             {
                 "shown": True,
-                "visual": spec,
+                "visual": shown,
                 "note": "Already on the user's screen — don't repeat its numbers in your reply.",
             },
             ensure_ascii=False,

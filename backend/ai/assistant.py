@@ -1504,23 +1504,33 @@ def _maybe_append_artifact_block(owner_blocks: Optional[list], result_text: str)
         owner_blocks.append({"type": "artifact", "artifact": _artifact_event_payload(parsed)})
 
 
-def _visual_from_result(result_text: str) -> Optional[dict]:
-    """The resolved spec inside a ``show_visual`` result, or None for a refused call."""
+def _visual_from_result(result_text: str, args: Optional[dict] = None) -> Optional[dict]:
+    """The resolved spec inside a ``show_visual`` result, or None for a refused call. A
+    drawing's markup is not in the result (the model would pay for its own code twice) — it
+    comes back from the call's own arguments."""
     try:
         parsed = json.loads(result_text)
     except Exception:
         return None
-    if isinstance(parsed, dict) and parsed.get("shown") and isinstance(parsed.get("visual"), dict):
-        return parsed["visual"]
-    return None
+    if not (isinstance(parsed, dict) and parsed.get("shown")):
+        return None
+    spec = parsed.get("visual")
+    if not isinstance(spec, dict):
+        return None
+    code = (args or {}).get("code")
+    if "code" not in spec and isinstance(code, str) and code.strip():
+        spec = {**spec, "code": code.strip()}
+    return spec
 
 
-def _maybe_append_visual_block(owner_blocks: Optional[list], result_text: str) -> None:
-    """Re-derive an inline visual on reload from its persisted ``show_visual`` result — the
+def _maybe_append_visual_block(
+    owner_blocks: Optional[list], result_text: str, args: Optional[dict] = None
+) -> None:
+    """Re-derive an inline visual on reload from its persisted ``show_visual`` call — the
     same spec the live ``visual`` event carried, so a reload draws the identical picture."""
     if owner_blocks is None:
         return
-    spec = _visual_from_result(result_text)
+    spec = _visual_from_result(result_text, args)
     if spec is not None:
         owner_blocks.append({"type": "visual", "visual": spec})
 
@@ -1638,7 +1648,7 @@ def _post_execute_events(
         except Exception:
             pass
     elif tool_name == "show_visual":
-        _vis = _visual_from_result(text_result)
+        _vis = _visual_from_result(text_result, args)
         if _vis is not None:
             events.append({"type": "visual", "tool_use_id": tool_use_id, "visual": _vis})
     elif tool_name == "web_search":
@@ -2311,7 +2321,9 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                                 )
                             if block.get("name") == "show_visual":
                                 _maybe_append_visual_block(
-                                    tool_block_owner.get(b.get("tool_use_id")), block["result"]
+                                    tool_block_owner.get(b.get("tool_use_id")),
+                                    block["result"],
+                                    block.get("input"),
                                 )
                             if block.get("name") == "run_screen_command":
                                 _maybe_append_screen_command_block(

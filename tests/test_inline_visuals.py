@@ -369,6 +369,25 @@ def test_stream_event_and_reload_carry_the_same_spec(convo):
     assert assistant._post_execute_events("show_visual", "tv", {}, '{"error": "x"}') == []
 
 
+def test_a_drawing_is_not_echoed_back_but_still_drawn_live_and_on_reload(convo):
+    """The model pays for its drawing once: the result confirms it, the chat takes the code
+    from the call itself — live and after a reload."""
+    from backend.ai import assistant
+    from backend.ai.tools.visuals import show_visual
+
+    code = '<svg viewBox="0 0 680 40"><rect class="iv-c1" width="90" height="20"/></svg>'
+    request = {"title": "Spending", "code": code}
+    with feature_flags.override(inline_visuals=True):
+        text = asyncio.run(show_visual(request))[0]
+    assert code not in text
+    assert json.loads(text)["shown"] is True
+    events = assistant._post_execute_events("show_visual", "tv", request, text)
+    owner: list = []
+    assistant._maybe_append_visual_block(owner, text, request)
+    assert events[0]["visual"]["code"] == code
+    assert owner == [{"type": "visual", "visual": events[0]["visual"]}]
+
+
 def test_channel_text_shows_the_resolved_figures():
     from backend.services.visual_text import render_text
 
