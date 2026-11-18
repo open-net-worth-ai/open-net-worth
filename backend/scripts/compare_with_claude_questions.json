@@ -1,0 +1,17 @@
+[
+  {"id": "greet", "kind": "greeting", "budget": 25, "q": "hi"},
+  {"id": "nw", "kind": "lookup", "budget": 60, "q": "what's my net worth?"},
+  {"id": "cash", "kind": "lookup", "budget": 60, "q": "how much cash do I have?"},
+  {"id": "groceries", "kind": "lookup", "budget": 60, "q": "what did I spend on groceries this month?"},
+  {"id": "vs_last", "kind": "compare", "budget": 150, "q": "how does this month's spending compare with last month?"},
+  {"id": "vs_3m", "kind": "compare", "budget": 150, "q": "this month so far vs the same period in the last 3 months"},
+  {"id": "why_nw", "kind": "why", "budget": 180, "q": "why did my net worth change this month?"},
+  {"id": "biggest", "kind": "list", "budget": 120, "q": "what are my biggest expenses this month?"},
+  {"id": "portfolio", "kind": "analysis", "budget": 200, "q": "how is my portfolio doing?"},
+  {"id": "budget", "kind": "analysis", "budget": 200, "q": "am I on track with my budget this month?"},
+  {"id": "retire", "kind": "what_if", "budget": 200, "q": "can I retire at 55?"},
+  {"id": "pay_or_invest", "kind": "advice", "budget": 200, "q": "should I pay down my card or invest the money?"},
+  {"id": "viz_cat", "kind": "visual", "budget": 120, "q": "show me my spending by category this month"},
+  {"id": "viz_nw", "kind": "visual", "budget": 120, "q": "chart my net worth over the last year"},
+  {"id": "viz_flow", "kind": "visual", "budget": 120, "q": "where does my income go?"}
+]
