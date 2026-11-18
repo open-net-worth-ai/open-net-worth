@@ -136,6 +136,10 @@ the picture for you:
 - **Projection — not booked** marks a cash-flow forecast.
 - **Largest 6 of 35** means he kept the biggest rows and left the smallest out.
 
+To keep a chart, point at it and open the **⋯** menu in its top-right corner: **Copy as image**
+puts a PNG on your clipboard, ready to paste; **Download as SVG** and **Download as PNG** save it
+as a file named after the chart.
+
 Hiding amounts hides them in the standard charts. Lucius's own drawings are not masked — they
 show their figures even when amounts are hidden. On
 [Telegram](../connectors/telegram.md) a standard chart's figures arrive as a few lines of text,

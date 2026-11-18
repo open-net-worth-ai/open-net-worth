@@ -2744,6 +2744,34 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--panel);
+    position: relative;
+  }
+  /* The ⋯ copy/download menu (visual/VisualMenu.tsx): top right, shown on hover or focus, always
+     on touch screens. Out of the flex flow so it never pushes the title or chart. */
+  .ivis-menu {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .ivis:hover .ivis-menu,
+  .ivis:focus-within .ivis-menu,
+  .ivis-menu:has(.ivis-menu-note) {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .ivis-menu {
+      opacity: 1;
+    }
+  }
+  .ivis-menu-note {
+    font-size: 12px;
+    color: var(--muted);
   }
   .ivis-title {
     margin: 0;

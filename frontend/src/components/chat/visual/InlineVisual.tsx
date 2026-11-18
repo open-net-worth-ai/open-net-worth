@@ -5,6 +5,7 @@ import type { VisualBlock, VisualSpec, VisualTile } from '../../../types/chat'
 import { formatVisualValue } from './format'
 import { VisualChart } from './VisualChart'
 import { VisualDrawing } from './VisualDrawing'
+import { VisualMenu } from './VisualMenu'
 import { VisualDiverging, VisualProgress, VisualStack } from './VisualBars'
 
 class Guard extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -125,6 +126,7 @@ export function InlineVisual({ visual }: { visual: VisualSpec }) {
   const captions = isArr(visual.caption) ? visual.caption : []
   return (
     <section className="ivis" aria-label={visual.title || 'Visual'}>
+      <VisualMenu title={visual.title} drawingOnly={blocks.length === 0} />
       {visual.title && blocks.length > 0 && <h4 className="ivis-title">{visual.title}</h4>}
       {blocks.map((b, i) => (
         <Guard key={i}>{renderBlock(b, i)}</Guard>

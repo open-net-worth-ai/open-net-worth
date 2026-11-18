@@ -44,6 +44,7 @@
     "chart.js": "^4.5.1",
     "d3-sankey": "^0.12.3",
     "diff": "^9.0.0",
+    "html-to-image": "1.11.13",
     "lightweight-charts": "^5.2.0",
     "livekit-client": "2.15.8",
     "lucide-react": "^1.17.0",

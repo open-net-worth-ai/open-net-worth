@@ -39,20 +39,60 @@ export const MSG_RENDER = 'onw-visual-render'
 export const FRAME_URL = '/api/visuals/frame'
 
 export const MSG_MEASURE = 'onw-visual-measure'
+/** Copy / download (visualExport.ts): the chat asks, the frame answers with a data URL. */
+export const MSG_EXPORT = 'onw-visual-export'
+export const MSG_EXPORTED = 'onw-visual-exported'
+
+/** The frame's export: a drawing that is one SVG (no canvas) is serialized as that SVG, with
+ *  the frame's styles, theme and font inlined so it opens the same anywhere. Anything else
+ *  goes through html-to-image, whose browser build the chat posts in with the request. */
+const EXPORT = `
+  var exportIt=function(m){
+    var reply=function(o){o.type='${MSG_EXPORTED}';o.id=m.id;parent.postMessage(o,'*')};
+    var fail=function(err){reply({error:String(err&&err.message||err)})};
+    try{
+      var kids=[].filter.call(d.body.children,function(n){return n.tagName!=='SCRIPT'&&n.tagName!=='STYLE'});
+      var one=kids.length===1&&kids[0].tagName.toLowerCase()==='svg'&&!d.querySelector('canvas');
+      if(m.format==='svg'&&one){
+        var src=kids[0],svg=src.cloneNode(true),bb=src.getBoundingClientRect();
+        var st=d.createElementNS('http://www.w3.org/2000/svg','style');
+        st.textContent=[].map.call(d.querySelectorAll('style'),function(s){return s.textContent}).join(' ');
+        svg.insertBefore(st,svg.firstChild);
+        svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+        svg.setAttribute('data-mode',d.documentElement.getAttribute('data-mode')||'light');
+        svg.setAttribute('width',Math.round(bb.width));svg.setAttribute('height',Math.round(bb.height));
+        svg.setAttribute('style',(d.documentElement.getAttribute('style')||'')+';font-family:'+getComputedStyle(d.body).fontFamily);
+        reply({dataUrl:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg))});
+        return}
+      if(!window.htmlToImage)(0,eval)(m.lib);
+      var fn=m.format==='svg'?window.htmlToImage.toSvg:window.htmlToImage.toPng;
+      // html-to-image copies computed styles but not the style sheet, and it misses what SVG
+      // shapes get from classes (class="s1" -> var(--series-1)): their fills came out black.
+      // Write each SVG node's resolved paint and type onto it for the copy, then put it back.
+      var props=['fill','stroke','stroke-width','stroke-dasharray','opacity','fill-opacity','stroke-opacity','font-family','font-size','font-weight','text-anchor','dominant-baseline'];
+      var saved=[].map.call(d.body.querySelectorAll('svg, svg *'),function(n){
+        var cs=getComputedStyle(n),was=n.getAttribute('style');
+        n.setAttribute('style',props.map(function(p){return p+':'+cs.getPropertyValue(p)}).join(';')+';'+(was||''));
+        return [n,was]});
+      var restore=function(){saved.forEach(function(s){if(s[1]===null)s[0].removeAttribute('style');else s[0].setAttribute('style',s[1])})};
+      fn(d.body,{backgroundColor:m.bg,pixelRatio:2}).then(function(u){restore();reply({dataUrl:u})},function(err){restore();fail(err)});
+    }catch(err){fail(err)}
+  };`
 
 /** The frame's own script: report height whenever the drawing's size changes or the chat asks
  *  (a report sent before the chat listens is lost — live, a long transcript left drawings at
- *  their starting height for ~10s), and take theme updates. Runs before the drawing's markup
- *  so a drawing that throws still reports its height. */
+ *  their starting height for ~10s), take theme updates, and export itself on request. Runs
+ *  before the drawing's markup so a drawing that throws still reports its height. */
 const BRIDGE = `
 (function(){
   var d=document;
   var height=function(){var b=d.body,h=d.documentElement;
     return Math.ceil(Math.max(h.scrollHeight,b?b.scrollHeight:0,b?b.getBoundingClientRect().bottom:0))};
-  var send=function(){parent.postMessage({type:'${MSG_HEIGHT}',height:height()},'*')};
+  var send=function(){parent.postMessage({type:'${MSG_HEIGHT}',height:height()},'*')};${EXPORT}
   window.addEventListener('message',function(e){
     if(e.source!==parent||!e.data)return;
     if(e.data.type==='${MSG_MEASURE}'){send();return}
+    if(e.data.type==='${MSG_EXPORT}'){exportIt(e.data);return}
     if(e.data.type!=='${MSG_THEME}')return;
     var s=d.documentElement.style,v=e.data.vars||{};
     for(var k in v)s.setProperty(k,v[k]);
