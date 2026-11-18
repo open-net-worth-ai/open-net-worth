@@ -49,11 +49,11 @@ def _swallowed(provider="CoreWeave"):
     ]
 
 
-def _real_call(provider="OpenInference"):
-    tc = NS(index=0, id="call_1", function=NS(name="search_docs", arguments='{"query": "x"}'))
+def _real_call(provider="OpenInference", *, finish="tool_calls", arguments='{"query": "x"}'):
+    tc = NS(index=0, id="call_1", function=NS(name="search_docs", arguments=arguments))
     return [
         _chunk(content=" ", tool_calls=[tc], provider=provider),
-        _chunk(finish="tool_calls", provider=provider, usage=_usage(25)),
+        _chunk(finish=finish, provider=provider, usage=_usage(25)),
     ]
 
 
@@ -188,4 +188,26 @@ async def test_a_failed_retry_falls_back_to_the_empty_round():
     completions = _Completions(_swallowed(), fail_after_first=RuntimeError("No endpoints found"))
     events = await _events(_provider(completions))
     assert len(completions.calls) == 2
+    assert events[-1] == {"type": "done", "stop_reason": "end_turn"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("finish", "expected"),
+    [("stop", "tool_use"), ("length", "max_tokens"), ("content_filter", "end_turn")],
+)
+async def test_structured_tool_call_finish_reason(finish, expected):
+    events = await _events(_provider(_Completions(_real_call(finish=finish))))
+
+    assert [event for event in events if event["type"] == "tool_use"] == [
+        {"type": "tool_use", "id": "call_1", "name": "search_docs", "input": {"query": "x"}}
+    ]
+    assert events[-1] == {"type": "done", "stop_reason": expected}
+
+
+@pytest.mark.asyncio
+async def test_clean_stop_does_not_dispatch_a_call_with_incomplete_arguments():
+    completions = _Completions(_real_call(finish="stop", arguments='{"query":'))
+    events = await _events(_provider(completions))
+
     assert events[-1] == {"type": "done", "stop_reason": "end_turn"}

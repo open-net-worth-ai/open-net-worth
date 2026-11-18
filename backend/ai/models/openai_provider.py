@@ -786,12 +786,16 @@ class OpenAIProvider(AIProvider):
             "duration_ms": (_time.monotonic() - _t0) * 1000.0,
         }
 
+        complete_tool_calls = bool(tool_acc)
         for slot in tool_acc.values():
             try:
                 parsed = json.loads(slot["args"]) if slot["args"] else {}
             except json.JSONDecodeError:
                 log.warning("tool_use args not valid JSON  tool=%s", slot.get("name"))
                 parsed = {}
+                complete_tool_calls = False
+            if not slot["id"] or not slot["name"] or not isinstance(parsed, dict):
+                complete_tool_calls = False
             yield {
                 "type": "tool_use",
                 "id": slot["id"],
@@ -799,6 +803,10 @@ class OpenAIProvider(AIProvider):
                 "input": parsed,
             }
 
+        # Some compatible endpoints send complete calls with a plain "stop".
+        # Leave truncation and content filtering on their existing paths.
+        if finish_reason == "stop" and complete_tool_calls:
+            stop_reason = "tool_use"
         yield {"type": "done", "stop_reason": stop_reason}
 
     async def complete(
