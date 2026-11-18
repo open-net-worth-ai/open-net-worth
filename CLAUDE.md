@@ -307,6 +307,10 @@ One line each — full reasoning and the scar behind each is in
   open without it) — server-owned, not request-owned; a second call mid-turn enqueues.
 - A transcript is a table of messages (`session_messages`), not a JSON column. NEVER
   `batch_alter_table("sessions")` — the CASCADE deletes every message.
+- A FINISHED conversation (`/messages` → `live: false`) is shown exactly as the server's transcript —
+  never add a "which copy is richer" rule for it; a sent message is known by its `client_message_id`
+  (`clientId`, a resend answers `duplicate`), and a busy-time send fails visibly, never "queued" forever
+  (ADR `2026-11-18-a-finished-conversation-is-the-servers-transcript`).
 - "Unread" is a finished turn after the session meta's `last_read_at` (`POST /api/sessions/read`),
   never browser storage — a read on any client clears every client (ADR
   `2026-10-03-conversation-read-state-lives-on-the-server`).

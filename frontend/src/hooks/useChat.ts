@@ -7,11 +7,19 @@ import {
   applyRestoreResult,
   completeUnfinishedTail,
   loadMessages,
-  reconcileWithRemote,
   repairCutReplies,
   withRestoreMarks,
 } from '../utils/chatStore'
 import { fetchRevision, forgetRevision, syncedRevision } from '../utils/chatRevision'
+import { syncWithServer, type ServerSync } from '../utils/chatServerSync'
+import {
+  failQueued,
+  noteSending,
+  noteSent,
+  payloadFor,
+  settleOutbox,
+  withdrawQueued,
+} from '../state/chatOutbox'
 import { blockCount, contentCount } from '../utils/chatBubbles'
 import { authFetch } from '../api/client'
 import {
@@ -62,11 +70,11 @@ async function catchUp(
   ownerId: string,
   local: Message[] | null,
   knownChanged: boolean,
-): Promise<Message[] | null> {
-  if (!knownChanged) return reconcileWithRemote(ownerId, local)
+): Promise<ServerSync | null> {
+  if (!knownChanged) return syncWithServer(ownerId, local)
   chatSessions.apply(ownerId, (s) => (s.catchingUp ? s : { ...s, catchingUp: true }))
   try {
-    return await reconcileWithRemote(ownerId, local)
+    return await syncWithServer(ownerId, local)
   } finally {
     chatSessions.apply(ownerId, (s) => (s.catchingUp ? { ...s, catchingUp: false } : s))
   }
@@ -106,28 +114,35 @@ function pickFresher(fresher: Message[], prev: Message[]): Message[] {
   )
 }
 
-/** Adopt the transcript re-read that ends an attach, unless a fresher attach owns the view. */
-function adoptReconciled(ownerId: string, full: Message[] | null): void {
-  // NOT gated on `cancelled`: the attach ending is what flips the slice idle,
-  // which can drop `shouldAttach` and run the effect's teardown before the read
-  // lands. After a suspension that read is the ONLY copy of the reply — dropping
-  // it left a phone showing just the user's message (live report 2026-10-14). A
-  // fresher attach is caught below by `streaming`, the check that means it.
-  if (!full) return
-  // A reconcile is a point-in-time HTTP snapshot. If a FRESHER attach has
-  // already resumed streaming by the time it resolves — this connection's own
-  // teardown is what triggered the reconcile in the first place, e.g. a queued
-  // send forcing attachGen to force a fresh reconnect — that live stream is the
-  // current authoritative source, never a snapshot that may predate it and
-  // still be mid-flux around whatever the live stream is now handling. Adopting
-  // it anyway showed messages in the wrong relative order for as long as it
-  // took the NEXT reconcile to correct it (live report 2026-08-10: a queued
-  // message visibly jumped above the response it was queued under, then
-  // settled back once the whole exchange finished).
-  if (chatSessions.getSlice(ownerId).status === 'streaming') {
-    return forgetRevision(ownerId)
+/** Adopt a transcript re-read, unless a fresher attach owns the view. A FINISHED
+ *  conversation (`authoritative`) is shown exactly as the server has it and settles the
+ *  outbox; one still being written goes through the old richness check, since this
+ *  browser's live copy can be ahead of that snapshot. A re-read that changed nothing on
+ *  screen forgets its stamp, so the next return looks again rather than trusting a
+ *  revision whose content was never shown (live report 2026-11-18: a rejected read
+ *  recorded its stamp, and every later return skipped the re-read as "unchanged").
+ *
+ *  NOT gated on the caller's `cancelled`: the attach ending is what flips the slice idle,
+ *  which can drop `shouldAttach` and run the effect's teardown before the read lands.
+ *  After a suspension that read is the ONLY copy of the reply (live report 2026-10-14).
+ *  A fresher attach is caught by `streaming` instead: a reconcile is a point-in-time
+ *  snapshot, and a live stream that has already resumed is the authority over it —
+ *  adopting the snapshot anyway once showed a queued message jump above the response it
+ *  was queued under (live report 2026-08-10). */
+function adoptReconciled(ownerId: string, sync: ServerSync | null): void {
+  if (!sync) return
+  // `sending` too: a POST in flight added its message after this snapshot was taken.
+  const now = chatSessions.getSlice(ownerId)
+  if (now.status === 'streaming' || now.sending) return forgetRevision(ownerId)
+  if (sync.authoritative && sync.messages) {
+    const finished = sync.messages
+    setMessages(ownerId, () => finished)
+    settleOutbox(ownerId, sync.received)
+    return
   }
-  setMessages(ownerId, (prev) => pickFresher(full, prev))
+  const fresher = sync.messages
+  if (!fresher) return forgetRevision(ownerId)
+  setMessages(ownerId, (prev) => pickFresher(fresher, prev))
 }
 
 /** Paint a send that never reached the server: the failure IS assistant output, so it gets
@@ -229,12 +244,12 @@ export function useChat(
         // see reconcileWithRemote. Silent: nothing is known to have changed yet.
         return catchUp(conversationId, loaded, false)
       })
-      .then((fresher) => {
-        if (!fresher) return
+      .then((sync) => {
+        if (!sync) return
         if (cancelled) return forgetRevision(conversationId)
-        // Only adopt it if nothing else has touched the conversation meanwhile — a turn
-        // the user started while this was in flight owns the state now.
-        setMessages(conversationId, (prev) => pickFresher(fresher, prev))
+        // A turn the user started while this was in flight owns the state now — the
+        // adopt stands aside for it (`streaming` / `sending`).
+        adoptReconciled(conversationId, sync)
       })
     return () => {
       cancelled = true
@@ -373,18 +388,15 @@ export function useChat(
               ? { ...s, status: 'idle', startedAt: undefined }
               : { ...s, startedAt: undefined },
           )
-          // Backfill against the transcript. Pass the REAL cache, not null — reconcileWithRemote's
-          // own "never truncates" gate needs it (passing null made it treat the cache as
-          // empty and always hand back the server's lossier reconstruction).
-          void reconcileWithRemote(ownerId, chatSessions.getSlice(ownerId).messages).then(
-            (full) => {
-              adoptReconciled(ownerId, full)
-              // A fresher attach owns the view and will settle the send when IT ends.
-              if (chatSessions.getSlice(ownerId).status !== 'streaming') {
-                settleUnconfirmedSend(ownerId)
-              }
-            },
-          )
+          // Backfill against the transcript. Pass the REAL cache, not null — a turn still
+          // being written goes through the "never truncates" check, which needs it.
+          void syncWithServer(ownerId, chatSessions.getSlice(ownerId).messages).then((sync) => {
+            adoptReconciled(ownerId, sync)
+            // A fresher attach owns the view and will settle the send when IT ends.
+            if (chatSessions.getSlice(ownerId).status !== 'streaming') {
+              settleUnconfirmedSend(ownerId)
+            }
+          })
         }
       }
     })()
@@ -429,15 +441,50 @@ export function useChat(
       }
       void resyncIfChanged(ownerId)
     }
+    // `focus` too: an installed iOS app can resume with focus and no visibilitychange
+    // (live report 2026-11-18 — its timers ran again a minute before any visibility event).
     document.addEventListener('visibilitychange', onReturn)
     window.addEventListener('pageshow', onReturn)
     window.addEventListener('online', onReturn)
+    window.addEventListener('focus', onReturn)
     return () => {
       document.removeEventListener('visibilitychange', onReturn)
       window.removeEventListener('pageshow', onReturn)
       window.removeEventListener('online', onReturn)
+      window.removeEventListener('focus', onReturn)
     }
   }, [conversationId])
+
+  // The server's word on what is running, from the app-wide live poll — the recovery that
+  // needs no browser event at all. A view still following a turn the server says has
+  // ended holds a stream that died without a word (a phone suspended mid-turn): reconnect,
+  // which ends at once and re-reads the finished transcript. A turn that just LEFT the live
+  // set re-reads too, in case its end never reached this view. Both are plain timers, so
+  // they run however the app came back (live report 2026-11-18).
+  const wasLiveRef = useRef(false)
+  const lastRescueRef = useRef(0)
+  useEffect(() => {
+    wasLiveRef.current = false
+  }, [conversationId])
+  useEffect(() => {
+    if (!conversationId) return
+    const ownerId = conversationId
+    const s = chatSessions.getSlice(ownerId)
+    const isLive = liveSessions.includes(ownerId)
+    const leftLive = wasLiveRef.current && !isLive
+    wasLiveRef.current = isLive
+    if (!s.hydrated || isLive) return
+    if (s.status !== 'streaming') {
+      if (leftLive) void resyncIfChanged(ownerId)
+      return
+    }
+    const now = Date.now()
+    // A poll answered before the turn began can land after this view started following it.
+    if (now - (s.startedAt ?? now) < STALE_STREAM_AWAY_MS) return
+    if (now - lastRescueRef.current < STALE_STREAM_AWAY_MS) return
+    lastRescueRef.current = now
+    chatSessions.apply(ownerId, (x) => ({ ...x, attachGen: x.attachGen + 1 }))
+  }, [liveSessions, conversationId])
 
   const sendMessage = useCallback(
     async (
@@ -451,6 +498,9 @@ export function useChat(
       skills: string[] = [],
       screen: ScreenSnapshotWire | null = null,
       retry = false,
+      // Resending an outbox message: the SAME id, so a server that had it after all
+      // answers "duplicate" instead of running it twice.
+      clientId?: string,
     ) => {
       if (!silent && !text.trim() && attachments.length === 0) return
       // Captured ONCE, here — never re-read from `conversationId` again in this call. If
@@ -467,7 +517,7 @@ export function useChat(
       // same reason; this is the belt to its braces.
       if (busy && !multiTurnEnabled) return
       const wasAlreadyStreaming = _slice.status === 'streaming'
-      const messageId = uuid()
+      const messageId = clientId ?? uuid()
 
       if (!silent) {
         chatSessions.apply(ownerId, (s) => ({
@@ -488,6 +538,16 @@ export function useChat(
         const msg: Message = { id: messageId, role: 'user', text, attachments }
         if (busy) {
           addQueuedMessage(ownerId, { ...msg, pending: 'queued' as const })
+          noteSending(messageId, {
+            text,
+            attachments,
+            effort,
+            model,
+            mentions,
+            respondingAgent,
+            skills,
+            screen,
+          })
         } else {
           addUserMessage(ownerId, msg)
         }
@@ -549,6 +609,21 @@ export function useChat(
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const ack = (await res.json()) as { accepted?: string }
+        noteSent(messageId)
+        if (ack?.accepted === 'duplicate') {
+          // The server already holds this message (a resend after a lost response). Nothing
+          // new runs; the transcript — which names it — settles where it sits.
+          // Not busy: this send's own `sending`/`startedAt` end here. Busy: the running
+          // turn's `startedAt` is left alone.
+          chatSessions.apply(ownerId, (s) =>
+            busy ? { ...s, sending: false } : { ...s, sending: false, startedAt: undefined },
+          )
+          forgetRevision(ownerId)
+          void syncWithServer(ownerId, chatSessions.getSlice(ownerId).messages).then((sync) =>
+            adoptReconciled(ownerId, sync),
+          )
+          return
+        }
         // `accepted` decides where this message lives, and ignoring it stranded messages in
         // the tray forever. The client's `busy` is its own belief; the SERVER decides. It
         // answers "queued" only when a turn really was running to inject into — otherwise
@@ -597,10 +672,12 @@ export function useChat(
       } catch (err) {
         chatSessions.apply(ownerId, (s) => ({ ...s, sending: false, startedAt: undefined }))
         if (busy) {
-          // The message never reached the server — leave its pending chip up rather than
-          // clear it as if delivered. The RUNNING turn (opened by someone else's send) is
-          // untouched; only its OWN bubble/status would need error handling, and this send
-          // never had one.
+          // Nothing confirmed this message reached the server: it shows as failed, with
+          // Retry — never as "queued" forever (live report 2026-11-18). If it did land after
+          // all, the server delivers it into the running turn, or the next finished
+          // transcript names it, and either one takes it out of the outbox. The RUNNING turn
+          // (opened by an earlier send) is untouched.
+          failQueued(ownerId, messageId)
           return
         }
         if (err instanceof TypeError) {
@@ -819,6 +896,41 @@ export function useChat(
     )
   }, [conversationId, sendMessage])
 
+  /** Resend a failed outbox message exactly as it was first sent, under its own id. */
+  const retryQueued = useCallback(
+    (messageId: string) => {
+      const ownerId = conversationId
+      const queued = chatSessions.getSlice(ownerId).queuedMessages.find((m) => m.id === messageId)
+      const sent = payloadFor(messageId)
+      if (!queued) return
+      withdrawQueued(ownerId, messageId)
+      const p = sent ?? {
+        text: queued.text,
+        attachments: queued.attachments ?? [],
+        effort: 'medium',
+        model: '',
+        mentions: [],
+        respondingAgent: null,
+        skills: [],
+        screen: null,
+      }
+      void sendMessage(
+        p.text,
+        p.attachments,
+        p.effort,
+        false,
+        p.model,
+        p.mentions,
+        p.respondingAgent,
+        p.skills,
+        p.screen,
+        false,
+        messageId,
+      )
+    },
+    [conversationId, sendMessage],
+  )
+
   // Fetch the impact preview for a checkpoint (what restoring would change). Returns
   // { gone: true } if the checkpoint no longer exists (aged out / removed).
   const previewCheckpoint = useCallback(async (checkpointId: string) => {
@@ -892,6 +1004,7 @@ export function useChat(
     resolvePendingToolUse,
     stopStreaming,
     retryLast,
+    retryQueued,
     // Retry replays the last message THIS browser sent, so there has to be one. An
     // Automation conversation never has one — the scheduler opened the turn — and now that
     // a failed turn renders its error on reload, the Retry button beside it would render

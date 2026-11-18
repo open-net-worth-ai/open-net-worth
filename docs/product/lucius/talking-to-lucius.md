@@ -6,7 +6,7 @@ order: 20
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/mentions, lucius/permissions, lucius/models-and-cost]
-keywords: [chat, prompting, visual, visuals, chart, graph, timeline, response detail, brief, detailed, short answers, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone, upload, file types, supported files, excel, xlsx, xls, csv, ofx, qif, word, docx]
+keywords: [chat, queued, not delivered, retry, catch up, sync, prompting, visual, visuals, chart, graph, timeline, response detail, brief, detailed, short answers, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone, upload, file types, supported files, excel, xlsx, xls, csv, ofx, qif, word, docx]
 ---
 
 # How to talk to Lucius
@@ -216,6 +216,15 @@ something, the retry adds your message again so Lucius still knows what was done
   **Detailed** (the reasoning and the figures behind it too).
 - **Multi-turn chat** — let you send another message while Lucius is still answering; it's
   woven into the same reply. Off, **Send** waits until he's done.
+
+A message sent while he's answering shows **Queued** until he reads it. If he finishes without
+reading it, for example because your phone dropped the connection as you sent it, it says
+**Not delivered** with a **Retry** button instead of staying queued. Retry is safe even if the
+message did arrive: he won't answer it twice.
+
+Once Lucius has finished, every device shows the conversation exactly as the server saved it. A
+phone that slept through the end of an answer catches up when it wakes, even if it missed the
+reply as it streamed in, and so does an app you closed and reopened.
 
 ## The conversation list
 

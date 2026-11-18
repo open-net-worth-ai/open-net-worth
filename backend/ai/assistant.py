@@ -617,6 +617,21 @@ def _store():
 
 _DURABLE_OVERRIDE_KEY = "_onw_durable_content_override"
 
+# The id the sending client gave a user message (``client_message_id``), kept on the
+# stored entry so the rendered transcript can name it (``clientId``). It is how a client
+# knows — exactly, never by matching text — that the server holds a message it sent, so a
+# send whose reply was lost in transit is settled by the next transcript read.
+CLIENT_ID_KEY = "_onw_client_id"
+
+
+def client_ids_in(history: List[dict]) -> set[str]:
+    """Every client message id already in this transcript."""
+    return {
+        str(entry[CLIENT_ID_KEY])
+        for entry in history
+        if isinstance(entry, dict) and entry.get(CLIENT_ID_KEY)
+    }
+
 
 def _apply_durable_overrides(history: List[dict]) -> List[dict]:
     """Swap any message's temporarily dispatch-resolved content (e.g. an expanded image
@@ -2290,6 +2305,8 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                 counter += 1
                 msg = {"id": f"{session_id}-{counter}", "role": "user", "text": content}
                 _carry_ts(msg, entry)
+                if entry.get(CLIENT_ID_KEY):
+                    msg["clientId"] = str(entry[CLIENT_ID_KEY])
                 if automation_brief and not messages:
                     msg["automationBrief"] = automation_brief
                 _carry_checkpoint(msg, checkpoint_id, i)
@@ -2401,6 +2418,8 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                 counter += 1
                 msg = {"id": f"{session_id}-{counter}", "role": "user", "text": text}
                 _carry_ts(msg, entry)
+                if entry.get(CLIENT_ID_KEY):
+                    msg["clientId"] = str(entry[CLIENT_ID_KEY])
                 if automation_brief and not messages:
                     msg["automationBrief"] = automation_brief
                 if attachments:
@@ -3241,7 +3260,13 @@ def _drain_injected_messages(
         for qm in queued:
             clean = sanitize_untrusted(qm.text)
             fenced = fence_untrusted_block(_USER_MSG_FENCE_LABEL, clean, nonce)
-            history.append({"role": "user", "content": [{"type": "text", "text": fenced}]})
+            history.append(
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": fenced}],
+                    CLIENT_ID_KEY: qm.client_id,
+                }
+            )
             # Returned only after durable save + queue ack below. Ordering it first makes the
             # frontend place the user bubble before this message's skill activity.
             delivery_events.append({"type": "message_delivered", "message_id": qm.client_id})
@@ -4136,7 +4161,9 @@ async def _run_turn(
                 _active_skill_entries.append(_active_entry)
         _recovered_skill_events: list[dict] = []
         for queued in recovered_injections:
-            history.append({"role": "user", "content": queued.text})
+            history.append(
+                {"role": "user", "content": queued.text, CLIENT_ID_KEY: queued.client_id}
+            )
             _turn_user_idx = len(history) - 1
             for queued_invocation in queued.direct_invocations:
                 request = skill_runtime.InvocationRequest(

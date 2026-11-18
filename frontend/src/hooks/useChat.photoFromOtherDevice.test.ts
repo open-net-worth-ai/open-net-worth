@@ -21,6 +21,7 @@ vi.mock('../utils/chatStore', () => ({
   withRestoreMarks: (target: Message[]) => target,
   completeUnfinishedTail: () => null,
 }))
+vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 
 import { useChat } from './useChat'
 import { authFetch } from '../api/client'

@@ -395,6 +395,7 @@ export function ChatPanel({
     setConversationModel,
     messages,
     queuedMessages,
+    retryQueued,
     hydrated,
     catchingUp,
     streaming,
@@ -1601,6 +1602,7 @@ export function ChatPanel({
               // marker reads as sent, and "sent" is a claim about what the model has seen —
               // it must not be made for a message still sitting in the queue.
               message={msg}
+              onRetryQueued={retryQueued}
               onSendMessage={(text) =>
                 sendMessage(
                   text,

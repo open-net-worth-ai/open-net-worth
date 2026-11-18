@@ -28,6 +28,7 @@ vi.mock('../utils/chatStore', () => ({
   reconcileWithRemote: vi.fn().mockResolvedValue(null),
   saveMessages: vi.fn(),
 }))
+vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 
 // ── Import after mocks ─────────────────────────────────────────────────────────
 

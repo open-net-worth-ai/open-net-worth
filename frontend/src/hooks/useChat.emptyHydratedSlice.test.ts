@@ -34,6 +34,7 @@ vi.mock('../utils/chatStore', () => ({
   reconcileWithRemote: (...a: unknown[]) => reconcileWithRemote(...a),
   saveMessages: vi.fn(),
 }))
+vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 
 import { useChat } from './useChat'
 
