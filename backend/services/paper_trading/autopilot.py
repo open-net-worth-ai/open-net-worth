@@ -48,6 +48,12 @@ DEFAULT = {
     "running_since": None,
     # What Lucius recorded with record_autopilot_memo during the running review.
     "memo_draft": None,
+    # Why the next review runs early ("Review now", "ACME fell 6.1% today"), and why the running
+    # one is running; None = its schedule.
+    "pending_trigger": None,
+    "running_trigger": None,
+    # {reason key: day} — each trigger starts at most one review a day.
+    "trigger_seen": {},
     "failures": 0,
     "paused_reason": None,
     "runs": [],
@@ -165,8 +171,32 @@ def run_soon(pid: str) -> dict:
             raise ConflictError("A review is already running.")
         if a["paused_reason"]:  # Review now on a paused autopilot resumes it
             a.update(paused_reason=None, failures=0)
-        a.update(next_run_at=_now().isoformat())
+        a.update(next_run_at=_now().isoformat(), pending_trigger="Review now")
         return _save(row, a, conn=conn)
+
+
+def trigger(pid: str, reasons: dict[str, str]) -> bool:
+    """Start a review early for the reasons not seen yet today (op "autopilot_trigger").
+    Returns whether one was started."""
+    from backend.services.paper_trading import service
+
+    today = user_now().date().isoformat()
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        row = service.portfolio(pid, conn=conn)
+        a = of(row)
+        if row.get("status") != "active" or a["mode"] != "auto" or a["paused_reason"]:
+            return False
+        seen = {k: d for k, d in (a.get("trigger_seen") or {}).items() if d == today}
+        new = {k: r for k, r in reasons.items() if k not in seen}
+        if not new or a["running_since"]:
+            return False
+        a.update(
+            next_run_at=_now().isoformat(),
+            pending_trigger="; ".join(new.values()),
+            trigger_seen={**seen, **{k: today for k in new}},
+        )
+        _save(row, a, conn=conn)
+        return True
 
 
 # ── runs (op "autopilot_run") ───────────────────────────────────────────────────────────────
@@ -201,7 +231,10 @@ def start(pid: str, now: datetime) -> dict | None:
         if running and now - datetime.fromisoformat(running) < STALE_RUN:
             return None
         a.update(
-            running_since=now.isoformat(), next_run_at=next_slot(a["cadence"], now).isoformat()
+            running_since=now.isoformat(),
+            next_run_at=next_slot(a["cadence"], now).isoformat(),
+            running_trigger=a.get("pending_trigger"),
+            pending_trigger=None,
         )
         return _save(row, a, conn=conn)
 
@@ -227,6 +260,8 @@ def finish(pid: str, record: dict) -> dict:
             "status": status,
             "memo": str(draft.get("memo") or "")[:MAX_MEMO],
             "watching": str(draft.get("watching") or "")[:MAX_WATCHING] or None,
+            # Why it ran: its schedule (None), "Review now", or what moved.
+            "trigger": a.get("running_trigger"),
             # What it ran on, so two models' reviews can be compared.
             "model": record.get("model") or "",
             "effort": record.get("effort") or "medium",
@@ -239,6 +274,7 @@ def finish(pid: str, record: dict) -> dict:
             paused = "Paused after two failed reviews in a row. Turn it on again to resume."
         a.update(
             running_since=None,
+            running_trigger=None,
             memo_draft=None,
             failures=failures,
             paused_reason=paused,

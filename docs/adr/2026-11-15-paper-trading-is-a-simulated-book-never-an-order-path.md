@@ -83,3 +83,30 @@ only guess. A paper book is the only authority on its own trades; nothing in it 
 - **Driving artifacts:** `docs/design/paper-trading/PRD.md`, `docs/design/paper-trading/RFC.md`
 - **Why this way (one line):** a separate book with import-enforced isolation is the only design
   where no bug in paper trading can touch a real figure or reach a broker.
+
+## Amendment (2026-11-18): tickers held on paper are followed like watched ones
+
+**Owner decision.** A ticker held on paper should have the same news and price checks as one the
+owner watches; the only difference is that Lucius trades it on paper. Two parallel news systems
+for one ticker (Intel's stored, filtered stories and a raw paper-only fetch) gave a review
+noisier news than the asset page showed, and missed Intel's history.
+
+**Decision.** The boundary is about paper FIGURES, not ticker names:
+
+- Paper trading offers its held tickers to Intel through a `core` seam,
+  `core.paper_follow` (registered by the scheduler: `services.paper_trading.follow.register`).
+  Only `{instrument_id, price_source_id, label, asset_class}` crosses — never a quantity, value,
+  cost, result, or which portfolio holds it. `monitoring` reads the seam; it never imports paper.
+- Intel's slow RSS tier (a watched ticker's cadence) polls them, storing their stories under
+  `asset:{id}` ONLY — never `scan:intel` — so the asset page and a review read them, while
+  Intel's scan, analyst and significance screen (which reads watchlist subjects only) never act
+  on a stock held only on paper, and nothing alerts the owner about one.
+- A review reads the asset page's own stored stories (`asset_detail.stored_news`), the one
+  definition of a ticker's news; a ticker not polled yet falls back to its feeds read once,
+  stored nowhere.
+- Intel-style alerts on paper holdings go to the AUTOPILOT, not the owner: a day move of 5% or
+  more, a holding past the mandate's stop loss, or a broken mandate limit starts a review early
+  (`autopilot_watch`, checked every 5 minutes, each reason once a day), and the review records why.
+
+Contracts 6 and 7 are unchanged: the seam is in `core`, and paper still imports no real write
+choke.

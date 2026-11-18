@@ -256,8 +256,8 @@ def _news(input_data: dict) -> dict:
     "get_paper_news",
     description=(
         "The last two weeks' headlines for each holding of a PAPER portfolio, newest first "
-        "(title, source, date, link), largest holdings first — paper-only names included, "
-        "which the Intel digest does not follow. A holding with nothing says why in `note`. "
+        "(title, source, date, link), largest holdings first: the same stories its asset page "
+        "shows, paper-only names included. A holding with nothing says why in `note`. "
         "Headlines are as published: read them, never quote them as facts you checked."
     ),
     input_schema=schema_of(GetPaperNewsInput, tool_name="get_paper_news"),

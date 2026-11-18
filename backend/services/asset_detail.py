@@ -175,6 +175,34 @@ def _live_news_for_instrument(
     return [cluster[0] for cluster in clusters]
 
 
+def stored_news(inst: dict) -> list[dict]:
+    """The asset page's own news for an instrument row: its stored stories through the same
+    relevance and quality filters (``_live_news_for_instrument``). One definition of "the news
+    for a ticker" — a paper autopilot review reads exactly this."""
+    symbol = inst.get("symbol") or ""
+    price_source_id = inst.get("price_source_id") or ""
+    inst_label = inst.get("name") or symbol or ""
+    # Only include `price_source_id` in `relevance_terms` when it's genuinely a DIFFERENT string
+    # from the ticker — i.e. actually name-shaped, not a redundant copy of the symbol.
+    relevance_terms = list(
+        dict.fromkeys(
+            t
+            for t in (
+                inst.get("name"),
+                price_source_id if price_source_id.casefold() != symbol.casefold() else None,
+            )
+            if t
+        )
+    )
+    relevance_tickers = [t for t in (symbol,) if t]
+    return _live_news_for_instrument(
+        inst.get("id") or "",
+        inst_label,
+        relevance_terms=relevance_terms,
+        relevance_tickers=relevance_tickers,
+    )
+
+
 def _cached_snapshot(inst: dict | None) -> dict:
     """The instrument's last batched-quote snapshot, cache-only (no network on a page read)."""
     from backend.services.prices import cached_quote_snapshot
@@ -1240,26 +1268,7 @@ def read_asset_detail(
     # `read_asset_detail`'s own construction of it against a REAL instrument row). Only include
     # `price_source_id` in `relevance_terms` when it's genuinely a DIFFERENT string from the
     # ticker — i.e. actually name-shaped, not a redundant copy of the symbol.
-    symbol = inst.get("symbol") or ""
-    price_source_id = inst.get("price_source_id") or ""
-    inst_label = inst.get("name") or symbol or ""
-    relevance_terms = list(
-        dict.fromkeys(
-            t
-            for t in (
-                inst.get("name"),
-                price_source_id if price_source_id.casefold() != symbol.casefold() else None,
-            )
-            if t
-        )
-    )
-    relevance_tickers = [t for t in (symbol,) if t]
-    news = _live_news_for_instrument(
-        instrument_id,
-        inst_label,
-        relevance_terms=relevance_terms,
-        relevance_tickers=relevance_tickers,
-    )
+    news = stored_news(inst)
     key_issues = _coerce_sources(brief.get("key_issues") or [])
 
     raw_facts = brief.get("facts") or {}

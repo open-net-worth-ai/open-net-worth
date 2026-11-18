@@ -423,7 +423,8 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
                   <p className="paper-ap-watching">Watching: {r.watching}</p>
                 )}
                 <div className="a3-muted">
-                  Ran on {modelLabel(r.model)} • {effortLabel(r.effort)}
+                  {r.trigger ? `Started by: ${r.trigger}` : 'Started on schedule'} • Ran on{' '}
+                  {modelLabel(r.model)} • {effortLabel(r.effort)}
                 </div>
                 {r.orders.length > 0 && (
                   <ul className="paper-ap-trades">

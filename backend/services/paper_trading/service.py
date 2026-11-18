@@ -768,6 +768,10 @@ def apply_paper_change(change: dict) -> dict:
                 change.get("id"), change.get("memo"), change.get("watching")
             )
         }
+    if op == "autopilot_trigger":
+        from backend.services.paper_trading import autopilot
+
+        return {"started": autopilot.trigger(change.get("id"), change.get("reasons") or {})}
     if op == "autopilot_run_now":
         from backend.services.paper_trading import autopilot
 

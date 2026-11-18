@@ -1,12 +1,11 @@
 """Recent headlines for a paper portfolio's holdings — what an autopilot review reads.
 
-Intel follows the owner's REAL and watched holdings; a paper-only name (one bought only on paper)
-has no stored news, so a review saw nothing for it (2026-11-18). This reads each holding's own
-feeds instead — the same Google News and Yahoo addresses Intel resolves for a holding
-(``services.feeds.resolve_holding_feeds``), fetched over the SSRF-guarded pinned client — and
-stores NOTHING: Intel never learns what is held on paper (ADR 2026-11-15-paper-trading-is-a-
-simulated-book-never-an-order-path). The addresses are built here from the holding, never chosen
-by the model. A feed that fails is skipped, and says so."""
+One definition of "the news for a ticker": the asset page's own stored stories, through its
+relevance and quality filters (``services.asset_detail.stored_news``). A ticker held on paper is
+followed by Intel like a watched one (``core.paper_follow``), so its stories are there within a
+poll. Until then — a ticker bought minutes ago — this reads the same feeds Intel would
+(``services.feeds.resolve_holding_feeds``, the addresses built here from the holding, never by
+the model) over the SSRF-guarded pinned client, and stores nothing; a feed that fails says so."""
 
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ from email.utils import parsedate_to_datetime
 
 from backend.core.pinned_http import pinned_urlopen
 from backend.db.instrument_store import InstrumentStore
-from backend.services import feeds
+from backend.services import asset_detail, feeds
 
 logger = logging.getLogger(__name__)
 
@@ -96,23 +95,66 @@ def _holding_feeds(holding: dict) -> list[str]:
     return [f["url"] for f in feeds.resolve_holding_feeds(row) if f.get("url")]
 
 
+def _stored(holding: dict, now: datetime) -> list[dict]:
+    """The asset page's stored stories for this holding, newest few of the last two weeks."""
+    key = holding["asset_key"]
+    inst = InstrumentStore().find_by_id(key[5:]) if key.startswith("inst:") else None
+    if not inst:
+        return []
+    out = []
+    for item in asset_detail.stored_news(inst):
+        try:
+            when = datetime.fromisoformat(
+                str(item.get("published_at") or "").replace("Z", "+00:00")
+            )
+        except ValueError:
+            continue
+        when = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+        if now - when > MAX_AGE:
+            continue
+        out.append(
+            {
+                "title": item.get("title") or "",
+                "source": item.get("source") or item.get("domain") or "",
+                "published": when.date().isoformat(),
+                "url": item.get("url") or "",
+            }
+        )
+    out.sort(key=lambda h: h["published"], reverse=True)
+    return out[:PER_HOLDING]
+
+
 def for_holdings(holdings: list[dict], now: datetime | None = None) -> list[dict]:
     """``[{symbol, name, headlines: [{title, source, published, url}], note}]`` — the newest few
-    headlines of the last two weeks per holding, largest holdings first."""
+    headlines of the last two weeks per holding, largest holdings first: the stored, filtered
+    stories when there are any, else the holding's feeds read now."""
     now = now or datetime.now(timezone.utc)
     ranked = sorted(holdings, key=lambda h: -(h.get("value_home") or 0))[:MAX_HOLDINGS]
-    plans = [(h, _holding_feeds(h)) for h in ranked]
+    stored = {h["asset_key"]: _stored(h, now) for h in ranked}
+    plans = [(h, [] if stored[h["asset_key"]] else _holding_feeds(h)) for h in ranked]
     urls = sorted({u for _h, us in plans for u in us})
     with ThreadPoolExecutor(max_workers=6) as pool:
         fetched = dict(zip(urls, pool.map(_fetch, urls)))
     out = []
     for h, us in plans:
+        if stored[h["asset_key"]]:
+            out.append(
+                {
+                    "symbol": h.get("symbol"),
+                    "name": h.get("name"),
+                    "headlines": stored[h["asset_key"]],
+                    "note": None,
+                }
+            )
+            continue
         got = [fetched[u] for u in us]
         items = [i for g in got if g for i in g]
         heads = _headlines(items, now)
         note = None
-        if not us:
+        if not us and h.get("kind") not in ("listed", "fund_nav", "crypto"):
             note = "No news feed for this kind of asset."
+        elif not us:
+            note = "No headlines in the last two weeks."
         elif all(g is None for g in got):
             note = "Its news feeds could not be read just now."
         elif not heads:

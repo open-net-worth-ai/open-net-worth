@@ -105,16 +105,24 @@ The **Autopilot** tab's switch sets who trades a paper portfolio:
 
 Autopilot needs a mandate: it is what you approve in advance. Every review:
 
-- reads the portfolio, then checks the last two weeks' headlines for each holding (from its own
-  news feeds, so a name you hold only on paper is covered too; nothing is saved to Intel), your
-  investment thesis for each one that has it, and the chart and company figures of anything that
-  moved a lot or is near a limit, before it decides anything;
+- reads the portfolio, then checks the last two weeks' headlines for each holding (the same
+  stories its asset page shows), your investment thesis for each one that has it, and the chart
+  and company figures of anything that moved a lot or is near a limit, before it decides
+  anything;
 - ends with a memo Lucius writes for you, plus what he is watching next. A review that ends
   without one counts as failed;
 - trades only this paper portfolio, and reads nothing beyond prices, its holdings' headlines,
   your theses and Intel (no real accounts, no connectors, no web search or browsing);
 - can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
   such as a holding past its stop loss or over its cap.
+
+A review also starts early, between scheduled ones, when a holding moves 5% or more in a day,
+falls past the stop loss, or breaks a mandate limit (checked every few minutes, each reason once a
+day). These alerts go to Lucius, not to you; the review says what started it.
+
+A stock you hold on paper is followed like one you watch: Intel collects its news on the same
+schedule, and it shows on the stock's page. Only its name is shared; your paper positions and
+results never are, and Intel never alerts you about a stock you hold only on paper.
 
 Set **Schedule**, **Model** and **Instructions** (anything Lucius should keep in mind) on the
 left. **Model** picks what each review runs on, and its effort: **Default** follows Settings →

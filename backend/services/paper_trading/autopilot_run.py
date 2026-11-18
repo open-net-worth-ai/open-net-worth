@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from backend.core.automation_runner import (
     AutomationApprovalContext,
@@ -73,6 +73,10 @@ def prompt(row: dict) -> str:
     ]
     if a["instructions"]:
         lines.append(f"The owner's standing instructions: {a['instructions']}")
+    if a.get("running_trigger"):
+        lines.append(
+            f"This review was started early because: {a['running_trigger']}. Look at that first."
+        )
     lines += [
         "",
         "Do this:",
@@ -170,10 +174,25 @@ def _orders_since(pid: str, started: datetime) -> list[dict]:
     return out
 
 
+# How often the triggers are checked (the scheduler's pass runs every minute).
+WATCH_EVERY = timedelta(minutes=5)
+_last_watch: list[datetime | None] = [None]
+
+
 async def run_due() -> list[dict]:
-    """The scheduler's pass: review every due auto portfolio, one after another."""
+    """The scheduler's pass: check the triggers every few minutes, then review every due Auto
+    portfolio, one after another."""
     if not feature_flags.enabled("paper_trading"):
         return []
+    now = _now()
+    if _last_watch[0] is None or now - _last_watch[0] >= WATCH_EVERY:
+        _last_watch[0] = now
+        from backend.services.paper_trading import autopilot_watch
+
+        try:
+            await asyncio.to_thread(autopilot_watch.check, now)
+        except Exception:  # noqa: BLE001 — a failed check never stops the due reviews
+            logger.exception("autopilot watch failed")
     out = []
     for row in autopilot.due(_now()):
         out.append({"id": row["id"], **(await review(row["id"]))})

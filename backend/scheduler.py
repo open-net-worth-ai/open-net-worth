@@ -762,6 +762,14 @@ def start() -> None:
         misfire_grace_time=3600,
         max_instances=1,
     )
+    # Tickers held on paper are followed by Intel like watched ones, by name only
+    # (core.paper_follow; ADR 2026-11-15-paper-trading-…, amended 2026-11-18).
+    try:
+        from backend.services.paper_trading import follow as paper_follow
+
+        paper_follow.register()
+    except Exception as exc:
+        logger.exception("scheduler: paper follow registration failed: %s", exc)
     # Paper autopilot — each Auto portfolio's due review (and any "Review now"), one at a time.
     _scheduler.add_job(
         _run_paper_autopilot,
