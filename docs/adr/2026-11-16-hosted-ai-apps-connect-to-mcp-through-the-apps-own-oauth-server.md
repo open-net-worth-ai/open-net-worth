@@ -50,6 +50,12 @@ authorization server only for Flask and Django and lists no CIMD support.
   the owner turns on. The page says to deny a link someone sent. Each new grant notifies the owner;
   Settings lists and revokes grants; any password change, reset or removal, and any change of the
   public address, revokes every grant.
+- **The consent page shows the app's own icon**, which the server fetches from the app's verified
+  client host (never a host the page names), through the SSRF-guarded, DNS-pinned fetch with no
+  redirects: the domain's declared raster icon or `/favicon.ico`, same host only, sniffed as
+  PNG / ICO / JPEG / WebP (no SVG), at most 256 KB, cached a day. It is served back from our
+  origin with `nosniff` and a `default-src 'none'; sandbox` CSP. Nothing is stored on disk; no
+  icon means the app's initial.
 - **OAuth tokens open `/mcp` only.** While the server is available, `require_auth` hands `/mcp` to
   its own gate (which also answers the 401 that names the protected-resource metadata); no other
   route accepts an OAuth token.

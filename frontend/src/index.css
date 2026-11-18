@@ -2155,13 +2155,6 @@
   .consent-actions .btn-secondary {
     border-color: var(--line-strong);
   }
-  /* A disabled primary (Sign in before the password, Allow while sending) stays the primary
-     action, just dimmed — the app-wide disabled grey would make Deny look like the main one. */
-  .consent-form .btn-primary:disabled:not([aria-busy]) {
-    background: var(--cta);
-    color: var(--ink-on-cta);
-    opacity: 0.35;
-  }
   .consent-foot {
     margin: 0;
     color: var(--faint);

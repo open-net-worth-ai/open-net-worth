@@ -55,7 +55,7 @@ it('names the app by the server label and its host, with a warning about forward
 
 it('asks to sign in first when this browser has no recent sign-in', async () => {
   let signedIn = false
-  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+  fetchMock.mockImplementation((url: string) => {
     if (url === '/api/auth/login') {
       signedIn = true
       return json(200, { ok: true })

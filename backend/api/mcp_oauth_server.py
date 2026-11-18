@@ -16,12 +16,12 @@ from typing import Optional
 from urllib.parse import unquote
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from backend.core import ratelimit
 from backend.core.errors import NotFoundError
-from backend.services.mcp_oauth import authorize, metadata, settings, tokens
+from backend.services.mcp_oauth import app_icon, authorize, metadata, settings, tokens
 from backend.services.mcp_oauth.clients import ClientRefused
 from backend.services.mcp_oauth.common import OAuthError
 
@@ -92,6 +92,31 @@ def consent_details(http: Request, request: str = ""):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     details["signed_in"] = authorize.signed_in_recently(http.cookies.get(_SESSION_COOKIE))
     return JSONResponse(details, headers={**_NO_STORE, **_FRAME_DENY})
+
+
+@router.get("/api/oauth/consent/icon")
+def consent_icon(request: str = ""):
+    """The asking app's icon, fetched by the server from the app's own verified domain. Served
+    with headers that keep it an image (raster only, no sniffing, no script)."""
+    _require_available()
+    try:
+        host = authorize.consent_details(request)["app_host"]
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    icon = app_icon.icon_for_host(host)
+    if icon is None:
+        raise HTTPException(status_code=404, detail="no icon")
+    data, mime = icon
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            **_FRAME_DENY,
+            "Cache-Control": "private, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; sandbox",
+        },
+    )
 
 
 class ConsentBody(BaseModel):

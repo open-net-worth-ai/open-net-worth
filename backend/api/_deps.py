@@ -76,8 +76,9 @@ _EXEMPT: set = {
     # single-use `state` staged by lunch_flow_pending.stage() is the credential, not a session.
     # The inbound MCP OAuth server (flag mcp_oauth). Discovery is public by design; authorize,
     # token and revoke are called by an app or a signed-out browser, and each carries its own
-    # credential (PKCE + code, refresh token, client secret). The consent API's approve call is
-    # credentialed by the password typed on the page. Every one 404s while the server is off.
+    # credential (PKCE + code, refresh token, client secret). The consent API checks for itself
+    # that the browser signed in within the last few minutes before it approves; its icon is the
+    # asking app's own favicon. Every one 404s while the server is off.
     ("GET", "/.well-known/oauth-protected-resource"),
     ("GET", "/.well-known/oauth-protected-resource/mcp"),
     ("GET", "/.well-known/oauth-authorization-server"),
@@ -86,6 +87,7 @@ _EXEMPT: set = {
     ("POST", "/oauth/revoke"),
     ("GET", "/api/oauth/consent"),
     ("POST", "/api/oauth/consent"),
+    ("GET", "/api/oauth/consent/icon"),
 }
 
 # ``/mcp`` has its own gate (``mcp/server._require_mcp_bearer``). While the MCP OAuth server is

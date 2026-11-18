@@ -56,7 +56,7 @@ export function ConsentPage() {
     <main className="oauth-consent">
       <div className="consent-card">
         {load.state === 'ready' && !load.details.signed_in ? (
-          <SignInStep details={load.details} onSignedIn={() => void reload()} />
+          <SignInStep request={request} details={load.details} onSignedIn={() => void reload()} />
         ) : null}
         {load.state === 'ready' && load.details.signed_in ? (
           <Decide
@@ -70,7 +70,7 @@ export function ConsentPage() {
         ) : null}
         {load.state !== 'ready' ? (
           <>
-            <Pairing appName={null} />
+            <Pairing app={null} />
             {load.state === 'loading' ? <Loading label="Opening…" /> : null}
             {load.state === 'leaving' ? <Loading label="Returning to the app…" /> : null}
             {load.state === 'gone' ? (
@@ -86,9 +86,11 @@ export function ConsentPage() {
   )
 }
 
-/** The one visual moment: this instance's mark, a locked link, and the app asking to connect. */
-function Pairing({ appName }: { appName: string | null }) {
+/** The one visual moment: this instance's mark, a locked link, and the app asking to connect —
+ * its own icon, which the server fetches from the app's verified domain, or its initial. */
+function Pairing({ app, request }: { app: ConsentDetails | null; request?: string }) {
   const brand = useBrand()
+  const [iconFailed, setIconFailed] = useState(false)
   return (
     <div className="consent-pair" aria-hidden="true">
       <span className="consent-pair__tile">
@@ -104,13 +106,29 @@ function Pairing({ appName }: { appName: string | null }) {
         </span>
       </span>
       <span className="consent-pair__tile consent-pair__tile--app">
-        {appName ? appName.charAt(0).toUpperCase() : ''}
+        {app && request && !iconFailed ? (
+          <img
+            src={`/api/oauth/consent/icon?request=${encodeURIComponent(request)}`}
+            alt=""
+            onError={() => setIconFailed(true)}
+          />
+        ) : app ? (
+          app.app_name.charAt(0).toUpperCase()
+        ) : null}
       </span>
     </div>
   )
 }
 
-function SignInStep({ details, onSignedIn }: { details: ConsentDetails; onSignedIn: () => void }) {
+function SignInStep({
+  request,
+  details,
+  onSignedIn,
+}: {
+  request: string
+  details: ConsentDetails
+  onSignedIn: () => void
+}) {
   const brand = useBrand()
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -131,7 +149,7 @@ function SignInStep({ details, onSignedIn }: { details: ConsentDetails; onSigned
 
   return (
     <form className="consent-form" onSubmit={submit}>
-      <Pairing appName={details.app_name} />
+      <Pairing app={details} request={request} />
       <header className="consent-head">
         <h1>Sign in to connect {details.app_name}</h1>
         <p>
@@ -218,7 +236,7 @@ function Decide({
 
   return (
     <form className="consent-form" onSubmit={submit}>
-      <Pairing appName={app} />
+      <Pairing app={details} request={request} />
       <header className="consent-head">
         <h1>Connect {app} to your book?</h1>
         <p>
