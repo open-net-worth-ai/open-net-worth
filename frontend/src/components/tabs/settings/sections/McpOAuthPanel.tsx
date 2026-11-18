@@ -9,8 +9,27 @@ import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { Badge, Btn, Field, row } from '../ds'
 import type { Toast } from '../ds'
+import { ConfirmDialog } from '../../../ui/ConfirmDialog'
+import type { ConfirmDialogData } from '../../../ui/ConfirmDialog'
 import { KEY, suggestedPublicUrl } from './mcpOAuth'
 import type { OAuthApp, OAuthClient, OAuthStatus } from './mcpOAuth'
+
+/** A pending confirmation: what the app's dialog shows, and what runs on Confirm. */
+type Ask = { data: ConfirmDialogData; run: () => void } | null
+
+function AskDialog({ ask, setAsk }: { ask: Ask; setAsk: (a: Ask) => void }) {
+  return (
+    <ConfirmDialog
+      data={ask?.data ?? null}
+      onConfirm={() => {
+        const run = ask?.run
+        setAsk(null)
+        run?.()
+      }}
+      onCancel={() => setAsk(null)}
+    />
+  )
+}
 
 interface Created {
   client_id: string
@@ -94,45 +113,58 @@ export function PublicUrl({
 }) {
   const [value, setValue] = useState(status.public_url || suggestedPublicUrl())
   const fromEnv = status.public_url_source === 'env'
-  async function save() {
-    if (
-      status.apps.length &&
-      value !== status.public_url &&
-      !window.confirm('Changing the address disconnects every connected app. Continue?')
-    )
+  const [ask, setAsk] = useState<Ask>(null)
+  function save() {
+    if (status.apps.length && value !== status.public_url) {
+      setAsk({
+        data: {
+          title: 'Change the public address?',
+          body: 'Every connected app is disconnected and has to be approved again.',
+          confirmLabel: 'Change address',
+          danger: true,
+        },
+        run: () => void put(),
+      })
       return
+    }
+    void put()
+  }
+  async function put() {
     const r = await send(`${KEY}/public-url`, 'PUT', { public_url: value })
     if (!r.ok) return toast(await detail(r))
     toast('Public address saved')
     refresh()
   }
   return (
-    <Field
-      label="Public HTTPS address"
-      help={
-        fromEnv
-          ? 'Set by ONW_PUBLIC_URL on the server.'
-          : !status.public_url && value && value === suggestedPublicUrl()
-            ? "Filled in from the address you're using now. It's saved only when you click Save."
-            : 'The address the internet reaches this instance at, like https://wealth.example.com.'
-      }
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          className="rd-input"
-          aria-label="Public HTTPS address"
-          value={value}
-          disabled={fromEnv}
-          placeholder="https://wealth.example.com"
-          onChange={(e) => setValue(e.target.value)}
-        />
-        {fromEnv ? null : (
-          <Btn size="xs" onClick={() => void save()} disabled={value === status.public_url}>
-            Save
-          </Btn>
-        )}
-      </div>
-    </Field>
+    <>
+      <AskDialog ask={ask} setAsk={setAsk} />
+      <Field
+        label="Public HTTPS address"
+        help={
+          fromEnv
+            ? 'Set by ONW_PUBLIC_URL on the server.'
+            : !status.public_url && value && value === suggestedPublicUrl()
+              ? "Filled in from the address you're using now. It's saved only when you click Save."
+              : 'The address the internet reaches this instance at, like https://wealth.example.com.'
+        }
+      >
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            className="rd-input"
+            aria-label="Public HTTPS address"
+            value={value}
+            disabled={fromEnv}
+            placeholder="https://wealth.example.com"
+            onChange={(e) => setValue(e.target.value)}
+          />
+          {fromEnv ? null : (
+            <Btn size="xs" onClick={save} disabled={value === status.public_url}>
+              Save
+            </Btn>
+          )}
+        </div>
+      </Field>
+    </>
   )
 }
 
@@ -145,8 +177,19 @@ export function ConnectedApps({
   refresh: () => void
   toast: Toast
 }) {
-  async function revoke(app: OAuthApp) {
-    if (!window.confirm(`Disconnect ${app.name} (${app.host})?`)) return
+  const [ask, setAsk] = useState<Ask>(null)
+  function revoke(app: OAuthApp) {
+    setAsk({
+      data: {
+        title: `Disconnect ${app.name}?`,
+        body: `${app.host} loses access to your book. It can connect again only if you approve it again.`,
+        confirmLabel: 'Disconnect',
+        danger: true,
+      },
+      run: () => void disconnect(app),
+    })
+  }
+  async function disconnect(app: OAuthApp) {
     const r = await send(`${KEY}/apps/${encodeURIComponent(app.grant_id)}`, 'DELETE')
     if (!r.ok) return toast(await detail(r))
     toast(`${app.name} disconnected`)
@@ -154,6 +197,7 @@ export function ConnectedApps({
   }
   return (
     <div>
+      <AskDialog ask={ask} setAsk={setAsk} />
       {apps.length === 0 ? (
         <span className="rd-help">No app is connected.</span>
       ) : (
@@ -167,7 +211,7 @@ export function ConnectedApps({
                 </Badge>
               </>,
               `${app.host} · connected ${when(app.connected_at)} · last used ${when(app.last_used_at)}`,
-              <Btn size="xs" variant="danger" onClick={() => void revoke(app)}>
+              <Btn size="xs" variant="danger" onClick={() => revoke(app)}>
                 Revoke
               </Btn>,
             )}
@@ -195,6 +239,7 @@ export function Credentials({
   const [redirect, setRedirect] = useState('')
   const [created, setCreated] = useState<Created | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [ask, setAsk] = useState<Ask>(null)
   async function create() {
     setError(null)
     const r = await send(`${KEY}/clients`, 'POST', { name, redirect_uris: [redirect.trim()] })
@@ -206,21 +251,31 @@ export function Credentials({
     setFormOpen(false)
     refresh()
   }
-  async function remove(c: OAuthClient) {
-    if (!window.confirm(`Delete the credentials for ${c.name}? Apps using them are disconnected.`))
-      return
+  function remove(c: OAuthClient) {
+    setAsk({
+      data: {
+        title: `Delete the client ID for ${c.name}?`,
+        body: 'Apps using it are disconnected and can no longer sign in with it.',
+        confirmLabel: 'Delete',
+        danger: true,
+      },
+      run: () => void destroy(c),
+    })
+  }
+  async function destroy(c: OAuthClient) {
     const r = await send(`${KEY}/clients/${encodeURIComponent(c.client_id)}`, 'DELETE')
     if (!r.ok) return toast(await detail(r))
     refresh()
   }
   return (
     <div className="mcp-cred">
+      <AskDialog ask={ask} setAsk={setAsk} />
       {clients.map((c) => (
         <div key={c.client_id} style={{ marginBottom: 8 }}>
           {row(
             c.name,
             c.redirect_uris.join(', '),
-            <Btn size="xs" variant="ghost" onClick={() => void remove(c)}>
+            <Btn size="xs" variant="ghost" onClick={() => remove(c)}>
               Delete
             </Btn>,
           )}

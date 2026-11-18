@@ -145,6 +145,7 @@ describe('Settings → MCP', () => {
     const toast = vi.fn()
     render(<McpPage toast={toast} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
     await waitFor(() => expect(calls).toEqual(['/api/mcp/oauth/apps/g1']))
     expect(toast).toHaveBeenCalledWith('Claude disconnected')
   })
