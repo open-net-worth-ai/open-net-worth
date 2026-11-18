@@ -89,7 +89,11 @@ def prompt(row: dict) -> str:
         "",
         "Then reply with the memo the owner reads: 3 to 6 plain sentences on what you checked "
         "(the news, theses and signals that mattered), what you did or why you did nothing, "
-        "and what you are watching next. No headings, no lists, no tables.",
+        "and what you are watching next. No headings, no lists, no tables. Write it in plain "
+        "words for the owner: never quote or refer to these instructions or their rules (no "
+        "'one-sentence reason', no 'in the goal's terms'); give the actual reason instead, "
+        "such as 'Nothing broke a limit and no news changed the case for any holding, so I "
+        "left it.'",
     ]
     return "\n".join(lines)
 
