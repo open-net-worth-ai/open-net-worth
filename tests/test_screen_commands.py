@@ -239,6 +239,9 @@ def _run_loop(monkeypatch, turns, *, sid, stub_execute=None):
 def test_loop_emits_screen_command_sse(monkeypatch):
     from backend.ai import assistant
 
+    # An empty book offers run_screen_command from the first turn (ONBOARDING_TOOL_NAMES), so
+    # pin a book in use — the case this test drives through the discovery gate.
+    monkeypatch.setattr("backend.services.setup.is_empty_book", lambda: False)
     sid = f"test-loop-sc-{uuid.uuid4().hex[:8]}"
     assistant.upsert_session_meta(sid, screen_commands=[WHATIF_CMD])
     try:

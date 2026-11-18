@@ -225,7 +225,7 @@ describe('the form footer', () => {
 
   it('Save and connect refreshes the page like the footer Save, so the badge follows the bot', async () => {
     const reload = vi.fn()
-    renderDetail({ ...saved, configured: false }, true, reload)
+    renderDetail(saved, true, reload)
     fireEvent.change(await screen.findByLabelText(/^Bot token/), { target: { value: '123:ABC' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save and connect' }))
     await waitFor(() => expect(reload).toHaveBeenCalled())

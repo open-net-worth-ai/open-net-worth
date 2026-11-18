@@ -28,7 +28,9 @@ _CLOSES_STDIN = (
 )
 
 
-@pytest.mark.parametrize("loop", ["asyncio", "uvloop"])
+# asyncio only: the server never runs on uvloop (SERVER_EVENT_LOOP, test_server_event_loop.py),
+# and on Linux uvloop's child keeps a copy of the pipe open, so the write never fails there.
+@pytest.mark.parametrize("loop", ["asyncio"])
 def test_a_closed_input_is_an_external_service_error_with_the_clis_reason(tmp_path, loop):
     async def run():
         session = LiveSession([sys.executable, "-c", _CLOSES_STDIN], {}, str(tmp_path))
