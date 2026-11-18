@@ -30,6 +30,7 @@ const instances = vi.hoisted(
 vi.mock('chart.js', () => {
   class FakeChart {
     static register = vi.fn()
+    static instances = {}
     update = vi.fn()
     resize = vi.fn()
     destroy = vi.fn()

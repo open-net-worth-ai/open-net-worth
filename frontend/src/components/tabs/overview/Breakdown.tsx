@@ -12,7 +12,8 @@
 // percentages.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ChartEvent } from 'chart.js'
+import { createPortal } from 'react-dom'
+import type { ChartEvent, TooltipOptions } from 'chart.js'
 import { useAmountsHidden, useMaskText } from '../../../utils/amountMask'
 import { fBase, fBaseCompact, fPct } from '../../../utils/format'
 import { OvChart, amountsHidden, kTick, resolveColor } from './charts'
@@ -215,10 +216,19 @@ function BreakdownDonut({
     return () => ro.disconnect()
   }, [])
   const valueText = fBaseCompact(total)
+  useAmountsHidden()
+  const sig = JSON.stringify([
+    total,
+    rows.map(({ key, label, value, color }) => [key, label, value, color]),
+  ])
+  const [hover, setHover] = useState<{ sig: string; index: number; x: number; y: number } | null>(
+    null,
+  )
+  const hoveredRow = hover?.sig === sig ? rows[hover.index] : undefined
   return (
     <div className="ov-breakdown-donut-wrap" ref={wrapRef} style={{ width: size, height: size }}>
       <OvChart
-        sig={'donut|' + total + '|' + rows.map((r) => r.key + r.value).join(',')}
+        sig={sig}
         config={{
           type: 'doughnut',
           data: {
@@ -248,8 +258,23 @@ function BreakdownDonut({
             plugins: {
               legend: { display: false },
               tooltip: {
-                callbacks: {
-                  label: (x: { dataIndex: number }) => tooltipLine(rows[x.dataIndex], total),
+                enabled: false,
+                external: ({
+                  chart,
+                  tooltip,
+                }: Parameters<TooltipOptions<'doughnut'>['external']>[0]) => {
+                  const point = tooltip.dataPoints?.[0]
+                  if (!tooltip.opacity || !point) {
+                    setHover(null)
+                    return
+                  }
+                  const bounds = chart.canvas.getBoundingClientRect()
+                  setHover({
+                    sig,
+                    index: point.dataIndex,
+                    x: bounds.left + tooltip.caretX,
+                    y: bounds.top + tooltip.caretY,
+                  })
                 },
               },
             },
@@ -263,6 +288,24 @@ function BreakdownDonut({
         <span className="ov-breakdown-donut-value money">{valueText}</span>
         <span className="ov-breakdown-donut-label">total</span>
       </div>
+      {/* The chart canvas and widget body both clip their contents. */}
+      {hover &&
+        hoveredRow &&
+        createPortal(
+          <div
+            role="tooltip"
+            className="ov-breakdown-tooltip"
+            style={{
+              left: `clamp(min(10rem + 8px, 50vw), ${hover.x}px, max(100vw - 10rem - 8px, 50vw))`,
+              ...(hover.y > window.innerHeight / 2
+                ? { bottom: window.innerHeight - hover.y + 8 }
+                : { top: hover.y + 8 }),
+            }}
+          >
+            {tooltipLine(hoveredRow, total)}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
