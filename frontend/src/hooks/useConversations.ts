@@ -421,6 +421,17 @@ export function mergeServerRows(
   return [...merged, ...prev.filter((c) => !seen.has(c.id))]
 }
 
+/** A chat promoted after the listing was requested is missing from it, not gone: keep its row. */
+function keepPromoted(
+  prev: ConversationMeta[],
+  merged: ConversationMeta[],
+  promoted: Set<string>,
+): ConversationMeta[] {
+  const listed = new Set(merged.map((c) => c.id))
+  const missing = prev.filter((c) => promoted.has(c.id) && !listed.has(c.id))
+  return missing.length ? [...missing, ...merged] : merged
+}
+
 /** `auto: true` marks a title this client derived itself (first message, placeholder,
  *  normalization). The server lets it yield to the AI-written title and to a rename, so a
  *  late automatic write can never replace either. Only a rename the person typed omits it. */
@@ -461,6 +472,10 @@ export function useConversations() {
       return new Map<string, ConversationMeta>(p ? [[p.id, p]] : [])
     })(),
   )
+  // Drafts this mount promoted with a first message. The boot listing can be requested before
+  // that message and land after it: the chat is then in neither the listing nor the pending
+  // marker, and reading it as a stale pointer jumped back to the previous conversation.
+  const promotedRef = useRef(new Set<string>())
   // A draft is deliberately absent from `conversations`, but its model is still live UI
   // state. Keep selections made in this mount separate from the server listing so an async
   // reconciliation cannot overwrite a picker choice before its first send persists it.
@@ -491,14 +506,20 @@ export function useConversations() {
         mintFirstConversation(sessions)
         return
       }
-      setConversations((prev) => mergeServerRows(prev, sessions, { keepLocalOnly: false }))
+      setConversations((prev) =>
+        keepPromoted(
+          prev,
+          mergeServerRows(prev, sessions, { keepLocalOnly: false }),
+          promotedRef.current,
+        ),
+      )
       const saved = activeIdRef.current || readActiveId()
       // A still-unpromoted draft never reaches the server, so it never appears in `sessions`
       // — that alone can't distinguish "stale pointer, fall back" from "you're mid-draft,
-      // keep it." The persisted pending marker can.
+      // keep it." The persisted pending marker can, and `promotedRef` once it has been sent.
       const pending = readPendingConversation()
-      const savedIsPendingDraft = !!pending && pending.id === saved
-      const active = sessions.some((s) => s.id === saved) || savedIsPendingDraft ? saved : first.id
+      const savedIsOurDraft = (!!pending && pending.id === saved) || promotedRef.current.has(saved)
+      const active = sessions.some((s) => s.id === saved) || savedIsOurDraft ? saved : first.id
       activeIdRef.current = active
       setActiveIdState(active)
       localStorage.setItem(ACTIVE_KEY, active)
@@ -507,7 +528,7 @@ export function useConversations() {
     function mintFirstConversation(serverRows: ConversationMeta[] = []) {
       const saved = activeIdRef.current || readActiveId()
       const pending = readPendingConversation()
-      if (pending && pending.id === saved) {
+      if ((pending && pending.id === saved) || promotedRef.current.has(saved)) {
         if (serverRows.length) {
           setConversations((prev) => mergeServerRows(prev, serverRows, { keepLocalOnly: true }))
         }
@@ -741,6 +762,7 @@ export function useConversations() {
     const pending = pendingConvsRef.current.get(id)
     if (!pending) return
     pendingConvsRef.current.delete(id)
+    promotedRef.current.add(id)
     writePendingConversation(null)
     // The placeholder is not a title: the send this precedes may name the conversation
     // server-side (the onboarding welcome's "Getting started"), and an automatic title
