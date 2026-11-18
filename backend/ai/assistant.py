@@ -4680,6 +4680,11 @@ async def _run_turn(
                                 "id": tu["id"],
                                 "name": tu["name"],
                                 "input": tu["input"],
+                                **(
+                                    {"google_thought_signature": tu["google_thought_signature"]}
+                                    if "google_thought_signature" in tu
+                                    else {}
+                                ),
                             }
                         )
                     if assistant_content:

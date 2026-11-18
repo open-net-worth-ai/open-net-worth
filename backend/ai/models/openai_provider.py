@@ -349,7 +349,9 @@ class OpenAIProvider(AIProvider):
         return out
 
     @staticmethod
-    def _messages_to_openai(messages: List[dict], system: str) -> list[dict]:
+    def _messages_to_openai(
+        messages: List[dict], system: str, *, gemini: bool = False
+    ) -> list[dict]:
         """Anthropic-shaped history → OpenAI chat messages.
 
         Anthropic content blocks (text / tool_use / tool_result) are flattened into
@@ -393,6 +395,11 @@ class OpenAIProvider(AIProvider):
                                 },
                             }
                         )
+                        signature = block.get("google_thought_signature")
+                        if gemini and isinstance(signature, str) and signature:
+                            tool_calls[-1]["extra_content"] = {
+                                "google": {"thought_signature": signature}
+                            }
                 msg: dict = {"role": "assistant", "content": "".join(text_parts) or None}
                 if tool_calls:
                     msg["tool_calls"] = tool_calls
@@ -495,7 +502,7 @@ class OpenAIProvider(AIProvider):
         effort: str = "medium",
     ) -> AsyncGenerator[dict, None]:
         client = self._get_client()
-        oai_messages = self._messages_to_openai(messages, system)
+        oai_messages = self._messages_to_openai(messages, system, gemini="gemini" in model.lower())
         # PROACTIVE strip: when we already know this model refuses image input, drop the
         # image parts BEFORE the call instead of paying a round trip (plus the base64
         # upload of every image still in history) to be told so. The reactive retry below
@@ -525,7 +532,8 @@ class OpenAIProvider(AIProvider):
         )
 
         # Accumulate streamed tool-call deltas by index → emit once complete.
-        tool_acc: dict[int, dict] = {}
+        tool_acc: dict[str | int, dict] = {}
+        tool_slots_by_index: dict[int, str | int] = {}
         finish_reason: Optional[str] = None
         # Usage fields — populated from the trailing usage chunk when
         # stream_options={"include_usage": True} is honoured by the endpoint. SUMMED
@@ -669,12 +677,25 @@ class OpenAIProvider(AIProvider):
                     #   - Ollama: generally mirrors OpenAI but may omit function on some deltas
                     for tc in getattr(delta, "tool_calls", None) or []:
                         delivered = True
-                        idx = getattr(tc, "index", 0) or 0
-                        slot = tool_acc.setdefault(
-                            idx, {"id": "", "name": "", "args": "", "_started": False}
+                        idx = getattr(tc, "index", None) or 0
+                        call_id = getattr(tc, "id", None)
+                        key = tool_slots_by_index.get(idx, idx)
+                        if call_id:
+                            # Gemini can omit the index on multiple distinct calls.
+                            # Keep their arguments and signatures attached to their IDs.
+                            if key == idx and idx in tool_acc and call_id not in tool_acc:
+                                tool_acc[call_id] = tool_acc.pop(idx)
+                            key = tool_slots_by_index[idx] = call_id
+                        slot = tool_acc.setdefault(key, {"id": "", "name": "", "args": ""})
+                        if call_id:
+                            slot["id"] = call_id
+                        extra = getattr(tc, "extra_content", None)
+                        google = extra.get("google") if isinstance(extra, dict) else None
+                        signature = (
+                            google.get("thought_signature") if isinstance(google, dict) else None
                         )
-                        if getattr(tc, "id", None):
-                            slot["id"] = tc.id
+                        if isinstance(signature, str) and signature:
+                            slot["google_thought_signature"] = signature
                         fn = getattr(tc, "function", None)
                         if fn is not None:
                             name = getattr(fn, "name", None) or ""
@@ -683,14 +704,6 @@ class OpenAIProvider(AIProvider):
                             args_frag = getattr(fn, "arguments", None) or ""
                             if args_frag:
                                 slot["args"] += args_frag
-                        # Emit tool_use_start exactly once, as soon as we have a name.
-                        if slot["name"] and not slot["_started"]:
-                            slot["_started"] = True
-                            yield {
-                                "type": "tool_use_start",
-                                "id": slot["id"],
-                                "name": slot["name"],
-                            }
                     if choice.finish_reason:
                         finish_reason = choice.finish_reason
             except BaseException:
@@ -786,19 +799,34 @@ class OpenAIProvider(AIProvider):
             "duration_ms": (_time.monotonic() - _t0) * 1000.0,
         }
 
-        for slot in tool_acc.values():
-            try:
-                parsed = json.loads(slot["args"]) if slot["args"] else {}
-            except json.JSONDecodeError:
-                log.warning("tool_use args not valid JSON  tool=%s", slot.get("name"))
-                parsed = {}
-            yield {
-                "type": "tool_use",
-                "id": slot["id"],
-                "name": slot["name"],
-                "input": parsed,
-            }
-
+        # Some compatible endpoints close a valid tool round with "stop" or
+        # without a finish reason. Validate the whole batch before emitting it
+        # so a partial call cannot be displayed, persisted, or executed.
+        if tool_acc and finish_reason in (None, "stop", "tool_calls"):
+            stop_reason = "end_turn"
+            calls = []
+            for slot in tool_acc.values():
+                try:
+                    parsed = json.loads(slot["args"]) if slot["args"] else {}
+                except json.JSONDecodeError as exc:
+                    log.warning(
+                        "tool_use args not valid JSON  tool=%s  error=%s", slot["name"], exc.msg
+                    )
+                    break
+                if not slot["id"] or not slot["name"] or not isinstance(parsed, dict):
+                    log.warning(
+                        "tool_use missing id, name, or argument object  tool=%s", slot["name"]
+                    )
+                    break
+                call = {"type": "tool_use", "id": slot["id"], "name": slot["name"], "input": parsed}
+                if "google_thought_signature" in slot:
+                    call["google_thought_signature"] = slot["google_thought_signature"]
+                calls.append(call)
+            else:
+                stop_reason = "tool_use"
+                for call in calls:
+                    yield {**call, "type": "tool_use_start"}
+                    yield call
         yield {"type": "done", "stop_reason": stop_reason}
 
     async def complete(

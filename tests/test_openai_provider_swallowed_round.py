@@ -49,11 +49,11 @@ def _swallowed(provider="CoreWeave"):
     ]
 
 
-def _real_call(provider="OpenInference"):
-    tc = NS(index=0, id="call_1", function=NS(name="search_docs", arguments='{"query": "x"}'))
+def _real_call(provider="OpenInference", *, finish="tool_calls", arguments='{"query": "x"}'):
+    tc = NS(index=0, id="call_1", function=NS(name="search_docs", arguments=arguments))
     return [
         _chunk(content=" ", tool_calls=[tc], provider=provider),
-        _chunk(finish="tool_calls", provider=provider, usage=_usage(25)),
+        _chunk(finish=finish, provider=provider, usage=_usage(25)),
     ]
 
 
@@ -189,3 +189,70 @@ async def test_a_failed_retry_falls_back_to_the_empty_round():
     events = await _events(_provider(completions))
     assert len(completions.calls) == 2
     assert events[-1] == {"type": "done", "stop_reason": "end_turn"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("finish", "expected"),
+    [
+        ("stop", "tool_use"),
+        (None, "tool_use"),
+        ("length", "max_tokens"),
+        ("content_filter", "end_turn"),
+    ],
+)
+async def test_structured_tool_call_finish_reason(finish, expected):
+    events = await _events(_provider(_Completions(_real_call(finish=finish))))
+
+    calls = [event for event in events if event["type"] in ("tool_use_start", "tool_use")]
+    if expected == "tool_use":
+        assert calls == [
+            {"type": kind, "id": "call_1", "name": "search_docs", "input": {"query": "x"}}
+            for kind in ("tool_use_start", "tool_use")
+        ]
+    else:
+        assert not calls
+    assert events[-1] == {"type": "done", "stop_reason": expected}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish", [None, "stop", "tool_calls"])
+async def test_incomplete_arguments_are_not_emitted(finish):
+    completions = _Completions(_real_call(finish=finish, arguments='{"query":'))
+    events = await _events(_provider(completions))
+
+    assert not any(event["type"].startswith("tool_use") for event in events)
+    assert events[-1] == {"type": "done", "stop_reason": "end_turn"}
+
+
+@pytest.mark.asyncio
+async def test_gemini_calls_without_indexes_keep_distinct_arguments_and_signatures():
+    first = NS(
+        id="call_1",
+        function=NS(name="list_accounts", arguments="{}"),
+        extra_content={"google": {"thought_signature": "signature"}},
+    )
+    second = NS(id="call_2", function=NS(name="find_tools", arguments='{"query":'))
+    tail = NS(id=None, function=NS(name=None, arguments='"accounts"}'))
+    events = await _events(
+        _provider(
+            _Completions(
+                [
+                    _chunk(tool_calls=[first, second]),
+                    _chunk(tool_calls=[tail], finish="stop"),
+                ]
+            )
+        )
+    )
+
+    assert [event for event in events if event["type"] == "tool_use"] == [
+        {
+            "type": "tool_use",
+            "id": "call_1",
+            "name": "list_accounts",
+            "input": {},
+            "google_thought_signature": "signature",
+        },
+        {"type": "tool_use", "id": "call_2", "name": "find_tools", "input": {"query": "accounts"}},
+    ]
+    assert events[-1] == {"type": "done", "stop_reason": "tool_use"}
