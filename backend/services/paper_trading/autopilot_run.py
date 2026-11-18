@@ -24,7 +24,7 @@ from backend.core.automation_runner import (
     reset_automation_approval,
 )
 from backend.core.headless_turn import get_runner
-from backend.services import feature_flags
+from backend.services.feature_flags import enabled as flag_enabled
 from backend.services.paper_trading import autopilot, mandate, service
 
 logger = logging.getLogger(__name__)
@@ -211,7 +211,7 @@ _last_watch: list[datetime | None] = [None]
 async def run_due() -> list[dict]:
     """The scheduler's pass: check the triggers every few minutes, then review every due Auto
     portfolio, one after another."""
-    if not feature_flags.enabled("paper_trading"):
+    if not flag_enabled("paper_trading"):
         return []
     now = _now()
     if _last_watch[0] is None or now - _last_watch[0] >= WATCH_EVERY:

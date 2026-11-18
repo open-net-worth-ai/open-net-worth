@@ -261,6 +261,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="paper_trading",
+        title="Paper Trading",
         description=(
             "Paper Trading: try trades with pretend money at real market prices, in "
             "Intelligence → Paper Trading or through Lucius, for shares, funds, crypto, metals, "
