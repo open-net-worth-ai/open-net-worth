@@ -6,7 +6,7 @@ order: 62
 audience: [user, operator]
 status: stable
 related: [operations/security-and-privacy, operations/exposing-beyond-localhost, connectors/external-mcp, features/settings]
-keywords: [mcp, claude desktop, claude code, cursor, vs code, chatgpt, cline, continue, stdio, onw mcp, api token, external client, copy config]
+keywords: [mcp, claude desktop, claude code, cursor, vs code, chatgpt, claude.ai, claude mobile, custom connector, oauth, connected apps, read-only, cline, continue, stdio, onw mcp, api token, external client, copy config]
 ---
 
 # Use your book from other AI apps
@@ -149,24 +149,75 @@ claude mcp add --transport http open-net-worth http://127.0.0.1:8080/mcp \
   --header "Authorization: Bearer your-api-token"
 ```
 
-## Set up ChatGPT or another hosted app
+## claude.ai, Claude on your phone and ChatGPT (sign in with OAuth)
 
-Hosted apps run on their provider's servers, so they can't start a program on your computer or
-reach `localhost`. They connect over HTTP to `<your address>/mcp` with the token as a Bearer
-header.
+**Experimental — off by default.** Turn on **Mcp oauth** under **Settings → Developer →
+Experimental** first (see [Experimental features](../features/settings.md#experimental-features)).
 
-1. Make your instance reachable at a public HTTPS address first — see
+claude.ai (web and mobile), Claude Desktop's **Add custom connector** and ChatGPT run on their
+provider's servers. They can't start a program on your computer or reach `localhost`, and they
+can't send your API token: they sign in with OAuth instead. You approve each app once, with your
+password, and choose whether it may only read or may also make changes.
+
+1. Make your instance reachable at a public HTTPS address — see
    [Exposing beyond localhost](exposing-beyond-localhost.md). (This needs a server install; the
    desktop app only accepts connections from its own computer.)
-2. Open the app through that public address, go to **Settings → MCP**, choose **ChatGPT** or
-   **Generic HTTP / remote**, and click **Copy config**.
-3. **ChatGPT:** **Settings → Connectors** (with Developer mode on) **→ Add custom connector**, and
-   enter the **MCP server URL** (`https://your-address/mcp`) and the Bearer token from the copied
-   text. **Other apps:** use the copied `url` and `Authorization: Bearer …` header.
+2. In **Settings → Security**, set a password if you haven't, and turn off **Don't ask for the
+   password on this computer**. Behind a reverse proxy or tunnel every visitor looks like "this
+   computer", so the connection is refused while it's on.
+3. In **Settings → MCP → Hosted apps**, enter your public address (for example
+   `https://wealth.example.com`) and click **Save**, or set `ONW_PUBLIC_URL` on the server. The
+   panel shows **On** when everything is ready, and lists what's missing when it isn't.
+4. Add the connector in the app, using the **Connector address** the panel shows
+   (`https://your-address/mcp`; **Copy** puts it on your clipboard):
+   - **claude.ai:** open **Connectors** (under **Customize** or **Settings**) and choose **Add
+     custom connector**. Leave the advanced OAuth fields empty. The connector also works in Claude
+     on your phone and in Claude Desktop.
+   - **ChatGPT:** with Developer mode on, add a custom MCP server (connector) with that URL and
+     choose OAuth.
+5. A page from your own address opens. Check the address bar and type your Open Net Worth
+   password. It confirms this one connection only: it doesn't sign that browser in to Open Net
+   Worth.
+6. The next page shows which app is asking and what it will be able to do. Choose **Allow read
+   access**, or turn on **Also let it make changes** first and choose **Allow read and write
+   access**.
+
+Only approve a request you started yourself, a moment ago, from your own account. If someone
+sends you a link to this page, choose **Deny**: approving it would connect *their* account to your
+book.
+
+**What happens after you approve**
+
+- **Read-only** apps see only the tools that read. They can't add, edit or delete anything, send
+  anything or run code. They can read everything a read tool reads, including past conversations
+  and the database through the SQL tool, but never a document marked Private.
+- **Read and write** apps can do what an app with your API token can (below).
+- **Neither** can use the tools of MCP servers you've connected to Open Net Worth (a broker's,
+  say): those stay Lucius's. A connected app sees only Open Net Worth's own tools.
+- You get a notification each time an app is connected.
+- **Settings → MCP → Hosted apps** lists every connected app, when it last used your book, and a
+  **Revoke** button.
+- Changing your password, or the public address, disconnects every app. So does an app reusing an
+  old sign-in token, which can mean the token was copied. You get a notification then too.
+- An app that stays unused for 30 days, or has been connected for 180 days, has to be approved
+  again.
+
+**Another hosted app.** If an app asks for a client ID and secret, create them in **Settings → MCP
+→ Hosted apps → App credentials**: enter the app's name and its redirect (callback) URL. The
+secret is shown once, with **Copy client ID** and **Copy secret** buttons. An app shows under
+**Connected apps** once it has finished signing in.
+
+**If your hosted app accepts a header instead.** Some apps let you set a fixed
+`Authorization: Bearer …` header. In **Settings → MCP**, choose **Generic HTTP / remote**, click
+**Copy config**, and use the copied `url` and header. That token has full access (see below).
+
+**Firewalls.** If you limit who can reach your address, allow Anthropic's outbound range
+(`160.79.104.0/21`) for Claude and OpenAI's published egress addresses for ChatGPT.
 
 ## What a connected app can do
 
-An app holding your API token **acts as you**: it can read your whole book and make changes.
+An app holding your API token, or approved with **Also let it make changes**, **acts as you**: it
+can read your whole book and make changes.
 
 - **No approval cards.** When Lucius wants to make a change that needs your approval, he shows you
   a card first. Other apps don't get those cards: a tool set to **Needs approval** runs straight

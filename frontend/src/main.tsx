@@ -18,6 +18,7 @@ import { initTheme } from './theme'
 import { Gallery } from './components/ui/Gallery.tsx'
 import { LazyApprovalCardGallery } from './components/chat/approval/LazyApprovalCardGallery.tsx'
 import { LazyPhoneSetupPage } from './components/phoneSetup/LazyPhoneSetupPage.tsx'
+import { LazyConsentPage } from './components/oauthConsent/LazyConsentPage.tsx'
 import { wireDataSource } from './lucius/adapters'
 import { onwDataSource, readEmbeddedDescriptors } from './lucius/onwDataSource'
 import { refreshFromAdapter, seedEntityRegistry } from './lucius/entityRegistry'
@@ -60,6 +61,9 @@ const showGallery = galleryParam !== null
 // /phone-setup?t=… is opened by a phone with no session (the QR in Settings → Phone shortcuts):
 // it renders before the sign-in gate, with the app's theme and design system but none of the app.
 const showPhoneSetup = window.location.pathname === '/phone-setup'
+// /oauth/consent?request=… is where a hosted AI app sends the owner to approve a connection
+// (flag mcp_oauth). Also before the sign-in gate: the password typed on the page approves.
+const showOAuthConsent = window.location.pathname === '/oauth/consent'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -69,6 +73,12 @@ createRoot(document.getElementById('root')!).render(
       ) : (
         <Gallery />
       )
+    ) : showOAuthConsent ? (
+      <ThemeProvider>
+        <ErrorBoundary label="connect an app">
+          <LazyConsentPage />
+        </ErrorBoundary>
+      </ThemeProvider>
     ) : showPhoneSetup ? (
       <ThemeProvider>
         <ErrorBoundary label="phone setup">

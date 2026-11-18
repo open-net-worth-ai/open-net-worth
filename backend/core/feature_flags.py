@@ -229,6 +229,21 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 17),
         remove_by=date(2027, 3, 1),
     ),
+    Flag(
+        name="mcp_oauth",
+        description=(
+            "Connect claude.ai, Claude on your phone, Claude Desktop's custom connectors and "
+            "ChatGPT to your book over the internet. They sign in with OAuth: you type your "
+            "password on a consent page and choose read-only or read and change. Needs a public "
+            "HTTPS address (Settings > MCP), a password, and \"Don't ask for the password on "
+            'this computer" off. Settings > MCP lists connected apps and revokes them. Off: '
+            "only the API token opens /mcp, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 16),
+        remove_by=date(2027, 3, 1),
+    ),
 )
 
 

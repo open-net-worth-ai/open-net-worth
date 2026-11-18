@@ -30,7 +30,29 @@ import json as _json
 from typing import Optional, Tuple
 
 from backend.ai.tools import TOOL_SCHEMAS, execute_tool
-from backend.ai.tools.registry import is_rest_send, mutated_domains
+from backend.ai.tools.registry import is_rest_send, may_change_something, mutated_domains
+
+# Every scope a caller can hold. The static API token holds both; an OAuth grant (flag
+# mcp_oauth) holds ``("read",)`` or both.
+ALL_SCOPES: tuple[str, ...] = ("read", "write")
+
+READ_ONLY_REFUSAL = (
+    "This connection is read-only, so it can't run {name}. To let this app make changes, "
+    "disconnect it in Settings > MCP and connect it again with changes allowed."
+)
+
+
+def tool_allowed(name: str, scopes: tuple[str, ...]) -> bool:
+    """THE scope seam for inbound MCP. ``write`` allows everything the static token can; without
+    it a tool runs only if it passes BOTH read-only classifiers: the client-facing annotation
+    (``readOnlyHint``) and the registry's own ``may_change_something`` (which also counts any
+    tool it doesn't know). Decided per call, so a REST tool registered at runtime is judged when
+    it is used (ADR 2026-11-16-hosted-ai-apps-connect-to-mcp-through-the-apps-own-oauth-server)."""
+    if "write" in scopes:
+        return True
+    if "read" not in scopes:
+        return False
+    return _annotations_for(name).get("readOnlyHint") is True and not may_change_something(name)
 
 
 def _annotations_for(name: str) -> dict:
@@ -78,6 +100,8 @@ _SIDE_EFFECT_NO_DOMAIN: frozenset[str] = frozenset(
         "run_script",
         "run_code",
         "run_screen_command",
+        # Writes a skill and its script file when no approval card can be shown (inbound MCP).
+        "save_code_as_skill",
         # An Automation run's own task list — turn-ephemeral, like the scope changes above.
         "add_run_tasks",
         "update_run_task",
@@ -101,7 +125,7 @@ _DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
 )
 
 
-def mcp_tool_descriptors() -> list[dict]:
+def mcp_tool_descriptors(scopes: tuple[str, ...] = ALL_SCOPES) -> list[dict]:
     """The MCP ``tools/list`` payload: ``{name, description, inputSchema, annotations}`` per tool.
 
     The offered set is the WHOLE registry — a Bearer-authenticated caller is the operator, and
@@ -116,13 +140,18 @@ def mcp_tool_descriptors() -> list[dict]:
             "annotations": _annotations_for(t["name"]),
         }
         for t in TOOL_SCHEMAS
+        if tool_allowed(t["name"], scopes)
     ]
     descriptors.sort(key=lambda d: d["name"])
     return descriptors
 
 
 async def call_tool(
-    name: str, arguments: dict, *, surface: str = "api_token"
+    name: str,
+    arguments: dict,
+    *,
+    surface: str = "api_token",
+    scopes: tuple[str, ...] = ALL_SCOPES,
 ) -> Tuple[str, Optional[dict]]:
     """Dispatch an MCP ``tools/call`` to the tool registry.
 
@@ -137,6 +166,9 @@ async def call_tool(
     ``{"error": "unknown tool: …"}`` sentinel.
     """
     from backend.core.audit_context import clear_audit_scope, set_audit_scope
+
+    if not tool_allowed(name, scopes):
+        return _json.dumps({"ok": False, "error": READ_ONLY_REFUSAL.format(name=name)}), None
 
     if not mutated_domains(name):
         # A read costs no checkpoint and no audit row, but it IS still attributed: the

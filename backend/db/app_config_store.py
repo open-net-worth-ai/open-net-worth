@@ -107,6 +107,7 @@ AI_SPEND_BUDGET_KEY = "ai_spend_budget_usd"
 # get_backup_retention_days()/set_backup_retention_days() below.
 BACKUP_ENABLED_FLAG = "backup_enabled"
 BACKUP_RETENTION_DAYS_KEY = "backup_retention_days"
+MCP_PUBLIC_URL_KEY = "mcp_public_url"
 DEFAULT_BACKUP_RETENTION_DAYS = 30
 
 # Unattended-write notification toggle (Settings > Permissions). Default TRUE (opt-out, not
@@ -242,6 +243,18 @@ class AppConfigStore(NamespacedSettingsStore):
             raw[BACKUP_RETENTION_DAYS_KEY] = clamped
             self.save(raw, conn=conn)
         return clamped
+
+    def get_mcp_public_url(self) -> str:
+        """The stored public https origin for hosted AI apps ("" when unset). Validation lives
+        in ``services.mcp_oauth.settings`` — this is data access only."""
+        return str(self._read_raw().get(MCP_PUBLIC_URL_KEY) or "")
+
+    def set_mcp_public_url(self, value: str) -> str:
+        with self._use_conn(None) as conn:
+            raw = self._read_raw(conn=conn)
+            raw[MCP_PUBLIC_URL_KEY] = value
+            self.save(raw, conn=conn)
+        return value
 
     def get_turn_time_limit_s(self) -> Optional[int]:
         """The stored turn time limit in seconds (``0`` = no limit), or ``None`` when unset."""

@@ -477,6 +477,12 @@ class Settings:
     # unless a self-hoster who understands what a shell on this machine means turns it on.
     terminal_enabled: bool = field(default_factory=lambda: _env_bool("ONW_TERMINAL_ENABLED", False))
 
+    # ── Public address for hosted AI apps (ONW_PUBLIC_URL) ──────────────────────
+    # The https origin claude.ai / ChatGPT reach this instance at. The ONLY source of every URL
+    # the OAuth server publishes (flag mcp_oauth) — never the request's Host. Settings > MCP
+    # can store one too; this env value wins when set (services.mcp_oauth.public_url).
+    public_url: str = field(default_factory=lambda: os.environ.get("ONW_PUBLIC_URL", "").strip())
+
     # ── Turn lifetime (concurrent-conversations RFC Phase 3) ────────────────────
     # Wall-clock bound on one server-owned turn (backend.ai.turns). Not a spend cap — an
     # idle/no-event watchdog was considered and rejected (a legitimately long tool call,

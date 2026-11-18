@@ -276,7 +276,6 @@ READ_ONLY_TOOLS = frozenset(
         # Validates/normalizes against read-only reference options; it never reaches the
         # Automation mutation choke or any store write.
         "preview_automation",
-        "save_code_as_skill",
         # Federates providers_for_country() + per-bank list_institutions() (Enable Banking
         # only — GoCardless, restored 2026-11-02, is deliberately NOT federated: its bank list
         # caches a token, and new signups are closed) — pure reads. Enable Banking's
@@ -327,4 +326,9 @@ NO_DOMAIN_WRITE_TOOLS: dict[str, str] = {
     "run_code": "sandboxed subprocess, no store access; staging is an in-memory dict",
     # Documented in CLAUDE.md as ZERO store writes — ephemeral UI state pushed over SSE.
     "run_screen_command": "ephemeral UI state only, no store writes",
+    # NOT a read (security review of the mcp_oauth branch, 2026-11-16): it stages its own card,
+    # and wherever no card can be shown — an approval's redemption, or an inbound MCP caller —
+    # it writes a skill and its script file (``_apply_code_skill``). Listed here, not given
+    # ``mutates=("skills",)``, so the chat path's own card stays the only card.
+    "save_code_as_skill": "self-staged; once applied writes a skill + script file",
 }

@@ -1955,12 +1955,274 @@
     margin-top: 6px;
     width: 100%;
   }
-  /* /phone-setup — the page a phone opens from Settings → Phone shortcuts (no session). The
-     shell only: Container centres it, ui/ primitives draw everything inside. */
-  .phone-setup {
+  /* /phone-setup — the page a phone opens from Settings → Phone shortcuts (no session) — and
+     /oauth/consent, where a hosted AI app sends the owner to approve a connection. The shell
+     only: Container centres it, ui/ primitives draw everything inside. */
+  .phone-setup,
+  .oauth-consent {
     min-height: 100dvh;
     padding: calc(var(--safe-t) + var(--space-8)) calc(var(--safe-r) + var(--space-6))
       calc(var(--safe-b) + var(--space-9)) calc(var(--safe-l) + var(--space-6));
+  }
+  /* The consent page is a sign-in moment, so it wears the login card: centred, one surface, the
+     instance's mark on top. The pairing is the only flourish; everything below it stays quiet. */
+  .oauth-consent {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    background: var(--bg);
+  }
+  .consent-card {
+    width: min(540px, 100%);
+    /* Centred like the sign-in card; auto margins (not align-items: center) so a card taller
+       than the screen still scrolls from its top. */
+    margin: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    padding: 36px 40px 28px;
+  }
+  .consent-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .consent-pair {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 4px 0 2px;
+  }
+  .consent-pair__tile {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    flex: none;
+  }
+  .consent-pair__tile img {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+  }
+  .consent-pair__tile--app {
+    color: var(--ink);
+    font-size: 22px;
+    font-weight: 650;
+  }
+  .consent-pair__link {
+    position: relative;
+    width: 72px;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--faint) 0 4px, transparent 4px 8px);
+  }
+  .consent-pair__lock {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--good);
+  }
+  .consent-head {
+    text-align: center;
+  }
+  .consent-head h1 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 21px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+  .consent-head p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .consent-head strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .consent-scope {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg);
+    padding: 18px 20px;
+  }
+  .consent-scope__title {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .consent-scope ul {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .consent-can,
+  .consent-cannot {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .consent-can {
+    color: var(--ink);
+  }
+  .consent-can svg {
+    color: var(--good);
+    flex: none;
+    margin-top: calc((1.45em - 15px) / 2);
+  }
+  .consent-cannot {
+    color: var(--faint);
+  }
+  .consent-cannot svg {
+    flex: none;
+    margin-top: calc((1.45em - 15px) / 2);
+  }
+  /* Title and switch on one line, the explanation full width under them. */
+  .consent-scope__switch {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 16px;
+    row-gap: 3px;
+    margin: 16px -6px -2px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--hover-surface);
+  }
+  .consent-scope__switch label {
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 550;
+  }
+  .consent-scope__switch p {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--faint);
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .consent-warn {
+    margin: 0;
+    padding: 11px 14px;
+    border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--warn) 7%, transparent);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .consent-password {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .consent-password label {
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 550;
+  }
+  .consent-error {
+    margin: 0;
+    color: var(--bad);
+    font-size: 13px;
+  }
+  /* Always stacked, full width, Allow on top: the label changes length with the switch, and a
+     row of two would have to wrap or squeeze on narrower cards. */
+  .consent-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .consent-actions > * {
+    width: 100%;
+  }
+  .consent-actions .btn-primary {
+    order: -1;
+  }
+  .consent-actions .btn-secondary {
+    border-color: var(--line-strong);
+  }
+  .consent-foot {
+    margin: 0;
+    color: var(--faint);
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+  }
+  /* Settings → MCP → Hosted apps: the status line, the address to paste, and where to paste it. */
+  .mcp-hosted-status {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .mcp-hosted-status__head {
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-size: 13.5px;
+    font-weight: 550;
+  }
+  .mcp-hosted-url {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .mcp-hosted-url .rd-input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+  .mcp-hosted-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0 16px 0 34px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .mcp-hosted-list strong {
+    color: var(--ink);
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  /* A phone (often claude.ai's in-app browser): no card frame, edge to edge, and the two
+     buttons stacked full width with Allow on top, where the thumb is. */
+  @media (max-width: 480px) {
+    .oauth-consent {
+      padding-left: calc(var(--safe-l) + 20px);
+      padding-right: calc(var(--safe-r) + 20px);
+    }
+    .consent-card {
+      padding: 8px 0 0;
+      background: none;
+      border: 0;
+      box-shadow: none;
+    }
   }
   /* A table masks every cell but its first: a cell that holds no figure (a status, a date, the
      row's buttons) opts out with `.not-money`, and an empty one has nothing to mask. */
@@ -15625,7 +15887,7 @@ body.hide-amounts .mask * {
     font-size: 11.5px;
     color: var(--faint);
   }
-  @container (max-width: 560px) {
+  @container (max-width: 447px) {
     .intel-pulse-card .intel-brief-updated,
     .intel-pulse-name {
       display: none;
