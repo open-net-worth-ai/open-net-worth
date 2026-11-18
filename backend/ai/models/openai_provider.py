@@ -674,7 +674,7 @@ class OpenAIProvider(AIProvider):
                         delivered = True
                         idx = getattr(tc, "index", 0) or 0
                         slot = tool_acc.setdefault(
-                            idx, {"id": "", "name": "", "args": "", "_started": False}
+                            idx, {"id": "", "name": "", "args": ""}
                         )
                         if getattr(tc, "id", None):
                             slot["id"] = tc.id
@@ -691,14 +691,6 @@ class OpenAIProvider(AIProvider):
                             args_frag = getattr(fn, "arguments", None) or ""
                             if args_frag:
                                 slot["args"] += args_frag
-                        # Emit tool_use_start exactly once, as soon as we have a name.
-                        if slot["name"] and not slot["_started"]:
-                            slot["_started"] = True
-                            yield {
-                                "type": "tool_use_start",
-                                "id": slot["id"],
-                                "name": slot["name"],
-                            }
                     if choice.finish_reason:
                         finish_reason = choice.finish_reason
             except BaseException:
@@ -794,30 +786,30 @@ class OpenAIProvider(AIProvider):
             "duration_ms": (_time.monotonic() - _t0) * 1000.0,
         }
 
-        complete_tool_calls = bool(tool_acc)
-        for slot in tool_acc.values():
-            try:
-                parsed = json.loads(slot["args"]) if slot["args"] else {}
-            except json.JSONDecodeError:
-                log.warning("tool_use args not valid JSON  tool=%s", slot.get("name"))
-                parsed = {}
-                complete_tool_calls = False
-            if not slot["id"] or not slot["name"] or not isinstance(parsed, dict):
-                complete_tool_calls = False
-            yield {
-                "type": "tool_use",
-                "id": slot["id"],
-                "name": slot["name"],
-                "input": parsed,
-                **({"google_thought_signature": slot["google_thought_signature"]}
-                   if "google_thought_signature" in slot else {}),
-            }
-
-        # Some compatible endpoints send complete calls with a plain "stop"
-        # or close the stream without a finish reason.
-        # Leave truncation and content filtering on their existing paths.
-        if finish_reason in (None, "stop") and complete_tool_calls:
-            stop_reason = "tool_use"
+        # Some compatible endpoints close a valid tool round with "stop" or
+        # without a finish reason. Validate the whole batch before emitting it
+        # so a partial call cannot be displayed, persisted, or executed.
+        if tool_acc and finish_reason in (None, "stop", "tool_calls"):
+            stop_reason = "end_turn"
+            calls = []
+            for slot in tool_acc.values():
+                try:
+                    parsed = json.loads(slot["args"]) if slot["args"] else {}
+                except json.JSONDecodeError as exc:
+                    log.warning("tool_use args not valid JSON  tool=%s  error=%s", slot["name"], exc.msg)
+                    break
+                if not slot["id"] or not slot["name"] or not isinstance(parsed, dict):
+                    log.warning("tool_use missing id, name, or argument object  tool=%s", slot["name"])
+                    break
+                call = {"type": "tool_use", "id": slot["id"], "name": slot["name"], "input": parsed}
+                if "google_thought_signature" in slot:
+                    call["google_thought_signature"] = slot["google_thought_signature"]
+                calls.append(call)
+            else:
+                stop_reason = "tool_use"
+                for call in calls:
+                    yield {**call, "type": "tool_use_start"}
+                    yield call
         yield {"type": "done", "stop_reason": stop_reason}
 
     async def complete(
