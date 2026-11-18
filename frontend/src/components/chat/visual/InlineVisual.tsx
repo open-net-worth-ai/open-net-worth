@@ -133,7 +133,13 @@ export function InlineVisual({ visual, draft }: { visual: VisualSpec; draft?: bo
       ))}
       {code && (
         <Guard>
-          <VisualDrawing code={code} title={visual.title} draft={draft} />
+          {/* While Lucius is still writing it, a band of light sweeps across the drawing; it
+              fades out once the finished drawing takes over. Always rendered, so the frame
+              beside it is never rebuilt when the draft ends. */}
+          <div className="ivis-drawing">
+            <VisualDrawing code={code} title={visual.title} draft={draft} />
+            <span className={draft ? 'ivis-shimmer is-on' : 'ivis-shimmer'} aria-hidden="true" />
+          </div>
         </Guard>
       )}
       {captions.map((c, i) => (

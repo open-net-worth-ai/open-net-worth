@@ -172,6 +172,17 @@ describe('InlineVisual', () => {
     expect(flat.querySelector('.ivis-tile-delta--flat')).toBeTruthy()
   })
 
+  it('sweeps a shimmer over a drawing only while it is a draft, in the same frame', () => {
+    const drawing = { id: 'draft', title: 'Spend', code: '<svg>' } as VisualSpec
+    const { container, rerender } = render(<InlineVisual visual={drawing} draft />)
+    const frame = container.querySelector('iframe.ivis-frame')
+    expect(container.querySelector('.ivis-shimmer.is-on')).toBeTruthy()
+    expect(container.querySelector('.ivis-menu')).toBeNull()
+    rerender(<InlineVisual visual={{ ...drawing, id: 'vis_1', code: '<svg/>' }} />)
+    expect(container.querySelector('.ivis-shimmer.is-on')).toBeNull()
+    expect(container.querySelector('iframe.ivis-frame')).toBe(frame)
+  })
+
   it('shows the title above blocks and above a drawing', () => {
     const withBlocks = render(<InlineVisual visual={FIXTURE} />).container
     expect(withBlocks.querySelector('.ivis-title')!.textContent).toBe('Spending, Nov vs Oct')

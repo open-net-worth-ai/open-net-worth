@@ -2770,6 +2770,51 @@
     font-size: 12px;
     color: var(--muted);
   }
+  /* A drawing still being written (visual/InlineVisual.tsx): a soft band sweeps across it. */
+  .ivis-drawing {
+    position: relative;
+    min-width: 0;
+    max-width: 680px;
+  }
+  .ivis-shimmer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  .ivis-shimmer.is-on {
+    opacity: 1;
+  }
+  .ivis-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 25%,
+      color-mix(in srgb, var(--ink) 11%, transparent) 50%,
+      transparent 75%
+    );
+    transform: translateX(-100%);
+  }
+  .ivis-shimmer.is-on::after {
+    animation: ivis-sweep 1.6s ease-in-out infinite;
+  }
+  @keyframes ivis-sweep {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ivis-shimmer.is-on::after {
+      animation: none;
+      transform: none;
+      background: color-mix(in srgb, var(--ink) 4%, transparent);
+    }
+  }
   /* A step under the reply's 14px text, as a chart title sits under the prose around it. */
   .ivis-title {
     margin: 0;

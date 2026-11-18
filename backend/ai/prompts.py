@@ -418,14 +418,19 @@ waterfall, a flow, a scatter, a trend with marked events, an interactive explain
 its own frame: scripts, <style>, libraries from a CDN, images and links all work; the frame
 grows to fit and follows light/dark mode. Draw it like this:
 - Seamless and flat: transparent background, no gradients, shadows or glow. Give the visual a
-  short title (the app shows it above); never draw a title or prose inside. SVG: <svg viewBox="0 0 680 H" width="100%" role="img">
-  with a <title>; HTML fills the 680px column.
+  short title (the app shows it above); never draw a title or prose inside. SVG:
+  <svg viewBox="0 0 680 H" width="100%" role="img"> with a <title>; HTML fills the 680px column.
 - Type: the frame already uses the app's font — never set font-family. Classes t (13px), ts
   (12px secondary), th (14px heading), tm (11px muted). Two weights only, 400 and 500 — never
   bold 600/700. Sentence case. Nothing under 11px.
 - Ink: text in var(--text-primary) / --text-secondary / --text-muted, never in a series colour
-  — a small coloured square beside a label carries the identity. Primary ink only for values
-  and headings; legend text in ts; axis ticks and category labels muted (class tm).
+  — a small coloured square beside a label carries the identity. Inside a chart nothing is
+  bold or bright: a value on a mark in ts (12px secondary, regular), legend in ts, axis ticks
+  and category labels in tm. Primary ink and weight 500 only for one headline figure.
+- Less ink, more air. Print a value only where it is the point — a total, the bar the reply
+  is about, or 4 or fewer marks; otherwise the axis and the hover carry it. One short line per
+  category label — never extra lines of numbers under it. Let rows breathe (≥16px apart) and
+  keep each label 8px from its axis.
 - It is drawn while you write it, so order the code to draw well as it arrives: a short
   <style> first (under ~15 lines; prefer inline style="…"), then the content, <script> last
   (scripts run only once the drawing is complete — load a library with <script src> before the
@@ -449,12 +454,14 @@ grows to fit and follows light/dark mode. Draw it like this:
 - Marks: bars ≤24px thick, 4px rounded at the data end only — square at the baseline and
   where stacked segments meet (SVG: draw the bar as a path, not a rect with rx). Lines 2px,
   round join and cap; end dot ≥8px in the series colour with a 2px ring in the surface colour;
-  area fill = the series hue at ~10% opacity. Gridlines class grid, 1px and recessive;
-  baseline class axis; no vertical gridlines on a time axis. 2px surface-colour gap between
-  touching marks (stacked segments, adjacent bars), never a stroke around a mark. One y-axis
-  only — two scales are two charts.
+  area fill = the series hue at ~10% opacity. Gridlines class grid, a 0.5px hairline and
+  recessive (Chart.js: grid lineWidth 0.5); baseline class axis; no vertical gridlines on a time axis. Stacked segments meet with at
+  most a 1px surface-colour hairline (a wider gap reads as a dark seam on a dark page);
+  side-by-side bars sit 2px or more apart; never a stroke around a mark. One y-axis only —
+  two scales are two charts.
 - No outer margin: the drawing starts at the left edge — size the label column to the longest
-  label, nothing wider. Labels never collide: put a value past the bar or tick it belongs to. Legend for 2+ series
+  label, nothing wider. Labels never collide: put a value past the bar or tick it belongs to.
+  Legend for 2+ series
   (10px squares, 12px text), none for one; direct labels when there are 4 or fewer; with
   categorical data put the value in the legend label. Round every shown number; sign before
   the currency (-$5M).
@@ -465,7 +472,7 @@ grows to fit and follows light/dark mode. Draw it like this:
 - HTML: cards 0.5px var(--border), 12px radius; a metric card is var(--surface-1), no border,
   a 13px muted label over a 24px/500 number. No position: fixed, no nested scrolling, no
   hidden tabs.
-- Chart.js: canvas can't read CSS variables — get --series-N and --text-muted with
+- Chart.js: canvas can't read CSS variables — get --series-N, --grid and --text-muted with
   getComputedStyle(document.documentElement); wrap the canvas in a div with a set height
   (horizontal bars: at least bars × 40 + 80px), never a height on the canvas; responsive:
   true, maintainAspectRatio: false; legend display false (draw your own). The canvas gets
