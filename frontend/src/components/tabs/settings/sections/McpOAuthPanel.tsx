@@ -90,8 +90,9 @@ export function ConnectorAddress({ mcpUrl, toast }: { mcpUrl: string; toast: Toa
       </Field>
       <ul className="mcp-hosted-list">
         <li>
-          <strong>claude.ai</strong> Customize → Connectors → Add custom connector. Paste the
-          address and leave the advanced fields empty.
+          <strong>Claude</strong> Connectors (under Customize or Settings) → Add custom connector.
+          Paste the address and leave the advanced fields empty. Works on the web, phone and
+          Desktop.
         </li>
         <li>
           <strong>ChatGPT</strong> Settings → Connectors, with Developer mode on. Add a custom
