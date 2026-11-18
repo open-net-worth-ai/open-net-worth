@@ -74,6 +74,7 @@ const series = Array.from(
 export const DRAWING_CSS = `
 :root,[data-mode=dark]{${seriesVars(SERIES_DARK)}--grid:#2c2c2a;--axis:#383835;--status-good:#0ca30c;--status-warning:#c98500;--status-serious:#d95926;--status-critical:#e66767}
 [data-mode=light]{${seriesVars(SERIES_LIGHT)}--grid:#e1e0d9;--axis:#c3c2b7;--status-good:#0ca30c;--status-warning:#fab219;--status-serious:#ec835a;--status-critical:#d03b3b}
+[data-mode=dark]{color-scheme:dark}[data-mode=light]{color-scheme:light}
 html,body{margin:0;padding:0;background:transparent}html{overflow-y:hidden}
 body{color:var(--text-primary);font-size:14px;line-height:1.6;font-weight:400}
 b,strong,h1,h2,h3,h4,h5,h6,th{font-weight:500}

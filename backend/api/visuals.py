@@ -26,7 +26,7 @@ FRAME_CSP = (
     "allow-modals; frame-ancestors 'self'"
 )
 
-_LOADER = f"""<!doctype html><html><head><meta charset="utf-8"></head><body><script>
+_LOADER = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"></head><body><script>
 window.addEventListener('message', function (e) {{
   if (e.source !== parent || !e.data || e.data.type !== '{MSG_RENDER}') return;
   document.open();
