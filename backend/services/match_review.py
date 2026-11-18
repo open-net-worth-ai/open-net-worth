@@ -548,6 +548,10 @@ async def judge_reviews_async(batch_id: str | None = None) -> dict:
         ):
             kept += 1
             continue
+        # Two bank rows keyed only by content hashes: identical charges can be two real ones.
+        if matching.rests_on_content_hashes(incoming, canonical):
+            kept += 1
+            continue
 
         # F20: refuse auto-merge while a live tie exists — keep for human to resolve.
         # Filter to alternatives whose row is still live; stale alts don't constitute a tie.

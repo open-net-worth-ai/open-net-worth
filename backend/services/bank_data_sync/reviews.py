@@ -7,10 +7,12 @@ Kinds:
   kept here until decided);
 * ``vanished`` — a booked row the bank no longer lists (two complete misses);
 * ``posted`` — a pending row booked earlier settled at a different amount;
-* ``duplicate`` — a new bank row the duplicate guard matched to a row already in the book.
+* ``duplicate`` — a new bank row the duplicate guard matched to a row already in the book;
+* ``undone`` — the rows of a sync you undid (``detail.rows``), ONE item per run (undo.py).
 
-The ledger changes only when the user accepts an item. A ``duplicate`` or ``posted`` item, open or
-dismissed, also holds its ref back from booking, so a re-run neither re-asks nor books it."""
+The ledger changes only when the user accepts an item. A ``duplicate``, ``posted`` or ``undone``
+item, open or dismissed, also holds its refs back from booking, so a re-run neither re-asks nor
+books them."""
 
 from __future__ import annotations
 
@@ -21,8 +23,8 @@ from typing import Optional
 from backend.core.untrusted import sanitize_untrusted
 from backend.db.bank_sync_store import BankSyncReviewStore
 
-KINDS = ("modified", "vanished", "posted", "duplicate")
-HOLDING_KINDS = ("duplicate", "posted")
+KINDS = ("modified", "vanished", "posted", "duplicate", "undone")
+HOLDING_KINDS = ("duplicate", "posted", "undone")
 
 
 def _now() -> str:
@@ -114,12 +116,18 @@ def record_changes(provider: str, changes: list[dict], run_id: Optional[str]) ->
 
 
 def held_refs(provider: str) -> set[str]:
-    """Refs a ``duplicate``/``posted`` item holds back from booking (open or dismissed)."""
-    return {
-        r["ref"]
-        for r in BankSyncReviewStore().for_provider(provider)
-        if r.get("kind") in HOLDING_KINDS and r.get("status") in ("open", "applying", "dismissed")
-    }
+    """Refs a ``duplicate``/``posted``/``undone`` item holds back from booking (open or
+    dismissed)."""
+    held: set[str] = set()
+    for r in BankSyncReviewStore().for_provider(provider):
+        if r.get("kind") in HOLDING_KINDS and r.get("status") in ("open", "applying", "dismissed"):
+            detail = r.get("detail") or {}
+            if r.get("kind") != "undone":  # its own ref names the run, not a bank row
+                held.add(r["ref"])
+            held.update(detail.get("refs") or [])  # a card payment's two rows
+            for row in detail.get("rows") or []:  # an undone run's rows
+                held.update(row.get("refs") or [])
+    return held
 
 
 STALE_CLAIM = timedelta(minutes=10)

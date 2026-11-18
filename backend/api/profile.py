@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -98,6 +98,8 @@ DEFAULT_PROFILE = {
     "chat_multi_turn_enabled": False,
     # Draw reasoning as one merged block instead of a block per round. Default OFF (split).
     "chat_thinking_grouped": False,
+    # How much detail Lucius puts in an answer (brief | normal | detailed). None = normal.
+    "chat_response_detail": None,
     # A device with no choice of its own sends the screen with each message. Default ON.
     "screen_awareness_default": True,
     "seen_intros": [],
@@ -192,6 +194,8 @@ class ProfileBody(BaseModel):
     chat_multi_turn_enabled: Optional[bool] = None
     # Human-only UI preference — merge reasoning into one block instead of per round.
     chat_thinking_grouped: Optional[bool] = None
+    # brief | normal | detailed — how much detail Lucius puts in an answer.
+    chat_response_detail: Optional[Literal["brief", "normal", "detailed"]] = None
     # Human-only UI preference — a device's Screen awareness until it makes its own choice.
     screen_awareness_default: Optional[bool] = None
     # Statement-import review band's pre-selected action — "skip" (default) or "merge".

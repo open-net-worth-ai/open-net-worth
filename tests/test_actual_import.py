@@ -118,6 +118,7 @@ class Server:
         self.opened += 1
         yield SimpleNamespace(
             plan=lambda: shape.plan_from_rows(self.rows),
+            read=lambda: (self.rows, shape.plan_from_rows(self.rows)),
             currency=self.currency,
             mode=self.rows.mode,
             notices=self.notices,

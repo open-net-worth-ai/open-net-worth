@@ -22,10 +22,12 @@ from backend.services.bank_data_sync import (
     balances,
     booker,
     budget,
+    follow,
     pending,
     relink,
     reviews,
     settings,
+    undo,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,11 @@ logger = logging.getLogger(__name__)
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 _STOP_STATUSES = ("auth_error", "not_configured", "disabled")
+CUT_SHORT_MESSAGE = (
+    "the bank sent only part of the history, so nothing was booked yet — the next sync reads it "
+    "all again"
+)
+FOLLOWED_MESSAGE = "the bank gave this account a new id, so the sync followed it there."
 GONE_MESSAGE = (
     "the bank no longer lists this account, so nothing was read. If you linked the bank again, "
     "Unlink this account and Link the bank's current one to it."
@@ -42,6 +49,11 @@ GONE_MESSAGE = (
 def _lock(key: str) -> threading.Lock:
     with _locks_guard:
         return _locks.setdefault(key, threading.Lock())
+
+
+def slot(key: str) -> threading.Lock:
+    """The connector's run slot: held while a run works, and by anything that must not overlap one."""
+    return _lock(key)
 
 
 @dataclass
@@ -123,6 +135,13 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
         out.states[app_id] = {"status": status, "error": error}
         return status
     listed = {str(a.get("provider_account_id") or "") for a in result.get("accounts") or []}
+    follow.remember(p.key, result.get("accounts") or [])
+    if pid not in listed and not account.get("_followed"):
+        moved = follow.successor(p.key, pid, result.get("accounts") or [])
+        if moved and follow.move_link(p.key, app_id, pid, moved):
+            out.warnings.append(f"{name}: {FOLLOWED_MESSAGE}")
+            again = {**account, "provider_account_id": moved, "_followed": True}
+            return _fetch_account(p, again, run_id, out)
     if pid not in listed:
         # The bank answered without this account: it was closed, or the bank was linked again
         # and the account has a new id. Read as "done · 0 rows" it silently never synced again
@@ -131,16 +150,28 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
         out.warnings.append(f"{name}: {error}")
         out.states[app_id] = {"status": "account_gone", "error": error}
         return "account_gone"
+    whole = (result.get("window") or {}).get("complete") is not False
+    if first and not whole:
+        # A first import the bank cut short (a page cap, a bank that stopped answering part
+        # way): booked, it marked the history read and left the rest unfetched for good. Nothing
+        # is booked; it stays a first import, read whole again soon (review 2026-11-15).
+        out.warnings.append(f"{name}: {CUT_SHORT_MESSAGE}")
+        out.states[app_id] = {"status": "connect_error", "error": CUT_SHORT_MESSAGE}
+        return "connect_error"
     out.states[app_id] = {"status": "ok", "error": None}
     if warning:
         out.warnings.append(f"{name}: {warning}")
     out.warnings.extend(f"{name}: {w}" for w in result.get("warnings") or [])
     quiet = pending.quiet_refs(p.key)
-    changes = [c for c in result.get("changes") or [] if str(c.get("ref") or "") not in quiet]
-    out.counts["to_review"] += reviews.record_changes(p.key, changes, run_id)
     rows = [r for r in result.get("transactions") or [] if r.get("linked_account_id") == app_id]
+    changes = [c for c in result.get("changes") or [] if str(c.get("ref") or "") not in quiet]
+    changes = relink.still_listed(p.key, changes, result.get("transactions") or [])
+    out.counts["to_review"] += reviews.record_changes(p.key, changes, run_id)
     out.rows.extend(rows)
-    out.read[app_id] = since
+    if whole:
+        # Pending bookings the bank no longer lists are dropped only after a whole read: one
+        # cut short just didn't reach them.
+        out.read[app_id] = since
     out.read_as[app_id] = pid
     remembered = relink.read_as(p.key).get(app_id)
     if relink.is_relinked(p.key, app_id, pid) or (
@@ -234,8 +265,13 @@ def _outcome(counts: dict, status: str) -> str:
         parts.append(
             f"{counts['booked']} booked ({pend} pending)" if pend else f"{counts['booked']} booked"
         )
+    if counts.get("card_payments"):
+        n = counts["card_payments"]
+        parts.append(f"{n} move{'s' if n != 1 else ''} between your accounts filed as a transfer")
     if counts.get("relinked"):
         parts.append(f"{counts['relinked']} already in your book, matched to the bank's new ids")
+    if counts.get("claimed"):
+        parts.append(f"{counts['claimed']} matched to transactions you entered")
     if counts.get("settled"):
         parts.append(f"{counts['settled']} cleared")
     if counts.get("pending_removed"):
@@ -276,10 +312,17 @@ def _book(p: Provider, fetched: _Fetched, run_id: str, counts: dict, errors: lis
     counts["held"] = result.held
     counts["linked"] = result.linked_refs
     counts["relinked"] = result.relinked
+    counts["claimed"] = result.claimed
     counts["pending"] = result.pending
     counts["settled"] = result.settled
     counts["pending_removed"] = result.pending_removed
+    counts["card_payments"] = result.card_payments
     errors.extend({"item": "A row", "reason": e} for e in result.errors)
+    try:
+        counts["undoable"] = int(undo.record(p.key, run_id, p.label, result))
+    except Exception:  # noqa: BLE001 — booked either way; this run just can't be undone
+        logger.exception("bank_data_sync: %s run %s could not record its batch", p.key, run_id)
+        fetched.warnings.append("This sync can't be undone, because its record couldn't be saved.")
     return result.created
 
 
@@ -297,6 +340,20 @@ def _align(p: Provider, first_import: set[str], warnings: list[str]) -> None:
         logger.exception("bank_data_sync: %s alignment failed", p.key)
         warnings.append("The account's start couldn't be moved back yet; the next run tries again.")
     budget.update(p.key, pending_align=sorted(pending))
+
+
+def _one_line(warnings: list[str]) -> str:
+    """The run's warnings as one line, each reason once with the accounts it hit: "Checking,
+    Card: the bank needs you to sign in again" — not the same sentence once per account."""
+    by_reason: dict[str, list[str]] = {}
+    for w in warnings:
+        name, sep, reason = w.partition(": ")
+        if not sep:
+            name, reason = "", w
+        names = by_reason.setdefault(reason, [])
+        if name and name not in names:
+            names.append(name)
+    return "; ".join(f"{', '.join(n)}: {r}" if n else r for r, n in by_reason.items())
 
 
 def _remember_history_read(p: Provider, accounts: set[str]) -> None:
@@ -366,12 +423,18 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
         # Read BEFORE booking: an account holding only its Starting Balance is set to the
         # bank's balance once its history is in (balances.py).
         empty = balances.only_opening(fetched.first_import)
+        moving = fetched.first_import | set(budget.state(p.key).get("pending_align") or [])
+        opening_before = undo.openings(moving)
         _progress(run_id, "booking", 0, len(fetched.rows), "", fetched.lines)
         created = _book(p, fetched, run_id, counts, errors)
         relink.remember(p.key, fetched.read_as)
         _align(p, fetched.first_import, fetched.warnings)
         _remember_history_read(p, fetched.first_import)
         _record_balances(p, fetched, empty, run_id)
+        if not undo.keep_openings(run_id, opening_before):
+            fetched.warnings.append(
+                "Undoing this sync won't put an account's start back, because it couldn't be noted."
+            )
         _remember_reads(p, fetched.states)  # only once its rows are booked
     except Exception as exc:  # noqa: BLE001 — the one write rolled back; say so on the run
         logger.exception("bank_data_sync: %s run failed", p.key)
@@ -387,7 +450,7 @@ def execute(p: Provider, accounts: list[dict], run_id: str) -> dict:
     counts["errors"] = len(errors)
     # A partial run (one bank read, another not) keeps what failed, so the bank that wasn't read
     # never shows as synced.
-    last_error = "; ".join(fetched.warnings)[:500] if status != "ok" else None
+    last_error = _one_line(fetched.warnings)[:500] if status != "ok" else None
     budget.record_outcome(p, status, last_error)
     import_runs.finish(
         run_id,

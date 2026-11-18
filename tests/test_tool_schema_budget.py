@@ -283,7 +283,11 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # says a 'total' account's balance is its untracked part, not cash; update_accounts takes
     # value_source; reconcile_accounts takes real_total; acquire_lots says not to ask for funding.
     # ~1.1K chars after trimming (create_account's value_source dropped — update_accounts sets it).
-    budget = 480_000
+    # 2026-11-17: -> 483_700 (+2_700 on top of the 481_000 the Copy Trading / bank-fetch
+    # re-wording raise sets). show_visual (flag inline_visuals, ~2.6K chars after trimming):
+    # inline charts, figures and timelines whose numbers are references into earlier tool
+    # results (docs/design/inline-visuals.md). CORE, so it also counts in the offer below.
+    budget = 483_700
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

@@ -10,6 +10,7 @@
   * ``POST /api/bank-sync/{provider}/accounts/{id}/use-bank-balance``  match the bank's balance
   * ``POST /api/bank-sync/{provider}/import``         bring in the history (setup step 2)
   * ``POST /api/bank-sync/{provider}/run``            Sync now (409 with the reason when refused)
+  * ``POST /api/bank-sync/{provider}/runs/{run_id}/undo``  undo a run (409 with the reason when refused)
   * ``GET  /api/bank-sync/{provider}/runs``           its run history
   * ``GET  /api/bank-sync/reviews``                   open review items (``?provider=``)
   * ``POST /api/bank-sync/reviews/{id}/accept|dismiss|book``
@@ -51,6 +52,8 @@ class ScheduleBody(BaseModel):
 class DecisionBody(BaseModel):
     # The item's updated_at as the user saw it; a newer version of the item is refused (409).
     updated_at: Optional[str] = None
+    # Book: one row of an undone sync (its bank ref); omitted, every row it holds.
+    ref: Optional[str] = None
 
 
 async def _call(fn, *args):
@@ -82,7 +85,8 @@ async def bank_sync_review_dismiss(item_id: str, body: Optional[DecisionBody] = 
 
 @router.post("/api/bank-sync/reviews/{item_id}/book")
 async def bank_sync_review_book(item_id: str, body: Optional[DecisionBody] = None):
-    return await _call(bank_data_sync.book_review, item_id, body.updated_at if body else None)
+    seen, ref = (body.updated_at, body.ref) if body else (None, None)
+    return await _call(bank_data_sync.book_review, item_id, seen, ref)
 
 
 @router.get("/api/bank-sync/{provider}")
@@ -123,6 +127,11 @@ async def bank_sync_run(provider: str):
 @router.post("/api/bank-sync/{provider}/import")
 async def bank_sync_import(provider: str):
     return await _call(bank_data_sync.import_history, provider)
+
+
+@router.post("/api/bank-sync/{provider}/runs/{run_id}/undo")
+async def bank_sync_undo_run(provider: str, run_id: str):
+    return await _call(bank_data_sync.undo_run, provider, run_id)
 
 
 @router.get("/api/bank-sync/{provider}/runs")

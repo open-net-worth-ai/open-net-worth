@@ -222,6 +222,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_screen_detail",
         "read_screen",
         "show_guide",  # lights up a control in the open app; writes nothing
+        "show_visual",  # copies figures out of earlier tool results into the reply; writes nothing
         "get_spending_breakdown",
         "get_spending_summary",
         "get_statement",

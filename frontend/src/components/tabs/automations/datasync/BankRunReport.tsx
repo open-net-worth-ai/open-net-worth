@@ -1,12 +1,22 @@
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Check, Sparkles } from 'lucide-react'
 import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
-import { useChatComposer } from '../../../../state/chatComposer'
-import { useQueryCache } from '../../../../state/queryCache'
+import { useChatComposerOptional } from '../../../../state/chatComposer'
+import { invalidateQueryCache, useQueryCache } from '../../../../state/queryCache'
 import { fDate, getBaseCurrency } from '../../../../utils/format'
 import { fCur } from '../../accounts/format'
-import { Badge, Button, Cluster, ErrorState, Modal, Skeleton, Text } from '../../../ui'
+import {
+  Badge,
+  Button,
+  Cluster,
+  ConfirmDialog,
+  ErrorState,
+  Modal,
+  Skeleton,
+  Text,
+} from '../../../ui'
 import {
   STATUS_LABEL,
   STATUS_TONE,
@@ -16,12 +26,14 @@ import {
   type RunRecord,
 } from '../../imports/runs'
 import { useTransactionSurfaces } from '../../accounts/transactionSurfacesContext'
+import { bankSyncSend } from './bankSync'
 
 // One bank sync run, opened from its History row (ADR 2026-11-13): one line on what it did; the
 // transactions it booked, by day, drawn as the Accounts register draws them (its own classes and
 // category pill: payee, category or Uncategorized, amount), each opening its detail drawer
 // OVER the report so you can go row by row; View in register and Categorize with Lucius in the
-// footer (owner, 2026-11-14). The account shows only when the run read more than one.
+// footer (owner, 2026-11-14), and Undo this run (Amendment 13). The account shows only when the
+// run read more than one.
 
 const DID: [string, (n: number) => string][] = [
   ['already_booked', (n) => `${n} already in your book`],
@@ -72,6 +84,7 @@ export function BankRunReport({ runId, onClose }: { runId: string; onClose: () =
   const r = run.data
   const counts = (r?.counts ?? {}) as unknown as Record<string, number>
   const booked = (counts.booked ?? 0) > 0
+  const undoable = (counts.undoable ?? 0) > 0 && !counts.undone
   return (
     <Modal
       open
@@ -99,7 +112,17 @@ export function BankRunReport({ runId, onClose }: { runId: string; onClose: () =
             ].join(' · ')
           : undefined
       }
-      footer={r && booked ? <RunFooter r={r} onClose={onClose} /> : undefined}
+      footer={
+        r && (booked || undoable) ? (
+          <RunFooter
+            r={r}
+            counts={counts}
+            undoable={undoable}
+            onClose={onClose}
+            onUndone={() => void run.refresh()}
+          />
+        ) : undefined
+      }
     >
       {run.error ? (
         <ErrorState
@@ -132,6 +155,12 @@ function RunBody({ r, counts }: { r: RunRecord; counts: Record<string, number> }
           {did.length > 0 && <span className="bs-run-facts">{did.join(' · ')}</span>}
         </p>
       )}
+      {counts.undone ? (
+        <Text size="sm" tone="muted">
+          You undid this sync. What it booked was removed; the bank’s rows wait in Needs your
+          review.
+        </Text>
+      ) : null}
       {problems.map((p, i) => (
         <Text key={i} size="sm" tone="warn">
           {p}
@@ -142,10 +171,23 @@ function RunBody({ r, counts }: { r: RunRecord; counts: Record<string, number> }
   )
 }
 
-function RunFooter({ r, onClose }: { r: RunRecord; onClose: () => void }) {
+function RunFooter({
+  r,
+  counts,
+  undoable,
+  onClose,
+  onUndone,
+}: {
+  r: RunRecord
+  counts: Record<string, number>
+  undoable: boolean
+  onClose: () => void
+  onUndone: () => void
+}) {
   const navigate = useNavigate()
   return (
     <div className="bs-run-foot">
+      {undoable && <UndoRun r={r} counts={counts} onUndone={onUndone} />}
       <Button
         size="sm"
         onClick={() => {
@@ -166,15 +208,97 @@ function RunFooter({ r, onClose }: { r: RunRecord; onClose: () => void }) {
   )
 }
 
+/** Undo this run: its rows removed, what it dropped restored, its rows held for a decision in
+ *  Needs your review (never silently booked again). The dialog says so before anything moves; the
+ *  server's refusal (a later sync changed the book) is shown in it. */
+function UndoRun({
+  r,
+  counts,
+  onUndone,
+}: {
+  r: RunRecord
+  counts: Record<string, number>
+  onUndone: () => void
+}) {
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const booked = counts.booked ?? 0
+  const dropped = counts.pending_removed ?? 0
+  const close = () => {
+    if (busy) return
+    setAsking(false)
+    setError(null)
+  }
+  const confirm = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await bankSyncSend(`/${r.provider}/runs/${r.id}/undo`, 'POST')
+      invalidateQueryCache(
+        (key) => key.startsWith('/api/imports/runs') || key.startsWith('/api/transactions'),
+      )
+      setAsking(false)
+      onUndone()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That didn’t work. Try again in a moment.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const removes = `${booked} ${booked === 1 ? 'transaction' : 'transactions'}`
+  const brings = `${dropped} pending ${dropped === 1 ? 'one' : 'ones'}`
+  return (
+    <>
+      <Button size="sm" variant="ghost" onClick={() => setAsking(true)}>
+        Undo this run
+      </Button>
+      <ConfirmDialog
+        data={
+          asking
+            ? {
+                title: 'Undo this sync?',
+                confirmLabel: 'Undo this run',
+                danger: true,
+                confirmDisabled: busy,
+                body: (
+                  <>
+                    <p>
+                      {`This removes the ${removes} this sync booked${dropped ? ` and brings back the ${brings} it dropped` : ''}. Your balances go back to what they were before it.`}
+                    </p>
+                    <p>
+                      The bank’s rows aren’t booked again by the next sync. They wait together under
+                      Needs your review, where you can book them all again, book one, or forget
+                      them.
+                    </p>
+                    {error && (
+                      <div role="alert">
+                        <Text size="sm" tone="bad">
+                          {error}
+                        </Text>
+                      </div>
+                    )}
+                  </>
+                ),
+              }
+            : null
+        }
+        onConfirm={() => void confirm()}
+        onCancel={close}
+      />
+    </>
+  )
+}
+
 /** Hands Lucius exactly this run's uncategorized rows: how many, from when to when, in which
  *  accounts, and "all of them". His transaction tool can't filter by run, so a bare "these"
  *  became "this month" and skipped the rest (owner test, 2026-11-14). The prompt lands in his
  *  box, in a new conversation, for the user to send. */
 function CategorizeWithLucius({ r, onClose }: { r: RunRecord; onClose: () => void }) {
   const booked = useBooked(r.id)
-  const composer = useChatComposer()
+  const composer = useChatComposerOptional() // only an offer: no chat here, no button
   const open = (booked.data ?? []).filter((t) => !t.category)
-  if (!open.length) return null
+  if (!open.length || !composer) return null
   const dates = open.map((t) => t.date).sort()
   const first = dates[0]!
   const last = dates[dates.length - 1]!

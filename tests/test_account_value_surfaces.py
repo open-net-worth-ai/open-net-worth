@@ -168,6 +168,9 @@ class _PlaidStore:
     def mark_reconnect(self, *, needed, ok):
         self.reconnect = (set(needed), set(ok))
 
+    def update_item(self, item_id, fields):
+        return {}
+
 
 def test_plaid_fetch_balances_reads_accounts_get_for_every_bank(monkeypatch):
     calls = []

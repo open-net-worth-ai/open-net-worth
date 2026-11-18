@@ -23,7 +23,7 @@ from backend.services.actual_sync.shape_values import milli as _milli
 from backend.services.actual_sync.shape_values import text as _text
 from backend.services.ynab_migration import mapping
 
-__all__ = ["Rows", "delta_against", "plan_from_rows"]
+__all__ = ["Rows", "delta_against", "plan_from_rows", "raw_transactions"]
 
 SB_PAYEE_NAME = "Starting Balance"
 SB_PAYEE_ID = "starting-balance"
@@ -347,6 +347,32 @@ def _months(book: _Book, categories: list[dict], today: str) -> list[dict]:
             entries.append(entry)
         out.append({"month": f"{m // 100:04d}-{m % 100:02d}-01", "categories": entries})
     return out
+
+
+def _payee_name(book: _Book, payee_id) -> str:
+    if payee_id == SB_PAYEE_ID:
+        return SB_PAYEE_NAME
+    payee = book.payee.get(payee_id) or {}
+    acct = payee.get("transfer_acct")
+    return _text((book.account.get(acct) or {}).get("name") if acct else payee.get("name"), 200)
+
+
+def raw_transactions(rows: Rows) -> list[dict]:
+    """Every live transaction as Actual holds it, before any reshaping: ``raw`` is its own row, a
+    split's lines under ``children``. Beside it, what the plan says of it (``date``, ``amount`` in
+    milliunits, ``payee`` name, ``account``) for the row that keeps it."""
+    book = _Book(rows)
+    return [
+        {
+            "id": t["id"],
+            "account": t["acct"],
+            "date": _iso(t["date"]),
+            "amount": book.effective_amount(t),
+            "payee": _payee_name(book, _payee_ref(book, t, _is_opening(t))),
+            "raw": {**t, "children": lines} if (lines := book.lines.get(t["id"])) else t,
+        }
+        for t in book.top
+    ]
 
 
 def plan_from_rows(rows: Rows) -> dict:

@@ -78,6 +78,7 @@
 }
 /* One card per bank: its name and status on top, its accounts below. */
 .bs-bank {
+  container-type: inline-size;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--panel);
@@ -159,15 +160,29 @@
   min-width: 0;
 }
 .bs-gap {
-  padding: 1px 8px;
-  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--warn);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   cursor: pointer;
+}
+.bs-gap::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.bs-gap:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .bs-acct-book {
   display: inline-flex;
@@ -195,6 +210,49 @@
 }
 .bs-acct + .bs-acct {
   border-top: 1px solid var(--line);
+}
+.bs-acct .ui-check {
+  min-width: 0;
+}
+.bs-acct .ui-check__label {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.bs-acct-nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bs-acct .bs-acct-mask {
+  flex: none;
+}
+/* The Accounts card narrower than ~560px of its OWN width (the Lucius panel open, a phone): each
+   account is two lines — the bank's name and mask, then the book account and its gap. */
+@container (max-width: 560px) {
+  .bs-acct-cols {
+    display: none;
+  }
+  .bs-acct {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 3px;
+  }
+  .bs-acct-side {
+    padding-left: calc(16px + var(--space-3));
+  }
+}
+/* The sync page's content narrower than ~900px (the Lucius panel open): History goes under
+   Accounts rather than squeezing both. */
+.bs-detail {
+  container-type: inline-size;
+}
+@container (max-width: 900px) {
+  .bs-detail .a3-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
 }
 .bs-acct-mask {
   margin-left: 6px;
@@ -243,6 +301,43 @@
 .bs-review-rows dd {
   margin: 0;
   color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.bs-undone-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.bs-undone-toggle:hover {
+  text-decoration: underline;
+}
+.bs-undone-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+.bs-undone-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.bs-undone-row > span {
   overflow-wrap: anywhere;
 }
 

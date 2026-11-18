@@ -181,7 +181,7 @@ def _sanitize_extra(extra: dict) -> dict:
     return out
 
 
-def _sanitize_raw(value: object, *, _depth: int = 0) -> object:
+def sanitize_raw(value: object, *, _depth: int = 0) -> object:
     """Recursively sanitize every STRING LEAF of a provider's raw evidence dict (S-F3) —
     ``raw`` is stashed unsanitized-and-unbounded today, but it is readable by Lucius via
     ``run_sql_query`` against the ``connector_snapshots`` table, so it is exactly as
@@ -195,9 +195,9 @@ def _sanitize_raw(value: object, *, _depth: int = 0) -> object:
     if isinstance(value, str):
         return sanitize_untrusted(value, max_len=_RAW_LEAF_MAX_LEN)
     if isinstance(value, dict):
-        return {k: _sanitize_raw(v, _depth=_depth + 1) for k, v in value.items()}
+        return {k: sanitize_raw(v, _depth=_depth + 1) for k, v in value.items()}
     if isinstance(value, list):
-        return [_sanitize_raw(v, _depth=_depth + 1) for v in value]
+        return [sanitize_raw(v, _depth=_depth + 1) for v in value]
     return value
 
 
@@ -549,7 +549,7 @@ def _fetch(
         {
             "ref": _row_ref(r),
             "provider_account_id": r.get("provider_account_id"),
-            "raw": _sanitize_raw(r.get("raw")),
+            "raw": sanitize_raw(r.get("raw")),
             "normalized": {
                 "date": r.get("date"),
                 "amount": r.get("amount"),
@@ -738,8 +738,14 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
             }
         )
+    # Linked here, but missing from the list. With every bank answering, the bank no longer
+    # lists them (closed, or linked again under a new id); with one that couldn't be read
+    # (an expired sign-in) they may well still be there. Flagged either way, never "Other".
+    flag = "unread" if window.warnings else "not_listed"
     accounts.extend(
-        a for a in _linked_only_accounts(linked) if a["provider_account_id"] not in seen
+        {**a, flag: True}
+        for a in _linked_only_accounts(linked)
+        if a["provider_account_id"] not in seen
     )
     result = {"status": "ok", "provider_label": provider.label, "accounts": accounts}
     if window.warnings:

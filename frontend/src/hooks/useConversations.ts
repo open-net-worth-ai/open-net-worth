@@ -225,11 +225,13 @@ function writePendingConversation(c: ConversationMeta | null): void {
   }
 }
 
+const UNTITLED = 'New conversation'
+
 function makeConversation(): ConversationMeta {
   const now = new Date().toISOString()
   return {
     id: uuid(),
-    title: 'New conversation',
+    title: UNTITLED,
     createdAt: now,
     updatedAt: now,
     messageCount: 0,
@@ -238,6 +240,17 @@ function makeConversation(): ConversationMeta {
     // selection overrides it per conversation.
     model: '',
   }
+}
+
+/** A new conversation that lives only in this browser until its first message promotes it
+ *  (`ensurePersisted`): no server row, no sidebar entry. Every "start a new one" path goes
+ *  through here — an eagerly saved empty one is not a draft, so a later fresh start (first
+ *  run's welcome) opened a second and the empty "New conversation" stayed in the list. */
+function stageDraft(pending: Map<string, ConversationMeta>): ConversationMeta {
+  const c = makeConversation()
+  pending.set(c.id, c)
+  writePendingConversation(c)
+  return c
 }
 
 // Fresh PWA launch → replace the persisted "resume this conversation" pointer with a brand
@@ -408,6 +421,17 @@ export function mergeServerRows(
   return [...merged, ...prev.filter((c) => !seen.has(c.id))]
 }
 
+/** A chat promoted after the listing was requested is missing from it, not gone: keep its row. */
+function keepPromoted(
+  prev: ConversationMeta[],
+  merged: ConversationMeta[],
+  promoted: Set<string>,
+): ConversationMeta[] {
+  const listed = new Set(merged.map((c) => c.id))
+  const missing = prev.filter((c) => promoted.has(c.id) && !listed.has(c.id))
+  return missing.length ? [...missing, ...merged] : merged
+}
+
 /** `auto: true` marks a title this client derived itself (first message, placeholder,
  *  normalization). The server lets it yield to the AI-written title and to a rename, so a
  *  late automatic write can never replace either. Only a rename the person typed omits it. */
@@ -420,6 +444,15 @@ async function apiPatchSession(
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(opts?.auto ? { title, auto: true } : { title }),
+  })
+}
+
+/** Make sure the server has a row for this conversation, without naming it. */
+async function apiTouchSession(id: string): Promise<void> {
+  await authFetch(`/api/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
   })
 }
 
@@ -439,6 +472,10 @@ export function useConversations() {
       return new Map<string, ConversationMeta>(p ? [[p.id, p]] : [])
     })(),
   )
+  // Drafts this mount promoted with a first message. The boot listing can be requested before
+  // that message and land after it: the chat is then in neither the listing nor the pending
+  // marker, and reading it as a stale pointer jumped back to the previous conversation.
+  const promotedRef = useRef(new Set<string>())
   // A draft is deliberately absent from `conversations`, but its model is still live UI
   // state. Keep selections made in this mount separate from the server listing so an async
   // reconciliation cannot overwrite a picker choice before its first send persists it.
@@ -469,14 +506,20 @@ export function useConversations() {
         mintFirstConversation(sessions)
         return
       }
-      setConversations((prev) => mergeServerRows(prev, sessions, { keepLocalOnly: false }))
+      setConversations((prev) =>
+        keepPromoted(
+          prev,
+          mergeServerRows(prev, sessions, { keepLocalOnly: false }),
+          promotedRef.current,
+        ),
+      )
       const saved = activeIdRef.current || readActiveId()
       // A still-unpromoted draft never reaches the server, so it never appears in `sessions`
       // — that alone can't distinguish "stale pointer, fall back" from "you're mid-draft,
-      // keep it." The persisted pending marker can.
+      // keep it." The persisted pending marker can, and `promotedRef` once it has been sent.
       const pending = readPendingConversation()
-      const savedIsPendingDraft = !!pending && pending.id === saved
-      const active = sessions.some((s) => s.id === saved) || savedIsPendingDraft ? saved : first.id
+      const savedIsOurDraft = (!!pending && pending.id === saved) || promotedRef.current.has(saved)
+      const active = sessions.some((s) => s.id === saved) || savedIsOurDraft ? saved : first.id
       activeIdRef.current = active
       setActiveIdState(active)
       localStorage.setItem(ACTIVE_KEY, active)
@@ -485,7 +528,7 @@ export function useConversations() {
     function mintFirstConversation(serverRows: ConversationMeta[] = []) {
       const saved = activeIdRef.current || readActiveId()
       const pending = readPendingConversation()
-      if (pending && pending.id === saved) {
+      if ((pending && pending.id === saved) || promotedRef.current.has(saved)) {
         if (serverRows.length) {
           setConversations((prev) => mergeServerRows(prev, serverRows, { keepLocalOnly: true }))
         }
@@ -496,9 +539,8 @@ export function useConversations() {
         localStorage.setItem(ACTIVE_KEY, saved)
         return
       }
-      const c = makeConversation()
-      apiPatchSession(c.id, c.title, { auto: true }).catch(() => {})
-      setConversations([c, ...serverRows])
+      const c = stageDraft(pendingConvsRef.current)
+      setConversations(serverRows)
       activeIdRef.current = c.id
       setActiveIdState(c.id)
       localStorage.setItem(ACTIVE_KEY, c.id)
@@ -624,7 +666,7 @@ export function useConversations() {
         const updated = prev.map((c) => {
           if (c.id !== id) return c
           const title =
-            firstUserMessage && (c.title === 'New conversation' || c.title.includes('[skill:'))
+            firstUserMessage && (c.title === UNTITLED || c.title.includes('[skill:'))
               ? conversationTitleFromFirstMessage(firstUserMessage)
               : c.title
           if (title !== c.title) apiPatchSession(id, title, { auto: true }).catch(() => {})
@@ -693,13 +735,12 @@ export function useConversations() {
   // (the capacity regression test, which is specifically about the EAGER list's behavior).
   const createConversation = useCallback(
     (opts?: { persist?: boolean }): string => {
-      const c = makeConversation()
       if (opts?.persist !== true) {
-        pendingConvsRef.current.set(c.id, c)
-        writePendingConversation(c)
-        setActiveId(c.id)
-        return c.id
+        const draft = stageDraft(pendingConvsRef.current)
+        setActiveId(draft.id)
+        return draft.id
       }
+      const c = makeConversation()
       apiPatchSession(c.id, c.title, { auto: true }).catch(() => {})
       // NOT capped here — same reasoning as switchConversation below: MAX_CONVS bounds the
       // localStorage BOOT CACHE (writeCachedList), not the live in-memory list.
@@ -721,8 +762,13 @@ export function useConversations() {
     const pending = pendingConvsRef.current.get(id)
     if (!pending) return
     pendingConvsRef.current.delete(id)
+    promotedRef.current.add(id)
     writePendingConversation(null)
-    apiPatchSession(pending.id, pending.title, { auto: true }).catch(() => {})
+    // The placeholder is not a title: the send this precedes may name the conversation
+    // server-side (the onboarding welcome's "Getting started"), and an automatic title
+    // arriving after it would rename it back. A bare PATCH creates the row and names nothing.
+    if (pending.title === UNTITLED) apiTouchSession(pending.id).catch(() => {})
+    else apiPatchSession(pending.id, pending.title, { auto: true }).catch(() => {})
     setConversations((prev) => (prev.some((c) => c.id === id) ? prev : [pending, ...prev]))
   }, [])
 
@@ -785,14 +831,10 @@ export function useConversations() {
       }
       deleteMessages(id)
       setConversations((prev) => {
-        let updated = prev.filter((c) => c.id !== id)
+        const updated = prev.filter((c) => c.id !== id)
         if (id === activeIdRef.current) {
-          let next = updated.find((c) => !isBackgroundConversation(c))
-          if (!next) {
-            next = makeConversation()
-            apiPatchSession(next.id, next.title, { auto: true }).catch(() => {})
-            updated = [next]
-          }
+          const next =
+            updated.find((c) => !isBackgroundConversation(c)) ?? stageDraft(pendingConvsRef.current)
           setActiveId(next.id)
         }
         return updated

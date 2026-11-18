@@ -76,13 +76,16 @@ export interface BankSyncStatus {
   stage?: BankSyncStage
 }
 
-export type ReviewKind = 'modified' | 'vanished' | 'posted' | 'duplicate'
+export type ReviewKind = 'modified' | 'vanished' | 'posted' | 'duplicate' | 'undone'
 
 export interface BankRowView {
   date?: string
   amount?: number
   currency?: string
   description?: string
+  /** What a purchase in another currency cost there (a bank row only). */
+  original_amount?: number | null
+  original_currency?: string | null
 }
 
 export interface BankReview {
@@ -102,7 +105,23 @@ export interface BankReview {
     row?: BankRowView
     user_edited?: boolean
     reason?: string
+    /** A row held back because the sync that booked it was undone: Book again, or Dismiss. */
+    undone?: boolean
+    /** A card payment's other bank row: both are booked again together, as one transfer. */
+    pair?: BankRowView
+    /** kind 'undone': every row of the sync you undid, held back as ONE decision. */
+    rows?: BankUndoneRow[]
+    /** kind 'undone': when that sync ran. */
+    run_at?: string
   }
+}
+
+/** One row of an undone sync: a card payment's two bank rows are one entry (`pair`). */
+export interface BankUndoneRow {
+  /** The bank's refs; the first books just this row again. */
+  refs: string[]
+  row: BankRowView
+  pair?: BankRowView
 }
 
 export interface BankRunCounts {

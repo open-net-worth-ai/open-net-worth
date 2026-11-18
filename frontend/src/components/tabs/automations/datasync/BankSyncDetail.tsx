@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { fDateTime } from '../../../../utils/format'
+import { useHoldGuides } from '../../../intro/tourTarget'
 import { ErrorState, Loading } from '../../../ui'
 import { BankRunReport } from './BankRunReport'
 import { BankSyncHead, BankSyncSettings } from './BankSyncPanel'
@@ -15,6 +16,8 @@ import './bankSync.css'
 // anything to review and the settings on the left, the run history on the right.
 
 export function BankSyncDetail({ provider, onBack }: { provider: string; onBack: () => void }) {
+  // The person came to set up or run this sync: no guide starts on top of it (ADR 2026-11-14).
+  useHoldGuides()
   // Re-read every two seconds only while a run is in progress.
   const [poll, setPoll] = useState(false)
   const sync = useBankSync(provider, true, poll)
@@ -55,7 +58,7 @@ export function BankSyncDetail({ provider, onBack }: { provider: string; onBack:
   const status = sync.data
   if (status.stage === 'done')
     return (
-      <div className="a3-wrap" data-od-id="bank-sync-detail">
+      <div className="a3-wrap bs-detail" data-od-id="bank-sync-detail">
         {crumb}
         <BankSyncHead status={status} />
         <div className="a3-cols">
@@ -105,16 +108,15 @@ function BankSyncHistory({ provider }: { provider: string }) {
                 type="button"
                 role="listitem"
                 className="a3-hist-row"
+                title={run.trigger === 'scheduled' ? 'Scheduled run' : 'Started by you'}
                 onClick={() => setOpen(run.id)}
               >
                 <span
                   className={`rd-dot ${bad ? 'bad' : run.status === 'running' ? 'run' : 'good'}`}
                   aria-hidden="true"
                 />
-                <span className="when">{fDateTime(run.started_at, 'short', 'always')}</span>
+                <span className="when">{fDateTime(run.started_at, 'short')}</span>
                 <span className="note">
-                  {run.trigger === 'scheduled' ? 'Scheduled' : 'By you'}
-                  {' — '}
                   {run.status === 'running' ? 'Syncing…' : run.outcome || run.error || ''}
                 </span>
                 {run.status === 'running' && <span className="a3-live" title="Running now" />}

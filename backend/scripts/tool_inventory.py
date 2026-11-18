@@ -97,6 +97,7 @@ ATTRIBUTE_LIST_PARAMS: dict[str, str] = {
     "get_watchlist.values": "read FILTER, not an entity target",
     "connector_sync.providers": "one sync sweep across providers",
     "add_transaction_refs.refs": "one transaction, many provenance pairs",
+    "show_visual.blocks": "one visual in one reply, made of up to three blocks",
     # NOTE — seven entries were DELETED here by the 2026-07-19d naming-close lane, and the
     # deletion is the point. They exempted apply_lot_acquire.acquisitions,
     # apply_lot_dispose.disposals, apply_lot_delete.deletions,

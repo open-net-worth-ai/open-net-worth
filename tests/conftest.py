@@ -280,6 +280,15 @@ def _no_real_codex_catalog_fetch(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _simplefin_feed_per_test():
+    """SimpleFIN shares one answer between a run's per-account reads for a couple of minutes
+    (``simplefin._feed``): start every test without one."""
+    from backend.services.aggregation import simplefin
+
+    simplefin._forget_shared()
+
+
+@pytest.fixture(autouse=True)
 def _mention_corpus_per_test():
     """The mention picker's corpus memo is keyed on the data epoch, which a test that writes a
     store's file directly or swaps a module's path never moves — start every test empty."""
@@ -806,6 +815,24 @@ def _no_tool_call_flusher_thread(monkeypatch):
     _call_log._drain()
     yield
     _call_log._drain()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_telegram_token_check(request, monkeypatch):
+    """Saving a Telegram token asks Telegram who it belongs to (``getMe``). No test may reach
+    Telegram: the check answers as an unreachable Telegram would (``None`` — the save lands, no
+    username). A test that needs a verdict patches its own; tests of the check itself mark
+    themselves ``real_telegram_token_check`` and fake the Bot instead."""
+    if "real_telegram_token_check" in request.keywords:
+        yield
+        return
+    from backend.connectors.telegram import botapi
+
+    async def _offline(_token):
+        return None
+
+    monkeypatch.setattr(botapi, "check_token", _offline)
+    yield
 
 
 @pytest.fixture(autouse=True)

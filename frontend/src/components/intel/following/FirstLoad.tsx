@@ -34,10 +34,19 @@ const rows = (n: number) =>
 
 /** A portfolio page before its data: this page's own shape (the header with its real way back
  *  and the name when known, the actions, the tabs, the chart, the filter chips, the table). */
-export function PageSkeleton({ name, onBack }: { name: string; onBack: () => void }) {
+export function PageSkeleton({
+  name,
+  onBack,
+  crumb = true,
+}: {
+  name: string
+  onBack: () => void
+  /** Off on a phone, which goes back with the edge swipe. */
+  crumb?: boolean
+}) {
   return (
     <div className="fol-page" aria-busy="true" aria-label={COPY.loadingPage}>
-      <Crumb name={name || COPY.loadingPage} onBack={onBack} />
+      {crumb && <Crumb name={name || COPY.loadingPage} onBack={onBack} />}
       <header className="fol-head">
         <div className="fol-id">
           <h2 className="fol-title">

@@ -501,6 +501,27 @@ def _remove_web_search(connector_id: str) -> None:
 _FEED_STATE = ("last_synced_at", "last_status", "last_error")
 
 
+def _banks_config(private: tuple[str, ...], ended: Callable[[dict], bool]):
+    """A bank connector's public config: the default merge without ``private`` state, plus
+    ``banks_need_sign_in`` — how many of its banks wait for the user — so the Connectors list
+    flags it. That count is all it says about the (private) banks."""
+
+    def build(row: Row, have: Have, ctx: dict) -> dict:
+        merged = {**row["state"], **row["config"]}
+        out = {k: v for k, v in merged.items() if k not in private}
+        banks = merged.get("banks") or {}
+        values = banks.values() if isinstance(banks, dict) else banks
+        out["banks_need_sign_in"] = sum(1 for b in values if isinstance(b, dict) and ended(b))
+        return out
+
+    return build
+
+
+# GoCardless requisition statuses that mean a bank's access is over (expired, refused,
+# suspended); an unfinished link is not.
+_GC_ENDED = frozenset({"EX", "RJ", "SU"})
+
+
 def _kind(kind: str, label: str, configured: Callable, **options) -> ConnectorKind:
     return ConnectorKind(kind, label, configured, **options)
 
@@ -620,6 +641,10 @@ _KINDS: tuple[ConnectorKind, ...] = (
         secret_fields=_secrets("private_key", minted=("session_id", "sessions")),
         config_keys=("application_id", "aspsp", "country"),
         private_state=("banks", "pending_links", "account_identities"),
+        public_config=_banks_config(
+            ("banks", "pending_links", "account_identities"),
+            lambda b: bool(b.get("access_ended")),
+        ),
         # The moved sessions are still consented at Enable Banking; without each bank's name the
         # receiver would list unnamed banks.
         moved_state=("banks", "account_identities"),
@@ -632,6 +657,9 @@ _KINDS: tuple[ConnectorKind, ...] = (
         secret_fields=_secrets("secret_key", minted=("access_token", "requisitions")),
         config_keys=("secret_id",),
         private_state=("accounts_meta", "banks"),
+        public_config=_banks_config(
+            ("accounts_meta", "banks"), lambda b: str(b.get("status") or "") in _GC_ENDED
+        ),
         # The moved requisitions are still linked at GoCardless; without each bank's name and
         # status the receiver would show unnamed, unlinked banks until someone checked them.
         moved_state=("banks", "accounts_meta"),

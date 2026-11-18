@@ -26,6 +26,27 @@ vi.mock('@tanstack/react-router', () => ({
   useRouter: () => undefined,
 }))
 
+// The open review items a test needs; null = the one bank-changed item most tests read.
+let reviewItems: unknown[] | null = null
+
+function duplicateItem(n: number) {
+  return {
+    id: `bsr_d${n}`,
+    provider: 'gocardless',
+    provider_label: 'GoCardless',
+    kind: 'duplicate',
+    ref: `derived:${n}`,
+    txn_id: `t${n}`,
+    created_at: '2026-11-13T10:00:00+00:00',
+    updated_at: '2026-11-13T10:00:00+00:00',
+    detail: {
+      reason: 'same amount, similar description, near date',
+      current: { date: '2026-11-12', amount: -3.4, currency: 'EUR', description: `ACME CAFE ${n}` },
+      row: { date: '2026-11-13', amount: -3.4, currency: 'EUR', description: `ACME CAFE ${n}` },
+    },
+  }
+}
+
 const reply = (body: unknown, status = 200) =>
   Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) })
 
@@ -63,10 +84,12 @@ function status(over: Partial<BankSyncStatus> = {}): BankSyncStatus {
 }
 
 let current: BankSyncStatus
+let undoneItem = false
 const sent: { url: string; method?: string; body?: string }[] = []
 
 beforeEach(() => {
   current = status()
+  undoneItem = false
   sent.length = 0
   authFetch.mockImplementation((url: string, init?: { method?: string; body?: string }) => {
     if (init?.method) sent.push({ url, method: init.method, body: init.body })
@@ -97,6 +120,26 @@ beforeEach(() => {
         problems: [],
         progress: { done: 0, total: 0 },
       })
+    if (url === '/api/imports/runs/r2')
+      return reply({
+        id: 'r2',
+        provider: 'gocardless',
+        kind: 'sync',
+        trigger: 'manual',
+        status: 'done',
+        started_at: '2026-11-14T10:00:00+00:00',
+        finished_at: '2026-11-14T10:00:05+00:00',
+        outcome: '2 booked',
+        counts: { fetched: 2, booked: 2, pending_removed: 1, undoable: 1, errors: 0 },
+        errors: [],
+        warnings: [],
+        log: [],
+        problems: [],
+        progress: { done: 0, total: 0 },
+      })
+    if (url === '/api/bank-sync/gocardless/runs/r2/undo' && init?.method === 'POST')
+      return reply({ removed: 2 })
+    if (url.startsWith('/api/transactions?batch_id=bank_sync%3Ar2')) return reply([])
     if (url.startsWith('/api/transactions?batch_id=bank_sync%3Ar1'))
       return reply([
         {
@@ -114,6 +157,51 @@ beforeEach(() => {
         },
       ])
     if (url === '/api/categories') return reply([])
+    if (url.startsWith('/api/bank-sync/reviews?') && undoneItem)
+      return reply({
+        items: [
+          {
+            id: 'bsr_2',
+            provider: 'gocardless',
+            provider_label: 'GoCardless',
+            kind: 'undone',
+            ref: 'run:r2',
+            txn_id: null,
+            created_at: '2026-11-14T10:00:00+00:00',
+            updated_at: '2026-11-14T10:00:00+00:00',
+            detail: {
+              undone: true,
+              reason: 'You undid the sync that booked these.',
+              rows: [
+                {
+                  refs: ['acc:o1'],
+                  row: {
+                    date: '2026-11-12',
+                    amount: -10,
+                    currency: 'GBP',
+                    description: 'ACME CAFE',
+                  },
+                },
+                {
+                  refs: ['acc:o2'],
+                  row: { date: '2026-11-11', amount: -4, currency: 'GBP', description: 'ACME BUS' },
+                },
+                {
+                  refs: ['acc:o3'],
+                  row: {
+                    date: '2026-11-10',
+                    amount: -6,
+                    currency: 'GBP',
+                    description: 'ACME KIOSK',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })
+    if (url.startsWith('/api/bank-sync/reviews?') && reviewItems)
+      return reply({ items: reviewItems })
     if (url.startsWith('/api/bank-sync/reviews?'))
       return reply({
         items: [
@@ -141,6 +229,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  reviewItems = null
   cleanup()
   clearQueryCache()
   authFetch.mockReset()
@@ -163,8 +252,9 @@ describe.each([false, true])('bank_data_sync=%s', (on) => {
         return
       }
       expect(await screen.findByRole('region', { name: 'GoCardless sync' })).toBeTruthy()
-      expect(screen.getByText(/^Not set up · /)).toBeTruthy()
-      expect(screen.getByText(/every 12 hours/)).toBeTruthy()
+      expect(
+        screen.getByText('Bring in your history, then new transactions every 12 hours.'),
+      ).toBeTruthy()
       expect(screen.queryByRole('checkbox')).toBeNull() // the details live on the sync's own page
       fireEvent.click(screen.getByRole('button', { name: 'Set up sync' }))
       expect(navigate).toHaveBeenCalledWith(
@@ -206,7 +296,8 @@ describe('with bank_data_sync on', () => {
 
   it('lists each linked account with its own Sync box, and reads only once they run out', async () => {
     render(<BankSyncSettings status={status({ mode: 'data', stage: 'done' })} />)
-    const box = await screen.findByRole('checkbox', { name: /ACME Current/ })
+    // The box is named for the account at the bank; the book account is the button beside it.
+    const box = await screen.findByRole('checkbox', { name: /Current Account/ })
     expect((box as HTMLInputElement).checked).toBe(true)
     expect(screen.getByRole('button', { name: 'ACME Current' })).toBeTruthy()
     expect(screen.getByText('•••0001')).toBeTruthy()
@@ -231,10 +322,14 @@ describe('with bank_data_sync on', () => {
         method: 'POST',
       }),
     )
-    const imported = status({ stage: 'sync' })
+    // The import's own run, newer than the one before the tap, ends the wait.
+    const imported = status({
+      stage: 'sync',
+      last_run: { id: 'r-import', status: 'done' } as BankSyncStatus['last_run'],
+    })
     imported.accounts![0]!.imported = true
     rerender(<BankSyncSetup status={imported} />)
-    expect(screen.getByText(/^Imported/)).toBeTruthy()
+    expect(screen.getByText('History imported')).toBeTruthy()
     expect(screen.queryByText(/Lucius/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
     await waitFor(() =>
@@ -252,6 +347,53 @@ describe('with bank_data_sync on', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use the bank’s version' }))
     await waitFor(() =>
       expect(sent.at(-1)).toMatchObject({ url: '/api/bank-sync/reviews/bsr_1/accept' }),
+    )
+  })
+
+  it('an undone sync is one item: Book all again, Forget them, or book one row', async () => {
+    undoneItem = true
+    render(<BankSyncReviews provider="gocardless" />)
+    expect(await screen.findByText(/its 3 transactions weren’t booked again/)).toBeTruthy()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Same transaction' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Forget them' })).toBeTruthy()
+    expect(screen.queryByText(/ACME BUS/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show the 3 transactions' }))
+    const bus = screen.getByText(/ACME BUS/).closest('li')!
+    fireEvent.click(bus.querySelector('button')!)
+    await waitFor(() =>
+      expect(sent.at(-1)).toMatchObject({ url: '/api/bank-sync/reviews/bsr_2/book' }),
+    )
+    expect(JSON.parse(sent.at(-1)!.body!)).toMatchObject({ ref: 'acc:o2' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Book all 3 again' }))
+    await waitFor(() => expect(JSON.parse(sent.at(-1)!.body!).ref).toBeUndefined())
+  })
+
+  it('a review shows each amount in its currency', async () => {
+    render(<BankSyncReviews provider="gocardless" />)
+    expect(await screen.findByText(/£27\.50/)).toBeTruthy()
+    expect(screen.getByText(/£25\.00/)).toBeTruthy()
+  })
+
+  it('a long review list shows its first three, the rest one click away', async () => {
+    reviewItems = [1, 2, 3, 4, 5].map(duplicateItem)
+    render(<BankSyncReviews provider="gocardless" />)
+    expect(await screen.findAllByRole('listitem')).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 5' }))
+    expect(screen.getAllByRole('listitem')).toHaveLength(5)
+  })
+
+  it('every possible duplicate is linked at once, only after you confirm', async () => {
+    reviewItems = [1, 2, 3, 4, 5].map(duplicateItem)
+    render(<BankSyncReviews provider="gocardless" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Same transaction for all 5' }))
+    expect(sent).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Same transaction for all' }))
+    await waitFor(() => expect(sent).toHaveLength(5))
+    expect(sent.map((r) => r.url)).toEqual(
+      [1, 2, 3, 4, 5].map((n) => `/api/bank-sync/reviews/bsr_d${n}/accept`),
     )
   })
 
@@ -274,6 +416,21 @@ describe('with bank_data_sync on', () => {
     expect(acme.querySelectorAll('input[type=checkbox]')).toHaveLength(2)
     const other = screen.getByRole('group', { name: 'Other Bank accounts to sync' })
     expect(other.textContent).toContain('Other Card')
+  })
+
+  it('a long bank account name is cut with an ellipsis and keeps its full name in the title', () => {
+    const base = status().accounts![0]!
+    const long = 'Plaid Gold Standard 0% Interest Checking'
+    render(
+      <BankSyncSettings
+        status={status({
+          mode: 'data',
+          stage: 'done',
+          accounts: [{ ...base, bank: 'ACME Bank', bank_name: long, mask: '0000' }],
+        })}
+      />,
+    )
+    expect(screen.getByTitle(long).textContent).toBe(long)
   })
 
   it.each([
@@ -386,12 +543,11 @@ describe('with bank_data_sync on', () => {
 
   it('a run report says what it did and lists what it booked', async () => {
     render(<BankRunReport runId="r1" onClose={() => {}} />)
-    expect(
-      await screen.findByText('1 booked · 1 already in your book · 1 still pending at the bank'),
-    ).toBeTruthy()
-    expect(screen.getByText('Scheduled · took 5s · read 3 from the bank')).toBeTruthy()
+    expect(await screen.findByText('1 booked')).toBeTruthy()
+    expect(screen.getByText('1 already in your book · 1 still pending at the bank')).toBeTruthy()
+    expect(screen.getByText(/· 5s · scheduled$/)).toBeTruthy()
     expect(await screen.findByText('ACME Grocery')).toBeTruthy()
-    expect(screen.getByText('ACME Current · Uncategorized')).toBeTruthy()
+    expect(screen.getByText('Uncategorized')).toBeTruthy()
   })
 
   it('a run report opens the register filtered to the run, and each row closes into its drawer', async () => {
@@ -405,8 +561,35 @@ describe('with bank_data_sync on', () => {
         search: expect.objectContaining({ batch: 'bank_sync:r1' }),
       }),
     )
+    // A row opens its drawer over the report, which stays open beneath it.
     fireEvent.click(await screen.findByRole('button', { name: 'Open ACME Grocery' }))
-    expect(onClose).toHaveBeenCalledTimes(2)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('a run that changed the book can be undone, once you have read what it will do', async () => {
+    render(<BankRunReport runId="r2" onClose={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo this run' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Undo this sync?' })
+    expect(dialog.textContent).toContain('removes the 2 transactions this sync booked')
+    expect(dialog.textContent).toContain('brings back the 1 pending one it dropped')
+    expect(dialog.textContent).toContain('book them all again, book one, or forget them')
+    expect(sent).toHaveLength(0)
+    const confirm = Array.from(dialog.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Undo this run',
+    )!
+    fireEvent.click(confirm)
+    await waitFor(() =>
+      expect(sent.at(-1)).toMatchObject({
+        url: '/api/bank-sync/gocardless/runs/r2/undo',
+        method: 'POST',
+      }),
+    )
+  })
+
+  it('a run that booked and removed nothing has no Undo', async () => {
+    render(<BankRunReport runId="r1" onClose={() => {}} />)
+    await screen.findByRole('button', { name: 'View in register' })
+    expect(screen.queryByRole('button', { name: 'Undo this run' })).toBeNull()
   })
 
   it('step 2 can be skipped: Skip for now moves on to Turn on, importing nothing', () => {
@@ -448,8 +631,8 @@ describe('with bank_data_sync on', () => {
     authFetch.mockImplementation(() => reply({ connectors: [] }))
     render(
       <ConnectorNextStep
-        provider="simplefin"
-        providerLabel="SimpleFIN"
+        provider="lunch_money"
+        providerLabel="Lunch Money"
         linkedCount={1}
         unlinkedCount={0}
       />,
@@ -474,7 +657,7 @@ describe('with bank_data_sync on', () => {
     const tile = screen.getByRole('button', { name: 'Set up Plaid' })
     expect(tile.textContent).toContain('Every 6 hours')
     fireEvent.click(tile)
-    expect(onOpen).toHaveBeenCalledWith('bank:plaid')
+    expect(onOpen).toHaveBeenCalledWith('bank-plaid')
   })
 
   it('a bank not set up starts with Connect, the way the budget apps do', () => {
@@ -495,6 +678,6 @@ describe('with bank_data_sync on', () => {
     const card = screen.getByRole('article', { name: 'GoCardless bank sync' })
     expect(card.textContent).toContain('2 to review')
     fireEvent.click(card)
-    expect(onOpen).toHaveBeenCalledWith('bank:gocardless')
+    expect(onOpen).toHaveBeenCalledWith('bank-gocardless')
   })
 })

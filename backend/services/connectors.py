@@ -34,6 +34,7 @@ from backend.core.errors import NotFoundError, ValidationError
 from backend.core.mcp_external import is_read_only
 from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
 from backend.db.engine import get_engine
+from backend.db.pairing_store import PairingStore
 from backend.models.connector import ConnectorTool, ConnectorView
 from backend.models.mcp_client import MCP_CONNECTOR_PREFIX
 from backend.services import tool_permissions, tool_permissions_v2
@@ -437,6 +438,9 @@ def remove_connector(connector_id: str) -> None:
     else:
         ConnectorStore().delete(connector_id)
     tool_permissions.clear_connector_permissions(connector_id)
+    # A chat connector's pending pairing requests go with it: re-adding the bot showed the old
+    # bot's "Pending approvals", one tap from letting that sender in (owner, 2026-11-16).
+    PairingStore().clear(connector_id)
     _reconcile_notify_channel(kind)
 
 

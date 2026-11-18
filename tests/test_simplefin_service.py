@@ -191,7 +191,8 @@ def test_fetch_accounts_error_never_leaks_credentials(monkeypatch):
     assert "sfin_user_42" not in message
     assert "s3cr3t_pw" not in message
     assert "bridge.simplefin.org" not in message
-    assert message == "SimpleFIN HTTP 403"
+    assert message == svc._STATUS_TEXT[403]
+    assert "HTTP 403" in message  # what classify_error reads
 
 
 def test_fetch_window_scrubs_credential_from_an_unexpected_exception(monkeypatch):
@@ -297,12 +298,13 @@ def test_claim_setup_token_bounds_response_size(monkeypatch):
 
 class TestFetchWindow:
     def _fake_fetch_accounts(self, feed=_FEED, captured=None):
-        def _fake(access_url, start_date=None, end_date=None, account=None):
+        def _fake(access_url, start_date=None, end_date=None, account=None, balances_only=False):
             if captured is not None:
                 captured["access_url"] = access_url
                 captured["start_date"] = start_date
                 captured["end_date"] = end_date
                 captured["account"] = account
+                captured["balances_only"] = balances_only
             return feed
 
         return _fake
@@ -350,7 +352,7 @@ class TestFetchWindow:
         interest = by_ref["ACT-SAV:T3"]
         assert interest["raw"] == _FEED["accounts"][1]["transactions"][0]
 
-    def test_accounts_only_skips_transactions_and_windows_to_zero_width(self, monkeypatch):
+    def test_accounts_only_asks_for_balances_only(self, monkeypatch):
         store = _configured_store()
         captured: dict = {}
         monkeypatch.setattr(svc, "fetch_accounts", self._fake_fetch_accounts(captured=captured))
@@ -363,14 +365,20 @@ class TestFetchWindow:
         )
         assert len(window.accounts) == 2
         assert window.rows == []
-        assert captured["start_date"] == captured["end_date"]
+        assert captured["balances_only"] is True
+        assert captured["start_date"] is None and captured["end_date"] is None
 
-    def test_account_filter_passed_through_to_provider(self, monkeypatch):
+    def test_one_account_is_read_from_the_feed_for_every_account(self, monkeypatch):
+        """The Bridge allows ~24 requests a day: every account comes in one request, shared by
+        the run's per-account reads, and ``account`` picks that account's rows."""
         store = _configured_store()
         captured: dict = {}
         monkeypatch.setattr(svc, "fetch_accounts", self._fake_fetch_accounts(captured=captured))
-        svc.fetch_window(store, "2026-01-01T00:00:00+00:00", "2026-02-01T00:00:00+00:00", "ACT-CHK")
-        assert captured["account"] == "ACT-CHK"
+        w = svc.fetch_window(
+            store, "2026-01-01T00:00:00+00:00", "2026-02-01T00:00:00+00:00", "ACT-CHK"
+        )
+        assert captured["account"] is None
+        assert {r["provider_account_id"] for r in w.rows} == {"ACT-CHK"}
 
     def test_zero_amount_transaction_skipped(self, monkeypatch):
         store = _configured_store()
@@ -464,7 +472,7 @@ class TestClassifyError:
 def _capture_slices(monkeypatch, feed):
     calls: list[dict] = []
 
-    def _fake(access_url, start_date=None, end_date=None, account=None):
+    def _fake(access_url, start_date=None, end_date=None, account=None, balances_only=False):
         calls.append({"start": start_date, "end": end_date})
         return feed
 
@@ -484,20 +492,19 @@ def test_an_error_inside_a_200_feed_is_a_warning_and_the_window_is_incomplete(mo
     _capture_slices(monkeypatch, feed)
     window = svc.fetch_window(_configured_store(), "2026-01-01", "2026-01-10", None)
     assert window.complete is False
-    assert window.warnings == [
-        "SimpleFIN: Connection to ACME Bank may need attention",
-        "SimpleFIN: con.auth Connection to ACME Bank may need attention",
-    ]
+    # v2 repeats its errlist messages in ``errors`` for v1 readers: said once.
+    assert window.warnings == ["SimpleFIN: Connection to ACME Bank may need attention"]
 
 
-def test_a_long_window_is_fetched_in_45_day_slices_that_include_the_last_day(monkeypatch):
-    """The bridge flags any range over 45 days (and says it may cap it), and its end-date
-    is exclusive — so slices cover every day through ``before`` and no slice is longer."""
+def test_a_long_window_is_fetched_in_44_day_slices_that_include_the_last_day(monkeypatch):
+    """The bridge refuses a range over 45 days, and a 45-day slice crossing a clock change is
+    an hour over (Sure #5101); its end-date is exclusive — so slices cover every day through
+    ``before`` and none is longer than 44 days."""
     monkeypatch.setattr(svc, "user_zone", lambda: timezone.utc)
     calls = _capture_slices(monkeypatch, {"errors": [], "accounts": []})
     svc.fetch_window(_configured_store(), "2026-01-01", "2026-03-31", None)
     day = 86400
-    assert [(c["end"] - c["start"]) // day for c in calls] == [45, 45]
+    assert [(c["end"] - c["start"]) // day for c in calls] == [44, 44, 2]
     assert calls[0]["start"] == int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())
     assert calls[-1]["end"] == int(datetime(2026, 4, 1, tzinfo=timezone.utc).timestamp())
     assert all(a["end"] == b["start"] for a, b in zip(calls, calls[1:]))

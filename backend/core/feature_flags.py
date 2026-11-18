@@ -188,8 +188,8 @@ FLAGS: tuple[Flag, ...] = (
     Flag(
         name="bank_data_sync",
         description=(
-            "Book a bank connector's transactions without AI. On the GoCardless, Enable Banking "
-            "or Plaid connector, choose Sync without AI: each linked account you tick gets the "
+            "Book a bank connector's transactions without AI. On the GoCardless, Enable Banking, "
+            "Plaid or SimpleFIN connector, choose Sync without AI: each linked account you tick gets the "
             "history the bank serves, then new rows on a schedule. Changes the bank makes "
             "afterwards wait for you in a review list. Bank syncs join the Data Sync tab in "
             "Automations. Off: only a Lucius Automation books bank rows, as before."
@@ -197,6 +197,18 @@ FLAGS: tuple[Flag, ...] = (
         default=True,
         owner="owner",
         added=date(2026, 11, 13),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
+        name="inline_visuals",
+        description=(
+            "Lucius can answer with a small chart, figures or a timeline inside its reply when "
+            "a picture says it better: a trend, a breakdown, a comparison. Every number in it "
+            "comes straight from the app's own data. Off: replies are text and tables only."
+        ),
+        default=True,
+        owner="owner",
+        added=date(2026, 11, 17),
         remove_by=date(2027, 3, 1),
     ),
     Flag(

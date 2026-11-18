@@ -1635,6 +1635,15 @@ div.fol-row-main {
   box-shadow: 0 0 0 var(--space-4) var(--bg);
 }
 
+/* On a phone the pinned card draws its chart shorter — the real chart, markers and all, still in
+   view while the table scrolls under it, with room left for the rows (owner, 2026-11-16: at full
+   height it left room for four). */
+@container fol-page (width < 640px) {
+  .fol-act-card {
+    --fol-chart-h: 120px;
+  }
+}
+
 /* The way back to Famous Portfolios, on the name's own line. */
 .fol-back-icon {
   all: unset;
@@ -1935,13 +1944,25 @@ div.fol-row-main {
   gap: var(--space-3);
 }
 
+/* The two columns share their rows (subgrid): a side with more sectors pushes BOTH sides'
+   "Top 5 holdings" down, so the two lists always start on one line. A column is four parts:
+   heading, figures, sectors, holdings. */
 .fol-vs-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-9);
+  column-gap: var(--space-9);
 }
 
 .fol-vs-col {
+  display: grid;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  align-content: start;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.fol-vs-part {
   display: grid;
   align-content: start;
   gap: var(--space-5);
@@ -1975,6 +1996,11 @@ div.fol-row-main {
   .fol-vs-pair {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-8);
+  }
+  /* Stacked, there is nothing beside a column to line up with. */
+  .fol-vs-col {
+    grid-row: auto;
+    grid-template-rows: none;
   }
 }
 

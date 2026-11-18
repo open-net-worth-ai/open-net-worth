@@ -10,8 +10,16 @@ import {
 } from '../../../../hooks/useChatSuggestionsEnabled'
 import { authFetch } from '../../../../api/client'
 import { setCachedQueryData, useCachedFetchState } from '../../../../state/queryCache'
-import { Panel, Toggle, useSectionBusy } from '../ds'
+import { Panel, SegTabs, Toggle, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
+
+type ResponseDetail = 'brief' | 'normal' | 'detailed'
+
+const RESPONSE_DETAIL_OPTIONS: readonly { value: ResponseDetail; label: string }[] = [
+  { value: 'brief', label: 'Brief' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'detailed', label: 'Detailed' },
+]
 
 export function ChatSection({ toast }: SectionProps) {
   // Follow-up suggestion chips. The control existed in Settings → Appearance before the port
@@ -22,6 +30,7 @@ export function ChatSection({ toast }: SectionProps) {
     chat_cost_visible?: boolean
     chat_multi_turn_enabled?: boolean
     chat_thinking_grouped?: boolean
+    chat_response_detail?: ResponseDetail | null
     screen_awareness_default?: boolean
   }>(
     PROFILE_KEY,
@@ -31,6 +40,7 @@ export function ChatSection({ toast }: SectionProps) {
         chat_cost_visible?: boolean
         chat_multi_turn_enabled?: boolean
         chat_thinking_grouped?: boolean
+        chat_response_detail?: ResponseDetail | null
         screen_awareness_default?: boolean
       }>(PROFILE_KEY),
     { staleTime: 0 },
@@ -142,6 +152,25 @@ export function ChatSection({ toast }: SectionProps) {
     }
   }
 
+  async function putResponseDetail(detail: ResponseDetail) {
+    try {
+      const r = await authFetch(PROFILE_KEY, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_response_detail: detail }),
+      })
+      if (!r.ok) {
+        toast(`Could not save (HTTP ${r.status})`)
+        return
+      }
+      const body = (await r.json()) as { profile?: unknown }
+      setCachedQueryData(PROFILE_KEY, body.profile ?? body)
+      toast(`Response detail: ${detail}`)
+    } catch {
+      toast('Could not reach the server. Try again.')
+    }
+  }
+
   return (
     <Panel title="Chat" sub="How the assistant behaves in the chat panel">
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -203,6 +232,21 @@ export function ChatSection({ toast }: SectionProps) {
           disabled={!suggestions.data}
           onChange={(v) => void putThinkingGrouped(v)}
           label="Group reasoning into one block"
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Response detail</div>
+          <div className="rd-help" style={{ marginTop: 3, display: 'block', lineHeight: 1.5 }}>
+            How much detail Lucius puts in an answer. Brief: the answer and the key figures.
+            Detailed: the reasoning too.
+          </div>
+        </div>
+        <SegTabs
+          options={RESPONSE_DETAIL_OPTIONS}
+          value={suggestions.data?.chat_response_detail ?? 'normal'}
+          onChange={(v) => void putResponseDetail(v)}
+          ariaLabel="Response detail"
         />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

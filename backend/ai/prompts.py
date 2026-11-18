@@ -388,6 +388,66 @@ def _fmt_agent_tool_catalog(allowed_tools: Optional[list]) -> str:
     return "\n".join(["", header, body])
 
 
+_VISUALS_GUIDE = """
+VISUALS IN A REPLY — show_visual draws a small chart, figures or a timeline inside the reply.
+When the answer has a shape, DRAW IT — that is the default, not an extra:
+- "where did my money go / what did I spend on" → chart bar of the categories
+- "this month vs last" / "compare X and Y" → stats (now, compare = then) + chart bar, two series
+- "how is my net worth / portfolio trending" → chart line
+- "what's my allocation / am I concentrated" → chart stack
+- "how's my budget" → chart progress (spent vs target)
+- "when do I vest / what bills are coming" → timeline
+- "what moved my net worth / why did X change" → your own drawing: a waterfall, start → each
+  driver (up good, down bad) → end
+- "where does my income go" → your own drawing: income split into spending groups and saving
+- "this month vs last by category" → chart bar, two series (both months' rows)
+- "am I on track / what if" → stats: one tile per figure that moved (odds, safe age, median
+  pot), value = the what-if run, compare = the saved-plan run ("args": {} picks the run with
+  no arguments), compare_label "Your plan"
+Don't draw a single figure, a yes or no, or advice. Read first, then call show_visual with
+references to those results. With standard blocks, the text is one or two sentences: the
+takeaway and anything the picture can't say — never the figures it already shows. WHAT-IFS: on
+Plan › Outlook, stage the what-if with run_screen_command; elsewhere draw it and also stage it,
+so they can open it in Outlook.
+YOUR OWN DRAWING (code, alone or beside blocks) — SVG or HTML you write, for any shape: a
+waterfall, a flow, a scatter, a trend with marked events, an interactive explainer. It runs in
+its own frame: scripts, <style>, libraries from a CDN, images and links all work; the frame
+grows to fit and follows light/dark mode. Draw it like this:
+- Seamless and flat: transparent background, no gradients, shadows or glow. No title or prose
+  inside — the reply says what it is. SVG: <svg viewBox="0 0 680 H" width="100%" role="img">
+  with a <title>; HTML fills the 680px column.
+- Type: classes t (13px), ts (12px secondary), th (14px heading), tm (11px muted). Two weights
+  only, 400 and 500 — never bold 600/700. Sentence case. Nothing under 11px.
+- Ink: text in var(--text-primary) / --text-secondary / --text-muted, never in a series colour
+  — a small coloured square beside a label carries the identity.
+- Colour by meaning, never in sequence: at most two hues plus grey. Magnitude = one hue;
+  "this one matters" = one hue, the rest class muted; over/under a target = blue vs red.
+  Series in this fixed order: s1 blue, s2 orange, s3 aqua, s4 yellow, s5 magenta, s6 green,
+  s7 violet, s8 red (fill + stroke; add nofill for a line). Status: good, warn, serious, bad.
+  Diagram boxes: c-purple c-teal c-coral c-pink c-gray (c-blue c-green c-amber c-red only for
+  info/success/warning/error) on a <g> holding the rect and its text.
+- Marks: bars ≤24px thick (14–18 is typical), rx 3–4; lines 2px with round caps; gridlines
+  class grid, baseline class axis, no vertical gridlines on a time axis; 2px gap between
+  touching marks. One y-axis only.
+- Labels never collide: put a value past the bar or tick it belongs to. Legend for 2+ series
+  (10px squares, 12px text); direct labels when there are 4 or fewer. Round every shown
+  number; sign before the currency (-$5M).
+- Chart.js: canvas can't read CSS variables — get --series-N and --text-muted with
+  getComputedStyle(document.documentElement); wrap the canvas in a div with a set height,
+  responsive: true, maintainAspectRatio: false, legend display false (draw your own).
+"""
+
+
+def _visuals_block() -> str:
+    """The VISUALS paragraph while the ``inline_visuals`` flag is on; nothing when it is off."""
+    from backend.services.feature_flags import enabled
+
+    try:
+        return _VISUALS_GUIDE if enabled("inline_visuals") else ""
+    except Exception:  # an unreadable flag must not break the prompt — fall back to off
+        return ""
+
+
 def _budget_method_line() -> str:
     """The book's budget method and the tool that reads it. ``get_budget_month`` is Zero-Based's
     table whatever the method, so a 50/30/20 book asked "how's my budget?" was answered in Ready
@@ -713,6 +773,11 @@ if the user seems ready to add their first account or holding, call activate_ski
         else ""
     )
 
+    visuals_block = _visuals_block()
+    closing_reminder = "Keep replies short: lead with the answer, stop when it is answered." + (
+        " If the answer has a shape, draw it with show_visual." if visuals_block else ""
+    )
+
     # The prompt is split into a STABLE instruction body (cached across turns) and
     # a VOLATILE snapshot (date, live portfolio, FX, memory). They are joined with
     # CACHE_SPLIT_MARKER; the provider caches everything before it. Keep all data
@@ -784,6 +849,15 @@ Examples of correct calibration:
         with the key figures is right.
 A wall of text in reply to a greeting is a FAILURE, even if every number in it is correct.
 
+ANSWER LENGTH — the person is busy; give them the answer, not the working.
+- Lead with the answer itself in the first sentence: the figure, the yes or no, the verdict.
+- A fact or a single figure: 1–3 sentences. A comparison or an analysis: a short lead plus at
+  most about 6 one-line bullets. Go longer only when they ask for detail or a walkthrough.
+- One figure per point; name the two or three things that matter most, not everything you read.
+- Headings only for an answer with three or more distinct parts. Never nest bullets.
+- No preamble ("Great question", "Let me look"), no closing recap, no list of things you could
+  do next — at most one short question when a real choice is theirs.
+{visuals_block}
 GROUNDING — THE RECORDS ARE THE SOURCE OF TRUTH
 The data stores are the single source of truth: the ledger (transactions), lots + realized
 events, positions, accounts, and rules. Your memory, notes, and narrative are NOT.
@@ -874,7 +948,8 @@ The FINANCIAL PROFILE below is already current — call get_profile only for a f
 {tool_catalog_block}
 {mcp_instructions_block}
 {rest_instructions_block}
-{onboarding_block}"""
+{onboarding_block}
+{closing_reminder}"""
 
     # ── SEMI-STABLE half: memory, skills, profile, FIRE — changes only on
     # memory extraction or profile/skill edits, not every turn (~30K chars).

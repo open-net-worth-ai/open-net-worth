@@ -140,7 +140,7 @@ async def _handle_allowlist_reject(adapter: ChatChannelAdapter, inbound: Inbound
         await adapter.send_text(
             inbound.channel_id,
             "Hi! You'll need to be added before I can help. Send this number to whoever set up "
-            f"this bot: *{inbound.sender_id}*",
+            f"this bot: **{inbound.sender_id}**",
         )
     except Exception:
         log.exception("[%s] failed to send allowlist-reject reply", adapter.connector)
@@ -171,9 +171,11 @@ async def _handle_pairing(adapter: ChatChannelAdapter, inbound: InboundMessage) 
     try:
         await adapter.send_text(
             inbound.channel_id,
-            "You're not approved to use this assistant yet. Ask the operator to approve "
-            f"pairing code *{code}* in their app (Connectors → "
-            f"{adapter.connector.title()} → Pending approvals).",
+            "Hi! You're not approved to chat with me yet.\n\n"
+            f"Pairing code: **{code}**\n\n"
+            "Approve it in Open Net Worth, under Connectors → "
+            f"{adapter.connector.title()}. If someone else set this bot up, send them the code. "
+            "I'll tell you here when you're in.",
         )
     except Exception:
         log.exception("[%s] failed to send pairing-code reply", adapter.connector)

@@ -40,7 +40,7 @@ def bank(db_isolated, monkeypatch):
         if accounts_only:
             return FetchWindow(accounts=accounts)
         rows = [eb_svc._txn_to_row(t, UID, "EUR") for t in feed["txns"]]
-        return FetchWindow(accounts=accounts, rows=[r for r in rows if r])
+        return FetchWindow(accounts=accounts, rows=eb_svc.with_hash_aliases([r for r in rows if r]))
 
     monkeypatch.setattr(eb_svc, "fetch_window", fetch_window)
     feed["account"] = accounts_service.create_account(
@@ -66,7 +66,11 @@ def _txn(amount: str = "12.50", indicator: str = "DBIT", **fields) -> dict:
     }
 
 
-def _book(account_id: str, ref: str, *, on: str = ON, amount: float = 12.5) -> str:
+def _book(
+    account_id: str, ref: str, *, on: str = ON, amount: float = 12.5, twin: bool = False
+) -> str:
+    """``twin``: a second identical charge, booked as the separate payment the user said it was
+    — a content-hash ref no longer vetoes the duplicate check, so it needs that answer."""
     return ledger_service.create_transaction(
         {
             "date": on,
@@ -77,7 +81,8 @@ def _book(account_id: str, ref: str, *, on: str = ON, amount: float = 12.5) -> s
             "from_currency": "EUR",
             "source": "ai",
             "external_refs": [{"source": "enable_banking", "ref": ref}],
-        }
+        },
+        allow_duplicate=twin,
     )["id"]
 
 
@@ -168,7 +173,7 @@ def test_a_stale_handle_never_hides_a_new_transaction(bank):
 def test_identical_rows_keep_the_numbers_0149_gave_them(bank):
     fields, ref_0149, _ = CASES["transaction_code_only"]
     _book(bank["account"], ref_0149)
-    _book(bank["account"], f"{ref_0149}#2")
+    _book(bank["account"], f"{ref_0149}#2", twin=True)
     bank["txns"] = [_txn(**fields), _txn(**fields), _txn(**fields)]
 
     result = connector_fetch.fetch("enable_banking")
@@ -244,3 +249,30 @@ def test_other_connectors_keep_their_ref_text():
         {"amount": 4.2, "date": ON, "iso_currency_code": "USD"}, {"currency": "USD"}, "pl-1"
     )
     assert pl["external_refs"][0]["ref"] == derived_ref("pl-1", ON, -4.2, "USD", "Plaid")
+
+
+def test_a_row_booked_before_its_bank_gave_it_an_id_is_known_when_it_does(bank):
+    # Listed first with no entry_reference (pending, say) and booked under its content hash;
+    # the bank adds the entry_reference later. The same row, never booked a second time.
+    fields = {"remittance_information": ["ACME CAFE"]}
+    first = eb_svc._txn_to_row(_txn(**fields), UID, "EUR")
+    booked = _book(bank["account"], first["external_refs"][0]["ref"])
+    bank["txns"] = [_txn(entry_reference="ENTRY-77", **fields)]
+
+    result = connector_fetch.fetch("enable_banking", include_booked=True)
+
+    assert result["counts"]["already_booked"] == 1
+    assert result["counts"]["returned"] == 1
+    assert result["transactions"][0]["booked_txn_id"] == booked
+
+
+def test_two_identical_rows_given_ids_later_are_never_guessed_apart(bank):
+    # Both coffees were booked earlier under their content hashes; now each has an id. The
+    # hash can't say which is which, so neither borrows it: no real charge is hidden as booked.
+    fields = {"remittance_information": ["ACME CAFE"]}
+    rows = eb_svc.with_hash_aliases(
+        [eb_svc._txn_to_row(_txn(entry_reference=e, **fields), UID, "EUR") for e in ("E2", "E1")]
+    )
+    content_hash = derived_ref(UID, ON, -12.5, "EUR", eb_svc._ref_text(_txn(**fields)))
+    assert all(content_hash not in r["ref_aliases"] for r in rows)
+    assert all("_content_hash" not in r for r in rows)

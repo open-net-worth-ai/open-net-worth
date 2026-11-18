@@ -428,7 +428,8 @@ def _with_value_source(data: dict) -> dict:
 def provider_label(source: str | None) -> str:
     """The connector's display name for ``source`` — an ``external_ids``/connector-snapshot
     provider key (e.g. ``"plaid"``) — read from ``services.aggregation.providers.PROVIDERS``
-    (L2 owns that table; this only ever reads its ``.label``). Falls back to the raw source
+    (L2 owns that table; this only ever reads its ``.label``), else the connector catalog (a
+    budget app's source: ``"actual_budget"``). Falls back to the raw source
     string for an unknown/blank key so a drawer/list never renders empty."""
     if not source:
         return ""
@@ -438,6 +439,10 @@ def provider_label(source: str | None) -> str:
         provider = PROVIDERS.get(source)
         if provider is not None:
             return provider.label
+        from backend.services.connector_catalog import CATALOG
+
+        if source in CATALOG:
+            return CATALOG[source].label
     except Exception:
         logger.warning("provider_label: lookup failed for %r", source, exc_info=True)
     return source

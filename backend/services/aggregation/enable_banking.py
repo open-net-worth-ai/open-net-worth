@@ -53,7 +53,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -71,6 +71,10 @@ EXTERNAL_SOURCE = "enable_banking"
 
 API_BASE = "https://api.enablebanking.com"
 _HTTP_TIMEOUT = 30.0
+# A consent is asked for the bank's own maximum (``maximum_consent_validity``), up to 180 days
+# (the PSD2 ceiling); 90 when the bank states none.
+_DEFAULT_CONSENT_DAYS = 90
+_MAX_CONSENT_DAYS = 180
 # The JWT is short-lived; mint a fresh one per call (cheap) with a small validity window.
 _JWT_TTL_SECONDS = 3600
 _JWT_ISS = "enablebanking.com"
@@ -177,16 +181,9 @@ def _api_error(resp: httpx.Response, what: str, *, redirect_url: str = "") -> Va
 # ── institution picker + consent link ────────────────────────────────────────────────
 
 
-def list_institutions(country: str) -> list[dict]:
-    """List the banks (ASPSPs) Enable Banking supports in ``country`` (ISO 3166 alpha-2,
-    e.g. ``FI``, ``DE``, ``FR``). Returns a trimmed ``[{id, name, country, logo}]`` list for
-    the UI picker. Raises ``ValidationError`` on a bad country / auth / transport failure."""
-    code = (country or "").strip().upper()
-    if len(code) != 2:
-        raise ValidationError("country must be a 2-letter ISO code (e.g. FI, DE, FR)")
-
-    store = EnableBankingConfigStore()
-    token = _bearer(store)
+def _aspsp_rows(token: str, code: str) -> list[dict]:
+    """GET ``/aspsps?country=`` → the raw bank entries. Raises ``ValidationError`` on a
+    transport or HTTP failure."""
     try:
         resp = httpx.get(
             f"{API_BASE}/aspsps",
@@ -198,12 +195,42 @@ def list_institutions(country: str) -> list[dict]:
         raise ValidationError(f"could not reach Enable Banking: {exc}") from exc
     if resp.status_code != 200:
         raise _api_error(resp, "listing banks")
-
     data = resp.json() or {}
     # TODO(enable-banking): confirm the response shape — documented as {"aspsps": [...]}.
     rows = (
         data.get("aspsps") if isinstance(data, dict) else (data if isinstance(data, list) else [])
     )
+    return [r for r in rows or [] if isinstance(r, dict)]
+
+
+def _consent_days(token: str, aspsp: str, code: str) -> int:
+    """How long to ask the bank's consent to last: its own ``maximum_consent_validity`` (seconds,
+    per ``GET /aspsps``), capped at ``_MAX_CONSENT_DAYS``. Best effort: 90 days when the bank
+    can't be looked up or states no maximum."""
+    try:
+        rows = _aspsp_rows(token, code)
+    except ValidationError as exc:
+        logger.info("enable_banking: bank's consent limit unavailable (%s)", exc)
+        return _DEFAULT_CONSENT_DAYS
+    for r in rows:
+        if r.get("name") == aspsp:
+            try:
+                days = int(r.get("maximum_consent_validity") or 0) // 86400
+            except (TypeError, ValueError):
+                days = 0
+            return min(days, _MAX_CONSENT_DAYS) if days > 0 else _DEFAULT_CONSENT_DAYS
+    return _DEFAULT_CONSENT_DAYS
+
+
+def list_institutions(country: str) -> list[dict]:
+    """List the banks (ASPSPs) Enable Banking supports in ``country`` (ISO 3166 alpha-2,
+    e.g. ``FI``, ``DE``, ``FR``). Returns a trimmed ``[{id, name, country, logo}]`` list for
+    the UI picker. Raises ``ValidationError`` on a bad country / auth / transport failure."""
+    code = (country or "").strip().upper()
+    if len(code) != 2:
+        raise ValidationError("country must be a 2-letter ISO code (e.g. FI, DE, FR)")
+
+    rows = _aspsp_rows(_bearer(EnableBankingConfigStore()), code)
     out: list[dict] = []
     for r in rows or []:
         # An ASPSP is identified by (name, country); there is no opaque id, so we use the name
@@ -278,8 +305,12 @@ def start_authorization(aspsp: str, country: str, redirect: str) -> dict:
 
     store = EnableBankingConfigStore()
     token = _bearer(store)
-    # Consent validity is capped at ~90 days for most banks; request the documented max.
-    valid_until = (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(timespec="seconds")
+    # Ask for the bank's own longest consent: a longer one is renewed less often. Five minutes
+    # short of it, so a clock a little ahead of the bank's never gets the request refused.
+    days = _consent_days(token, bank, code)
+    valid_until = (
+        datetime.now(timezone.utc) + timedelta(days=days) - timedelta(minutes=5)
+    ).isoformat(timespec="seconds")
     state = str(uuid.uuid4())
     # Verified against the sandbox (issue #103): `state` is required (422 without it) and
     # `aspsp` needs both name and country.
@@ -387,7 +418,30 @@ def create_session(code: str, state: str = "") -> dict:
         # back to them — even on a book that never listed its accounts since it was linked.
         _remember_accounts(store, token, old_session, store.bank(key) or {})
         _revoke_session(token, old_session)
+    _store_stable_ids(store, token, key, session_id, accounts)
+    from backend.services.bank_data_sync import budget
+
+    budget.access_renewed("enable_banking")
     return {"session_id": session_id, "accounts": accounts, "bank_key": key}
+
+
+def _store_stable_ids(
+    store: EnableBankingConfigStore, token: str, key: str, session_id: str, accounts: list
+) -> None:
+    """Record the new bank's accounts under their ids HERE — AFTER the consent it renews had
+    its accounts remembered, so each maps back to the id its links already use. Stored as the
+    session's own uids, a renewed bank's accounts were no longer found by their links, and its
+    expiry warning and "Access ended" vanished (review 2026-11-15). Best effort."""
+    bank = store.bank(key) or {}
+    entries = [a for a in accounts if isinstance(a, dict) and a.get("identification_hash")]
+    try:
+        entries = entries or session_accounts_data(token, session_id)
+    except (ExternalServiceError, httpx.HTTPError, ValueError) as exc:
+        logger.info("enable_banking: a new consent's account ids stay as given: %s", exc)
+        return
+    ids = [_stable_account_id(store, bank, a) for a in entries if _account_uid(a)]
+    if ids:
+        store.set_account_ids(key, ids)
 
 
 def _account_hashes(token: str, session_id: str, accounts: Optional[list] = None) -> set[str]:
@@ -556,7 +610,11 @@ def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
 
 
 def fetch_session_accounts(
-    token: str, session_id: str, *, with_balances: bool = False
+    token: str,
+    session_id: str,
+    *,
+    with_balances: bool = False,
+    wanted: Optional[Callable[[dict], bool]] = None,
 ) -> list[dict]:
     """GET ``/sessions/{id}`` → the consented accounts, each enriched from
     ``/accounts/{uid}/details`` (name, currency, type).
@@ -565,7 +623,9 @@ def fetch_session_accounts(
     (``accounts_data`` holds only uid + hashes), so keeping only dicts dropped every account.
     A details failure keeps ``{"uid": uid}`` so transactions still fetch. Raises
     ``ExternalServiceError`` (never the raw httpx exception — see ``_safe_get``) when the
-    session itself can't be read."""
+    session itself can't be read. ``wanted`` keeps only the accounts it accepts (given the
+    session's ``accounts_data`` entry: uid + ``identification_hash``) BEFORE any details call, so
+    reading one account never spends the bank's details reads on its siblings."""
     try:
         resp = _safe_get(token, f"/sessions/{session_id}", {})
     except ExternalServiceError as exc:
@@ -586,6 +646,9 @@ def fetch_session_accounts(
         uid = _account_uid(entry) if isinstance(entry, dict) else str(entry or "").strip()
         if uid and uid not in uids:
             uids.append(uid)
+    known = {_account_uid(a): a for a in data.get("accounts_data") or [] if isinstance(a, dict)}
+    if wanted is not None:
+        uids = [u for u in uids if wanted(known.get(u) or {"uid": u})]
 
     def with_details(uid: str) -> dict:
         try:
@@ -593,7 +656,14 @@ def fetch_session_accounts(
         except (ExternalServiceError, ValueError) as exc:
             logger.warning("enable_banking account details failed: %s", exc)
             details = None
-        return {**details, "uid": uid} if isinstance(details, dict) else {"uid": uid}
+        # The details never carry ``identification_hash``: keep the session's, which is what
+        # finds a renewed account's stable id again.
+        identity = (
+            {"identification_hash": known[uid]["identification_hash"]}
+            if (known.get(uid, {}).get("identification_hash"))
+            else {}
+        )
+        return {**(details if isinstance(details, dict) else {}), **identity, "uid": uid}
 
     # Listing every account: each one's details AND balance in the same round (the balance
     # needs only the session's uid), not one round after the other — ~1.5 s less on the sandbox.
@@ -911,11 +981,8 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
     date_str = _txn_date(eb_txn)
     description = _txn_description(eb_txn)
     txn_id = _txn_id(eb_txn)
-    ref = (
-        f"{account_uid}:{txn_id}"
-        if txn_id
-        else derived_ref(account_uid, date_str, amount, currency, _ref_text(eb_txn))
-    )
+    content_hash = derived_ref(account_uid, date_str, amount, currency, _ref_text(eb_txn))
+    ref = f"{account_uid}:{txn_id}" if txn_id else content_hash
     # A row booked under 0.1.49 carries the ref it had then; the fetch still knows it by it.
     old_ref = _ref_0149(eb_txn, account_uid, date_str, amount, currency)
     original_amount, original_currency = _original_charge(eb_txn, currency)
@@ -934,7 +1001,25 @@ def _txn_to_row(eb_txn: dict, account_uid: str, currency_hint: str) -> dict | No
         "pending": status in _PENDING_STATUSES,
         "supersedes_ref": None,
         "ref_aliases": [old_ref] if old_ref != ref else [],
+        "_content_hash": content_hash,
     }
+
+
+def with_hash_aliases(rows: list[dict]) -> list[dict]:
+    """One account's rows from one read, each also known by its content hash when it has an
+    entry_reference: a row booked while the bank gave it none (a pending row, often) is then
+    recognised, not booked again. Only a hash no other row in the read shares — for two
+    identical charges the hash can't say which is which, and the wrong guess hides a real one;
+    those fall to the duplicate check, which asks."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.get("_content_hash") or ""] = counts.get(row.get("_content_hash") or "", 0) + 1
+    for row in rows:
+        content_hash = row.pop("_content_hash", None)
+        ref = row["external_refs"][0]["ref"]
+        if content_hash and content_hash != ref and counts[content_hash] == 1:
+            row["ref_aliases"] = [*row["ref_aliases"], content_hash]
+    return rows
 
 
 def _bank_label(bank: dict, banks: list[dict]) -> Optional[str]:
@@ -963,19 +1048,29 @@ def _bank_unread(store: EnableBankingConfigStore, bank: dict, label: str, exc: E
 
 
 def _accounts_of_every_bank(
-    token: str, store: EnableBankingConfigStore, *, with_balances: bool = False
+    token: str,
+    store: EnableBankingConfigStore,
+    *,
+    with_balances: bool = False,
+    account: Optional[str] = None,
 ) -> tuple[list[dict], bool, list[str]]:
     """Every linked bank's accounts, each tagged with its bank (``institution``). One bank
     that can't be read (its consent ended, the bank is down) never hides the others: it is
     skipped, named in a warning, and the result is marked incomplete. When no bank at all can
-    be read, that is the fetch's error — never an "ok" with nothing in it."""
+    be read, that is the fetch's error — never an "ok" with nothing in it.
+
+    ``account`` (one account's read): the bank holding it is read first, and only that account's
+    details are fetched; the other banks are read only if it isn't found there."""
     out: list[dict] = []
     complete = True
     warnings: list[str] = []
     failures: list[Exception] = []
     seen: set[str] = set()
     banks = store.banks()
-    for bank in banks:
+    holders = [b for b in banks if account and account in (b.get("account_ids") or [])]
+    for bank in [*holders, *(b for b in banks if b not in holders)]:
+        if account and any(a["uid"] == account for a in out):
+            break
         label = _bank_label(bank, banks) or "A bank"
         if bank.get("access_ended") == "app_changed":
             warnings.append(f"{label}: linked under your previous Enable Banking app — {_RENEW}")
@@ -984,7 +1079,14 @@ def _accounts_of_every_bank(
             continue
         try:
             accounts = fetch_session_accounts(
-                token, bank["session_id"], with_balances=with_balances
+                token,
+                bank["session_id"],
+                with_balances=with_balances,
+                wanted=(
+                    (lambda entry, bank=bank: _stable_account_id(store, bank, entry) == account)
+                    if account
+                    else None
+                ),
             )
         except (ExternalServiceError, httpx.HTTPError) as exc:
             warnings.append(_bank_unread(store, bank, label, exc))
@@ -1067,7 +1169,7 @@ def fetch_window(
     # Every account wanted: their balances come with their details. One account (a sync): only
     # its own balance is read — a bank limits balance reads too.
     eb_accounts, complete, warnings = _accounts_of_every_bank(
-        token, store, with_balances=account is None
+        token, store, with_balances=account is None, account=account
     )
     if account:
         # ONE account (the bank data sync): its bank not answering is this read's failure,
@@ -1089,6 +1191,7 @@ def fetch_window(
                 ended = any(b.get("access_ended") for b in store.banks())
             raise ExternalServiceError("; ".join(warnings), bank_access=ended)
         warnings = []
+        complete = True  # another bank's trouble never cuts THIS account's read short
     balances = parallel.each(
         lambda a: a.pop("_balances", None) or fetch_account_balances(token, _api_uid(a)),
         eb_accounts,
@@ -1120,10 +1223,8 @@ def fetch_window(
             continue
         complete = complete and account_complete
         currency_hint = _account_currency(eb_account)
-        for eb_txn in txns:
-            row = _txn_to_row(eb_txn, account_uid, currency_hint)
-            if row is not None:
-                rows.append(row)
+        built = (_txn_to_row(eb_txn, account_uid, currency_hint) for eb_txn in txns)
+        rows.extend(with_hash_aliases([row for row in built if row is not None]))
     return FetchWindow(accounts=accounts, rows=rows, complete=complete, warnings=warnings)
 
 

@@ -81,6 +81,13 @@ def _rsa_pem() -> str:
 
 
 @pytest.fixture(autouse=True)
+def _no_consent_lookup(monkeypatch):
+    """``start_authorization`` asks Enable Banking for the bank's longest consent (``GET
+    /aspsps``); these tests mock only ``httpx.post``, so answer it here — never the network."""
+    monkeypatch.setattr(svc, "_consent_days", lambda token, aspsp, code: 90)
+
+
+@pytest.fixture(autouse=True)
 def isolate_stores(db_isolated):
     """Every test runs against a fresh, isolated database."""
 
@@ -96,7 +103,7 @@ def _configure(monkeypatch, txns_by_account=None):
     each account's transaction page (single page, complete)."""
     feed = txns_by_account if txns_by_account is not None else _TXNS
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
-    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(_ACCOUNTS))
+    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid, **kw: list(_ACCOUNTS))
     monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
     _store().update({"session_id": "SESS-1", "aspsp": "ACME Bank", "country": "FI"})
     monkeypatch.setattr(
@@ -841,8 +848,12 @@ def _link(monkeypatch, session_id, aspsp, country="FI", accounts=None, deleted=N
     renewal reads the old one before revoking it. Never the network."""
     monkeypatch.setattr(svc, "_bearer", lambda store: "JWT")
     listed = sessions or {}
-    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(listed.get(sid, [])))
-    monkeypatch.setattr(svc, "session_accounts_data", lambda token, sid: list(listed.get(sid, [])))
+    monkeypatch.setattr(
+        svc, "fetch_session_accounts", lambda token, sid, **kw: list(listed.get(sid, []))
+    )
+    monkeypatch.setattr(
+        svc, "session_accounts_data", lambda token, sid, **kw: list(listed.get(sid, []))
+    )
     _pending("S", aspsp, country)
     body = {
         "session_id": session_id,
@@ -917,7 +928,7 @@ def test_fetch_window_reads_every_bank_and_one_failure_hides_none(monkeypatch):
     _link(monkeypatch, "SESS-B", "Other Bank", "SE")
     _link(monkeypatch, "SESS-C", "Broken Bank", "DE")
 
-    def _accounts(token, sid):
+    def _accounts(token, sid, **kw):
         if sid == "SESS-C":
             raise ExternalServiceError("Enable Banking HTTP 401")
         return [{"uid": f"{sid}-A", "name": f"{sid} main", "currency": "EUR"}]
@@ -970,7 +981,7 @@ def _two_banks(monkeypatch, ended_sid):
     _link(monkeypatch, "SESS-A", "ACME Bank")
     _link(monkeypatch, "SESS-B", "Other Bank", "SE")
 
-    def _accounts(token, sid):
+    def _accounts(token, sid, **kw):
         if sid == ended_sid:
             raise svc.ConsentEndedError("Enable Banking says this consent is closed")
         return [{"uid": f"{sid}-A", "currency": "EUR"}]
@@ -995,12 +1006,16 @@ def test_a_bank_whose_consent_ended_is_named_and_flagged_to_renew(monkeypatch):
 def test_no_bank_answering_is_an_error_never_an_empty_ok(monkeypatch):
     _link(monkeypatch, "SESS-A", "ACME Bank")
 
-    def _ended(token, sid):
+    def _ended(token, sid, **kw):
         raise svc.ConsentEndedError("Enable Banking no longer knows this consent (HTTP 404)")
 
     monkeypatch.setattr(svc, "fetch_session_accounts", _ended)
-    with pytest.raises(ValidationError, match="No bank could be read. ACME Bank: access ended"):
+    # Every bank's consent ended: renew them (reconnect_needed), not the app's key (auth_error).
+    with pytest.raises(
+        ExternalServiceError, match="No bank could be read. ACME Bank: access ended"
+    ) as exc:
         svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
+    assert svc.classify_error(exc.value) == "reconnect_needed"
     assert svc.classify_error(ValidationError("x")) == "auth_error"
 
 
@@ -1010,7 +1025,9 @@ def test_a_bank_from_the_previous_app_is_named_without_a_call(monkeypatch):
     store.mark_access_ended([store.banks()[0]["key"]], "app_changed")
     read: list[str] = []
     monkeypatch.setattr(
-        svc, "fetch_session_accounts", lambda token, sid: read.append(sid) or [{"uid": f"{sid}-A"}]
+        svc,
+        "fetch_session_accounts",
+        lambda token, sid, **kw: read.append(sid) or [{"uid": f"{sid}-A"}],
     )
     w = svc.fetch_window(_store(), "2026-11-01", "2026-11-13", None)
     assert read == ["SESS-B"]
@@ -1035,7 +1052,7 @@ def test_renewing_a_bank_from_the_previous_app_leaves_its_old_consent_alone(monk
 def _window_with(monkeypatch, sessions, seen_uids):
     """fetch_window over ``sessions`` ({session_id: [accounts]}), recording which uids the
     Enable Banking endpoints were called with."""
-    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid: list(sessions[sid]))
+    monkeypatch.setattr(svc, "fetch_session_accounts", lambda token, sid, **kw: list(sessions[sid]))
 
     def _balance(token, uid):
         seen_uids.append(("balance", uid))
@@ -1090,7 +1107,8 @@ def test_a_renewal_keeps_ids_even_when_the_accounts_were_never_listed(monkeypatc
     sessions = {"SESS-OLD": old, "SESS-NEW": new}
     deleted: list[str] = []
     _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old, deleted=deleted, sessions=sessions)
-    assert _store().get()["account_identities"] == {}  # nothing listed yet
+    _store()._record({"account_identities": None})  # a book linked before they were recorded
+    assert _store().get()["account_identities"] == {}
     _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, deleted=deleted, sessions=sessions)
     after = _window_with(monkeypatch, {"SESS-NEW": new}, [])
     assert [a["provider_account_id"] for a in after.accounts] == ["UID-OLD"]
@@ -1149,7 +1167,9 @@ def test_accounts_name_the_country_only_when_two_banks_share_a_name(monkeypatch)
     _link(monkeypatch, "SESS-SE", "Nordea", "SE")
     _link(monkeypatch, "SESS-OP", "OP", "FI")
     monkeypatch.setattr(
-        svc, "fetch_session_accounts", lambda token, sid: [{"uid": f"{sid}-A", "currency": "EUR"}]
+        svc,
+        "fetch_session_accounts",
+        lambda token, sid, **kw: [{"uid": f"{sid}-A", "currency": "EUR"}],
     )
     monkeypatch.setattr(svc, "fetch_account_balances", lambda token, uid: (None, {}))
     w = svc.fetch_window(_store(), "2026-10-01", "2026-11-13", None, accounts_only=True)
@@ -1254,6 +1274,7 @@ def test_renewing_a_closed_consent_still_keeps_its_accounts_ids(monkeypatch):
     _link(monkeypatch, "SESS-OLD", "ACME Bank", accounts=old)
     store = _store()
     store.mark_access_ended([store.banks()[0]["key"]], "ended")
+    store._record({"account_identities": None})  # a book linked before they were recorded
     assert store.get()["account_identities"] == {}
     _link(monkeypatch, "SESS-NEW", "ACME Bank", accounts=new, sessions={"SESS-OLD": old})
     after = _window_with(monkeypatch, {"SESS-NEW": new}, [])

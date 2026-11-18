@@ -17,6 +17,7 @@ import type {
 import { useChatCostVisible, useChatThinkingGrouped } from '../../hooks/useChatSuggestionsEnabled'
 import { Button, Modal } from '../ui'
 import { ArtifactCard } from './ArtifactCard'
+import { InlineVisual } from './visual/InlineVisual'
 import { WriteReceiptChip } from './WriteReceiptChip'
 import { useAnchoredPopover } from './anchoredPopover'
 import { ScreenCommandChip } from './ScreenCommandChip'
@@ -526,6 +527,13 @@ function renderGroupedBlock(
     return (
       <div key={i} className="msg-artifact-wrap">
         <ArtifactCard artifact={block.artifact} />
+      </div>
+    )
+  }
+  if (block.type === 'visual') {
+    return (
+      <div key={i} className="msg-visual-wrap">
+        <InlineVisual visual={block.visual} />
       </div>
     )
   }

@@ -86,6 +86,10 @@ CORE_TOOL_NAMES: frozenset[str] = frozenset(
         # import_transactions below, rather than justified by historical call frequency.
         "activate_skill",
         "calculate",  # 19.5% of sessions
+        # Structural, like activate_skill: the model can only decide a reply is better drawn
+        # if it already holds the drawing tool — nothing in a question tells it to go find
+        # one. New tool (2026-11-17, flag inline_visuals), so there is no spread to measure.
+        "show_visual",
         # Ledger reads + hot writes
         "get_transactions",  # 34.1% — the #2 tool in the corpus
         "add_transactions",  # 20.1%

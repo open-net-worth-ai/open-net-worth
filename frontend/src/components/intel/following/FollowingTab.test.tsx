@@ -61,7 +61,8 @@ function followRoutes() {
     router.go(next, !!o.replace)
   })
 }
-vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => false }))
+const phone = vi.hoisted(() => ({ on: false }))
+vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => phone.on }))
 const openAsset = vi.hoisted(() => vi.fn())
 vi.mock('../../../state/assetNav', () => ({ useAssetNav: () => ({ openAsset }) }))
 // The owner's own book holds one of the fund's stocks.
@@ -72,6 +73,7 @@ vi.mock('../usePortfolioTickerMaps', () => ({
 // what its tooltip would say at the last point, so a test can read both.
 vi.mock('./ActivityChart', () => ({
   CHART_HEIGHT: 200,
+  CHART_BOX: '200px',
   ActivityChart: (p: {
     label: string
     points: { date: string }[]
@@ -180,6 +182,17 @@ describe('Discover', () => {
     expect(crumb.textContent).toContain('Acme Capital')
     fireEvent.click(within(crumb).getByRole('button', { name: COPY.backToAll }))
     expect(await screen.findByRole('button', { name: COPY.openLabel('Acme Capital') })).toBeTruthy()
+  })
+
+  it('keeps the breadcrumb on a phone', async () => {
+    phone.on = true
+    try {
+      setup()
+      await open('Acme Capital')
+      expect(screen.getByRole('navigation', { name: COPY.breadcrumbLabel })).toBeTruthy()
+    } finally {
+      phone.on = false
+    }
   })
 })
 

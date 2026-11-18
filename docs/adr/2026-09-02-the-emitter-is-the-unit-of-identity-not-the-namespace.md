@@ -161,3 +161,41 @@ decision ("does that veto") stay separate and separately testable.
   `tests/test_transfer_notified_by_both_banks.py`
 - **Why this way (one line):** a namespace is not an issuer — `email` has hundreds of senders — so
   the veto must test the emitter, and fail closed when it cannot establish one.
+
+## Amendment 2026-11-16 — a content-hash ref is not an id
+
+**Context.** A bank connector files a row the bank gave no id under the connector's own
+authoritative namespace, keyed by a hash of its content (`providers.derived_ref`: account, date,
+amount, currency, frozen wording → `derived:<16 hex>`, with a `#2`, `#3` suffix for repeats in one
+read). `is_authoritative_source` promises "native per-event identifiers (not content hashes)", but
+`_collision_sources` read every ref under the namespace, so two different hashes counted as two
+distinct ids. The same payment hashes to a new key whenever anything it hashes shifts — an Enable
+Banking pending row booking on another day, a bank re-wording a line, the 0.1.50 description
+change — and the veto then let the second copy be written with no human in the loop: the exact
+"false positive → silent double-count" this ADR names as the costly direction.
+
+**Decision.** `_collision_sources` skips a content-hash ref (`core.txn_sources.is_content_hash_ref`,
+prefix `CONTENT_HASH_REF_PREFIX`, which `providers.DERIVED_PREFIX` now aliases). A pair whose only
+refs under a namespace are hashes is scored by the ordinary layers. A native id beside a hash still
+collides as before.
+
+**Consequences.**
+- A shifted hash is caught: refused at the write choke for Lucius (with the usual
+  `allow_duplicate` / `add_transaction_refs` guidance), and a "possible duplicate" review item in
+  the AI-free bank sync, never a second booking.
+- Two identical charges in one read still book as two: one sync run is one `batch_id`
+  (`_same_feed`), and they carry distinct numbered refs. Two identical charges that arrive in
+  SEPARATE reads are now asked about instead of booked silently — accepted: nothing from the bank
+  tells them apart, and asking is this ADR's cheap direction.
+- Such a pair is never AUTO-merged, whatever the policy: `matching.rests_on_content_hashes` stops
+  `match_review`'s judge from merging it even under `auto_high` with an LLM "same" — two identical
+  charges from separate syncs may be two real ones, and only the owner can tell.
+- Enable Banking: a row with an `entry_reference` is also known by its content hash
+  (`with_hash_aliases`), so a row booked before the bank gave it one is not booked again — but only
+  when no other row in that account's read shares the hash. For two identical charges the hash
+  can't say which booking is which; those fall to the duplicate check, which asks.
+- Checked against Actual Budget, Sure, Wealthfolio and Firefly III (2026-11-16): all hash content
+  when the bank gives no id; only Actual also fuzzy-matches a shifted row (±7 days, same amount),
+  and those without a counter lose the second of two identical charges.
+
+Tests: `tests/test_content_hash_refs_reach_dedup.py`.

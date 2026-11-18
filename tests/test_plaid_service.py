@@ -246,8 +246,10 @@ class TestNormalizeHelpers:
             "mask": "0000",
             "currency": "USD",
             "balance": 150.25,
+            "available_to_spend": None,
             "account_type": None,
             "institution": None,
+            "persistent_id": None,
         }
 
     @pytest.mark.parametrize(
@@ -481,8 +483,10 @@ class TestFetchWindow:
                 "mask": None,
                 "currency": "USD",
                 "balance": 100.0,
+                "available_to_spend": None,
                 "account_type": None,
                 "institution": None,
+                "persistent_id": None,
             }
         ]
         assert len(window.rows) == 1

@@ -175,6 +175,29 @@ describe('TxnDetail — Source section, kind: connector (CDS-UI-16)', () => {
   })
 })
 
+describe('TxnDetail — Source section for a budget app (YNAB / Actual Budget)', () => {
+  const entry: SourceEntry = {
+    kind: 'connector',
+    source: 'actual_budget',
+    ref: 't-pay',
+    provider: 'actual_budget',
+    providerLabel: 'Actual Budget',
+    providerAccountId: '',
+    fetchedAt: '2026-11-17T06:00:00Z',
+    raw: { id: 't-pay', reconciled: 1, children: [{ id: 't-l1', notes: 'one' }] },
+    unavailable: false,
+  }
+
+  it("opens on the app's own ref, names the app, and lists its row with a split's lines", async () => {
+    renderDrawer(makeTxn({ externalRefs: [{ source: 'actual_budget', ref: 't-pay' }] }), [entry])
+    await waitFor(() => screen.getByText('Actual Budget'))
+    fireEvent.click(screen.getByRole('button', { name: /show raw fields/i }))
+    const rawBody = document.querySelector('.acct-detail-raw-body') as HTMLElement
+    expect(within(rawBody).getByText('Reconciled')).toBeTruthy()
+    expect(within(rawBody).getByText('[{"id":"t-l1","notes":"one"}]')).toBeTruthy()
+  })
+})
+
 describe('TxnDetail — Source section, kind: connector (CDS-UI-22 Unlink source)', () => {
   const entry: SourceEntry = {
     kind: 'connector',

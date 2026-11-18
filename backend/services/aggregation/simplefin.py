@@ -23,7 +23,10 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import logging
+import threading
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlsplit
@@ -34,7 +37,7 @@ from backend.core.errors import ExternalServiceError, ValidationError
 from backend.core.net_guard import UnsafeUrlError, assert_public_url
 from backend.core.user_time import user_zone
 from backend.db.simplefin_config_store import SimpleFinConfigStore
-from backend.services import ledger as ledger_service
+from backend.services.aggregation import simplefin_feed as sf_feed
 from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
@@ -54,6 +57,17 @@ _MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 SOURCE_ID = "simplefin"
 EXTERNAL_SOURCE = "simplefin"
+
+# What the Bridge's own statuses mean for the user (protocol checklist): 403 is an access URL
+# revoked or disabled, 402 a lapsed SimpleFIN subscription. Each keeps "HTTP <code>" so
+# ``classify_error`` still reads it.
+_STATUS_TEXT = {
+    402: "SimpleFIN Bridge needs payment (HTTP 402): renew your SimpleFIN subscription",
+    403: (
+        "SimpleFIN refused the connection (HTTP 403): it was turned off at SimpleFIN Bridge. "
+        "Connect SimpleFIN again with a new setup token"
+    ),
+}
 
 
 def _now() -> str:
@@ -98,7 +112,8 @@ def _safe_get(url: str, params: dict) -> httpx.Response:
         resp = httpx.get(url, params=params, timeout=_HTTP_TIMEOUT)
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        raise ExternalServiceError(f"SimpleFIN HTTP {exc.response.status_code}") from None
+        code = exc.response.status_code
+        raise ExternalServiceError(_STATUS_TEXT.get(code, f"SimpleFIN HTTP {code}")) from None
     except httpx.HTTPError as exc:
         raise ExternalServiceError(f"SimpleFIN request failed ({type(exc).__name__})") from None
     if len(resp.content) > _MAX_RESPONSE_BYTES:
@@ -152,7 +167,15 @@ def claim_setup_token(setup_token: str) -> str:
     access_url = (resp.text or "").strip()
     if not access_url.lower().startswith(("http://", "https://")):
         raise ValidationError("claim did not return a valid access URL")
+    _wake_sync()
     return access_url
+
+
+def _wake_sync() -> None:
+    """A connection just claimed: a bank sync waiting for the user runs at the next tick."""
+    from backend.services.bank_data_sync import budget
+
+    budget.access_renewed("simplefin")
 
 
 def fetch_accounts(
@@ -160,6 +183,8 @@ def fetch_accounts(
     start_date: int | None = None,
     end_date: int | None = None,
     account: str | None = None,
+    *,
+    balances_only: bool = False,
 ) -> dict:
     """GET the SimpleFIN ``/accounts`` feed. The access URL carries HTTP-basic creds; we
     append ``/accounts`` and the optional ``start-date``/``end-date`` (unix seconds) +
@@ -187,7 +212,11 @@ def fetch_accounts(
         params["end-date"] = int(end_date)
     if account:
         params["account"] = account
-    params["pending"] = 1
+    if balances_only:
+        params["balances-only"] = 1
+    else:
+        params["pending"] = 1  # opt-in; never send pending=0, which the Bridge reads as 1
+    params["version"] = 2  # ``errlist`` codes and ``connections`` (protocol v2)
     resp = _safe_get(url, params)
     return resp.json()
 
@@ -195,28 +224,25 @@ def fetch_accounts(
 # ── normalize + fetch_window ─────────────────────────────────────────────────────────
 
 
-def _account_to_common(sf_account: dict) -> dict:
-    """A SimpleFIN account → the common ``accounts[]`` shape (RFC §A)."""
-    org = sf_account.get("org") or {}
-    org_name = org.get("name") or org.get("domain") or ""
-    name = sf_account.get("name") or "SimpleFIN account"
-    display = f"{org_name} · {name}".strip(" ·") if org_name else name
-    try:
-        balance = float(sf_account.get("balance"))
-    except (TypeError, ValueError):
-        balance = None
-    return {
-        "provider_account_id": str(sf_account.get("id") or ""),
-        "name": display,
-        "mask": None,
-        "currency": (sf_account.get("currency") or "").upper() or None,
-        "balance": balance,
-    }
-
-
 def _ref_text(sf_txn: dict) -> str:
     """The text an id-less row's ref hashes. FROZEN: an id-less row's ref hashes it, so a change here books every such row again."""
     return (sf_txn.get("description") or sf_txn.get("payee") or "").strip() or "SimpleFIN"
+
+
+def _is_pending(sf_txn: dict) -> bool:
+    """Pending is the ``pending`` flag, or ``posted`` 0 beside a ``transacted_at`` (the
+    protocol: posted "may be 0" while pending). A missing ``posted`` is not pending — some
+    banks omit it on settled rows (Sure, ``SimplefinEntry::Processor``)."""
+    if sf_txn.get("pending"):
+        return True
+    try:
+        return (
+            sf_txn.get("posted") is not None
+            and int(sf_txn.get("posted") or 0) == 0
+            and bool(int(sf_txn.get("transacted_at") or 0))
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def _txn_to_row(sf_txn: dict, sf_account_id: str, currency: str) -> dict | None:
@@ -254,7 +280,7 @@ def _txn_to_row(sf_txn: dict, sf_account_id: str, currency: str) -> dict | None:
         "payee": _text(sf_txn.get("payee")),
         "memo": _text(sf_txn.get("memo")),
         "category_hint": merchant_category(sf_txn.get("mcc")),
-        "pending": bool(sf_txn.get("pending")),
+        "pending": _is_pending(sf_txn),
         "supersedes_ref": None,
     }
 
@@ -282,10 +308,10 @@ def _txn_date(sf_txn: dict) -> Optional[str]:
     return None
 
 
-# SimpleFIN Bridge answers a longer range with an error ("Requested date range exceeds
-# recommended range of 45 days. In the future, this may be capped.", seen 2026-11-13), so a
-# window is fetched in slices no longer than this.
-_MAX_SLICE_DAYS = 45
+# SimpleFIN Bridge answers a range over 45 days with an error ("Requested date range exceeds
+# recommended range of 45 days. In the future, this may be capped.", seen 2026-11-13), and a
+# 45-day slice that crosses a clock change is an hour over it (Sure #5101): 44 at most.
+_MAX_SLICE_DAYS = 44
 
 
 def _slices(since: str, before: str) -> list[tuple[int, int]]:
@@ -309,24 +335,37 @@ def _midnight(day: date, zone) -> int:
     return int(datetime(day.year, day.month, day.day, tzinfo=zone).timestamp())
 
 
-def _feed_errors(feed: dict, access_url: str) -> list[str]:
-    """SimpleFIN reports a failed bank connection INSIDE a 200 response: ``errors`` (strings)
-    and, from newer bridges, ``errlist`` (``{code, msg, ...}``). Ignoring them made a feed
-    missing a bank look complete. Server text, so scrubbed, flattened and capped."""
-    found: list[str] = []
-    for item in feed.get("errors") or []:
-        found.append(str(item))
-    for item in feed.get("errlist") or []:
-        if isinstance(item, dict):
-            found.append(" ".join(str(item.get(k) or "") for k in ("code", "msg")).strip())
-        else:
-            found.append(str(item))
-    out: list[str] = []
-    for text in found:
-        clean = " ".join(_scrub(text, access_url).split())[:300]
-        if clean and clean not in out:
-            out.append(f"SimpleFIN: {clean}")
-    return out
+# ── one request for every account ───────────────────────────────────────────────────
+# The Bridge allows about 24 requests a day per connection, refreshes from the banks once a
+# day, and a request per account blew that budget (Actual #3228). The bank data sync reads
+# one account at a time, so a window is fetched ONCE for every account and each account's
+# read in the same run takes its rows from that answer. Kept a couple of minutes: a run.
+_SHARED_FOR = 120.0
+_shared: dict[tuple, tuple[float, dict]] = {}
+_shared_lock = threading.Lock()
+
+
+def _feed(access_url: str, start: int, end: int) -> dict:
+    key = (hashlib.sha256(access_url.encode()).hexdigest(), start, end)
+    now = time.monotonic()
+    with _shared_lock:
+        for k in [k for k, (at, _) in _shared.items() if now - at > _SHARED_FOR]:
+            _shared.pop(k, None)
+        hit = _shared.get(key)
+    if hit is not None:
+        return hit[1]
+    try:
+        feed = fetch_accounts(access_url, start_date=start, end_date=end)
+    except Exception as exc:  # noqa: BLE001 — belt-and-braces scrub, see _scrub's docstring
+        raise type(exc)(_scrub(str(exc), access_url)) from exc
+    with _shared_lock:
+        _shared[key] = (time.monotonic(), feed)
+    return feed
+
+
+def _forget_shared() -> None:
+    with _shared_lock:
+        _shared.clear()
 
 
 def fetch_window(
@@ -337,39 +376,61 @@ def fetch_window(
     *,
     accounts_only: bool = False,
 ) -> FetchWindow:
-    """SimpleFIN's provider-side windowed fetch (RFC §B) — ``start-date``/``end-date``/
-    ``account`` are all server-side SimpleFIN params, so the window and account filter
-    apply BEFORE the data ever reaches us. The feed is not paginated; it is ``complete``
-    unless SimpleFIN reported an error for some connection, which leaves rows out."""
+    """SimpleFIN's provider-side windowed fetch (RFC §B): ``start-date``/``end-date`` are
+    server-side, in slices of at most ``_MAX_SLICE_DAYS``. Every account comes in ONE request
+    per slice (``_feed``), shared by the run's per-account reads; ``account`` then picks that
+    account's rows. ``complete`` is False when the Bridge reported an error about the account
+    (or one with no scope), which may leave rows out. A sign-in the Bridge needs for the
+    account's connection (``con.auth``) raises, so the sync asks for it instead of booking a
+    feed that stopped moving."""
     access_url = store.access_url()
-    slices = _slices(since, before)
     if accounts_only:
-        slices = [(slices[0][0], slices[0][0])]  # zero-width — accounts still come back in full
+        feed = fetch_accounts(access_url, balances_only=True)
+        errors = sf_feed.feed_errors(feed, lambda t: _scrub(t, access_url))
+        sf_feed.raise_fatal(errors)
+        return FetchWindow(
+            accounts=sf_feed.accounts_of(feed),
+            rows=[],
+            complete=not errors,
+            warnings=[f"SimpleFIN: {e['msg']}" for e in errors],
+        )
     accounts_by_id: dict[str, dict] = {}
+    connections: dict[str, str] = {}
     rows_by_ref: dict[str, dict] = {}
-    warnings: list[str] = []
-    for start_ts, end_ts in slices:
-        try:
-            feed = fetch_accounts(access_url, start_date=start_ts, end_date=end_ts, account=account)
-        except Exception as exc:  # noqa: BLE001 — belt-and-braces scrub, see _scrub's docstring
-            raise type(exc)(_scrub(str(exc), access_url)) from exc
-        warnings.extend(w for w in _feed_errors(feed, access_url) if w not in warnings)
+    errors: list[dict] = []
+    for start_ts, end_ts in _slices(since, before):
+        feed = _feed(access_url, start_ts, end_ts)
+        found = sf_feed.feed_errors(feed, lambda t: _scrub(t, access_url))
+        sf_feed.raise_fatal(found)
+        errors.extend(e for e in found if e not in errors)
+        connections.update(sf_feed.connections_of(feed))
         for sf_account in feed.get("accounts") or []:
             sf_account_id = str(sf_account.get("id") or "")
             accounts_by_id[sf_account_id] = sf_account
-            if accounts_only:
+            if account and sf_account_id != account:
                 continue
-            currency = (sf_account.get("currency") or ledger_service.base_currency()).upper()
+            currency = sf_feed.row_currency(sf_account)
+            if currency is None:
+                continue  # a custom currency (points): nothing to book it in
             for sf_txn in sf_account.get("transactions") or []:
                 row = _txn_to_row(sf_txn, sf_account_id, currency)
                 if row is not None:
                     rows_by_ref.setdefault(row["external_refs"][0]["ref"], row)
+    conn_id = str((accounts_by_id.get(account or "") or {}).get("conn_id") or "")
+    mine = [e for e in errors if sf_feed.concerns(e, account, conn_id)]
+    for e in mine:
+        if e["code"] == "con.auth" and account:
+            raise ExternalServiceError(
+                f"SimpleFIN: {e['msg']} — fix the connection at SimpleFIN Bridge",
+                bank_access=True,
+            )
+    warnings = [f"SimpleFIN: {e['msg']}" for e in mine]
     for warning in warnings:
         logger.warning("simplefin fetch: %s", warning)
     return FetchWindow(
-        accounts=[_account_to_common(a) for a in accounts_by_id.values()],
+        accounts=[sf_feed.account_to_common(a, connections) for a in accounts_by_id.values()],
         rows=list(rows_by_ref.values()),
-        complete=not warnings,
+        complete=not mine,
         warnings=warnings,
     )
 
@@ -377,11 +438,18 @@ def fetch_window(
 def classify_error(exc: Exception) -> str:
     """Exception → status taxonomy for SimpleFIN. The real fetch path raises the sanitized
     ``ExternalServiceError`` from ``_safe_get`` (no url/credential — see its docstring);
-    re-derive the class from that safe message. The raw ``httpx.*`` branches below stay for
+    re-derive the class from that safe message, or from the context ``fetch_window`` set on
+    an error the Bridge reported inside a 200. The raw ``httpx.*`` branches below stay for
     callers/tests that raise those directly."""
     if isinstance(exc, ExternalServiceError):
+        if exc.context.get("bank_access"):
+            return "reconnect_needed"  # one connection's sign-in, fixed at SimpleFIN Bridge
+        if exc.context.get("rate_limited"):
+            return "rate_limited"
+        if exc.context.get("access_refused"):
+            return "auth_error"
         msg = str(exc).lower()
-        if "http 401" in msg or "http 403" in msg:
+        if "http 401" in msg or "http 402" in msg or "http 403" in msg:
             return "auth_error"
         if "http 429" in msg:
             return "rate_limited"

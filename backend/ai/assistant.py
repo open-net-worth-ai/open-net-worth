@@ -1504,6 +1504,37 @@ def _maybe_append_artifact_block(owner_blocks: Optional[list], result_text: str)
         owner_blocks.append({"type": "artifact", "artifact": _artifact_event_payload(parsed)})
 
 
+def _visual_from_result(result_text: str, args: Optional[dict] = None) -> Optional[dict]:
+    """The resolved spec inside a ``show_visual`` result, or None for a refused call. A
+    drawing's markup is not in the result (the model would pay for its own code twice) — it
+    comes back from the call's own arguments."""
+    try:
+        parsed = json.loads(result_text)
+    except Exception:
+        return None
+    if not (isinstance(parsed, dict) and parsed.get("shown")):
+        return None
+    spec = parsed.get("visual")
+    if not isinstance(spec, dict):
+        return None
+    code = (args or {}).get("code")
+    if "code" not in spec and isinstance(code, str) and code.strip():
+        spec = {**spec, "code": code.strip()}
+    return spec
+
+
+def _maybe_append_visual_block(
+    owner_blocks: Optional[list], result_text: str, args: Optional[dict] = None
+) -> None:
+    """Re-derive an inline visual on reload from its persisted ``show_visual`` call — the
+    same spec the live ``visual`` event carried, so a reload draws the identical picture."""
+    if owner_blocks is None:
+        return
+    spec = _visual_from_result(result_text, args)
+    if spec is not None:
+        owner_blocks.append({"type": "visual", "visual": spec})
+
+
 def _fill_search_block_results(block: dict, result_text: str) -> None:
     """Fill a rehydrated 'search' block's results from its persisted tool_result.
 
@@ -1616,6 +1647,10 @@ def _post_execute_events(
                 )
         except Exception:
             pass
+    elif tool_name == "show_visual":
+        _vis = _visual_from_result(text_result, args)
+        if _vis is not None:
+            events.append({"type": "visual", "tool_use_id": tool_use_id, "visual": _vis})
     elif tool_name == "web_search":
         try:
             raw = json.loads(text_result)
@@ -2283,6 +2318,12 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                             if block.get("name") == "create_artifact":
                                 _maybe_append_artifact_block(
                                     tool_block_owner.get(b.get("tool_use_id")), block["result"]
+                                )
+                            if block.get("name") == "show_visual":
+                                _maybe_append_visual_block(
+                                    tool_block_owner.get(b.get("tool_use_id")),
+                                    block["result"],
+                                    block.get("input"),
                                 )
                             if block.get("name") == "run_screen_command":
                                 _maybe_append_screen_command_block(
@@ -3700,10 +3741,36 @@ def _resolve_style(new_messages: list) -> str:
     to answer). The ONE remaining response-style nudge is the smalltalk greeting
     guard: a pure smalltalk turn (deterministic — ai/smalltalk.py) still gets
     SMALLTALK_STYLE so a bare "hello" can't earn an essay (the live incident this
-    guard was built for). Every other turn returns "" — no style line."""
+    guard was built for). Otherwise the person's own Response detail setting adds its
+    line (brief / detailed); "normal" or no choice returns "" — no style line."""
     from backend.ai.smalltalk import SMALLTALK_STYLE, is_smalltalk_turn
 
-    return SMALLTALK_STYLE if is_smalltalk_turn(new_messages) else ""
+    if is_smalltalk_turn(new_messages):
+        return SMALLTALK_STYLE
+    return _DETAIL_STYLES.get(_response_detail(), "")
+
+
+# The person's own Settings choice (profile ``chat_response_detail``). "normal" — and no
+# choice at all — adds no line: the prompt's ANSWER LENGTH rules already are the default.
+_DETAIL_STYLES = {
+    "brief": (
+        "The person asked for BRIEF answers: the answer and its key figure in one or two "
+        "sentences, at most three one-line bullets, no headings. Expand only if asked."
+    ),
+    "detailed": (
+        "The person asked for DETAILED answers: after the answer, walk through the reasoning, "
+        "the figures behind it and the assumptions — still led by the answer itself."
+    ),
+}
+
+
+def _response_detail() -> str:
+    try:
+        from backend.services.profile import read_profile
+
+        return (read_profile() or {}).get("chat_response_detail") or "normal"
+    except Exception:  # a profile read must never fail a turn — fall back to the default
+        return "normal"
 
 
 async def run(
@@ -3857,6 +3924,12 @@ async def _run_turn(
 
     # For logging and cost-tracking use the bare model id.
     _, history = get_or_create_session(session_id)
+    # show_visual copies its figures out of this conversation's tool results — bind the LIVE
+    # list so results from earlier rounds of this same turn are visible to it. Never reset:
+    # the next turn rebinds before any tool runs.
+    from backend.ai import visual_sources
+
+    visual_sources.bind(history)
     # Seed the extra-tool-groups and extra-tool-names ContextVars from persisted session
     # meta so the CORE-based offer reflects tools the user already loaded in prior turns
     # (Lane D — both paths are sticky per-session).
