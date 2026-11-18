@@ -31,6 +31,7 @@ router = APIRouter(tags=["mcp-oauth-server"])
 _NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 # Failed token/revoke calls per client IP (abuse, not guessing: every credential is 256-bit).
 token_limiter = ratelimit.SlidingWindowLimiter(30, 15 * 60)
+_SESSION_COOKIE = "onw_session"
 
 
 def _require_available() -> None:
@@ -83,19 +84,19 @@ def oauth_authorize(request: Request):
 
 # ── consent (the SPA page /oauth/consent calls these) ──────────────────────────────
 @router.get("/api/oauth/consent")
-def consent_details(request: str = ""):
+def consent_details(http: Request, request: str = ""):
     _require_available()
     try:
         details = authorize.consent_details(request)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    details["signed_in"] = authorize.signed_in_recently(http.cookies.get(_SESSION_COOKIE))
     return JSONResponse(details, headers={**_NO_STORE, **_FRAME_DENY})
 
 
 class ConsentBody(BaseModel):
     request: str
     decision: str  # "allow" | "deny"
-    password: str = ""
     allow_write: bool = False
 
 
@@ -112,10 +113,9 @@ async def consent_decide(body: ConsentBody, request: Request):
     if body.decision not in ("allow", "deny"):
         raise HTTPException(status_code=422, detail="decision must be allow or deny")
     approve = body.decision == "allow"
-    if approve:
-        denied = _check_password(body.password, request)
-        if denied is not None:
-            return denied
+    if approve and not authorize.signed_in_recently(request.cookies.get(_SESSION_COOKIE)):
+        # The page signs in again and retries; nothing about the request changes.
+        return JSONResponse({"detail": "sign in again"}, status_code=401, headers=_NO_STORE)
     try:
         decision = authorize.decide(body.request, approve, body.allow_write)
     except NotFoundError as exc:
@@ -123,24 +123,6 @@ async def consent_decide(body: ConsentBody, request: Request):
     if decision.approved:
         await _notify_connected(decision)
     return JSONResponse({"redirect": decision.redirect}, headers=_NO_STORE)
-
-
-def _check_password(password: str, request: Request) -> Optional[JSONResponse]:
-    """The same brute-force budget as sign-in (same limiter, same key), so the consent page is
-    never a second password oracle."""
-    key = _client_key(request)
-    allowed, retry_after = ratelimit.login_limiter.check(key)
-    if not allowed:
-        return JSONResponse(
-            {"detail": "too many attempts, try again later"},
-            status_code=429,
-            headers={"Retry-After": str(retry_after)},
-        )
-    if not authorize.password_ok(password):
-        ratelimit.login_limiter.record(key)
-        return JSONResponse({"detail": "invalid password"}, status_code=401)
-    ratelimit.login_limiter.reset(key)
-    return None
 
 
 async def _notify_connected(decision: authorize.Decision) -> None:

@@ -2094,11 +2094,13 @@
     flex: none;
     margin-top: calc((1.45em - 15px) / 2);
   }
+  /* Title and switch on one line, the explanation full width under them. */
   .consent-scope__switch {
-    display: flex;
-    gap: 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
     align-items: center;
-    justify-content: space-between;
+    column-gap: 16px;
+    row-gap: 3px;
     margin-top: 14px;
     padding-top: 14px;
     border-top: 1px solid var(--line);
@@ -2109,7 +2111,8 @@
     font-weight: 550;
   }
   .consent-scope__switch p {
-    margin: 3px 0 0;
+    grid-column: 1 / -1;
+    margin: 0;
     color: var(--faint);
     font-size: 12.5px;
     line-height: 1.45;
@@ -2150,12 +2153,12 @@
   .consent-actions .btn-secondary {
     border-color: var(--line-strong);
   }
-  /* Until the password is typed, Allow stays the primary action, just dimmed — the app-wide
-     disabled grey would make Deny look like the main button. */
-  .consent-actions .btn-primary:disabled:not([aria-busy]) {
-    background: var(--primary);
-    color: var(--ink-on-accent);
-    opacity: 0.42;
+  /* A disabled primary (Sign in before the password, Allow while sending) stays the primary
+     action, just dimmed — the app-wide disabled grey would make Deny look like the main one. */
+  .consent-form .btn-primary:disabled:not([aria-busy]) {
+    background: var(--cta);
+    color: var(--ink-on-cta);
+    opacity: 0.35;
   }
   .consent-foot {
     margin: 0;
@@ -2205,10 +2208,25 @@
     font-weight: 600;
     margin-right: 4px;
   }
+  /* A phone (often claude.ai's in-app browser): no card frame, edge to edge, and the two
+     buttons stacked full width with Allow on top, where the thumb is. */
   @media (max-width: 480px) {
+    .oauth-consent {
+      padding-left: calc(var(--safe-l) + 20px);
+      padding-right: calc(var(--safe-r) + 20px);
+    }
     .consent-card {
       margin-top: 0;
-      padding: 22px 18px 18px;
+      padding: 8px 0 0;
+      background: none;
+      border: 0;
+      box-shadow: none;
+    }
+    .consent-actions {
+      grid-template-columns: 1fr;
+    }
+    .consent-actions .btn-primary {
+      order: -1;
     }
   }
   /* A table masks every cell but its first: a cell that holds no figure (a status, a date, the

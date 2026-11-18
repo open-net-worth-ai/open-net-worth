@@ -175,9 +175,11 @@ password, and choose whether it may only read or may also make changes.
      on your phone and in Claude Desktop.
    - **ChatGPT:** with Developer mode on, add a custom MCP server (connector) with that URL and
      choose OAuth.
-5. A page from your own address opens, showing which app is asking and what it will be able to
-   do. Check the address bar, type your Open Net Worth password, and choose **Allow read-only
-   access**. Turn on **Also let it make changes** first if you want it to write.
+5. A page from your own address opens. Check the address bar and sign in with your Open Net
+   Worth password. (If you signed in on that browser in the last 10 minutes, this step is
+   skipped.)
+6. The next page shows which app is asking and what it will be able to do. Choose **Allow
+   read-only access**, or turn on **Also let it make changes** first if you want it to write.
 
 Only approve a request you started yourself, a moment ago, from your own account. If someone
 sends you a link to this page, choose **Deny**: approving it would connect *their* account to your

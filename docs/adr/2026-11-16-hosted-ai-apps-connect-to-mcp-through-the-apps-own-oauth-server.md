@@ -42,9 +42,12 @@ authorization server only for Flask and Django and lists no CIMD support.
   `readOnlyHint`, and not `may_change_something` (the two classifiers, decided per call, so a REST
   tool added at runtime is judged when used); write tools are hidden from `tools/list` and refused
   if called. `write` allows what the static token allows. Blocked tools stay blocked for everyone.
-- **Consent** asks for the instance password typed on the consent page, every time — not a session
-  and not loopback trust — rate-limited with sign-in. Read-only is the default; changes are a box
-  the owner ticks. The page says to deny a link someone sent. Each new grant notifies the owner;
+- **Consent** needs the instance password typed in the last 10 minutes, through the ordinary
+  sign-in (rate-limited as always): the consent page signs the owner in first, then shows Deny /
+  Allow. An older session or loopback trust never approves, so a link opened later in a
+  signed-in browser asks for the password again. The session cookie carries its sign-in time
+  (`iat`); a cookie without one never counts. Read-only is the default; changes are a switch
+  the owner turns on. The page says to deny a link someone sent. Each new grant notifies the owner;
   Settings lists and revokes grants; any password change, reset or removal, and any change of the
   public address, revokes every grant.
 - **OAuth tokens open `/mcp` only.** While the server is available, `require_auth` hands `/mcp` to
@@ -62,7 +65,7 @@ authorization server only for Flask and Django and lists no CIMD support.
   their password, and can give a cloud app read-only access.
 - Consent phishing across accounts — an attacker sending the owner an authorize link started from
   the attacker's own Claude account — stays possible, as with any OAuth server. It is narrowed by
-  the typed password, a 10-minute request window, the read-only default, the notice on every new
+  the recent sign-in, a 10-minute request window, the read-only default, the notice on every new
   grant, and Revoke.
 - An app that does CIMD from another host needs owner-created credentials until the host list grows.
 - Loopback trust must be off. A same-host proxy or tunnel makes every visitor "loopback", so an

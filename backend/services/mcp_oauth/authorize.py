@@ -7,13 +7,14 @@ redirect. Once both are trusted, every other failure goes back to the app as a r
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlencode, urlsplit
 
 from backend.core.errors import NotFoundError
-from backend.core.security import verify_password
+from backend.core.security import verify_session
 from backend.db.auth_store import AuthStore
 from backend.db.mcp_oauth_store import McpOAuthStore
 from backend.services.mcp_oauth import settings
@@ -120,13 +121,24 @@ def consent_details(request_id: str) -> dict:
     }
 
 
-def password_ok(password: str) -> bool:
+# How long after typing the password a sign-in still approves a hosted app. Long enough to sign
+# in and read the consent card; short enough that a link opened later in a signed-in browser asks
+# for the password again (a one-click approval would be the phishing route).
+SIGN_IN_FRESH_SECONDS = 10 * 60
+
+
+def signed_in_recently(session_cookie: Optional[str], now: Optional[float] = None) -> bool:
+    """Whether this browser's session comes from a password typed in the last few minutes.
+    A cookie minted before sign-ins carried ``iat`` never counts."""
     store = AuthStore()
-    return (
-        bool(password)
-        and store.is_password_set()
-        and verify_password(password, store.password_hash())
-    )
+    if not session_cookie or not store.is_password_set():
+        return False
+    payload = verify_session(session_cookie, store.session_key_bytes())
+    iat = payload.get("iat") if payload else None
+    if not isinstance(iat, int) or isinstance(iat, bool):
+        return False
+    age = (time.time() if now is None else now) - iat
+    return 0 <= age <= SIGN_IN_FRESH_SECONDS
 
 
 @dataclass(frozen=True)

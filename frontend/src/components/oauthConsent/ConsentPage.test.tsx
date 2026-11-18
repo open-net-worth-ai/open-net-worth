@@ -9,6 +9,7 @@ const DETAILS = {
   redirect_host: 'claude.ai',
   requested_scopes: ['read', 'write'],
   expires_at: '2026-11-16T12:10:00.000000Z',
+  signed_in: true,
 }
 
 let fetchMock: ReturnType<typeof vi.fn>
@@ -37,8 +38,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function posted(): Record<string, unknown> {
-  const call = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'POST')
+function consentPost(): Record<string, unknown> {
+  const call = fetchMock.mock.calls.find(
+    ([url, init]) => url === '/api/oauth/consent' && (init as RequestInit)?.method === 'POST',
+  )
   return JSON.parse(String((call![1] as RequestInit).body)) as Record<string, unknown>
 }
 
@@ -50,33 +53,58 @@ it('names the app by the server label and its host, with a warning about forward
   expect(fetchMock.mock.calls[0]![0]).toBe('/api/oauth/consent?request=req-abc')
 })
 
-it('allows read-only by default and needs the password typed on the page', async () => {
+it('asks to sign in first when this browser has no recent sign-in', async () => {
+  let signedIn = false
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (url === '/api/auth/login') {
+      signedIn = true
+      return json(200, { ok: true })
+    }
+    return json(200, { ...DETAILS, signed_in: signedIn })
+  })
   render(<ConsentPage />)
-  const allow = await screen.findByRole('button', { name: 'Allow read-only access' })
-  expect((allow as HTMLButtonElement).disabled).toBe(true)
+  expect(await screen.findByText('Sign in to connect Claude')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Allow read-only access' })).toBeNull()
   fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: 'pw' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+  expect(await screen.findByText('Connect Claude to your book?')).toBeTruthy()
+  const login = fetchMock.mock.calls.find(([url]) => url === '/api/auth/login')!
+  expect(JSON.parse(String((login[1] as RequestInit).body))).toEqual({ password: 'pw' })
+})
+
+it('says so when the sign-in password is wrong', async () => {
+  fetchMock.mockImplementation((url: string) =>
+    url === '/api/auth/login'
+      ? json(401, { detail: 'invalid password' })
+      : json(200, { ...DETAILS, signed_in: false }),
+  )
+  render(<ConsentPage />)
+  await screen.findByText('Sign in to connect Claude')
+  fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: 'x' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+  expect(await screen.findByText('That password is not right.')).toBeTruthy()
+})
+
+it('allows read-only by default with no password on the consent card', async () => {
+  render(<ConsentPage />)
+  await screen.findByText('Connect Claude to your book?')
+  expect(document.querySelector('input[type="password"]')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Allow read-only access' }))
   await waitFor(() =>
     expect(assign).toHaveBeenCalledWith('https://claude.ai/api/mcp/auth_callback?code=x'),
   )
-  expect(posted()).toEqual({
-    request: 'req-abc',
-    decision: 'allow',
-    password: 'pw',
-    allow_write: false,
-  })
+  expect(consentPost()).toEqual({ request: 'req-abc', decision: 'allow', allow_write: false })
 })
 
-it('grants changes only when the box is ticked', async () => {
+it('grants changes only when the switch is on', async () => {
   render(<ConsentPage />)
   fireEvent.click(await screen.findByLabelText(/Also let it make changes/))
-  fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: 'pw' } })
   fireEvent.click(screen.getByRole('button', { name: 'Allow reading and changes' }))
   await waitFor(() => expect(assign).toHaveBeenCalled())
-  expect(posted().allow_write).toBe(true)
+  expect(consentPost().allow_write).toBe(true)
 })
 
-it('offers no changes box when the app only asked to read', async () => {
+it('offers no changes switch when the app only asked to read', async () => {
   fetchMock.mockImplementation((_url: string, init?: RequestInit) =>
     !init || init.method !== 'POST'
       ? json(200, { ...DETAILS, requested_scopes: ['read'] })
@@ -87,24 +115,21 @@ it('offers no changes box when the app only asked to read', async () => {
   expect(screen.queryByLabelText(/Also let it make changes/)).toBeNull()
 })
 
-it('says so when the password is wrong and stays on the page', async () => {
+it('goes back to sign-in when the sign-in has gone stale', async () => {
   fetchMock.mockImplementation((_url: string, init?: RequestInit) =>
-    !init || init.method !== 'POST'
-      ? json(200, DETAILS)
-      : json(401, { detail: 'invalid password' }),
+    !init || init.method !== 'POST' ? json(200, DETAILS) : json(401, { detail: 'sign in again' }),
   )
   render(<ConsentPage />)
-  fireEvent.change(await screen.findByDisplayValue(''), { target: { value: 'bad' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Allow read-only access' }))
-  expect(await screen.findByText('That password is not right.')).toBeTruthy()
+  fireEvent.click(await screen.findByRole('button', { name: 'Allow read-only access' }))
+  expect(await screen.findByText('Sign in to connect Claude')).toBeTruthy()
   expect(assign).not.toHaveBeenCalled()
 })
 
-it('denies without a password', async () => {
+it('denies without signing in again', async () => {
   render(<ConsentPage />)
   fireEvent.click(await screen.findByRole('button', { name: 'Deny' }))
   await waitFor(() => expect(assign).toHaveBeenCalled())
-  expect(posted()).toEqual({ request: 'req-abc', decision: 'deny' })
+  expect(consentPost()).toEqual({ request: 'req-abc', decision: 'deny' })
 })
 
 it('explains an expired request', async () => {

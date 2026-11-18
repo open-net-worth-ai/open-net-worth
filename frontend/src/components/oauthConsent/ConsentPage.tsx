@@ -1,16 +1,17 @@
 // /oauth/consent?request=… — where a hosted AI app (claude.ai, ChatGPT) sends the owner to approve
 // a connection to the book (flag mcp_oauth).
 //
-// Rendered BEFORE the sign-in gate (main.tsx): the owner types their password HERE, every time,
-// and that typed password is what approves — never a session, never loopback trust. Read-only is
-// the default; changes are a switch the owner turns on. The app's name is the server's label for a
-// known host, never what the app calls itself.
-import { useEffect, useState } from 'react'
+// Rendered BEFORE the sign-in gate (main.tsx). Two steps: sign in (skipped when this browser
+// signed in within the last few minutes), then the consent card with Deny / Allow. Approving needs
+// that RECENT sign-in — never an old session, never loopback trust — so a link opened later in a
+// signed-in browser asks for the password again. Read-only is the default; changes are a switch.
+// The app's name is the server's label for a known host, never what the app calls itself.
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useBrand } from '../../brand-context'
 import { Check, LockKeyhole, X } from '../../ui/icons'
 import { Button, ErrorState, Loading, PasswordField, Switch } from '../ui'
-import { decideConsent, loadConsent } from './consentApi'
+import { decideConsent, loadConsent, signIn } from './consentApi'
 import type { ConsentDetails } from './consentApi'
 
 type Load =
@@ -20,8 +21,6 @@ type Load =
   | { state: 'leaving' }
 
 const ERRORS = {
-  password: 'That password is not right.',
-  throttled: 'Too many wrong passwords. Wait 15 minutes and try again.',
   expired: 'This request has expired. Start again from the app.',
   failed: 'Something went wrong. Start again from the app.',
 } as const
@@ -30,35 +29,46 @@ export function ConsentPage() {
   const [load, setLoad] = useState<Load>({ state: 'loading' })
   const request = new URLSearchParams(window.location.search).get('request') ?? ''
 
+  const reload = useCallback(
+    () =>
+      loadConsent(request)
+        .then((details) => setLoad({ state: 'ready', details }))
+        .catch(() => setLoad({ state: 'gone' })),
+    [request],
+  )
+
   useEffect(() => {
     // The URL names a pending sign-in — never pass it on as a Referer.
     const meta = document.createElement('meta')
     meta.name = 'referrer'
     meta.content = 'no-referrer'
     document.head.appendChild(meta)
-    let live = true
-    loadConsent(request)
-      .then((details) => live && setLoad({ state: 'ready', details }))
-      .catch(() => live && setLoad({ state: 'gone' }))
-    return () => {
-      live = false
-      meta.remove()
-    }
-  }, [request])
+    void reload()
+    return () => meta.remove()
+  }, [reload])
+
+  const leave = (url: string) => {
+    setLoad({ state: 'leaving' })
+    window.location.assign(url)
+  }
 
   return (
     <main className="oauth-consent">
       <div className="consent-card">
-        {load.state === 'ready' ? (
+        {load.state === 'ready' && !load.details.signed_in ? (
+          <SignInStep details={load.details} onSignedIn={() => void reload()} />
+        ) : null}
+        {load.state === 'ready' && load.details.signed_in ? (
           <Decide
             request={request}
             details={load.details}
-            onLeave={(url) => {
-              setLoad({ state: 'leaving' })
-              window.location.assign(url)
-            }}
+            onLeave={leave}
+            onSignedOut={() =>
+              setLoad({ state: 'ready', details: { ...load.details, signed_in: false } })
+            }
           />
-        ) : (
+        ) : null}
+        {load.state !== 'ready' ? (
           <>
             <Pairing appName={null} />
             {load.state === 'loading' ? <Loading label="Opening…" /> : null}
@@ -70,7 +80,7 @@ export function ConsentPage() {
               />
             ) : null}
           </>
-        )}
+        ) : null}
       </div>
     </main>
   )
@@ -100,6 +110,67 @@ function Pairing({ appName }: { appName: string | null }) {
   )
 }
 
+function SignInStep({ details, onSignedIn }: { details: ConsentDetails; onSignedIn: () => void }) {
+  const brand = useBrand()
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!password || busy) return
+    setBusy(true)
+    setError(null)
+    const result = await signIn(password)
+    setBusy(false)
+    if (result.ok) {
+      setPassword('')
+      onSignedIn()
+    } else setError(result.message)
+  }
+
+  return (
+    <form className="consent-form" onSubmit={submit}>
+      <Pairing appName={details.app_name} />
+      <header className="consent-head">
+        <h1>Sign in to connect {details.app_name}</h1>
+        <p>
+          <strong>{details.app_host}</strong> is asking to use {brand.app_name}. Sign in first, then
+          choose what it can do.
+        </p>
+      </header>
+      {/* The same hidden username as the main sign-in, so a password manager fills the login it
+          saved for this instance. */}
+      <input
+        type="text"
+        name="username"
+        autoComplete="username"
+        defaultValue="opennetworth"
+        readOnly
+        tabIndex={-1}
+        aria-hidden="true"
+        className="sr-only"
+      />
+      <div className="consent-password">
+        <label htmlFor="consent-password">Password</label>
+        <PasswordField
+          id="consent-password"
+          name="password"
+          autoComplete="current-password"
+          autoFocus
+          value={password}
+          invalid={error !== null}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        {error ? <p className="consent-error">{error}</p> : null}
+      </div>
+      <Button type="submit" variant="primary" loading={busy} disabled={!password || busy}>
+        Sign in
+      </Button>
+    </form>
+  )
+}
+
 function Ability({ allowed, children }: { allowed: boolean; children: ReactNode }) {
   return (
     <li className={allowed ? 'consent-can' : 'consent-cannot'}>
@@ -113,13 +184,14 @@ function Decide({
   request,
   details,
   onLeave,
+  onSignedOut,
 }: {
   request: string
   details: ConsentDetails
   onLeave: (url: string) => void
+  onSignedOut: () => void
 }) {
   const brand = useBrand()
-  const [password, setPassword] = useState('')
   const [write, setWrite] = useState(false)
   const [busy, setBusy] = useState<'allow' | 'deny' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -131,12 +203,11 @@ function Decide({
     setBusy(decision)
     setError(null)
     const result = await decideConsent(
-      decision === 'allow'
-        ? { request, decision, password, allow_write: changes }
-        : { request, decision },
+      decision === 'allow' ? { request, decision, allow_write: changes } : { request, decision },
     )
     setBusy(null)
     if (result.ok) onLeave(result.redirect)
+    else if (result.reason === 'signin') onSignedOut()
     else setError(ERRORS[result.reason])
   }
 
@@ -161,21 +232,16 @@ function Decide({
           <Ability allowed>See your accounts, transactions, budget and investments</Ability>
           <Ability allowed={changes}>Add, edit and delete records</Ability>
           <Ability allowed={changes}>Run automations and send messages for you</Ability>
-          <Ability allowed={false}>
-            Place trades or send payments. {brand.app_name} can't do either.
-          </Ability>
         </ul>
         {canWrite ? (
           <div className="consent-scope__switch">
-            <div>
-              <label htmlFor="consent-write">Also let it make changes</label>
-              <p>Every change is recorded and can be undone. Leave off for read-only access.</p>
-            </div>
+            <label htmlFor="consent-write">Also let it make changes</label>
             <Switch
               id="consent-write"
               checked={write}
               onChange={(e) => setWrite(e.target.checked)}
             />
+            <p>Every change is recorded and can be undone. Leave off for read-only access.</p>
           </div>
         ) : null}
       </section>
@@ -185,17 +251,7 @@ function Decide({
         link, choose Deny.
       </p>
 
-      <div className="consent-password">
-        <label htmlFor="consent-password">Your {brand.app_name} password</label>
-        <PasswordField
-          id="consent-password"
-          autoComplete="current-password"
-          value={password}
-          invalid={error === ERRORS.password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        {error ? <p className="consent-error">{error}</p> : null}
-      </div>
+      {error ? <p className="consent-error">{error}</p> : null}
 
       <div className="consent-actions">
         <Button
@@ -207,12 +263,7 @@ function Decide({
         >
           Deny
         </Button>
-        <Button
-          type="submit"
-          variant="primary"
-          loading={busy === 'allow'}
-          disabled={!password || busy !== null}
-        >
+        <Button type="submit" variant="primary" loading={busy === 'allow'} disabled={busy !== null}>
           {changes ? 'Allow reading and changes' : 'Allow read-only access'}
         </Button>
       </div>

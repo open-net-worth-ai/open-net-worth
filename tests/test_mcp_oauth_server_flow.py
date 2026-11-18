@@ -28,6 +28,7 @@ from tests.mcp_oauth_helpers import (
     rpc,
     seed_auth,
     shift_clock,
+    sign_in,
     start,
 )
 
@@ -164,17 +165,41 @@ def test_consent_shows_our_name_for_the_app_not_the_documents(client):
     assert details["requested_scopes"] == ["read", "write"]
 
 
-def test_a_wrong_password_mints_nothing_and_counts_as_a_failed_sign_in(client):
-    from backend.core import ratelimit
+def test_approving_needs_a_sign_in_and_reports_it(client):
+    _, challenge = pkce()
+    request_id = start(client, challenge)
+    details = client.get("/api/oauth/consent", params={"request": request_id}).json()
+    assert details["signed_in"] is False
+    res = approve(client, request_id, signed_in=False)
+    assert res.status_code == 401
+    assert sign_in(client).status_code == 200
+    details = client.get("/api/oauth/consent", params={"request": request_id}).json()
+    assert details["signed_in"] is True
+    assert approve(client, request_id, signed_in=False).status_code == 200
+
+
+def test_an_old_sign_in_does_not_approve(client, monkeypatch):
+    from backend.services.mcp_oauth import authorize
 
     _, challenge = pkce()
     request_id = start(client, challenge)
-    res = approve(client, request_id, password="wrong")
-    assert res.status_code == 401
-    assert ratelimit.login_limiter.check("testclient") == (True, 0)
-    for _ in range(5):
-        approve(client, request_id, password="wrong")
-    assert approve(client, request_id).status_code == 429
+    assert sign_in(client).status_code == 200
+    real = authorize.time.time
+    monkeypatch.setattr(
+        authorize.time, "time", lambda: real() + authorize.SIGN_IN_FRESH_SECONDS + 5
+    )
+    assert approve(client, request_id, signed_in=False).status_code == 401
+
+
+def test_a_session_without_a_sign_in_time_does_not_approve(client):
+    from backend.core.security import sign_session
+    from backend.db.auth_store import AuthStore
+
+    _, challenge = pkce()
+    request_id = start(client, challenge)
+    store = AuthStore()
+    client.cookies.set("onw_session", sign_session({}, store.session_key_bytes(), 3600))
+    assert approve(client, request_id, signed_in=False).status_code == 401
 
 
 def test_deny_sends_access_denied_and_spends_the_request(client):
@@ -201,7 +226,7 @@ def test_a_cross_site_approval_is_refused(client):
     request_id = start(client, challenge)
     res = client.post(
         "/api/oauth/consent",
-        json={"request": request_id, "decision": "allow", "password": "x"},
+        json={"request": request_id, "decision": "allow"},
         headers={"Sec-Fetch-Site": "cross-site"},
     )
     assert res.status_code == 403

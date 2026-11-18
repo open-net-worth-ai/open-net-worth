@@ -68,14 +68,16 @@ def claude_doc(**overrides) -> dict:
 
 def build_client() -> TestClient:
     """A small app with the real gate: ``require_auth`` as the app-wide dependency, the /mcp
-    router, both OAuth routers, and one ordinary /api route."""
+    router, sign-in, both OAuth routers, and one ordinary /api route."""
     from backend.api._deps import require_auth
+    from backend.api.auth import router as auth_router
     from backend.api.mcp_oauth_server import router as oauth_router
     from backend.api.mcp_oauth_settings import router as settings_router
     from backend.mcp.server import router as mcp_router
 
     app = FastAPI(dependencies=[Depends(require_auth)])
     app.include_router(mcp_router)
+    app.include_router(auth_router)
     app.include_router(oauth_router)
     app.include_router(settings_router)
 
@@ -119,15 +121,18 @@ def start(client: TestClient, challenge: str, **overrides) -> str:
     return query(location)["request"]
 
 
-def approve(client: TestClient, request_id: str, *, write: bool = False, password: str = PASSWORD):
+def sign_in(client: TestClient, password: str = PASSWORD):
+    """The ordinary sign-in the consent page sends the owner through first."""
+    return client.post("/api/auth/login", json={"password": password})
+
+
+def approve(client: TestClient, request_id: str, *, write: bool = False, signed_in: bool = True):
+    if signed_in:
+        res = sign_in(client)
+        assert res.status_code == 200, res.text
     return client.post(
         "/api/oauth/consent",
-        json={
-            "request": request_id,
-            "decision": "allow",
-            "password": password,
-            "allow_write": write,
-        },
+        json={"request": request_id, "decision": "allow", "allow_write": write},
     )
 
 

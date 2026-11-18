@@ -10,6 +10,7 @@ them unauthenticated.
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -59,7 +60,8 @@ class RemovePasswordBody(BaseModel):
 def _set_session_cookie(request: Request, response: Response) -> None:
     store = AuthStore()
     ttl = store.session_ttl()
-    token = sign_session({}, store.session_key_bytes(), ttl)
+    # ``iat`` is when the password was typed: a hosted-app approval needs a recent one.
+    token = sign_session({"iat": int(time.time())}, store.session_key_bytes(), ttl)
     response.set_cookie(
         key=_SESSION_COOKIE,
         value=token,
