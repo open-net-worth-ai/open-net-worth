@@ -92,20 +92,30 @@ function SpokenAbove({ sessionId, messages }: { sessionId: string; messages: Cha
 }
 
 /** Draws the conversation's newest answer as far as Lucius has said it. */
-function VoiceCallRevealed({
+/** Follows the voice for the newest answer and reports the message to show. Renders nothing:
+ *  the bubble itself stays put in the tree, so it is never rebuilt when this comes and goes. */
+function VoiceRevealProbe({
   message,
   sessionId,
-  children,
+  onReveal,
 }: {
   message: Message
   sessionId: string
-  children: (message: Message) => ReactNode
+  onReveal: (heldText: string | null) => void
 }) {
-  return children(useVoiceReveal(message, sessionId))
+  const shown = useVoiceReveal(message, sessionId)
+  // Only the text the voice has reached goes up (a string, so an unchanged one is no update).
+  // Layout effect: it is in place before the browser paints.
+  const held = shown === message ? null : shown.text
+  useLayoutEffect(() => onReveal(held), [held, onReveal])
+  useLayoutEffect(() => () => onReveal(null), [onReveal])
+  return null
 }
 
 /** One message of the chat. Only the newest, if it's an answer, follows the voice: the hook wakes
- *  on every spoken word, so an older message must never carry it. */
+ *  on every spoken word, so an older message must never carry it. The bubble is rendered in the
+ *  same place either way — when a new message made this one older, swapping its wrapper rebuilt
+ *  the whole bubble and redrew every chart in it (2026-11-18). */
 export function LastAnswerReveal({
   message,
   messages,
@@ -119,13 +129,13 @@ export function LastAnswerReveal({
   live: boolean
   children: (message: Message) => ReactNode
 }) {
-  if (!live || message.role !== 'assistant') return <>{children(message)}</>
+  const [held, setHeld] = useState<string | null>(null)
+  const following = live && message.role === 'assistant'
   return (
     <>
-      <SpokenAbove sessionId={sessionId} messages={messages} />
-      <VoiceCallRevealed message={message} sessionId={sessionId}>
-        {children}
-      </VoiceCallRevealed>
+      {following && <SpokenAbove sessionId={sessionId} messages={messages} />}
+      {following && <VoiceRevealProbe message={message} sessionId={sessionId} onReveal={setHeld} />}
+      {children(following && held !== null ? { ...message, text: held, streaming: true } : message)}
     </>
   )
 }

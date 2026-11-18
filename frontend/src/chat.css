@@ -2730,10 +2730,11 @@
   }
 
   /* ── Inline visual (show_visual): tiles, charts, bars, timeline in the chat column ───── */
+  /* Flat on the page (no card), so the space around it is what sets it apart from the reply. */
   .msg-visual-wrap {
     width: 100%;
     min-width: 0;
-    margin-top: 8px;
+    margin: 16px 0 20px;
   }
   .ivis {
     display: flex;
@@ -2769,9 +2770,10 @@
     font-size: 12px;
     color: var(--muted);
   }
+  /* A step under the reply's 14px text, as a chart title sits under the prose around it. */
   .ivis-title {
     margin: 0;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--ink);
   }
