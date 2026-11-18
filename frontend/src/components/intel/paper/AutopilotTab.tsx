@@ -2,7 +2,8 @@ import '../../tabs/automations.css'
 
 import { useState } from 'react'
 import { ChevronRight, Play } from 'lucide-react'
-import { Button, Select, Switch, TextArea, groupModels, modelRefOf } from '../../ui'
+import { Button, Switch, TextArea, groupModels, modelRefOf } from '../../ui'
+import { FieldSelect } from '../../tabs/connectors/VoicePicker'
 import type { SelectOptGroup } from '../../ui'
 import type { ModelOption } from '../../../api/models'
 import { useModels } from '../../../hooks/useModels'
@@ -266,7 +267,7 @@ function Settings({
         <label className="a3-block-h" htmlFor="pp-ap-cadence">
           Schedule
         </label>
-        <Select
+        <FieldSelect
           id="pp-ap-cadence"
           value={cadence}
           options={CADENCE}
@@ -277,14 +278,14 @@ function Settings({
         <div className="a3-block-h">AI model</div>
         <div className="paper-ap-model">
           {/* The same Select as Schedule and Effort beside it, models grouped by provider. */}
-          <Select
+          <FieldSelect
             id="pp-ap-model"
             aria-label="AI model"
             value={model}
             options={modelOptions(models.models, models.defaultModel, model)}
             onChange={(e) => setModel(e.target.value)}
           />
-          <Select
+          <FieldSelect
             aria-label="Effort"
             value={effort}
             options={EFFORT}
