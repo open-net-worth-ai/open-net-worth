@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 from html.parser import HTMLParser
 from typing import Optional
@@ -35,6 +36,10 @@ _SIGNATURES: tuple[tuple[bytes, str], ...] = (
 _HOST = re.compile(r"^[a-z0-9.-]+(:[0-9]{1,5})?$")
 
 _cache: dict[str, tuple[float, Optional[tuple[bytes, str]]]] = {}
+# One fetch per host at a time: a burst of page loads waits for the first fetch and reads its
+# result, instead of each sending its own requests to the app's domain.
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
 
 
 def _sniff(data: bytes) -> Optional[str]:
@@ -122,12 +127,26 @@ def icon_for_host(host: str, now: Optional[float] = None) -> Optional[tuple[byte
     if not _HOST.match(host):
         return None
     clock = time.monotonic() if now is None else now
-    cached = _cache.get(host)
-    if cached and clock - cached[0] < (CACHE_S if cached[1] else MISS_CACHE_S):
-        return cached[1]
-    result = _fetch(host)
-    _cache[host] = (clock, result)
-    return result
+    hit = _cached(host, clock)
+    if hit is not None:
+        return hit[0]
+    with _locks_guard:
+        lock = _locks.setdefault(host, threading.Lock())
+    with lock:
+        hit = _cached(host, clock)
+        if hit is not None:
+            return hit[0]
+        result = _fetch(host)
+        _cache[host] = (clock, result)
+        return result
+
+
+def _cached(host: str, clock: float) -> Optional[tuple[Optional[tuple[bytes, str]]]]:
+    """``(result,)`` while the cached answer is fresh, else ``None`` (a cached miss is ``(None,)``)."""
+    entry = _cache.get(host)
+    if entry and clock - entry[0] < (CACHE_S if entry[1] else MISS_CACHE_S):
+        return (entry[1],)
+    return None
 
 
 def reset_cache_for_tests() -> None:

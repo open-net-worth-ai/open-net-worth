@@ -31,7 +31,8 @@ router = APIRouter(tags=["mcp-oauth-server"])
 _NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 # Failed token/revoke calls per client IP (abuse, not guessing: every credential is 256-bit).
 token_limiter = ratelimit.SlidingWindowLimiter(30, 15 * 60)
-_SESSION_COOKIE = "onw_session"
+# The icon route makes the server fetch from the app's domain: a burst must not fan out.
+icon_limiter = ratelimit.SlidingWindowLimiter(30, 60)
 
 
 def _require_available() -> None:
@@ -90,15 +91,21 @@ def consent_details(http: Request, request: str = ""):
         details = authorize.consent_details(request)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    details["signed_in"] = authorize.signed_in_recently(http.cookies.get(_SESSION_COOKIE))
+    details["signed_in"] = authorize.signed_in_for(
+        http.cookies.get(authorize.CONSENT_COOKIE), request
+    )
     return JSONResponse(details, headers={**_NO_STORE, **_FRAME_DENY})
 
 
 @router.get("/api/oauth/consent/icon")
-def consent_icon(request: str = ""):
+def consent_icon(http: Request, request: str = ""):
     """The asking app's icon, fetched by the server from the app's own verified domain. Served
     with headers that keep it an image (raster only, no sniffing, no script)."""
     _require_available()
+    allowed, _ = icon_limiter.check(_client_key(http))
+    if not allowed:
+        raise HTTPException(status_code=429, detail="too many requests")
+    icon_limiter.record(_client_key(http))
     try:
         host = authorize.consent_details(request)["app_host"]
     except NotFoundError as exc:
@@ -138,7 +145,8 @@ async def consent_decide(body: ConsentBody, request: Request):
     if body.decision not in ("allow", "deny"):
         raise HTTPException(status_code=422, detail="decision must be allow or deny")
     approve = body.decision == "allow"
-    if approve and not authorize.signed_in_recently(request.cookies.get(_SESSION_COOKIE)):
+    cookie = request.cookies.get(authorize.CONSENT_COOKIE)
+    if approve and not authorize.signed_in_for(cookie, body.request):
         # The page signs in again and retries; nothing about the request changes.
         return JSONResponse({"detail": "sign in again"}, status_code=401, headers=_NO_STORE)
     try:
@@ -147,7 +155,50 @@ async def consent_decide(body: ConsentBody, request: Request):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if decision.approved:
         await _notify_connected(decision)
-    return JSONResponse({"redirect": decision.redirect}, headers=_NO_STORE)
+    response = JSONResponse({"redirect": decision.redirect}, headers=_NO_STORE)
+    response.delete_cookie(authorize.CONSENT_COOKIE, path=authorize.CONSENT_COOKIE_PATH)
+    return response
+
+
+class ConsentSignInBody(BaseModel):
+    request: str
+    password: str
+
+
+@router.post("/api/oauth/consent/sign-in")
+def consent_sign_in(body: ConsentSignInBody, request: Request):
+    """The password typed on the consent page, for THIS request only: a short cookie scoped to the
+    consent routes, never the app's own session. Same brute-force budget as the main sign-in."""
+    _require_available()
+    if _cross_site(request):
+        raise HTTPException(status_code=403, detail="cross-origin request refused")
+    key = _client_key(request)
+    allowed, retry_after = ratelimit.login_limiter.check(key)
+    if not allowed:
+        return JSONResponse(
+            {"detail": "too many attempts, try again later"},
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+        )
+    if not authorize.password_ok(body.password):
+        ratelimit.login_limiter.record(key)
+        return JSONResponse({"detail": "invalid password"}, status_code=401, headers=_NO_STORE)
+    ratelimit.login_limiter.reset(key)
+    try:
+        value = authorize.consent_cookie(body.request)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    response = JSONResponse({"ok": True}, headers=_NO_STORE)
+    response.set_cookie(
+        key=authorize.CONSENT_COOKIE,
+        value=value,
+        max_age=authorize.CONSENT_SIGN_IN_SECONDS,
+        path=authorize.CONSENT_COOKIE_PATH,
+        httponly=True,
+        samesite="strict",
+        secure=request.url.scheme == "https",  # the same rule as the app's session cookie
+    )
+    return response
 
 
 async def _notify_connected(decision: authorize.Decision) -> None:

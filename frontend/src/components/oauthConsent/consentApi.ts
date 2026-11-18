@@ -1,6 +1,6 @@
 // What /oauth/consent shows and sends (see ConsentPage). The request id in the URL names the
-// staged sign-in; approving needs a password typed in the last few minutes, through the ordinary
-// sign-in, so the page signs the owner in first when `signed_in` is false.
+// staged sign-in; approving needs the password typed for THIS request in the last few minutes, so
+// the page signs the owner in first when `signed_in` is false.
 import { tooManyAttemptsMessage } from '../../api/rateLimit'
 
 export interface ConsentDetails {
@@ -26,13 +26,14 @@ export async function loadConsent(request: string): Promise<ConsentDetails> {
   return (await r.json()) as ConsentDetails
 }
 
-export async function signIn(password: string): Promise<SignInResult> {
+export async function signIn(request: string, password: string): Promise<SignInResult> {
   try {
-    const r = await fetch('/api/auth/login', {
+    // Signs in for THIS request only: a short cookie for the consent page, never the app session.
+    const r = await fetch('/api/oauth/consent/sign-in', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ request, password }),
     })
     if (r.ok) return { ok: true }
     if (r.status === 401) return { ok: false, message: 'That password is not right.' }

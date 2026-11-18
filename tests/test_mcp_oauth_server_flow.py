@@ -165,41 +165,74 @@ def test_consent_shows_our_name_for_the_app_not_the_documents(client):
     assert details["requested_scopes"] == ["read", "write"]
 
 
-def test_approving_needs_a_sign_in_and_reports_it(client):
+def test_approving_needs_a_sign_in_for_this_request_and_reports_it(client):
     _, challenge = pkce()
     request_id = start(client, challenge)
     details = client.get("/api/oauth/consent", params={"request": request_id}).json()
     assert details["signed_in"] is False
-    res = approve(client, request_id, signed_in=False)
-    assert res.status_code == 401
-    assert sign_in(client).status_code == 200
+    assert approve(client, request_id, signed_in=False).status_code == 401
+    assert sign_in(client, request_id).status_code == 200
     details = client.get("/api/oauth/consent", params={"request": request_id}).json()
     assert details["signed_in"] is True
     assert approve(client, request_id, signed_in=False).status_code == 200
 
 
-def test_an_old_sign_in_does_not_approve(client, monkeypatch):
+def test_a_sign_in_for_one_request_never_approves_another(client):
+    _, challenge = pkce()
+    mine = start(client, challenge)
+    forwarded = start(client, challenge)
+    assert sign_in(client, mine).status_code == 200
+    details = client.get("/api/oauth/consent", params={"request": forwarded}).json()
+    assert details["signed_in"] is False
+    assert approve(client, forwarded, signed_in=False).status_code == 401
+
+
+def test_the_app_session_never_approves_and_consent_sign_in_never_mints_one(client):
+    from tests.mcp_oauth_helpers import PASSWORD
+
+    _, challenge = pkce()
+    request_id = start(client, challenge)
+    assert client.post("/api/auth/login", json={"password": PASSWORD}).status_code == 200
+    assert approve(client, request_id, signed_in=False).status_code == 401
+    client.cookies.clear()
+    res = sign_in(client, request_id)
+    assert "onw_session" not in res.cookies
+    cookie = res.headers["set-cookie"]
+    assert "onw_consent=" in cookie and "Path=/api/oauth/consent" in cookie
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie.replace("Strict", "strict")
+
+
+def test_an_old_consent_sign_in_does_not_approve(client, monkeypatch):
     from backend.services.mcp_oauth import authorize
 
     _, challenge = pkce()
     request_id = start(client, challenge)
-    assert sign_in(client).status_code == 200
+    assert sign_in(client, request_id).status_code == 200
     real = authorize.time.time
-    monkeypatch.setattr(
-        authorize.time, "time", lambda: real() + authorize.SIGN_IN_FRESH_SECONDS + 5
-    )
+    late = authorize.CONSENT_SIGN_IN_SECONDS + 5
+    monkeypatch.setattr(authorize.time, "time", lambda: real() + late)
     assert approve(client, request_id, signed_in=False).status_code == 401
 
 
-def test_a_session_without_a_sign_in_time_does_not_approve(client):
-    from backend.core.security import sign_session
-    from backend.db.auth_store import AuthStore
+def test_a_wrong_password_sets_nothing_and_counts_as_a_failed_sign_in(client):
+    from backend.core import ratelimit
 
     _, challenge = pkce()
     request_id = start(client, challenge)
-    store = AuthStore()
-    client.cookies.set("onw_session", sign_session({}, store.session_key_bytes(), 3600))
-    assert approve(client, request_id, signed_in=False).status_code == 401
+    res = sign_in(client, request_id, password="wrong")
+    assert res.status_code == 401 and "onw_consent" not in res.cookies
+    assert ratelimit.login_limiter.check("testclient") == (True, 0)
+    for _ in range(5):
+        sign_in(client, request_id, password="wrong")
+    assert sign_in(client, request_id).status_code == 429
+
+
+def test_a_used_consent_sign_in_is_cleared(client):
+    _, challenge = pkce()
+    request_id = start(client, challenge)
+    res = approve(client, request_id)
+    assert res.status_code == 200
+    assert 'onw_consent=""' in res.headers["set-cookie"] or "Max-Age=0" in res.headers["set-cookie"]
 
 
 def test_deny_sends_access_denied_and_spends_the_request(client):
@@ -208,17 +241,17 @@ def test_deny_sends_access_denied_and_spends_the_request(client):
     res = client.post("/api/oauth/consent", json={"request": request_id, "decision": "deny"})
     q = query(res.json()["redirect"])
     assert q["error"] == "access_denied" and q["state"] == "st-123" and q["iss"] == PUBLIC
-    assert approve(client, request_id).status_code == 404
+    assert sign_in(client, request_id).status_code == 404
 
 
 def test_a_request_is_single_use_and_expires(client, monkeypatch):
     _, challenge = pkce()
     request_id = start(client, challenge)
     assert approve(client, request_id).status_code == 200
-    assert approve(client, request_id).status_code == 404
+    assert sign_in(client, request_id).status_code == 404
     other = start(client, challenge)
     shift_clock(monkeypatch, timedelta(minutes=11))
-    assert approve(client, other).status_code == 404
+    assert sign_in(client, other).status_code == 404
 
 
 def test_a_cross_site_approval_is_refused(client):
@@ -321,3 +354,57 @@ def test_get_and_delete_mcp_need_a_token_while_oauth_is_on(client):
     assert client.delete("/mcp").status_code == 401
     token = connect(client)["access_token"]
     assert client.get("/mcp", headers={"Authorization": f"Bearer {token}"}).status_code == 405
+
+
+# ── the consent page's app icon ──────────────────────────────────────────────────
+
+
+def test_the_icon_comes_from_the_requests_verified_host(client, monkeypatch):
+    from backend.services.mcp_oauth import app_icon
+
+    asked: list[str] = []
+
+    def fake(host):
+        asked.append(host)
+        return b"\x89PNG\r\n\x1a\n" + b"\x00" * 8, "image/png"
+
+    monkeypatch.setattr(app_icon, "icon_for_host", fake)
+    _, challenge = pkce()
+    request_id = start(client, challenge)
+    res = client.get("/api/oauth/consent/icon", params={"request": request_id})
+    assert res.status_code == 200
+    assert asked == ["claude.ai"]
+    assert res.headers["content-type"] == "image/png"
+    assert res.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in res.headers["content-security-policy"]
+    assert "default-src 'none'" in res.headers["content-security-policy"]
+
+
+def test_no_request_no_icon_and_no_fetch(client, monkeypatch):
+    from backend.services.mcp_oauth import app_icon
+
+    monkeypatch.setattr(app_icon, "icon_for_host", lambda host: pytest.fail("fetched"))
+    assert client.get("/api/oauth/consent/icon", params={"request": "nope"}).status_code == 404
+    assert client.get("/api/oauth/consent/icon").status_code == 404
+
+
+def test_a_missing_icon_is_a_plain_404(client, monkeypatch):
+    from backend.services.mcp_oauth import app_icon
+
+    monkeypatch.setattr(app_icon, "icon_for_host", lambda host: None)
+    _, challenge = pkce()
+    res = client.get("/api/oauth/consent/icon", params={"request": start(client, challenge)})
+    assert res.status_code == 404
+
+
+def test_the_icon_route_is_rate_limited(client, monkeypatch):
+    from backend.services.mcp_oauth import app_icon
+
+    monkeypatch.setattr(app_icon, "icon_for_host", lambda host: None)
+    _, challenge = pkce()
+    request_id = start(client, challenge)
+    codes = [
+        client.get("/api/oauth/consent/icon", params={"request": request_id}).status_code
+        for _ in range(31)
+    ]
+    assert codes[:30] == [404] * 30 and codes[30] == 429

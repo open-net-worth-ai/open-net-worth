@@ -71,10 +71,12 @@ def build_client() -> TestClient:
     router, sign-in, both OAuth routers, and one ordinary /api route."""
     from backend.api._deps import require_auth
     from backend.api.auth import router as auth_router
+    from backend.api.mcp_oauth_server import icon_limiter
     from backend.api.mcp_oauth_server import router as oauth_router
     from backend.api.mcp_oauth_settings import router as settings_router
     from backend.mcp.server import router as mcp_router
 
+    icon_limiter.clear()
     app = FastAPI(dependencies=[Depends(require_auth)])
     app.include_router(mcp_router)
     app.include_router(auth_router)
@@ -121,14 +123,16 @@ def start(client: TestClient, challenge: str, **overrides) -> str:
     return query(location)["request"]
 
 
-def sign_in(client: TestClient, password: str = PASSWORD):
-    """The ordinary sign-in the consent page sends the owner through first."""
-    return client.post("/api/auth/login", json={"password": password})
+def sign_in(client: TestClient, request_id: str, password: str = PASSWORD):
+    """The password typed on the consent page, for this one request."""
+    return client.post(
+        "/api/oauth/consent/sign-in", json={"request": request_id, "password": password}
+    )
 
 
 def approve(client: TestClient, request_id: str, *, write: bool = False, signed_in: bool = True):
     if signed_in:
-        res = sign_in(client)
+        res = sign_in(client, request_id)
         assert res.status_code == 200, res.text
     return client.post(
         "/api/oauth/consent",

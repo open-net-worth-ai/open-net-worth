@@ -1,10 +1,10 @@
 // /oauth/consent?request=… — where a hosted AI app (claude.ai, ChatGPT) sends the owner to approve
 // a connection to the book (flag mcp_oauth).
 //
-// Rendered BEFORE the sign-in gate (main.tsx). Two steps: sign in (skipped when this browser
-// signed in within the last few minutes), then the consent card with Deny / Allow. Approving needs
-// that RECENT sign-in — never an old session, never loopback trust — so a link opened later in a
-// signed-in browser asks for the password again. Read-only is the default; changes are a switch.
+// Rendered BEFORE the sign-in gate (main.tsx). Two steps: type the password for this request, then
+// the consent card with Deny / Allow. The sign-in is for THIS request only (a short cookie on the
+// consent routes, never the app's session, never loopback trust), so a link someone else started
+// always needs the password typed for it. Read-only is the default; changes are a switch.
 // The app's name is the server's label for a known host, never what the app calls itself.
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
@@ -139,7 +139,7 @@ function SignInStep({
     if (!password || busy) return
     setBusy(true)
     setError(null)
-    const result = await signIn(password)
+    const result = await signIn(request, password)
     setBusy(false)
     if (result.ok) {
       setPassword('')

@@ -56,7 +56,7 @@ it('names the app by the server label and its host, with a warning about forward
 it('asks to sign in first when this browser has no recent sign-in', async () => {
   let signedIn = false
   fetchMock.mockImplementation((url: string) => {
-    if (url === '/api/auth/login') {
+    if (url === '/api/oauth/consent/sign-in') {
       signedIn = true
       return json(200, { ok: true })
     }
@@ -68,13 +68,16 @@ it('asks to sign in first when this browser has no recent sign-in', async () => 
   fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: 'pw' } })
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
   expect(await screen.findByText('Connect Claude to your book?')).toBeTruthy()
-  const login = fetchMock.mock.calls.find(([url]) => url === '/api/auth/login')!
-  expect(JSON.parse(String((login[1] as RequestInit).body))).toEqual({ password: 'pw' })
+  const login = fetchMock.mock.calls.find(([url]) => url === '/api/oauth/consent/sign-in')!
+  expect(JSON.parse(String((login[1] as RequestInit).body))).toEqual({
+    request: 'req-abc',
+    password: 'pw',
+  })
 })
 
 it('says so when the sign-in password is wrong', async () => {
   fetchMock.mockImplementation((url: string) =>
-    url === '/api/auth/login'
+    url === '/api/oauth/consent/sign-in'
       ? json(401, { detail: 'invalid password' })
       : json(200, { ...DETAILS, signed_in: false }),
   )

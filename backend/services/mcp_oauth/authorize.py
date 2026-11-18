@@ -7,6 +7,7 @@ redirect. Once both are trusted, every other failure goes back to the app as a r
 
 from __future__ import annotations
 
+import hmac
 import time
 import uuid
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from typing import Optional
 from urllib.parse import urlencode, urlsplit
 
 from backend.core.errors import NotFoundError
-from backend.core.security import verify_session
+from backend.core.security import sign_session, verify_password, verify_session
 from backend.db.auth_store import AuthStore
 from backend.db.mcp_oauth_store import McpOAuthStore
 from backend.services.mcp_oauth import settings
@@ -121,24 +122,49 @@ def consent_details(request_id: str) -> dict:
     }
 
 
-# How long after typing the password a sign-in still approves a hosted app. Long enough to sign
-# in and read the consent card; short enough that a link opened later in a signed-in browser asks
-# for the password again (a one-click approval would be the phishing route).
-SIGN_IN_FRESH_SECONDS = 10 * 60
+# The consent page signs the owner in for ONE request: a short cookie, usable only on the consent
+# routes, naming the request it was typed for. It never mints the app's own session (that browser
+# may be a phone's in-app view or someone else's laptop), and a password typed for one request
+# never approves another — so a link someone else started always needs the password typed for it.
+CONSENT_COOKIE = "onw_consent"
+CONSENT_COOKIE_PATH = "/api/oauth/consent"
+CONSENT_SIGN_IN_SECONDS = 10 * 60
+_CONSENT_PURPOSE = "mcp-oauth-consent"
 
 
-def signed_in_recently(session_cookie: Optional[str], now: Optional[float] = None) -> bool:
-    """Whether this browser's session comes from a password typed in the last few minutes.
-    A cookie minted before sign-ins carried ``iat`` never counts."""
+def password_ok(password: str) -> bool:
     store = AuthStore()
-    if not session_cookie or not store.is_password_set():
+    return (
+        bool(password)
+        and store.is_password_set()
+        and verify_password(password, store.password_hash())
+    )
+
+
+def consent_cookie(request_id: str) -> str:
+    """The signed cookie value for a password just typed for ``request_id``. Raises
+    ``NotFoundError`` for a request that is gone, so nothing is minted for it."""
+    _live_request(request_id)
+    payload = {"p": _CONSENT_PURPOSE, "r": digest(request_id), "iat": int(time.time())}
+    return sign_session(payload, AuthStore().session_key_bytes(), CONSENT_SIGN_IN_SECONDS)
+
+
+def signed_in_for(cookie: Optional[str], request_id: str, now: Optional[float] = None) -> bool:
+    """Whether this browser typed the password for THIS request in the last few minutes. The
+    signature is the instance's session key, so a password change voids it like every session."""
+    store = AuthStore()
+    if not cookie or not request_id or not store.is_password_set():
         return False
-    payload = verify_session(session_cookie, store.session_key_bytes())
-    iat = payload.get("iat") if payload else None
+    payload = verify_session(cookie, store.session_key_bytes())
+    if not payload or payload.get("p") != _CONSENT_PURPOSE:
+        return False
+    if not hmac.compare_digest(str(payload.get("r", "")), digest(request_id)):
+        return False
+    iat = payload.get("iat")
     if not isinstance(iat, int) or isinstance(iat, bool):
         return False
     age = (time.time() if now is None else now) - iat
-    return 0 <= age <= SIGN_IN_FRESH_SECONDS
+    return 0 <= age <= CONSENT_SIGN_IN_SECONDS
 
 
 @dataclass(frozen=True)
