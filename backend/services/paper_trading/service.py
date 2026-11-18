@@ -307,6 +307,8 @@ def _carried_autopilot(old: dict) -> dict | None:
         "mode": a["mode"],
         "cadence": a["cadence"],
         "instructions": a["instructions"],
+        "model": a["model"],
+        "effort": a["effort"],
         "next_run_at": nxt,
     }
 

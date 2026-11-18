@@ -175,3 +175,31 @@ def test_start_over_keeps_the_settings_not_the_log(paper_db, lucius):
     a = views.page(nxt["id"])["autopilot"]
     assert (a["mode"], a["cadence"], a["instructions"]) == ("auto", "weekly", "Keep it simple.")
     assert a["runs"] == [] and a["next_run_at"]
+
+
+# ── model ───────────────────────────────────────────────────────────────────────────────────
+
+
+def test_a_review_runs_on_the_portfolios_own_model(paper_db, lucius):
+    pid = _new()["id"]
+    _auto(pid, model="anthropic:claude-haiku-5-5", effort="low")
+    seen = lucius()
+    _review(pid)
+    assert seen["model"] == "anthropic:claude-haiku-5-5" and seen["effort"] == "low"
+    [run] = views.page(pid)["autopilot"]["runs"]
+    assert (run["model"], run["effort"]) == ("anthropic:claude-haiku-5-5", "low")
+
+
+def test_the_default_model_is_left_to_the_app(paper_db, lucius):
+    pid = _new()["id"]
+    _auto(pid)
+    seen = lucius()
+    _review(pid)
+    assert seen["model"] is None and seen["effort"] == "medium"
+    assert views.page(pid)["autopilot"]["model"] == ""
+
+
+def test_effort_is_low_medium_or_high(paper_db):
+    pid = _new()["id"]
+    with pytest.raises(ValidationError, match="Effort is low, medium or high"):
+        _auto(pid, effort="max")

@@ -45,6 +45,7 @@ export interface MandateBreach {
 
 export type AutopilotMode = 'manual' | 'auto'
 export type AutopilotCadence = 'daily' | 'weekly'
+export type AutopilotEffort = 'low' | 'medium' | 'high'
 
 /** One autopilot review: what Lucius wrote, and the paper orders it placed. */
 export interface AutopilotRun {
@@ -55,6 +56,9 @@ export interface AutopilotRun {
   memo: string
   orders: { id: string; label: string; status: string }[]
   error: string | null
+  /** What it ran on: '' is the app's default model. */
+  model?: string
+  effort?: AutopilotEffort
 }
 
 /** A paper portfolio's autopilot: manual (only you trade) or auto (Lucius reviews and trades
@@ -63,6 +67,9 @@ export interface PaperAutopilot {
   mode: AutopilotMode
   cadence: AutopilotCadence
   instructions: string
+  /** '' = the app's default model; else '<provider>:<model>' as the pickers write it. */
+  model: string
+  effort: AutopilotEffort
   next_run_at: string | null
   running: boolean
   /** Running, or due within two minutes: the page polls until its memo arrives. */
@@ -412,7 +419,13 @@ export const placePaperOrder = (id: string, asset: PaperAsset, d: OrderDraft) =>
 
 export const setPaperAutopilot = (
   id: string,
-  body: { mode?: AutopilotMode; cadence?: AutopilotCadence; instructions?: string },
+  body: {
+    mode?: AutopilotMode
+    cadence?: AutopilotCadence
+    instructions?: string
+    model?: string
+    effort?: AutopilotEffort
+  },
 ) => send<{ autopilot: PaperAutopilot }>(`${paperPageKey(id)}/autopilot`, 'PATCH', body)
 
 export const runPaperAutopilot = (id: string) =>

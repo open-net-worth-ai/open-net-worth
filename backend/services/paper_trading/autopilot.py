@@ -24,6 +24,8 @@ from backend.db.paper_store import ALL_TABLES, PaperPortfolioStore
 
 MODES = ("manual", "auto")
 CADENCES = ("daily", "weekly")
+EFFORTS = ("low", "medium", "high")
+MAX_MODEL = 120
 # Reviews run at this time in the owner's zone: daily on weekdays, weekly on Mondays.
 RUN_AT = time(10, 0)
 MAX_RUNS_KEPT = 20
@@ -37,6 +39,10 @@ DEFAULT = {
     "mode": "manual",
     "cadence": "daily",
     "instructions": "",
+    # The model each review runs on: "" is the app's default (Settings → AI), else a
+    # model reference as the pickers write it ("<provider>:<model>").
+    "model": "",
+    "effort": "medium",
     "next_run_at": None,
     "running_since": None,
     "failures": 0,
@@ -73,6 +79,8 @@ def view(row: dict) -> dict:
         "mode": a["mode"],
         "cadence": a["cadence"],
         "instructions": a["instructions"],
+        "model": a["model"],
+        "effort": a["effort"],
         "next_run_at": a["next_run_at"] if a["mode"] == "auto" and not a["paused_reason"] else None,
         "running": bool(a["running_since"]),
         # Running, or due within two minutes: the page polls until its memo arrives.
@@ -94,7 +102,7 @@ def view(row: dict) -> dict:
 
 
 def apply_settings(change: dict) -> dict:
-    """Set the mode, cadence or instructions. Auto needs a mandate: the mandate is what the
+    """Set the mode, cadence, instructions, model or effort. Auto needs a mandate: the mandate is what the
     owner approved in advance. Setting Auto again resumes a paused autopilot."""
     from backend.services.paper_trading import service
 
@@ -118,6 +126,16 @@ def apply_settings(change: dict) -> dict:
             if len(text) > MAX_INSTRUCTIONS:
                 raise ValidationError(f"Keep the instructions under {MAX_INSTRUCTIONS} characters.")
             a["instructions"] = text
+        if "model" in change:
+            model = str(change.get("model") or "").strip()
+            if len(model) > MAX_MODEL:
+                raise ValidationError("That model name is too long.")
+            a["model"] = model
+        if "effort" in change:
+            effort = str(change.get("effort") or "medium")
+            if effort not in EFFORTS:
+                raise ValidationError("Effort is low, medium or high.")
+            a["effort"] = effort
         rescheduled = mode == "auto" and (
             a["mode"] != "auto" or cadence != a["cadence"] or a["paused_reason"]
         )
@@ -198,6 +216,9 @@ def finish(pid: str, record: dict) -> dict:
             "finished_at": _now().isoformat(),
             "status": record["status"],
             "memo": str(record.get("memo") or "")[:MAX_MEMO],
+            # What it ran on, so two models' reviews can be compared.
+            "model": record.get("model") or "",
+            "effort": record.get("effort") or "medium",
             "orders": record.get("orders") or [],
             "error": record.get("error"),
         }

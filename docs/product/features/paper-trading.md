@@ -95,26 +95,31 @@ limit only after he tells you which one and you say yes; an Automation never can
 
 ## Autopilot
 
-The **Autopilot** tab sets who trades a paper portfolio:
+The **Autopilot** tab's switch sets who trades a paper portfolio:
 
-- **Manual** (the default): only you, and Lucius when you ask him in chat.
-- **Auto**: Lucius reviews the portfolio on a schedule (every weekday or every Monday, at 10:00
-  your time), places the trades he decides on, and writes a short memo of what he looked at,
-  what he did and what he is watching next. The portfolio shows an **Autopilot** tag, and each
-  order he places says **Autopilot**.
+- **Off** (the default): only you, and Lucius when you ask him in chat.
+- **On**: Lucius reviews the portfolio on a schedule (every weekday or every Monday, at 10:00
+  your time), places the trades he decides on, and writes a short memo of what he checked, what
+  he did and what he is watching next. The portfolio shows an **Autopilot** tag, and each order
+  he places says **Autopilot**.
 
-Auto needs a mandate: it is what you approve in advance. A review:
+Autopilot needs a mandate: it is what you approve in advance. Every review:
 
-- trades only this paper portfolio, and can read prices, your investment theses and Intel,
-  but nothing else (no real accounts, no connectors, no web);
-- can never break the mandate (no **Place anyway** for it);
-- fixes a broken limit first, such as a holding past its stop loss or over its cap.
+- reads the portfolio, then checks the news on its holdings, your investment thesis for each
+  one that has it, and the chart and company figures of anything that moved a lot or is near a
+  limit, before it decides anything;
+- trades only this paper portfolio, and reads nothing beyond prices, your theses and Intel (no
+  real accounts, no connectors, no web);
+- can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
+  such as a holding past its stop loss or over its cap.
 
-Add standing instructions in **Anything Lucius should keep in mind**. **Review now** runs a
-review within a minute. Every review, including one that made no trades, is listed under
-**Reviews**. Two failed reviews in a row pause the autopilot; turn it to Auto again to resume.
-**Start over** keeps the autopilot's settings, not its reviews. Each review is a Lucius turn, so
-it uses your AI model like a chat does.
+Set **Schedule**, **Model** and **Instructions** (anything Lucius should keep in mind) on the
+left. **Model** picks what each review runs on, and its effort: **Default** follows Settings →
+AI, so one portfolio can run on a cheaper model and another on a stronger one. **Review now** runs
+a review within a minute. **History** lists every review, including one that made no trades;
+open one to read its memo, its trades and the model it ran on. Two failed reviews in a row pause
+the autopilot; switch it on again to resume. **Start over** keeps the autopilot's settings, not
+its history. Each review is a Lucius turn, so it uses that model like a chat does.
 
 On an asset's **Position** tab, **On paper** lists your paper positions in it, apart from your
 real ones and never added to them, then every paper trade in it, newest first: the date, the paper

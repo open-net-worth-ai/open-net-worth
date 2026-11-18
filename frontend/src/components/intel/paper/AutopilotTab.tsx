@@ -2,12 +2,14 @@ import '../../tabs/automations.css'
 
 import { useState } from 'react'
 import { ChevronRight, Play } from 'lucide-react'
-import { Button, Select, Switch, TextArea } from '../../ui'
+import { Button, ModelPicker, Select, Switch, TextArea } from '../../ui'
+import { useModels } from '../../../hooks/useModels'
 import { fDateTime } from '../../../utils/format'
 import {
   runPaperAutopilot,
   setPaperAutopilot,
   type AutopilotCadence,
+  type AutopilotEffort,
   type AutopilotRun,
   type PaperAutopilot,
   type PaperMandate,
@@ -19,6 +21,10 @@ const CADENCE: { value: AutopilotCadence; label: string }[] = [
 ]
 
 const at = (iso: string) => fDateTime(iso, 'short', 'always')
+const effortLabel = (e?: string) =>
+  `${(e || 'medium')[0]!.toUpperCase()}${(e || 'medium').slice(1)} effort`
+/** "Default", or the model's own name without its provider. */
+const modelLabel = (m?: string) => (m ? (m.split(':').pop() ?? m) : 'Default')
 
 /** A paper portfolio's autopilot, laid out as an Automation's page is (the same classes): the
  *  on/off switch and Review now, then what it works within and its schedule on the left, and
@@ -197,11 +203,25 @@ function Settings({
 }: {
   autopilot: PaperAutopilot
   saving: boolean
-  onSave: (body: { cadence: AutopilotCadence; instructions: string }) => void
+  onSave: (body: {
+    cadence: AutopilotCadence
+    instructions: string
+    model: string
+    effort: AutopilotEffort
+  }) => void
 }) {
   const [cadence, setCadence] = useState<AutopilotCadence>(autopilot.cadence)
   const [instructions, setInstructions] = useState(autopilot.instructions)
-  const changed = cadence !== autopilot.cadence || instructions.trim() !== autopilot.instructions
+  const [model, setModel] = useState(autopilot.model)
+  const [effort, setEffort] = useState<AutopilotEffort>(autopilot.effort)
+  // The same cross-provider list every other model picker shows.
+  const models = useModels(true)
+  const changed =
+    cadence !== autopilot.cadence ||
+    instructions.trim() !== autopilot.instructions ||
+    model !== autopilot.model ||
+    effort !== autopilot.effort
+  const save = () => onSave({ cadence, instructions: instructions.trim(), model, effort })
   return (
     <>
       <section className="a3-block">
@@ -217,6 +237,34 @@ function Settings({
         />
       </section>
       <section className="a3-block">
+        <div className="a3-block-h">Model</div>
+        <div className="paper-ap-model">
+          <ModelPicker
+            id="pp-ap-model"
+            label="Model"
+            size="sm"
+            models={models.models}
+            value={model}
+            defaultLabel="Default"
+            defaultModelId={models.defaultModel}
+            onChange={setModel}
+          />
+          <select
+            aria-label="Effort"
+            className="a3-mini-select"
+            value={effort}
+            onChange={(e) => setEffort(e.target.value as AutopilotEffort)}
+          >
+            <option value="low">Low effort</option>
+            <option value="medium">Medium effort</option>
+            <option value="high">High effort</option>
+          </select>
+        </div>
+        <p className="a3-muted">
+          Each review is a Lucius turn on this model. Default follows Settings → AI.
+        </p>
+      </section>
+      <section className="a3-block">
         <label className="a3-block-h" htmlFor="pp-ap-notes">
           Instructions
         </label>
@@ -230,12 +278,7 @@ function Settings({
         />
         {changed && (
           <div>
-            <Button
-              size="sm"
-              variant="primary"
-              loading={saving}
-              onClick={() => onSave({ cadence, instructions: instructions.trim() })}
-            >
+            <Button size="sm" variant="primary" loading={saving} onClick={save}>
               Save
             </Button>
           </div>
@@ -284,6 +327,9 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
             {on && (
               <div className="paper-ap-run">
                 <p>{r.status === 'failed' ? (r.error ?? 'Unknown error.') : r.memo}</p>
+                <div className="a3-muted">
+                  Ran on {modelLabel(r.model)} • {effortLabel(r.effort)}
+                </div>
                 {r.orders.length > 0 && (
                   <ul className="paper-ap-trades">
                     {r.orders.map((o) => (

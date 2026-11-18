@@ -6,7 +6,7 @@ GET    /api/paper/portfolios                        — active cards + archived 
 POST   /api/paper/portfolios                        — create (cash | holdings | followed)
 GET    /api/paper/portfolios/{id}                   — the page: figures, holdings, orders, activity
 PATCH  /api/paper/portfolios/{id}                   — rename, settings, benchmark, archive
-PATCH  /api/paper/portfolios/{id}/autopilot         — manual | auto, daily | weekly, instructions
+PATCH  /api/paper/portfolios/{id}/autopilot         — mode, cadence, instructions, model, effort
 POST   /api/paper/portfolios/{id}/autopilot/run     — review now (the scheduler runs it)
 POST   /api/paper/portfolios/{id}/start-over        — archive this run, start the next
 DELETE /api/paper/portfolios/{id}
@@ -128,6 +128,9 @@ class AutopilotBody(BaseModel):
     mode: Literal["manual", "auto"] | None = None
     cadence: Literal["daily", "weekly"] | None = None
     instructions: str | None = Field(None, max_length=600)
+    # "" = the app's default model; else "<provider>:<model>" as the pickers write it.
+    model: str | None = Field(None, max_length=120)
+    effort: Literal["low", "medium", "high"] | None = None
 
 
 @router.patch("/api/paper/portfolios/{pid}/autopilot")

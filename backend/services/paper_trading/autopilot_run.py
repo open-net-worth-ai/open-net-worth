@@ -71,20 +71,25 @@ def prompt(row: dict) -> str:
     lines += [
         "",
         "Do this:",
-        "1. Read the portfolio (get_paper_portfolios with this id): holdings, cash, open "
-        "orders, and its mandate status. Read what you need about its holdings and any "
-        "candidates (prices, theses, technicals, fundamentals, the Intel digest).",
-        "2. Decide whether to trade. Doing nothing is often right: trade only for a reason you "
-        "can state in one sentence, in the goal's terms.",
-        "3. Place the paper orders you decide on, sells first, each with a "
+        "1. Read the portfolio (get_paper_portfolios with this id): holdings, prices, cash, "
+        "open orders, and its mandate status.",
+        "2. Every review, before deciding anything, also check: (a) the news on its holdings "
+        "(get_intel_digest); (b) the owner's thesis for each holding that has one "
+        "(get_investment_theses): is it in its buy zone, near its target, past its stop?; "
+        "(c) for any holding that moved more than 3% since the last review or is near a "
+        "limit, its technicals and fundamentals (get_asset_technicals, "
+        "get_asset_fundamentals). Before any buy, check the name you would buy the same way.",
+        "3. Then decide whether to trade. Doing nothing is often right: trade only for a "
+        "reason you can state in one sentence, in the goal's terms.",
+        "4. Place the paper orders you decide on, sells first, each with a "
         "short Why. Preview a buy if you are unsure it keeps the mandate. A buy that breaks a "
         "limit is refused: never try to break one. Fix any limit that is broken now (a holding "
         "over its cap, cash below its floor, a holding past its stop loss) before anything else.",
-        "4. Trade only this portfolio.",
+        "5. Trade only this portfolio.",
         "",
-        "Then reply with the memo the owner reads: 2 to 5 plain sentences on what you looked at, "
-        "what you did (or why you did nothing) and what you are watching next. No headings, no "
-        "lists, no tables.",
+        "Then reply with the memo the owner reads: 3 to 6 plain sentences on what you checked "
+        "(the news, theses and signals that mattered), what you did or why you did nothing, "
+        "and what you are watching next. No headings, no lists, no tables.",
     ]
     return "\n".join(lines)
 
@@ -96,6 +101,7 @@ async def review(pid: str) -> dict:
     if row is None:
         return {"status": "skipped"}
     runner = get_runner()
+    settings = autopilot.of(row)
     record: dict
     if runner is None:
         record = {"status": "failed", "error": "Lucius isn't available on this install."}
@@ -116,9 +122,10 @@ async def review(pid: str) -> dict:
                 runner(
                     prompt(row),
                     allowed_tools=list(TOOLS),
+                    model=settings["model"] or None,
                     lean_prompt=True,
                     enforce_offer=True,
-                    effort="medium",
+                    effort=settings["effort"],
                 ),
                 timeout=TIMEOUT_S,
             )
@@ -131,6 +138,7 @@ async def review(pid: str) -> dict:
         finally:
             reset_automation_approval(token)
     record["orders"] = _orders_since(pid, started)
+    record.update(model=settings["model"], effort=settings["effort"])
     autopilot.finish(pid, record)
     return record
 
