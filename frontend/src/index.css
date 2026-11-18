@@ -21333,10 +21333,10 @@ body.hide-amounts .mf-lbl-amt {
   font-size: 12.5px;
   color: var(--muted);
 }
+/* The model, then its effort: two fields the size of the Schedule field above them. */
 .paper-ap-model {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
   gap: 10px;
 }
 .paper-ap-chev {

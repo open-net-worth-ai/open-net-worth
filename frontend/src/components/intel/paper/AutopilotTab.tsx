@@ -20,6 +20,12 @@ const CADENCE: { value: AutopilotCadence; label: string }[] = [
   { value: 'weekly', label: 'Every Monday at 10:00' },
 ]
 
+const EFFORT: { value: AutopilotEffort; label: string }[] = [
+  { value: 'low', label: 'Low effort' },
+  { value: 'medium', label: 'Medium effort' },
+  { value: 'high', label: 'High effort' },
+]
+
 const at = (iso: string) => fDateTime(iso, 'short', 'always')
 const effortLabel = (e?: string) =>
   `${(e || 'medium')[0]!.toUpperCase()}${(e || 'medium').slice(1)} effort`
@@ -237,31 +243,29 @@ function Settings({
         />
       </section>
       <section className="a3-block">
-        <div className="a3-block-h">Model</div>
+        <div className="a3-block-h">AI model</div>
         <div className="paper-ap-model">
           <ModelPicker
             id="pp-ap-model"
-            label="Model"
-            size="sm"
+            label="AI model"
+            size="field"
             models={models.models}
             value={model}
             defaultLabel="Default"
             defaultModelId={models.defaultModel}
             onChange={setModel}
           />
-          <select
+          <Select
             aria-label="Effort"
-            className="a3-mini-select"
+            dense
             value={effort}
+            options={EFFORT}
             onChange={(e) => setEffort(e.target.value as AutopilotEffort)}
-          >
-            <option value="low">Low effort</option>
-            <option value="medium">Medium effort</option>
-            <option value="high">High effort</option>
-          </select>
+          />
         </div>
         <p className="a3-muted">
-          Each review is a Lucius turn on this model. Default follows Settings → AI.
+          The model Lucius reviews this portfolio with. Unless you pick one, it uses your default
+          from Settings → AI. Higher effort thinks longer and costs more per review.
         </p>
       </section>
       <section className="a3-block">
