@@ -236,7 +236,6 @@ function Settings({
         </label>
         <Select
           id="pp-ap-cadence"
-          dense
           value={cadence}
           options={CADENCE}
           onChange={(e) => setCadence(e.target.value as AutopilotCadence)}
@@ -257,7 +256,6 @@ function Settings({
           />
           <Select
             aria-label="Effort"
-            dense
             value={effort}
             options={EFFORT}
             onChange={(e) => setEffort(e.target.value as AutopilotEffort)}

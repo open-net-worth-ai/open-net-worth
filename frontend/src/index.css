@@ -21339,6 +21339,11 @@ body.hide-amounts .mf-lbl-amt {
   grid-template-columns: minmax(0, 1fr) 160px;
   gap: 10px;
 }
+/* The picker's own padding left it 2px shorter than the select beside it: it takes the row's. */
+.paper-ap-model > .mp-wrap,
+.paper-ap-model .mp-trigger--field {
+  height: 100%;
+}
 .paper-ap-chev {
   margin-left: auto;
   transition: transform 0.15s ease;
