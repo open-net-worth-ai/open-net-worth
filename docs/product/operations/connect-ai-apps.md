@@ -166,18 +166,18 @@ password, and choose whether it may only read or may also make changes.
    password on this computer**. Behind a reverse proxy or tunnel every visitor looks like "this
    computer", so the connection is refused while it's on.
 3. In **Settings → MCP → Hosted apps**, enter your public address (for example
-   `https://wealth.example.com`) and click **Save**. **Copy** next to the address puts it on your
-   clipboard. Or set `ONW_PUBLIC_URL` on the server. The
+   `https://wealth.example.com`) and click **Save**, or set `ONW_PUBLIC_URL` on the server. The
    panel shows **On** when everything is ready, and lists what's missing when it isn't.
-4. Add the connector in the app, using the address the panel shows (`https://your-address/mcp`):
+4. Add the connector in the app, using the **Connector address** the panel shows
+   (`https://your-address/mcp`; **Copy** puts it on your clipboard):
    - **claude.ai:** open **Connectors** (under **Customize** or **Settings**) and choose **Add
      custom connector**. Leave the advanced OAuth fields empty. The connector also works in Claude
      on your phone and in Claude Desktop.
    - **ChatGPT:** with Developer mode on, add a custom MCP server (connector) with that URL and
      choose OAuth.
-5. A page from your own address opens. Check the address bar, read which app is asking, type your
-   Open Net Worth password, and choose **Allow read-only access**. Tick **Also let it make
-   changes** first if you want it to write.
+5. A page from your own address opens, showing which app is asking and what it will be able to
+   do. Check the address bar, type your Open Net Worth password, and choose **Allow read-only
+   access**. Turn on **Also let it make changes** first if you want it to write.
 
 Only approve a request you started yourself, a moment ago, from your own account. If someone
 sends you a link to this page, choose **Deny**: approving it would connect *their* account to your

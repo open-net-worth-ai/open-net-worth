@@ -45,7 +45,7 @@ function posted(): Record<string, unknown> {
 it('names the app by the server label and its host, with a warning about forwarded links', async () => {
   render(<ConsentPage />)
   expect(await screen.findByText('Connect Claude to your book?')).toBeTruthy()
-  expect(screen.getByText(/Claude \(claude\.ai\) wants to read/)).toBeTruthy()
+  expect(screen.getByText('claude.ai')).toBeTruthy()
   expect(screen.getByText(/If someone sent you this link, choose Deny/)).toBeTruthy()
   expect(fetchMock.mock.calls[0]![0]).toBe('/api/oauth/consent?request=req-abc')
 })

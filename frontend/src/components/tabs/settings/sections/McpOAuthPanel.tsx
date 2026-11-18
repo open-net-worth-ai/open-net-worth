@@ -118,19 +118,14 @@ function OAuthBody({
       sub="Connect over OAuth: paste the address into the app, then approve with your password"
     >
       {status.available ? (
-        <span className="rd-help" style={{ display: 'block', lineHeight: 1.55 }}>
-          <Badge tone="good">On</Badge> In claude.ai, open Connectors and choose Add custom
-          connector. In ChatGPT, add a custom MCP server (Developer mode). Paste{' '}
-          <span data-ctx-secret="">{status.mcp_url}</span>{' '}
-          <Btn size="xs" variant="ghost" onClick={() => copy(status.mcp_url, 'Address', toast)}>
-            Copy
-          </Btn>{' '}
-          Each app gets read-only access unless you tick changes on the consent page.
-        </span>
+        <Ready mcpUrl={status.mcp_url} toast={toast} />
       ) : (
-        <div>
-          <Badge tone="warn">Off</Badge>
-          <ul className="rd-help" style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.55 }}>
+        <div className="mcp-hosted-status">
+          <div className="mcp-hosted-status__head">
+            <Badge tone="warn">Off</Badge>
+            <span>Not ready yet</span>
+          </div>
+          <ul className="mcp-hosted-list">
             {status.reasons.map((r) => (
               <li key={r}>{REASONS[r] ?? r}</li>
             ))}
@@ -141,6 +136,46 @@ function OAuthBody({
       <ConnectedApps apps={status.apps} refresh={refresh} toast={toast} />
       <Credentials clients={status.clients} refresh={refresh} toast={toast} />
     </Panel>
+  )
+}
+
+function Ready({ mcpUrl, toast }: { mcpUrl: string; toast: Toast }) {
+  return (
+    <div className="mcp-hosted-status">
+      <div className="mcp-hosted-status__head">
+        <Badge tone="good">On</Badge>
+        <span>Ready for claude.ai and ChatGPT</span>
+      </div>
+      <Field
+        span="full"
+        label="Connector address"
+        help="Each app gets read-only access unless you allow changes when you approve it."
+      >
+        <div className="mcp-hosted-url">
+          <input
+            className="rd-input"
+            aria-label="Connector address"
+            readOnly
+            value={mcpUrl}
+            data-ctx-secret=""
+            onFocus={(e) => e.target.select()}
+          />
+          <Btn size="xs" onClick={() => copy(mcpUrl, 'Address', toast)}>
+            Copy
+          </Btn>
+        </div>
+      </Field>
+      <ul className="mcp-hosted-list">
+        <li>
+          <strong>claude.ai</strong> Customize → Connectors → Add custom connector. Paste the
+          address and leave the advanced fields empty.
+        </li>
+        <li>
+          <strong>ChatGPT</strong> Settings → Connectors, with Developer mode on. Add a custom
+          connector with the address and choose OAuth.
+        </li>
+      </ul>
+    </div>
   )
 }
 

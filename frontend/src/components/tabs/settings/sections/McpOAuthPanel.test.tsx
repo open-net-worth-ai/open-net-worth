@@ -61,7 +61,7 @@ describe('Settings → MCP → Hosted apps', () => {
   it('shows the address to paste and each connected app with its access', async () => {
     serve(ON)
     render(<McpOAuthPanel toast={vi.fn()} />)
-    expect(await screen.findByText('https://wealth.example.com/mcp')).toBeTruthy()
+    expect(await screen.findByDisplayValue('https://wealth.example.com/mcp')).toBeTruthy()
     expect(screen.getByText('Read-only')).toBeTruthy()
     expect(screen.getByText(/claude\.ai · connected/)).toBeTruthy()
   })
@@ -102,7 +102,7 @@ describe('Settings → MCP → Hosted apps', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Create credentials' }))
     await waitFor(() => expect(container.textContent).toContain('onw_cs_secret'))
-    const secretBox = container.querySelector('[data-ctx-secret]:not(span)')
+    const secretBox = container.querySelector('div[data-ctx-secret]')
     expect(secretBox?.textContent).toContain('onw_cs_secret')
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
