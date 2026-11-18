@@ -88,8 +88,11 @@ const EXPORT = `
 const BRIDGE = `
 (function(){
   var d=document;
-  var height=function(){var b=d.body,h=d.documentElement;
-    return Math.ceil(Math.max(h.scrollHeight,b?b.scrollHeight:0,b?b.getBoundingClientRect().bottom:0))};
+  // The drawing's own height, never the page's: the page's scrollHeight is at least the frame's
+  // current height, so a frame could grow and never shrink back (on a phone a draft drawn taller
+  // left a gap under the finished one).
+  var height=function(){var b=d.body;
+    return b?Math.ceil(Math.max(b.scrollHeight,b.getBoundingClientRect().bottom)):0};
   var send=function(){parent.postMessage({type:'${MSG_HEIGHT}',height:height()},'*')};${EXPORT}
   window.addEventListener('message',function(e){
     if(e.source!==parent||!e.data)return;

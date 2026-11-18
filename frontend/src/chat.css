@@ -2818,6 +2818,8 @@
   /* A step under the reply's 14px text, as a chart title sits under the prose around it. */
   .ivis-title {
     margin: 0;
+    /* Clear of the ⋯ menu in the top-right corner, which a phone always shows. */
+    padding-right: 32px;
     font-size: 13px;
     font-weight: 600;
     color: var(--ink);

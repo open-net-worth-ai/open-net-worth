@@ -436,6 +436,9 @@ grows to fit and follows light/dark mode. Draw it like this:
   (scripts run only once the drawing is complete — load a library with <script src> before the
   script that uses it). SVG: <defs> first, then the shapes. Show everything stacked — no tabs
   or display: none sections.
+- A chart with axes — bars, lines, areas, scatter, a waterfall as floating bars — is Chart.js:
+  its text stays its real size on a phone, where an SVG shrinks with the column (680 → ~360px
+  halves every label). SVG is for diagrams, flows and shapes; there keep text ≥14px.
 - Pick the form first, colour last. One value (+ trend) = a stat tile, never a one-bar chart;
   a few headline numbers = a row of tiles; a ratio against a limit = a meter; more than ~7
   classes that all matter = a table. Compare magnitude = bars; trend = line (area for one
