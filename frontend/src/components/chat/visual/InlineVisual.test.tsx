@@ -139,6 +139,39 @@ describe('InlineVisual', () => {
     expect(render(<InlineVisual visual={{} as VisualSpec} />).container.innerHTML).toBe('')
   })
 
+  it('shows the change on a tile, coloured by which way is good', () => {
+    const tile = (better: 'up' | 'down' | null) =>
+      ({
+        ...FIXTURE,
+        blocks: [
+          {
+            type: 'stats',
+            tiles: [
+              {
+                label: 'Spent',
+                value: 4180,
+                compare: 3640,
+                compare_label: 'Oct',
+                format: 'money',
+                currency: 'SGD',
+                delta: 540,
+                delta_pct: 0.148352,
+                better,
+              },
+            ],
+          },
+        ],
+      }) as VisualSpec
+    const bad = render(<InlineVisual visual={tile('down')} />).container
+    const delta = bad.querySelector('.ivis-tile-delta')!
+    expect(delta.textContent).toBe('+S$540 (+15%) ')
+    expect(delta.classList.contains('ivis-tile-delta--bad')).toBe(true)
+    const good = render(<InlineVisual visual={tile('up')} />).container
+    expect(good.querySelector('.ivis-tile-delta--good')).toBeTruthy()
+    const flat = render(<InlineVisual visual={tile(null)} />).container
+    expect(flat.querySelector('.ivis-tile-delta--flat')).toBeTruthy()
+  })
+
   it('shows the title above blocks but not above a drawing, which has its own heading', () => {
     const withBlocks = render(<InlineVisual visual={FIXTURE} />).container
     expect(withBlocks.querySelector('.ivis-title')!.textContent).toBe('Spending, Nov vs Oct')

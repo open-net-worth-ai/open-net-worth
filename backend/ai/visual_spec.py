@@ -157,19 +157,36 @@ def _stats(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
         fmt, currency = _format(tile)
         label = _label(tile.get("label"), f"tile {i + 1} label")
         compare = tile.get("compare")
+        value = _number(_lookup(tile.get("value"), used), f"{label} value")
+        then = _number(_lookup(compare, used), f"{label} compare") if compare else None
+        better = tile.get("better")
+        if better not in (None, "up", "down"):
+            raise VisualSpecError(f'{label}: better is "up" or "down"')
         out.append(
             {
                 "label": label,
-                "value": _number(_lookup(tile.get("value"), used), f"{label} value"),
-                "compare": _number(_lookup(compare, used), f"{label} compare") if compare else None,
+                "value": value,
+                "compare": then,
                 "compare_label": _label(tile["compare_label"], "compare_label")
                 if tile.get("compare_label")
                 else None,
                 "format": fmt,
                 "currency": currency,
+                **_delta(value, then),
+                "better": better,
             }
         )
     return {"type": "stats", "tiles": out}
+
+
+def _delta(value: Optional[float], then: Optional[float]) -> dict:
+    """The change the tile shows, worked out here so the model never types it: absolute, and
+    relative when the comparison isn't zero. Nothing for a missing side."""
+    if value is None or then is None:
+        return {"delta": None, "delta_pct": None}
+    delta = round(value - then, 10)
+    pct = round(delta / abs(then), 6) if then else None
+    return {"delta": delta, "delta_pct": pct}
 
 
 def _keep_largest(chart: dict, limit: int, notes: list[str]) -> None:

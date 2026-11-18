@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTheme } from '../../../theme'
 import { paletteAt } from '../../../utils/constants'
-import { OvChart, TICK, axes, kTick, legend } from '../../tabs/overview/charts'
+import { GRID, OvChart, TICK, axes, kTick, legend } from '../../tabs/overview/charts'
 import type { VisualBlock } from '../../../types/chat'
 import { fDate, fMonth } from '../../../utils/format'
 import { formatVisualValue } from './format'
@@ -43,8 +43,20 @@ export function VisualChart({ block }: { block: ChartBlock }) {
       maintainAspectRatio: false,
       interaction: { mode: 'index' as const, intersect: false },
       scales: axes({
-        x: { ticks: { color: TICK(), maxTicksLimit: 6, maxRotation: 0 } },
-        y: { ticks: { color: TICK(), callback: format === 'money' ? kTick : fmt } },
+        // A bar is unreadable without its name, so bars label every category; a line's dates
+        // thin out on their own.
+        x: {
+          ticks: isLine
+            ? { color: TICK(), maxTicksLimit: 6, maxRotation: 0 }
+            : { color: TICK(), autoSkip: false, maxRotation: 45 },
+        },
+        // Hairline gridlines in chat (the screens keep their 1px): recessive, never louder
+        // than the data.
+        y: {
+          ticks: { color: TICK(), callback: format === 'money' ? kTick : fmt },
+          grid: { color: GRID(), lineWidth: 0.5 },
+          border: { display: false },
+        },
       }),
       plugins: {
         legend: legend(series.length > 1),

@@ -1,7 +1,7 @@
 import { Component, type ReactNode } from 'react'
 import { MaskedText } from '../../ui/MaskedText'
 import { fDate, moneyClass } from '../../../utils/format'
-import type { VisualBlock, VisualSpec } from '../../../types/chat'
+import type { VisualBlock, VisualSpec, VisualTile } from '../../../types/chat'
 import { formatVisualValue } from './format'
 import { VisualChart } from './VisualChart'
 import { VisualDrawing } from './VisualDrawing'
@@ -19,6 +19,26 @@ class Guard extends Component<{ children: ReactNode }, { failed: boolean }> {
 
 const isArr = (v: unknown): v is unknown[] => Array.isArray(v)
 
+/** The change since the comparison, signed, with its percentage. Green when it moved the
+ *  way Lucius said is good, red when it moved the other way, grey when it didn't say. */
+function Delta({ tile }: { tile: VisualTile }) {
+  const d = tile.delta
+  if (d == null || d === 0) return null
+  const tone = !tile.better ? 'flat' : d > 0 === (tile.better === 'up') ? 'good' : 'bad'
+  const sign = d > 0 ? '+' : '−'
+  const pct =
+    tile.delta_pct == null ? '' : ` (${sign}${Math.abs(tile.delta_pct * 100).toFixed(0)}%)`
+  return (
+    <span className={`ivis-tile-delta ivis-tile-delta--${tone}`}>
+      <span className={moneyClass()}>
+        {sign}
+        {formatVisualValue(Math.abs(d), tile.format, tile.currency)}
+      </span>
+      {pct}{' '}
+    </span>
+  )
+}
+
 function Stats({ block }: { block: Extract<VisualBlock, { type: 'stats' }> }) {
   if (!isArr(block.tiles)) return null
   return (
@@ -31,6 +51,7 @@ function Stats({ block }: { block: Extract<VisualBlock, { type: 'stats' }> }) {
           </div>
           {t.compare != null && (
             <div className="ivis-tile-compare">
+              <Delta tile={t} />
               vs {t.compare_label ? `${t.compare_label} ` : ''}
               <span className={moneyClass()}>
                 {formatVisualValue(t.compare, t.format, t.currency)}

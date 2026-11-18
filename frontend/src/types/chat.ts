@@ -702,6 +702,11 @@ export interface VisualTile {
   compare_label?: string | null
   format?: VisualFormat
   currency?: string | null
+  /** value − compare, worked out by the server; null without a comparison. */
+  delta?: number | null
+  delta_pct?: number | null
+  /** Which way is good, as Lucius said (spending: down); colours the delta. */
+  better?: 'up' | 'down' | null
 }
 
 export type VisualChartKind = 'line' | 'bar' | 'diverging' | 'stack' | 'progress'

@@ -2779,6 +2779,18 @@
     font-size: 11px;
     color: var(--muted);
   }
+  .ivis-tile-delta {
+    font-weight: 500;
+  }
+  .ivis-tile-delta--good {
+    color: var(--good);
+  }
+  .ivis-tile-delta--bad {
+    color: var(--bad);
+  }
+  .ivis-tile-delta--flat {
+    color: var(--ink);
+  }
   .ivis-chart {
     position: relative;
     height: 200px;

@@ -81,6 +81,27 @@ def test_stats_copy_the_numbers_out_of_the_tool_results(convo):
     assert spec["id"].startswith("vis_") and spec["caption"] == []
 
 
+def _tile(extra: dict) -> dict:
+    tile = {"label": "Spent", "value": _ref("2026-11", "total"), **extra}
+    return visual_spec.resolve({"blocks": [{"type": "stats", "tiles": [tile]}]})["blocks"][0][
+        "tiles"
+    ][0]
+
+
+def test_the_server_works_out_the_change_and_keeps_which_way_is_good(convo):
+    tile = _tile({"compare": _ref("2026-10", "total"), "better": "down"})
+    assert tile["delta"] == 540.0
+    assert tile["delta_pct"] == round(540 / 3640, 6)
+    assert tile["better"] == "down"
+
+
+def test_no_change_without_a_comparison_and_better_is_checked(convo):
+    tile = _tile({})
+    assert (tile["delta"], tile["delta_pct"], tile["better"]) == (None, None, None)
+    with pytest.raises(VisualSpecError, match="better"):
+        _tile({"compare": _ref("2026-10", "total"), "better": "sideways"})
+
+
 def test_a_second_series_joins_by_label_and_leaves_gaps(convo):
     spec = visual_spec.resolve(
         {

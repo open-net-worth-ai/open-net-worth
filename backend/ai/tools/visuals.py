@@ -47,6 +47,7 @@ _BLOCK = {
                     "value": _REF_SHORT,
                     "compare": _REF_SHORT,
                     "compare_label": {"type": "string"},
+                    "better": {"type": "string", "enum": ["up", "down"]},
                     "format": {"type": "string", "enum": list(visual_spec.FORMATS)},
                     "currency": {"type": "string"},
                 },
