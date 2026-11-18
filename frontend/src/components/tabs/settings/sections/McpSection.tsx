@@ -63,7 +63,11 @@ export function McpSection({ toast, openSection }: SectionProps) {
   const copyable = g.snippet({ ...ctxFull, token })
 
   return (
-    <Panel title="Copy a config" sub="For an app on your computer or your own network">
+    <Panel
+      className="mcp-token"
+      title="Copy a config"
+      sub="For an app on your computer or your own network"
+    >
       <span className="rd-help" style={{ display: 'block', lineHeight: 1.55 }}>
         An app holding your API token acts as you: it can read your book and make changes. Every
         change it makes is recorded and can be undone.

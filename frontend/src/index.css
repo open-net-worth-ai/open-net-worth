@@ -2228,6 +2228,11 @@
       grid-template-columns: minmax(0, 1fr);
     }
   }
+  /* The API-token path's panel; its phone layout is in settings.css (Settings styles are
+     unlayered there and would win over this file's layered rules). */
+  .mcp-token {
+    min-width: 0;
+  }
   /* The OAuth path's set-up checklist: a tick per requirement met, an open circle and a way to
      fix it for each one that isn't. */
   .mcp-check {

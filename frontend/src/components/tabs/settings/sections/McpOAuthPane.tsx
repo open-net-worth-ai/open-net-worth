@@ -41,8 +41,8 @@ function steps(status: OAuthStatus | null): Step[] {
     },
     {
       done: !r.has('loopback_trusted'),
-      label: 'Every visitor has to sign in',
-      hint: 'Turn off "Don\'t ask for the password on this computer". Behind a proxy or tunnel, every visitor arrives as this computer, so all of them would skip the password.',
+      label: 'The password is always required',
+      hint: 'Turn off "Don\'t ask for the password on this computer". Otherwise, people reaching your address from the internet could get in without it.',
       fix: { label: 'Open Security', section: 'security' },
     },
     {
