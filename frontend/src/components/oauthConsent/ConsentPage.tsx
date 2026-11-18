@@ -161,6 +161,9 @@ function Decide({
           <Ability allowed>See your accounts, transactions, budget and investments</Ability>
           <Ability allowed={changes}>Add, edit and delete records</Ability>
           <Ability allowed={changes}>Run automations and send messages for you</Ability>
+          <Ability allowed={false}>
+            Place trades or send payments. {brand.app_name} can't do either.
+          </Ability>
         </ul>
         {canWrite ? (
           <div className="consent-scope__switch">
@@ -196,21 +199,21 @@ function Decide({
 
       <div className="consent-actions">
         <Button
+          type="button"
+          variant="secondary"
+          loading={busy === 'deny'}
+          disabled={busy !== null}
+          onClick={() => void decide('deny')}
+        >
+          Deny
+        </Button>
+        <Button
           type="submit"
           variant="primary"
           loading={busy === 'allow'}
           disabled={!password || busy !== null}
         >
           {changes ? 'Allow reading and changes' : 'Allow read-only access'}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          loading={busy === 'deny'}
-          disabled={busy !== null}
-          onClick={() => void decide('deny')}
-        >
-          Deny
         </Button>
       </div>
 

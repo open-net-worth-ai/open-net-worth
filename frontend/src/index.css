@@ -1973,13 +1973,13 @@
     background: var(--bg);
   }
   .consent-card {
-    width: min(440px, 100%);
+    width: min(540px, 100%);
     margin-top: clamp(0px, 6vh, 64px);
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 16px;
     box-shadow: var(--shadow-lg);
-    padding: 28px 28px 22px;
+    padding: 36px 40px 28px;
   }
   .consent-form {
     display: flex;
@@ -2038,15 +2038,15 @@
   .consent-head h1 {
     margin: 0;
     color: var(--ink);
-    font-size: 21px;
+    font-size: 24px;
     font-weight: 650;
     letter-spacing: -0.01em;
     line-height: 1.25;
   }
   .consent-head p {
-    margin: 6px 0 0;
+    margin: 8px 0 0;
     color: var(--muted);
-    font-size: 14px;
+    font-size: 15px;
   }
   .consent-head strong {
     color: var(--ink);
@@ -2056,7 +2056,7 @@
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--bg);
-    padding: 14px 16px;
+    padding: 18px 20px;
   }
   .consent-scope__title {
     margin: 0 0 10px;
@@ -2076,8 +2076,8 @@
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    font-size: 14px;
-    line-height: 1.4;
+    font-size: 15px;
+    line-height: 1.45;
   }
   .consent-can {
     color: var(--ink);
@@ -2085,14 +2085,14 @@
   .consent-can svg {
     color: var(--good);
     flex: none;
-    margin-top: 2px;
+    margin-top: calc((1.45em - 15px) / 2);
   }
   .consent-cannot {
     color: var(--faint);
   }
   .consent-cannot svg {
     flex: none;
-    margin-top: 2px;
+    margin-top: calc((1.45em - 15px) / 2);
   }
   .consent-scope__switch {
     display: flex;
@@ -2116,10 +2116,10 @@
   }
   .consent-warn {
     margin: 0;
-    padding: 10px 12px;
-    border-left: 3px solid var(--warn);
-    border-radius: 4px 8px 8px 4px;
-    background: color-mix(in srgb, var(--warn) 9%, transparent);
+    padding: 11px 14px;
+    border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--warn) 7%, transparent);
     color: var(--muted);
     font-size: 13px;
     line-height: 1.5;
@@ -2140,12 +2140,19 @@
     font-size: 13px;
   }
   .consent-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: 10px;
   }
   .consent-actions > * {
     width: 100%;
+  }
+  /* Until the password is typed, Allow stays the primary action, just dimmed — the app-wide
+     disabled grey would make Deny look like the main button. */
+  .consent-actions .btn-primary:disabled:not([aria-busy]) {
+    background: var(--primary);
+    color: var(--ink-on-accent);
+    opacity: 0.42;
   }
   .consent-foot {
     margin: 0;
