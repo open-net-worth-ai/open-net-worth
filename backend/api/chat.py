@@ -395,6 +395,22 @@ def _announce_user_message(session_id: str, turn_id: str, req: ChatRequest, text
     )
 
 
+def _already_received(session_id: str, history: list, client_id: Optional[str]) -> bool:
+    """Does the server already have this message — in the transcript, or queued for a turn
+    that is still running and will deliver it? A copy stranded in the queue with no turn left
+    to drain it is taken back instead: this resend starts the turn that answers it."""
+    if not client_id:
+        return False
+    if client_id in assistant.client_ids_in(history):
+        return True
+    if not pending_injection.holds(session_id, client_id):
+        return False
+    if turns.executing_turn_id(session_id) is not None:
+        return True
+    pending_injection.withdraw(session_id, client_id)
+    return False
+
+
 @router.post("/api/chat")
 async def chat(req: ChatRequest, request: Request):
     # Public-demo quotas (inert unless DEMO_MODE). Checked BEFORE anything is spawned, so a
@@ -417,6 +433,18 @@ async def chat(req: ChatRequest, request: Request):
     session_id, _history = assistant.get_or_create_session(req.session_id)
     if demo_visitors.enabled():
         demo_visitors.claim(session_id, _visitor)
+    # A resend of a message the server already holds — the client's outbox retrying a send
+    # whose response was lost (a phone suspending mid-request) — is acknowledged, never run
+    # twice. The client settles it from the transcript, which names the message by this id.
+    if _already_received(session_id, _history, req.client_message_id):
+        return JSONResponse(
+            {
+                "session_id": session_id,
+                "turn_id": turns.executing_turn_id(session_id),
+                "accepted": "duplicate",
+            },
+            status_code=202,
+        )
     # Read BEFORE the turn appends to the same list: an empty transcript means this POST
     # carries the conversation's opening message, the one its AI title is written from.
     _is_opening_message = not _history
@@ -600,6 +628,9 @@ async def chat(req: ChatRequest, request: Request):
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if req.client_message_id and new_messages and new_messages[-1].get("role") == "user":
+        new_messages[-1] = {**new_messages[-1], assistant.CLIENT_ID_KEY: req.client_message_id}
 
     # Residue safety net (mid-turn injection RFC, acceptance C3 — "never silently
     # dropped"): a message can land in the injection queue and then never get drained if
@@ -1045,6 +1076,10 @@ def get_session_messages(
         "messages": messages,
         "total": total,
         "revision": revision,
+        # A turn is running: the newest messages are still being written, and the live
+        # stream — not this snapshot — is the authority for them. False means this
+        # snapshot is the whole, finished conversation; a client takes it as it is.
+        "live": live_sessions.is_live(session_id),
     }
 
 

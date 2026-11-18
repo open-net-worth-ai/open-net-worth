@@ -681,7 +681,13 @@ export interface Message {
   // message). Cleared the instant the server's message_delivered event names this id —
   // which, for a message that was pending, is also the moment it moves out of
   // chatSessions.ConvSlice.queuedMessages into `messages` (see `ts` below).
-  pending?: 'queued'
+  // 'failed': the send never got a confirmed answer from the server and no transcript read
+  // has found it there since — shown with Retry, which resends under the SAME id (the
+  // server answers a duplicate as already received). Never left as 'queued' forever.
+  pending?: 'queued' | 'failed'
+  // The id the sending client gave this user message, as the server's transcript names it
+  // (`client_message_id`). How a browser knows exactly that the server holds its message.
+  clientId?: string
   // Epoch ms — when this message actually entered the true timeline. For a user message
   // sent while idle, or any assistant message, that is "now" at creation time. For a
   // message that was QUEUED (sent while busy), it is deliberately NOT stamped at send
