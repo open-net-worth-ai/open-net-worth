@@ -76,8 +76,28 @@ class LiveSession(cli_live_session.LiveSession):
     STALL_ENV = STALL_ENV
     STALL_DEFAULT = STALL_DEFAULT
 
+    def __init__(self, argv: list[str], env: dict, workdir: str):
+        super().__init__(argv, env, workdir)
+        # Running total of `total_cost_usd` this process has already reported.
+        self.cost_reported_usd = 0.0
+
     def is_final(self, event: dict) -> bool:
         return event.get("type") == "result"
+
+    def own_round_cost(self, result: dict) -> dict:
+        """``result`` with ``total_cost_usd`` narrowed to THIS round's own cost.
+
+        Over one stream-json process the CLI's ``usage`` covers the latest query only, but
+        ``total_cost_usd`` (like ``modelUsage``) is the running total since the process
+        started (measured on claude 2.1.316). Taken as-is, every round re-billed every
+        earlier one and a turn's summed cost grew quadratically with the session's age.
+        """
+        total = result.get("total_cost_usd")
+        if not isinstance(total, (int, float)) or isinstance(total, bool):
+            return result
+        own = max(0.0, float(total) - self.cost_reported_usd)
+        self.cost_reported_usd = float(total)
+        return {**result, "total_cost_usd": own}
 
     def launch_argv(self) -> list[str]:
         return with_system_prompt_file(self.argv, self.workdir)

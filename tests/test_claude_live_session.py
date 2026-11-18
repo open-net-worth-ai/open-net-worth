@@ -311,3 +311,59 @@ def test_sessions_can_be_switched_off(monkeypatch):
     assert cls.sessions_enabled() is True
     monkeypatch.setenv("ONW_CLAUDE_CLI_SESSIONS", "0")
     assert cls.sessions_enabled() is False
+
+
+# ── cost: the CLI's total_cost_usd is CUMULATIVE over the process ─────────────
+
+
+def _cumulative_cost_cli(tmp_path, step=0.01):
+    """A `claude` stand-in that reports cost the way the real one does in a live session.
+
+    Measured on claude 2.1.316 (2026-11-18): over ONE ``--input-format stream-json``
+    process, each ``result``'s ``usage`` covers that query only, but ``total_cost_usd``
+    (and ``modelUsage``) is the running total since the process started.
+    """
+    script = tmp_path / "claude"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            #!/usr/bin/env python3
+            import json, sys
+            total = 0.0
+            for _line in sys.stdin:
+                total += {step!r}
+                for ev in (
+                    {{"type": "system", "subtype": "init", "apiKeySource": "none"}},
+                    {{"type": "stream_event", "event": {{"type": "content_block_delta",
+                        "delta": {{"type": "text_delta", "text": "hi"}}}}}},
+                    {{"type": "result", "result": "hi", "total_cost_usd": round(total, 6),
+                      "usage": {{"input_tokens": 1, "output_tokens": 1}}}},
+                ):
+                    sys.stdout.write(json.dumps(ev) + "\\n")
+                sys.stdout.flush()
+            """
+        ).strip()
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return script
+
+
+async def test_each_round_on_a_live_session_reports_only_its_own_cost(tmp_path, monkeypatch):
+    """A reused process must not re-bill every earlier round (live: one turn read ~$2 for
+    ~$0.2 of tokens, because each round re-reported the whole session's running total)."""
+    from backend.ai.models.claude_cli_provider import ClaudeCliProvider
+
+    monkeypatch.setenv("ONW_CLAUDE_CLI_SESSIONS", "1")
+    provider = ClaudeCliProvider(cli_path=str(_cumulative_cost_cli(tmp_path)))
+    reply = {"role": "assistant", "content": "hi"}
+    transcripts = [[USER], [USER, reply, FOLLOW], [USER, reply, FOLLOW, reply, USER]]
+
+    costs = []
+    for messages in transcripts:
+        events = [
+            e async for e in provider.stream_chat(messages, tools=[], system="SYS", model="haiku")
+        ]
+        costs.append(next(e for e in events if e["type"] == "usage")["cost_usd"])
+
+    assert costs == pytest.approx([0.01, 0.01, 0.01])
+    await cls.close_all()

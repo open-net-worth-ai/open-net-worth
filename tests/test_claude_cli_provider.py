@@ -1272,7 +1272,9 @@ async def test_an_unfenced_call_narration_gets_one_silent_nudge_retry_that_actua
             [
                 _init_event(),
                 *_text_deltas(real_call_text),
-                _result_event(real_call_text, cost=0.12),
+                # The retry runs on the SAME live process, whose `total_cost_usd` is the
+                # running total (0.36 + this round's 0.12) — the real CLI's behaviour.
+                _result_event(real_call_text, cost=0.48),
             ],
         ],
     )
@@ -1903,6 +1905,9 @@ async def test_a_reused_session_rejected_by_the_api_retries_on_a_fresh_process(
             for ev in self._events:
                 yield ev
 
+        def own_round_cost(self, result):
+            return result
+
     poisoned = _Session(
         [_init_event(), _result_event("API Error: 400 ... non-empty", is_error=True)]
     )
@@ -1948,6 +1953,9 @@ async def test_a_FRESH_session_rejected_by_the_api_still_raises(tmp_path, monkey
         async def events(self):
             yield _init_event()
             yield _result_event("API Error: 400 ... non-empty", is_error=True)
+
+        def own_round_cost(self, result):
+            return result
 
     async def fake_acquire(*_args, **_kwargs):
         return _Session(), "Human: go", [], False  # reused=False

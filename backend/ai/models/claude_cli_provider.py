@@ -682,6 +682,8 @@ class ClaudeCliProvider(AIProvider):
                                     peak_prompt_tokens, _message_start_prompt(inner)
                                 )
                         elif etype == "result":
+                            if session is not None:
+                                ev = session.own_round_cost(ev)
                             fallback_text = ev.get("result") or ""
                             if ev.get("is_error"):
                                 cli_error = _result_error(ev)
