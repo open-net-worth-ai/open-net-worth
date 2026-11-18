@@ -349,7 +349,7 @@ class OpenAIProvider(AIProvider):
         return out
 
     @staticmethod
-    def _messages_to_openai(messages: List[dict], system: str) -> list[dict]:
+    def _messages_to_openai(messages: List[dict], system: str, *, gemini: bool = False) -> list[dict]:
         """Anthropic-shaped history → OpenAI chat messages.
 
         Anthropic content blocks (text / tool_use / tool_result) are flattened into
@@ -393,6 +393,9 @@ class OpenAIProvider(AIProvider):
                                 },
                             }
                         )
+                        signature = block.get("google_thought_signature")
+                        if gemini and isinstance(signature, str) and signature:
+                            tool_calls[-1]["extra_content"] = {"google": {"thought_signature": signature}}
                 msg: dict = {"role": "assistant", "content": "".join(text_parts) or None}
                 if tool_calls:
                     msg["tool_calls"] = tool_calls
@@ -495,7 +498,7 @@ class OpenAIProvider(AIProvider):
         effort: str = "medium",
     ) -> AsyncGenerator[dict, None]:
         client = self._get_client()
-        oai_messages = self._messages_to_openai(messages, system)
+        oai_messages = self._messages_to_openai(messages, system, gemini="gemini" in model.lower())
         # PROACTIVE strip: when we already know this model refuses image input, drop the
         # image parts BEFORE the call instead of paying a round trip (plus the base64
         # upload of every image still in history) to be told so. The reactive retry below
@@ -675,6 +678,11 @@ class OpenAIProvider(AIProvider):
                         )
                         if getattr(tc, "id", None):
                             slot["id"] = tc.id
+                        extra = getattr(tc, "extra_content", None)
+                        google = extra.get("google") if isinstance(extra, dict) else None
+                        signature = google.get("thought_signature") if isinstance(google, dict) else None
+                        if isinstance(signature, str) and signature:
+                            slot["google_thought_signature"] = signature
                         fn = getattr(tc, "function", None)
                         if fn is not None:
                             name = getattr(fn, "name", None) or ""
@@ -801,6 +809,8 @@ class OpenAIProvider(AIProvider):
                 "id": slot["id"],
                 "name": slot["name"],
                 "input": parsed,
+                **({"google_thought_signature": slot["google_thought_signature"]}
+                   if "google_thought_signature" in slot else {}),
             }
 
         # Some compatible endpoints send complete calls with a plain "stop"
