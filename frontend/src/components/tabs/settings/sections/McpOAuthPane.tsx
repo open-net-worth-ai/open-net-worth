@@ -6,15 +6,9 @@ import { Circle, CircleCheck } from '../../../../ui/icons'
 import { InfoPopover } from '../../../ui'
 import { Btn, Panel } from '../ds'
 import type { Toast } from '../ds'
-import {
-  BLOCKERS,
-  ConnectedApps,
-  ConnectorAddress,
-  Credentials,
-  PublicUrl,
-  REASONS,
-} from './McpOAuthPanel'
-import type { OAuthStatus } from './McpOAuthPanel'
+import { ConnectedApps, ConnectorAddress, Credentials, PublicUrl } from './McpOAuthPanel'
+import { BLOCKERS, REASONS } from './mcpOAuth'
+import type { OAuthStatus } from './mcpOAuth'
 
 interface Step {
   done: boolean
@@ -132,21 +126,15 @@ function OtherApps({
   toast: Toast
 }) {
   const [open, setOpen] = useState(false)
-  const show = open || status.clients.length > 0
   return (
     <Panel title="Client ID and secret">
-      {show ? (
-        <Credentials clients={status.clients} refresh={refresh} toast={toast} />
-      ) : (
-        <div className="mcp-other">
-          <span className="rd-help">
-            If an app asks for a client ID and secret, create them here.
-          </span>
-          <Btn size="xs" onClick={() => setOpen(true)}>
-            Create client ID and secret
-          </Btn>
-        </div>
-      )}
+      <Credentials
+        clients={status.clients}
+        refresh={refresh}
+        toast={toast}
+        formOpen={open}
+        setFormOpen={setOpen}
+      />
     </Panel>
   )
 }

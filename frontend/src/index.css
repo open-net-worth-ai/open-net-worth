@@ -2233,19 +2233,31 @@
   .mcp-token {
     min-width: 0;
   }
+  /* The client ID and secret form: its fields stack inside one row (row styling in
+     settings.css). */
+  .mcp-cred {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .mcp-cred__error {
+    color: var(--bad);
+    font-size: var(--text-sm);
+  }
   /* The OAuth path's set-up checklist: a tick per requirement met, an open circle and a way to
      fix it for each one that isn't. */
   .mcp-check {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
     margin: 0;
     padding: 0;
     list-style: none;
   }
   .mcp-check__item {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
+    min-height: 26px;
     gap: 10px;
     color: var(--ink);
     font-size: var(--text-base);
@@ -2254,7 +2266,6 @@
   .mcp-check__mark {
     display: grid;
     flex: none;
-    margin-top: 1px;
     color: var(--warn);
   }
   .mcp-check__item.done .mcp-check__mark {

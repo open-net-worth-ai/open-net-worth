@@ -43,6 +43,8 @@ MAX_NAME_CHARS = 80
 
 _cimd_cache: dict[str, tuple[float, dict]] = {}
 
+_BAD_CALLBACK = "Enter a valid callback URL."
+
 
 def user_agent() -> str:
     """Who is fetching. An app's identity host may refuse a default ``Python-urllib`` agent:
@@ -221,14 +223,14 @@ def _check_redirect_uri(uri: str) -> str:
     try:
         parts = urlsplit(uri)
     except ValueError as exc:
-        raise ValidationError(f"{uri!r} isn't a valid address.") from exc
+        raise ValidationError(_BAD_CALLBACK) from exc
     if parts.fragment or parts.username or parts.password:
-        raise ValidationError("A return address can't contain a fragment or a password.")
+        raise ValidationError(_BAD_CALLBACK)
     if parts.scheme == "https" and parts.hostname:
         return uri
     if _loopback(uri) is not None:
         return uri
-    raise ValidationError("A return address must be https://, or http://127.0.0.1 / localhost.")
+    raise ValidationError(_BAD_CALLBACK)
 
 
 def create_client(name: str, redirect_uris: list[str]) -> dict:
@@ -238,9 +240,9 @@ def create_client(name: str, redirect_uris: list[str]) -> dict:
         raise ValidationError("Give the app a name.")
     uris = [_check_redirect_uri(u) for u in redirect_uris if (u or "").strip()]
     if not uris:
-        raise ValidationError("Add the app's return (redirect) address.")
+        raise ValidationError("Enter the callback URL.")
     if len(uris) > MAX_REDIRECT_URIS:
-        raise ValidationError(f"At most {MAX_REDIRECT_URIS} return addresses.")
+        raise ValidationError(f"At most {MAX_REDIRECT_URIS} callback URLs.")
     client_id = new_secret(CLIENT_PREFIX)[:31]
     secret = new_secret(SECRET_PREFIX)
     created = stamp(now())

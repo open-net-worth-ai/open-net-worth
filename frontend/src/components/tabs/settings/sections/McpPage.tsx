@@ -7,7 +7,7 @@ import { Globe, KeyRound } from '../../../../ui/icons'
 import type { SectionProps } from '../ds'
 import { McpSection } from './McpSection'
 import { OAuthPane } from './McpOAuthPane'
-import { oauthState, useOAuthStatus } from './McpOAuthPanel'
+import { oauthState, useOAuthStatus } from './mcpOAuth'
 
 type Mode = 'oauth' | 'token'
 

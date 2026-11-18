@@ -7,8 +7,8 @@ vi.mock('../../../../api/client', () => ({ authFetch: vi.fn() }))
 import { authFetch } from '../../../../api/client'
 import { clearQueryCache } from '../../../../state/queryCache'
 import { McpPage } from './McpPage'
-import { suggestedPublicUrl } from './McpOAuthPanel'
-import type { OAuthStatus } from './McpOAuthPanel'
+import { suggestedPublicUrl } from './mcpOAuth'
+import type { OAuthStatus } from './mcpOAuth'
 
 const mockAuthFetch = vi.mocked(authFetch)
 const json = (body: unknown, status = 200) =>
@@ -161,7 +161,7 @@ describe('Settings → MCP', () => {
     fireEvent.change(screen.getByLabelText('Callback URL'), {
       target: { value: 'https://app.example/cb' },
     })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Create client ID and secret' }).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(container.textContent).toContain('onw_cs_secret'))
     const secretBox = container.querySelector('div[data-ctx-secret]')
     expect(secretBox?.textContent).toContain('onw_cs_secret')

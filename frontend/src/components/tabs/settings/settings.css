@@ -4106,3 +4106,17 @@
     align-items: flex-start;
   }
 }
+
+/* Settings → MCP → Client ID and secret: the form's fields are a compact stack inside one panel
+   row, not rows of their own (no divider, no second indent). */
+.onw-settings .rd-set-body .mcp-cred .rd-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0;
+  border-bottom: none;
+}
+.onw-settings .rd-set-body .mcp-cred .rd-field > .rd-help {
+  margin-top: 0;
+}
