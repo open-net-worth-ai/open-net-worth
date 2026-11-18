@@ -128,8 +128,9 @@ No card the owner doesn't hold is ever suggested; no card catalog ships.
 
 Evidence (a real book, 2026-11-18): none of ~60 uploaded statements (card PDFs from three issuers;
 bank and e-wallet exports) carries an MCC. Bank feeds sometimes do (GoCardless
-`merchantCategoryCode`, SimpleFIN `mcc`, both optional), and today only a text `category_hint`
-survives import. So the MCC is mostly **resolved**, not read.
+`merchantCategoryCode`, SimpleFIN `mcc`, both optional); Plaid and YNAB send none. Where a feed
+sends one, it is **already kept**: the provider's whole row is stored in `connector_snapshots` and
+linked to the booked transaction. So the MCC is mostly **resolved**, and read where a feed has it.
 
 - **Bundled:** the full ISO 18245 code → description list (a public list; replaces the partial
   table in `services/aggregation/mcc.py`). No merchant → MCC database ships: none is free, and the
@@ -141,7 +142,7 @@ survives import. So the MCC is mostly **resolved**, not read.
 | # | Source | Confidence |
 |---|---|---|
 | 1 | Owner-confirmed MCC for this merchant | confirmed |
-| 2 | MCC seen on a bank-feed row at this payee (stored raw from now on — additive) | high |
+| 2 | MCC in a stored bank-feed row (`connector_snapshots`) of a transaction at this payee | high |
 | 3 | MCC passed by the caller (an agent at checkout) | as given |
 | 4 | Lucius's guess: constrained to valid codes, from descriptor + country + typical amount; 1–3 candidates with confidence | low |
 | 5 | Web search ("<merchant> MCC", community reports) — opt-in, merchant name only, result is a cited suggestion, never confirmed by itself | low–medium |
@@ -320,7 +321,7 @@ P1
 
 P2
 - Only cards the owner holds are ranked; an unconfirmed rule never affects a ranking.
-- The raw MCC from GoCardless / SimpleFIN is stored on new rows; re-importing does not lose it.
+- A GoCardless / SimpleFIN MCC in a payee's stored snapshot rows is used as resolver source 2.
 - The MCC answer names its source (confirmed / feed / caller / guess / web); a guess is labelled;
   web search never runs when every candidate gives the same winning card, nor with it switched off.
 - Every extracted rule cites a quote that exists verbatim in its document; a Private document is
@@ -377,7 +378,8 @@ P3
 2. Where owner rules live: on the category, or a separate rules list?
 3. Is the scoped token general (a token with a tool allowlist) or `check_spend`-only? General is
    reusable but is a security-critical surface (`/security-review`, ADR).
-4. Storing the raw feed MCC is useful on its own (better categorising) — ship it ahead of P2?
+4. (Resolved 2026-11-18: feed MCCs are already stored in `connector_snapshots`; no storage
+   change is needed.)
 5. Does Lucius answer "can I afford this?" unprompted when the owner mentions a purchase, or only
    when asked?
 6. Where a material terms change surfaces in-app: an Intel story (the one in-app alert surface
