@@ -91,10 +91,16 @@ export function EditPortfolioDialog({
       size="md"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button size="sm" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={!ok} loading={busy} onClick={() => void save()}>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={!ok}
+            loading={busy}
+            onClick={() => void save()}
+          >
             Save
           </Button>
         </>

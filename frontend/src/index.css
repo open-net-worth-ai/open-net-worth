@@ -21284,6 +21284,14 @@ body.hide-amounts .mf-lbl-amt {
   color: var(--text);
   text-decoration-color: currentColor;
 }
+/* The Holdings tab's sections — figures and chart, By sector, the table — a section's space
+   apart, as Copy Trading's .fol-holdings are (the title sat right under the ring above it). */
+.paper-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-9);
+  min-width: 0;
+}
 /* The Mandate tab: the goal in the portfolio's own words, then each limit kept or broken. */
 .paper-mandate {
   display: flex;

@@ -163,15 +163,18 @@ export function PaperPortfolioPage({
       </div>
       <div className="fol-tabpanel">
         {tab === 'holdings' && (
-          <div className="fol-sec">
-            <div className="fol-keyfigs">
-              <div className="fol-ret3 paper-figs">
-                {/* The returns are Performance's, under its chart: each figure is said once. */}
-                <Figure label="Paper value" value={money(f.value)} />
-                <Figure label="Cash left" value={money(f.cash_home)} />
+          // Three sections spaced as Copy Trading's are: figures and chart, By sector, the table.
+          <div className="paper-sections">
+            <div className="fol-sec">
+              <div className="fol-keyfigs">
+                <div className="fol-ret3 paper-figs">
+                  {/* The returns are Performance's, under its chart: each figure is said once. */}
+                  <Figure label="Paper value" value={money(f.value)} />
+                  <Figure label="Cash left" value={money(f.cash_home)} />
+                </div>
               </div>
+              <PaperChart id={id} name={p.name} benchmark={p.benchmark} orders={data.orders} />
             </div>
-            <PaperChart id={id} name={p.name} benchmark={p.benchmark} orders={data.orders} />
             {(data.sectors?.length ?? 0) > 1 && (
               <div className="fol-panel">
                 <h2 className="fol-sec-title">By sector</h2>
@@ -189,41 +192,43 @@ export function PaperPortfolioPage({
                 />
               </div>
             )}
-            {data.holdings.length > 0 && (
-              // Copy Trading's title; a picked sector names itself instead.
-              <h2 className="fol-sec-title">
-                {sector
-                  ? `${sector} (${shownHoldings.length})`
-                  : COPY.allHoldingsTitle(data.holdings.length)}
-              </h2>
-            )}
-            {data.holdings.length > 0 ? (
-              <SortTable
-                label={`${p.name} holdings`}
-                rows={shownHoldings}
-                rowKey={(h) => h.asset_key}
-                initialSort="value"
-                // A row opens its asset's own page, as on Holdings. A currency or a contract
-                // has no page of its own.
-                onRowClick={(h) => {
-                  const instrumentId = h.asset_key.startsWith('inst:') ? h.asset_key.slice(5) : ''
-                  if (instrumentId)
-                    openAsset({
-                      instrumentId,
-                      // A stock's ticker opens its quote; anything else opens by its id.
-                      ticker: h.kind === 'listed' ? (h.symbol ?? undefined) : undefined,
-                      label: h.name,
-                    })
-                }}
-                columns={holdingColumns(
-                  (h, side) => setTicket({ asset: assetOfHolding(h), side }),
-                  !archived,
-                  money,
-                )}
-              />
-            ) : (
-              <p className="fol-by">No holdings yet</p>
-            )}
+            <div className="fol-sec">
+              {data.holdings.length > 0 && (
+                // Copy Trading's title; a picked sector names itself instead.
+                <h2 className="fol-sec-title">
+                  {sector
+                    ? `${sector} (${shownHoldings.length})`
+                    : COPY.allHoldingsTitle(data.holdings.length)}
+                </h2>
+              )}
+              {data.holdings.length > 0 ? (
+                <SortTable
+                  label={`${p.name} holdings`}
+                  rows={shownHoldings}
+                  rowKey={(h) => h.asset_key}
+                  initialSort="value"
+                  // A row opens its asset's own page, as on Holdings. A currency or a contract
+                  // has no page of its own.
+                  onRowClick={(h) => {
+                    const instrumentId = h.asset_key.startsWith('inst:') ? h.asset_key.slice(5) : ''
+                    if (instrumentId)
+                      openAsset({
+                        instrumentId,
+                        // A stock's ticker opens its quote; anything else opens by its id.
+                        ticker: h.kind === 'listed' ? (h.symbol ?? undefined) : undefined,
+                        label: h.name,
+                      })
+                  }}
+                  columns={holdingColumns(
+                    (h, side) => setTicket({ asset: assetOfHolding(h), side }),
+                    !archived,
+                    money,
+                  )}
+                />
+              ) : (
+                <p className="fol-by">No holdings yet</p>
+              )}
+            </div>
           </div>
         )}
         {tab === 'orders' && (
