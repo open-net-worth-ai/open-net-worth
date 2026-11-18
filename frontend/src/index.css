@@ -2141,11 +2141,14 @@
   }
   .consent-actions {
     display: grid;
-    grid-template-columns: 1fr 1.6fr;
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
   .consent-actions > * {
     width: 100%;
+  }
+  .consent-actions .btn-secondary {
+    border-color: var(--line-strong);
   }
   /* Until the password is typed, Allow stays the primary action, just dimmed — the app-wide
      disabled grey would make Deny look like the main button. */
