@@ -219,8 +219,10 @@ FLAGS: tuple[Flag, ...] = (
         name="inline_visuals",
         description=(
             "Lucius can answer with a small chart, figures or a timeline inside its reply when "
-            "a picture says it better: a trend, a breakdown, a comparison. Every number in it "
-            "comes straight from the app's own data. Off: replies are text and tables only."
+            "a picture says it better: a trend, a breakdown, a comparison. In those, every "
+            "number comes straight from the app's own data. For anything else he draws the "
+            "picture himself, with numbers he writes in from what he read, so check one that "
+            "matters. Off: replies are text and tables only."
         ),
         default=True,
         owner="owner",
