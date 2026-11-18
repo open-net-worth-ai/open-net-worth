@@ -103,6 +103,7 @@ def test_a_review_is_offered_only_reads_and_paper_tools_under_the_paper_guard(pa
     out = _review(pid)
     assert out["status"] == "done"
     assert seen["enforce_offer"] is True
+    assert seen["max_tool_calls"] == autopilot_run.MAX_TOOL_CALLS
     assert set(seen["allowed_tools"]) == set(autopilot_run.TOOLS)
     assert not {"add_transactions", "web_search", "create_automation"} & set(seen["allowed_tools"])
     ctx = seen["ctx"]

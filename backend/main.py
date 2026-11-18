@@ -246,6 +246,7 @@ async def _headless_turn_runner(
     lean_prompt=False,
     enforce_offer=False,
     effort="medium",
+    max_tool_calls=None,
 ) -> str:
     """The headless-turn runner registered on the ``core.headless_turn`` seam (below, in
     ``lifespan``) so a service can run one Lucius turn WITHOUT ``services`` importing ``ai``
@@ -277,6 +278,9 @@ async def _headless_turn_runner(
     lean_prompt = use the short system prompt instead of the full conversational one — right
     for a zero-tool completion that only has to return text.
 
+    max_tool_calls = with ``enforce_offer``, how many tool calls the turn may make (None → the
+    default, ``_skill_scope.ENFORCED_OFFER_MAX_CALLS``).
+
     enforce_offer = make ``allowed_tools`` a real ceiling for this turn. Without it an offer is
     advisory: a call outside it still dispatches, and nobody is here to tap a card.
     """
@@ -301,7 +305,7 @@ async def _headless_turn_runner(
     if allowed_tools is not None:
         _skill_scope.set_offer_scope(allowed_tools)
     if enforce_offer:
-        _skill_scope.enforce_offer()
+        _skill_scope.enforce_offer(max_tool_calls)
     run_model = model or ModelConfigStore().resolved()["model"]
     short_id = str(uuid.uuid4())[:8]
     session_id = f"headless-{short_id}"

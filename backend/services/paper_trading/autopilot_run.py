@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 ORIGIN = "autopilot"
 CONTEXT_PREFIX = "autopilot:"
 TIMEOUT_S = 600
+# The review's tool calls: the default enforced budget (8) was spent on reading before it
+# could record its memo (2026-11-18). It reads its own holdings, never a stranger's text
+# into a search, so it gets room for a real review.
+MAX_TOOL_CALLS = 40
 # Reads, and this portfolio's paper tools. Everything else is outside the offer, and the
 # paper-only guard refuses it at dispatch even if the model names it.
 TOOLS = (
@@ -88,6 +92,8 @@ def prompt(row: dict) -> str:
         "limit is refused: never try to break one. Fix any limit that is broken now (a holding "
         "over its cap, cash below its floor, a holding past its stop loss) before anything else.",
         "5. Trade only this portfolio.",
+        f"You have {MAX_TOOL_CALLS} tool calls in all: batch what you can (one get_live_prices "
+        "for every ticker) and always keep one for the memo.",
         "",
         "6. Finish by calling record_autopilot_memo. Its memo is the only thing the owner reads "
         "of this review, and a review without one counts as failed; what you write outside it "
@@ -135,6 +141,7 @@ async def review(pid: str) -> dict:
                     model=settings["model"] or None,
                     lean_prompt=True,
                     enforce_offer=True,
+                    max_tool_calls=MAX_TOOL_CALLS,
                     effort=settings["effort"],
                 ),
                 timeout=TIMEOUT_S,
