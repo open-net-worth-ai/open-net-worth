@@ -144,7 +144,17 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
   worth (an all-cash book).
 - **Net worth** is recalculated every time, in your base currency. Change your base currency
   and every past figure is converted again — see [Base currency & FX](../concepts/base-currency-and-fx.md).
+- **The change beside net worth** ("this month", 3M, 1Y) always ends at the net worth shown.
+  When live prices arrive after the screen opens, both update together.
 - **Retirement accounts count** in net worth. **Unvested** stock isn't counted until it vests.
+- **FIRE projection** says **0 yrs** to independence once your net worth is at or past your FIRE
+  number.
+- **Crossover point** is the year your passive income (dividends and interest) covers your
+  spending. It says **Now** only when it already does. If your net worth has passed your FIRE
+  number but your passive income still covers less than your spending (a book that is mostly a
+  home, say), it says **Not yet** rather than a year.
+- **Coffee • weekly spend** counts purchases whose description, payee, memo or category mentions
+  coffee, espresso, café, kopi, latte or cappuccino.
 - **Today's move, movers, the Holdings map and Unrealized gains** cover vested holdings only and show one line per holding, summed across the accounts it sits in. **Debt** is your loans and credit cards; an overdrawn bank account is already netted into cash. **Performance** compares against the benchmark set in Investments → Performance, and **Allocation drift** covers your investments only: it leaves out property and other owned
   assets, and it leaves out account balances (cash, a brokerage's settlement cash, fixed deposits,
   retirement cash), so a balance with no target never gets a "Trim" or "Top up" suggestion.

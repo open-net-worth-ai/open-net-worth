@@ -126,14 +126,14 @@ its usage limits apply instead of a bill. Each reply counts only its own usage. 
 2026-11-18 a long Claude Code CLI conversation could show a figure several times too high,
 because each reply also re-counted the earlier ones. Those older records are not corrected.
 
-**Experimental — Claude Code CLI keeps its cache when Lucius loads a tool.** Lucius starts a
-chat with its most-used tools and loads others when it needs them. With the Claude Code CLI,
-each load used to restart the CLI and write the whole prompt (about 40,000 tokens) to its cache
-again. That added roughly $0.15 at list price to the reply, and a few seconds of wait. Turn on
-**Settings → Developer → Experimental → claude_cli_stable_tool_prompt** and the new tool is
-introduced inside the conversation instead, so the CLI keeps its cache. In testing, a reply
-that loaded a tool wrote about 2,000 tokens to cache instead of 40,000. If Lucius ever stops
-seeing a tool it just loaded, turn it off again.
+**Claude Code CLI keeps its cache when Lucius loads a tool.** Lucius starts a chat with its
+most-used tools and loads others when it needs them. With the Claude Code CLI, the new tool is
+introduced inside the conversation, so the CLI keeps its running process and prompt cache. In
+testing, a reply that loaded a tool wrote about 2,000 tokens to cache instead of 40,000, which
+saves roughly $0.15 at list price and a few seconds of wait. This is on by default. If Lucius
+ever stops seeing a tool it just loaded, turn off **Settings → Developer → Experimental →
+claude_cli_stable_tool_prompt**; each tool load then restarts the CLI with the full tool list,
+as before.
 
 To cut costs: turn off **Follow-up suggestions** in **Settings → Chat** (that stops a
 model call per reply), route background tasks to a cheaper model, and use **Low** effort for

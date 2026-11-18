@@ -747,6 +747,35 @@ def test_month_to_date_compares_like_with_like(seeded_book):
     assert mtd["delta"] == pytest.approx(mtd["to_net_worth"] - mtd["from_net_worth"], abs=0.02)
 
 
+def test_history_is_re_read_when_prices_land_mid_request(seeded_book, monkeypatch):
+    """A live price refresh landing between the history read and `net_worth()` left the
+    series on the old prices, so "this month" and every range change ended at a different
+    figure than the headline beside them. A write during the request re-reads the series."""
+    stale = [{"date": "2026-11-18", "net_worth": 1.0, "classes": {}}]
+    fresh = [{"date": "2026-11-18", "net_worth": 2.0, "classes": {}}]
+    reads = iter([stale, fresh])
+    epochs = iter([(1, 0, "2026-11-18"), (2, 0, "2026-11-18")])  # a commit lands in between
+
+    monkeypatch.setattr(networth_stats.ledger_service, "net_worth_history", lambda: next(reads))
+    monkeypatch.setattr(networth_stats.read_cache, "current_epoch", lambda: next(epochs))
+    stats = networth_stats.networth_stats()
+    assert stats["history"] == fresh
+
+
+def test_history_is_read_once_when_nothing_was_written(seeded_book, monkeypatch):
+    calls = {"n": 0}
+    real = networth_stats.ledger_service.net_worth_history
+
+    def counted():
+        calls["n"] += 1
+        return real()
+
+    monkeypatch.setattr(networth_stats.ledger_service, "net_worth_history", counted)
+    monkeypatch.setattr(networth_stats.read_cache, "current_epoch", lambda: (1, 0, "2026-11-18"))
+    networth_stats.networth_stats()
+    assert calls["n"] == 1
+
+
 def test_range_stats_split_the_move_into_saved_and_market(seeded_book):
     stats = networth_stats.networth_stats()
     for window in stats["ranges"].values():
@@ -924,6 +953,46 @@ def test_spend_search_with_an_empty_query_returns_nothing(seeded_book):
     result = spend_search.spend_search("", weeks=4)
     assert result["total"] == 0.0
     assert len(result["weeks"]) == 4
+
+
+def test_spend_search_matches_any_of_several_words(db_isolated, monkeypatch):
+    """Regression: the Coffee widget searched the one word "coffee", so a week with two
+    espresso-bar purchases showed $0. `a|b` matches any of the words, each purchase once."""
+    from backend.services import ledger as ledger_svc
+
+    monkeypatch.setattr(spend_search, "user_today", lambda: spend_search.date(2026, 7, 8))
+    acct = ledger_svc.accounts.create(
+        {
+            "name": "Everyday",
+            "kind": "asset",
+            "type": "cash",
+            "currency": "SGD",
+            "initial_balance": 1_000.0,
+            "initial_balance_date": "2026-01-01",
+        }
+    )
+    for description, amount in (
+        ("Two Birds Espresso", 6.0),
+        ("Kopi Lane", 3.0),
+        ("Espresso and coffee beans", 10.0),  # matches two words, counted once
+        ("Hardware store", 40.0),
+    ):
+        ledger_svc.create_transaction(
+            {
+                "date": "2026-07-07",
+                "kind": "expense",
+                "description": description,
+                "from_account_id": acct["id"],
+                "from_amount": amount,
+                "from_currency": "SGD",
+            }
+        )
+
+    assert spend_search.spend_search("coffee", weeks=2)["total"] == pytest.approx(10.0)
+    assert spend_search.spend_search("coffee|espresso|kopi", weeks=2)["total"] == pytest.approx(
+        19.0
+    )
+    assert spend_search.spend_search(" | ", weeks=2)["total"] == 0
 
 
 def test_spend_search_average_excludes_the_open_current_week(db_isolated, monkeypatch):

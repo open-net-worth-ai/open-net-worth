@@ -137,13 +137,16 @@ def compute_fire(
 
     progress_pct = (current_nw / fire_num * 100) if fire_num > 0 else 0.0
 
-    years_to_fire: Optional[float] = None
+    # Already at or past the FIRE number is zero years away; the loop below steps a month
+    # before its first check, so without this it could only ever answer "0.1 years".
+    years_to_fire: Optional[float] = 0.0 if fire_num > 0 and current_nw >= fire_num else None
     nw = current_nw
-    for month in range(1, MAX_PROJECTION_YEARS * 12 + 1):
-        nw = nw * (1 + r_monthly) + monthly_savings
-        if nw >= fire_num:
-            years_to_fire = month / 12
-            break
+    if years_to_fire is None:
+        for month in range(1, MAX_PROJECTION_YEARS * 12 + 1):
+            nw = nw * (1 + r_monthly) + monthly_savings
+            if nw >= fire_num:
+                years_to_fire = month / 12
+                break
 
     projected_fire_age = (
         current_age + years_to_fire
@@ -197,8 +200,10 @@ def compute_fire(
         "withdrawal_rate_pct": withdrawal_rate_pct,
         "current_age": round(current_age, 1) if current_age is not None else None,
         "retirement_target_age": retirement_target_age,
-        "years_to_fire": round(years_to_fire, 1) if years_to_fire else None,
-        "projected_fire_age": round(projected_fire_age, 1) if projected_fire_age else None,
+        "years_to_fire": round(years_to_fire, 1) if years_to_fire is not None else None,
+        "projected_fire_age": (
+            round(projected_fire_age, 1) if projected_fire_age is not None else None
+        ),
         "on_track": on_track,
         "monthly_savings_needed": monthly_savings_needed,
         "trajectory": trajectory,

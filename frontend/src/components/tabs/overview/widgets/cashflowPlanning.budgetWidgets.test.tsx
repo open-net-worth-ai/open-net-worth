@@ -6,6 +6,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const summary = vi.hoisted(() => ({ current: null as unknown }))
 const projections = vi.hoisted(() => ({ current: null as unknown }))
+const fireData = vi.hoisted(() => ({
+  current: { progress_pct: 10, years_to_fire: 13 } as {
+    progress_pct: number
+    years_to_fire: number | null
+  },
+}))
 
 vi.mock('../../../../hooks/serverState', () => ({
   usePlanningSummary: () => ({ data: summary.current, initialLoading: false, error: null }),
@@ -20,7 +26,7 @@ vi.mock('../useWidgetData', () => ({
 }))
 vi.mock('../../../../hooks/useFire', () => ({
   useFire: () => ({
-    data: { progress_pct: 10, years_to_fire: 13 },
+    data: fireData.current,
     loading: false,
     error: false,
     retry: vi.fn(),
@@ -31,7 +37,10 @@ import { cashflowPlanningWidgetComponents } from './cashflowPlanning'
 import { WIDGET_DEFINITIONS } from '../definitions'
 import type { WidgetInstance } from '../types'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  fireData.current = { progress_pct: 10, years_to_fire: 13 }
+})
 
 function renderWidget(defId: string) {
   const Comp = cashflowPlanningWidgetComponents[defId]!
@@ -133,5 +142,32 @@ describe('Crossover', () => {
     expect(screen.queryByText('Monthly spending')).toBeNull()
     expect(container.querySelectorAll('.ov-cross-stats .ov-cross-stat')).toHaveLength(3)
     expect(container.querySelector('.ov-cross-yr')?.textContent).toMatch(/^\d{4}$/)
+  })
+
+  const crossoverAt = (coverage: number) => ({
+    crossover: {
+      known: true,
+      passive_monthly: 77.73,
+      expenses_monthly: 4349.91,
+      coverage_pct: coverage,
+      to_go_monthly: 4272.18,
+    },
+  })
+
+  // Regression: a book past its FIRE number (most of it a home) read "Now" while passive
+  // income covered 2% of spending. The headline must agree with the coverage under it.
+  it('does not say Now when passive income covers only part of spending', () => {
+    fireData.current = { progress_pct: 116.6, years_to_fire: 0 }
+    projections.current = crossoverAt(1.79)
+    const { container } = renderWidget('crossover')
+    expect(container.querySelector('.ov-cross-yr')?.textContent).toBe('Not yet')
+    expect(container.querySelector('.ov-cross-note')).toBeNull()
+  })
+
+  it('says Now once passive income covers spending', () => {
+    fireData.current = { progress_pct: 40, years_to_fire: 9 }
+    projections.current = crossoverAt(104)
+    const { container } = renderWidget('crossover')
+    expect(container.querySelector('.ov-cross-yr')?.textContent).toBe('Now')
   })
 })

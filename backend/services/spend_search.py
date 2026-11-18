@@ -27,7 +27,8 @@ def _monday_of(day: date) -> date:
 
 def spend_search(query: str, weeks: int = DEFAULT_WEEKS) -> dict:
     """Expense transactions matching `query` (description/payee/memo/category), summed into
-    Monday-start weeks. An empty query returns empty weeks rather than the whole book.
+    Monday-start weeks. `a|b` matches either word. An empty query returns empty weeks rather
+    than the whole book.
     `average` divides by COMPLETED weeks only (the last bucket, Monday through today, is
     always the still-open current week) — falling back to that partial bucket's own total
     when there are no completed weeks yet, never a division by zero."""
@@ -45,10 +46,12 @@ def spend_search(query: str, weeks: int = DEFAULT_WEEKS) -> dict:
     ]
 
     term = (query or "").strip()
-    if term:
+    # `a|b|c` matches any of the words: one word missed most of what it was named for ("coffee"
+    # never matched an "Espresso" bar or a "Kopi" stall).
+    needles = [n for n in (part.strip().lower() for part in term.split("|")) if n]
+    if needles:
         base = base_currency()
         rates = load_fx_cache()
-        needle = term.lower()
         payee_names = payee_registry.payee_names()
         cat_labels = {
             c["id"]: c.get("label", "")
@@ -60,7 +63,10 @@ def spend_search(query: str, weeks: int = DEFAULT_WEEKS) -> dict:
             when = (t.get("date") or "")[:10]
             if not (window_start <= when <= window_end):
                 continue
-            if not ledger_service.txn_matches_q(t, needle, "any", payee_names, cat_labels):
+            if not any(
+                ledger_service.txn_matches_q(t, needle, "any", payee_names, cat_labels)
+                for needle in needles
+            ):
                 continue
             for bucket in buckets:
                 if bucket["start"] <= when <= bucket["end"]:
