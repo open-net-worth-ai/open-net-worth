@@ -37,7 +37,7 @@ describe('UploadedFileRow', () => {
     expect(preview.getAttribute('src')).toBe('/api/uploads/att_0123456789ab/image')
 
     const deletes = screen.getAllByRole('button', { name: 'Delete' })
-    fireEvent.click(deletes[deletes.length - 1])
+    fireEvent.click(deletes[deletes.length - 1]!)
     expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'att_0123456789ab' }))
     expect(screen.queryByAltText('telegram_photo_1.jpg')).toBeNull()
   })

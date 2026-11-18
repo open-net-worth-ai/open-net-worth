@@ -47,6 +47,14 @@ def _texts() -> tuple[tuple[str, str], ...]:
 def before(db_url, monkeypatch, tmp_path):
     from backend.db import engine as eng
 
+    if db_url.startswith("postgresql"):
+        # One shared server: without a scrub it is already at head, so both upgrades below
+        # are no-ops and an earlier test's rows collide with this one's seed.
+        scrub = create_engine(db_url)
+        with scrub.begin() as c:
+            c.execute(sa.text("DROP SCHEMA public CASCADE"))
+            c.execute(sa.text("CREATE SCHEMA public"))
+        scrub.dispose()
     monkeypatch.setenv("ONW_DATABASE_URL", db_url)
     patch_all_cutover_sources_missing(monkeypatch, tmp_path)
     eng.dispose_engine()

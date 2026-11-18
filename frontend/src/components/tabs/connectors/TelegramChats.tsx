@@ -153,13 +153,15 @@ export function ChatList({
       </FormField>
       <ConfirmDialog
         data={
-          revoking && {
-            title: `Remove ${who(revoking)}?`,
-            body: `They won't be able to chat with Lucius or approve anything from Telegram. ${regainAccess}`,
-            confirmLabel: 'Remove',
-            danger: true,
-            confirmDisabled: busy,
-          }
+          revoking
+            ? {
+                title: `Remove ${who(revoking)}?`,
+                body: `They won't be able to chat with Lucius or approve anything from Telegram. ${regainAccess}`,
+                confirmLabel: 'Remove',
+                danger: true,
+                confirmDisabled: busy,
+              }
+            : null
         }
         onConfirm={() => void confirmRevoke()}
         onCancel={() => !busy && setRevoking(null)}
