@@ -50,10 +50,12 @@ _FALSE = {"0", "false"}
 
 @dataclass(frozen=True)
 class Flag:
-    """One declared flag. ``description`` is shown to the owner — plain words, what turning it
+    """One declared flag. ``title`` is its label in Settings — written out, acronyms cased
+    (``MCP``, not ``Mcp``); ``name`` is the fixed code key. ``description`` is shown to the owner — plain words, what turning it
     on changes. ``remove_by`` is when the old path and the flag must be gone (CI fails after)."""
 
     name: str
+    title: str
     description: str
     default: bool
     owner: str
@@ -68,6 +70,7 @@ class Flag:
 FLAGS: tuple[Flag, ...] = (
     Flag(
         name="claude_cli_stable_tool_prompt",
+        title="Stable tool prompt on the Claude Code CLI",
         description=(
             "With Lucius on the Claude Code CLI, a tool Lucius loads mid-conversation is "
             "introduced in the conversation instead of in its instructions, so the CLI keeps "
@@ -84,6 +87,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="permissions_v2",
+        title="Permissions v2",
         description=(
             "A new permissions model. Each tool has one setting: Always allow, Ask or Block. "
             "In Auto mode a model judges each Ask call and only stops you when it is unsure. "
@@ -101,6 +105,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="search_reads_results",
+        title="Web search reads its results",
         description=(
             "Web search reads the pages behind its top three results and hands Lucius the "
             "passages that match your search, instead of only the search engine's snippet. "
@@ -118,6 +123,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="followed_portfolios",
+        title="Followed portfolios",
         description=(
             "Copy Trading in Intelligence: follow a famous fund or a House member, see what they "
             "hold, and copy their trades with Lucius."
@@ -130,6 +136,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="intel_delivery_decider",
+        title="Intel delivery timing",
         description=(
             "Lucius decides which Intel news reaches you now, which waits for a roundup, "
             "and which stays in the Intel tab."
@@ -142,6 +149,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="ynab_import_and_sync",
+        title="YNAB import and sync",
         description=(
             "Import a whole YNAB plan, then keep it and this book in step on a schedule: from "
             "YNAB, to YNAB or both ways. Adds the Data Sync tab in Automations."
@@ -153,6 +161,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="allow_brokerage_total_valuation",
+        title="Brokerage total valuation",
         description=(
             "Investment and retirement accounts are valued by Brokerage total or Live holdings "
             "(Edit account → Value this account by). A typed balance is the account's total, "
@@ -168,6 +177,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="actual_budget_sync",
+        title="Actual Budget sync",
         description=(
             "Connect an Actual server, import a whole budget and keep it and this book "
             "in step on a schedule. Shares the Data Sync tab in Automations with YNAB."
@@ -179,6 +189,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="voice_calls",
+        title="Voice calls",
         description=(
             "Talk to Lucius out loud: a Call button in the chat starts a voice call with your "
             "microphone. Set it up in Connectors → Voice calls."
@@ -190,6 +201,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="price_alert_lucius_run",
+        title="Price alerts run Lucius",
         description=(
             "When a price alert fires, Lucius looks into it before you hear about it: it follows "
             "the alert's instructions by searching the web and X. A crash-watch alert on a holding "
@@ -203,6 +215,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="bank_data_sync",
+        title="Bank sync without AI",
         description=(
             "Book a bank connector's transactions without AI. On the GoCardless, Enable Banking, "
             "Plaid or SimpleFIN connector, choose Sync without AI: each linked account you tick gets the "
@@ -217,6 +230,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="inline_visuals",
+        title="Inline visuals in chat",
         description=(
             "Lucius can answer with a small chart, figures or a timeline inside its reply when "
             "a picture says it better: a trend, a breakdown, a comparison. In those, every "
@@ -231,6 +245,7 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="mcp_oauth",
+        title="MCP OAuth sign-in",
         description=(
             "Connect claude.ai, Claude on your phone, Claude Desktop's custom connectors and "
             "ChatGPT to your book over the internet. They sign in with OAuth: you type your "
@@ -257,8 +272,10 @@ def build_registry(flags: tuple[Flag, ...]) -> dict[str, Flag]:
             raise ValidationError(f"feature flag {flag.name!r} is declared twice")
         if flag.kind not in _KINDS:
             raise ValidationError(f"feature flag {flag.name!r} has unknown kind {flag.kind!r}")
-        if not flag.description.strip() or not flag.owner.strip():
-            raise ValidationError(f"feature flag {flag.name!r} needs a description and an owner")
+        if not flag.title.strip() or not flag.description.strip() or not flag.owner.strip():
+            raise ValidationError(
+                f"feature flag {flag.name!r} needs a title, a description and an owner"
+            )
         if flag.remove_by <= flag.added:
             raise ValidationError(f"feature flag {flag.name!r}: remove_by must follow added")
         registry[flag.name] = flag
@@ -278,7 +295,9 @@ def get(name: str) -> Flag:
 
 
 def all_flags() -> list[Flag]:
-    return sorted(REGISTRY.values(), key=lambda f: f.name)
+    """Newest first (by ``added``), then by name — the order Settings shows them in."""
+    by_name = sorted(REGISTRY.values(), key=lambda f: f.name)
+    return sorted(by_name, key=lambda f: f.added, reverse=True)
 
 
 def env_var(name: str) -> str:

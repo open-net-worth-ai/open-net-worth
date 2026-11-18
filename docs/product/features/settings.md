@@ -77,7 +77,7 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
 
 ## Experimental features
 
-Settings → Developer → **Experimental**, at the top of Developer, lists features that are still being tried out. Each has
+Settings → Developer → **Experimental**, at the top of Developer, lists features that are still being tried out, newest first. Each has
 a switch, a short description, and whether it is at its **default** or **changed** by you; **Reset**
 puts a changed one back to its default. Turning a feature off always brings back exactly how the
 app worked before. Each one is temporary: once it is finished it becomes part of the app (or is

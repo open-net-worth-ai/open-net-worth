@@ -51,6 +51,7 @@ def test_list_shape(env):
     row = _row(body)
     assert row == {
         "name": NAME,
+        "title": "Example flag",
         "description": row["description"],
         "kind": "release",
         "default": False,

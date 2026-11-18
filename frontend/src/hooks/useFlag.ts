@@ -13,6 +13,7 @@ export type FeatureFlagSource = 'test' | 'demo' | 'env' | 'stored' | 'default'
 
 export interface FeatureFlag {
   name: string
+  title: string
   description: string
   kind: 'release' | 'kill_switch'
   default: boolean
