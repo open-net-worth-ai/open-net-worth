@@ -5,6 +5,12 @@ import { InlineVisual } from './InlineVisual'
 import { formatVisualValue } from './format'
 import type { VisualBlock, VisualSpec } from '../../../types/chat'
 
+// The frame's font files are fetched in the browser; these tests only render the frame element.
+vi.mock('./drawingFonts', () => ({
+  FRAME_FONT: 'Plus Jakarta Sans',
+  loadFrameFonts: () => Promise.resolve(''),
+}))
+
 // Chart.js needs a real canvas; the wrapper is covered by the Overview tests.
 const chartSpy = vi.fn()
 vi.mock('../../tabs/overview/charts', async (importOriginal) => {

@@ -416,8 +416,9 @@ grows to fit and follows light/dark mode. Draw it like this:
 - Seamless and flat: transparent background, no gradients, shadows or glow. No title or prose
   inside — the reply says what it is. SVG: <svg viewBox="0 0 680 H" width="100%" role="img">
   with a <title>; HTML fills the 680px column.
-- Type: classes t (13px), ts (12px secondary), th (14px heading), tm (11px muted). Two weights
-  only, 400 and 500 — never bold 600/700. Sentence case. Nothing under 11px.
+- Type: the frame already uses the app's font — never set font-family. Classes t (13px), ts
+  (12px secondary), th (14px heading), tm (11px muted). Two weights only, 400 and 500 — never
+  bold 600/700. Sentence case. Nothing under 11px.
 - Ink: text in var(--text-primary) / --text-secondary / --text-muted, never in a series colour
   — a small coloured square beside a label carries the identity.
 - Colour by meaning, never in sequence: at most two hues plus grey. Magnitude = one hue;

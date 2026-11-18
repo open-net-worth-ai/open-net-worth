@@ -9,6 +9,7 @@ import {
   readMode,
   readTheme,
 } from './drawingFrame'
+import { loadFrameFonts } from './drawingFonts'
 
 // No `allow-same-origin`: the drawing's scripts get an opaque origin, never the app's session.
 const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals'
@@ -21,17 +22,30 @@ const SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow
 export function VisualDrawing({ code, title }: { code: string; title?: string | null }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const rendered = useRef(false)
+  const loaderReady = useRef(false)
   const [height, setHeight] = useState(0)
+  // The app's font, packed for the frame; null until fetched (once per page).
+  const [fontFaces, setFontFaces] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    void loadFrameFonts().then((css) => live && setFontFaces(css))
+    return () => {
+      live = false
+    }
+  }, [])
   // Built once per drawing: a theme change is posted in, never a re-render that re-runs scripts.
   const doc = useMemo(
     () =>
-      buildDrawingDocument(
-        code,
-        readTheme(),
-        getComputedStyle(document.body).fontFamily,
-        readMode(),
-      ),
-    [code],
+      fontFaces === null
+        ? null
+        : buildDrawingDocument(
+            code,
+            readTheme(),
+            getComputedStyle(document.body).fontFamily,
+            readMode(),
+            fontFaces,
+          ),
+    [code, fontFaces],
   )
 
   // Layout effect, not effect: it must be listening before the frame's first report.
@@ -47,9 +61,14 @@ export function VisualDrawing({ code, title }: { code: string; title?: string | 
     return () => window.removeEventListener('message', onMessage)
   }, [])
 
-  useEffect(() => {
-    rendered.current = false
-  }, [doc])
+  // Post the drawing in once both the loader and the fonts are ready, whichever comes last.
+  const render = () => {
+    const win = frame.current?.contentWindow
+    if (!win || !doc || !loaderReady.current || rendered.current) return
+    rendered.current = true
+    win.postMessage({ type: MSG_RENDER, html: doc }, '*')
+  }
+  useEffect(render, [doc])
 
   useEffect(() => {
     const push = () =>
@@ -67,13 +86,11 @@ export function VisualDrawing({ code, title }: { code: string; title?: string | 
   // The loader's load posts the drawing in; the drawing's own load (writing it fires `load`
   // again) only asks for its height.
   const onLoad = () => {
-    const win = frame.current?.contentWindow
-    if (!win) return
     if (!rendered.current) {
-      rendered.current = true
-      win.postMessage({ type: MSG_RENDER, html: doc }, '*')
+      loaderReady.current = true
+      render()
     } else {
-      win.postMessage({ type: MSG_MEASURE }, '*')
+      frame.current?.contentWindow?.postMessage({ type: MSG_MEASURE }, '*')
     }
   }
 

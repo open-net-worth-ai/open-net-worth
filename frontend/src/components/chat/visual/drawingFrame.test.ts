@@ -25,6 +25,19 @@ describe('buildDrawingDocument', () => {
     expect(doc).not.toMatch(/font-weight:\s*[67]00/)
   })
 
+  it('puts the font faces first, so the drawing uses the app font', () => {
+    const face = "@font-face{font-family:'Plus Jakarta Sans';font-weight:600;src:url(data:x)}"
+    const doc = buildDrawingDocument(
+      '<svg></svg>',
+      {},
+      "'Plus Jakarta Sans', sans-serif",
+      'light',
+      face,
+    )
+    expect(doc).toContain(`<style>${face}:root{`)
+    expect(doc).toContain("body{font-family:'Plus Jakarta Sans', sans-serif}")
+  })
+
   it('reports its height and takes theme updates through the bridge script', () => {
     const doc = buildDrawingDocument('<svg></svg>', {}, '')
     expect(doc).toContain(MSG_HEIGHT)

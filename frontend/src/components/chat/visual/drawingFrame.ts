@@ -82,12 +82,14 @@ export function readMode(root: Element = document.documentElement): 'light' | 'd
   return getComputedStyle(root).colorScheme.includes('dark') ? 'dark' : 'light'
 }
 
-/** The full HTML document for the frame. `font` is the chat's font stack. */
+/** The full HTML document for the frame. `font` is the chat's font stack; `fontFaces` the
+ *  `@font-face` rules that make it load inside the frame (`drawingFonts.ts`). */
 export function buildDrawingDocument(
   code: string,
   vars: Record<string, string>,
   font: string,
   mode: 'light' | 'dark' = 'dark',
+  fontFaces = '',
 ): string {
   const root = Object.entries(vars)
     .map(([k, v]) => `${k}:${v};`)
@@ -95,7 +97,7 @@ export function buildDrawingDocument(
   return `<!doctype html><html data-mode="${mode}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <base target="_blank">
-<style>:root{${root}}${DRAWING_CSS}
+<style>${fontFaces}:root{${root}}${DRAWING_CSS}
 body{font-family:${font || 'system-ui,sans-serif'}}</style>
 <script>${BRIDGE}</script>
 </head><body>${code}</body></html>`
