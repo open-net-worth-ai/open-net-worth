@@ -178,8 +178,9 @@ password, and choose whether it may only read or may also make changes.
 5. A page from your own address opens. Check the address bar and type your Open Net Worth
    password. It confirms this one connection only: it doesn't sign that browser in to Open Net
    Worth.
-6. The next page shows which app is asking and what it will be able to do. Choose **Allow
-   read-only access**, or turn on **Also let it make changes** first if you want it to write.
+6. The next page shows which app is asking and what it will be able to do. Choose **Allow read
+   access**, or turn on **Also let it make changes** first and choose **Allow read and write
+   access**.
 
 Only approve a request you started yourself, a moment ago, from your own account. If someone
 sends you a link to this page, choose **Deny**: approving it would connect *their* account to your
@@ -190,7 +191,9 @@ book.
 - **Read-only** apps see only the tools that read. They can't add, edit or delete anything, send
   anything or run code. They can read everything a read tool reads, including past conversations
   and the database through the SQL tool, but never a document marked Private.
-- **Read and changes** apps can do what an app with your API token can (below).
+- **Read and write** apps can do what an app with your API token can (below).
+- **Neither** can use the tools of MCP servers you've connected to Open Net Worth (a broker's,
+  say): those stay Lucius's. A connected app sees only Open Net Worth's own tools.
 - You get a notification each time an app is connected.
 - **Settings → MCP → Hosted apps** lists every connected app, when it last used your book, and a
   **Revoke** button.

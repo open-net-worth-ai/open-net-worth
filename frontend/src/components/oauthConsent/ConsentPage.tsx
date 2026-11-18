@@ -250,6 +250,9 @@ function Decide({
           <Ability allowed>See your accounts, transactions, budget and investments</Ability>
           <Ability allowed={changes}>Add, edit and delete records</Ability>
           <Ability allowed={changes}>Run automations and send messages for you</Ability>
+          <Ability allowed={false}>
+            Use tools from MCP servers you've connected to {brand.app_name}
+          </Ability>
         </ul>
         {canWrite ? (
           <div className="consent-scope__switch">
@@ -282,7 +285,7 @@ function Decide({
           Deny
         </Button>
         <Button type="submit" variant="primary" loading={busy === 'allow'} disabled={busy !== null}>
-          {changes ? 'Allow reading and changes' : 'Allow read-only access'}
+          {changes ? 'Allow read and write access' : 'Allow read access'}
         </Button>
       </div>
 
