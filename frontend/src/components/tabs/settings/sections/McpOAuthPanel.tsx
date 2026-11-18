@@ -1,68 +1,39 @@
-// Settings → MCP → "Hosted apps": claude.ai, Claude on the phone, Claude Desktop's custom
-// connectors and ChatGPT connect over OAuth (flag mcp_oauth). Renders nothing while the flag is
-// off (the status call answers 404).
+// The OAuth path of Settings → MCP (flag mcp_oauth): claude.ai, Claude on the phone, Claude
+// Desktop's custom connectors and ChatGPT. The status call answers 404 while the flag is off.
 //
-// Three things live here: the public address every OAuth URL is built from, the apps connected
-// with Revoke, and app credentials for an app that can't use the built-in identity. Why the
-// server is off, when it is, is shown from the server's own list of reasons.
+// The pieces live here — the status, the public address every OAuth URL is built from (prefilled
+// from the page's own https origin, saved only on Save), the address to paste, the apps connected
+// with Revoke, and app credentials for an app that can't use the built-in identity. The pane that
+// lays them out as a checklist is McpOAuthPane.tsx.
 import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
-import { useCachedFetchState } from '../../../../state/queryCache'
-import { Badge, Btn, Field, Panel, row } from '../ds'
-import type { SectionProps, Toast } from '../ds'
-import { McpSection } from './McpSection'
+import { Badge, Btn, Field, row } from '../ds'
+import type { Toast } from '../ds'
+import { ConfirmDialog } from '../../../ui/ConfirmDialog'
+import type { ConfirmDialogData } from '../../../ui/ConfirmDialog'
+import { KEY, suggestedPublicUrl } from './mcpOAuth'
+import type { OAuthApp, OAuthClient, OAuthStatus } from './mcpOAuth'
 
-export interface OAuthApp {
-  grant_id: string
-  name: string
-  host: string
-  scopes: string[]
-  connected_at: string
-  last_used_at: string | null
-}
+/** A pending confirmation: what the app's dialog shows, and what runs on Confirm. */
+type Ask = { data: ConfirmDialogData; run: () => void } | null
 
-export interface OAuthClient {
-  client_id: string
-  name: string
-  redirect_uris: string[]
-  created_at: string
-}
-
-export interface OAuthStatus {
-  available: boolean
-  reasons: string[]
-  public_url: string
-  public_url_source: 'env' | 'stored'
-  mcp_url: string
-  apps: OAuthApp[]
-  clients: OAuthClient[]
+function AskDialog({ ask, setAsk }: { ask: Ask; setAsk: (a: Ask) => void }) {
+  return (
+    <ConfirmDialog
+      data={ask?.data ?? null}
+      onConfirm={() => {
+        const run = ask?.run
+        setAsk(null)
+        run?.()
+      }}
+      onCancel={() => setAsk(null)}
+    />
+  )
 }
 
 interface Created {
   client_id: string
   client_secret: string
-}
-
-const KEY = '/api/mcp/oauth'
-
-const REASONS: Record<string, string> = {
-  flag_off: 'The feature is off.',
-  no_public_url: 'Set the public HTTPS address below.',
-  invalid_public_url: 'The public address must be https:// and reachable from the internet.',
-  no_password: 'Set a password in Settings → Security — the consent page asks for it.',
-  auth_disabled: 'Sign-in is turned off on this instance.',
-  loopback_trusted:
-    'In Settings → Security, turn off "Don\'t ask for the password on this computer": behind a proxy or tunnel every visitor looks like this computer.',
-  demo: 'Not available on the public demo.',
-  gateway: 'Not available behind the Open Net Worth gateway yet.',
-  desktop: 'The desktop app only accepts connections from this computer.',
-}
-
-async function loadStatus(): Promise<OAuthStatus | null> {
-  const r = await authFetch(KEY)
-  if (r.status === 404) return null
-  if (!r.ok) throw new Error(String(r.status))
-  return (await r.json()) as OAuthStatus
 }
 
 async function send(path: string, method: string, body?: unknown): Promise<Response> {
@@ -95,61 +66,13 @@ function when(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
 }
 
-export function McpOAuthPanel({ toast }: { toast: Toast }) {
-  const { data, refresh } = useCachedFetchState<OAuthStatus | null>(KEY, loadStatus, {
-    staleTime: 0,
-  })
-  if (!data) return null
-  return <OAuthBody status={data} refresh={() => void refresh()} toast={toast} />
-}
-
-function OAuthBody({
-  status,
-  refresh,
-  toast,
-}: {
-  status: OAuthStatus
-  refresh: () => void
-  toast: Toast
-}) {
-  return (
-    <Panel
-      title="Hosted apps (claude.ai, ChatGPT)"
-      sub="Connect over OAuth: paste the address into the app, then approve with your password"
-    >
-      {status.available ? (
-        <Ready mcpUrl={status.mcp_url} toast={toast} />
-      ) : (
-        <div className="mcp-hosted-status">
-          <div className="mcp-hosted-status__head">
-            <Badge tone="warn">Off</Badge>
-            <span>Not ready yet</span>
-          </div>
-          <ul className="mcp-hosted-list">
-            {status.reasons.map((r) => (
-              <li key={r}>{REASONS[r] ?? r}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <PublicUrl status={status} refresh={refresh} toast={toast} />
-      <ConnectedApps apps={status.apps} refresh={refresh} toast={toast} />
-      <Credentials clients={status.clients} refresh={refresh} toast={toast} />
-    </Panel>
-  )
-}
-
-function Ready({ mcpUrl, toast }: { mcpUrl: string; toast: Toast }) {
+export function ConnectorAddress({ mcpUrl, toast }: { mcpUrl: string; toast: Toast }) {
   return (
     <div className="mcp-hosted-status">
-      <div className="mcp-hosted-status__head">
-        <Badge tone="good">On</Badge>
-        <span>Ready for claude.ai and ChatGPT</span>
-      </div>
       <Field
         span="full"
         label="Connector address"
-        help="Each app gets read-only access unless you allow changes when you approve it."
+        help="Each app gets read access unless you allow writes when you approve it."
       >
         <div className="mcp-hosted-url">
           <input
@@ -179,7 +102,7 @@ function Ready({ mcpUrl, toast }: { mcpUrl: string; toast: Toast }) {
   )
 }
 
-function PublicUrl({
+export function PublicUrl({
   status,
   refresh,
   toast,
@@ -188,49 +111,64 @@ function PublicUrl({
   refresh: () => void
   toast: Toast
 }) {
-  const [value, setValue] = useState(status.public_url)
+  const [value, setValue] = useState(status.public_url || suggestedPublicUrl())
   const fromEnv = status.public_url_source === 'env'
-  async function save() {
-    if (
-      status.apps.length &&
-      value !== status.public_url &&
-      !window.confirm('Changing the address disconnects every connected app. Continue?')
-    )
+  const [ask, setAsk] = useState<Ask>(null)
+  function save() {
+    if (status.apps.length && value !== status.public_url) {
+      setAsk({
+        data: {
+          title: 'Change the public address?',
+          body: 'Every connected app is disconnected and has to be approved again.',
+          confirmLabel: 'Change address',
+          danger: true,
+        },
+        run: () => void put(),
+      })
       return
+    }
+    void put()
+  }
+  async function put() {
     const r = await send(`${KEY}/public-url`, 'PUT', { public_url: value })
     if (!r.ok) return toast(await detail(r))
     toast('Public address saved')
     refresh()
   }
   return (
-    <Field
-      label="Public HTTPS address"
-      help={
-        fromEnv
-          ? 'Set by ONW_PUBLIC_URL on the server.'
-          : 'The address the internet reaches this instance at, like https://wealth.example.com.'
-      }
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          className="rd-input"
-          aria-label="Public HTTPS address"
-          value={value}
-          disabled={fromEnv}
-          placeholder="https://wealth.example.com"
-          onChange={(e) => setValue(e.target.value)}
-        />
-        {fromEnv ? null : (
-          <Btn size="xs" onClick={() => void save()} disabled={value === status.public_url}>
-            Save
-          </Btn>
-        )}
-      </div>
-    </Field>
+    <>
+      <AskDialog ask={ask} setAsk={setAsk} />
+      <Field
+        label="Public HTTPS address"
+        help={
+          fromEnv
+            ? 'Set by ONW_PUBLIC_URL on the server.'
+            : !status.public_url && value && value === suggestedPublicUrl()
+              ? "Filled in from the address you're using now. It's saved only when you click Save."
+              : 'The address the internet reaches this instance at, like https://wealth.example.com.'
+        }
+      >
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            className="rd-input"
+            aria-label="Public HTTPS address"
+            value={value}
+            disabled={fromEnv}
+            placeholder="https://wealth.example.com"
+            onChange={(e) => setValue(e.target.value)}
+          />
+          {fromEnv ? null : (
+            <Btn size="xs" onClick={save} disabled={value === status.public_url}>
+              Save
+            </Btn>
+          )}
+        </div>
+      </Field>
+    </>
   )
 }
 
-function ConnectedApps({
+export function ConnectedApps({
   apps,
   refresh,
   toast,
@@ -239,8 +177,19 @@ function ConnectedApps({
   refresh: () => void
   toast: Toast
 }) {
-  async function revoke(app: OAuthApp) {
-    if (!window.confirm(`Disconnect ${app.name} (${app.host})?`)) return
+  const [ask, setAsk] = useState<Ask>(null)
+  function revoke(app: OAuthApp) {
+    setAsk({
+      data: {
+        title: `Disconnect ${app.name}?`,
+        body: `${app.host} loses access to your book. It can connect again only if you approve it again.`,
+        confirmLabel: 'Disconnect',
+        danger: true,
+      },
+      run: () => void disconnect(app),
+    })
+  }
+  async function disconnect(app: OAuthApp) {
     const r = await send(`${KEY}/apps/${encodeURIComponent(app.grant_id)}`, 'DELETE')
     if (!r.ok) return toast(await detail(r))
     toast(`${app.name} disconnected`)
@@ -248,9 +197,7 @@ function ConnectedApps({
   }
   return (
     <div>
-      <div className="rd-bars-lbl" style={{ marginBottom: 7 }}>
-        Connected apps
-      </div>
+      <AskDialog ask={ask} setAsk={setAsk} />
       {apps.length === 0 ? (
         <span className="rd-help">No app is connected.</span>
       ) : (
@@ -260,11 +207,11 @@ function ConnectedApps({
               <>
                 {app.name}{' '}
                 <Badge tone={app.scopes.includes('write') ? 'warn' : ''}>
-                  {app.scopes.includes('write') ? 'Read + changes' : 'Read-only'}
+                  {app.scopes.includes('write') ? 'Read and write' : 'Read'}
                 </Badge>
               </>,
               `${app.host} · connected ${when(app.connected_at)} · last used ${when(app.last_used_at)}`,
-              <Btn size="xs" variant="danger" onClick={() => void revoke(app)}>
+              <Btn size="xs" variant="danger" onClick={() => revoke(app)}>
                 Revoke
               </Btn>,
             )}
@@ -275,49 +222,60 @@ function ConnectedApps({
   )
 }
 
-function Credentials({
+export function Credentials({
   clients,
   refresh,
   toast,
+  formOpen,
+  setFormOpen,
 }: {
   clients: OAuthClient[]
   refresh: () => void
   toast: Toast
+  formOpen: boolean
+  setFormOpen: (open: boolean) => void
 }) {
   const [name, setName] = useState('')
   const [redirect, setRedirect] = useState('')
   const [created, setCreated] = useState<Created | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [ask, setAsk] = useState<Ask>(null)
   async function create() {
-    const r = await send(`${KEY}/clients`, 'POST', { name, redirect_uris: [redirect] })
-    if (!r.ok) return toast(await detail(r))
+    setError(null)
+    const r = await send(`${KEY}/clients`, 'POST', { name, redirect_uris: [redirect.trim()] })
+    if (!r.ok) return setError(await detail(r))
     const body = (await r.json()) as { created: Created }
     setCreated(body.created)
     setName('')
     setRedirect('')
+    setFormOpen(false)
     refresh()
   }
-  async function remove(c: OAuthClient) {
-    if (!window.confirm(`Delete the credentials for ${c.name}? Apps using them are disconnected.`))
-      return
+  function remove(c: OAuthClient) {
+    setAsk({
+      data: {
+        title: `Delete the client ID for ${c.name}?`,
+        body: 'Apps using it are disconnected and can no longer sign in with it.',
+        confirmLabel: 'Delete',
+        danger: true,
+      },
+      run: () => void destroy(c),
+    })
+  }
+  async function destroy(c: OAuthClient) {
     const r = await send(`${KEY}/clients/${encodeURIComponent(c.client_id)}`, 'DELETE')
     if (!r.ok) return toast(await detail(r))
     refresh()
   }
   return (
-    <div>
-      <div className="rd-bars-lbl" style={{ marginBottom: 7 }}>
-        App credentials
-      </div>
-      <span className="rd-help" style={{ display: 'block', lineHeight: 1.55, marginBottom: 8 }}>
-        Claude and ChatGPT need none. For another app, create a client ID and secret and paste them
-        into its advanced OAuth settings.
-      </span>
+    <div className="mcp-cred">
+      <AskDialog ask={ask} setAsk={setAsk} />
       {clients.map((c) => (
         <div key={c.client_id} style={{ marginBottom: 8 }}>
           {row(
             c.name,
             c.redirect_uris.join(', '),
-            <Btn size="xs" variant="ghost" onClick={() => void remove(c)}>
+            <Btn size="xs" variant="ghost" onClick={() => remove(c)}>
               Delete
             </Btn>,
           )}
@@ -338,35 +296,61 @@ function Credentials({
           </div>
         </div>
       ) : null}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <input
-          className="rd-input"
-          aria-label="App name"
-          placeholder="App name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          className="rd-input"
-          aria-label="Redirect URL"
-          placeholder="https://app.example.com/oauth/callback"
-          value={redirect}
-          onChange={(e) => setRedirect(e.target.value)}
-        />
-        <Btn size="xs" onClick={() => void create()} disabled={!name.trim() || !redirect.trim()}>
-          Create credentials
-        </Btn>
-      </div>
+      {formOpen ? (
+        <>
+          <Field
+            span="full"
+            label="App name"
+            help="Shown in Connected apps, so you can tell it apart."
+          >
+            <input
+              className="rd-input"
+              aria-label="App name"
+              placeholder="My MCP client"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field
+            span="full"
+            label="Callback URL"
+            help="Where the app receives your approval. Find it in the app's OAuth settings, usually called redirect URI or callback URL. Sign-ins go only there."
+          >
+            <input
+              className="rd-input"
+              aria-label="Callback URL"
+              placeholder="https://app.example.com/oauth/callback"
+              value={redirect}
+              onChange={(e) => {
+                setRedirect(e.target.value)
+                setError(null)
+              }}
+            />
+            {error ? <span className="mcp-cred__error">{error}</span> : null}
+          </Field>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn
+              size="xs"
+              onClick={() => void create()}
+              disabled={!name.trim() || !redirect.trim()}
+            >
+              Create
+            </Btn>
+            <Btn size="xs" variant="ghost" onClick={() => setFormOpen(false)}>
+              Cancel
+            </Btn>
+          </div>
+        </>
+      ) : (
+        <div className="mcp-other">
+          <span className="rd-help">
+            {clients.length ? '' : 'If an app asks for a client ID and secret, create them here.'}
+          </span>
+          <Btn size="xs" onClick={() => setFormOpen(true)}>
+            {clients.length ? 'New client ID and secret' : 'Create client ID and secret'}
+          </Btn>
+        </div>
+      )}
     </div>
-  )
-}
-
-/** Settings → MCP: the local/token setup, then hosted apps over OAuth (when the flag is on). */
-export function McpPage(props: SectionProps) {
-  return (
-    <>
-      <McpSection {...props} />
-      <McpOAuthPanel toast={props.toast} />
-    </>
   )
 }

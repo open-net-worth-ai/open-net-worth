@@ -161,18 +161,6 @@ ${stdio}`
     },
   },
   {
-    id: 'chatgpt',
-    label: 'ChatGPT',
-    transport: 'remote',
-    where:
-      "ChatGPT → Settings → Connectors (Developer mode on) → Add custom connector. ChatGPT runs in OpenAI's cloud, so it needs a PUBLIC url — localhost is not reachable.",
-    snippet: (ctx) => `MCP server URL:
-${ctx.origin}/mcp
-
-Authentication: Bearer token (Authorization header)
-Authorization: Bearer ${ctx.token}`,
-  },
-  {
     id: 'http',
     label: 'Generic HTTP / remote',
     transport: 'remote',

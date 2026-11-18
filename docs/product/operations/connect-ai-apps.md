@@ -5,8 +5,35 @@ category: operations
 order: 62
 audience: [user, operator]
 status: stable
-related: [operations/security-and-privacy, operations/exposing-beyond-localhost, connectors/external-mcp, features/settings]
-keywords: [mcp, claude desktop, claude code, cursor, vs code, chatgpt, claude.ai, claude mobile, custom connector, oauth, connected apps, read-only, cline, continue, stdio, onw mcp, api token, external client, copy config]
+related:
+  [
+    operations/security-and-privacy,
+    operations/exposing-beyond-localhost,
+    connectors/external-mcp,
+    features/settings,
+  ]
+keywords:
+  [
+    mcp,
+    claude desktop,
+    claude code,
+    cursor,
+    vs code,
+    chatgpt,
+    claude.ai,
+    claude mobile,
+    custom connector,
+    oauth,
+    connected apps,
+    read-only,
+    cline,
+    continue,
+    stdio,
+    onw mcp,
+    api token,
+    external client,
+    copy config,
+  ]
 ---
 
 # Use your book from other AI apps
@@ -32,8 +59,8 @@ Lucius uses someone else's server.
 These apps run on your computer, so they connect through a small bridge program that the app
 starts for you.
 
-1. In Open Net Worth, open **Settings → MCP**.
-2. Under **Connect from…**, click your app: **Claude Desktop**, **Cursor**, **VS Code (Copilot)**
+1. In Open Net Worth, open **Settings → MCP** and choose **API token** at the top.
+2. Under **Your app**, click your app: **Claude Desktop**, **Cursor**, **VS Code (Copilot)**
    or **Cline / Continue / other**.
 3. If you run Open Net Worth as a server rather than the desktop app, pick how it runs:
    **Installed (onw)**, **Running from source**, or **Docker or another computer** (see
@@ -43,17 +70,18 @@ starts for you.
    `ONW_API_TOKEN_PASTED_ON_COPY`, so the token never appears on the page).
 5. Paste it where the hint on screen says:
 
-   | App | Where to paste |
-   |---|---|
-   | **Claude Desktop** | **Settings → Developer → Edit Config** opens `claude_desktop_config.json`. Paste it in (merge it into `"mcpServers"` if you already have other servers), save, and **restart Claude Desktop**. |
-   | **Cursor** | `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project). |
-   | **VS Code (Copilot)** | `.vscode/mcp.json` (workspace) or your user `mcp.json`. VS Code uses `"servers"`, not `"mcpServers"`. |
-   | **Cline / Continue / other** | The app's MCP settings file, in its `mcpServers` section. |
+   | App                          | Where to paste                                                                                                                                                                                 |
+   | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **Claude Desktop**           | **Settings → Developer → Edit Config** opens `claude_desktop_config.json`. Paste it in (merge it into `"mcpServers"` if you already have other servers), save, and **restart Claude Desktop**. |
+   | **Cursor**                   | `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).                                                                                                                       |
+   | **VS Code (Copilot)**        | `.vscode/mcp.json` (workspace) or your user `mcp.json`. VS Code uses `"servers"`, not `"mcpServers"`.                                                                                          |
+   | **Cline / Continue / other** | The app's MCP settings file, in its `mcpServers` section.                                                                                                                                      |
 
    For Cursor, VS Code and "other", the copied text holds **two alternatives** separated by
-   `// — or —` lines. Paste **only one** of them (the *stdio* one, for an app on the same
+   `// — or —` lines. Paste **only one** of them (the _stdio_ one, for an app on the same
    computer) — the comment lines and the second block would make the file invalid.
-6. **Check it works:** in the AI app, ask *"Using open-net-worth, what's my net worth?"* It should
+
+6. **Check it works:** in the AI app, ask _"Using open-net-worth, what's my net worth?"_ It should
    answer with your figure. In Claude Desktop, the server also appears under its connectors/tools
    list.
 
@@ -77,12 +105,12 @@ A Claude Desktop config looks like this (server installed with `onw`):
 What the `command` is depends on how you installed Open Net Worth — **Copy config** fills in the
 right one:
 
-| Install | What the config runs |
-|---|---|
-| **Desktop app** | The Python bundled inside the app, with `-m backend.cli mcp`. Instead of an address, the config names your book folder (`ONW_ROOT`), because the desktop app picks a new address each time it starts and the bridge finds the current one there. If you move the app or switch book folders, copy the config again. |
-| **Installed (`onw`)** | The `onw` command, with `mcp`. Settings fills in its full path when it can, because apps like Claude Desktop don't search your shell's `PATH`. |
-| **Running from source** | `python3 -m backend.mcp.stdio_bridge`, run in your checkout folder. See the troubleshooting note below if your app can't start it. |
-| **Docker or another computer** | `onw mcp`, installed on the computer where the AI app runs, with the address of your Open Net Worth. See below. |
+| Install                        | What the config runs                                                                                                                                                                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Desktop app**                | The Python bundled inside the app, with `-m backend.cli mcp`. Instead of an address, the config names your book folder (`ONW_ROOT`), because the desktop app picks a new address each time it starts and the bridge finds the current one there. If you move the app or switch book folders, copy the config again. |
+| **Installed (`onw`)**          | The `onw` command, with `mcp`. Settings fills in its full path when it can, because apps like Claude Desktop don't search your shell's `PATH`.                                                                                                                                                                      |
+| **Running from source**        | `python3 -m backend.mcp.stdio_bridge`, run in your checkout folder. See the troubleshooting note below if your app can't start it.                                                                                                                                                                                  |
+| **Docker or another computer** | `onw mcp`, installed on the computer where the AI app runs, with the address of your Open Net Worth. See below.                                                                                                                                                                                                     |
 
 ## Docker, or an AI app on another computer
 
@@ -98,6 +126,7 @@ the computer where the AI app runs. So that computer gets its own copy of the br
 
    This doesn't start a second Open Net Worth there. `onw mcp` only passes each message from the
    AI app to your instance's address and hands the answer back.
+
 2. On that same computer, open Open Net Worth in the browser, go to **Settings → MCP**, choose
    **Docker or another computer** and click **Copy config**. Copying it there puts in the
    address that computer reaches your instance at.
@@ -116,8 +145,14 @@ computer** and **Copy config** gives you this, with your token filled in:
   "mcpServers": {
     "open-net-worth": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "http://your-server:8080/mcp", "--allow-http",
-               "--header", "Authorization:${ONW_AUTH}"],
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://your-server:8080/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization:${ONW_AUTH}"
+      ],
       "env": { "ONW_AUTH": "Bearer your-api-token" }
     }
   }
@@ -131,7 +166,7 @@ apps break an argument that contains a space.
 
 Claude Code has no tab of its own in Settings → MCP, but it takes the same configuration:
 
-1. In **Settings → MCP**, choose **Claude Desktop** and click **Copy config**.
+1. In **Settings → MCP**, choose **API token**, then **Claude Desktop**, and click **Copy config**.
 2. Take the part inside `"open-net-worth": { … }` and add it from a terminal:
 
    ```bash
@@ -139,6 +174,7 @@ Claude Code has no tab of its own in Settings → MCP, but it takes the same con
    ```
 
    Add `--scope user` to make it available in every project.
+
 3. Check with `claude mcp list` — `open-net-worth` should show as connected — then ask Claude Code
    about your book.
 
@@ -151,8 +187,10 @@ claude mcp add --transport http open-net-worth http://127.0.0.1:8080/mcp \
 
 ## claude.ai, Claude on your phone and ChatGPT (sign in with OAuth)
 
-**Experimental — off by default.** Turn on **Mcp oauth** under **Settings → Developer →
-Experimental** first (see [Experimental features](../features/settings.md#experimental-features)).
+**Experimental — off by default.** In **Settings → MCP**, choose **OAuth** at the top: a
+checklist shows each step, with a button to the setting that fixes it. The first is turning on
+**Mcp oauth** under **Settings → Developer → Experimental** (see
+[Experimental features](../features/settings.md#experimental-features)).
 
 claude.ai (web and mobile), Claude Desktop's **Add custom connector** and ChatGPT run on their
 provider's servers. They can't start a program on your computer or reach `localhost`, and they
@@ -165,9 +203,10 @@ password, and choose whether it may only read or may also make changes.
 2. In **Settings → Security**, set a password if you haven't, and turn off **Don't ask for the
    password on this computer**. Behind a reverse proxy or tunnel every visitor looks like "this
    computer", so the connection is refused while it's on.
-3. In **Settings → MCP → Hosted apps**, enter your public address (for example
-   `https://wealth.example.com`) and click **Save**, or set `ONW_PUBLIC_URL` on the server. The
-   panel shows **On** when everything is ready, and lists what's missing when it isn't.
+3. In **Settings → MCP → OAuth**, enter your public address (for example
+   `https://wealth.example.com`) and click **Save**, or set `ONW_PUBLIC_URL` on the server. If
+   you opened Settings through that HTTPS address, it's already filled in; it's saved only when you
+   click **Save**. The **OAuth** card shows **Ready** when everything is in place, or how many steps are left.
 4. Add the connector in the app, using the **Connector address** the panel shows
    (`https://your-address/mcp`; **Copy** puts it on your clipboard):
    - **claude.ai:** open **Connectors** (under **Customize** or **Settings**) and choose **Add
@@ -183,7 +222,7 @@ password, and choose whether it may only read or may also make changes.
    access**.
 
 Only approve a request you started yourself, a moment ago, from your own account. If someone
-sends you a link to this page, choose **Deny**: approving it would connect *their* account to your
+sends you a link to this page, choose **Deny**: approving it would connect _their_ account to your
 book.
 
 **What happens after you approve**
@@ -195,7 +234,7 @@ book.
 - **Neither** can use the tools of MCP servers you've connected to Open Net Worth (a broker's,
   say): those stay Lucius's. A connected app sees only Open Net Worth's own tools.
 - You get a notification each time an app is connected.
-- **Settings → MCP → Hosted apps** lists every connected app, when it last used your book, and a
+- **Settings → MCP → OAuth** lists every connected app, when it last used your book, and a
   **Revoke** button.
 - Changing your password, or the public address, disconnects every app. So does an app reusing an
   old sign-in token, which can mean the token was copied. You get a notification then too.
@@ -203,12 +242,12 @@ book.
   again.
 
 **Another hosted app.** If an app asks for a client ID and secret, create them in **Settings → MCP
-→ Hosted apps → App credentials**: enter the app's name and its redirect (callback) URL. The
+→ OAuth → Client ID and secret**: enter the app's name and its redirect (callback) URL. The
 secret is shown once, with **Copy client ID** and **Copy secret** buttons. An app shows under
 **Connected apps** once it has finished signing in.
 
 **If your hosted app accepts a header instead.** Some apps let you set a fixed
-`Authorization: Bearer …` header. In **Settings → MCP**, choose **Generic HTTP / remote**, click
+`Authorization: Bearer …` header. In **Settings → MCP**, choose **API token**, then **Generic HTTP / remote**, click
 **Copy config**, and use the copied `url` and header. That token has full access (see below).
 
 **Firewalls.** If you limit who can reach your address, allow Anthropic's outbound range
@@ -235,6 +274,7 @@ can read your whole book and make changes.
 ## Troubleshooting
 
 **Claude Desktop says "Server disconnected" / the tools don't appear**
+
 - Open Net Worth isn't running — start it, then restart Claude Desktop.
 - The app can't find `onw`. Replace `"command"` with the full path printed by `which onw`
   (Windows: `where onw`).
@@ -248,6 +288,7 @@ running at that address. Start it. With a server install, check `ONW_BASE_URL` m
 address you open in your browser.
 
 **It worked, then stopped**
+
 - You rotated the API token, or set a password for the first time (setting the first password
   also replaces the token). Copy the config again.
 - Desktop app: a config containing a `127.0.0.1:<port>` address goes stale when the app

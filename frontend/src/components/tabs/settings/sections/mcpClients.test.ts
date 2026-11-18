@@ -126,7 +126,6 @@ describe('MCP client snippets', () => {
       url: `${ORIGIN}/mcp`,
       headers: { Authorization: 'Bearer TOK' },
     })
-    expect(snippet('chatgpt', ctx())).toContain('Authorization: Bearer TOK')
   })
 
   it('the launch note says what path to use when the server could not find onw', () => {
