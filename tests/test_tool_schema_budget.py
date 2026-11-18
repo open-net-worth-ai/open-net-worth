@@ -287,11 +287,10 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # re-wording raise sets). show_visual (flag inline_visuals, ~2.6K chars after trimming):
     # inline charts, figures and timelines whose numbers are references into earlier tool
     # results (docs/design/inline-visuals.md). CORE, so it also counts in the offer below.
-    # 2026-11-15/18: 483_700 -> 496_000. Paper Trading's ten tools (ADR 2026-11-15-paper-trading-
-    # is-a-simulated-book-never-an-order-path) add ~11,800 chars, and the paper mandate's fields
-    # (create/update_paper_portfolios, place_paper_orders' override_mandate) ~600 more. Not CORE,
-    # so the default offer is unchanged.
-    budget = 496_000
+    # 2026-11-15/18: 483_700 -> 497_100. Paper Trading's ten tools (ADR 2026-11-15-paper-trading-
+    # is-a-simulated-book-never-an-order-path), their mandate fields included: 13,374 chars
+    # measured. Not CORE, so the default offer is unchanged.
+    budget = 497_100
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."
