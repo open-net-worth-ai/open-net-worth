@@ -206,8 +206,13 @@ def series(
     through_day = _intraday(row, book, events, points, flows, value_now)
     if through_day:
         last = through_day[-1]
-        yours = _your_line(points[0]["date"])
-        days = [d for d in yours if d <= points[-1]["date"]]
+        # Your real investments, reconstructed at the same moments (yours_intraday): the line
+        # and its figure are one calculation, so they always agree.
+        from backend.services.paper_trading import yours_intraday
+
+        yours = yours_intraday.line([p["date"] for p in through_day])
+        for p in through_day:
+            p["yours"] = yours.get(p["date"])
         return {
             "series": through_day,
             "intraday": True,
@@ -215,7 +220,7 @@ def series(
             "benchmark": {"symbol": row.get("benchmark"), "return_pct": last["benchmark"]}
             if row.get("benchmark")
             else None,
-            "yours_return_pct": yours[max(days)] if days else None,
+            "yours_return_pct": last.get("yours"),
             "simulated": True,
         }
     days = RANGES.get(rng.upper())

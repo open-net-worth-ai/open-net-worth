@@ -54,8 +54,9 @@ The page picks up a fill on its own, without a reload.
 The page shows your **Paper value** (holdings plus cash) and **Cash left** (not yet invested),
 then **Performance**: the return since you started, beside your real investments and the
 benchmark. In its first days the chart follows the day as it went, from the benchmark's last
-close before you started; your investments, which have daily values only, show as a figure
-until the chart turns daily after the first week. Pick **1W**, **1M**, **3M**, **1Y** or **All**
+close before you started. Your investments follow the day too: what you held each day, at each
+holding's price at that moment (a fund or a price you set stays at its last close). A day's
+trades count from that day's start, so this figure can differ a little from Investments'. Pick **1W**, **1M**, **3M**, **1Y** or **All**
 under the chart. **By sector** rings what it holds, as on Copy Trading (cash left out); tap a
 sector to list only its holdings. Below are **Holdings** (click a row to open that asset's page), **Orders** and
 **Activity** (every trade, with its **Why**).
