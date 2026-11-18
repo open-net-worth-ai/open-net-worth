@@ -73,10 +73,10 @@ FLAGS: tuple[Flag, ...] = (
             "introduced in the conversation instead of in its instructions, so the CLI keeps "
             "its running process and prompt cache. A turn that loads a tool then reads the "
             "cached prompt instead of writing ~40K tokens to cache again: faster, and less of "
-            "your plan's usage. Off: every tool load restarts the CLI with the full tool list, "
-            "as before. More in Help: Models and cost control."
+            "your plan's usage. On by default. Off: every tool load restarts the CLI with the "
+            "full tool list, as before. More in Help: Models and cost control."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 18),
         remove_by=date(2027, 2, 28),

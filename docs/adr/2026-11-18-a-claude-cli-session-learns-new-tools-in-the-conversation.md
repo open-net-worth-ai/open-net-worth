@@ -1,7 +1,8 @@
 # A Claude CLI live session learns a newly loaded tool in the conversation, not its system prompt
 
 - **Date**: 2026-11-18
-- **Status**: Proposed (behind `claude_cli_stable_tool_prompt`, default off)
+- **Status**: Accepted (behind `claude_cli_stable_tool_prompt`: default off when declared on
+  2026-11-18, default on since 2026-11-18 at the owner's call, after the 13-turn check below)
 - **Area**: AI transports (`backend/ai/models/claude_cli_provider.py`, `claude_live_session.py`)
 - **Amends**: `2026-08-01-claude-cli-live-sessions` (the session key only)
 
@@ -54,4 +55,12 @@ discovered tool schemas at the tail of its context.
   nothing is lost.
 - Not covered: the direct Anthropic API provider's `tools` array also grows per turn and sits at
   the front of the cache. `defer_loading` is the native fix there, and it is a separate decision.
-- Retire the flag by `remove_by` (2027-02-28): promote the on path, or delete it.
+- Retire the flag by `remove_by` (2027-02-28): delete the off path, or the on path if it misbehaves.
+
+## Reliability check (2026-11-18)
+
+The same 13-turn conversation ran once with the flag on and once with it off (sonnet, subscription
+login, synthetic book). It loads three tools early and calls them again 6–9 turns later. Flag on:
+14 tool calls, all valid against their schemas, no tool errors, no tool loaded twice, $0.21
+list-equivalent. Flag off: 12 calls, one with an argument the tool doesn't have, $0.69. On that
+evidence the owner made it the default.
