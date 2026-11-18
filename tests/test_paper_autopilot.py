@@ -105,7 +105,8 @@ def test_a_review_is_offered_only_reads_and_paper_tools_under_the_paper_guard(pa
     assert seen["enforce_offer"] is True
     assert seen["max_tool_calls"] == autopilot_run.MAX_TOOL_CALLS
     assert set(seen["allowed_tools"]) == set(autopilot_run.TOOLS)
-    assert not {"add_transactions", "web_search", "create_automation"} & set(seen["allowed_tools"])
+    assert not {"add_transactions", "fetch_page", "create_automation"} & set(seen["allowed_tools"])
+    assert seen["ctx"].outbound_reads == autopilot_run.OUTBOUND
     ctx = seen["ctx"]
     assert ctx.simulation_only and ctx.paper_portfolio_id == pid
     assert "max 20% per holding" in seen["prompt"] and "Prefer adding to winners." in seen["prompt"]

@@ -422,6 +422,11 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
                 {r.watching && r.status !== 'failed' && (
                   <p className="paper-ap-watching">Watching: {r.watching}</p>
                 )}
+                {(r.looked_up?.length ?? 0) > 0 && (
+                  <p className="paper-ap-watching">
+                    Looked up: {(r.looked_up ?? []).map(lookupLabel).join('; ')}
+                  </p>
+                )}
                 <div className="a3-muted">
                   {r.trigger ? `Started by: ${r.trigger}` : 'Started on schedule'} • Ran on{' '}
                   {modelLabel(r.model)} • {effortLabel(r.effort)}
@@ -440,4 +445,15 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
       })}
     </div>
   )
+}
+
+const LOOKUP_KIND: Record<string, string> = {
+  web_search: 'searched',
+  x_search: 'searched X for',
+  yahoo_get_price_history: 'price history of',
+  coingecko_get_price_history: 'price history of',
+}
+
+function lookupLabel(l: { tool: string; query: string }): string {
+  return `${LOOKUP_KIND[l.tool] ?? l.tool} “${l.query}”`
 }

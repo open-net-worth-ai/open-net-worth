@@ -56,9 +56,11 @@ export interface AutopilotRun {
   memo: string
   /** What Lucius is watching before the next review. */
   watching?: string | null
-  /** Why it ran: null = its schedule, "Review now", or what moved ("ACME fell 6.1% today"). */
+  /** Why it ran: null = its schedule, "Review now", or what moved ("ACME fell 6.1% in its last session"). */
   trigger?: string | null
   orders: { id: string; label: string; status: string }[]
+  /** What it looked up off the machine, in order: web and X searches, price histories. */
+  looked_up?: { tool: string; query: string }[]
   error: string | null
   /** What it ran on: '' is the app's default model. */
   model?: string

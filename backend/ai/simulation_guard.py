@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 OUTBOUND_READS = frozenset({"fetch_page", "web_search", "x_search", "search_institutions"})
 # Writes that later turns read as instructions: never from a paper run.
 PERSISTENT_INSTRUCTIONS = frozenset({"save_code_as_skill"})
+# Never allowed by a run's ``outbound_reads``: a URL the model picks (a planted link in a search
+# result) is the step from reading text to being steered by it.
+NEVER_OUTBOUND = frozenset({"fetch_page", "search_institutions"})
 _SIM_WRITE_DOMAINS = frozenset({"paper", "artifacts", "notification_log"})
 
 
@@ -61,9 +64,29 @@ def allows(tool_name: str) -> bool:
     return domains <= (_SIM_WRITE_DOMAINS | SIMULATION_DOMAINS)
 
 
-def refusal(tool_name: str) -> Optional[tuple[str, None]]:
+def _allowed_outbound(tool_name: str, input_data: Optional[dict]) -> bool:
+    """A read the run's context names in ``outbound_reads`` (the paper autopilot's searches and
+    public price histories): still a pure read, never a page fetch. Logged for the review."""
+    from backend.ai.tools.registry import has_external_effect, is_registered, written_domains
+    from backend.core.automation_runner import get_automation_approval
+
+    context = get_automation_approval()
+    if context is None or tool_name not in context.outbound_reads or tool_name in NEVER_OUTBOUND:
+        return False
+    if not is_registered(tool_name) or has_external_effect(tool_name):
+        return False
+    if written_domains(tool_name):
+        return False
+    if context.outbound_log is not None:
+        args = input_data or {}
+        what = args.get("query") or args.get("ticker") or args.get("coin") or ""
+        context.outbound_log.append({"tool": tool_name, "query": str(what)[:200]})
+    return True
+
+
+def refusal(tool_name: str, input_data: Optional[dict] = None) -> Optional[tuple[str, None]]:
     """The refusal for this call in a ``simulation_only`` run, or None when it may proceed."""
-    if not active() or allows(tool_name):
+    if not active() or allows(tool_name) or _allowed_outbound(tool_name, input_data):
         return None
     logger.info("simulation_only: refused %s", tool_name)
     return (

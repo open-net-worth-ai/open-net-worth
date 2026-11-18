@@ -111,8 +111,13 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
   anything;
 - ends with a memo Lucius writes for you, plus what he is watching next. A review that ends
   without one counts as failed;
-- trades only this paper portfolio, and reads nothing beyond prices, its holdings' headlines,
-  your theses and Intel (no real accounts, no connectors, no web search or browsing);
+- can also search the web and X when the stored news doesn't explain a move, read a longer
+  price history, check the dividend calendar before buying near an ex-date, and look at your
+  watchlist and Intel's latest analysis for ideas. It never opens a web page, so a link in a
+  search result can't steer it. **History** lists every search and price history it looked up;
+- trades only this paper portfolio. Your watchlist, Intel's analysis and the dividend calendar
+  name stocks you really hold, so it sees those, but it never reads your accounts, never uses a
+  connector, and never writes anything outside the paper portfolio;
 - can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
   such as a holding past its stop loss or over its cap.
 
@@ -128,7 +133,7 @@ Set **Schedule**, **Model** and **Instructions** (anything Lucius should keep in
 left. **Model** picks what each review runs on, and its effort: **Default** follows Settings →
 AI, so one portfolio can run on a cheaper model and another on a stronger one. **Review now** runs
 a review within a minute. **History** lists every review, including one that made no trades;
-open one to read its memo, its trades and the model it ran on. Two failed reviews in a row pause
+open one to read its memo, its trades, what it looked up and the model it ran on. Two failed reviews in a row pause
 the autopilot; switch it on again to resume. **Start over** keeps the autopilot's settings, not
 its history. Each review is a Lucius turn, so it uses that model like a chat does.
 

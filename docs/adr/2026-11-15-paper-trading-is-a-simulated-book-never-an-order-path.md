@@ -110,3 +110,22 @@ noisier news than the asset page showed, and missed Intel's history.
 
 Contracts 6 and 7 are unchanged: the seam is in `core`, and paper still imports no real write
 choke.
+
+## Amendment (2026-11-18): an autopilot review may search, never fetch a page
+
+The owner asked that the autopilot have every tool and piece of data a trading decision needs.
+A paper review now also gets `web_search`, `x_search`, the public price histories
+(`yahoo_get_price_history`, `coingecko_get_price_history`), the owner's watchlist, Intel's digest
+and the dividend calendar.
+
+- The paper-only guard still refuses every outbound read and connector tool for a paper
+  Automation. The ONE widening is a run context's `outbound_reads`, a set of tool names that only
+  `autopilot_run` sets (`OUTBOUND`). An allowed call must still be a registered pure read with no
+  external effect and no written domain. `fetch_page` and `search_institutions` are never
+  allowed, whatever the set says (`NEVER_OUTBOUND`): a URL the model picks from a result is the
+  step from reading planted text to being steered by it.
+- What an injected page could do is bounded by what the review can call: this portfolio's paper
+  orders, inside a mandate it cannot override. Every allowed outbound call is logged on the run
+  (`looked_up`), and History shows it.
+- The digest and the watchlist describe the owner's real book. A review reads them for ideas and
+  is told never to repeat their amounts. Its writes are still paper-only.

@@ -1017,7 +1017,7 @@ async def _dispatch_call(
         return unknown, None
     from backend.ai import simulation_guard
 
-    simulated = simulation_guard.refusal(name)
+    simulated = simulation_guard.refusal(name, input_data)
     if simulated is not None:
         # A paper-only Automation: refused before any permission engine, judge or card.
         _record_call(name, invoked, input_data, simulated[0], started, ())

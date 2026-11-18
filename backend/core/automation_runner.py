@@ -37,6 +37,12 @@ class AutomationApprovalContext:
     # The paper portfolio a paper Automation is bound to, if any: its paper writes may touch only
     # that portfolio's lineage (its runs across Start over).
     paper_portfolio_id: str | None = None
+    # Reads a paper run may send off the machine anyway (a search query, a public price
+    # history), named one by one. Set only by the paper autopilot, never from stored or model
+    # text; a page fetch is never one (``ai.simulation_guard``). Each allowed call is appended
+    # to ``outbound_log`` so the review can show what it looked up.
+    outbound_reads: frozenset[str] = frozenset()
+    outbound_log: list | None = None
 
 
 _approval_context: ContextVar[AutomationApprovalContext | None] = ContextVar(

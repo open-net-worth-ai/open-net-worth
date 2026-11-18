@@ -266,6 +266,8 @@ def finish(pid: str, record: dict) -> dict:
             "model": record.get("model") or "",
             "effort": record.get("effort") or "medium",
             "orders": record.get("orders") or [],
+            # What it looked up off the machine (searches, price histories), in order.
+            "looked_up": record.get("looked_up") or [],
             "error": error,
         }
         failures = a["failures"] + 1 if status == "failed" else 0

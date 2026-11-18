@@ -190,3 +190,69 @@ def test_review_now_is_its_own_reason(paper_db, monkeypatch):
     monkeypatch.setattr(headless_turn, "_runner", runner)
     asyncio.run(autopilot_run.review(pid))
     assert views.page(pid)["autopilot"]["runs"][0]["trigger"] == "Review now"
+
+
+# ── outbound reads ──────────────────────────────────────────────────────────────────────────
+
+
+def _bind(**kw):
+    from backend.core.automation_runner import AutomationApprovalContext, bind_automation_approval
+
+    return bind_automation_approval(
+        AutomationApprovalContext(run_id="r", session_id="", mode="manual", **kw)
+    )
+
+
+def test_a_review_may_search_and_its_run_shows_what_it_looked_up(paper_db, monkeypatch):
+    from backend.ai import simulation_guard
+
+    pid = _auto_portfolio()
+    apply_paper_change({"op": "autopilot_run_now", "id": pid})
+    seen: dict = {}
+
+    async def runner(prompt, **kw):
+        seen["tools"] = kw["allowed_tools"]
+        seen["search"] = simulation_guard.refusal("web_search", {"query": "ACME earnings"})
+        seen["history"] = simulation_guard.refusal("yahoo_get_price_history", {"ticker": "ACME"})
+        seen["fetch"] = simulation_guard.refusal("fetch_page", {"url": "https://x/1"})
+        facade.record_memo(get_automation_approval().paper_portfolio_id, "Held.", None)
+        return ""
+
+    monkeypatch.setattr(headless_turn, "_runner", runner)
+    asyncio.run(autopilot_run.review(pid))
+    assert seen["search"] is None and seen["history"] is None
+    assert seen["fetch"] is not None  # a page fetch is never allowed
+    assert {"web_search", "x_search", "get_watchlist", "get_intel_digest"} <= set(seen["tools"])
+    [run] = views.page(pid)["autopilot"]["runs"]
+    assert run["looked_up"] == [
+        {"tool": "web_search", "query": "ACME earnings"},
+        {"tool": "yahoo_get_price_history", "query": "ACME"},
+    ]
+
+
+def test_a_paper_automation_still_cannot_search():
+    from backend.ai import simulation_guard
+    from backend.core.automation_runner import reset_automation_approval
+
+    token = _bind(automation_id="auto_1", simulation_only=True)
+    try:
+        assert simulation_guard.refusal("web_search", {"query": "ACME"}) is not None
+        assert simulation_guard.refusal("yahoo_get_price_history", {"ticker": "ACME"}) is not None
+    finally:
+        reset_automation_approval(token)
+
+
+def test_a_page_fetch_or_a_write_is_never_an_outbound_read_even_if_named():
+    from backend.ai import simulation_guard
+    from backend.core.automation_runner import reset_automation_approval
+
+    token = _bind(
+        automation_id="autopilot:p",
+        simulation_only=True,
+        outbound_reads=frozenset({"fetch_page", "delete_accounts"}),
+    )
+    try:
+        assert simulation_guard.refusal("fetch_page", {"url": "https://x"}) is not None
+        assert simulation_guard.refusal("delete_accounts", {}) is not None
+    finally:
+        reset_automation_approval(token)
