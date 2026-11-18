@@ -108,31 +108,3 @@ def test_nothing_to_draw_without_intraday_bars():
         "2026-11-16T14:30:00Z",
         "2026-11-16T20:00:00Z",
     ]
-
-
-def test_your_investments_sit_on_each_days_last_point(monkeypatch):
-    """Your real investments have one value a day: on the through-the-day chart each goes on its
-    day's last point (in the owner's zone) and the start is 0, so the line joins real values."""
-    from backend.services.paper_trading import performance
-
-    sgt = timezone(timedelta(hours=8))
-    monkeypatch.setattr(performance, "user_now", lambda: datetime(2026, 11, 18, 9, tzinfo=sgt))
-    stamps = [
-        "2026-11-16T08:59:00Z",  # start: 16:59 on the 16th, SGT
-        "2026-11-16T14:30:00Z",  # 22:30 on the 16th: the 16th's last
-        "2026-11-16T20:00:00Z",  # 04:00 on the 17th
-        "2026-11-17T14:30:00Z",  # 22:30 on the 17th: the 17th's last
-        "2026-11-17T20:00:00Z",  # 04:00 on the 18th: the 18th's last
-    ]
-    points = [{"date": s, "yours": None} for s in stamps]
-    yours = {"2026-11-16": -0.01, "2026-11-17": -0.03, "2026-11-18": -0.05}
-    performance._place_your_days(points, yours)
-    assert [p["yours"] for p in points] == [0.0, -0.01, None, -0.03, -0.05]
-
-
-def test_no_investments_no_line():
-    from backend.services.paper_trading import performance
-
-    points = [{"date": "2026-11-16T08:59:00Z", "yours": None}]
-    performance._place_your_days(points, {})
-    assert points[0]["yours"] is None

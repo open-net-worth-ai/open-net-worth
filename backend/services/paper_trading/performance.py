@@ -9,7 +9,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 
 from backend.core.config import get_settings
-from backend.core.user_time import user_now, user_today
+from backend.core.user_time import user_today
 from backend.services import returns
 from backend.services.followed_portfolios import performance as followed_performance
 from backend.services.paper_trading.book import Book
@@ -134,24 +134,6 @@ def _your_line(start: str) -> dict[str, float]:
     return {d: round((1.0 + float(v)) / base - 1.0, 6) for d, v in line.items() if d >= start}
 
 
-def _place_your_days(points: list[dict], yours: dict[str, float]) -> None:
-    """On the through-the-day chart, your investments have one value a day (their daily close):
-    each goes on that day's last point, and the start point is 0, so the chart joins a line
-    through real values only, never an estimate between them."""
-    if not yours or not points:
-        return
-    tz = user_now().tzinfo
-    last_of_day: dict[str, int] = {}
-    for i, p in enumerate(points):
-        at = datetime.fromisoformat(str(p["date"]).replace("Z", "+00:00"))
-        last_of_day[at.astimezone(tz).date().isoformat()] = i
-    points[0]["yours"] = 0.0
-    for day, value in yours.items():
-        i = last_of_day.get(day)
-        if i:  # never the start point, which is 0 by definition
-            points[i]["yours"] = value
-
-
 def summary(
     row: dict, book: Book, values: list[dict], value_now: float | None, *, with_yours: bool = False
 ) -> dict:
@@ -225,7 +207,6 @@ def series(
     if through_day:
         last = through_day[-1]
         yours = _your_line(points[0]["date"])
-        _place_your_days(through_day, yours)
         days = [d for d in yours if d <= points[-1]["date"]]
         return {
             "series": through_day,
