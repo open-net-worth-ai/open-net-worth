@@ -123,6 +123,36 @@ def test_revoked_grant_survives_restore(isolated):
     assert perms.stored_tool_level(perms.CORE_CONNECTOR_ID, "add_transactions") is None
 
 
+def test_trading_records_are_not_rolled_back_by_restore(isolated):
+    from backend.db.trading_store import TradingStore
+
+    grants = TradingStore("grants")
+    events = TradingStore("events")
+    grants.insert({"id": "grant_synthetic", "scope_id": "run_synthetic", "active": True})
+    backup = backup_service.run_backup(now=_NOW)
+    assert backup["ok"] is True
+    grants.update_by_id("grant_synthetic", {"active": False})
+    events.insert({"id": "event_synthetic", "scope_id": "run_synthetic"})
+
+    result = _restore_and_reconnect(backup["name"])
+    assert result["ok"] is True
+    assert grants.required("grant_synthetic")["active"] is False
+    assert events.required("event_synthetic")["id"] == "event_synthetic"
+
+
+def test_sanitised_backup_strips_trading_grants(isolated, tmp_path):
+    from backend.db.trading_store import TradingStore
+
+    sentinel = "synthetic-trading-grant-sentinel"
+    TradingStore("grants").insert({"id": "grant_synthetic", "scope_id": "", "token": sentinel})
+    backup = backup_service.run_backup(now=_NOW)
+    assert backup["ok"] is True
+    destination = tmp_path / "sanitised.zip"
+    assert backup_service.write_sanitised_copy(backup["name"], destination)["ok"] is True
+    with zipfile.ZipFile(destination) as archive:
+        database = archive.read(next(name for name in archive.namelist() if name.endswith(".db")))
+    assert sentinel.encode() not in database
+
 # ── 2. The audit trail is never erased by a restore ────────────────────────────────────────
 
 

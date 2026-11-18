@@ -12,6 +12,7 @@ mechanism docstring and the compatibility re-export shim.
 
 from __future__ import annotations
 
+from backend.core.sensitive import TRADING_OPERATIONAL_TABLES
 from backend.paths import (
     AGENT_FINDINGS_JSON,
     ALPACA_CONFIG_JSON,
@@ -321,3 +322,5 @@ _EXCLUDED_TABLES = frozenset(
 # to do for them. Keep the dict (and `snapshot_before_write`'s lookup) for any FUTURE
 # file-pair — this is an emptied instance of a still-real mechanism, not a retired one.
 _COMPANIONS: dict[str, tuple[str, ...]] = {}
+
+_EXCLUDED_TABLES |= TRADING_OPERATIONAL_TABLES | {"trading_control"}

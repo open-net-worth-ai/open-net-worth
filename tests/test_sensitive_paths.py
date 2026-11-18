@@ -242,6 +242,14 @@ def test_non_restorable_tables_matches_db_resident_non_restorable_files():
     # DB-native from their first revision — no JSON file ever existed, so there is no
     # NON_RESTORABLE_FILES entry to pair them with and nothing for check 1 to assert.
     db_native_non_restorable = {
+        "trading_workspaces",
+        "trading_runs",
+        "trading_accounts",
+        "trading_orders",
+        "trading_fills",
+        "trading_events",
+        "trading_comparisons",
+        "trading_grants",
         "desktop_access_grants",
         "desktop_ingest_jobs",
         "import_runs",
