@@ -102,8 +102,14 @@ def networth_stats(base: str | None = None) -> dict:
     rendering, not arithmetic.
     """
     base = (base or base_currency()).upper()
+    epoch = read_cache.current_epoch()
     history = ledger_service.net_worth_history()
     net_worth = ledger_service.net_worth(base)["net_worth"]
+    # The two reads are not one snapshot. A write landing between them (a live price refresh,
+    # most often) left the series on the old prices, so every range change ended at a different
+    # figure than the headline beside it. Re-read the series once when anything was written.
+    if epoch is not None and read_cache.current_epoch() != epoch:
+        history = ledger_service.net_worth_history()
 
     # Points before price collection began carry no market value, so a range that straddles
     # that boundary would read a pure bookkeeping artifact as a gain. Compare like with like.

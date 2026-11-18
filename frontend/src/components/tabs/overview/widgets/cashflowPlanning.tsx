@@ -764,11 +764,19 @@ const Crossover: ComponentType<WidgetContentProps> = ({ instance, def, onNavigat
   const passiveMonthly = crossover.passive_monthly
   const pct = Math.round(crossover.coverage_pct)
   const toGo = crossover.to_go_monthly
-  let yearLabel = '—'
-  if (fire.data) {
-    if (fire.data.progress_pct >= 100) yearLabel = 'Now'
-    else if (fire.data.years_to_fire != null)
-      yearLabel = String(new Date().getFullYear() + Math.round(fire.data.years_to_fire))
+  // The headline must agree with the coverage figure under it. "Now" means passive income
+  // covers spending today. The FIRE year is a projection only while the FIRE number is still
+  // ahead: a book past it (a large home, say) whose passive income still covers 2% read "Now".
+  let yearLabel: string
+  let projected = true
+  if (crossover.coverage_pct >= 100) {
+    yearLabel = 'Now'
+    projected = false
+  } else if (fire.data && fire.data.progress_pct < 100 && fire.data.years_to_fire) {
+    yearLabel = String(new Date().getFullYear() + Math.round(fire.data.years_to_fire))
+  } else {
+    yearLabel = 'Not yet'
+    projected = false
   }
 
   return (
@@ -776,7 +784,7 @@ const Crossover: ComponentType<WidgetContentProps> = ({ instance, def, onNavigat
       <div className="ov-cross">
         <div className="ov-cross-hd">
           <span className="ov-cross-yr">{yearLabel}</span>
-          <span className="ov-cross-note">projected</span>
+          {projected && <span className="ov-cross-note">projected</span>}
         </div>
         <div className="ov-env-bar ov-goal-bar">
           <span className="ov-env-fill" style={{ width: `${pct}%`, background: 'var(--good)' }} />
@@ -933,7 +941,13 @@ const PlanFire: ComponentType<WidgetContentProps> = ({ instance, def }) => {
           label="FIRE number"
         />
         <InsHeadStat
-          value={data.years_to_fire != null ? `${data.years_to_fire.toFixed(1)} yrs` : '50+ yrs'}
+          value={
+            data.years_to_fire === 0
+              ? '0 yrs'
+              : data.years_to_fire != null
+                ? `${data.years_to_fire.toFixed(1)} yrs`
+                : '50+ yrs'
+          }
           label="to independence"
           color="var(--good)"
         />

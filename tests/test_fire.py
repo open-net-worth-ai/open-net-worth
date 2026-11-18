@@ -386,17 +386,22 @@ def test_compute_fire_projected_fire_age_equals_current_age_plus_years():
         assert result["projected_fire_age"] == pytest.approx(expected, abs=0.15)
 
 
-def test_compute_fire_already_past_fire_number_fires_quickly():
-    """When NW already exceeds fire_number, years_to_fire rounds to 0.1 (month 1 / 12 = 0.083 → rounds to 0.1)."""
-    result = _fire(
-        current_nw=2_000_000.0,
-        monthly_retirement_spending=5_000.0,
-        withdrawal_rate_pct=4.0,
-    )
-    # fire_number = 1,500,000 — already exceeded.
-    # The loop fires after month 1; round(1/12, 1) == 0.1.
-    assert result["years_to_fire"] is not None
-    assert result["years_to_fire"] <= 0.1  # single-month resolution
+def test_compute_fire_already_past_fire_number_is_zero_years_away():
+    """At or past the FIRE number is 0 years away, and the projected age is today's age.
+
+    Regression: the loop stepped a month before its first check, so a book already past its
+    FIRE number read "0.1 yrs to independence" on the dashboard. And 0 must stay 0 in the
+    payload, not turn into None (which the widget renders as "50+ yrs")."""
+    for nw in (1_500_000.0, 2_000_000.0):  # fire_number = 1,500,000: equal to, and past it
+        result = _fire(
+            current_nw=nw,
+            monthly_retirement_spending=5_000.0,
+            withdrawal_rate_pct=4.0,
+            current_age=35.0,
+        )
+        assert result["years_to_fire"] == 0.0
+        assert result["projected_fire_age"] == 35.0
+        assert result["on_track"] is True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
