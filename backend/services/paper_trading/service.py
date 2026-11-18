@@ -438,24 +438,12 @@ def _pre_trade_check(change, row, asset, order, quote, fxq, now) -> list[dict]:
     return breaches
 
 
-def _refuse_past_autopilot_cap(row: dict, origin: str, *, conn: Connection) -> None:
-    """A review places at most ``MAX_ORDERS_PER_RUN`` orders, counted here, not by the model."""
+def _refuse_outside_a_review(row: dict, origin: str) -> None:
+    """The autopilot places orders only while one of its reviews is running."""
     from backend.services.paper_trading import autopilot
 
-    if origin != "autopilot":
-        return
-    started = autopilot.run_started_at(row)
-    if not started:
+    if origin == "autopilot" and not autopilot.run_started_at(row):
         raise ConflictError("The autopilot trades only during a review.")
-    placed = sum(
-        1
-        for o in portfolio_orders(row["id"], conn=conn)
-        if o.get("origin") == "autopilot" and str(o.get("placed_at")) >= started
-    )
-    if placed >= autopilot.MAX_ORDERS_PER_RUN:
-        raise ConflictError(
-            f"An autopilot review places at most {autopilot.MAX_ORDERS_PER_RUN} orders."
-        )
 
 
 def _place(change: dict) -> dict:
@@ -473,7 +461,7 @@ def _place(change: dict) -> dict:
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = portfolio(row["id"], conn=conn)
         _require_active(row)
-        _refuse_past_autopilot_cap(row, origin, conn=conn)
+        _refuse_outside_a_review(row, origin)
         bk = derive(row["id"], conn=conn)
         open_orders = [o for o in portfolio_orders(row["id"], conn=conn) if o["status"] == "open"]
         if len(open_orders) >= MAX_OPEN_ORDERS:

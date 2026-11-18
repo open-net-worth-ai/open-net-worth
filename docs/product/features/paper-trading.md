@@ -107,7 +107,7 @@ Auto needs a mandate: it is what you approve in advance. A review:
 
 - trades only this paper portfolio, and can read prices, your investment theses and Intel,
   but nothing else (no real accounts, no connectors, no web);
-- places at most 5 orders, and can never break the mandate (no **Place anyway** for it);
+- can never break the mandate (no **Place anyway** for it);
 - fixes a broken limit first, such as a holding past its stop loss or over its cap.
 
 Add standing instructions in **Anything Lucius should keep in mind**. **Review now** runs a

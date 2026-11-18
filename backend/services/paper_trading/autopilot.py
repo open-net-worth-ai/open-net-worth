@@ -8,8 +8,9 @@ never an Automation: it lives on the row (``autopilot``, additive) and goes with
 This module holds the settings, the schedule and the run log — every write through
 ``apply_paper_change`` (ops ``autopilot`` and ``autopilot_run``). The review itself is
 ``autopilot_run``. The limits that matter are enforced here and in the paper choke, never left
-to the model: Auto needs a mandate, a review places at most ``MAX_ORDERS_PER_RUN`` orders and can
-never break the mandate, one review runs at a time, and two failed reviews in a row pause it."""
+to the model: Auto needs a mandate, a review can never break it and trades only while it runs,
+one review runs at a time, and two failed reviews in a row pause it. There is no cap on how many
+orders a review places (owner, 2026-11-18)."""
 
 from __future__ import annotations
 
@@ -25,7 +26,6 @@ MODES = ("manual", "auto")
 CADENCES = ("daily", "weekly")
 # Reviews run at this time in the owner's zone: daily on weekdays, weekly on Mondays.
 RUN_AT = time(10, 0)
-MAX_ORDERS_PER_RUN = 5
 MAX_RUNS_KEPT = 20
 FAILURES_TO_PAUSE = 2
 MAX_INSTRUCTIONS = 600
@@ -87,7 +87,6 @@ def view(row: dict) -> dict:
         ),
         "paused_reason": a["paused_reason"],
         "runs": list(reversed(a["runs"]))[:MAX_RUNS_KEPT],
-        "max_orders_per_run": MAX_ORDERS_PER_RUN,
     }
 
 

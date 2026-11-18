@@ -7,7 +7,7 @@ else — and the paper-only guard Automations use (``AutomationApprovalContext``
 ``simulation_only`` and the portfolio bound), so dispatch refuses any real write, connector or
 outbound tool, and every paper write outside this portfolio, whatever the model asks for. Its
 orders carry the origin ``autopilot``: the paper choke refuses one that breaks the mandate and
-caps how many a review may place."""
+refuses one placed outside a review."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def prompt(row: dict) -> str:
         "candidates (prices, theses, technicals, fundamentals, the Intel digest).",
         "2. Decide whether to trade. Doing nothing is often right: trade only for a reason you "
         "can state in one sentence, in the goal's terms.",
-        f"3. Place at most {autopilot.MAX_ORDERS_PER_RUN} paper orders, sells first, each with a "
+        "3. Place the paper orders you decide on, sells first, each with a "
         "short Why. Preview a buy if you are unsure it keeps the mandate. A buy that breaks a "
         "limit is refused: never try to break one. Fix any limit that is broken now (a holding "
         "over its cap, cash below its floor, a holding past its stop loss) before anything else.",

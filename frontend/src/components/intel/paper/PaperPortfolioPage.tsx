@@ -276,7 +276,7 @@ export function PaperPortfolioPage({
             // Remount after a save, so its fields start from what is stored.
             key={`${data.autopilot.mode}-${data.autopilot.cadence}-${data.autopilot.instructions}`}
             autopilot={data.autopilot}
-            hasMandate={!!p.mandate}
+            mandate={p.mandate}
             archived={archived}
             portfolioId={id}
             onEditMandate={() => setEditing(true)}

@@ -1,6 +1,6 @@
 """Paper autopilot: Manual or Auto. Auto needs a mandate; a review is one Lucius turn offered only
 reads and this portfolio's paper tools, under the paper-only guard bound to the portfolio; its
-orders are "autopilot", can never break the mandate, are capped per review, and only happen
+orders are "autopilot", can never break the mandate, and only happen
 during a review; the memo is logged; two failures in a row pause it; Start over keeps the
 settings, not the log. Lucius here is a fake runner — no model is called."""
 
@@ -127,22 +127,12 @@ def test_a_review_can_never_break_the_mandate(paper_db, lucius):
     assert views.page(pid)["holdings"] == []
 
 
-def test_a_review_places_at_most_five_orders(paper_db, lucius):
+def test_a_review_has_no_cap_on_its_orders(paper_db, lucius):
     pid = _new()["id"]
     _auto(pid)
-    errors: list[str] = []
-
-    def act():
-        for _ in range(autopilot.MAX_ORDERS_PER_RUN + 1):
-            try:
-                _buy(pid, 1)
-            except ConflictError as exc:
-                errors.append(str(exc))
-
-    lucius(act=act)
+    lucius(act=lambda: [_buy(pid, 1) for _ in range(8)])
     out = _review(pid)
-    assert len(out["orders"]) == autopilot.MAX_ORDERS_PER_RUN
-    assert errors == [f"An autopilot review places at most {autopilot.MAX_ORDERS_PER_RUN} orders."]
+    assert len(out["orders"]) == 8
 
 
 def test_the_autopilot_trades_only_during_a_review(paper_db):

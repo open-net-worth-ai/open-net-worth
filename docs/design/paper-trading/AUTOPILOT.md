@@ -71,8 +71,9 @@ it lives on, and is deleted with, the portfolio.
 the portfolio row) and `autopilot_run.py` (one review). A review is one headless Lucius turn
 (`core.headless_turn`) with an ENFORCED tool offer (reads + the paper tools) and the paper-only
 guard bound to the portfolio (`AutomationApprovalContext`, `simulation_only`,
-`paper_portfolio_id`); its orders carry origin `autopilot`, which the paper choke refuses past
-5 per review, outside a review, or across the mandate (no override). Daily (weekdays) or weekly
+`paper_portfolio_id`); its orders carry origin `autopilot`, which the paper choke refuses outside
+a review or across the mandate (no override). No cap on orders per review (owner, 2026-11-18:
+a 5-order cap was built, then removed). Daily (weekdays) or weekly
 (Mondays) at 10:00 in the owner's zone; "Review now" sets the next review to now and the
 scheduler's one-minute pass runs it. Two failures in a row pause it. Not built yet: event
 triggers (buy zone, stop, drift), a monthly model-cost ceiling, and Lucius turning autopilot on

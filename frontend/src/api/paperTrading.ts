@@ -69,7 +69,6 @@ export interface PaperAutopilot {
   review_soon: boolean
   paused_reason: string | null
   runs: AutopilotRun[]
-  max_orders_per_run: number
 }
 
 export interface PaperCard {

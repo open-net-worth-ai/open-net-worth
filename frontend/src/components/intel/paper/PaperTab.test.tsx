@@ -118,7 +118,6 @@ const page = {
     review_soon: false,
     paused_reason: null,
     runs: [],
-    max_orders_per_run: 5,
   },
 }
 
@@ -322,8 +321,6 @@ describe('Paper Trading', () => {
       await waitFor(() =>
         expect(api.autopilot).toHaveBeenCalledWith('ppf_1', {
           mode: 'auto',
-          cadence: 'daily',
-          instructions: '',
         }),
       )
     } finally {
