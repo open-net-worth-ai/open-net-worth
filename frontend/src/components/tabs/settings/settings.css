@@ -4091,4 +4091,18 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+  /* A step's fix button drops under its label instead of squeezing it. */
+  .onw-settings .mcp-check__item {
+    flex-wrap: wrap;
+  }
+  .onw-settings .mcp-check__text {
+    flex-basis: calc(100% - 37px);
+  }
+  .onw-settings .mcp-check__item > .rd-btn {
+    margin-left: 27px;
+  }
+  .onw-settings .mcp-other {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

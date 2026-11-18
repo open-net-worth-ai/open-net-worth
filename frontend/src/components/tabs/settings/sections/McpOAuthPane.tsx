@@ -3,6 +3,7 @@
 // apps already connected. Credentials for any other app sit behind a disclosure at the end.
 import { useState } from 'react'
 import { Circle, CircleCheck } from '../../../../ui/icons'
+import { InfoPopover } from '../../../ui'
 import { Btn, Panel } from '../ds'
 import type { Toast } from '../ds'
 import {
@@ -26,7 +27,7 @@ function steps(status: OAuthStatus | null): Step[] {
   const flag: Step = {
     done: status !== null,
     label: 'OAuth is switched on',
-    hint: 'Experimental, under Developer → Experimental → Mcp oauth.',
+    hint: 'An experimental switch, under Developer → Experimental.',
     fix: { label: 'Open Developer', section: 'developer' },
   }
   if (!status) return [flag]
@@ -42,7 +43,7 @@ function steps(status: OAuthStatus | null): Step[] {
     {
       done: !r.has('loopback_trusted'),
       label: 'The password is always required',
-      hint: 'Turn off "Don\'t ask for the password on this computer". Otherwise, people reaching your address from the internet could get in without it.',
+      hint: 'Turn off "Don\'t ask for the password on this computer": behind a proxy, visitors from the internet count as this computer.',
       fix: { label: 'Open Security', section: 'security' },
     },
     {
@@ -88,8 +89,10 @@ export function OAuthPane({
                 {step.done ? <CircleCheck size={17} /> : <Circle size={17} />}
               </span>
               <span className="mcp-check__text">
-                <span>{step.label}</span>
-                {step.hint && !step.done ? <span className="rd-help">{step.hint}</span> : null}
+                {step.label}
+                {step.hint && !step.done ? (
+                  <InfoPopover text={step.hint} label={`Why: ${step.label}`} />
+                ) : null}
               </span>
               {!step.done && step.fix && openSection ? (
                 <Btn size="xs" onClick={() => openSection(step.fix!.section)}>
