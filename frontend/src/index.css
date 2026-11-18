@@ -21299,9 +21299,28 @@ body.hide-amounts .mf-lbl-amt {
   display: grid;
   gap: 22px;
 }
+/* Type on the app's scale, not automations.css's own pixel sizes (12.5px, 11.5px): labels and
+   body at --text-base, notes and secondary text at --text-sm, fields at --text-md. */
+.paper-ap .a3-block-h {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.paper-ap .a3-block-h .count,
+.paper-ap .a3-muted,
+.paper-ap .a3-history-empty,
+.paper-ap .a3-hist-row .note {
+  font-size: var(--text-sm);
+}
+.paper-ap .a3-detail-state,
+.paper-ap .a3-hist-row .when {
+  font-size: var(--text-base);
+}
+.paper-ap .a3-linkbtn {
+  font-size: var(--text-sm);
+}
 .paper-ap-goal {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.6;
   max-width: 62ch;
 }
@@ -21310,7 +21329,7 @@ body.hide-amounts .mf-lbl-amt {
   gap: 4px;
   margin: 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--muted);
 }
 .paper-ap-run {
@@ -21321,8 +21340,8 @@ body.hide-amounts .mf-lbl-amt {
 }
 .paper-ap-run p {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: var(--text-base);
+  line-height: 1.6;
   max-width: 68ch;
 }
 .paper-ap-trades {
@@ -21330,7 +21349,7 @@ body.hide-amounts .mf-lbl-amt {
   gap: 4px;
   margin: 0;
   padding-left: 18px;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 /* The model, then its effort: two fields the size of the Schedule field above them. */
