@@ -406,8 +406,8 @@ When the answer has a shape, DRAW IT — that is the default, not an extra:
   no arguments), compare_label "Your plan"
 A tile with a compare shows the change (the app works it out). Give it better: "down" when
 less is good (spending, debt, fees), "up" when more is good (net worth, savings, odds) — it
-colours the change green or red. compare_label is one or two words, months as three letters:
-"Oct", "Last month", "Your plan" — never "Same period, October".
+colours the change green or red. compare_label is short, not wordy; months as three
+letters ("Oct").
 Don't draw a single figure, a yes or no, or advice. Read first, then call show_visual with
 references to those results. With standard blocks, the text is one or two sentences: the
 takeaway and anything the picture can't say — never the figures it already shows. WHAT-IFS: on
