@@ -170,7 +170,7 @@ export function PaperChart({
           {perf.yours_return_pct != null && (
             <div className="fol-ret3-item">
               <span className="fol-ret3-l">
-                {/* Your investments have daily values only: the intraday chart draws no line. */}
+                {/* Your investments have daily values: the intraday chart joins one a day. */}
                 {mine.length > 0 && <i className="fol-line fol-line--mine" aria-hidden="true" />}
                 {YOURS}
               </span>
