@@ -2,7 +2,9 @@ import '../../tabs/automations.css'
 
 import { useState } from 'react'
 import { ChevronRight, Play } from 'lucide-react'
-import { Button, ModelPicker, Select, Switch, TextArea } from '../../ui'
+import { Button, Select, Switch, TextArea, groupModels, modelRefOf } from '../../ui'
+import type { SelectOptGroup } from '../../ui'
+import type { ModelOption } from '../../../api/models'
 import { useModels } from '../../../hooks/useModels'
 import { fDateTime } from '../../../utils/format'
 import {
@@ -25,6 +27,36 @@ const EFFORT: { value: AutopilotEffort; label: string }[] = [
   { value: 'medium', label: 'Medium effort' },
   { value: 'high', label: 'High effort' },
 ]
+
+/** The model choices as Select groups: Default first (naming what it is now), then each
+ *  provider's models. A stored model the list no longer offers stays selectable. */
+function modelOptions(
+  models: ModelOption[],
+  defaultRef: string | undefined,
+  current: string,
+): SelectOptGroup[] {
+  const name = (ref: string) => {
+    const m = models.find((x) => modelRefOf(x) === ref || x.id === ref)
+    return m ? `${m.id} · ${m.provider_label ?? m.provider_key ?? ''}`.replace(/ · $/, '') : ref
+  }
+  const groups: SelectOptGroup[] = [
+    {
+      group: 'Default',
+      options: [{ value: '', label: defaultRef ? `Default (${name(defaultRef)})` : 'Default' }],
+    },
+    // "Preferred" repeats models listed under their provider: one place each.
+    ...groupModels(models)
+      .filter((g) => g.label !== 'Preferred')
+      .map((g) => ({
+        group: g.label,
+        options: g.models.map((m) => ({ value: modelRefOf(m), label: m.label ?? m.id })),
+      })),
+  ]
+  const known = groups.some((g) => g.options.some((o) => o.value === current))
+  if (current && !known)
+    groups.push({ group: 'Saved', options: [{ value: current, label: current }] })
+  return groups
+}
 
 const at = (iso: string) => fDateTime(iso, 'short', 'always')
 const effortLabel = (e?: string) =>
@@ -244,15 +276,13 @@ function Settings({
       <section className="a3-block">
         <div className="a3-block-h">AI model</div>
         <div className="paper-ap-model">
-          <ModelPicker
+          {/* The same Select as Schedule and Effort beside it, models grouped by provider. */}
+          <Select
             id="pp-ap-model"
-            label="AI model"
-            size="field"
-            models={models.models}
+            aria-label="AI model"
             value={model}
-            defaultLabel="Default"
-            defaultModelId={models.defaultModel}
-            onChange={setModel}
+            options={modelOptions(models.models, models.defaultModel, model)}
+            onChange={(e) => setModel(e.target.value)}
           />
           <Select
             aria-label="Effort"
