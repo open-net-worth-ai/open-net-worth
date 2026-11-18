@@ -2005,8 +2005,8 @@
     flex: none;
   }
   .consent-pair__tile img {
-    width: 36px;
-    height: 36px;
+    width: 42px;
+    height: 42px;
     object-fit: contain;
   }
   .consent-pair__tile--app {
