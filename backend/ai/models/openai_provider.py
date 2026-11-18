@@ -528,7 +528,8 @@ class OpenAIProvider(AIProvider):
         )
 
         # Accumulate streamed tool-call deltas by index → emit once complete.
-        tool_acc: dict[int, dict] = {}
+        tool_acc: dict[str | int, dict] = {}
+        tool_slots_by_index: dict[int, str | int] = {}
         finish_reason: Optional[str] = None
         # Usage fields — populated from the trailing usage chunk when
         # stream_options={"include_usage": True} is honoured by the endpoint. SUMMED
@@ -672,12 +673,18 @@ class OpenAIProvider(AIProvider):
                     #   - Ollama: generally mirrors OpenAI but may omit function on some deltas
                     for tc in getattr(delta, "tool_calls", None) or []:
                         delivered = True
-                        idx = getattr(tc, "index", 0) or 0
-                        slot = tool_acc.setdefault(
-                            idx, {"id": "", "name": "", "args": ""}
-                        )
-                        if getattr(tc, "id", None):
-                            slot["id"] = tc.id
+                        idx = getattr(tc, "index", None) or 0
+                        call_id = getattr(tc, "id", None)
+                        key = tool_slots_by_index.get(idx, idx)
+                        if call_id:
+                            # Gemini can omit the index on multiple distinct calls.
+                            # Keep their arguments and signatures attached to their IDs.
+                            if key == idx and idx in tool_acc and call_id not in tool_acc:
+                                tool_acc[call_id] = tool_acc.pop(idx)
+                            key = tool_slots_by_index[idx] = call_id
+                        slot = tool_acc.setdefault(key, {"id": "", "name": "", "args": ""})
+                        if call_id:
+                            slot["id"] = call_id
                         extra = getattr(tc, "extra_content", None)
                         google = extra.get("google") if isinstance(extra, dict) else None
                         signature = google.get("thought_signature") if isinstance(google, dict) else None

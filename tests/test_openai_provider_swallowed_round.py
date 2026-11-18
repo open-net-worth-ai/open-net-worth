@@ -223,3 +223,25 @@ async def test_incomplete_arguments_are_not_emitted(finish):
 
     assert not any(event["type"].startswith("tool_use") for event in events)
     assert events[-1] == {"type": "done", "stop_reason": "end_turn"}
+
+
+@pytest.mark.asyncio
+async def test_gemini_calls_without_indexes_keep_distinct_arguments_and_signatures():
+    first = NS(
+        id="call_1",
+        function=NS(name="list_accounts", arguments="{}"),
+        extra_content={"google": {"thought_signature": "signature"}},
+    )
+    second = NS(id="call_2", function=NS(name="find_tools", arguments='{"query":'))
+    tail = NS(id=None, function=NS(name=None, arguments='"accounts"}'))
+    events = await _events(_provider(_Completions([
+        _chunk(tool_calls=[first, second]),
+        _chunk(tool_calls=[tail], finish="stop"),
+    ])))
+
+    assert [event for event in events if event["type"] == "tool_use"] == [
+        {"type": "tool_use", "id": "call_1", "name": "list_accounts", "input": {},
+         "google_thought_signature": "signature"},
+        {"type": "tool_use", "id": "call_2", "name": "find_tools", "input": {"query": "accounts"}},
+    ]
+    assert events[-1] == {"type": "done", "stop_reason": "tool_use"}
