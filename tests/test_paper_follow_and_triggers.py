@@ -174,9 +174,9 @@ def test_the_review_knows_why_it_ran_and_history_says_so(paper_db, monkeypatch):
 
     monkeypatch.setattr(headless_turn, "_runner", runner)
     asyncio.run(autopilot_run.review(pid))
-    assert "started early because: ACME fell 5.7% today" in seen["prompt"]
+    assert "started early because: ACME fell 5.7% in its last session" in seen["prompt"]
     [run] = views.page(pid)["autopilot"]["runs"]
-    assert run["trigger"] == "ACME fell 5.7% today"
+    assert run["trigger"] == "ACME fell 5.7% in its last session"
 
 
 def test_review_now_is_its_own_reason(paper_db, monkeypatch):

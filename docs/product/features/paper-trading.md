@@ -116,7 +116,7 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
 - can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
   such as a holding past its stop loss or over its cap.
 
-A review also starts early, between scheduled ones, when a holding moves 5% or more in a day,
+A review also starts early, between scheduled ones, when a holding moves 5% or more in its last session,
 falls past the stop loss, or breaks a mandate limit (checked every few minutes, each reason once a
 day). These alerts go to Lucius, not to you; the review says what started it.
 

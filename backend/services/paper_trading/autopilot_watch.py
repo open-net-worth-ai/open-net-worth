@@ -52,7 +52,7 @@ def reasons_for(row: dict, now: datetime) -> dict[str, str]:
     for sym, move in _day_moves(held).items():
         if abs(move) >= DAY_MOVE:
             verb = "rose" if move > 0 else "fell"
-            out[f"move:{sym}"] = f"{sym} {verb} {abs(move) * 100:.1f}% today"
+            out[f"move:{sym}"] = f"{sym} {verb} {abs(move) * 100:.1f}% in its last session"
     stop = m.get("stop_loss_pct")
     if stop is not None:
         for h in held:
