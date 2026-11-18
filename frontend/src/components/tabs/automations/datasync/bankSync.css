@@ -443,7 +443,7 @@
 .bs-run-foot .bs-run-lucius {
   background: var(--lucius);
   border-color: var(--lucius);
-  color: #fff;
+  color: var(--bg);
 }
 
 /* The import's live progress: what it is on, and a bar that keeps moving while the bank

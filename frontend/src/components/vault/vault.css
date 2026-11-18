@@ -812,12 +812,12 @@
 .vault-action-tile--lucius {
   border-color: var(--lucius);
   background: var(--lucius);
-  color: #fff;
+  color: var(--bg);
 }
 @media (hover: hover) {
   .vault-action-tile--lucius:hover {
     border-color: var(--lucius);
-    background: color-mix(in srgb, var(--lucius) 88%, #fff);
+    background: color-mix(in srgb, var(--lucius) 88%, var(--bg));
   }
 }
 .vault-section {

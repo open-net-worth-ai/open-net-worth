@@ -132,11 +132,11 @@
 .ui-btn.fi-lucius {
   background: var(--lucius);
   border-color: var(--lucius);
-  color: var(--ink-on-accent);
+  color: var(--bg);
 }
 @media (hover: hover) {
   .ui-btn.fi-lucius:hover {
-    background: color-mix(in srgb, var(--lucius) 85%, #fff);
+    background: color-mix(in srgb, var(--lucius) 85%, var(--bg));
     border-color: color-mix(in srgb, var(--lucius) 85%, #fff);
     color: var(--ink-on-accent);
   }

@@ -502,13 +502,13 @@
   }
 }
 .c2-ribbon-act.hot {
-  color: #fff;
+  color: var(--bg);
   background: var(--lucius);
   border-color: var(--lucius);
 }
 @media (hover: hover) {
   .c2-ribbon-act.hot:hover {
-    background: color-mix(in srgb, var(--lucius) 86%, #fff);
+    background: color-mix(in srgb, var(--lucius) 86%, var(--bg));
   }
 }
 .c2-ribbon-lite {

@@ -18579,7 +18579,7 @@ body.hide-amounts .mask * {
   padding: 8px 14px;
   border-radius: var(--radius-pill);
   background: var(--lucius);
-  color: var(--ink-on-accent);
+  color: var(--bg);
   border: none;
   cursor: pointer;
   font: inherit;
@@ -18592,7 +18592,7 @@ body.hide-amounts .mask * {
 }
 @media (hover: hover) {
   .lx-launcher:hover {
-    background: color-mix(in srgb, var(--lucius) 85%, var(--ink-on-accent));
+    background: color-mix(in srgb, var(--lucius) 85%, var(--bg));
   }
 }
 .lx-launcher-badge {

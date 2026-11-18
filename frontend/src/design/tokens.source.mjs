@@ -86,7 +86,7 @@ export const tokenGroups = [
     tokens: [
       ['primary', '#3b86dd', '#2666b8'],
       ['violet', '#7C6CF5', '#5D4BD8'],
-      ['lucius', '#7C6CF5'],
+      ['lucius', 'var(--ink)'],
       ['act-teal', '#22b8cf', '#0d7f92'],
       ['accent', 'var(--primary)'],
       // The main call to action is INK, not blue: near-black on a light page, near-white on

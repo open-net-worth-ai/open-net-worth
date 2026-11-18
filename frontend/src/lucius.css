@@ -53,12 +53,11 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #fff;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--lucius) 92%, #fff) 0%,
-      var(--lucius) 100%
-    );
+    /* Ink on every theme: a white pill on dark, a black one on light. */
+    --lx-pill-bg: var(--ink);
+    --lx-pill-fg: var(--bg);
+    color: var(--lx-pill-fg);
+    background: var(--lx-pill-bg);
     border: none;
     border-radius: 999px;
     padding: 12px 20px;
@@ -66,12 +65,11 @@
     font-weight: 600;
     cursor: pointer;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
       0 2px 6px rgba(0, 0, 0, 0.3),
       0 10px 26px rgba(0, 0, 0, 0.5);
   }
   .lx-dock-pill .acct-spark {
-    color: #fff;
+    color: var(--lx-pill-fg);
   }
   /* The pill with voice calls on: Call │ Ask Lucius at rest, and the whole call inside it. It
      is right-anchored, so it grows leftward; its width steps by mode, never by content. */
@@ -114,14 +112,14 @@
     --lx-pill-w: 21rem;
   }
   .lx-dock-pill--call .lx-orb {
-    --lx-orb-base: #fff;
+    --lx-orb-base: var(--lx-pill-fg);
   }
   /* Beats .lx-call-btn's composer fill, which is declared later in this file. */
   .lx-call-btn.lx-call-btn--pill {
     width: 2rem;
     height: 2rem;
-    background: rgba(255, 255, 255, 0.18);
-    color: #fff;
+    background: color-mix(in srgb, var(--lx-pill-fg) 18%, transparent);
+    color: var(--lx-pill-fg);
   }
   .lx-dock-pill-ask,
   .lx-dock-pill-open {
@@ -159,8 +157,8 @@
     justify-content: center;
     border: none;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.18);
-    color: #fff;
+    background: color-mix(in srgb, var(--lx-pill-fg) 18%, transparent);
+    color: var(--lx-pill-fg);
     cursor: pointer;
   }
   .lx-dock-pill-btn:disabled {
@@ -168,8 +166,8 @@
     cursor: default;
   }
   .lx-dock-pill-btn[aria-pressed='true'] {
-    background: #fff;
-    color: var(--lucius);
+    background: var(--lx-pill-fg);
+    color: var(--lx-pill-bg);
   }
   .lx-dock-pill-btn--end {
     background: var(--bad);
@@ -178,8 +176,8 @@
     flex: none;
     border: none;
     border-radius: 999px;
-    background: #fff;
-    color: var(--lucius);
+    background: var(--lx-pill-fg);
+    color: var(--lx-pill-bg);
     font: inherit;
     font-size: var(--text-xs);
     font-weight: 600;
@@ -206,7 +204,7 @@
     }
     .lx-call-btn.lx-call-btn--pill:hover,
     .lx-dock-pill-btn:not(:disabled, [aria-pressed='true'], .lx-dock-pill-btn--end):hover {
-      background: rgba(255, 255, 255, 0.28);
+      background: color-mix(in srgb, var(--lx-pill-fg) 28%, transparent);
     }
   }
   @media (prefers-reduced-motion: no-preference) {
@@ -224,7 +222,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .lx-dock-pill--call[data-mode='attention'] {
-      outline: 2px solid #fff;
+      outline: 2px solid var(--lx-pill-bg);
       outline-offset: 2px;
     }
   }
@@ -237,7 +235,7 @@
   @keyframes lx-dock-pill-attn {
     50% {
       box-shadow:
-        0 0 0 4px rgba(255, 255, 255, 0.35),
+        0 0 0 4px color-mix(in srgb, var(--lx-pill-bg) 35%, transparent),
         0 10px 26px rgba(0, 0, 0, 0.5);
     }
   }
@@ -245,7 +243,6 @@
     .lx-dock-pill:hover {
       transform: translateY(-1px);
       box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.22),
         0 3px 8px rgba(0, 0, 0, 0.32),
         0 14px 32px rgba(0, 0, 0, 0.55);
     }
@@ -985,7 +982,7 @@
     background: var(--cta-hover);
   }
   .lx-call-btn.lx-call-btn--pill:active {
-    background: rgba(255, 255, 255, 0.34);
+    background: color-mix(in srgb, var(--lx-pill-fg) 34%, transparent);
   }
   @media (prefers-reduced-motion: no-preference) {
     .lx-call-btn,
@@ -1207,8 +1204,8 @@
   }
   /* Amber and red would vanish on the pill's colour; its words say which. */
   .lx-dock-pill--call .lx-callstage-signal {
-    --lx-signal-on: #fff;
-    --lx-signal-off: rgba(255, 255, 255, 0.3);
+    --lx-signal-on: var(--lx-pill-fg);
+    --lx-signal-off: color-mix(in srgb, var(--lx-pill-fg) 30%, transparent);
   }
   /* Whole pixels only: at 3.5px browsers rounded the bars to 4, 3, 4, 3 wide. */
   .lx-callstage-signal > span {
@@ -4566,7 +4563,7 @@
     padding: 0 5px;
     border-radius: 9px;
     background: var(--lucius);
-    color: #fff;
+    color: var(--bg);
     font-size: 11px;
     font-weight: 700;
   }
