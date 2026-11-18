@@ -1974,7 +1974,9 @@
   }
   .consent-card {
     width: min(540px, 100%);
-    margin-top: clamp(0px, 6vh, 64px);
+    /* Centred like the sign-in card; auto margins (not align-items: center) so a card taller
+       than the screen still scrolls from its top. */
+    margin: auto;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 16px;
@@ -2216,7 +2218,6 @@
       padding-right: calc(var(--safe-r) + 20px);
     }
     .consent-card {
-      margin-top: 0;
       padding: 8px 0 0;
       background: none;
       border: 0;
