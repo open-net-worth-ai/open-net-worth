@@ -2169,20 +2169,113 @@
     line-height: 1.5;
     text-align: center;
   }
+  /* Settings → MCP: the first choice — OAuth or the API token — as two equal cards, each saying
+     whether its path is ready. */
+  .mcp-choice {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .mcp-choice__card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 14px 16px;
+    text-align: left;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .mcp-choice__card:hover {
+    background: var(--hover-surface);
+  }
+  .mcp-choice__card.on {
+    border-color: var(--muted);
+    background: var(--hover-surface);
+  }
+  .mcp-choice__card:focus {
+    outline: none;
+  }
+  .mcp-choice__card:focus-visible {
+    outline: 1px solid var(--primary);
+    outline-offset: 2px;
+  }
+  .mcp-choice__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-size: var(--text-md);
+    font-weight: 600;
+  }
+  .mcp-choice__icon {
+    display: grid;
+    color: var(--muted);
+  }
+  .mcp-choice__card.on .mcp-choice__icon {
+    color: var(--ink);
+  }
+  .mcp-choice__sub {
+    font-size: var(--text-sm);
+    line-height: 1.45;
+  }
+  @media (max-width: 560px) {
+    .mcp-choice {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  /* The OAuth path's set-up checklist: a tick per requirement met, an open circle and a way to
+     fix it for each one that isn't. */
+  .mcp-check {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .mcp-check__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    color: var(--ink);
+    font-size: var(--text-base);
+    font-weight: 500;
+  }
+  .mcp-check__mark {
+    display: grid;
+    flex: none;
+    margin-top: 1px;
+    color: var(--warn);
+  }
+  .mcp-check__item.done .mcp-check__mark {
+    color: var(--good);
+  }
+  .mcp-check__item.done .mcp-check__text {
+    color: var(--muted);
+  }
+  .mcp-check__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .mcp-other {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
   /* Settings → MCP → Hosted apps: the status line, the address to paste, and where to paste it. */
   .mcp-hosted-status {
     display: flex;
     flex-direction: column;
     gap: 12px;
-  }
-  .mcp-hosted-status__head {
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--ink);
-    font-size: 13.5px;
-    font-weight: 550;
   }
   .mcp-hosted-url {
     display: flex;

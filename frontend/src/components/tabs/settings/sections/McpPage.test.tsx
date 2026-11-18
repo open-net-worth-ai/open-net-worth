@@ -6,7 +6,8 @@ vi.mock('../../../../api/client', () => ({ authFetch: vi.fn() }))
 
 import { authFetch } from '../../../../api/client'
 import { clearQueryCache } from '../../../../state/queryCache'
-import { McpOAuthPanel } from './McpOAuthPanel'
+import { McpPage } from './McpPage'
+import { suggestedPublicUrl } from './McpOAuthPanel'
 import type { OAuthStatus } from './McpOAuthPanel'
 
 const mockAuthFetch = vi.mocked(authFetch)
@@ -39,6 +40,17 @@ function serve(
   mockAuthFetch.mockImplementation(async (url, init) => {
     const hit = extra?.(String(url), init as RequestInit)
     if (hit) return hit
+    if (String(url) === '/api/auth/api-token') return json({ token: 'TOK' })
+    if (String(url) === '/api/mcp/connect-info')
+      return json({
+        desktop: false,
+        command: 'onw',
+        args: ['mcp'],
+        command_found: true,
+        root: null,
+        source_root: null,
+        container: false,
+      })
     return status === null ? json({ detail: 'Not Found' }, 404) : json(status)
   })
 }
@@ -50,27 +62,72 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-describe('Settings → MCP → Hosted apps', () => {
-  it('renders nothing while the flag is off', async () => {
+describe('Settings → MCP', () => {
+  it('offers OAuth even while the flag is off, with the one step that turns it on', async () => {
     serve(null)
-    const { container } = render(<McpOAuthPanel toast={vi.fn()} />)
-    await waitFor(() => expect(mockAuthFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+    const openSection = vi.fn()
+    render(<McpPage toast={vi.fn()} openSection={openSection} />)
+    expect(await screen.findByText('Not set up')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /API token/ }).getAttribute('aria-checked')).toBe(
+      'true',
+    )
+    fireEvent.click(screen.getByRole('radio', { name: /OAuth/ }))
+    expect(screen.getByText('OAuth is switched on')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Developer' }))
+    expect(openSection).toHaveBeenCalledWith('developer')
+  })
+
+  it('opens on OAuth when it is ready, and the token path no longer lists ChatGPT', async () => {
+    serve(ON)
+    render(<McpPage toast={vi.fn()} />)
+    expect(await screen.findByDisplayValue('https://wealth.example.com/mcp')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /OAuth/ }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: /API token/ }))
+    expect(await screen.findByRole('tab', { name: 'Claude Desktop' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'ChatGPT' })).toBeNull()
   })
 
   it('shows the address to paste and each connected app with its access', async () => {
     serve(ON)
-    render(<McpOAuthPanel toast={vi.fn()} />)
+    render(<McpPage toast={vi.fn()} />)
     expect(await screen.findByDisplayValue('https://wealth.example.com/mcp')).toBeTruthy()
-    expect(screen.getByText('Read-only')).toBeTruthy()
+    expect(screen.getByText('Read')).toBeTruthy()
     expect(screen.getByText(/claude\.ai · connected/)).toBeTruthy()
   })
 
-  it('explains every reason the server is off', async () => {
+  it('lists what is missing as steps, each with a way to fix it', async () => {
     serve({ ...ON, available: false, reasons: ['no_password', 'loopback_trusted'], apps: [] })
-    render(<McpOAuthPanel toast={vi.fn()} />)
-    expect(await screen.findByText(/Set a password in Settings → Security/)).toBeTruthy()
+    const openSection = vi.fn()
+    render(<McpPage toast={vi.fn()} openSection={openSection} />)
+    expect(await screen.findByText('2 steps left')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /OAuth/ }))
+    expect(screen.getByText('A password is set, and sign-in is on')).toBeTruthy()
     expect(screen.getByText(/Don't ask for the password on this computer/)).toBeTruthy()
+    expect(screen.queryByDisplayValue('https://wealth.example.com/mcp')).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open Security' })[0]!)
+    expect(openSection).toHaveBeenCalledWith('security')
+  })
+
+  it('says plainly where OAuth is not offered at all', async () => {
+    serve({ ...ON, available: false, reasons: ['desktop'], apps: [] })
+    render(<McpPage toast={vi.fn()} />)
+    expect(await screen.findByText('Not available here')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /OAuth/ }))
+    expect(screen.getByText("OAuth isn't available here")).toBeTruthy()
+  })
+
+  it('suggests the page address only when it is https and not this machine', () => {
+    const at = (protocol: string, hostname: string) => ({
+      protocol,
+      hostname,
+      origin: `${protocol}//${hostname}`,
+    })
+    expect(suggestedPublicUrl(at('https:', 'wealth.example.com'))).toBe(
+      'https://wealth.example.com',
+    )
+    expect(suggestedPublicUrl(at('http:', 'wealth.example.com'))).toBe('')
+    expect(suggestedPublicUrl(at('https:', 'localhost'))).toBe('')
+    expect(suggestedPublicUrl(at('https:', '127.0.0.1'))).toBe('')
   })
 
   it('revokes an app', async () => {
@@ -83,7 +140,7 @@ describe('Settings → MCP → Hosted apps', () => {
       return undefined
     })
     const toast = vi.fn()
-    render(<McpOAuthPanel toast={toast} />)
+    render(<McpPage toast={toast} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
     await waitFor(() => expect(calls).toEqual(['/api/mcp/oauth/apps/g1']))
     expect(toast).toHaveBeenCalledWith('Claude disconnected')
@@ -95,12 +152,13 @@ describe('Settings → MCP → Hosted apps', () => {
         ? json({ created: { client_id: 'onw_cl_x', client_secret: 'onw_cs_secret' }, ...ON })
         : undefined,
     )
-    const { container } = render(<McpOAuthPanel toast={vi.fn()} />)
+    const { container } = render(<McpPage toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Create client ID and secret' }))
     fireEvent.change(await screen.findByLabelText('App name'), { target: { value: 'My app' } })
-    fireEvent.change(screen.getByLabelText('Redirect URL'), {
+    fireEvent.change(screen.getByLabelText('Callback URL'), {
       target: { value: 'https://app.example/cb' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Create credentials' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create client ID and secret' }).at(-1)!)
     await waitFor(() => expect(container.textContent).toContain('onw_cs_secret'))
     const secretBox = container.querySelector('div[data-ctx-secret]')
     expect(secretBox?.textContent).toContain('onw_cs_secret')
@@ -117,7 +175,7 @@ describe('Settings → MCP → Hosted apps', () => {
 
   it('locks the address field when the server sets it', async () => {
     serve({ ...ON, public_url_source: 'env' })
-    render(<McpOAuthPanel toast={vi.fn()} />)
+    render(<McpPage toast={vi.fn()} />)
     const input = (await screen.findByLabelText('Public HTTPS address')) as HTMLInputElement
     expect(input.disabled).toBe(true)
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()

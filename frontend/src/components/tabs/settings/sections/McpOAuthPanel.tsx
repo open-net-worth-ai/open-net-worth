@@ -1,16 +1,15 @@
-// Settings → MCP → "Hosted apps": claude.ai, Claude on the phone, Claude Desktop's custom
-// connectors and ChatGPT connect over OAuth (flag mcp_oauth). Renders nothing while the flag is
-// off (the status call answers 404).
+// The OAuth path of Settings → MCP (flag mcp_oauth): claude.ai, Claude on the phone, Claude
+// Desktop's custom connectors and ChatGPT. The status call answers 404 while the flag is off.
 //
-// Three things live here: the public address every OAuth URL is built from, the apps connected
-// with Revoke, and app credentials for an app that can't use the built-in identity. Why the
-// server is off, when it is, is shown from the server's own list of reasons.
+// The pieces live here — the status, the public address every OAuth URL is built from (prefilled
+// from the page's own https origin, saved only on Save), the address to paste, the apps connected
+// with Revoke, and app credentials for an app that can't use the built-in identity. The pane that
+// lays them out as a checklist is McpOAuthPane.tsx.
 import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
-import { Badge, Btn, Field, Panel, row } from '../ds'
-import type { SectionProps, Toast } from '../ds'
-import { McpSection } from './McpSection'
+import { Badge, Btn, Field, row } from '../ds'
+import type { Toast } from '../ds'
 
 export interface OAuthApp {
   grant_id: string
@@ -43,9 +42,9 @@ interface Created {
   client_secret: string
 }
 
-const KEY = '/api/mcp/oauth'
+export const KEY = '/api/mcp/oauth'
 
-const REASONS: Record<string, string> = {
+export const REASONS: Record<string, string> = {
   flag_off: 'The feature is off.',
   no_public_url: 'Set the public HTTPS address below.',
   invalid_public_url: 'The public address must be https:// and reachable from the internet.',
@@ -95,61 +94,37 @@ function when(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
 }
 
-export function McpOAuthPanel({ toast }: { toast: Toast }) {
+/** The OAuth server's status; ``null`` while the flag is off (the call answers 404). */
+export function useOAuthStatus(): { status: OAuthStatus | null; refresh: () => void } {
   const { data, refresh } = useCachedFetchState<OAuthStatus | null>(KEY, loadStatus, {
     staleTime: 0,
   })
-  if (!data) return null
-  return <OAuthBody status={data} refresh={() => void refresh()} toast={toast} />
+  return { status: data ?? null, refresh: () => void refresh() }
 }
 
-function OAuthBody({
-  status,
-  refresh,
-  toast,
-}: {
-  status: OAuthStatus
-  refresh: () => void
-  toast: Toast
-}) {
-  return (
-    <Panel
-      title="Hosted apps (claude.ai, ChatGPT)"
-      sub="Connect over OAuth: paste the address into the app, then approve with your password"
-    >
-      {status.available ? (
-        <Ready mcpUrl={status.mcp_url} toast={toast} />
-      ) : (
-        <div className="mcp-hosted-status">
-          <div className="mcp-hosted-status__head">
-            <Badge tone="warn">Off</Badge>
-            <span>Not ready yet</span>
-          </div>
-          <ul className="mcp-hosted-list">
-            {status.reasons.map((r) => (
-              <li key={r}>{REASONS[r] ?? r}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <PublicUrl status={status} refresh={refresh} toast={toast} />
-      <ConnectedApps apps={status.apps} refresh={refresh} toast={toast} />
-      <Credentials clients={status.clients} refresh={refresh} toast={toast} />
-    </Panel>
+/** Reasons nothing on this instance's settings can fix: the path just isn't offered here. */
+export const BLOCKERS = new Set(['demo', 'gateway', 'desktop'])
+
+/** What the OAuth card says about its path. */
+export function oauthState(status: OAuthStatus | null): { label: string; tone: 'good' | 'warn' } {
+  if (!status) return { label: 'Not set up', tone: 'warn' }
+  if (status.available) return { label: 'Ready', tone: 'good' }
+  if (status.reasons.some((r) => BLOCKERS.has(r)))
+    return { label: 'Not available here', tone: 'warn' }
+  const steps = new Set(
+    status.reasons.map((r) => (r === 'invalid_public_url' ? 'no_public_url' : r)),
   )
+  const n = steps.size
+  return { label: n === 1 ? '1 step left' : `${n} steps left`, tone: 'warn' }
 }
 
-function Ready({ mcpUrl, toast }: { mcpUrl: string; toast: Toast }) {
+export function ConnectorAddress({ mcpUrl, toast }: { mcpUrl: string; toast: Toast }) {
   return (
     <div className="mcp-hosted-status">
-      <div className="mcp-hosted-status__head">
-        <Badge tone="good">On</Badge>
-        <span>Ready for claude.ai and ChatGPT</span>
-      </div>
       <Field
         span="full"
         label="Connector address"
-        help="Each app gets read-only access unless you allow changes when you approve it."
+        help="Each app gets read access unless you allow writes when you approve it."
       >
         <div className="mcp-hosted-url">
           <input
@@ -179,7 +154,7 @@ function Ready({ mcpUrl, toast }: { mcpUrl: string; toast: Toast }) {
   )
 }
 
-function PublicUrl({
+export function PublicUrl({
   status,
   refresh,
   toast,
@@ -188,7 +163,7 @@ function PublicUrl({
   refresh: () => void
   toast: Toast
 }) {
-  const [value, setValue] = useState(status.public_url)
+  const [value, setValue] = useState(status.public_url || suggestedPublicUrl())
   const fromEnv = status.public_url_source === 'env'
   async function save() {
     if (
@@ -208,7 +183,9 @@ function PublicUrl({
       help={
         fromEnv
           ? 'Set by ONW_PUBLIC_URL on the server.'
-          : 'The address the internet reaches this instance at, like https://wealth.example.com.'
+          : !status.public_url && value && value === suggestedPublicUrl()
+            ? "Filled in from the address you're using now. It's saved only when you click Save."
+            : 'The address the internet reaches this instance at, like https://wealth.example.com.'
       }
     >
       <div style={{ display: 'flex', gap: 8 }}>
@@ -230,7 +207,7 @@ function PublicUrl({
   )
 }
 
-function ConnectedApps({
+export function ConnectedApps({
   apps,
   refresh,
   toast,
@@ -248,9 +225,6 @@ function ConnectedApps({
   }
   return (
     <div>
-      <div className="rd-bars-lbl" style={{ marginBottom: 7 }}>
-        Connected apps
-      </div>
       {apps.length === 0 ? (
         <span className="rd-help">No app is connected.</span>
       ) : (
@@ -260,7 +234,7 @@ function ConnectedApps({
               <>
                 {app.name}{' '}
                 <Badge tone={app.scopes.includes('write') ? 'warn' : ''}>
-                  {app.scopes.includes('write') ? 'Read + changes' : 'Read-only'}
+                  {app.scopes.includes('write') ? 'Read and write' : 'Read'}
                 </Badge>
               </>,
               `${app.host} · connected ${when(app.connected_at)} · last used ${when(app.last_used_at)}`,
@@ -275,7 +249,7 @@ function ConnectedApps({
   )
 }
 
-function Credentials({
+export function Credentials({
   clients,
   refresh,
   toast,
@@ -305,13 +279,6 @@ function Credentials({
   }
   return (
     <div>
-      <div className="rd-bars-lbl" style={{ marginBottom: 7 }}>
-        App credentials
-      </div>
-      <span className="rd-help" style={{ display: 'block', lineHeight: 1.55, marginBottom: 8 }}>
-        Claude and ChatGPT need none. For another app, create a client ID and secret and paste them
-        into its advanced OAuth settings.
-      </span>
       {clients.map((c) => (
         <div key={c.client_id} style={{ marginBottom: 8 }}>
           {row(
@@ -338,35 +305,44 @@ function Credentials({
           </div>
         </div>
       ) : null}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <Field span="full" label="App name" help="Shown in Connected apps, so you can tell it apart.">
         <input
           className="rd-input"
           aria-label="App name"
-          placeholder="App name"
+          placeholder="My MCP client"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
+      </Field>
+      <Field
+        span="full"
+        label="Callback URL"
+        help="Where the app receives your approval. Find it in the app's OAuth settings, usually called redirect URI or callback URL. Sign-ins go only there."
+      >
         <input
           className="rd-input"
-          aria-label="Redirect URL"
+          aria-label="Callback URL"
           placeholder="https://app.example.com/oauth/callback"
           value={redirect}
           onChange={(e) => setRedirect(e.target.value)}
         />
+      </Field>
+      <div>
         <Btn size="xs" onClick={() => void create()} disabled={!name.trim() || !redirect.trim()}>
-          Create credentials
+          Create client ID and secret
         </Btn>
       </div>
     </div>
   )
 }
 
-/** Settings → MCP: the local/token setup, then hosted apps over OAuth (when the flag is on). */
-export function McpPage(props: SectionProps) {
-  return (
-    <>
-      <McpSection {...props} />
-      <McpOAuthPanel toast={props.toast} />
-    </>
-  )
+const LOOPBACK = /^(127\.0\.0\.1|localhost|\[::1\])$/
+
+/** The page's own address, when it is one the internet could reach: the owner is looking at it
+ * in their address bar, so it is a safe suggestion. It is only ever saved by the owner's Save;
+ * the server never takes its address from a request. */
+export function suggestedPublicUrl(
+  loc: Pick<Location, 'protocol' | 'hostname' | 'origin'> = window.location,
+): string {
+  return loc.protocol === 'https:' && !LOOPBACK.test(loc.hostname) ? loc.origin : ''
 }

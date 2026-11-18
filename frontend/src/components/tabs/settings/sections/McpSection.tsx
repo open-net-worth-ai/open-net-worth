@@ -1,5 +1,6 @@
-// Settings → MCP. This instance IS an MCP server: other AI apps (Claude Desktop, Cursor, VS
-// Code, ChatGPT…) connect to it and use your book. The reverse — Lucius using someone else's
+// Settings → MCP, the API-token path: an app on your computer (Claude Desktop, Claude Code,
+// Cursor, VS Code…) connects with a copied config holding the API token. Online apps (claude.ai,
+// ChatGPT) use the OAuth path instead (McpOAuthPane). The reverse — Lucius using someone else's
 // server — lives in Connectors.
 //
 // Snippets come from mcpClients.ts (the one source), filled with this instance's real origin,
@@ -62,18 +63,14 @@ export function McpSection({ toast, openSection }: SectionProps) {
   const copyable = g.snippet({ ...ctxFull, token })
 
   return (
-    <Panel
-      title="Use your book from other AI apps"
-      sub="This instance is an MCP server — point Claude Desktop, Cursor, VS Code or ChatGPT at it"
-    >
+    <Panel title="Copy a config" sub="For an app on your computer or your own network">
       <span className="rd-help" style={{ display: 'block', lineHeight: 1.55 }}>
         An app holding your API token acts as you: it can read your book and make changes. Every
-        change it makes is recorded and can be undone. This is the reverse of Connectors → MCP,
-        where Lucius uses someone else&apos;s server.
+        change it makes is recorded and can be undone.
       </span>
       <div>
         <div className="rd-bars-lbl" style={{ marginBottom: 7 }}>
-          Connect from…
+          Your app
         </div>
         <div className="rd-seg rd-seg--scroll" role="tablist" aria-label="MCP client">
           {MCP_CLIENTS.map((c) => (

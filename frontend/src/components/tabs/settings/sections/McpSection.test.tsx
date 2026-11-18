@@ -47,7 +47,7 @@ describe('Settings → MCP', () => {
     const code = container.querySelector('.rd-code')!.textContent!
     expect(code).toContain(TOKEN_MASK)
     expect(code).not.toContain('real-secret-token')
-    expect(screen.getByText('Use your book from other AI apps')).toBeTruthy()
+    expect(screen.getByText('Copy a config')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy config' }))
     await waitFor(() => expect(writeText).toHaveBeenCalled())

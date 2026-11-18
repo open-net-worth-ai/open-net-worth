@@ -105,7 +105,7 @@ const loadShortcutsSection = () => import('./settings/sections/ShortcutsSection'
 const ShortcutsSection = lazyChunk(() =>
   loadShortcutsSection().then((m) => ({ default: m.ShortcutsSection })),
 )
-const loadMcpSection = () => import('./settings/sections/McpOAuthPanel')
+const loadMcpSection = () => import('./settings/sections/McpPage')
 const McpSection = lazyChunk(() => loadMcpSection().then((m) => ({ default: m.McpPage })))
 const loadDeveloperSection = () => import('./settings/sections/DeveloperSectionSwitch')
 const DeveloperSection = lazyChunk(() =>
