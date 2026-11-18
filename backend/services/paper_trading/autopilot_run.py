@@ -7,7 +7,8 @@ else — and the paper-only guard Automations use (``AutomationApprovalContext``
 ``simulation_only`` and the portfolio bound), so dispatch refuses any real write, connector or
 outbound tool, and every paper write outside this portfolio, whatever the model asks for. The
 one widening is ``OUTBOUND``: web and X searches and public price histories, named one by one in
-the run's context and logged on its run — never a page fetch. Its
+the run's context, capped and logged on its run. The model never fetches a page it picks; a
+search may read its top results' pages (the owner's search setting), which the engine picks. Its
 orders carry the origin ``autopilot``: the paper choke refuses one that breaks the mandate and
 refuses one placed outside a review."""
 
@@ -32,8 +33,8 @@ ORIGIN = "autopilot"
 CONTEXT_PREFIX = "autopilot:"
 TIMEOUT_S = 600
 # The review's tool calls: the default enforced budget (8) was spent on reading before it
-# could record its memo (2026-11-18). It reads its own holdings, never a stranger's text
-# into a search, so it gets room for a real review.
+# could record its memo (2026-11-18). Searches and price histories are capped apart, at
+# ``simulation_guard.MAX_OUTBOUND``, since each one is billed.
 MAX_TOOL_CALLS = 40
 MAX_LOOKED_UP = 40
 # Reads, and this portfolio's paper tools. Everything else is outside the offer, and the
@@ -61,9 +62,9 @@ TOOLS = (
     "get_intel_digest",
     "get_dividend_calendar",
 )
-# Reads that leave the machine: search queries and public price histories, never a page fetch
-# (a link planted in a result is the step from reading to being steered). Each one the review
-# makes is logged on its run, so History shows what it looked up.
+# Reads that leave the machine: search queries and public price histories, never a page the
+# model picks (a link planted in a result is the step from reading to being steered). Each one
+# that ran is logged on its run, so History shows what it looked up.
 OUTBOUND = frozenset(
     {"web_search", "x_search", "yahoo_get_price_history", "coingecko_get_price_history"}
 )
@@ -106,8 +107,8 @@ def prompt(row: dict) -> str:
         "limit, its technicals and fundamentals (get_asset_technicals, "
         "get_asset_fundamentals). Before any buy, check the name you would buy the same way.",
         "   When the stored news doesn't explain a move or an earnings result, search for it "
-        "(web_search for articles, x_search for what traders are saying; treat posts as "
-        "opinion). For a longer view than the technicals, read the price history "
+        "(web_search; x_search too, when you have it, for what traders are saying, which "
+        "is opinion). You have at most 10 searches and price-history reads. For a longer view than the technicals, read the price history "
         "(yahoo_get_price_history, or coingecko_get_price_history for crypto). Check "
         "get_dividend_calendar before buying near an ex-date. For new ideas, look at the "
         "owner's watchlist (get_watchlist) and Intel's latest analysis (get_intel_digest); "

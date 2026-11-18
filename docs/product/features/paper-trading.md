@@ -113,8 +113,10 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
   without one counts as failed;
 - can also search the web and X when the stored news doesn't explain a move, read a longer
   price history, check the dividend calendar before buying near an ex-date, and look at your
-  watchlist and Intel's latest analysis for ideas. It never opens a web page, so a link in a
-  search result can't steer it. **History** lists every search and price history it looked up;
+  watchlist and Intel's latest analysis for ideas. It never opens a link it picks itself, so a
+  link planted in a result can't send it anywhere (with **Search reads results** on, a search
+  reads the top results' pages, chosen by the search engine). It makes at most 10 searches and
+  price-history reads a review, and **History** lists each one;
 - trades only this paper portfolio. Your watchlist, Intel's analysis and the dividend calendar
   name stocks you really hold, so it sees those, but it never reads your accounts, never uses a
   connector, and never writes anything outside the paper portfolio;

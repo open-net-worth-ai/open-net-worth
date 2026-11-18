@@ -74,8 +74,9 @@ def test_discovers_every_write_choke_from_source():
     # `followed_portfolio` joined with follow/refresh/unfollow/set_ticker (2026-11-10); 67 once
     # `income` gained `amend` (a dividend corrected from its holding's Dividends table, 2026-11-11);
     # 76 once `paper` (services.paper_trading.service.apply_paper_change, the simulated book)
-    # joined with create/update/archive/start_over/delete/place/cancel/mark/lifecycle (2026-11-15).
-    assert sum(len(c.ops) for c in chokes) == 76
+    # joined with create/update/archive/start_over/delete/place/cancel/mark/lifecycle (2026-11-15);
+    # 80 once its autopilot added autopilot/autopilot_memo/autopilot_trigger/autopilot_run_now.
+    assert sum(len(c.ops) for c in chokes) == 80
 
 
 def test_discriminator_split_is_eight_type_three_op():

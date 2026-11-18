@@ -1017,7 +1017,7 @@ async def _dispatch_call(
         return unknown, None
     from backend.ai import simulation_guard
 
-    simulated = simulation_guard.refusal(name, input_data)
+    simulated = simulation_guard.refusal(name)
     if simulated is not None:
         # A paper-only Automation: refused before any permission engine, judge or card.
         _record_call(name, invoked, input_data, simulated[0], started, ())
@@ -1084,6 +1084,7 @@ async def _dispatch_call(
     )
     if text is not None:  # a self-staged ``(None, change)`` wrote nothing yet
         _broadcast_write(mutated_domains(name))
+        simulation_guard.note_outbound(name, input_data)
     return text, proposed
 
 

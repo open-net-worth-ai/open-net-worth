@@ -203,31 +203,63 @@ def _bind(**kw):
     )
 
 
+class _Search:
+    def __init__(self, fail: bool = False):
+        self.fail = fail
+
+    async def search(self, query, max_results):
+        if self.fail:
+            raise RuntimeError("provider down")
+        return [{"url": "https://x/1", "title": "Acme beats", "content": "Acme beat estimates."}]
+
+
 def test_a_review_may_search_and_its_run_shows_what_it_looked_up(paper_db, monkeypatch):
-    from backend.ai import simulation_guard
+    from backend.ai.tools import misc, registry
 
     pid = _auto_portfolio()
     apply_paper_change({"op": "autopilot_run_now", "id": pid})
     seen: dict = {}
+    provider = _Search()
+    monkeypatch.setattr(misc, "get_search_provider", lambda: provider)
 
     async def runner(prompt, **kw):
         seen["tools"] = kw["allowed_tools"]
-        seen["search"] = simulation_guard.refusal("web_search", {"query": "ACME earnings"})
-        seen["history"] = simulation_guard.refusal("yahoo_get_price_history", {"ticker": "ACME"})
-        seen["fetch"] = simulation_guard.refusal("fetch_page", {"url": "https://x/1"})
+        seen["search"], _ = await registry.dispatch("web_search", {"query": "ACME earnings"})
+        provider.fail = True
+        try:
+            await registry.dispatch("web_search", {"query": "a search that failed"})
+        except RuntimeError:
+            pass
+        seen["fetch"], _ = await registry.dispatch("fetch_page", {"url": "https://x/1"})
         facade.record_memo(get_automation_approval().paper_portfolio_id, "Held.", None)
         return ""
 
     monkeypatch.setattr(headless_turn, "_runner", runner)
     asyncio.run(autopilot_run.review(pid))
-    assert seen["search"] is None and seen["history"] is None
-    assert seen["fetch"] is not None  # a page fetch is never allowed
+    assert "Acme beats" in seen["search"]
+    assert "REFUSED" in seen["fetch"]  # a page the model picks: never
     assert {"web_search", "x_search", "get_watchlist", "get_intel_digest"} <= set(seen["tools"])
     [run] = views.page(pid)["autopilot"]["runs"]
-    assert run["looked_up"] == [
-        {"tool": "web_search", "query": "ACME earnings"},
-        {"tool": "yahoo_get_price_history", "query": "ACME"},
-    ]
+    # Only the search that RAN is listed; the failed one and the refused fetch are not.
+    assert run["looked_up"] == [{"tool": "web_search", "query": "ACME earnings"}]
+
+
+def test_a_review_stops_searching_at_its_cap():
+    from backend.ai import simulation_guard
+    from backend.core.automation_runner import reset_automation_approval
+
+    log: list = [{"tool": "web_search", "query": "q"}] * simulation_guard.MAX_OUTBOUND
+    token = _bind(
+        automation_id="autopilot:p",
+        simulation_only=True,
+        outbound_reads=frozenset({"web_search"}),
+        outbound_log=log,
+    )
+    try:
+        refused = simulation_guard.refusal("web_search")
+        assert refused is not None and "its limit" in refused[0]
+    finally:
+        reset_automation_approval(token)
 
 
 def test_a_paper_automation_still_cannot_search():
@@ -236,8 +268,8 @@ def test_a_paper_automation_still_cannot_search():
 
     token = _bind(automation_id="auto_1", simulation_only=True)
     try:
-        assert simulation_guard.refusal("web_search", {"query": "ACME"}) is not None
-        assert simulation_guard.refusal("yahoo_get_price_history", {"ticker": "ACME"}) is not None
+        assert simulation_guard.refusal("web_search") is not None
+        assert simulation_guard.refusal("yahoo_get_price_history") is not None
     finally:
         reset_automation_approval(token)
 
@@ -252,7 +284,7 @@ def test_a_page_fetch_or_a_write_is_never_an_outbound_read_even_if_named():
         outbound_reads=frozenset({"fetch_page", "delete_accounts"}),
     )
     try:
-        assert simulation_guard.refusal("fetch_page", {"url": "https://x"}) is not None
-        assert simulation_guard.refusal("delete_accounts", {}) is not None
+        assert simulation_guard.refusal("fetch_page") is not None
+        assert simulation_guard.refusal("delete_accounts") is not None
     finally:
         reset_automation_approval(token)

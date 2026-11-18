@@ -11,7 +11,8 @@ A paper Automation (its stored ``simulation_only`` flag, bound into the run's
 
 Everything else is REFUSED at dispatch, before any permission engine, Auto judge or approval
 card: every real write, every tool that acts outside the install, every connector tool (a bank,
-broker or REST API read included, so nothing leaves with the owner's credentials), every
+broker or REST API read included, so nothing leaves with the owner's credentials — the one
+exception is a run context's named ``outbound_reads``, below), every
 external MCP tool (a broker's ``place_order`` included), and every write to memory or skills —
 what a paper run leaves there would be read by later, real turns (``PERSISTENT_INSTRUCTIONS``). It reads the run's flag, never the tool's arguments or
 the instructions, so an edited or injected instruction cannot widen it, and it holds whichever
@@ -34,6 +35,9 @@ PERSISTENT_INSTRUCTIONS = frozenset({"save_code_as_skill"})
 # Never allowed by a run's ``outbound_reads``: a URL the model picks (a planted link in a search
 # result) is the step from reading text to being steered by it.
 NEVER_OUTBOUND = frozenset({"fetch_page", "search_institutions"})
+# Each one is billed by the owner's search or price provider, and a search may read its top
+# results' pages too: a review's own cap, well below its tool-call budget.
+MAX_OUTBOUND = 10
 _SIM_WRITE_DOMAINS = frozenset({"paper", "artifacts", "notification_log"})
 
 
@@ -64,9 +68,10 @@ def allows(tool_name: str) -> bool:
     return domains <= (_SIM_WRITE_DOMAINS | SIMULATION_DOMAINS)
 
 
-def _allowed_outbound(tool_name: str, input_data: Optional[dict]) -> bool:
+def _allowed_outbound(tool_name: str) -> bool:
     """A read the run's context names in ``outbound_reads`` (the paper autopilot's searches and
-    public price histories): still a pure read, never a page fetch. Logged for the review."""
+    public price histories): still a pure read, never a page the model picks. Pure: the call is
+    logged only once it has run (``note_outbound``)."""
     from backend.ai.tools.registry import has_external_effect, is_registered, written_domains
     from backend.core.automation_runner import get_automation_approval
 
@@ -75,19 +80,50 @@ def _allowed_outbound(tool_name: str, input_data: Optional[dict]) -> bool:
         return False
     if not is_registered(tool_name) or has_external_effect(tool_name):
         return False
-    if written_domains(tool_name):
-        return False
-    if context.outbound_log is not None:
-        args = input_data or {}
-        what = args.get("query") or args.get("ticker") or args.get("coin") or ""
-        context.outbound_log.append({"tool": tool_name, "query": str(what)[:200]})
-    return True
+    return not written_domains(tool_name)
 
 
-def refusal(tool_name: str, input_data: Optional[dict] = None) -> Optional[tuple[str, None]]:
+def _over_outbound_cap() -> bool:
+    from backend.core.automation_runner import get_automation_approval
+
+    context = get_automation_approval()
+    log = context.outbound_log if context is not None else None
+    return log is not None and len(log) >= MAX_OUTBOUND
+
+
+def note_outbound(tool_name: str, input_data: Optional[dict]) -> None:
+    """Record an allowed outbound read that RAN (dispatch calls this after its handler
+    returned), so the run's History lists only what was really looked up."""
+    from backend.core.automation_runner import get_automation_approval
+
+    context = get_automation_approval()
+    if context is None or context.outbound_log is None or tool_name not in context.outbound_reads:
+        return
+    args = input_data or {}
+    what = args.get("query") or args.get("ticker") or args.get("coin") or ""
+    context.outbound_log.append({"tool": tool_name, "query": str(what)[:200]})
+
+
+def refusal(tool_name: str) -> Optional[tuple[str, None]]:
     """The refusal for this call in a ``simulation_only`` run, or None when it may proceed."""
-    if not active() or allows(tool_name) or _allowed_outbound(tool_name, input_data):
+    if not active() or allows(tool_name):
         return None
+    if _allowed_outbound(tool_name):
+        if not _over_outbound_cap():
+            return None
+        return (
+            json.dumps(
+                {
+                    "ok": False,
+                    "refused_by": "simulation_only",
+                    "error": (
+                        f"REFUSED: this review has already made {MAX_OUTBOUND} searches and "
+                        "price-history reads, its limit. Decide with what you have."
+                    ),
+                }
+            ),
+            None,
+        )
     logger.info("simulation_only: refused %s", tool_name)
     return (
         json.dumps(

@@ -124,8 +124,14 @@ and the dividend calendar.
   external effect and no written domain. `fetch_page` and `search_institutions` are never
   allowed, whatever the set says (`NEVER_OUTBOUND`): a URL the model picks from a result is the
   step from reading planted text to being steered by it.
+- With `search_reads_results` on, a `web_search` reads its top results' pages (and
+  `x_search` is retired), so a review reads whole attacker-authorable pages, not only snippets.
+  The engine picks those URLs; the model still never picks one.
 - What an injected page could do is bounded by what the review can call: this portfolio's paper
-  orders, inside a mandate it cannot override. Every allowed outbound call is logged on the run
-  (`looked_up`), and History shows it.
+  orders, inside a mandate it cannot override, and a misleading memo, which the next review
+  reads (still only paper). Every outbound call that RAN is logged on the run (`looked_up`,
+  written by dispatch after the handler returns, never by the guard), and History shows it.
+- A review makes at most `MAX_OUTBOUND` (10) outbound reads; each is billed by the owner's
+  provider, and reviews also start on price moves.
 - The digest and the watchlist describe the owner's real book. A review reads them for ideas and
   is told never to repeat their amounts. Its writes are still paper-only.
