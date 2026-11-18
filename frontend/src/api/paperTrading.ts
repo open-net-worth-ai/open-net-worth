@@ -43,6 +43,35 @@ export interface MandateBreach {
   message: string
 }
 
+export type AutopilotMode = 'manual' | 'auto'
+export type AutopilotCadence = 'daily' | 'weekly'
+
+/** One autopilot review: what Lucius wrote, and the paper orders it placed. */
+export interface AutopilotRun {
+  id: string
+  started_at: string | null
+  finished_at: string
+  status: 'done' | 'failed'
+  memo: string
+  orders: { id: string; label: string; status: string }[]
+  error: string | null
+}
+
+/** A paper portfolio's autopilot: manual (only you trade) or auto (Lucius reviews and trades
+ *  it on a schedule, within its mandate). */
+export interface PaperAutopilot {
+  mode: AutopilotMode
+  cadence: AutopilotCadence
+  instructions: string
+  next_run_at: string | null
+  running: boolean
+  /** Running, or due within two minutes: the page polls until its memo arrives. */
+  review_soon: boolean
+  paused_reason: string | null
+  runs: AutopilotRun[]
+  max_orders_per_run: number
+}
+
 export interface PaperCard {
   id: string
   name: string
@@ -65,6 +94,7 @@ export interface PaperCard {
   open_orders: number
   sparkline: { date: string; value: number }[]
   mandate: PaperMandate | null
+  autopilot_mode?: AutopilotMode
   holdings_count: number
   weights: { symbol: string; weight: number }[]
   recent_trades: { label: string; side: OrderSide; symbol: string | null; at: string }[]
@@ -165,6 +195,7 @@ export interface PaperPage {
   orders: PaperOrder[]
   activity: PaperEvent[]
   mandate: MandateStatus | null
+  autopilot?: PaperAutopilot
   /** Each sector's share of what is invested, largest first. */
   sectors?: {
     sector: string
@@ -379,6 +410,14 @@ export const placePaperOrder = (id: string, asset: PaperAsset, d: OrderDraft) =>
     ...assetRef(asset),
     ...d,
   })
+
+export const setPaperAutopilot = (
+  id: string,
+  body: { mode?: AutopilotMode; cadence?: AutopilotCadence; instructions?: string },
+) => send<{ autopilot: PaperAutopilot }>(`${paperPageKey(id)}/autopilot`, 'PATCH', body)
+
+export const runPaperAutopilot = (id: string) =>
+  send<{ autopilot: PaperAutopilot }>(`${paperPageKey(id)}/autopilot/run`, 'POST')
 
 export const cancelPaperOrder = (orderId: string) =>
   send<unknown>(`${PAPER_KEY}/orders/${encodeURIComponent(orderId)}`, 'DELETE')

@@ -67,9 +67,20 @@ Under the hood it can reuse the headless-turn runner and the scheduler that Auto
 engine, already sandboxed to Paper only), but the user never sees or manages it as an Automation:
 it lives on, and is deleted with, the portfolio.
 
+**Built (2026-11-18)** as `services/paper_trading/autopilot.py` (settings, schedule, review log on
+the portfolio row) and `autopilot_run.py` (one review). A review is one headless Lucius turn
+(`core.headless_turn`) with an ENFORCED tool offer (reads + the paper tools) and the paper-only
+guard bound to the portfolio (`AutomationApprovalContext`, `simulation_only`,
+`paper_portfolio_id`); its orders carry origin `autopilot`, which the paper choke refuses past
+5 per review, outside a review, or across the mandate (no override). Daily (weekdays) or weekly
+(Mondays) at 10:00 in the owner's zone; "Review now" sets the next review to now and the
+scheduler's one-minute pass runs it. Two failures in a row pause it. Not built yet: event
+triggers (buy zone, stop, drift), a monthly model-cost ceiling, and Lucius turning autopilot on
+or off from chat.
+
 ## Order to build
 
 1. **Mandate**: built, with a per-sector limit and the By sector ring.
-2. **Autopilot** (Manual / Auto) with memos and its hard limits.
+2. **Autopilot** (Manual / Auto) with memos and its hard limits: built, on a schedule.
 3. **Rebalance band** and review cadence on the mandate, read by the autopilot's reviews.
 4. **Review**: decision journal, mandate-breach log, thesis hit rate, You vs Lucius.

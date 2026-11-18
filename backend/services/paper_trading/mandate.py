@@ -60,6 +60,26 @@ def clean(raw: dict | None) -> dict | None:
     return out or None
 
 
+def describe(m: dict | None) -> str:
+    """The limits in one line, for a prompt: "max 20% per holding; at least 5% cash; …"."""
+    if not m:
+        return ""
+    parts = []
+    if m.get("max_position_pct") is not None:
+        parts.append(f"max {m['max_position_pct']:g}% per holding")
+    if m.get("max_sector_pct") is not None:
+        parts.append(f"max {m['max_sector_pct']:g}% per sector")
+    if m.get("min_cash_pct") is not None:
+        parts.append(f"at least {m['min_cash_pct']:g}% cash")
+    if m.get("max_positions") is not None:
+        parts.append(f"at most {m['max_positions']} holdings")
+    if m.get("stop_loss_pct") is not None:
+        parts.append(f"sell a holding down {m['stop_loss_pct']:g}% from cost")
+    if m.get("universe"):
+        parts.append(f"buy only {', '.join(m['universe'])}")
+    return "; ".join(parts)
+
+
 def _pct(x: float) -> str:
     return f"{x * 100:.1f}%".replace(".0%", "%")
 

@@ -159,6 +159,8 @@ def _prepare(change: dict) -> tuple[dict, dict]:
         "benchmark": str(change.get("benchmark") or seed.default_benchmark()),
         "settings": _clean_settings(change.get("settings")),
         "mandate": mandate.clean(change.get("mandate")),
+        # Only Start over passes one: the settings carry over, the review log does not.
+        "autopilot": change.get("autopilot"),
         "origin": {"kind": start, "ref": change.get("followed_id"), "label": opening["label"]},
         "status": "active",
         "lineage_id": change.get("lineage_id") or new_id("plin"),
@@ -284,12 +286,29 @@ def _prepare_next_run(old: dict, spec: dict) -> tuple[dict, dict]:
             "benchmark": old.get("benchmark"),
             "settings": old.get("settings") or {},
             "mandate": old.get("mandate"),
+            "autopilot": _carried_autopilot(old),
             "lineage_id": old.get("lineage_id"),
             "run_no": int(old.get("run_no") or 1) + 1,
             "origin": old.get("created_by") or "owner",
             "automation_id": old.get("automation_id"),
         }
     )
+
+
+def _carried_autopilot(old: dict) -> dict | None:
+    """A new run keeps the autopilot's settings, not its review log or a pause."""
+    from backend.services.paper_trading import autopilot
+
+    if not old.get("autopilot"):
+        return None
+    a = autopilot.of(old)
+    nxt = autopilot.next_slot(a["cadence"], _now()).isoformat() if a["mode"] == "auto" else None
+    return {
+        "mode": a["mode"],
+        "cadence": a["cadence"],
+        "instructions": a["instructions"],
+        "next_run_at": nxt,
+    }
 
 
 def _delete(change: dict) -> dict:
@@ -408,13 +427,35 @@ def _pre_trade_check(change, row, asset, order, quote, fxq, now) -> list[dict]:
     if not breaches:
         return []
     origin = str(change.get("origin") or "owner")
-    if origin.startswith("automation:") or not change.get("override_mandate"):
+    # An Automation or the autopilot has no one to ask: the mandate is its hard limit.
+    unattended = origin.startswith("automation:") or origin == "autopilot"
+    if unattended or not change.get("override_mandate"):
         raise ConflictError(
             "This buy breaks the portfolio's mandate: "
             + " ".join(b["message"] for b in breaches)
-            + ("" if origin.startswith("automation:") else " Place it anyway to break it.")
+            + ("" if unattended else " Place it anyway to break it.")
         )
     return breaches
+
+
+def _refuse_past_autopilot_cap(row: dict, origin: str, *, conn: Connection) -> None:
+    """A review places at most ``MAX_ORDERS_PER_RUN`` orders, counted here, not by the model."""
+    from backend.services.paper_trading import autopilot
+
+    if origin != "autopilot":
+        return
+    started = autopilot.run_started_at(row)
+    if not started:
+        raise ConflictError("The autopilot trades only during a review.")
+    placed = sum(
+        1
+        for o in portfolio_orders(row["id"], conn=conn)
+        if o.get("origin") == "autopilot" and str(o.get("placed_at")) >= started
+    )
+    if placed >= autopilot.MAX_ORDERS_PER_RUN:
+        raise ConflictError(
+            f"An autopilot review places at most {autopilot.MAX_ORDERS_PER_RUN} orders."
+        )
 
 
 def _place(change: dict) -> dict:
@@ -432,6 +473,7 @@ def _place(change: dict) -> dict:
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = portfolio(row["id"], conn=conn)
         _require_active(row)
+        _refuse_past_autopilot_cap(row, origin, conn=conn)
         bk = derive(row["id"], conn=conn)
         open_orders = [o for o in portfolio_orders(row["id"], conn=conn) if o["status"] == "open"]
         if len(open_orders) >= MAX_OPEN_ORDERS:
@@ -724,4 +766,12 @@ def apply_paper_change(change: dict) -> dict:
         return _mark(change)
     if op == "lifecycle":
         return _lifecycle(change)
+    if op == "autopilot":
+        from backend.services.paper_trading import autopilot
+
+        return {"portfolio": autopilot.apply_settings(change)}
+    if op == "autopilot_run_now":
+        from backend.services.paper_trading import autopilot
+
+        return {"portfolio": autopilot.run_soon(change.get("id"))}
     raise ValidationError(f"Unknown paper change '{op}'.")

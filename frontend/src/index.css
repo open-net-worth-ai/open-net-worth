@@ -21292,6 +21292,27 @@ body.hide-amounts .mf-lbl-amt {
   gap: var(--space-9);
   min-width: 0;
 }
+/* The Autopilot tab: Manual / Auto with what it means now, then its settings and reviews. */
+.paper-autopilot-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.paper-autopilot-mode .paper-next,
+.paper-autopilot-need .paper-next {
+  margin: 0;
+  max-width: 70ch;
+}
+.paper-autopilot-form {
+  max-width: 560px;
+}
+.paper-autopilot-need {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
 /* The Mandate tab: the goal in the portfolio's own words, then each limit kept or broken. */
 .paper-mandate {
   display: flex;

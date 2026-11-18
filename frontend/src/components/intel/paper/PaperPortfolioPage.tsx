@@ -21,12 +21,13 @@ import {
 } from '../../../api/paperTrading'
 import { EditPortfolioDialog } from './EditPortfolioDialog'
 import { MandateTab } from './MandateTab'
+import { AutopilotTab } from './AutopilotTab'
 import { OrderTicket } from './OrderTicket'
 import { PaperChart } from './PaperChart'
 import { PaperSource } from './PaperSource'
 import { usePaperPage } from './usePaper'
 
-type Tab = 'holdings' | 'orders' | 'activity' | 'mandate'
+type Tab = 'holdings' | 'orders' | 'activity' | 'mandate' | 'autopilot'
 
 const assetOfHolding = (h: PaperHolding): PaperAsset => ({
   asset_key: h.asset_key,
@@ -61,7 +62,9 @@ export function PaperPortfolioPage({
   const [pollOpen, setPollOpen] = useState(false)
   const page = usePaperPage(id, pollOpen)
   const data = page.data
-  const hasOpen = (data?.figures.open_orders ?? 0) > 0
+  // Poll while an order waits, or while a review runs or is about to: its memo and trades
+  // then appear on their own.
+  const hasOpen = (data?.figures.open_orders ?? 0) > 0 || !!data?.autopilot?.review_soon
   if (hasOpen !== pollOpen) setPollOpen(hasOpen)
 
   if (page.initialLoading)
@@ -112,6 +115,7 @@ export function PaperPortfolioPage({
             <h2 className="fol-title paper-title">
               <span className="fol-title-name">{p.name}</span>
               <Tag>Paper</Tag>
+              {data.autopilot?.mode === 'auto' && <Tag tone="accent">Autopilot</Tag>}
               <span className="fol-title-by">
                 {p.source && (
                   <>
@@ -158,6 +162,7 @@ export function PaperPortfolioPage({
             { key: 'orders', label: 'Orders', badge: f.open_orders || undefined },
             { key: 'activity', label: 'Activity' },
             { key: 'mandate', label: 'Mandate', badge: data.mandate?.broken || undefined },
+            { key: 'autopilot', label: 'Autopilot' },
           ]}
         />
       </div>
@@ -264,6 +269,18 @@ export function PaperPortfolioPage({
           <MandateTab
             status={data.mandate}
             onEdit={archived ? undefined : () => setEditing(true)}
+          />
+        )}
+        {tab === 'autopilot' && data.autopilot && (
+          <AutopilotTab
+            // Remount after a save, so its fields start from what is stored.
+            key={`${data.autopilot.mode}-${data.autopilot.cadence}-${data.autopilot.instructions}`}
+            autopilot={data.autopilot}
+            hasMandate={!!p.mandate}
+            archived={archived}
+            portfolioId={id}
+            onEditMandate={() => setEditing(true)}
+            onNotice={setNotice}
           />
         )}
       </div>
@@ -445,7 +462,9 @@ function orderColumns(cancel: (id: string) => void): Column<PaperOrder>[] {
           <b>
             {o.side === 'buy' ? 'Buy' : 'Sell'} {o.quantity ?? ''} {o.symbol ?? o.name}
           </b>{' '}
-          <span className="fol-by">{o.origin === 'owner' ? 'You' : 'Lucius'}</span>
+          <span className="fol-by">
+            {o.origin === 'owner' ? 'You' : o.origin === 'autopilot' ? 'Autopilot' : 'Lucius'}
+          </span>
         </span>
       ),
     },

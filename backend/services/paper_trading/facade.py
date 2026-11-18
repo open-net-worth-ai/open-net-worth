@@ -48,6 +48,22 @@ def start_over(pid: str) -> dict:
     }
 
 
+def set_autopilot(pid: str, body: dict) -> dict:
+    """Manual or Auto, how often, and any standing instructions for the reviews."""
+    from backend.services.paper_trading import autopilot
+
+    row = service.apply_paper_change({"op": "autopilot", "id": pid, **body})["portfolio"]
+    return {"autopilot": autopilot.view(row), **SIMULATED}
+
+
+def run_autopilot_now(pid: str) -> dict:
+    """Review now: the scheduler's next pass (within a minute) runs it."""
+    from backend.services.paper_trading import autopilot
+
+    row = service.apply_paper_change({"op": "autopilot_run_now", "id": pid})["portfolio"]
+    return {"autopilot": autopilot.view(row), **SIMULATED}
+
+
 def delete(pid: str) -> dict:
     return {**service.apply_paper_change({"op": "delete", "id": pid}), **SIMULATED}
 

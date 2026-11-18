@@ -12,6 +12,7 @@ from backend.db.followed_portfolio_store import FollowedPortfolioStore
 from backend.db.paper_store import MAX_ACTIVE_PORTFOLIOS, PaperPortfolioStore, PaperValueStore
 from backend.services.paper_trading import (
     assets,
+    autopilot,
     mandate,
     performance,
     sectors,
@@ -125,6 +126,7 @@ def card(row: dict, *, live: bool = True) -> dict:
         + ([{"date": user_today().isoformat(), "value": value}] if value is not None else []),
         "settings": row.get("settings") or {},
         "mandate": row.get("mandate"),
+        "autopilot_mode": autopilot.of(row)["mode"],
         # What the card's ring and trade lines show: its largest holdings by weight (a live
         # card only) and its two newest buys or sells.
         "holdings_count": len(holdings),
@@ -327,6 +329,7 @@ def page(pid: str) -> dict:
         # By sector, as Copy Trading draws it: each sector's share of what is invested.
         "sectors": sectors.breakdown(val["holdings"], sector_of),
         "mandate": mandate.status(row.get("mandate"), val, sector_of),
+        "autopilot": autopilot.view(row),
         "orders": [order_view(o) for o in open_ + recent],
         "activity": activity(pid, limit=50)["activity"],
         **SIMULATED,

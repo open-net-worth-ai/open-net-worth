@@ -611,6 +611,19 @@ async def _run_paper_daily() -> None:
         logger.exception("scheduler: paper daily error: %s", exc)
 
 
+async def _run_paper_autopilot() -> None:
+    """Paper trading: run each Auto paper portfolio's due review (flag-gated inside). A review is
+    one Lucius turn that may trade only that simulated portfolio, within its mandate."""
+    try:
+        from backend.services.paper_trading import autopilot_run
+
+        result = await autopilot_run.run_due()
+        if result:
+            logger.info("scheduler: paper autopilot — %s", result)
+    except Exception as exc:
+        logger.exception("scheduler: paper autopilot error: %s", exc)
+
+
 async def _run_bank_data_sync() -> None:
     """Tick of the AI-free bank sync (ADR 2026-11-13): runs each connector in "Sync without AI"
     mode when its own schedule says it is due. Nothing at all while ``bank_data_sync`` is off."""
@@ -747,6 +760,15 @@ def start() -> None:
         id="paper_daily",
         replace_existing=True,
         misfire_grace_time=3600,
+        max_instances=1,
+    )
+    # Paper autopilot — each Auto portfolio's due review (and any "Review now"), one at a time.
+    _scheduler.add_job(
+        _run_paper_autopilot,
+        trigger=IntervalTrigger(seconds=60, start_date=datetime.now() + timedelta(seconds=30)),
+        id="paper_autopilot",
+        replace_existing=True,
+        misfire_grace_time=300,
         max_instances=1,
     )
 

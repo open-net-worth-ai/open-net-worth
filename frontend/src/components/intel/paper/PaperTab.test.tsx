@@ -109,6 +109,17 @@ const page = {
     },
   ],
   mandate: null,
+  autopilot: {
+    mode: 'manual',
+    cadence: 'daily',
+    instructions: '',
+    next_run_at: null,
+    running: false,
+    review_soon: false,
+    paused_reason: null,
+    runs: [],
+    max_orders_per_run: 5,
+  },
 }
 
 const api = vi.hoisted(() => ({
@@ -117,6 +128,7 @@ const api = vi.hoisted(() => ({
   preview: vi.fn(),
   search: vi.fn(),
   update: vi.fn(),
+  autopilot: vi.fn(),
 }))
 vi.mock('../../../api/paperTrading', async (importOriginal) => {
   const real = await importOriginal<typeof Api>()
@@ -145,6 +157,7 @@ vi.mock('../../../api/paperTrading', async (importOriginal) => {
     previewPaperOrder: api.preview,
     placePaperOrder: api.place,
     updatePaperPortfolio: api.update,
+    setPaperAutopilot: api.autopilot,
   }
 })
 
@@ -289,6 +302,32 @@ describe('Paper Trading', () => {
       expect(screen.getByText('NVIDIA Corporation')).toBeTruthy()
     } finally {
       Object.assign(page, { holdings: [holding], sectors: undefined })
+    }
+  })
+
+  it('turns autopilot on only once there is a mandate', async () => {
+    api.autopilot.mockResolvedValue({})
+    render(<PaperTab />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Autopilot' }))
+    expect(await screen.findByRole('button', { name: 'Set a mandate' })).toBeTruthy()
+    Object.assign(card, { mandate: { goal: 'Beat SPY', max_position_pct: 20 } })
+    try {
+      cleanup()
+      invalidateQueryCache(() => true)
+      render(<PaperTab />)
+      fireEvent.click(await screen.findByRole('tab', { name: 'Autopilot' }))
+      expect(screen.queryByRole('button', { name: 'Set a mandate' })).toBeNull()
+      fireEvent.click(screen.getByRole('tab', { name: 'Auto' }))
+      await waitFor(() =>
+        expect(api.autopilot).toHaveBeenCalledWith('ppf_1', {
+          mode: 'auto',
+          cadence: 'daily',
+          instructions: '',
+        }),
+      )
+    } finally {
+      Object.assign(card, { mandate: null })
     }
   })
 

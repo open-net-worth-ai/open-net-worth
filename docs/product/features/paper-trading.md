@@ -93,6 +93,29 @@ broken ones. **Start over** keeps the mandate.
 Lucius reads the mandate whenever he works on the portfolio and trades within it. He breaks a
 limit only after he tells you which one and you say yes; an Automation never can.
 
+## Autopilot
+
+The **Autopilot** tab sets who trades a paper portfolio:
+
+- **Manual** (the default): only you, and Lucius when you ask him in chat.
+- **Auto**: Lucius reviews the portfolio on a schedule (every weekday or every Monday, at 10:00
+  your time), places the trades he decides on, and writes a short memo of what he looked at,
+  what he did and what he is watching next. The portfolio shows an **Autopilot** tag, and each
+  order he places says **Autopilot**.
+
+Auto needs a mandate: it is what you approve in advance. A review:
+
+- trades only this paper portfolio, and can read prices, your investment theses and Intel,
+  but nothing else (no real accounts, no connectors, no web);
+- places at most 5 orders, and can never break the mandate (no **Place anyway** for it);
+- fixes a broken limit first, such as a holding past its stop loss or over its cap.
+
+Add standing instructions in **Anything Lucius should keep in mind**. **Review now** runs a
+review within a minute. Every review, including one that made no trades, is listed under
+**Reviews**. Two failed reviews in a row pause the autopilot; turn it to Auto again to resume.
+**Start over** keeps the autopilot's settings, not its reviews. Each review is a Lucius turn, so
+it uses your AI model like a chat does.
+
 On an asset's **Position** tab, **On paper** lists your paper positions in it, apart from your
 real ones and never added to them, then every paper trade in it, newest first: the date, the paper
 portfolio, the trade and its **Why**. A position you sold out of keeps its trades there.
@@ -146,4 +169,4 @@ included), search the web or fetch a page, or change Lucius's memory or skills, 
 instructions say. One tied to a paper portfolio trades only that portfolio (and its later runs
 after **Start over**). This is fixed when the Automation is created.
 
-On the public demo, paper portfolios can be read but not changed.
+On the public demo, paper portfolios can be read but not changed, and autopilot is off.

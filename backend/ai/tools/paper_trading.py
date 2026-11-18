@@ -49,7 +49,12 @@ def _refusal():
 
 def _origin() -> str:
     ctx = get_automation_approval()
-    return f"automation:{ctx.automation_id}" if ctx is not None else "lucius"
+    if ctx is None:
+        return "lucius"
+    # A paper portfolio's own autopilot review (services/paper_trading/autopilot_run.py).
+    if ctx.automation_id.startswith("autopilot:"):
+        return "autopilot"
+    return f"automation:{ctx.automation_id}"
 
 
 MAX_ORDERS_PER_CALL = 20
@@ -107,6 +112,13 @@ def _one_portfolio(pid: str) -> dict:
         "recent_activity": page["activity"][:10],
         # Its goal and limits, each kept or not right now. Trade within them.
         "mandate": page.get("mandate"),
+        # Whether its own autopilot reviews and trades it (set by the owner on the page), and
+        # what the last review said.
+        "autopilot": {
+            k: (page.get("autopilot") or {}).get(k)
+            for k in ("mode", "cadence", "next_run_at", "paused_reason")
+        }
+        | {"last_review": ((page.get("autopilot") or {}).get("runs") or [None])[0]},
         "sectors": [{k: s[k] for k in ("sector", "weight")} for s in page.get("sectors") or []],
         "simulated": True,
     }

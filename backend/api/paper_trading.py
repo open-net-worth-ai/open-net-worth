@@ -6,6 +6,8 @@ GET    /api/paper/portfolios                        — active cards + archived 
 POST   /api/paper/portfolios                        — create (cash | holdings | followed)
 GET    /api/paper/portfolios/{id}                   — the page: figures, holdings, orders, activity
 PATCH  /api/paper/portfolios/{id}                   — rename, settings, benchmark, archive
+PATCH  /api/paper/portfolios/{id}/autopilot         — manual | auto, daily | weekly, instructions
+POST   /api/paper/portfolios/{id}/autopilot/run     — review now (the scheduler runs it)
 POST   /api/paper/portfolios/{id}/start-over        — archive this run, start the next
 DELETE /api/paper/portfolios/{id}
 POST   /api/paper/portfolios/{id}/orders/preview    — what placing would do, no write
@@ -120,6 +122,22 @@ def get_paper_portfolio(pid: str):
 @router.patch("/api/paper/portfolios/{pid}")
 def update_paper_portfolio(pid: str, body: UpdateBody):
     return _run(paper.update, pid, body.model_dump(exclude_unset=True))
+
+
+class AutopilotBody(BaseModel):
+    mode: Literal["manual", "auto"] | None = None
+    cadence: Literal["daily", "weekly"] | None = None
+    instructions: str | None = Field(None, max_length=600)
+
+
+@router.patch("/api/paper/portfolios/{pid}/autopilot")
+def set_paper_autopilot(pid: str, body: AutopilotBody):
+    return _run(paper.set_autopilot, pid, body.model_dump(exclude_unset=True))
+
+
+@router.post("/api/paper/portfolios/{pid}/autopilot/run")
+def run_paper_autopilot(pid: str):
+    return _run(paper.run_autopilot_now, pid)
 
 
 @router.post("/api/paper/portfolios/{pid}/start-over")
