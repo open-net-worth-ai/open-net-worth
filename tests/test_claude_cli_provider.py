@@ -1905,6 +1905,8 @@ async def test_a_reused_session_rejected_by_the_api_retries_on_a_fresh_process(
             for ev in self._events:
                 yield ev
 
+        tools_shown = None
+
         def own_round_cost(self, result):
             return result
 

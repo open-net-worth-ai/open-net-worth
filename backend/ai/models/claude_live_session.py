@@ -41,7 +41,7 @@ knobs. Its public names are unchanged.
 from __future__ import annotations
 
 import json
-from typing import Optional
+from typing import Callable, Optional
 
 from backend.ai.image_payloads import decode_image_payloads
 
@@ -80,6 +80,9 @@ class LiveSession(cli_live_session.LiveSession):
         super().__init__(argv, env, workdir)
         # Running total of `total_cost_usd` this process has already reported.
         self.cost_reported_usd = 0.0
+        # name → digest of every tool this process has been shown, at spawn or since
+        # (`claude_cli_stable_tool_prompt`); None = keyed the old way, on the manifest.
+        self.tools_shown: Optional[dict[str, str]] = None
 
     def is_final(self, event: dict) -> bool:
         return event.get("type") == "result"
@@ -98,6 +101,17 @@ class LiveSession(cli_live_session.LiveSession):
         own = max(0.0, float(total) - self.cost_reported_usd)
         self.cost_reported_usd = float(total)
         return {**result, "total_cost_usd": own}
+
+    def can_serve_tools(self, digests: dict[str, str]) -> bool:
+        """Whether this process may serve a round offering ``digests``.
+
+        Only ADDING tools is safe: a process cannot be un-told about a tool it was shown,
+        nor told that one it knows has changed, so either needs a fresh process.
+        """
+        shown = self.tools_shown
+        if shown is None:
+            return False
+        return all(digests.get(name) == digest for name, digest in shown.items())
 
     def launch_argv(self) -> list[str]:
         return with_system_prompt_file(self.argv, self.workdir)
@@ -136,11 +150,15 @@ def pending_messages(messages: list[dict], consumed: int) -> str:
 
 
 async def acquire(
-    argv: list[str], env: dict, messages: list[dict], key_argv: Optional[list[str]] = None
+    argv: list[str],
+    env: dict,
+    messages: list[dict],
+    key_argv: Optional[list[str]] = None,
+    accepts: "Optional[Callable[[LiveSession], bool]]" = None,
 ) -> "tuple[LiveSession, str, list[dict], bool]":
     """Get a session for this turn — see :func:`cli_live_session.acquire`."""
     return await cli_live_session.acquire(
-        pool(), LiveSession, "onw-claude-cli-", argv, env, messages, key_argv
+        pool(), LiveSession, "onw-claude-cli-", argv, env, messages, key_argv, accepts=accepts
     )
 
 

@@ -67,6 +67,22 @@ class Flag:
 # (``tests/flags.py``) on top of these.
 FLAGS: tuple[Flag, ...] = (
     Flag(
+        name="claude_cli_stable_tool_prompt",
+        description=(
+            "With Lucius on the Claude Code CLI, a tool Lucius loads mid-conversation is "
+            "introduced in the conversation instead of in its instructions, so the CLI keeps "
+            "its running process and prompt cache. A turn that loads a tool then reads the "
+            "cached prompt instead of writing ~40K tokens to cache again: faster, and less of "
+            "your plan's usage. Off: every tool load restarts the CLI with the full tool list, "
+            "as before. More in Help: Models and cost control."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 18),
+        remove_by=date(2027, 2, 28),
+        kind="release",
+    ),
+    Flag(
         name="permissions_v2",
         description=(
             "A new permissions model. Each tool has one setting: Always allow, Ask or Block. "

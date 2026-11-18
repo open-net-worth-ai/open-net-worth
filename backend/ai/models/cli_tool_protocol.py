@@ -25,6 +25,7 @@ drop would look to the user like the assistant simply said nothing.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -223,7 +224,29 @@ def render_tool_manifest(tools: list[dict]) -> str:
     """Render the tool schemas into a system-prompt section, or "" when there are none."""
     if not tools:
         return ""
-    lines: list[str] = [_MANIFEST_HEADER]
+    return "\n".join([_MANIFEST_HEADER, *_tool_sections(tools)])
+
+
+def render_tool_addendum(tools: list[dict]) -> str:
+    """The schemas of tools loaded after a live CLI process started, for its next message.
+
+    Its system prompt (and so its prompt cache) stays as spawned; these join the
+    ``## Available tools`` it already holds. "" when there are none.
+    """
+    if not tools:
+        return ""
+    return "\n".join(
+        [
+            "<tools_added>",
+            "These tools are now in your Available tools too — call them exactly like the others:",
+            *_tool_sections(tools),
+            "</tools_added>",
+        ]
+    )
+
+
+def _tool_sections(tools: list[dict]) -> list[str]:
+    lines: list[str] = []
     for t in tools:
         name = t.get("name") or ""
         if not name:
@@ -237,7 +260,24 @@ def render_tool_manifest(tools: list[dict]) -> str:
             )
         except (TypeError, ValueError):
             lines.append("input_schema: {}")
-    return "\n".join(lines)
+    return lines
+
+
+def tool_digests(tools: list[dict]) -> dict[str, str]:
+    """name → hash of what the model is told about that tool (description + schema)."""
+    out: dict[str, str] = {}
+    for t in tools:
+        name = t.get("name") or ""
+        if not name:
+            continue
+        body = json.dumps(
+            [t.get("description") or "", t.get("input_schema") or {}],
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+        out[name] = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    return out
 
 
 def _block_to_text(block: dict, images: list[dict] | None = None, result_nonce: str = "") -> str:

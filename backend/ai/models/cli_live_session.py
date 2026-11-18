@@ -328,9 +328,14 @@ class SessionPool:
                 self._pool.pop(key, None)
         return doomed
 
-    def find(self, argv: list[str], fps: list[str]) -> Optional[LiveSession]:
+    def find(
+        self,
+        argv: list[str],
+        fps: list[str],
+        accepts: Optional[Callable[[LiveSession], bool]] = None,
+    ) -> Optional[LiveSession]:
         for s in self._pool.get(self.key(argv), []):
-            if s.alive and not s._busy and s.matches(fps):
+            if s.alive and not s._busy and s.matches(fps) and (accepts is None or accepts(s)):
                 return s
         return None
 
@@ -394,6 +399,7 @@ async def acquire(
     key_argv: Optional[list[str]] = None,
     render_full: RenderFull = flatten_messages_with_images,
     fresh: bool = False,
+    accepts: Optional[Callable[[LiveSession], bool]] = None,
 ) -> "tuple[LiveSession, str, list[dict], bool]":
     """Get a session for this turn.
 
@@ -401,6 +407,7 @@ async def acquire(
     or any rewrite of the history the session had consumed — a fresh process is spawned
     and ``render_full``'s rendering of the FULL transcript is sent. ``fresh`` skips the
     lookup altogether — a retry after a failed reuse must not land on another idle session.
+    ``accepts`` is a further test a kept session must pass, beyond its key and transcript.
     """
     key_argv = key_argv or argv
     for dead in p.reap_idle():
@@ -416,7 +423,7 @@ async def acquire(
             )
         await dead.close()
 
-    session = None if fresh else p.find(key_argv, fingerprints(messages))
+    session = None if fresh else p.find(key_argv, fingerprints(messages), accepts)
     if session is not None:
         text, images = pending_turn(messages, len(session.consumed))
         if text.strip() and text.strip() != "Assistant:":
