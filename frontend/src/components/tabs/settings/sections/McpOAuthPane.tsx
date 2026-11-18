@@ -1,6 +1,6 @@
-// The OAuth path of Settings → MCP as three steps: set up (a checklist built from the server's own
-// reasons, each open item with a way to fix it), connect (the address to paste and where), and the
-// apps already connected. Credentials for any other app sit behind a disclosure at the end.
+// The OAuth path of Settings → MCP: set up (a checklist built from the server's own reasons, each
+// open item with a way to fix it), connect (the address to paste and where), a client ID and secret
+// for an app that asks for one, and the apps already connected.
 import { useState } from 'react'
 import { Circle, CircleCheck } from '../../../../ui/icons'
 import { InfoPopover } from '../../../ui'
@@ -112,12 +112,12 @@ export function OAuthPane({
           <ConnectorAddress mcpUrl={status.mcp_url} toast={toast} />
         </Panel>
       ) : null}
+      {status ? <OtherApps status={status} refresh={refresh} toast={toast} /> : null}
       {status ? (
         <Panel title="Connected apps">
           <ConnectedApps apps={status.apps} refresh={refresh} toast={toast} />
         </Panel>
       ) : null}
-      {status ? <OtherApps status={status} refresh={refresh} toast={toast} /> : null}
     </>
   )
 }
