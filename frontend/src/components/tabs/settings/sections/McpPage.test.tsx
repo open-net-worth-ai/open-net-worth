@@ -102,7 +102,10 @@ describe('Settings → MCP', () => {
     expect(await screen.findByText('2 steps left')).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: /OAuth/ }))
     expect(screen.getByText('A password is set, and sign-in is on')).toBeTruthy()
-    expect(screen.getByText(/Don't ask for the password on this computer/)).toBeTruthy()
+    expect(screen.getByText('The password is always required')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Why: The password is always required' }),
+    ).toBeTruthy()
     expect(screen.queryByDisplayValue('https://wealth.example.com/mcp')).toBeNull()
     fireEvent.click(screen.getAllByRole('button', { name: 'Open Security' })[0]!)
     expect(openSection).toHaveBeenCalledWith('security')
