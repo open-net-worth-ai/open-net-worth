@@ -91,6 +91,7 @@ const DocumentsSheet = lazy(() =>
   import('../vault/DocumentsSheet').then((m) => ({ default: m.DocumentsSheet })),
 )
 // lazyChunk: a window left open across a rebuild reloads once instead of crashing on the click.
+import { MemorySheetFallback } from './MemorySheetFallback'
 const MemorySheet = lazyChunk(() =>
   import('./MemorySheet').then((m) => ({ default: m.MemorySheet })),
 )
@@ -1249,7 +1250,7 @@ export function ChatPanel({
         </Suspense>
       )}
       {!homeMode && memory.open && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<MemorySheetFallback />}>
           <MemorySheet onClose={memory.close} />
         </Suspense>
       )}
