@@ -485,7 +485,7 @@
 }
 
 /* The same filter controls in the widget's settings panel (its Filters tab), each section a
-   row like the panel's own controls: same padding, same divider, same label size. */
+   row like the panel's own controls: same padding and label size, no dividers. */
 .ov-fs-filters {
   display: flex;
   flex-direction: column;
@@ -512,11 +512,6 @@
 
 .ov-fs-filters .ov-rf-sec {
   padding: 12px 2px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
-}
-
-.ov-fs-filters .ov-rf-sec:last-of-type {
-  border-bottom: none;
 }
 
 .ov-fs-filters .ov-rf-h {
