@@ -81,9 +81,8 @@ settings as **Edit** in Customize — title, chart type, categories and so on), 
 color, hide title, fixed height), **Share with Lucius**, **Duplicate** and **Remove**, and a
 link to the tab it comes from. Every list widget's **Rows** setting includes **All**.
 
-**Build with Lucius** — in **Add widget**, describe what you want ("my USD exposure over time")
-and Lucius builds the widget. An empty view also offers **Build with Lucius** to assemble a whole
-view for you.
+**Build with Lucius** — an empty view offers **Build with Lucius**, which asks Lucius in chat
+which widgets to add for you.
 
 Each widget is as tall as its content (or the height you set, if you switched it to **Fixed**).
 Widgets side by side line up when their heights are close; when one is much shorter, it simply
@@ -134,7 +133,8 @@ instead, and its editor shows **Period** with its other settings:
   so they offer **3 months**, **6 months**, **12 months** or **This year**. Every one also
   offers **Custom**: pick a **From** and a **To** month and year, and it covers both and every
   month between.
-- **Categories.** Pick one or more (search the list) to count only those categories. A split
+- **Categories.** Pick one or more (search the list, grouped by kind: Expense, Income,
+  Investment, Transfer) to count only those categories. A split
   transaction counts only its split in the chosen category.
 - **Tags.** Search the list and pick one or more to count only transactions carrying any of
   them, for example everything tagged *#trip*.

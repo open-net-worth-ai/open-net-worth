@@ -4,7 +4,7 @@
 // (ReportFilterControls). The popover portals to <body> (like ChartToggleMenu): the trigger sits inside a
 // clipped, scrolling card. On a phone the same controls open in a bottom sheet instead.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from '../../../../ui/icons'
 import { BottomSheet } from '../../../ui/BottomSheet'
@@ -14,6 +14,7 @@ import { useIsMobile } from '../../../../hooks/useIsMobile'
 import { useCategories } from '../../../../hooks/serverState'
 import { useTransactionTags } from '../../accounts/tagOptions'
 import { FilterCombo } from '../../accounts/pickers'
+import { KIND_LABEL, KIND_ORDER, type CatKind } from '../../accounts/categoryKinds'
 import type { WidgetDefinition, WidgetInstance } from '../types'
 import { CUSTOM_PERIOD, reportHasFilters, reportScope } from './reportScope'
 
@@ -398,7 +399,8 @@ function CheckSection({
   title: string
   noun: string
   value: string[]
-  options: { id: string; label: string }[]
+  /** `group` heads a run of rows (a category's kind); options arrive ordered by it. */
+  options: { id: string; label: string; group?: string }[]
   onChange: (next: string[]) => void
   empty?: string
   hint?: string
@@ -439,15 +441,25 @@ function CheckSection({
                 No {noun.replace(/s$/, '').replace(/ie$/, 'y')} matches.
               </span>
             ) : (
-              shown.map((c) => (
-                <Checkbox
-                  key={c.id}
-                  className="ov-rf-check"
-                  label={c.label}
-                  checked={chosen.has(c.id)}
-                  onChange={() => toggle(c.id)}
-                />
-              ))
+              shown.map((c, i) => {
+                // A heading where the kind changes, after the rows ticked when it opened.
+                const prev = shown[i - 1]
+                const head =
+                  c.group &&
+                  !pinned.has(c.id) &&
+                  (!prev || pinned.has(prev.id) || prev.group !== c.group)
+                return (
+                  <Fragment key={c.id}>
+                    {head && <span className="ov-rf-group">{c.group}</span>}
+                    <Checkbox
+                      className="ov-rf-check"
+                      label={c.label}
+                      checked={chosen.has(c.id)}
+                      onChange={() => toggle(c.id)}
+                    />
+                  </Fragment>
+                )
+              })
             )}
           </div>
         </>
@@ -463,13 +475,21 @@ function CategorySection({
   onChange,
 }: {
   value: string[]
-  options: { id: string; label?: string }[]
+  options: { id: string; label?: string; kind?: string }[]
   onChange: (next: string[]) => void
 }) {
   const list = options
     .filter((c) => c.id !== 'split')
-    .map((c) => ({ id: c.id, label: c.label || c.id }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((c) => {
+      // An unknown or retired kind (an old adjustment category) counts as an expense, as the
+      // server's own `kind_for` does.
+      const kind = (KIND_ORDER as string[]).includes(c.kind ?? '') ? (c.kind as CatKind) : 'expense'
+      return { id: c.id, label: c.label || c.id, kind, group: KIND_LABEL[kind] }
+    })
+    .sort(
+      (a, b) =>
+        KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.label.localeCompare(b.label),
+    )
   return (
     <CheckSection
       title="Categories"

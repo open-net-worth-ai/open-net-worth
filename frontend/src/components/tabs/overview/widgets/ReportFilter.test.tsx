@@ -201,4 +201,35 @@ describe('ReportFilter', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Filter:/ }))
     expect(await screen.findByRole('textbox', { name: 'Search tags' })).toBeTruthy()
   })
+
+  it('groups the categories by kind: expense, then income', async () => {
+    authFetch.mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve(
+            url.startsWith('/api/categories')
+              ? [
+                  { id: 'cat_s', label: 'Salary', kind: 'income' },
+                  { id: 'cat_r', label: 'Rent', kind: 'expense' },
+                  { id: 'cat_d', label: 'Dining', kind: 'expense' },
+                ]
+              : { tags: [] },
+          ),
+      } as Response),
+    )
+    render(
+      <ReportFilter
+        instance={inst({})}
+        def={defOf('rep-spendcat')}
+        onPatch={vi.fn()}
+        label="This month"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Filter:/ }))
+    const list = await screen.findByRole('group', { name: 'Categories' })
+    await within(list).findByText('Salary')
+    expect(list.textContent).toBe('ExpenseDiningRentIncomeSalary')
+  })
 })
