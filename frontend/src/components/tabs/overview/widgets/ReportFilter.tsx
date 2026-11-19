@@ -14,6 +14,7 @@ import { useIsMobile } from '../../../../hooks/useIsMobile'
 import { useCategories } from '../../../../hooks/serverState'
 import { useTransactionTags } from '../../accounts/tagOptions'
 import { FilterCombo } from '../../accounts/pickers'
+import { KIND_LABEL, KIND_ORDER, type CatKind } from '../../accounts/categoryKinds'
 import type { WidgetDefinition, WidgetInstance } from '../types'
 import { CUSTOM_PERIOD, reportHasFilters, reportScope } from './reportScope'
 
@@ -468,17 +469,6 @@ function CheckSection({
   )
 }
 
-/** A category's kind, in the order the list shows them. */
-const KIND_ORDER = ['expense', 'income', 'investment', 'transfer', 'adjustment']
-// The names the rest of the app gives these kinds (the register's Type filter).
-const KIND_LABEL: Record<string, string> = {
-  expense: 'Expense',
-  income: 'Income',
-  investment: 'Investment',
-  transfer: 'Transfer',
-  adjustment: 'Adjustment',
-}
-
 function CategorySection({
   value,
   options,
@@ -491,7 +481,9 @@ function CategorySection({
   const list = options
     .filter((c) => c.id !== 'split')
     .map((c) => {
-      const kind = KIND_ORDER.includes(c.kind ?? '') ? c.kind! : 'expense'
+      // An unknown or retired kind (an old adjustment category) counts as an expense, as the
+      // server's own `kind_for` does.
+      const kind = (KIND_ORDER as string[]).includes(c.kind ?? '') ? (c.kind as CatKind) : 'expense'
       return { id: c.id, label: c.label || c.id, kind, group: KIND_LABEL[kind] }
     })
     .sort(
