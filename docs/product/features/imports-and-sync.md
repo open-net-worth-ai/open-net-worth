@@ -136,6 +136,11 @@ time.
   it. How often: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only. Below them,
   the last sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs review"), or why it failed.
   A sync that's due shows **Next sync: within a minute**: the app checks every minute.
+- **A Starting Balance changed in YNAB** comes across, unless the direction is **To YNAB**: your
+  opening balance moves by the same amount, so a change you made to it here stays. Its date follows
+  YNAB's when it still matched it. A Starting Balance changed here isn't sent to YNAB.
+- **A payee you clear here** is cleared in YNAB too. A category YNAB can't hold (on a tracking
+  account's row, or on a transfer) stays here and isn't cleared by YNAB's blank.
 - **What YNAB held.** Open a synced or imported transaction and its drawer's **Source** section
   shows the row as YNAB sent it, with a split's lines under it. Each sync refreshes it, and
   transactions imported before this was kept get theirs on the next sync.

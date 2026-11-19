@@ -142,6 +142,25 @@ def _income_view(ctx: Context, rendered: dict | None, ref: Canon) -> dict | None
     return rendered
 
 
+def _holds_category(ctx: Context, ref: Canon) -> bool:
+    """Whether the app can hold this row's category at all: a row in a budget account, or a
+    transfer with exactly one leg in one (where the app takes categorized transfers)."""
+    on = {a["id"]: bool(a.get("on_budget")) for a in ctx.meta["accounts"]}
+    legs = [on.get(ctx.ynab_acct.get(ref[s][0]), False) for s in ("from", "to") if ref.get(s)]
+    if ref.get("kind") == "transfer":
+        return current().caps.categorized_transfers and sum(legs) == 1
+    return any(legs)
+
+
+def _unheld_view(ctx: Context, rendered: dict | None, ref: Canon) -> dict | None:
+    """The app reads a category it cannot hold as none: that blank is not a change, so the
+    ledger's category stands."""
+    mine = ref.get("category") if ref else None
+    if rendered and not rendered.get("category") and mine and not _holds_category(ctx, ref):
+        return {**rendered, "category": mine}
+    return rendered
+
+
 def _with_lines(ctx: Context, ids: set[str]) -> set[str]:
     lines = {
         s["id"] for t in ids if t in ctx.mirror for s in ctx.mirror[t].get("subtransactions") or []
@@ -185,6 +204,7 @@ def build(
         if onw_id in claimed:
             rendered, blocked = claimed[onw_id]
             rendered = _income_view(ctx, rendered, onw or base)
+            rendered = _unheld_view(ctx, rendered, onw or base)
             ynab = canon(rendered) if rendered else base
             units.append(Unit(onw_id, row, refs, base, onw, ynab, rendered, blocked))
         elif (

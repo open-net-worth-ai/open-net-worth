@@ -202,6 +202,14 @@ device whose clock runs more than ten minutes behind can lose the same way.
   transfer's accounts or category, or turning a row into a transfer or back, stays in the review list.
 - A category you clear in Actual stays cleared here: no rule or payee default fills it back in,
   until you edit that row here.
+- A Starting Balance changed in Actual comes across, unless the direction is **To Actual**: your
+  opening balance moves by the same amount, so a change you made to it here stays. Its date follows
+  Actual's when it still matched it. A Starting Balance changed here isn't sent to Actual.
+- A payee you clear here is cleared in Actual too.
+- Actual has no category on an off-budget row, or on a transfer between two budget accounts. A
+  category you give one here stays here and isn't sent; Actual's blank doesn't clear it.
+- Actual stores whole cents. An amount finer than that, such as 12.345, goes as the nearest cent
+  (12.35) and stays as you wrote it here.
 - A change in only the letter case of a payee in Actual doesn't come across on its own. It arrives
   with the next other change to that row in Actual.
 - Income rows keep their category both ways. A new income category here goes into Actual's income
