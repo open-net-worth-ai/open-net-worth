@@ -101,6 +101,19 @@ def clear(path: Path) -> None:
     path.unlink(missing_ok=True)
 
 
+def clear_patiently(path: Path) -> bool:
+    """Windows refuses to remove a file while the other side (the server's watcher, or
+    `onw upgrade`) is reading it, so a refusal is waited out rather than raised."""
+    for _ in range(_CLEAR_ATTEMPTS):
+        try:
+            clear(path)
+            return True
+        except OSError:
+            time.sleep(_CLEAR_BACKOFF_SECONDS)
+    logger.warning("Couldn't remove %s", path)
+    return False
+
+
 def summary(path: Path, *, running: bool) -> str | None:
     """A line for `onw status`. An upgrade "in progress" with no server running is a leftover."""
     state, message = read_state(path)
@@ -206,13 +219,7 @@ class RequestWatcher(threading.Thread):
     def _clear_after_upgrade(self) -> None:
         """The upgrade is going ahead now, whatever happens here. Windows refuses to remove a file
         while `onw upgrade` is reading it, and that command leaves only once the file has gone."""
-        for _ in range(_CLEAR_ATTEMPTS):
-            try:
-                clear(self.path)
-                return
-            except OSError:
-                time.sleep(_CLEAR_BACKOFF_SECONDS)
-        logger.warning("Couldn't remove %s after the upgrade started", self.path)
+        clear_patiently(self.path)
 
     def stop(self) -> None:
         self.finished.set()
@@ -267,7 +274,7 @@ def _report(
     while True:
         state, message = read_state(path)
         if state == FAILED:
-            clear(path)
+            clear_patiently(path)
             print(f"The server couldn't upgrade: {message}", file=sys.stderr)
             print("To install it by hand, stop the server and run: onw upgrade", file=sys.stderr)
             return 1
@@ -323,7 +330,7 @@ def ask_server(
             return None
         print(f"==> Asking the server at {server.url} to upgrade to {target} ...", flush=True)
         if not _heard(path, heard_wait, poll):
-            clear(path)
+            clear_patiently(path)
             print("    It didn't answer: it's on a version from before it could be asked, or it")
             print("    wasn't started with `onw start`.")
             return None
