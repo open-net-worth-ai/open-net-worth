@@ -5590,6 +5590,7 @@ def get_transactions(
         if t.get("kind") not in ("transfer",):
             t["base_amount"] = txn_base_amount(t, _base, _rates)
             t["base_currency"] = _base
+    _stamp_in_category_base(txns, category, _base, _rates)
 
     if min_amount is not None or max_amount is not None:
 
@@ -5625,16 +5626,42 @@ def get_transactions(
     return {"transactions": txns}
 
 
+def _stamp_in_category_base(txns: list[dict], category, base: str, rates: dict) -> None:
+    """Under a category filter a SPLIT row matches when any of its lines is in a requested
+    category, but only those lines are that category's money: a 100 transfer split 70 Gifts /
+    30 Groceries is 70 of Gifts. Stamp that part as ``in_category_base`` for the totals (and
+    the reader) to use instead of the whole row's ``base_amount``."""
+    if not category:
+        return
+    wanted = {category} if isinstance(category, str) else set(category)
+    for t in txns:
+        if t.get("category") != SPLIT or t.get("base_amount") is None:
+            continue
+        t["in_category_base"] = round(
+            sum(
+                txn_split_base_amount(t, line, base, rates)
+                for line in t.get("splits") or []
+                if isinstance(line, dict) and line.get("category") in wanted
+            ),
+            2,
+        )
+
+
+def _counted_base(t: dict) -> float:
+    return abs(float(t.get("in_category_base", t["base_amount"])))
+
+
 def _txn_base_totals(txns: list[dict]) -> dict:
     """Income/expense base-currency totals over the FULL filtered set — computed
-    before pagination so a page slice can never change reported money math."""
+    before pagination so a page slice can never change reported money math. A split row
+    under a category filter counts only its lines in that category (``in_category_base``)."""
     total_in = sum(
-        abs(float(t["base_amount"]))
+        _counted_base(t)
         for t in txns
         if t.get("kind") == "income" and t.get("base_amount") is not None
     )
     total_out = sum(
-        abs(float(t["base_amount"]))
+        _counted_base(t)
         for t in txns
         if t.get("kind") == "expense" and t.get("base_amount") is not None
     )
