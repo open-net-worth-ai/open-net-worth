@@ -5229,15 +5229,6 @@ select.acct-addin {
 .acct-bm-menu.memo {
   min-width: 240px;
 }
-.acct-bm-menu::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 7px solid transparent;
-  border-top-color: var(--modal-bg);
-}
 .acct-bm-lbl {
   font-size: 10px;
   letter-spacing: 0.06em;
