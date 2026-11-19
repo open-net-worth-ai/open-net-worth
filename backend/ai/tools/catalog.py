@@ -31,6 +31,43 @@ from typing import Iterable, Optional
 # seam for the next one.
 _CATALOG_HIDDEN: frozenset[str] = frozenset()
 
+# A feature behind a flag owns its tools: while the flag is off, Lucius is not offered them, cannot
+# find them, and an MCP client is not listed them (owner, 2026-11-19: "the feature is off means he
+# shouldn't have access or see the tools at all"). A call by name is still refused by the tool.
+FLAGGED_TOOLS: dict[str, frozenset[str]] = {
+    "paper_trading": frozenset(
+        {
+            "cancel_paper_orders",
+            "create_paper_portfolio",
+            "delete_paper_portfolios",
+            "get_paper_activity",
+            "get_paper_news",
+            "get_paper_portfolios",
+            "get_paper_results",
+            "place_paper_orders",
+            "preview_paper_orders",
+            "record_autopilot_memo",
+            "record_paper_marks",
+            "update_paper_portfolios",
+        }
+    ),
+}
+
+
+def flag_hidden_tools() -> frozenset[str]:
+    """The tools of every feature whose flag is off (an unreadable flag counts as off)."""
+    from backend.services.feature_flags import enabled
+
+    hidden: set[str] = set()
+    for flag, names in FLAGGED_TOOLS.items():
+        try:
+            on = enabled(flag)
+        except Exception:
+            on = False
+        if not on:
+            hidden |= names
+    return frozenset(hidden)
+
 
 def hidden_tools() -> frozenset[str]:
     """Every tool kept out of what the model is offered: the permanent hides above plus any tool a
@@ -44,7 +81,7 @@ def hidden_tools() -> frozenset[str]:
         from backend.ai.search.switch import retired_tools
 
         retired = retired_tools()
-    return _CATALOG_HIDDEN | retired
+    return _CATALOG_HIDDEN | retired | flag_hidden_tools()
 
 
 # Leading instruction line of the rendered catalog. Tells the model that names are all

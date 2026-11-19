@@ -17,7 +17,9 @@ your money and never part of your net worth, cash, budget or Investments figures
 here ever sends an order to a broker.
 
 It is the **Paper Trading** tab in **Intelligence**, after Copy Trading. To try it, turn on
-**Settings → Developer → Experimental → Paper Trading** (off by default).
+**Settings → Developer → Experimental → Paper Trading** (off by default). While it is off, Lucius
+has no paper tools at all (he is not shown them and cannot find them), and neither do apps
+connected over MCP.
 
 ## Start a paper portfolio
 

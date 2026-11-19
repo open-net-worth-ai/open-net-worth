@@ -132,6 +132,9 @@ def mcp_tool_descriptors(scopes: tuple[str, ...] = ALL_SCOPES) -> list[dict]:
     there is no narrower surface to filter to. Names / descriptions / schemas come straight
     from the registry (single source of truth); ``annotations`` are derived presentation hints.
     """
+    from backend.ai.tools.catalog import flag_hidden_tools
+
+    off = flag_hidden_tools()
     descriptors = [
         {
             "name": t["name"],
@@ -140,7 +143,7 @@ def mcp_tool_descriptors(scopes: tuple[str, ...] = ALL_SCOPES) -> list[dict]:
             "annotations": _annotations_for(t["name"]),
         }
         for t in TOOL_SCHEMAS
-        if tool_allowed(t["name"], scopes)
+        if tool_allowed(t["name"], scopes) and t["name"] not in off
     ]
     descriptors.sort(key=lambda d: d["name"])
     return descriptors
