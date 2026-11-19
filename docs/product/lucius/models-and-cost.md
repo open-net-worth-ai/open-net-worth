@@ -116,7 +116,10 @@ message. There's nothing to set. This is separate from [Memory](memory.md), whic
 - **Everything:** **Settings → Cost & Performance**. Pick a **Period** (**Today**,
   **Yesterday**, **7 days**, **30 days**, **All time**) to see **AI spend** — total, turns,
   tokens and cache hits, broken down **By surface**, **By provider** and **By model**, a cost
-  trend, and a **Projected** monthly estimate at that period's rate. Below it, **Search &
+  trend (for **Today**, up to the current hour), and a **Projected** monthly estimate at that
+  period's rate. **permissions** is the Auto judge that rules on tools set to Ask; **intel**
+  includes price-move notes, the watch reader, alert delivery and the Analysis tab's
+  write-ups. Below it, **Search &
   fetch** shows estimated charges from web-search providers, and **Model performance** shows
   each model's speed and reliability.
 

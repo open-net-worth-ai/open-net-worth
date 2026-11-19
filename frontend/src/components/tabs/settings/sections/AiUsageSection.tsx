@@ -87,7 +87,11 @@ interface TrendPoint {
 function costTrendPoints(summary: CostSummary, window: CostWindow): TrendPoint[] {
   if (window === 'today' || window === 'yesterday') {
     const hourly = new Map((summary.by_hour ?? []).map((row) => [row.hour.slice(-2), row]))
-    return Array.from({ length: 24 }, (_, hour) => {
+    // Today stops at the current hour — never past the last hour that has spend, in case the
+    // profile timezone the server buckets by runs ahead of this browser's clock.
+    const lastWithData = Math.max(-1, ...Array.from(hourly.keys(), Number))
+    const length = window === 'today' ? Math.max(new Date().getHours(), lastWithData) + 1 : 24
+    return Array.from({ length }, (_, hour) => {
       const key = String(hour).padStart(2, '0')
       const row = hourly.get(key)
       return {

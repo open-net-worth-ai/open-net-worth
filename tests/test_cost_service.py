@@ -1248,6 +1248,20 @@ class TestSourceToBucket:
         assert _source_to_bucket("intel_scan") == "intel"
         assert _source_to_bucket("intel_brief") == "intel"
 
+    def test_later_intel_features_are_intel_not_other(self):
+        """Regression (2026-11-19): price-move notes, the watch reader, the delivery decider and
+        the Analysis-tab narratives logged under sources the map never listed — ~$1/day of
+        Intel spend showed as "other"."""
+        from backend.services.cost import _source_to_bucket
+
+        for source in ("price_movement", "watch_reader", "delivery", "fundamentals", "technicals"):
+            assert _source_to_bucket(source) == "intel", source
+
+    def test_auto_judge_has_its_own_permissions_bucket(self):
+        from backend.services.cost import _source_to_bucket
+
+        assert _source_to_bucket("auto_approval") == "permissions"
+
     def test_agent_prefix(self):
         from backend.services.cost import _source_to_bucket
 

@@ -55,7 +55,23 @@ _AGENT_PREFIX = "agent:"
 # these IS the Intel & Watchlist feature's own spend, so it belongs in the "intel" bucket,
 # not the "other" catch-all it silently fell into (BUG: on a watchlist-heavy instance this
 # was the single largest cost surface, mislabeled as miscellaneous).
-_INTEL_SOURCES = frozenset({"asset_brief", "analysis", "price_monitor", "news_screen"})
+_INTEL_SOURCES = frozenset(
+    {
+        "asset_brief",
+        "analysis",
+        "price_monitor",
+        "news_screen",
+        # The same gap reopened for later Intel features (2026-11-19: ~$1/day in "other"):
+        "price_movement",  # monitoring/price_movements.py — the price-move note
+        "watch_reader",  # monitoring/watch_reader.py
+        "delivery",  # monitoring/delivery_decider.py — now / later / skip
+        "fundamentals",  # services/asset_fundamentals.py — Analysis-tab narrative
+        "technicals",  # services/asset_technicals.py — Analysis-tab narrative
+    }
+)
+
+# permissions_v2's Auto judge (ai/auto_judge.py): one call per Ask tool it rules on.
+_PERMISSIONS_SOURCES = frozenset({"auto_approval"})
 
 # Scheduled/background automation runs are exactly what the "agent:<id>" bucket was
 # designed for (recurring, unattended AI runs) — automation_runner_adapter.py never adopted
@@ -121,6 +137,8 @@ def _source_to_bucket(source: str) -> str:
         return "vision"
     if source in _COMPACTION_SOURCES:
         return "compaction"
+    if source in _PERMISSIONS_SOURCES:
+        return "permissions"
     return "other"
 
 

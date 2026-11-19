@@ -172,16 +172,46 @@ describe('AiUsageSection — AI spend: search/fetch split from models/providers'
   })
 
   it('shows a compact cost timeline with visible dollar context', async () => {
-    render(<AiUsageSection toast={vi.fn()} />)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 8, 21, 14, 2))
+    try {
+      render(<AiUsageSection toast={vi.fn()} />)
 
-    const chart = await screen.findByLabelText('Cost trend')
-    expect(chart.querySelectorAll('.rd-cost-trend-bar')).toHaveLength(24)
-    expect(screen.getByText('US$0.10 avg / turn')).toBeTruthy()
-    expect(screen.getByText('US$0.10 peak')).toBeTruthy()
-    expect(screen.getByText('12 AM')).toBeTruthy()
-    expect(screen.getByText('12 PM')).toBeTruthy()
+      const chart = await screen.findByLabelText('Cost trend')
+      // Today stops at the current hour (2 PM) instead of drawing empty future hours.
+      expect(chart.querySelectorAll('.rd-cost-trend-bar')).toHaveLength(15)
+      expect(screen.getByText('US$0.10 avg / turn')).toBeTruthy()
+      expect(screen.getByText('US$0.10 peak')).toBeTruthy()
+      expect(screen.getByText('12 AM')).toBeTruthy()
+      expect(screen.getByText('2 PM')).toBeTruthy()
+      expect(screen.queryByText('11 PM')).toBeNull()
+      expect(screen.queryByText('Each bar is one AI turn')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never trims Today before the last hour that has spend', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 8, 21, 3, 0))
+    try {
+      render(<AiUsageSection toast={vi.fn()} />)
+      const chart = await screen.findByLabelText('Cost trend')
+      expect(chart.querySelectorAll('.rd-cost-trend-bar')).toHaveLength(11)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps all 24 hours for Yesterday', async () => {
+    render(<AiUsageSection toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('tab', { name: 'Yesterday' }))
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText('Cost trend').querySelectorAll('.rd-cost-trend-bar'),
+      ).toHaveLength(24),
+    )
     expect(screen.getByText('11 PM')).toBeTruthy()
-    expect(screen.queryByText('Each bar is one AI turn')).toBeNull()
   })
 
   it('separates the summary metrics and cost trend into distinct panel rows', async () => {
