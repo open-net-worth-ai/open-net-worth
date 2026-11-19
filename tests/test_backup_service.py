@@ -59,6 +59,23 @@ def test_run_backup_zips_data_dir(isolated):
         assert zf.read("accounts.json") == b"[]"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits; Windows is the ACL")
+def test_run_backup_is_owner_only_whatever_the_umask(isolated):
+    """A backup carries the secret tables, so neither it nor its folder is group/other
+    readable — including a folder an older version left at 0755 with zips already in it."""
+    _, backups_dir, _ = isolated
+    os.chmod(backups_dir, 0o755)
+    old = backups_dir / _name(datetime(2026, 7, 1, tzinfo=timezone.utc))
+    old.write_bytes(b"")
+    os.chmod(old, 0o644)
+    now = datetime(2026, 7, 6, 3, 30, tzinfo=timezone.utc)
+
+    assert backup_service.run_backup(now=now)["ok"] is True
+
+    assert backups_dir.stat().st_mode & 0o777 == 0o700
+    assert (backups_dir / _name(now)).stat().st_mode & 0o777 == 0o600
+
+
 def test_run_backup_excludes_its_own_backups_dir(isolated):
     """A zip of DATA_DIR must never nest backups inside backups (infinite growth)."""
     data_dir, backups_dir, _ = isolated

@@ -51,8 +51,10 @@ In a `backups` folder next to your data, on the same computer:
 Each one is a `.zip` named by the time it was taken (UTC), for example `20261010T033000Z.zip`;
 the ones you take by hand end in `-manual.zip`.
 
-These backups live on the **same disk** as your book. To protect against losing the computer,
-also keep a copy somewhere else — see the next section.
+These backups live on the **same disk** as your book, and unlike a downloaded copy they still hold
+your credentials, so the `backups` folder and every file in it can only be read by your own
+user account. To protect against losing the computer, also keep a copy somewhere else — see the
+next section.
 
 ## Keep a copy somewhere else
 
