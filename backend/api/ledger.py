@@ -833,6 +833,14 @@ def get_spend_by_week(q: str = "", weeks: int = 6):
     return spend_search_service.spend_search(q, weeks=weeks)
 
 
+@router.get("/api/transactions/tags")
+def get_transaction_tags() -> dict:
+    """The tags already on live transactions, most used first — the tag picker's options."""
+    from backend.services import transaction_tags
+
+    return {"tags": transaction_tags.tag_usage()}
+
+
 @router.get("/api/transactions/recently-added")
 def get_recently_added_transactions(
     limit: int = Query(8, ge=1, le=500),

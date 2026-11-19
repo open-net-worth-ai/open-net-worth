@@ -372,6 +372,20 @@ class TransactionStore:
         with self._eng().connect() as conn:
             return {pid: (int(n), last or "") for pid, n, last in conn.execute(stmt)}
 
+    def tag_usage(self) -> dict[str, tuple[int, str]]:
+        """Per tag: how many live transactions carry it, and the latest date among them. Reads
+        only the `tags`/`date` columns — never a payload decode."""
+        stmt = select(transactions.c.tags, func.substr(transactions.c.date, 1, 10)).where(
+            transactions.c.deleted == 0
+        )
+        out: dict[str, tuple[int, str]] = {}
+        with self._eng().connect() as conn:
+            for tags, day in conn.execute(stmt):
+                for tag in {str(t).strip() for t in (tags or []) if str(t).strip()}:
+                    n, last = out.get(tag, (0, ""))
+                    out[tag] = (n + 1, max(last, day or ""))
+        return out
+
     def earliest_date(self) -> str | None:
         """The earliest non-deleted transaction day (``YYYY-MM-DD``), or None when there is none
         — what ``min(date[:10])`` over ``all()`` gives, from the ``date`` column alone."""

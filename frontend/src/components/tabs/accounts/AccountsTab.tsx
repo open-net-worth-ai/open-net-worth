@@ -1159,6 +1159,7 @@ export function AccountsTab({
             kind: 'transfer',
             description: descInput || 'Transfer',
             memo,
+            tags: data.tags,
             category: data.category || null,
             from_account_id: fromId,
             from_amount: amt,
@@ -1175,6 +1176,7 @@ export function AccountsTab({
             kind: 'income',
             description,
             memo,
+            tags: data.tags,
             to_account_id: data.account,
             to_amount: amt,
             to_currency: ccy,
@@ -1190,6 +1192,7 @@ export function AccountsTab({
             kind: 'investment',
             description,
             memo,
+            tags: data.tags,
             from_account_id: data.account,
             from_amount: amt,
             from_currency: ccy,
@@ -1204,6 +1207,7 @@ export function AccountsTab({
             kind: 'expense',
             description,
             memo,
+            tags: data.tags,
             from_account_id: data.account,
             from_amount: amt,
             from_currency: ccy,
@@ -1234,6 +1238,7 @@ export function AccountsTab({
     if (patch.date != null) u.date = patch.date
     if (patch.description != null) u.description = patch.description
     if (patch.memo != null) u.memo = patch.memo
+    if (patch.tags !== undefined) u.tags = patch.tags
     if (patch.category !== undefined) u.category = patch.category
     if (patch.cleared != null) u.cleared = patch.cleared
     if (patch.kind != null) u.kind = patch.kind

@@ -10,7 +10,6 @@ import {
   ACTION_VERB,
   catOptionsFor,
   normalizeTags,
-  liveTagFormat,
   isRefundTxn,
   fCur,
   fxInfo,
@@ -33,6 +32,7 @@ import type {
 } from './types'
 import { AddAccountSelect, AddDateField, AddPayeeField, AddCategoryField } from './pickers'
 import { SplitEditor, type EditSplit } from './SplitEditor'
+import { TagField } from './TagField'
 import { SplitLines } from './SplitView'
 import { ConfirmModal } from './ConfirmModal'
 import { Checkbox } from '../../ui/Checkbox'
@@ -818,15 +818,10 @@ function EditBody({
             rows={2}
           />
         </Field>
-        <Field
-          label="Tags"
-          hint="lowercase-with-hyphens • comma-separated (japan-trip, reimbursable…)"
-        >
-          <input
-            className="acct-edit-in"
-            value={f.tags}
-            onChange={(e) => set('tags', liveTagFormat(e.target.value))}
-            onBlur={() => set('tags', normalizeTags(f.tags).join(', '))}
+        <Field label="Tags" hint="Pick a tag you've used before, or type a new one to create it.">
+          <TagField
+            value={normalizeTags(f.tags)}
+            onChange={(tags) => set('tags', tags.join(', '))}
             placeholder="japan-trip, reimbursable"
           />
         </Field>

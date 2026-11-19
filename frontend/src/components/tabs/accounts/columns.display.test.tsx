@@ -11,7 +11,7 @@ function open(props: { hidden?: Set<string>; showHidden?: boolean }) {
   render(
     <ColumnsPicker
       showAccount={false}
-      hidden={props.hidden ?? new Set()}
+      hidden={props.hidden ?? new Set(['tags'])}
       onToggle={vi.fn()}
       onReset={onReset}
       showHidden={props.showHidden ?? false}
@@ -32,6 +32,11 @@ describe('Display picker', () => {
   it('Reset is disabled while everything is at its default', () => {
     open({})
     expect(screen.getByText('Reset')).toHaveProperty('disabled', true)
+  })
+
+  it('Reset is enabled once a default-hidden column (Tags) is turned on', () => {
+    open({ hidden: new Set() })
+    expect(screen.getByText('Reset')).toHaveProperty('disabled', false)
   })
 
   it('Reset restores the columns AND turns Show hidden off', () => {

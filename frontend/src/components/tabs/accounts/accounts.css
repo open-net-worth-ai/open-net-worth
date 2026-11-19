@@ -10105,3 +10105,84 @@ button.acct-alert-src {
 .acct-src-one {
   margin-top: 10px;
 }
+
+/* ── TagField: search / select / create tags (drawer, register cell, add row) ── */
+.acct-tagf {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: 6px 9px;
+  cursor: text;
+}
+.acct-tagf:focus-within {
+  border-color: var(--accent);
+}
+.acct-tagf.compact {
+  min-height: 30px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+}
+.acct-tagf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+.acct-tagf-x {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .acct-tagf-x:hover {
+    color: var(--ink);
+  }
+}
+.acct-tagf-in {
+  flex: 1;
+  min-width: 70px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.acct-tagf.compact .acct-tagf-in {
+  font-size: 12px;
+  min-width: 48px;
+}
+.acct-tagf-in:focus {
+  outline: none;
+}
+.acct-tagf-pop {
+  width: 260px;
+}
+/* Register Tags cell (read view): chips on one line, clipped. */
+.acct-td-tags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: text;
+}
+.acct-td-tags .acct-detail-tag {
+  flex-shrink: 0;
+}

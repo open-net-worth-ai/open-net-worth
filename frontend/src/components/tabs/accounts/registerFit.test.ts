@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { REG_COLS } from './Register'
+import { REG_COLS as ALL_COLS } from './Register'
 import { fitRegisterColumns } from './registerFit'
+
+// The register as it first opens: a default-hidden column (Tags) is not laid out until turned on.
+const REG_COLS = ALL_COLS.filter((c) => !c.defaultHidden)
 
 const widthsOf = () => Object.fromEntries(REG_COLS.map((c) => [c.key, c.w]))
 

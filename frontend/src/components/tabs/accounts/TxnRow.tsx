@@ -23,12 +23,14 @@ import {
 } from './pickers'
 import { SourceIcon, IconCheck } from './pickers'
 import { SplitChip } from './SplitView'
+import { TagField } from './TagField'
 import { Check, Circle } from '../../../ui/icons'
 
 export interface RowPatch {
   date?: string
   description?: string
   memo?: string
+  tags?: string[]
   category?: string | null
   payee?: string // payee display NAME — orchestrator resolves to payeeId
   cleared?: boolean
@@ -39,6 +41,30 @@ export interface RowPatch {
   fromCurrency?: string | null
   toAmount?: number | null
   toCurrency?: string | null
+}
+
+/** The register's inline Tags editor: edits a local copy, commits once focus leaves it. */
+function InlineTags({
+  initial,
+  onDone,
+  onCancel,
+}: {
+  initial: string[]
+  onDone: (tags: string[]) => void
+  onCancel: () => void
+}) {
+  const [tags, setTags] = useState(initial)
+  return (
+    <TagField
+      compact
+      autoFocus
+      value={tags}
+      onChange={setTags}
+      placeholder="Tag…"
+      onLeave={onDone}
+      onCancel={onCancel}
+    />
+  )
 }
 
 export function categoryPill(
@@ -462,6 +488,34 @@ export function TxnRow({
               />
             ) : memoText ? (
               memoText
+            ) : (
+              <span className="acct-payee-sub">—</span>
+            )}
+          </span>
+        )}
+        {has('tags') && (
+          <span
+            className="acct-td-tags"
+            data-edit=""
+            onDoubleClick={editCell('tags')}
+            title={edit === 'tags' || !t.tags?.length ? undefined : t.tags.join(', ')}
+          >
+            {edit === 'tags' ? (
+              <InlineTags
+                initial={t.tags ?? []}
+                onDone={(tags) => {
+                  const before = (t.tags ?? []).join(',')
+                  if (tags.join(',') === before) close()
+                  else commit({ tags })
+                }}
+                onCancel={close}
+              />
+            ) : t.tags?.length ? (
+              t.tags.map((tg) => (
+                <span key={tg} className="acct-detail-tag">
+                  {tg}
+                </span>
+              ))
             ) : (
               <span className="acct-payee-sub">—</span>
             )}
