@@ -13,25 +13,14 @@ robustness feature. A model answer that makes no call is returned as plain text 
 from __future__ import annotations
 
 import json
-import re
 import secrets
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from backend.core.errors import (
-    BudgetExceededError,
-    ConfigurationError,
-    ExternalServiceError,
-    OpenNetWorthError,
-    ProviderTimeoutError,
-    ValidationError,
-)
-from backend.core.report_redact import redact_text
+from backend.core.errors import ValidationError
 
-_MAX_ERROR_CHARS = 300
 _MAX_CALL_ID = 40
 _JSON_OBJECT_TOOL = "json_response"
-_RATE_LIMITED = re.compile(r"rate[ _-]?limit|usage limit|too many requests|quota|\b429\b", re.I)
 
 _EMPTY_SCHEMA = {"type": "object", "properties": {}}
 
@@ -107,13 +96,24 @@ def _arguments(raw: Any) -> dict:
     return parsed
 
 
+def _tool_calls(message: dict) -> list[dict]:
+    calls = message.get("tool_calls")
+    if calls is None:
+        return []
+    if not isinstance(calls, list) or not all(isinstance(c, dict) for c in calls):
+        raise ValidationError("tool_calls must be a list of objects.")
+    return calls
+
+
 def _assistant_blocks(message: dict) -> list[dict]:
     blocks: list[dict] = []
     text = _text_of(message.get("content"), "assistant")
     if text:
         blocks.append({"type": "text", "text": text})
-    for call in message.get("tool_calls") or []:
-        function = (call or {}).get("function") or {}
+    for call in _tool_calls(message):
+        function = call.get("function")
+        if not isinstance(function, dict):
+            raise ValidationError("A tool call needs a function object.")
         name = function.get("name")
         if not isinstance(name, str) or not name:
             raise ValidationError("A tool call needs a function name.")
@@ -184,7 +184,9 @@ def _structured_tool(response_format: Any) -> Optional[dict]:
     """``response_format`` as a single tool whose input is the reply, or None for plain text."""
     kind = response_format.get("type") if isinstance(response_format, dict) else None
     if kind == "json_schema":
-        spec = response_format.get("json_schema") or {}
+        spec = response_format.get("json_schema")
+        if not isinstance(spec, dict):
+            raise ValidationError("response_format json_schema needs a name and a schema.")
         schema = spec.get("schema")
         name = str(spec.get("name") or "").strip()
         if not name or not isinstance(schema, dict):
@@ -230,7 +232,10 @@ def to_onw_request(body: dict) -> OnwRequest:
     messages = _merge(turns)
     if not messages:
         raise ValidationError("messages must contain a user or assistant message.")
-    tools = [_tool_of(t) for t in body.get("tools") or []]
+    listed = body.get("tools")
+    if listed is not None and not isinstance(listed, list):
+        raise ValidationError("tools must be a list.")
+    tools = [_tool_of(t) for t in listed or []]
     structured = _structured_tool(body.get("response_format"))
     if structured is not None:
         tools = [*tools, structured]
@@ -353,52 +358,3 @@ def models_list(aliases: list[str]) -> dict:
         "object": "list",
         "data": [{"id": a, "object": "model", "created": 0, "owned_by": "onw"} for a in aliases],
     }
-
-
-# ── errors ───────────────────────────────────────────────────────────────────────────────
-
-
-def sanitize(message: str) -> str:
-    """One short line with keys, URLs with credentials, e-mails, paths and amounts masked."""
-    line = " ".join(redact_text(str(message)).split())
-    return line[:_MAX_ERROR_CHARS]
-
-
-def error_body(message: str, *, kind: str, code: str) -> dict:
-    return {"error": {"message": sanitize(message), "type": kind, "code": code}}
-
-
-def classify_error(exc: BaseException) -> tuple[int, dict]:
-    """``(http_status, error body)`` for a failure of one provider call.
-
-    429 for a rate or usage limit, 400 for a request the model refused as malformed or a run
-    that hit its cap, 502 for everything else upstream. Only messages of our own typed errors
-    are passed on: an unknown exception's text could hold anything, so it is replaced."""
-    if isinstance(exc, BudgetExceededError):
-        return 400, error_body(exc.message, kind="invalid_request_error", code="run_cap_reached")
-    if isinstance(exc, ValidationError):
-        return 400, error_body(exc.message, kind="invalid_request_error", code="invalid_request")
-    status = getattr(exc, "status_code", None)
-    text = exc.message if isinstance(exc, OpenNetWorthError) else ""
-    if status == 429 or type(exc).__name__ == "RateLimitError" or _RATE_LIMITED.search(text):
-        return 429, error_body(
-            text or "The model provider is rate limiting this run.",
-            kind="rate_limit_error",
-            code="rate_limit_exceeded",
-        )
-    if isinstance(status, int) and status in (400, 404, 413, 422):
-        return 400, error_body(
-            "The model provider rejected the request.",
-            kind="invalid_request_error",
-            code="invalid_request",
-        )
-    if isinstance(exc, ProviderTimeoutError):
-        return 502, error_body(text, kind="api_error", code="upstream_timeout")
-    detail = (
-        text
-        if isinstance(exc, (ExternalServiceError, ConfigurationError))
-        else "The model provider failed."
-    )
-    return 502, error_body(
-        detail or "The model provider failed.", kind="api_error", code="upstream_error"
-    )

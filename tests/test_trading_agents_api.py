@@ -16,7 +16,7 @@ from backend.core.errors import BudgetExceededError
 from backend.db.model_config_store import ModelConfigStore
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
-from backend.services.trading_agents import runs
+from backend.services.trading_agents import install, runs
 
 BASE = "/api/trading-agents"
 
@@ -45,7 +45,7 @@ def ready(*, disclaimer: bool = True) -> None:
     )
     store = TradingAgentsConfigStore()
     store.write(enabled=True)
-    store.merge_state({"install_status": "ready"})
+    store.merge_state({"install_status": "ready", "installed_version": install.TA_COMMIT})
     if disclaimer:
         store.write(config={"disclaimer_accepted_at": "2026-11-19T00:00:00+00:00"})
 

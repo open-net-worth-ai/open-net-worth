@@ -204,6 +204,45 @@ def test_emit_writes_one_json_object_per_line(ta, monkeypatch):
     assert [json.loads(line)["type"] for line in lines] == ["progress", "llm_call"]
 
 
+def test_emit_survives_a_stdout_that_cannot_encode_the_text(ta, monkeypatch):
+    """Windows pipes use the ANSI code page: text outside it must not kill the protocol."""
+    raw = io.BytesIO()
+    out = io.TextIOWrapper(raw, encoding="cp1252", errors="strict", newline="\n")
+    monkeypatch.setattr(ta, "_protocol_out", out)
+    text = "ACME \u2192 buy \u4e2d\u6587 \U0001f4c8"
+    ta.emit({"type": "result", "signal": "Hold", "final_state": {"final_trade_decision": text}})
+    out.flush()
+    (line,) = raw.getvalue().decode("ascii").splitlines()
+    assert json.loads(line)["final_state"]["final_trade_decision"] == text
+
+
+def test_the_installed_commit_is_read_from_the_distribution_record(ta, monkeypatch):
+    record = json.dumps({"vcs_info": {"vcs": "git", "commit_id": "c" * 40}})
+    dist = SimpleNamespace(read_text=lambda name: record)
+    monkeypatch.setattr("importlib.metadata.distribution", lambda name: dist)
+    assert ta.installed_commit() == "c" * 40
+    monkeypatch.setattr(dist, "read_text", lambda name: None)
+    assert ta.installed_commit() == ""
+
+
+def test_the_selftest_reports_the_installed_commit(ta, monkeypatch):
+    monkeypatch.setitem(sys.modules, "tradingagents", SimpleNamespace(__version__="9.9"))
+    monkeypatch.setattr(ta, "installed_commit", lambda: "d" * 40)
+    monkeypatch.setitem(sys.modules, "tradingagents.graph", SimpleNamespace())
+    monkeypatch.setitem(
+        sys.modules, "tradingagents.default_config", SimpleNamespace(DEFAULT_CONFIG=_defaults())
+    )
+    monkeypatch.setitem(
+        sys.modules, "tradingagents.graph.trading_graph", SimpleNamespace(TradingAgentsGraph=object)
+    )
+    monkeypatch.setitem(
+        sys.modules, "tradingagents.portfolio", SimpleNamespace(PortfolioContext=object)
+    )
+    code, out, _ = _run_main(ta, monkeypatch, ["--selftest"])
+    assert code == 0
+    assert json.loads(out) == {"ok": True, "ta_version": "9.9", "ta_commit": "d" * 40}
+
+
 def _run_main(ta, monkeypatch, argv, stdin=""):
     out, err = io.StringIO(), io.StringIO()
     monkeypatch.setattr(sys, "stdout", out)

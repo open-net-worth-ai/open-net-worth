@@ -26,7 +26,7 @@ from backend.db.model_config_store import ModelConfigStore
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.services import thesis_judgment
 from backend.services import trading_agents as ta
-from backend.services.trading_agents import budget, context, runs, settings
+from backend.services.trading_agents import budget, context, install, runs, settings
 from tests.flags import flags
 
 NAMES = (
@@ -50,7 +50,7 @@ def ready():
     )
     store = TradingAgentsConfigStore()
     store.write(enabled=True, config={"disclaimer_accepted_at": "2026-11-19T00:00:00+00:00"})
-    store.merge_state({"install_status": "ready"})
+    store.merge_state({"install_status": "ready", "installed_version": install.TA_COMMIT})
     with flags(trading_agents=True):
         yield
 

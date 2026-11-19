@@ -26,6 +26,7 @@ FLAG_OFF = "flag_off"
 CONNECTOR_OFF = "connector_off"
 CONNECTOR_PAUSED = "connector_paused"
 NOT_INSTALLED = "not_installed"
+NEEDS_REINSTALL = "needs_reinstall"
 INSTALLING = "installing"
 MODEL_UNAVAILABLE = "model_unavailable"
 READY = "ready"
@@ -50,7 +51,7 @@ def flag_on() -> bool:
 def availability() -> Availability:
     """Whether a run can start, and if not, the first thing in the way (in this order): the
     release flag, the connector never set up, paused, not installed (or failed), installing,
-    an AI model that cannot serve, else ready."""
+    installed from a commit other than the pinned one, an AI model that cannot serve, else ready."""
     if not flag_on():
         return Availability(FLAG_OFF, "TradingAgents is not turned on.")
     saved = TradingAgentsConfigStore().read()
@@ -65,11 +66,23 @@ def availability() -> Availability:
     if install != "ready":
         detail = state.get("install_error") or "Install it from its connector page."
         return Availability(NOT_INSTALLED, f"TradingAgents is not installed. {detail}".strip())
+    if state.get("installed_version") != _pinned_commit():
+        return Availability(
+            NEEDS_REINSTALL,
+            "TradingAgents was installed from a different version than this app expects. "
+            "Reinstall it from its connector page.",
+        )
     try:
         settings.resolve_models(settings.load())
     except ModelUnavailableError as exc:
         return Availability(MODEL_UNAVAILABLE, exc.message)
     return Availability(READY, "Ready.")
+
+
+def _pinned_commit() -> str:
+    from backend.services.trading_agents import install
+
+    return install.TA_COMMIT
 
 
 def require_flag() -> None:
@@ -83,7 +96,7 @@ def require_ready() -> None:
     if result.ready:
         return
     context = {"status": result.status}
-    if result.status in (NOT_INSTALLED, INSTALLING):
+    if result.status in (NOT_INSTALLED, INSTALLING, NEEDS_REINSTALL):
         raise NotInstalledError(result.message, **context)
     if result.status == MODEL_UNAVAILABLE:
         raise ModelUnavailableError(result.message, **context)

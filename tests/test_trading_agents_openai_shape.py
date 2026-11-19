@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from backend.ai.trading_agents import openai_errors
 from backend.ai.trading_agents import openai_shape as shape
 from backend.core.errors import (
     BudgetExceededError,
@@ -260,15 +261,50 @@ class _Upstream(Exception):
     ],
 )
 def test_provider_failures_map_to_the_right_status(exc, status, code):
-    got_status, body = shape.classify_error(exc)
+    got_status, body = openai_errors.classify_error(exc)
     assert (got_status, body["error"]["code"]) == (status, code)
 
 
 def test_error_messages_never_carry_a_key_or_an_unknown_exceptions_text():
-    _, body = shape.classify_error(_Upstream(500))
+    _, body = openai_errors.classify_error(_Upstream(500))
     assert "sk-ant" not in json.dumps(body) and "leaked" not in json.dumps(body)
-    message = shape.sanitize(
+    message = openai_errors.sanitize(
         "Bearer abcdefghijklmnop failed at https://u:p@host.example/x?k=v\n" * 20
     )
     assert "abcdefghijklmnop" not in message and "u:p@" not in message and "\n" not in message
     assert len(message) <= 300
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"role": "assistant", "tool_calls": "oops"},
+        {"role": "assistant", "tool_calls": ["not-an-object"]},
+        {"role": "assistant", "tool_calls": [None]},
+        {"role": "assistant", "tool_calls": [{"id": "c1", "function": "not-an-object"}]},
+        {"role": "assistant", "tool_calls": {"id": "c1"}},
+        {"role": "assistant", "content": 7},
+        {"role": "assistant", "content": {"text": "x"}},
+        {"role": "user", "content": [None]},
+        {"role": "tool", "tool_call_id": "c1", "content": {"a": 1}},
+    ],
+)
+def test_a_malformed_assistant_or_tool_message_is_a_validation_error_not_a_crash(message):
+    body = {"messages": [{"role": "user", "content": "hi"}, message]}
+    with pytest.raises(ValidationError):
+        shape.to_onw_request(body)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"tools": "get_quote"},
+        {"tools": 3},
+        {"tools": [None]},
+        {"response_format": {"type": "json_schema", "json_schema": ["x"]}},
+        {"response_format": {"type": "json_schema", "json_schema": "x"}},
+    ],
+)
+def test_malformed_tools_and_response_format_are_validation_errors_not_a_crash(extra):
+    with pytest.raises(ValidationError):
+        shape.to_onw_request({"messages": [{"role": "user", "content": "hi"}], **extra})

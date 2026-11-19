@@ -107,6 +107,9 @@ def test_a_ticker_level_run_records_that_no_portfolio_was_sent():
     "over",
     [
         {"ticker": "../etc"},
+        {"ticker": "."},
+        {"ticker": ".."},
+        {"ticker": "-.="},
         {"ticker": ""},
         {"ticker": "A" * 16},
         {"trade_date": (date.today() + timedelta(days=3)).isoformat()},
@@ -126,6 +129,32 @@ def test_create_refuses_bad_input_and_writes_nothing(events, over):
         _create(**over)
     assert TradingAgentsRunStore().count() == 0
     assert events == []
+
+
+# ── events ───────────────────────────────────────────────────────────────────────────────
+
+
+def test_usage_and_progress_publish_at_most_once_a_second_but_transitions_always(
+    events, monkeypatch
+):
+    clock = [100.0]
+    monkeypatch.setattr(runs.time, "monotonic", lambda: clock[0])
+    run = _running()
+    assert len(events) == 2  # create, start
+    for index in range(20):
+        _usage(run["id"])
+        apply_run_change(
+            "progress",
+            run_id=run["id"],
+            stage="Trader",
+            status="started" if index % 2 else "finished",
+        )
+    assert len(events) == 3  # the whole burst is one event
+    clock[0] += 1.5
+    _usage(run["id"])
+    assert len(events) == 4
+    apply_run_change("finish", run_id=run["id"], signal="Hold")
+    assert len(events) == 5
 
 
 # ── lifecycle ────────────────────────────────────────────────────────────────────────────

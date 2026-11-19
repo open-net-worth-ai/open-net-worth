@@ -24,7 +24,7 @@ from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConflictError, OpenNetWorthError
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.services.trading_agents import install, runs, settings
-from backend.services.trading_agents.roles import role_for
+from backend.services.trading_agents.roles import ROLE_BY_NODE, role_for
 
 log = logging.getLogger(__name__)
 
@@ -40,10 +40,22 @@ _STOP_TEXT = {
     STOP_CALLS: "The run reached its limit of {calls} model calls and was stopped.",
     STOP_TIMEOUT: "The run took longer than 30 minutes and was stopped.",
 }
-_MAX_LINE_BYTES = 16 * 1024 * 1024
+_MAX_LINE_BYTES = 2 * 1024 * 1024
+_MAX_PROGRESS_WRITES = 500
 _STDERR_TAIL_CHARS = 2000
 _ERROR_DETAIL_CHARS = 300
 _ENV_NO_PROXY = ("127.0.0.1", "localhost")
+# Where a library looks for per-user config and caches: every one of them is the run's own folder.
+_HOME_VARIABLES = (
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+)
 
 
 @dataclass(frozen=True)
@@ -60,13 +72,20 @@ class Job:
     cap_usd: float
 
 
-def worker_env(token: str, sec_user_agent: str) -> dict[str, str]:
+def worker_env(token: str, sec_user_agent: str, run_id: str) -> dict[str, str]:
     """The worker's whole environment: the allowlisted base plus what a run needs. No LLM vendor
-    key, ever — ``OPENAI_COMPATIBLE_API_KEY`` carries the bridge's per-run token."""
-    folders = install.scratch()
+    key, ever — ``OPENAI_COMPATIBLE_API_KEY`` carries the bridge's per-run token. The worker is
+    not sandboxed (it can still read what its own user can), but nothing it would look up by
+    habit points at the owner's real home: HOME and every XDG/AppData variable are the run's own
+    folder, and ``.env`` loading is switched off."""
+    folders = install.scratch(run_id)
     env = scrubbed_environ()
+    env.update(dict.fromkeys(_HOME_VARIABLES, str(folders.home)))
+    for name in ("HOMEDRIVE", "HOMEPATH"):
+        env.pop(name, None)
     env.update(
         {
+            "PYTHON_DOTENV_DISABLED": "1",
             "OPENAI_COMPATIBLE_API_KEY": token,
             "TRADINGAGENTS_RESULTS_DIR": str(folders.results),
             "TRADINGAGENTS_CACHE_DIR": str(folders.cache),
@@ -103,7 +122,8 @@ class RunSession:
         self._bridge: Optional[LlmBridge] = None
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._pending: dict[str, llm_bridge.CallRecord] = {}
-        self._roles: dict[str, str] = {}
+        self._last_progress: Optional[tuple] = None
+        self._progress_writes = 0
         self._metered = 0.0
         self._result: Optional[dict] = None
         self._signal: Optional[str] = None
@@ -197,13 +217,13 @@ class RunSession:
         return json.dumps(body, allow_nan=False).encode()
 
     async def _converse(self, bridge: LlmBridge) -> None:
-        env = worker_env(bridge.token, self.job.cfg.sec_edgar_user_agent)
+        env = worker_env(bridge.token, self.job.cfg.sec_edgar_user_agent, self.job.run_id)
         proc = await asyncio.create_subprocess_exec(
             *self._command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=install.scratch().results,
+            cwd=install.scratch(self.job.run_id).results,
             env=env,
             limit=_MAX_LINE_BYTES,
             **process_tree.spawn_kwargs(),
@@ -264,25 +284,30 @@ class RunSession:
             self._worker_error = str(message.get("message") or "The worker failed.")
 
     def _progress(self, message: dict) -> None:
+        """A stage change, only for a node TradingAgents is known to have and only when it
+        differs from the last one written: the worker is untrusted, and each write is a row
+        update and a refresh of every open screen."""
+        stage, status = message.get("stage"), message.get("status")
+        if (
+            stage not in ROLE_BY_NODE
+            or (stage, status) == self._last_progress
+            or self._progress_writes >= _MAX_PROGRESS_WRITES
+        ):
+            return
+        self._last_progress = (stage, status)
+        self._progress_writes += 1
         try:
-            runs.apply_run_change(
-                "progress",
-                run_id=self.job.run_id,
-                stage=message.get("stage"),
-                status=message.get("status"),
-            )
+            runs.apply_run_change("progress", run_id=self.job.run_id, stage=stage, status=status)
         except OpenNetWorthError:
             log.debug("trading_agents_progress_dropped run=%s", self.job.run_id)
 
     def _attribute(self, message: dict) -> None:
+        """Say which role a call the bridge already served belongs to. The bridge reports every
+        call before it answers, so an id that is not waiting here was never issued: ignored."""
         call_id = message.get("call_id")
-        if not isinstance(call_id, str):
-            return
-        role = role_for(message.get("node"))
-        if call_id in self._pending:
-            self._charge(self._pending.pop(call_id), role)
-        else:
-            self._roles[call_id] = role
+        record = self._pending.pop(call_id, None) if isinstance(call_id, str) else None
+        if record is not None:
+            self._charge(record, role_for(message.get("node")))
 
     # ── cost, in-process from the bridge ─────────────────────────────────────────────────
 
@@ -290,11 +315,7 @@ class RunSession:
         self._metered += record.metered_usd
         if self._metered > self.job.cap_usd:
             self.stop(STOP_BUDGET)
-        role = self._roles.pop(record.call_id, None)
-        if role is not None:
-            self._charge(record, role)
-        else:
-            self._pending[record.call_id] = record
+        self._pending[record.call_id] = record
 
     def _charge(self, record: llm_bridge.CallRecord, role: str) -> None:
         plan = record.cost_basis == llm_bridge.PLAN_INCLUDED

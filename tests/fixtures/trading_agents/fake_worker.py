@@ -6,7 +6,9 @@ LLM bridge over loopback with canned OpenAI requests — no TradingAgents, no ve
 Modes: ``normal`` (a short analysis ending in a result), ``crash`` (one call, then exits 3 with no
 result), ``hang`` (one call, then never ends), ``overcap`` (calls until the bridge refuses one,
 then reports it), ``badline`` (garbage between valid lines, then a result), ``bigline`` (one line
-past the runner's limit).
+past the runner's limit), ``midline`` (a 3 MiB line, past the 2 MiB limit but under the old one),
+``spoof`` (progress for a stage no node has, the same stage over and over, and an ``llm_call``
+for a call the bridge never served, then a result).
 """
 
 from __future__ import annotations
@@ -93,6 +95,15 @@ def overcap(request: dict) -> None:
     emit({"type": "result", "signal": "Hold", "final_state": {}})
 
 
+def spoof(request: dict) -> None:
+    emit({"type": "progress", "stage": "Evil Stage", "status": "started", "at": "t"})
+    for _ in range(5):
+        emit({"type": "progress", "stage": "Market Analyst", "status": "started", "at": "t"})
+    emit({"type": "llm_call", "node": "Trader", "call_id": "onwcall_neverissued"})
+    attributed(request, "Market Analyst", "onw-quick", "one real call")
+    emit({"type": "result", "signal": "Hold", "final_state": {}})
+
+
 def main() -> None:
     mode = sys.argv[1]
     if len(sys.argv) > 2:
@@ -114,6 +125,12 @@ def main() -> None:
         print("this is not json", flush=True)
         emit({"type": "mystery"})
         normal(request)
+    elif mode == "spoof":
+        spoof(request)
+    elif mode == "midline":
+        sys.stdout.write("x" * (3 * 1024 * 1024) + "\n")
+        sys.stdout.flush()
+        time.sleep(3600)
     elif mode == "bigline":
         sys.stdout.write("x" * (17 * 1024 * 1024) + "\n")
         sys.stdout.flush()

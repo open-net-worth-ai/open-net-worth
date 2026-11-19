@@ -6,6 +6,8 @@ off in Settings makes the integration report ``model_unavailable`` instead of us
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from backend.core.errors import ModelUnavailableError, ValidationError
@@ -100,6 +102,32 @@ def test_data_vendor_keys_are_stored_as_secrets_and_never_in_the_config(db_isola
     assert "fred_api_key" not in TradingAgentsConfigStore().read()["config"]
     with pytest.raises(ValidationError):
         settings.update({}, secrets={"openai_api_key": "x"})  # there is no LLM key here
+
+
+@pytest.mark.parametrize("value", ["a" * 257, "line\nbreak", "nul\0byte", "carriage\rreturn"])
+def test_a_data_vendor_key_that_cannot_be_an_environment_value_is_refused(db_isolated, value):
+    with pytest.raises(ValidationError):
+        settings.update({}, secrets={"fred_api_key": value})
+    assert settings.data_vendor_env() == {}
+
+
+def test_an_unsafe_key_already_saved_never_reaches_the_environment(db_isolated):
+    store = TradingAgentsConfigStore()
+    store.write(secrets={"fred_api_key": "ok-key", "alpha_vantage_api_key": "bad\nvalue"})
+    assert settings.data_vendor_env() == {"FRED_API_KEY": "ok-key"}
+
+
+def test_only_the_runner_reads_the_data_vendor_keys_as_environment_values():
+    root = Path(__file__).resolve().parents[1] / "backend"
+    readers = {
+        str(path.relative_to(root))
+        for path in root.rglob("*.py")
+        if "data_vendor_env" in path.read_text(encoding="utf-8")
+    }
+    assert readers == {
+        "services/trading_agents/settings.py",
+        "ai/trading_agents/worker_session.py",
+    }
 
 
 def test_accepting_the_disclaimer_records_when(db_isolated):

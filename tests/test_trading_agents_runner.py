@@ -26,7 +26,7 @@ from backend.db.cost_log_store import CostLogStore
 from backend.db.model_config_store import ModelConfigStore
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
-from backend.services.trading_agents import budget, runs, settings
+from backend.services.trading_agents import budget, install, runs, settings
 
 
 def estimate_of(median: float) -> budget.Estimate:
@@ -69,7 +69,7 @@ def runner_env(db_isolated, tmp_path, monkeypatch):
     )
     store = TradingAgentsConfigStore()
     store.write(enabled=True, config={"disclaimer_accepted_at": "2026-11-19T00:00:00+00:00"})
-    store.merge_state({"install_status": "ready"})
+    store.merge_state({"install_status": "ready", "installed_version": install.TA_COMMIT})
     provider = FakeProvider()
     use_provider(monkeypatch, provider)
     runner.set_budget_check_for_tests(lambda **_: estimate_of(0.4))
@@ -236,7 +236,7 @@ def test_the_worker_env_holds_no_llm_vendor_key(monkeypatch):
         monkeypatch.setenv(name, "leak-" + name)
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
     TradingAgentsConfigStore().write(secrets={"fred_api_key": "fred-123"})
-    env = worker_session.worker_env("bridge-token", "ACME Research Bot")
+    env = worker_session.worker_env("bridge-token", "ACME Research Bot", "tar_0123456789ab")
     assert not set(_VENDOR_KEYS) & set(env)
     assert not any("leak-" in v for v in env.values())
     secretish = {k for k in env if any(w in k.upper() for w in ("KEY", "TOKEN", "SECRET", "PASS"))}
@@ -248,6 +248,20 @@ def test_the_worker_env_holds_no_llm_vendor_key(monkeypatch):
     for name in ("TRADINGAGENTS_RESULTS_DIR", "TRADINGAGENTS_CACHE_DIR"):
         assert str(paths.DATA_DIR) in env[name]
     assert "127.0.0.1" in env["NO_PROXY"].split(",")
+
+
+def test_the_worker_env_points_every_home_at_the_runs_own_folder(monkeypatch):
+    for name in ("HOME", "USERPROFILE", "APPDATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
+        monkeypatch.setenv(name, "/real/owner/home")
+    monkeypatch.setenv("HOMEDRIVE", "C:")
+    env = worker_session.worker_env("bridge-token", "ACME Research Bot", "tar_0123456789ab")
+    home = str(install.run_dir("tar_0123456789ab") / "home")
+    for name in worker_session._HOME_VARIABLES:
+        assert env[name] == home
+    assert "HOMEDRIVE" not in env and "HOMEPATH" not in env
+    assert "/real/owner/home" not in env.values()
+    assert env["PYTHON_DOTENV_DISABLED"] == "1"
+    assert env["TRADINGAGENTS_MEMORY_LOG_PATH"].startswith(str(install.run_dir("tar_0123456789ab")))
 
 
 async def test_the_spawned_process_gets_that_env_and_the_bridges_token(runner_env):
@@ -317,6 +331,30 @@ async def test_a_line_past_the_size_limit_fails_the_run(runner_env):
     await settle()
     row = run_of(run_id)
     assert row["status"] == "failed" and "too large" in row["error"]
+
+
+async def test_a_line_between_the_new_and_the_old_limit_fails_the_run(runner_env):
+    worker("midline", runner_env.tmp)
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    assert row["status"] == "failed" and "too large" in row["error"]
+
+
+async def test_progress_for_an_unknown_stage_or_a_repeat_is_not_written(runner_env):
+    worker("spoof", runner_env.tmp)
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    assert [(p["stage"], p["status"]) for p in row["progress"]] == [("Market Analyst", "started")]
+
+
+async def test_a_call_id_the_bridge_never_issued_is_not_attributed(runner_env):
+    worker("spoof", runner_env.tmp)
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    assert row["llm_calls"] == 1 and set(row["cost_by_role"]) == {"analyst_market"}
 
 
 # ── cancelling ───────────────────────────────────────────────────────────────────────────

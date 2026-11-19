@@ -19,7 +19,7 @@ from backend.db.model_config_store import ModelConfigStore
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.services import connectors as connectors_service
 from backend.services import trading_agents
-from backend.services.trading_agents import settings
+from backend.services.trading_agents import install, settings
 from tests.flags import flags
 
 
@@ -37,10 +37,14 @@ def _model(providers=None):
     )
 
 
-def _connector(*, enabled=True, install_status=None, install_error=None):
+def _connector(*, enabled=True, install_status=None, install_error=None, installed=True):
     store = TradingAgentsConfigStore()
     store.write(enabled=enabled)
-    state = {"install_status": install_status, "install_error": install_error}
+    state = {
+        "install_status": install_status,
+        "install_error": install_error,
+        "installed_version": install.TA_COMMIT if installed and install_status == "ready" else None,
+    }
     store.merge_state({k: v for k, v in state.items() if v})
 
 
@@ -93,6 +97,19 @@ def test_the_install_state_comes_before_the_model_check():
     result = trading_agents.availability()
     assert result.status == trading_agents.NOT_INSTALLED
     assert "Install timed out." in result.message
+    with pytest.raises(NotInstalledError):
+        trading_agents.require_ready()
+
+
+@flags(trading_agents=True)
+@pytest.mark.parametrize("version", [None, "0" * 40])
+def test_an_install_from_another_commit_than_the_pin_needs_a_reinstall(version):
+    _connector(install_status="ready", installed=False)
+    if version:
+        TradingAgentsConfigStore().merge_state({"installed_version": version})
+    _model()
+    result = trading_agents.availability()
+    assert result.status == trading_agents.NEEDS_REINSTALL and "Reinstall" in result.message
     with pytest.raises(NotInstalledError):
         trading_agents.require_ready()
 

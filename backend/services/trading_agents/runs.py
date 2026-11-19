@@ -14,6 +14,7 @@ a timeout stopped the run still cost what it cost, and the record must say so.
 from __future__ import annotations
 
 import re
+import time
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
@@ -72,6 +73,11 @@ _USAGE_COUNTERS = (
     "plan_included_calls",
     "unpriced_calls",
 )
+# A usage or progress write refreshes every open screen; a busy run makes dozens a minute, so at
+# most one event per second per run goes out for them. Every other change always publishes.
+_CHATTER_OPS = frozenset({"progress", "usage"})
+_CHATTER_INTERVAL_SECONDS = 1.0
+_chatter_sent: dict[str, float] = {}
 _SECRET_KEY = re.compile(r"key|token|secret|password|credential", re.IGNORECASE)
 
 
@@ -265,6 +271,17 @@ def _patch_for(op: str, row: dict, kw: dict) -> dict:
     return {"status": CANCELLED, "finished_at": _now()}
 
 
+def _publish(op: str, run_id: str) -> None:
+    if op in _CHATTER_OPS:
+        now = time.monotonic()
+        if now - _chatter_sent.get(run_id, -_CHATTER_INTERVAL_SECONDS) < _CHATTER_INTERVAL_SECONDS:
+            return
+        _chatter_sent[run_id] = now
+    else:
+        _chatter_sent.pop(run_id, None)
+    data_events.publish([DATA_DOMAIN])
+
+
 def apply_run_change(op: str, **kw: Any) -> dict:
     """The one writer. Returns the run after the change (for ``delete``, the run as deleted)."""
     store = TradingAgentsRunStore()
@@ -281,5 +298,5 @@ def apply_run_change(op: str, **kw: Any) -> dict:
         else:
             current = _get(store, kw.get("run_id"), conn)
             row = store.update(current["id"], _patch_for(op, current, kw), conn)
-    data_events.publish([DATA_DOMAIN])
+    _publish(op, row["id"])
     return row

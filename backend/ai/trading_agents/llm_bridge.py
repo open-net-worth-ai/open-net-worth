@@ -36,6 +36,7 @@ from starlette.routing import Route
 
 from backend.ai.models.base import AIProvider
 from backend.ai.trading_agents import openai_shape as shape
+from backend.ai.trading_agents.openai_errors import classify_error, error_body
 from backend.core.cost_context import cost_attribution
 from backend.core.errors import (
     BudgetExceededError,
@@ -204,6 +205,7 @@ class LlmBridge:
             log_config=None,
             access_log=False,
             lifespan="off",
+            proxy_headers=False,
             timeout_graceful_shutdown=2,
         )
         self._server = _QuietServer(config)
@@ -289,7 +291,7 @@ class LlmBridge:
             onw_request = shape.to_onw_request(body)
             self._admit()
         except OpenNetWorthError as exc:
-            status, payload = shape.classify_error(exc)
+            status, payload = classify_error(exc)
             return JSONResponse(payload, status_code=status)
         return await self._serve_call(model, onw_request)
 
@@ -303,7 +305,7 @@ class LlmBridge:
             if not (reply.text or reply.tool_uses):
                 raise ExternalServiceError("The model returned an empty reply.")
         except Exception as exc:  # noqa: BLE001 — every provider failure maps to an HTTP error
-            status, payload = shape.classify_error(exc)
+            status, payload = classify_error(exc)
             log.warning(
                 "bridge_call_failed run=%s call=%s alias=%s status=%d error=%s latency_ms=%d",
                 self.run_id,
@@ -372,7 +374,7 @@ def _is_loopback(host: str) -> bool:
 
 
 def _error(status: int, message: str, kind: str, code: str) -> JSONResponse:
-    return JSONResponse(shape.error_body(message, kind=kind, code=code), status_code=status)
+    return JSONResponse(error_body(message, kind=kind, code=code), status_code=status)
 
 
 async def _read_json(request: Request) -> dict:

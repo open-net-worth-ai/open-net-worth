@@ -7,6 +7,7 @@ throwaway interpreter to prove the tree is killed on a timeout.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from types import SimpleNamespace
@@ -70,9 +71,32 @@ def test_windows_uses_the_scripts_python(monkeypatch):
 
 
 def test_scratch_folders_are_created_under_the_root():
-    folders = install.scratch()
-    for folder in (folders.results, folders.cache, folders.memory_log.parent):
+    folders = install.scratch("tar_0123456789ab")
+    for folder in (folders.home, folders.results, folders.cache, folders.memory_log.parent):
         assert folder.is_dir() and install.root() in folder.parents
+
+
+def test_each_run_has_its_own_home_results_and_memory_but_shares_the_cache():
+    first, second = install.scratch("tar_aaaaaaaaaaaa"), install.scratch("tar_bbbbbbbbbbbb")
+    assert first.cache == second.cache
+    for name in ("home", "results", "memory_log"):
+        assert getattr(first, name) != getattr(second, name)
+        assert install.run_dir("tar_aaaaaaaaaaaa") in getattr(first, name).parents
+
+
+@pytest.mark.parametrize("run_id", ["", "..", "../etc", "tar/x", "tar_x\\y", "a" * 65])
+def test_a_run_id_that_is_not_a_plain_segment_is_refused(run_id):
+    with pytest.raises(ValueError):
+        install.run_dir(run_id)
+
+
+def test_removing_a_run_deletes_only_its_folder_and_boot_removes_them_all():
+    keep, drop = install.scratch("tar_aaaaaaaaaaaa"), install.scratch("tar_bbbbbbbbbbbb")
+    drop.memory_log.write_text("a past decision for ACME")
+    install.remove_run("tar_bbbbbbbbbbbb")
+    assert not install.run_dir("tar_bbbbbbbbbbbb").exists() and keep.home.is_dir()
+    install.remove_all_runs()
+    assert not install.run_dir("tar_aaaaaaaaaaaa").exists() and install.root().exists()
 
 
 def test_the_pin_is_one_full_commit():
@@ -101,10 +125,13 @@ async def test_with_uv_it_makes_a_venv_installs_the_pin_and_runs_the_selftest(mo
     commands = Commands()
     _install_with(monkeypatch, commands)
     await install.install()
-    venv, pip, check = commands.seen
+    venv, deps, pin, check = commands.seen
     assert venv[:3] == ["/bin/uv", "venv", str(install.venv_dir())]
-    assert pip[:3] == ["/bin/uv", "pip", "install"] and pip[-1] == install.TA_PIN
-    assert pip[pip.index("--python") + 1] == str(install.venv_python())
+    assert deps[:3] == ["/bin/uv", "pip", "install"]
+    assert deps[deps.index("--python") + 1] == str(install.venv_python())
+    assert deps[-4:] == ["--require-hashes", "--no-deps", "-r", str(install.lock_file())]
+    assert pin[:3] == ["/bin/uv", "pip", "install"] and pin[-1] == install.TA_PIN
+    assert "--no-deps" in pin and "--require-hashes" not in pin
     assert check[:2] == [str(install.venv_python()), "-I"] and check[-1] == "--selftest"
     assert _state()["install_status"] == "ready"
     assert _state()["installed_version"] == install.TA_COMMIT
@@ -117,7 +144,65 @@ async def test_without_uv_it_falls_back_to_venv_and_pip(monkeypatch):
     await install.install()
     assert commands.seen[0][1:3] == ["-m", "venv"]
     assert commands.seen[1][1:4] == ["-m", "pip", "install"]
-    assert commands.seen[1][-1] == install.TA_PIN
+    assert "--require-hashes" in commands.seen[1] and "--no-deps" in commands.seen[1]
+    assert commands.seen[2][1:4] == ["-m", "pip", "install"]
+    assert commands.seen[2][-1] == install.TA_PIN
+    assert _state()["install_status"] == "ready"
+
+
+def test_the_shipped_lock_is_fully_hashed_and_leaves_out_the_pin_itself():
+    requirements: dict[str, list[str]] = {}
+    for line in install.lock_file().read_text().splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        if not line.startswith(" "):
+            current = requirements.setdefault(line.split()[0], [])
+        current.append(line)
+    assert requirements and not any(
+        name.lower().startswith("tradingagents") for name in requirements
+    )
+    assert all("==" in name for name in requirements)
+    assert all(any("--hash=sha256:" in ln for ln in lines) for lines in requirements.values())
+
+
+async def test_with_no_lock_file_it_installs_the_pin_with_its_own_dependencies(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(install, "lock_file", lambda: tmp_path / "absent.lock")
+    commands = Commands()
+    _install_with(monkeypatch, commands)
+    await install.install()
+    assert [c[3:] if c[1] == "pip" else c[1] for c in commands.seen[:2]] == [
+        "venv",
+        ["--python", str(install.venv_python()), install.TA_PIN],
+    ]
+    assert len(commands.seen) == 3
+
+
+async def test_an_install_that_is_not_the_pinned_commit_fails_the_check(monkeypatch):
+    async def run(command, cwd=None):
+        if command[-1] == "--selftest":
+            return 0, '{"ok": true, "ta_version": "0.7.1", "ta_commit": "' + "0" * 40 + '"}'
+        return 0, ""
+
+    monkeypatch.setattr(install, "_run", run)
+    monkeypatch.setattr(install, "_installer", lambda: "/bin/uv")
+    await install.install()
+    assert _state()["install_status"] == "failed"
+    assert "not the pinned" in _state()["install_error"]
+    assert _state().get("installed_version") is None
+
+
+async def test_an_install_at_the_pinned_commit_passes_the_check(monkeypatch):
+    async def run(command, cwd=None):
+        if command[-1] == "--selftest":
+            report = {"ok": True, "ta_version": "0.7.1", "ta_commit": install.TA_COMMIT}
+            return 0, json.dumps(report)
+        return 0, ""
+
+    monkeypatch.setattr(install, "_run", run)
+    monkeypatch.setattr(install, "_installer", lambda: "/bin/uv")
+    await install.install()
     assert _state()["install_status"] == "ready"
 
 
@@ -128,7 +213,7 @@ async def test_a_failed_step_is_recorded_with_a_redacted_log_tail(monkeypatch):
     await install.install()
     state = _state()
     assert state["install_status"] == "failed"
-    assert "Installing failed" in state["install_error"]
+    assert "failed" in state["install_error"]
     assert secret not in state["install_error"]
     assert not install.venv_dir().exists()
 
@@ -222,7 +307,7 @@ async def test_a_command_that_cannot_start_is_an_error_the_install_reports(monke
 
 
 def test_removing_the_connector_deletes_the_environment_and_every_scratch_folder():
-    folders = install.scratch()
+    folders = install.scratch("tar_0123456789ab")
     install.venv_dir().mkdir(parents=True)
     folders.memory_log.write_text("a past decision for ACME")
     connector_catalog.kind_of("trading_agents").remove("trading_agents")

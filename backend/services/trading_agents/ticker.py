@@ -13,9 +13,10 @@ _TICKER = re.compile(r"^[A-Z0-9.\-^=]{1,15}$")
 
 def normalize(ticker: object) -> str:
     """Upper-cased and checked. Anything else is refused: the ticker is the one free-text value a
-    run sends to its data vendors, and it becomes a file name in the run's scratch folder."""
+    run sends to its data vendors, and it becomes a file name in the run's scratch folder — so it
+    holds at least one letter or digit, which also rules out ``.`` and ``..``."""
     symbol = str(ticker or "").strip().upper()
-    if not _TICKER.match(symbol):
+    if not _TICKER.match(symbol) or not any(ch.isalnum() for ch in symbol):
         raise ValidationError(
             "A ticker is 1 to 15 letters, digits or . - ^ = (for example ACME or ACME.L).",
             field="ticker",

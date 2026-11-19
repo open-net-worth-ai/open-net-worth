@@ -72,7 +72,9 @@ class WorkerError(Exception):
 
 
 def emit(payload: dict) -> None:
-    line = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    # ASCII only: on Windows the pipe's encoding is the ANSI code page, which cannot hold every
+    # character of a report; the runner's json.loads reads the escapes back losslessly.
+    line = json.dumps(payload, ensure_ascii=True, allow_nan=False)
     with _emit_lock:
         _protocol_out.write(line + "\n")
         _protocol_out.flush()
@@ -249,6 +251,19 @@ def run_analysis(request: dict) -> None:
     emit({"type": "result", "signal": str(signal), "final_state": public_final_state(final_state)})
 
 
+def installed_commit() -> str:
+    """The git commit TradingAgents was installed from (pip and uv both record it in the
+    distribution's ``direct_url.json``), or ``""`` when it was not a VCS install."""
+    try:
+        from importlib.metadata import distribution
+
+        text = distribution("tradingagents").read_text("direct_url.json") or ""
+        commit = (json.loads(text).get("vcs_info") or {}).get("commit_id")
+    except Exception:  # noqa: BLE001 — no record means "unverified", never a failed selftest
+        return ""
+    return commit if isinstance(commit, str) else ""
+
+
 def selftest() -> int:
     try:
         import tradingagents
@@ -260,7 +275,13 @@ def selftest() -> int:
     except Exception as exc:  # noqa: BLE001 — the report is the whole point
         emit({"ok": False, "error": f"{type(exc).__name__}: {exc}"[:_MAX_MESSAGE_CHARS]})
         return 1
-    emit({"ok": True, "ta_version": getattr(tradingagents, "__version__", "")})
+    emit(
+        {
+            "ok": True,
+            "ta_version": getattr(tradingagents, "__version__", ""),
+            "ta_commit": installed_commit(),
+        }
+    )
     return 0
 
 

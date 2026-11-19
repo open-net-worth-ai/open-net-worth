@@ -386,6 +386,12 @@ async def test_the_server_binds_loopback_on_a_random_port_and_stops(db_isolated)
             await client.get(f"http://127.0.0.1:{port}/v1/models")
 
 
+async def test_the_server_does_not_trust_forwarding_headers(db_isolated):
+    bridge, _ = _bridge()
+    async with bridge:
+        assert bridge._server.config.proxy_headers is False
+
+
 async def test_two_runs_get_different_ports_and_tokens(db_isolated):
     first, _ = _bridge()
     second, _ = _bridge()

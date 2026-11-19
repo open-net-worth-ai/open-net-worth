@@ -6,10 +6,14 @@ run is a subprocess of that interpreter (``ai/trading_agents/runner``). Installi
 click by the owner on the connector page — never at boot, never from a tool — and is refused in a
 public demo and in a QA process (tests inject a fake worker instead).
 
-Layout under ``root()``: ``venv/`` (the interpreter), ``results/`` (the worker's working folder and
-TradingAgents' own logs), ``cache/`` (market-data cache), ``memory/`` (its decision memory log).
-The logs and the memory hold text derived from the portfolio context, so ``remove_environment``
-deletes the whole folder. Run rows are kept (the owner deletes them from the UI).
+Layout under ``root()``: ``venv/`` (the interpreter), ``cache/`` (market-data cache, shared) and
+``runs/<run id>/`` (one run's own home, results folder and decision memory log). A run's folder holds
+text derived from the portfolio context, so it is deleted when the run ends or its row is deleted,
+and ``remove_environment`` deletes the whole tree. Run rows are kept (the owner deletes them from
+the UI).
+
+When ``worker/requirements.lock`` is present the install is two steps: every dependency from that
+hash-locked file (``--require-hashes --no-deps``), then the pinned commit with ``--no-deps``.
 
 An install writes its progress to the connector's app-written ``state`` (``install_status``,
 ``installed_version``, ``install_error``); a failure's log tail is redacted before it is stored.
@@ -20,10 +24,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 import sys
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 from backend.core import data_events, paths, platform_fs, process_tree
 from backend.core.child_env import scrubbed_environ
@@ -53,11 +58,23 @@ _tasks: set[asyncio.Task] = set()
 
 
 class Scratch(NamedTuple):
-    """The three folders (and one file) TradingAgents is told to use instead of ``~/.tradingagents``."""
+    """One run's folders (and one file) TradingAgents is told to use instead of ``~``. ``cache`` is
+    the only one shared between runs."""
 
+    home: Path
     results: Path
     cache: Path
     memory_log: Path
+
+
+_RUN_ID = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+
+
+def _no_runs() -> int:
+    return 0
+
+
+_busy: Callable[[], int] = _no_runs
 
 
 # ── paths ────────────────────────────────────────────────────────────────────────────────
@@ -83,14 +100,53 @@ def worker_script() -> Path:
     return Path(__file__).parent / "worker" / "ta_worker.py"
 
 
-def scratch() -> Scratch:
-    """Create (owner-only) and return the worker's scratch folders."""
-    base = root()
-    folders = Scratch(base / "results", base / "cache", base / "memory" / "memory_log.md")
-    for folder in (folders.results, folders.cache, folders.memory_log.parent):
+def lock_file() -> Path:
+    """The hash-locked dependency list shipped beside the worker (a data file of the wheel)."""
+    return worker_script().parent / "requirements.lock"
+
+
+def run_dir(run_id: str) -> Path:
+    """One run's folder. A run id is a path segment here, so anything else is refused."""
+    if not _RUN_ID.match(run_id or ""):
+        raise ValueError("not a TradingAgents run id")
+    return root() / "runs" / run_id
+
+
+def scratch(run_id: str) -> Scratch:
+    """Create (owner-only) and return one run's scratch folders."""
+    base = run_dir(run_id)
+    folders = Scratch(
+        base / "home", base / "results", root() / "cache", base / "memory" / "memory_log.md"
+    )
+    for folder in (folders.home, folders.results, folders.cache, folders.memory_log.parent):
         folder.mkdir(parents=True, exist_ok=True)
         platform_fs.restrict_to_owner(folder)
     return folders
+
+
+def remove_run(run_id: str) -> None:
+    """Delete one run's folder (its logs and memory hold text derived from the portfolio context)."""
+    shutil.rmtree(run_dir(run_id), ignore_errors=True)
+
+
+def remove_all_runs() -> None:
+    """Boot: nothing is running, so no run's folder is still wanted."""
+    shutil.rmtree(root() / "runs", ignore_errors=True)
+
+
+def set_busy_probe(probe: Callable[[], int]) -> None:
+    """The runner says how many runs are waiting or going (``services`` cannot import it)."""
+    global _busy
+    _busy = probe
+
+
+def refuse_if_busy() -> None:
+    """Rebuilding or removing the venv under a run would pull the interpreter out from under it."""
+    if _busy() > 0:
+        raise ConflictError(
+            "A TradingAgents run is waiting or going. Wait for it to finish or cancel it first.",
+            status="runs_pending",
+        )
 
 
 # ── refusal + state ──────────────────────────────────────────────────────────────────────
@@ -182,14 +238,23 @@ async def _create_environment() -> None:
     root().mkdir(parents=True, exist_ok=True)
     uv = _installer()
     python = str(venv_python())
+    locked = lock_file().is_file()
     if uv is not None:
         await _checked(
             [uv, "venv", str(venv_dir()), "--python", sys.executable], "Creating the environment"
         )
-        await _checked([uv, "pip", "install", "--python", python, TA_PIN], "Installing")
+        pip = [uv, "pip", "install", "--python", python]
+    else:
+        await _checked([sys.executable, "-m", "venv", str(venv_dir())], "Creating the environment")
+        pip = [python, "-m", "pip", "install", "--no-input"]
+    if locked:
+        await _checked(
+            [*pip, "--require-hashes", "--no-deps", "-r", str(lock_file())],
+            "Installing the locked dependencies",
+        )
+        await _checked([*pip, "--no-deps", TA_PIN], "Installing")
         return
-    await _checked([sys.executable, "-m", "venv", str(venv_dir())], "Creating the environment")
-    await _checked([python, "-m", "pip", "install", "--no-input", TA_PIN], "Installing")
+    await _checked([*pip, TA_PIN], "Installing")
 
 
 async def _selftest() -> str:
@@ -202,6 +267,13 @@ async def _selftest() -> str:
     report = _last_json(tail)
     if code != 0 or not report.get("ok"):
         raise ExternalServiceError(f"The install check failed: {_failure_text(tail)}")
+    commit = str(report.get("ta_commit") or "")
+    if commit and commit != TA_COMMIT:
+        raise ExternalServiceError(
+            f"The install check found TradingAgents at {commit[:12]}, not the pinned {TA_COMMIT[:12]}."
+        )
+    if not commit:
+        log.warning("trading_agents_install_commit_unverified")
     return str(report.get("ta_version") or "")
 
 
@@ -247,6 +319,7 @@ def start_install() -> None:
     refuse_if_not_allowed()
     if TradingAgentsConfigStore().read()["state"].get("install_status") == INSTALLING:
         raise ConflictError("TradingAgents is already installing.", status=INSTALLING)
+    refuse_if_busy()
     _set_state(install_status=INSTALLING, install_error=None)
     task = asyncio.get_running_loop().create_task(install(), name="trading_agents_install")
     _tasks.add(task)
@@ -258,6 +331,8 @@ def start_install() -> None:
 
 def remove_environment() -> None:
     """Delete the venv and every scratch folder (the connector's ``remove`` hook). Run rows stay."""
+
+    refuse_if_busy()
 
     def _warn(_func: object, path: str, exc: BaseException) -> None:
         log.warning("trading_agents_remove_failed path=%s error=%s", path, type(exc).__name__)

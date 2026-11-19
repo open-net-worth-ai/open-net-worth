@@ -44,6 +44,7 @@ _FLOAT_RANGES = {"per_run_cap_usd": (0.10, 50.0), "monthly_cap_usd": (0.0, 1000.
 _MAX_MODEL_REF = 200
 _MAX_LANGUAGE = 32
 _MAX_USER_AGENT = 200
+_MAX_SECRET = 256
 
 
 @dataclass(frozen=True)
@@ -196,7 +197,18 @@ def _validate_secrets(secrets: dict) -> dict:
     for key, value in secrets.items():
         if value is not None and not isinstance(value, str):
             raise ValidationError(f"{key} must be text.", field=key)
+        if isinstance(value, str) and not _env_safe(value.strip(), allow_empty=True):
+            raise ValidationError(
+                f"{key} must be at most {_MAX_SECRET} characters on one line.", field=key
+            )
     return {k: (v.strip() if isinstance(v, str) else None) for k, v in secrets.items()}
+
+
+def _env_safe(value: str, *, allow_empty: bool = False) -> bool:
+    """Whether ``value`` can be an environment variable's value: bounded, one line, no NUL."""
+    if not value:
+        return allow_empty
+    return len(value) <= _MAX_SECRET and not any(ch in value for ch in "\0\r\n")
 
 
 # ── read / write ─────────────────────────────────────────────────────────────────────────
@@ -252,7 +264,10 @@ def data_vendor_env() -> dict[str, str]:
     """The optional data-vendor keys, as the environment variable TradingAgents reads each from.
     For the runner only: the one place these values leave the connector."""
     names = {"alpha_vantage_api_key": "ALPHA_VANTAGE_API_KEY", "fred_api_key": "FRED_API_KEY"}
-    return {names[k]: v for k, v in TradingAgentsConfigStore().secrets().items() if k in names}
+    held = TradingAgentsConfigStore().secrets()
+    return {
+        names[k]: v for k, v in held.items() if k in names and isinstance(v, str) and _env_safe(v)
+    }
 
 
 # ── models ───────────────────────────────────────────────────────────────────────────────
