@@ -60,6 +60,10 @@ export interface BulkBarProps {
   onDuplicate: () => void
   onMemo: (text: string) => void
   onMove: (accountId: string) => void
+  /** Two selected rows that are one movement between your accounts (a card payment read from
+   *  both sides) become ONE transfer. `makeTransferWhy` greys it out with the reason. */
+  onMakeTransfer?: () => void
+  makeTransferWhy?: string
   onExport: () => void
   onDelete: () => void
 }
@@ -83,6 +87,8 @@ export function BulkBar({
   onDuplicate,
   onMemo,
   onMove,
+  onMakeTransfer,
+  makeTransferWhy,
   onExport,
   onDelete,
 }: BulkBarProps) {
@@ -229,6 +235,17 @@ export function BulkBar({
         Move to Account
         <ChevronRight className="acct-bm-caret" size={14} aria-hidden="true" />
       </button>
+      {onMakeTransfer && (
+        <button
+          className="acct-bm-item"
+          onClick={() => act(onMakeTransfer)}
+          disabled={!!makeTransferWhy}
+          title={makeTransferWhy}
+        >
+          <ArrowLeftRight className="acct-bm-ic" size={14} aria-hidden="true" />
+          Make Transfer
+        </button>
+      )}
       <button className="acct-bm-item" onClick={() => act(onExport)}>
         <Download className="acct-bm-ic" size={14} aria-hidden="true" />
         Export {count} {count === 1 ? 'Transaction' : 'Transactions'}

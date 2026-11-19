@@ -193,6 +193,8 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
                 "amount": amount,
                 "cleared": cleared,
                 "working": _figure(acc.get("working_balance")),
+                # Credit left on a card, never its balance (balances.bank_figure).
+                "available": _figure(acc.get("available_to_spend")),
                 "currency": acc.get("currency"),
                 "pending": sum(float(r.get("amount") or 0) for r in rows if r.get("pending")),
             }

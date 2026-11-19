@@ -41,6 +41,8 @@ import {
   selectionTotal,
 } from './data'
 import { previewDeleteEffects } from './transactionApi'
+import { transferPair } from './makeTransfer'
+import { mergeTransactions } from '../../../api/matches'
 import { buildTxnView } from './txnView'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
 import type { Account, Txn, Category, TransactionUpdate, ApiAccount, ApiTxn } from './types'
@@ -1429,6 +1431,18 @@ export function AccountsTab({
     hide: selList.filter((t) => !t.hidden).length,
     unhide: selList.filter((t) => t.hidden).length,
   }
+  // Two rows that are one movement between your accounts become ONE transfer (the merge keeps
+  // both bank ids, so a later sync re-reading either side books nothing new).
+  const pair = transferPair(selList)
+  const bulkMakeTransfer = () => {
+    if (!('pay' in pair)) return
+    void mergeTransactions(pair.pay.id, pair.receive.id, true, 'Make transfer')
+      .then(() => {
+        afterBulk('Made one transfer')
+        void L.refresh()
+      })
+      .catch((e) => showToast(e instanceof Error ? e.message : 'Could not make a transfer'))
+  }
   const bulkCategory = (cat: string) =>
     runBulk(ids(), { category: cat }, (n) => 'Re-categorised ' + n)
   // Mobile's bulk bar hands categorization to Lucius instead of a flyout (see BulkBar) — one
@@ -2307,6 +2321,8 @@ export function AccountsTab({
             onDuplicate={() => void bulkDuplicate()}
             onMemo={bulkMemo}
             onMove={bulkMove}
+            onMakeTransfer={bulkMakeTransfer}
+            makeTransferWhy={'why' in pair ? pair.why : undefined}
             onExport={bulkExport}
             onDelete={bulkDelete}
           />

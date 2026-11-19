@@ -104,6 +104,21 @@ export function AccountBoxes({
                   {a.balance_state === 'differs' && (
                     <BalanceGap account={a} status={status} busy={busy} act={act} />
                   )}
+                  {a.balance_state === 'needs_limit' && (
+                    <button
+                      type="button"
+                      className="bs-gap"
+                      title="The bank sent only the credit left on this card, which is not what you owe. Add the card's credit limit to its account, and the balance owed is worked out from it."
+                      onClick={() =>
+                        void navigate({
+                          to: '/accounts',
+                          search: { account: a.account_id } as never,
+                        } as never)
+                      }
+                    >
+                      Add the card’s credit limit to check its balance
+                    </button>
+                  )}
                 </div>
               </li>
             ))}

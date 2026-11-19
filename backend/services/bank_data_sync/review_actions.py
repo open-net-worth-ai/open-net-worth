@@ -5,7 +5,9 @@
   ``vanished``: the booked row is deleted (``bulk_delete_transactions``, which remembers the
   identity, so the bank re-listing it later asks again instead of re-booking);
   ``duplicate``: the bank row IS the booked one — its ref is linked to it
-  (``attach_external_refs``), no money moves.
+  (``attach_external_refs``), no money moves; ``transfer_pair``: the two rows become ONE transfer
+  (``match_review.merge_transactions_preserving_fields(become_transfer=True)``, the same merge
+  as "Make transfer" on two selected rows).
 * dismiss — the ledger stays as it is. A dismissed ``duplicate``/``posted`` keeps holding its
   ref back, so the next run doesn't ask again.
 * book — ``duplicate``: it is a different transaction after all; book it on its own. ``undone``
@@ -25,9 +27,10 @@ from backend.core import audit_context
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.db.bank_sync_store import BankSyncReviewStore
 from backend.services import ledger as ledger_service
+from backend.services import match_review
 from backend.services.bank_data_sync.booker import SURFACE, draft_for
 
-_ACCEPT_KINDS = ("modified", "vanished", "posted", "duplicate")
+_ACCEPT_KINDS = ("modified", "vanished", "posted", "duplicate", "transfer_pair")
 # One decision at a time per item, process-wide (one process holds the data folder): two clicks
 # — two tabs, a retried request — must not both book a duplicate or apply a change twice.
 _claim_lock = threading.Lock()
@@ -121,6 +124,8 @@ def _accept(item: dict) -> str:
     txn = _live_txn(item)
 
     def apply() -> str:
+        if kind == "transfer_pair":
+            return _make_transfer(txn, detail)
         if kind == "vanished":
             ledger_service.bulk_delete_transactions([txn["id"]])
             return "deleted"
@@ -137,6 +142,18 @@ def _accept(item: dict) -> str:
         return "applied"
 
     return apply()
+
+
+def _make_transfer(receiving: dict, detail: dict) -> str:
+    paying = ledger_service.transactions.find_by_id(detail.get("pay_txn_id") or "")
+    if paying is None or paying.get("deleted") or paying.get("merged_into"):
+        raise ConflictError(
+            "The other transaction is gone (deleted or merged) — dismiss this item."
+        )
+    match_review.merge_transactions_preserving_fields(
+        paying["id"], receiving["id"], reason="bank sync review", become_transfer=True
+    )
+    return "transferred"
 
 
 def dismiss(item_id: str, seen: Optional[str] = None) -> dict:

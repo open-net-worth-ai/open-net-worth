@@ -7,7 +7,9 @@ it as settled, ``Provider.balance_is_settled``) is compared with the account's C
 pending rows are booked uncleared (pending.py), so the two speak of the same money. A bank with
 one undivided figure that may hold pending (``amount`` alone) is in step if it matches the
 cleared OR the working balance. A card or loan's balance is owed money: the book holds it
-negative, whichever way round the bank reports it.
+negative, whichever way round the bank reports it. A card's AVAILABLE figure (credit left) is
+never its balance: with only that, the balance owed is the account's credit limit minus it, and
+with no limit set there is no figure (``needs_limit``) — Amendment 19.
 
 An account that held nothing but its Starting Balance when its history was first imported is set
 to the bank's figure (YNAB does the same on linking). Any other account is never changed
@@ -19,6 +21,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+from backend.core.errors import ValidationError
 from backend.services import ledger as ledger_service
 from backend.services.aggregation.providers import Provider
 from backend.services.bank_data_sync import budget
@@ -41,28 +44,64 @@ def _settled(bank: dict) -> Optional[float]:
     return None if value is None else float(value)
 
 
+def _only_available(bank: dict) -> bool:
+    """The one figure the bank sent is an AVAILABLE one (``balance_kinds``): no booked and no
+    expected balance, and ``amount`` is the available figure. For a card that is credit left,
+    never what is owed (a user report, 2026-11-19: a card's credit left read as the
+    balance)."""
+    available = bank.get("available")
+    if bank.get("cleared") is not None or bank.get("working") is not None or available is None:
+        return False
+    amount = bank.get("amount")
+    return amount is None or abs(float(amount) - float(available)) <= _TOL
+
+
+def bank_figure(account: dict, bank: Optional[dict]) -> tuple[Optional[float], bool, Optional[str]]:
+    """``(target, settled, why_none)``: the bank's balance in the book's sign (a card or loan
+    held negative), whether it is the settled figure, and, when there is none, why.
+
+    A card whose bank sent only its available credit is owed ``limit − available`` when the
+    account has a credit limit (in credit when available exceeds the limit); without one there
+    is no figure (``needs_limit``) — the available credit is never used as the balance."""
+    bank = bank or {}
+    settled = _settled(bank)
+    if settled is not None:
+        return _target(account, settled), True, None
+    if account.get("type") == "credit" and _only_available(bank):
+        limit = account.get("credit_limit")
+        if not limit or float(limit) <= 0:
+            return None, False, "needs_limit"
+        return float(bank["available"]) - float(limit), False, None
+    amount = bank.get("amount")
+    if amount is None:
+        return None, False, None
+    return _target(account, float(amount)), False, None
+
+
 def _books(account: dict) -> tuple[list[dict], Optional[str]]:
     txns = ledger_service.transactions.all()
     return txns, ledger_service.opening_date(account, txns)
 
 
 def compare(account: dict, bank: Optional[dict]) -> dict:
-    """``{bank_balance, cleared_balance, balance_state}``: ``match``, ``differs``, or None when
-    there's nothing to compare (no figure yet, another currency)."""
-    settled = _settled(bank or {})
-    figure = settled if settled is not None else (bank or {}).get("amount")
-    if not bank or figure is None:
-        return {"bank_balance": None, "cleared_balance": None, "balance_state": None}
+    """``{bank_balance, cleared_balance, balance_state}``: ``match``, ``differs``,
+    ``needs_limit`` (a card whose bank sent only its available credit, and no credit limit is
+    set), or None when there's nothing to compare (no figure yet, another currency)."""
+    target, settled, why = bank_figure(account, bank)
+    if not bank or target is None:
+        return {
+            "bank_balance": None,
+            "cleared_balance": None,
+            "balance_state": why if bank else None,
+        }
     txns, start = _books(account)
     cleared = round(ledger_service.cleared_account_balance(account, txns, start), 2)
     working = round(ledger_service.account_balance(account, txns, start), 2)
-    target = round(_target(account, float(figure)), 2)
+    target = round(target, 2)
     same_currency = not bank.get("currency") or bank["currency"] == account.get("currency")
     state = None
     if same_currency:
-        in_step = abs(target - cleared) <= _TOL or (
-            settled is None and abs(target - working) <= _TOL
-        )
+        in_step = abs(target - cleared) <= _TOL or (not settled and abs(target - working) <= _TOL)
         state = "match" if in_step else "differs"
     return {"bank_balance": target, "cleared_balance": cleared, "balance_state": state}
 
@@ -72,13 +111,17 @@ def use_bank(account_id: str, bank: dict) -> None:
     account = ledger_service.accounts.find_by_id(account_id)
     if not account:
         return
+    target, _settled_figure, why = bank_figure(account, bank)
+    if target is None:
+        if why == "needs_limit":
+            raise ValidationError(
+                "The bank sent only this card's available credit. Add the card's credit limit "
+                "to its account, and the balance owed is worked out from it."
+            )
+        return
     txns, start = _books(account)
     cleared = ledger_service.cleared_account_balance(account, txns, start)
-    settled = _settled(bank)
-    figure = settled if settled is not None else bank.get("amount")
-    if figure is None:
-        return
-    delta = _target(account, float(figure)) - cleared
+    delta = target - cleared
     if abs(delta) <= _TOL:
         return
     opening = ledger_service.opening_amount(account, txns)
@@ -112,4 +155,6 @@ def record(p: Provider, read: dict[str, dict], empty_on_first_import: set[str]) 
         account = ledger_service.accounts.find_by_id(account_id) or {}
         if bank.get("currency") and bank["currency"] != account.get("currency"):
             continue
+        if bank_figure(account, bank)[0] is None:
+            continue  # a card the bank sent only its available credit for: never guessed
         use_bank(account_id, bank)

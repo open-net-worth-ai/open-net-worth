@@ -3905,7 +3905,11 @@ def assert_mergeable(
     assert_merge_allowed(canonical, absorbed)
 
     # F23(a) — engine invariant re-checks (LOCAL import breaks ledger→matching→ledger cycle).
-    if not override:
+    # Both say "these are two real events", which is what a transfer's two legs ARE: a
+    # ``become_transfer`` pair is one debit and one credit on two different accounts
+    # (``_transfer_legs``), so the vetoes would refuse every card payment one bank sync read
+    # brought in (same batch, one connection's ids).
+    if not override and not become_transfer:
         from backend.services import matching as _matching  # local import — see module docstring
 
         if _matching._same_source_event_veto(canonical, absorbed):
