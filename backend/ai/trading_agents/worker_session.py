@@ -23,7 +23,7 @@ from backend.core import process_tree
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConflictError, OpenNetWorthError
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
-from backend.services.trading_agents import install, runs, settings
+from backend.services.trading_agents import budget, install, runs, settings
 from backend.services.trading_agents.roles import ROLE_BY_NODE, role_for
 
 log = logging.getLogger(__name__)
@@ -125,6 +125,8 @@ class RunSession:
         self._last_progress: Optional[tuple] = None
         self._progress_writes = 0
         self._metered = 0.0
+        self._limits = RunLimits()
+        self._budget_sentence: Optional[str] = None
         self._result: Optional[dict] = None
         self._signal: Optional[str] = None
         self._worker_error: Optional[str] = None
@@ -164,7 +166,7 @@ class RunSession:
         if self.stop_reason is None:
             self.stop_reason = reason
         if self._bridge is not None and reason != STOP_CANCEL:
-            self._bridge.refuse(self._stop_text(reason))
+            self._bridge.refuse(self._stop_text(reason), kind=STOP_BUDGET)
         self._kill()
 
     def _kill(self) -> None:
@@ -180,7 +182,8 @@ class RunSession:
     async def _execute(self) -> None:
         job = self.job
         models = llm_bridge.resolve_bridge_models(job.models)
-        limits = RunLimits(max_calls=job.cfg.max_llm_calls, max_metered_usd=job.cap_usd)
+        self._limits = await asyncio.to_thread(self._run_limits)
+        limits = self._limits
         concurrency = settings.bridge_concurrency(job.cfg, job.models)
         bridge = LlmBridge(
             run_id=job.run_id,
@@ -194,6 +197,21 @@ class RunSession:
             if self.stop_reason is not None:
                 return
             await self._converse(bridge)
+
+    def _run_limits(self) -> RunLimits:
+        """The calls and dollars this run may use. What is left of the monthly cap is read once,
+        now, as what finished runs spent: runs go one at a time, so nothing else spends it meanwhile
+        (those still waiting have spent nothing). An all-subscription run
+        spends no dollars, so the monthly cap does not apply to it."""
+        job = self.job
+        month_left = None
+        if not job.models.plan_included:
+            month_left = budget.run_limit_usd(job.cfg, budget.month_spend())
+        return RunLimits(
+            max_calls=job.cfg.max_llm_calls,
+            max_metered_usd=job.cap_usd,
+            month_remaining_usd=month_left,
+        )
 
     def _request(self, bridge: LlmBridge) -> bytes:
         job, cfg = self.job, self.job.cfg
@@ -313,7 +331,9 @@ class RunSession:
 
     def _on_call(self, record: llm_bridge.CallRecord) -> None:
         self._metered += record.metered_usd
-        if self._metered > self.job.cap_usd:
+        limit = self._limits.usd_limit()
+        if limit is not None and self._metered > limit[0]:
+            self._budget_sentence = limit[1]
             self.stop(STOP_BUDGET)
         self._pending[record.call_id] = record
 
@@ -331,7 +351,7 @@ class RunSession:
             cache_creation_tokens=record.cache_creation_tokens,
             cost_usd=record.metered_usd,
             plan_included_calls=int(plan),
-            unpriced_calls=int(not plan and record.cost_usd is None),
+            unpriced_calls=int(record.unpriced),
         )
 
     def _flush_unattributed(self) -> None:
@@ -343,6 +363,8 @@ class RunSession:
     # ── the end ──────────────────────────────────────────────────────────────────────────
 
     def _stop_text(self, reason: str) -> str:
+        if reason == STOP_BUDGET and self._budget_sentence:
+            return self._budget_sentence
         return _STOP_TEXT[reason].format(cap=self.job.cap_usd, calls=self.job.cfg.max_llm_calls)
 
     def _end(self, status: str, message: str) -> None:
@@ -357,12 +379,14 @@ class RunSession:
             log.warning("trading_agents_end_not_recorded run=%s status=%s", self.job.run_id, status)
 
     def _conclude(self) -> None:
-        if self._result is not None and self.stop_reason != STOP_CANCEL:
-            self._finish(self._result)
-        elif self.stop_reason == STOP_CANCEL:
+        """A stop reason outranks a result: a run stopped for its cap or its time is recorded as
+        stopped even when the worker's result line was already read."""
+        if self.stop_reason == STOP_CANCEL:
             self._end(runs.CANCELLED, "")
         elif self.stop_reason is not None:
             self._end(_STOP_STATUS[self.stop_reason], self._stop_text(self.stop_reason))
+        elif self._result is not None:
+            self._finish(self._result)
         else:
             self._end(*self._unfinished())
 
@@ -370,9 +394,8 @@ class RunSession:
         """How a run ends when the worker stopped without a result: a cap the bridge enforced
         (the worker saw a refused call and failed), else the worker's own error."""
         bridge = self._bridge
-        if bridge is not None and bridge.refused_calls:
-            reason = STOP_BUDGET if self._metered >= self.job.cap_usd else STOP_CALLS
-            return _STOP_STATUS[reason], self._stop_text(reason)
+        if bridge is not None and bridge.refused_calls and bridge.refusal_kind in _STOP_STATUS:
+            return _STOP_STATUS[bridge.refusal_kind], bridge.refusal_text or ""
         if self._worker_error:
             return runs.FAILED, self._worker_error
         code = self._proc.returncode if self._proc is not None else None

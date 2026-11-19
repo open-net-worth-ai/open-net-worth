@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api.cost import router as cost_router
-from backend.core.errors import BudgetExceededError, FeatureDisabledError
+from backend.core.errors import BudgetExceededError, FeatureDisabledError, ModelUnavailableError
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
 from backend.services import cost as cost_service
 from backend.services.trading_agents import budget, costs, settings
@@ -64,6 +64,18 @@ def _run(models=API, analysts=ANALYSTS, ticker="ACME", cfg=None, finish=True, **
     if finish:
         run = apply_run_change("finish", run_id=run["id"], signal="Hold")
     return run
+
+
+def _queued(estimate: float) -> dict:
+    return apply_run_change(
+        "create",
+        ticker="ACME",
+        analysts=ANALYSTS,
+        config_snapshot={},
+        context_level="ticker",
+        cap_usd=2.0,
+        estimate_usd=estimate,
+    )
 
 
 def _age(run_id: str, days: int) -> None:
@@ -131,6 +143,42 @@ def test_a_model_without_a_price_is_flagged_not_priced_at_zero_silently():
     assert got.median_usd == 0.0 and not got.priced
 
 
+def test_a_cli_on_a_stored_api_key_is_billed_so_it_is_metered_not_plan_included():
+    keyed = replace(CLI, deep_keyed=True, quick_keyed=True)
+    got = budget.estimate(settings.load(), keyed, ANALYSTS, _rate_for)
+    assert not got.plan_included and got.median_usd == pytest.approx(0.837)
+    half = replace(CLI, quick_keyed=True)
+    assert not budget.estimate(settings.load(), half, ANALYSTS, _rate_for).plan_included
+
+
+def test_an_unknown_transport_name_is_metered_never_assumed_to_be_a_subscription():
+    odd = replace(API, deep_transport="claude_cli_plus", quick_transport="claude_cli_plus")
+    assert not budget.estimate(settings.load(), odd, ANALYSTS, _rate_for).plan_included
+
+
+def test_a_local_model_costs_nothing_and_is_not_unpriced():
+    local = replace(API, deep_local=True, quick_local=True)
+    got = budget.estimate(settings.load(), local, ANALYSTS, lambda model: None)
+    assert got.median_usd == 0.0 and got.priced and got.unpriced_models == ()
+
+
+def test_the_unpriced_models_are_named_in_the_estimate():
+    got = budget.estimate(settings.load(), API, ANALYSTS, lambda model: None)
+    assert got.unpriced_models == ("acme-ai:model-a", "acme-ai:model-b")
+    assert got.as_dict()["unpriced_models"] == ["acme-ai:model-a", "acme-ai:model-b"]
+
+
+def test_a_metered_model_with_no_price_is_refused_by_name_unless_it_is_local():
+    cfg = replace(settings.load(), monthly_cap_usd=50.0)
+    with pytest.raises(ModelUnavailableError) as raised:
+        budget.check_can_start(cfg, API, ANALYSTS, lambda model: None)
+    assert "acme-ai:model-a" in raised.value.message
+    assert raised.value.context["model_ref"] == "acme-ai:model-a"
+    local = replace(API, deep_local=True, quick_local=True)
+    assert budget.check_can_start(cfg, local, ANALYSTS, lambda model: None).priced
+    assert budget.check_can_start(cfg, CLI, ANALYSTS, lambda model: None).plan_included
+
+
 # ── monthly cap ──────────────────────────────────────────────────────────────
 
 
@@ -143,6 +191,44 @@ def test_a_run_the_month_cannot_afford_is_refused_with_the_numbers():
     assert "$1.00" in raised.value.message
     assert raised.value.context["month_spend_usd"] == 0.5
     assert raised.value.context["monthly_cap_usd"] == 1.0
+
+
+def test_a_run_still_queued_or_going_counts_its_estimate_against_the_month():
+    cfg = replace(settings.load(), monthly_cap_usd=1.0)
+    apply_run_change(
+        "create",
+        ticker="ACME",
+        analysts=ANALYSTS,
+        config_snapshot={},
+        context_level="ticker",
+        cap_usd=2.0,
+        estimate_usd=0.60,
+    )
+    assert budget.month_spend() == 0.0 and budget.month_committed() == pytest.approx(0.60)
+    with pytest.raises(BudgetExceededError):
+        budget.check_can_start(cfg, API, ANALYSTS, _rate_for)
+
+
+def test_a_running_run_counts_what_it_has_spent_when_that_passes_its_estimate():
+    run = _queued(estimate=0.20)
+    apply_run_change("start", run_id=run["id"])
+    apply_run_change("usage", run_id=run["id"], llm_calls=1, cost_usd=0.90)
+    assert budget.month_committed() == pytest.approx(0.90)
+
+
+def test_a_finished_run_counts_what_it_cost_not_what_it_was_estimated_at():
+    run = _queued(estimate=5.0)
+    apply_run_change("start", run_id=run["id"])
+    apply_run_change("usage", run_id=run["id"], llm_calls=1, cost_usd=0.10)
+    apply_run_change("finish", run_id=run["id"], signal="Hold")
+    assert budget.month_committed() == pytest.approx(0.10)
+
+
+def test_the_live_limit_is_the_run_cap_or_what_is_left_of_the_month():
+    cfg = replace(settings.load(), per_run_cap_usd=2.0, monthly_cap_usd=10.0)
+    assert budget.run_limit_usd(cfg, 0.0) == 2.0
+    assert budget.run_limit_usd(cfg, 9.25) == pytest.approx(0.75)
+    assert budget.run_limit_usd(cfg, 12.0) == 0.0
 
 
 def test_a_run_inside_the_month_is_allowed_and_returns_its_estimate():
@@ -175,11 +261,6 @@ def test_the_month_starts_in_the_owners_zone(monkeypatch):
     tokyo = datetime(2026, 11, 1, 0, 30, tzinfo=ZoneInfo("Asia/Tokyo"))
     monkeypatch.setattr(budget, "user_now", lambda: tokyo)
     assert budget.month_start_utc() == "2026-10-31T15:00:00+00:00"
-
-
-def test_the_live_cap_helpers():
-    assert budget.run_cap_reached(2.0, 2.0) and not budget.run_cap_reached(1.99, 2.0)
-    assert budget.calls_cap_reached(150, 150) and not budget.calls_cap_reached(149, 150)
 
 
 # ── bucket ───────────────────────────────────────────────────────────────────

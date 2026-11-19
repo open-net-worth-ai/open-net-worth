@@ -7,8 +7,15 @@ two aliases (``onw-deep`` / ``onw-quick``); anything else is refused, so it cann
 the owner did not approve.
 
 One request is one provider call and one fresh CLI turn (``one_shot_turn``): the bridge hands the
-model's tool calls straight back to TradingAgents, which runs its own data tools and re-sends its
+model's tool calls straight back to TradingAgents, which runs its own tools and re-sends its
 transcript — never the Lucius "turn stays open" path. It runs NO tool.
+
+Caps are enforced HERE, before a call is made: a metered call reserves its worst-case cost first
+(``BridgeModel.worst_case_usd``) and waits while the reservations in flight would pass the limit,
+so concurrent calls cannot overshoot it by more than the one call that is let through when
+nothing else is outstanding. A call runs as its own task, shielded from the request: it is
+finished and recorded (one cost row, one ``CallRecord``) even when the worker was killed under it,
+and ``stop()`` waits for the calls still going.
 
 Message bodies carry portfolio amounts, so nothing here logs one: a call logs its id, alias,
 tokens, latency and status only. See docs/specs/trading-agents.md §4.2.
@@ -17,93 +24,67 @@ tokens, latency and status only. See docs/specs/trading-agents.md §4.2.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hmac
-import ipaddress
-import json
 import logging
 import secrets
 import socket
 import time
-from dataclasses import dataclass
-from typing import Callable, Iterator, Mapping, Optional
+from typing import Callable, Mapping, Optional
 
-import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from backend.ai.models.base import AIProvider
 from backend.ai.trading_agents import openai_shape as shape
-from backend.ai.trading_agents.openai_errors import classify_error, error_body
-from backend.core.cost_context import cost_attribution
+from backend.ai.trading_agents.bridge_http import (
+    QuietServer,
+    error_response,
+    is_loopback,
+    read_json,
+    record_cost,
+    run_provider,
+    server_config,
+)
+from backend.ai.trading_agents.bridge_models import (
+    ALIAS_DEEP,
+    ALIAS_QUICK,
+    ALIASES,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    KIND_BUDGET,
+    KIND_CALLS,
+    PLAN_INCLUDED,
+    BridgeModel,
+    CallRecord,
+    RunLimits,
+)
+from backend.ai.trading_agents.openai_errors import classify_error
 from backend.core.errors import (
     BudgetExceededError,
     ConfigurationError,
     ExternalServiceError,
     ModelUnavailableError,
     OpenNetWorthError,
-    ValidationError,
 )
-from backend.core.one_shot_turn import one_shot_turn
 from backend.services.trading_agents.settings import ResolvedModels
 
 log = logging.getLogger(__name__)
 
-SOURCE = "trading_agents"
-ALIAS_DEEP = "onw-deep"
-ALIAS_QUICK = "onw-quick"
-ALIASES = (ALIAS_DEEP, ALIAS_QUICK)
-PLAN_INCLUDED = "plan_included"
-# TradingAgents does not send an effort; both tiers run at the owner's usual middle setting.
-_EFFORT = "medium"
-_MAX_BODY_BYTES = 16 * 1024 * 1024
+__all__ = [
+    "ALIASES",
+    "ALIAS_DEEP",
+    "ALIAS_QUICK",
+    "PLAN_INCLUDED",
+    "BridgeModel",
+    "CallRecord",
+    "LlmBridge",
+    "RunLimits",
+    "resolve_bridge_models",
+]
+
 _START_TIMEOUT_SECONDS = 5.0
 _STOP_TIMEOUT_SECONDS = 5.0
-
-
-@dataclass(frozen=True)
-class BridgeModel:
-    """One alias's resolved model: the provider object and how its calls are labelled."""
-
-    alias: str
-    ref: str
-    model: str
-    provider_label: str
-    transport: str
-    provider: AIProvider
-
-
-@dataclass(frozen=True)
-class RunLimits:
-    """Hard stops the bridge enforces on its own, so a cap cannot be overshot by the calls that
-    were already in flight when the runner noticed it. ``None`` = no limit."""
-
-    max_calls: Optional[int] = None
-    max_metered_usd: Optional[float] = None
-
-
-@dataclass(frozen=True)
-class CallRecord:
-    """What one finished call cost, handed to the runner in-process (never via the worker)."""
-
-    call_id: str
-    alias: str
-    model_ref: str
-    input_tokens: int
-    output_tokens: int
-    cache_creation_tokens: int
-    cache_read_tokens: int
-    cost_usd: Optional[float]
-    cost_basis: Optional[str]
-    latency_ms: float
-    tool_calls: int
-
-    @property
-    def metered_usd(self) -> float:
-        """Spend that is real money: a plan-included call is quota use, not an invoice."""
-        return 0.0 if self.cost_basis == PLAN_INCLUDED else float(self.cost_usd or 0.0)
+_INFLIGHT_WAIT_SECONDS = 60.0
 
 
 def resolve_bridge_models(models: ResolvedModels) -> dict[str, BridgeModel]:
@@ -114,7 +95,11 @@ def resolve_bridge_models(models: ResolvedModels) -> dict[str, BridgeModel]:
     from backend.db.model_config_store import provider_label_for
 
     out: dict[str, BridgeModel] = {}
-    for alias, ref in ((ALIAS_DEEP, models.deep), (ALIAS_QUICK, models.quick)):
+    tiers = (
+        (ALIAS_DEEP, models.deep, models.deep_plan_included),
+        (ALIAS_QUICK, models.quick, models.quick_plan_included),
+    )
+    for alias, ref, plan_included in tiers:
         try:
             context = resolve_model_context(ref)
         except ConfigurationError as exc:
@@ -123,17 +108,16 @@ def resolve_bridge_models(models: ResolvedModels) -> dict[str, BridgeModel]:
             raise ModelUnavailableError(f"{ref!r} is not a usable AI model.", model_ref=ref)
         label = provider_label_for(context.transport, context.base_url, context.provider_key)
         out[alias] = BridgeModel(
-            alias, ref, context.model, label, context.transport, context.provider
+            alias,
+            ref,
+            context.model,
+            label,
+            context.transport,
+            context.provider,
+            base_url=context.base_url,
+            plan_included=plan_included,
         )
     return out
-
-
-class _QuietServer(uvicorn.Server):
-    """A uvicorn server that leaves the process's signal handlers to the main app."""
-
-    @contextlib.contextmanager
-    def capture_signals(self) -> Iterator[None]:
-        yield
 
 
 class LlmBridge:
@@ -158,9 +142,15 @@ class LlmBridge:
         self._admitted = 0
         self._refused = 0
         self._metered_usd = 0.0
-        self._refusal: Optional[str] = None
-        self._server: Optional[_QuietServer] = None
+        self._reserved_usd = 0.0
+        self._released = asyncio.Event()
+        self._inflight: set[asyncio.Task] = set()
+        self._refusal: Optional[tuple[str, str]] = None
+        self.refusal_kind: Optional[str] = None
+        self.refusal_text: Optional[str] = None
+        self._server: Optional[QuietServer] = None
         self._task: Optional[asyncio.Task] = None
+        self._sock: Optional[socket.socket] = None
         self._port = 0
         self.app = Starlette(
             routes=[
@@ -188,9 +178,10 @@ class LlmBridge:
         """Calls turned away for a cap — the runner's proof that a failed worker hit one."""
         return self._refused
 
-    def refuse(self, reason: str) -> None:
+    def refuse(self, reason: str, kind: str = KIND_BUDGET) -> None:
         """Turn every later call away (a cap the runner tracks tripped)."""
-        self._refusal = reason
+        self._refusal = (kind, reason)
+        self._released.set()
 
     async def start(self) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -199,16 +190,9 @@ class LlmBridge:
         except OSError as exc:
             sock.close()
             raise ExternalServiceError("The TradingAgents model bridge could not start.") from exc
+        self._sock = sock
         self._port = sock.getsockname()[1]
-        config = uvicorn.Config(
-            self.app,
-            log_config=None,
-            access_log=False,
-            lifespan="off",
-            proxy_headers=False,
-            timeout_graceful_shutdown=2,
-        )
-        self._server = _QuietServer(config)
+        self._server = QuietServer(server_config(self.app))
         self._task = asyncio.create_task(self._server.serve(sockets=[sock]))
         deadline = time.monotonic() + _START_TIMEOUT_SECONDS
         while not self._server.started:
@@ -219,6 +203,14 @@ class LlmBridge:
         log.info("bridge_started run=%s port=%d", self.run_id, self._port)
 
     async def stop(self) -> None:
+        """Wait (bounded) for the calls still going so each is recorded, then shut the server
+        and release the socket."""
+        pending = set(self._inflight)
+        if pending:
+            _, unfinished = await asyncio.wait(pending, timeout=_INFLIGHT_WAIT_SECONDS)
+            for task in unfinished:
+                task.cancel()
+            await asyncio.gather(*unfinished, return_exceptions=True)
         if self._server is not None:
             self._server.should_exit = True
         task, self._task = self._task, None
@@ -230,6 +222,9 @@ class LlmBridge:
             except Exception:  # noqa: BLE001 — a server that died on its own is already stopped
                 log.exception("bridge_server_failed run=%s", self.run_id)
         self._server = None
+        sock, self._sock = self._sock, None
+        if sock is not None:
+            sock.close()
 
     async def __aenter__(self) -> "LlmBridge":
         await self.start()
@@ -242,31 +237,55 @@ class LlmBridge:
 
     def _guard(self, request: Request) -> Optional[Response]:
         """403 for a peer that is not on this machine, 401 for a wrong or missing token."""
-        if not _is_loopback(request.client.host if request.client else ""):
-            return _error(403, "Forbidden.", "permission_error", "forbidden")
+        if not is_loopback(request.client.host if request.client else ""):
+            return error_response(403, "Forbidden.", "permission_error", "forbidden")
         header = request.headers.get("authorization", "")
         scheme, _, supplied = header.partition(" ")
         known = self.token.encode()
         if scheme.lower() != "bearer" or not hmac.compare_digest(supplied.strip().encode(), known):
-            return _error(401, "Invalid API key.", "authentication_error", "invalid_api_key")
+            return error_response(
+                401, "Invalid API key.", "authentication_error", "invalid_api_key"
+            )
         return None
 
-    def _admit(self) -> None:
-        """Count a call in, or raise ``BudgetExceededError`` when the run is out of budget."""
+    def _stop_reason(self, metered: bool) -> Optional[tuple[str, str]]:
+        """``(kind, sentence)`` when no more calls may be admitted, else ``None``."""
+        if self._refusal is not None:
+            return self._refusal
         limits = self._limits
-        reason = self._refusal
-        if reason is None and limits.max_calls is not None and self._admitted >= limits.max_calls:
-            reason = f"The run reached its limit of {limits.max_calls} model calls."
-        if (
-            reason is None
-            and limits.max_metered_usd is not None
-            and self._metered_usd >= limits.max_metered_usd
-        ):
-            reason = f"The run reached its spend cap of ${limits.max_metered_usd:.2f}."
-        if reason is not None:
-            self._refused += 1
-            raise BudgetExceededError(reason)
+        if limits.max_calls is not None and self._admitted >= limits.max_calls:
+            return KIND_CALLS, f"The run reached its limit of {limits.max_calls} model calls."
+        limit = limits.usd_limit() if metered else None
+        if limit is not None and self._metered_usd >= limit[0]:
+            return KIND_BUDGET, limit[1]
+        return None
+
+    def _fits(self, reserve: float, metered: bool) -> bool:
+        limit = self._limits.usd_limit() if metered else None
+        if limit is None or reserve <= 0 or self._reserved_usd == 0:
+            return True
+        return reserve <= limit[0] - self._metered_usd - self._reserved_usd
+
+    async def _admit(self, reserve: float, metered: bool) -> None:
+        """Count a call in and reserve its worst-case cost, waiting while the reservations
+        already in flight leave no room; ``BudgetExceededError`` when the run is out of budget."""
+        while True:
+            stop = self._stop_reason(metered)
+            if stop is not None:
+                self._refused += 1
+                if self.refusal_kind is None:
+                    self.refusal_kind, self.refusal_text = stop
+                raise BudgetExceededError(stop[1])
+            if self._fits(reserve, metered):
+                break
+            self._released.clear()
+            await self._released.wait()
         self._admitted += 1
+        self._reserved_usd += reserve
+
+    def _release(self, reserve: float) -> None:
+        self._reserved_usd = max(0.0, self._reserved_usd - reserve)
+        self._released.set()
 
     # ── routes ───────────────────────────────────────────────────────────────────────────
 
@@ -279,29 +298,33 @@ class LlmBridge:
         if denied is not None:
             return denied
         try:
-            body = await _read_json(request)
+            body, size = await read_json(request)
             model = self._models.get(str(body.get("model")))
             if model is None:
-                return _error(
+                return error_response(
                     400,
                     f"The model must be one of {', '.join(ALIASES)}.",
                     "invalid_request_error",
                     "model_not_found",
                 )
             onw_request = shape.to_onw_request(body)
-            self._admit()
+            reserve = model.worst_case_usd(size, _max_output_tokens(body))
+            await self._admit(reserve, model.metered)
         except OpenNetWorthError as exc:
             status, payload = classify_error(exc)
             return JSONResponse(payload, status_code=status)
-        return await self._serve_call(model, onw_request)
+        return await self._serve_call(model, onw_request, reserve)
 
-    async def _serve_call(self, model: BridgeModel, onw_request: shape.OnwRequest) -> Response:
+    async def _serve_call(
+        self, model: BridgeModel, onw_request: shape.OnwRequest, reserve: float
+    ) -> Response:
         call_id = shape.new_call_id()
         started = time.monotonic()
+        task = asyncio.create_task(self._call(model, call_id, onw_request, reserve, started))
+        self._inflight.add(task)
+        task.add_done_callback(self._call_done)
         try:
-            async with self._slots:
-                reply = await _run_provider(self.run_id, model, onw_request)
-            record = self._finish(model, call_id, reply, started)
+            reply, record = await asyncio.shield(task)
             if not (reply.text or reply.tool_uses):
                 raise ExternalServiceError("The model returned an empty reply.")
         except Exception as exc:  # noqa: BLE001 — every provider failure maps to an HTTP error
@@ -331,13 +354,55 @@ class LlmBridge:
         )
         return JSONResponse(completion)
 
+    def _call_done(self, task: asyncio.Task) -> None:
+        self._inflight.discard(task)
+        if not task.cancelled():
+            task.exception()  # read it, so a call nobody awaits any more is not logged as lost
+
+    async def _call(
+        self,
+        model: BridgeModel,
+        call_id: str,
+        onw_request: shape.OnwRequest,
+        reserve: float,
+        started: float,
+    ) -> tuple[shape.Reply, CallRecord]:
+        """One admitted call, to its end and recorded — whether or not anyone still waits for it.
+        A call that fails is a call: recorded with no tokens, so ``llm_calls`` and the call cap
+        count the same things."""
+        try:
+            async with self._slots:
+                reply = await run_provider(self.run_id, model, onw_request)
+            return reply, self._finish(model, call_id, reply, started)
+        except BaseException:
+            self._notify(self._failed_record(model, call_id, started))
+            raise
+        finally:
+            self._release(reserve)
+
+    def _failed_record(self, model: BridgeModel, call_id: str, started: float) -> CallRecord:
+        return CallRecord(
+            call_id=call_id,
+            alias=model.alias,
+            model_ref=model.ref,
+            input_tokens=0,
+            output_tokens=0,
+            cache_creation_tokens=0,
+            cache_read_tokens=0,
+            cost_usd=None,
+            cost_basis=None,
+            latency_ms=(time.monotonic() - started) * 1000.0,
+            tool_calls=0,
+            failed=True,
+        )
+
     def _finish(
         self, model: BridgeModel, call_id: str, reply: shape.Reply, started: float
     ) -> CallRecord:
         """Record the call's cost (once) and report it to the runner."""
         usage = reply.usage
         if not getattr(model.provider, "RECORDS_COST_IN_STREAM_CHAT", False):
-            _record_cost(self.run_id, model, usage)
+            record_cost(self.run_id, model, usage)
         record = CallRecord(
             call_id=call_id,
             alias=model.alias,
@@ -350,90 +415,26 @@ class LlmBridge:
             cost_basis=usage.cost_basis,
             latency_ms=(time.monotonic() - started) * 1000.0,
             tool_calls=len(reply.tool_uses),
+            unpriced=model.is_unpriced(usage),
         )
+        self._notify(record)
+        return record
+
+    def _notify(self, record: CallRecord) -> None:
         self._metered_usd += record.metered_usd
         if self._on_call is not None:
             try:
                 self._on_call(record)
             except Exception:  # noqa: BLE001 — the runner's bookkeeping never fails a call
-                log.exception("bridge_on_call_failed run=%s call=%s", self.run_id, call_id)
-        return record
+                log.exception("bridge_on_call_failed run=%s call=%s", self.run_id, record.call_id)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────────────────
 
 
-def _is_loopback(host: str) -> bool:
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
-        address = address.ipv4_mapped
-    return address.is_loopback
-
-
-def _error(status: int, message: str, kind: str, code: str) -> JSONResponse:
-    return JSONResponse(error_body(message, kind=kind, code=code), status_code=status)
-
-
-async def _read_json(request: Request) -> dict:
-    raw = await request.body()
-    if len(raw) > _MAX_BODY_BYTES:
-        raise ValidationError("The request is too large.")
-    try:
-        body = json.loads(raw)
-    except ValueError:
-        body = None
-    if not isinstance(body, dict):
-        raise ValidationError("The request body must be a JSON object.")
-    return body
-
-
-async def _run_provider(
-    run_id: str, model: BridgeModel, onw_request: shape.OnwRequest
-) -> shape.Reply:
-    """One fresh provider turn, read to its end and closed. The model's tool calls are only
-    collected: TradingAgents runs its own tools, so none is ever executed here.
-
-    The stream is read to ``done`` rather than cut at the first ``tool_use`` because the
-    Claude Code and Antigravity transports report the round's usage AFTER its calls."""
-    builder = shape.ReplyBuilder()
-    with one_shot_turn(), cost_attribution(SOURCE, SOURCE, run_id):
-        stream = model.provider.stream_chat(
-            messages=onw_request.messages,
-            tools=onw_request.tools,
-            system=onw_request.system,
-            model=model.model,
-            effort=_EFFORT,
-        )
-        try:
-            async for event in stream:
-                builder.add(event)
-                if builder.reply.done:
-                    break
-        finally:
-            close = getattr(stream, "aclose", None)
-            if close is not None:
-                await close()
-    return builder.reply
-
-
-def _record_cost(run_id: str, model: BridgeModel, usage: shape.Usage) -> None:
-    """The ONE cost row of a call — the same fields ``assistant._record_cost`` writes, labelled
-    for the run. A CLI subscription call is stamped by the transport's own ``cost_basis``."""
-    from backend.ai.cost_tracker import record
-
-    record(
-        SOURCE,
-        model.model,
-        usage.input_tokens,
-        usage.output_tokens,
-        usage.cache_creation_tokens,
-        usage.cache_read_tokens,
-        run_id,
-        cost_usd=usage.cost_usd,
-        surface=SOURCE,
-        cost_basis=usage.cost_basis,
-        provider=model.provider_label,
-    )
+def _max_output_tokens(body: dict) -> int:
+    for key in ("max_completion_tokens", "max_tokens"):
+        value = body.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+    return DEFAULT_MAX_OUTPUT_TOKENS

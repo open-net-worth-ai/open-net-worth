@@ -41,7 +41,10 @@ def client():
 
 def ready(*, disclaimer: bool = True) -> None:
     ModelConfigStore().save(
-        {"default_model": "anthropic:model-a", "providers": {"anthropic": {"api_key": "test-key"}}}
+        {
+            "default_model": "anthropic:claude-sonnet-4-5",
+            "providers": {"anthropic": {"api_key": "test-key"}},
+        }
     )
     store = TradingAgentsConfigStore()
     store.write(enabled=True)
@@ -100,7 +103,7 @@ def test_status_reports_what_the_card_needs(client):
     body = client.get(f"{BASE}/status").json()
     assert body["availability"] == {"status": "ready", "message": "Ready."}
     assert body["install"]["status"] == "ready"
-    assert body["models"]["deep"] == "anthropic:model-a"
+    assert body["models"]["deep"] == "anthropic:claude-sonnet-4-5"
     assert body["models"]["transports"]["quick"]
     assert body["caps"] == {"per_run_cap_usd": 2.0, "monthly_cap_usd": 20.0, "max_llm_calls": 150}
     assert body["queue_length"] == 0 and body["disclaimer_accepted"] is False
@@ -338,14 +341,14 @@ def test_an_invalid_config_names_its_field_and_writes_nothing(client, body, fiel
 def test_a_disabled_provider_cannot_be_saved_as_a_model(client):
     ModelConfigStore().save(
         {
-            "default_model": "anthropic:model-a",
+            "default_model": "anthropic:claude-sonnet-4-5",
             "providers": {
                 "anthropic": {"api_key": "test-key"},
                 "acme-ai": {"api_key": "test-key", "enabled": False},
             },
         }
     )
-    refused = client.put(f"{BASE}/config", json={"deep_model": "acme-ai:model-a"})
+    refused = client.put(f"{BASE}/config", json={"deep_model": "acme-ai:claude-sonnet-4-5"})
     assert refused.status_code == 422 and error_of(refused)["context"]["field"] == "deep_model"
 
 

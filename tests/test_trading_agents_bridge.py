@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
+from dataclasses import replace
 
 import httpx
 import pytest
 
+from backend.ai.trading_agents import bridge_http, bridge_models, llm_bridge
 from backend.ai.trading_agents.llm_bridge import (
     ALIAS_DEEP,
     ALIAS_QUICK,
@@ -305,6 +308,139 @@ async def test_a_malformed_request_does_not_use_up_a_call(db_isolated):
     assert (await _post(bridge, _body())).status_code == 200
 
 
+async def test_concurrent_calls_cannot_overshoot_the_cap(db_isolated, monkeypatch):
+    """Each call reserves its worst case first: with the limit at a little over one call's cost,
+    three at once are not three calls in flight — they go one at a time, each waiting for the
+    last one's real cost, so the cap is passed by one call at most and the third is refused."""
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (1000.0, 1000.0))
+    provider = FakeProvider(_answer("ok", cost=6.0), delay=0.05)
+    bridge = LlmBridge(
+        run_id=RUN_ID,
+        models=_models(provider),
+        concurrency=4,
+        limits=RunLimits(max_metered_usd=10.0),
+    )
+    async with _client(bridge) as client:
+        responses = await asyncio.gather(
+            *[client.post("/v1/chat/completions", json=_body()) for _ in range(3)]
+        )
+    assert sorted(r.status_code for r in responses) == [200, 200, 400]
+    assert len(provider.calls) == 2 and provider.peak == 1
+    assert bridge.metered_usd == pytest.approx(12.0)
+
+
+async def test_a_call_that_fits_beside_the_one_in_flight_runs_alongside_it(
+    db_isolated, monkeypatch
+):
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (1.0, 1.0))
+    provider = FakeProvider(delay=0.05)
+    bridge = LlmBridge(
+        run_id=RUN_ID,
+        models=_models(provider),
+        concurrency=4,
+        limits=RunLimits(max_metered_usd=10.0),
+    )
+    async with _client(bridge) as client:
+        responses = await asyncio.gather(
+            *[client.post("/v1/chat/completions", json=_body()) for _ in range(3)]
+        )
+    assert [r.status_code for r in responses] == [200, 200, 200] and provider.peak == 3
+
+
+async def test_what_is_left_of_the_month_limits_the_run_with_its_own_message(db_isolated):
+    bridge, provider = _bridge(limits=RunLimits(max_metered_usd=5.0, month_remaining_usd=0.03))
+    codes = [(await _post(bridge, _body())).status_code for _ in range(3)]
+    assert codes == [200, 200, 400] and len(provider.calls) == 2
+    assert "monthly cap" in bridge.refusal_text and bridge.refusal_kind == "budget"
+
+
+async def test_a_plan_or_local_model_is_not_held_to_a_dollar_limit(db_isolated):
+    provider = FakeProvider()
+    models = {
+        alias: replace(model, plan_included=True) for alias, model in _models(provider).items()
+    }
+    bridge = LlmBridge(
+        run_id=RUN_ID, models=models, concurrency=2, limits=RunLimits(max_metered_usd=0.0)
+    )
+    codes = [(await _post(bridge, _body())).status_code for _ in range(3)]
+    assert codes == [200, 200, 200]
+
+
+async def test_a_body_over_the_size_limit_is_refused_before_a_provider_is_called(db_isolated):
+    bridge, provider = _bridge()
+    big = _body(content="x" * (bridge_http.MAX_BODY_BYTES + 1))
+    response = await _post(bridge, big)
+    assert response.status_code == 400 and "too large" in response.json()["error"]["message"]
+    assert provider.calls == [] and bridge.calls_admitted == 0
+
+
+# ── every call is recorded, once ─────────────────────────────────────────────────────────
+
+
+async def test_a_call_cut_off_under_the_bridge_is_still_finished_and_recorded_once(db_isolated):
+    seen: list[CallRecord] = []
+    provider = FakeProvider(delay=0.2)
+    bridge, _ = _bridge(provider, on_call=seen.append)
+    async with _client(bridge) as client:
+        pending = asyncio.create_task(client.post("/v1/chat/completions", json=_body()))
+        while not provider.calls:
+            await asyncio.sleep(0.01)
+        pending.cancel()  # the worker was killed under its own request
+        await asyncio.gather(pending, return_exceptions=True)
+        await bridge.stop()  # waits for the call going
+    assert len(CostLogStore().all()) == 1
+    assert [r.failed for r in seen] == [False] and seen[0].cost_usd == 0.02
+
+
+async def test_stop_waits_for_a_call_going_but_not_forever(db_isolated, monkeypatch):
+    monkeypatch.setattr(llm_bridge, "_INFLIGHT_WAIT_SECONDS", 0.1)
+    seen: list[CallRecord] = []
+    bridge, provider = _bridge(FakeProvider(delay=30), on_call=seen.append)
+    async with _client(bridge) as client:
+        pending = asyncio.create_task(client.post("/v1/chat/completions", json=_body()))
+        while not provider.calls:
+            await asyncio.sleep(0.01)
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await bridge.stop()
+    assert [r.failed for r in seen] == [True] and CostLogStore().all() == []
+
+
+async def test_a_failed_call_counts_as_a_call_for_the_cap_and_for_the_record(db_isolated):
+    seen: list[CallRecord] = []
+    bridge, provider = _bridge(
+        FakeProvider(error=ExternalServiceError("Codex crashed.")),
+        limits=RunLimits(max_calls=2),
+        on_call=seen.append,
+    )
+    codes = [(await _post(bridge, _body())).status_code for _ in range(3)]
+    assert codes == [502, 502, 400]
+    assert bridge.calls_admitted == len(seen) == 2
+    assert all(r.failed and r.input_tokens == 0 for r in seen)
+    assert CostLogStore().all() == []
+
+
+async def test_a_call_with_no_price_and_no_reported_cost_is_unpriced(db_isolated, monkeypatch):
+    seen: list[CallRecord] = []
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: None)
+    bridge, _ = _bridge(FakeProvider(_answer("ok", cost=0.0)), on_call=seen.append)
+    await _post(bridge, _body())
+    reported = [{"type": "text_delta", "text": "ok"}, {**_usage(), "cost_reported": True}]
+    other, _ = _bridge(FakeProvider([*reported, {"type": "done"}]), on_call=seen.append)
+    await _post(other, _body())
+    plan, _ = _bridge(FakeProvider(_answer("ok", basis="plan_included")), on_call=seen.append)
+    await _post(plan, _body())
+    assert [r.unpriced for r in seen] == [True, False, False]
+
+
+async def test_a_priced_call_is_not_unpriced(db_isolated, monkeypatch):
+    seen: list[CallRecord] = []
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (1.0, 2.0))
+    bridge, _ = _bridge(on_call=seen.append)
+    await _post(bridge, _body())
+    assert [r.unpriced for r in seen] == [False]
+
+
 # ── concurrency and errors ───────────────────────────────────────────────────────────────
 
 
@@ -384,6 +520,27 @@ async def test_the_server_binds_loopback_on_a_random_port_and_stops(db_isolated)
     async with httpx.AsyncClient() as client:
         with pytest.raises(httpx.ConnectError):
             await client.get(f"http://127.0.0.1:{port}/v1/models")
+
+
+async def test_a_bridge_that_never_starts_gives_its_socket_back(db_isolated, monkeypatch):
+    made: list[socket.socket] = []
+    real = socket.socket
+
+    class Recording(real):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(self)
+
+    async def never(self, sockets=None):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(llm_bridge.socket, "socket", Recording)
+    monkeypatch.setattr(llm_bridge.QuietServer, "serve", never)
+    monkeypatch.setattr(llm_bridge, "_START_TIMEOUT_SECONDS", 0.05)
+    bridge, _ = _bridge()
+    with pytest.raises(ExternalServiceError):
+        await bridge.start()
+    assert made and all(sock.fileno() == -1 for sock in made)
 
 
 async def test_the_server_does_not_trust_forwarding_headers(db_isolated):

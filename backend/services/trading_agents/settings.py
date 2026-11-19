@@ -19,6 +19,7 @@ from backend.core.errors import (
     ProviderDisabledError,
     ValidationError,
 )
+from backend.core.local_endpoint import is_local_base_url
 from backend.db.model_config_store import ModelConfigStore, provider_entry
 from backend.db.trading_agents_config_store import (
     CONFIG_DEFAULTS,
@@ -67,16 +68,36 @@ class Settings:
 
 @dataclass(frozen=True)
 class ResolvedModels:
-    """The two models of a run as ``"<provider_key>:<model>"`` and each one's transport."""
+    """The two models of a run as ``"<provider_key>:<model>"``, each one's transport, whether the
+    provider has a stored API key (``*_keyed``) and whether its endpoint is on this machine
+    (``*_local``)."""
 
     deep: str
     quick: str
     deep_transport: str
     quick_transport: str
+    deep_keyed: bool = False
+    quick_keyed: bool = False
+    deep_local: bool = False
+    quick_local: bool = False
 
     @property
     def uses_cli(self) -> bool:
         return bool({self.deep_transport, self.quick_transport} & CLI_TRANSPORTS)
+
+    @property
+    def deep_plan_included(self) -> bool:
+        return self.deep_transport in CLI_TRANSPORTS and not self.deep_keyed
+
+    @property
+    def quick_plan_included(self) -> bool:
+        return self.quick_transport in CLI_TRANSPORTS and not self.quick_keyed
+
+    @property
+    def plan_included(self) -> bool:
+        """Every call is on a CLI subscription. A CLI with a stored API key is billed, so it is
+        metered like any API provider; unknown means metered."""
+        return self.deep_plan_included and self.quick_plan_included
 
     def as_dict(self) -> dict:
         return {
@@ -281,9 +302,9 @@ def _default_ref() -> str:
     return f"{resolved['provider_key']}:{resolved['model']}"
 
 
-def _transport(ref: str) -> str:
-    """The transport behind ``ref``, refusing a disabled or unknown provider. Never reroutes: an
-    unknown provider key would otherwise be read as a plain model of the default provider."""
+def _resolved(ref: str) -> dict:
+    """The provider entry behind ``ref``, refusing a disabled or unknown provider. Never reroutes:
+    an unknown provider key would otherwise be read as a plain model of the default provider."""
     provider_key = ref.partition(":")[0]
     if provider_entry(provider_key) is None:
         raise ModelUnavailableError(
@@ -301,7 +322,11 @@ def _transport(ref: str) -> str:
         raise ModelUnavailableError(exc.message or str(exc), model_ref=ref) from exc
     if resolved is None:
         raise ModelUnavailableError(f"{ref!r} is not a usable AI model.", model_ref=ref)
-    return resolved["transport"]
+    return resolved
+
+
+def _transport(ref: str) -> str:
+    return _resolved(ref)["transport"]
 
 
 def resolve_models(cfg: Settings) -> ResolvedModels:
@@ -310,11 +335,16 @@ def resolve_models(cfg: Settings) -> ResolvedModels:
     against its provider; ``ModelUnavailableError`` when one cannot serve."""
     deep = cfg.deep_model or _default_ref()
     quick = cfg.quick_model or ModelConfigStore().task_model_override("intel") or deep
+    deep_entry, quick_entry = _resolved(deep), _resolved(quick)
     return ResolvedModels(
         deep=deep,
         quick=quick,
-        deep_transport=_transport(deep),
-        quick_transport=_transport(quick),
+        deep_transport=deep_entry["transport"],
+        quick_transport=quick_entry["transport"],
+        deep_keyed=bool(str(deep_entry.get("api_key") or "").strip()),
+        quick_keyed=bool(str(quick_entry.get("api_key") or "").strip()),
+        deep_local=is_local_base_url(str(deep_entry.get("base_url") or "")),
+        quick_local=is_local_base_url(str(quick_entry.get("base_url") or "")),
     )
 
 

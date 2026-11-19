@@ -46,7 +46,10 @@ def isolated_db(db_isolated):
 def ready():
     """The connector on, installed and accepted, with a model that can serve (flag on)."""
     ModelConfigStore().save(
-        {"default_model": "anthropic:model-a", "providers": {"anthropic": {"api_key": "test-key"}}}
+        {
+            "default_model": "anthropic:claude-sonnet-4-5",
+            "providers": {"anthropic": {"api_key": "test-key"}},
+        }
     )
     store = TradingAgentsConfigStore()
     store.write(enabled=True, config={"disclaimer_accepted_at": "2026-11-19T00:00:00+00:00"})
@@ -80,7 +83,7 @@ def _run(*, ticker="ACME", reports=None, decision=None, finish=True) -> str:
         ticker=ticker,
         requested_by="lucius",
         analysts=["market"],
-        config_snapshot={"deep": "anthropic:model-a"},
+        config_snapshot={"deep": "anthropic:claude-sonnet-4-5"},
         context_level="investments",
         portfolio={"cash": 1000.0, "currency": "USD", "positions": []},
         disclosure={"level": "investments"},
@@ -166,7 +169,7 @@ async def test_a_start_queues_and_returns_at_once(submitted):
         )
     )
     assert out["ok"] and out["run_id"] == "tar_000000000001" and out["status"] == "queued"
-    assert out["estimate_usd"] == 0.0 and out["eta_minutes"] >= 1
+    assert out["estimate_usd"] == pytest.approx(0.837) and out["eta_minutes"] >= 1
     assert submitted == [
         {
             "symbol": "ACME",
@@ -240,8 +243,8 @@ def test_the_card_shows_models_cost_caps_and_the_exact_context(monkeypatch):
     data = card["data"]
     assert card["kind"] == "trading_agents_run" and card["raw_arguments"]["ticker"] == "acme"
     assert data["ticker"] == "ACME"
-    assert data["deep_model"].startswith("anthropic:model-a via ")
-    assert data["quick_model"].startswith("anthropic:model-a via ")
+    assert data["deep_model"].startswith("anthropic:claude-sonnet-4-5 via ")
+    assert data["quick_model"].startswith("anthropic:claude-sonnet-4-5 via ")
     assert data["estimated_cost"].startswith("about $")
     assert "$0.00 spent of a $" in data["this_month"]
     assert "model calls" in data["per_run_cap"]

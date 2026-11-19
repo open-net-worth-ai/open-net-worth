@@ -89,15 +89,20 @@ def _investment_rows(projection: dict, base: str) -> list[dict]:
     ]
 
 
-def _investable_cash_base(projection: dict) -> float:
-    """Σ of the cash and settlement-cash bands, in the base currency. A margin debit nets
-    against settlement cash; the total is never below zero (nothing to deploy)."""
-    total = sum(
-        r["base_value"]
-        for r in projection["rows"]
-        if r.get("is_account_row") and r.get("asset_class") in _INVESTABLE_BANDS
+def _investable_cash_base(projection: dict) -> tuple[float, bool]:
+    """``(cash, floored)``: Σ of the cash and settlement-cash bands in the base currency — the
+    headline cash on hand plus settlement cash, the same figure ``ledger.net_worth`` reports
+    (a test pins the two equal). A margin debit nets against settlement cash; the total is never
+    below zero (nothing to deploy), and ``floored`` says when it was."""
+    total = round(
+        sum(
+            r["base_value"]
+            for r in projection["rows"]
+            if r.get("is_account_row") and r.get("asset_class") in _INVESTABLE_BANDS
+        ),
+        2,
     )
-    return max(0.0, round(total, 2))
+    return max(0.0, total), total < 0
 
 
 def _position(symbol: str, rows: list[dict], currency: str, rates: dict, disclosure: dict) -> dict:
@@ -138,7 +143,8 @@ def _positions(rows: list[dict], currency: str, rates: dict, disclosure: dict) -
 
 
 def _cash(projection: dict, base: str, currency: str, disclosure: dict) -> Optional[float]:
-    cash_base = _investable_cash_base(projection)
+    cash_base, floored = _investable_cash_base(projection)
+    disclosure["cash_floored"] = floored
     rate = known_rate(base, currency, projection["fx"])
     if rate is None:
         disclosure["cash_omitted"] = f"no exchange rate from {base} to {currency}"
@@ -171,6 +177,7 @@ def build(ticker: str, level: str) -> tuple[Optional[dict], dict]:
         "average_price_omitted": [],
         "partial_cost": [],
         "cash_omitted": None,
+        "cash_floored": False,
     }
     if level == "ticker":
         return None, disclosure

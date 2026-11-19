@@ -1,9 +1,13 @@
 """TradingAgents spend: what a run is expected to cost, and whether the owner's caps let it start.
 
 ``check_can_start`` is the one entry point the runner and the API call before a run is created. The
-per-run cap and the call cap are enforced live by the runner while the run goes (``run_cap_reached``
-and ``calls_cap_reached`` are its two tests); the monthly cap is checked here, once, against the
-estimate. The app-wide AI budget (``AppConfigStore``) is not enforced — a separate, advisory figure.
+per-run cap and the call cap are enforced live by the bridge while the run goes, and the monthly
+cap's remainder at the run's start becomes one more live limit (``run_limit_usd``); here the
+monthly cap is checked once, against the estimates of every run still queued or going plus this
+one. What is metered is decided by the provider's own billing, never by a transport's name: a CLI
+on a stored API key is billed, and a model with no known price is refused (it cannot be capped),
+unless its endpoint is local. The app-wide AI budget (``AppConfigStore``) is not enforced — a
+separate, advisory figure.
 
 Prices are not read here: they live in ``ai.models.pricing``, a layer above, so the caller hands in
 ``rate_for`` (a bare model id -> ``(input, output)`` USD per million tokens, or ``None`` when the
@@ -17,12 +21,12 @@ from dataclasses import dataclass
 from datetime import timezone
 from typing import Callable, Optional, Sequence
 
-from backend.core.errors import BudgetExceededError
+from backend.core.errors import BudgetExceededError, ModelUnavailableError
 from backend.core.user_time import user_now
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
 from backend.services import trading_agents
 from backend.services.trading_agents import runs
-from backend.services.trading_agents.settings import CLI_TRANSPORTS, ResolvedModels, Settings
+from backend.services.trading_agents.settings import ResolvedModels, Settings
 
 RateFor = Callable[[str], Optional[tuple[float, float]]]
 
@@ -52,6 +56,7 @@ class Estimate:
     sample_size: int
     plan_included: bool
     priced: bool
+    unpriced_models: tuple[str, ...] = ()
 
     def as_dict(self) -> dict:
         return {
@@ -63,6 +68,7 @@ class Estimate:
             "sample_size": self.sample_size,
             "plan_included": self.plan_included,
             "priced": self.priced,
+            "unpriced_models": list(self.unpriced_models),
         }
 
 
@@ -104,21 +110,28 @@ def _tier_cost(rates: Optional[tuple[float, float]], calls: int, tokens: tuple[i
 
 def _static(
     cfg: Settings, models: ResolvedModels, analysts: int, rate_for: RateFor
-) -> tuple[float, int, bool]:
-    """``(usd, calls, priced)`` from the assumed tokens per call, metered tiers only."""
+) -> tuple[float, int, tuple[str, ...]]:
+    """``(usd, calls, unpriced models)`` from the assumed tokens per call, metered tiers only:
+    a plan-included or local tier costs nothing and is never unpriced."""
     calls = static_calls(cfg, analysts)
     tiers = (
-        (models.deep_transport, models.deep, _DEEP_CALLS, _DEEP_TOKENS),
-        (models.quick_transport, models.quick, calls - _DEEP_CALLS, _QUICK_TOKENS),
+        (models.deep, models.deep_plan_included or models.deep_local, _DEEP_CALLS, _DEEP_TOKENS),
+        (
+            models.quick,
+            models.quick_plan_included or models.quick_local,
+            calls - _DEEP_CALLS,
+            _QUICK_TOKENS,
+        ),
     )
-    usd, priced = 0.0, True
-    for transport, ref, tier_calls, tokens in tiers:
-        if transport in CLI_TRANSPORTS:
+    usd, unpriced = 0.0, []
+    for ref, free, tier_calls, tokens in tiers:
+        if free:
             continue
         rates = rate_for(_ref_model(ref))
-        priced = priced and rates is not None
+        if rates is None and ref not in unpriced:
+            unpriced.append(ref)
         usd += _tier_cost(rates, tier_calls, tokens)
-    return round(usd, 6), calls, priced
+    return round(usd, 6), calls, tuple(unpriced)
 
 
 def _signature(snapshot: dict, analysts: Sequence[str]) -> tuple:
@@ -153,8 +166,8 @@ def estimate(
     heuristic. A run on CLI subscriptions only is plan-included: no dollars, a call count."""
     snapshot = config_snapshot(cfg, models)
     past = _history(snapshot, analysts)
-    usd, calls, priced = _static(cfg, models, len(analysts), rate_for)
-    plan_included = {models.deep_transport, models.quick_transport} <= CLI_TRANSPORTS
+    usd, calls, unpriced = _static(cfg, models, len(analysts), rate_for)
+    plan_included = models.plan_included
     if len(past) >= MIN_HISTORY:
         median, low, high = _band([float(r["cost_usd"]) for r in past])
         usd_band = (median, low, high)
@@ -173,7 +186,8 @@ def estimate(
         basis=basis,
         sample_size=len(past) if basis == BASIS_HISTORY else 0,
         plan_included=plan_included,
-        priced=priced or plan_included or basis == BASIS_HISTORY,
+        priced=not unpriced or basis == BASIS_HISTORY,
+        unpriced_models=() if basis == BASIS_HISTORY else unpriced,
     )
 
 
@@ -190,35 +204,56 @@ def month_spend() -> float:
     return round(sum(float(r["cost_usd"]) for r in rows), 6)
 
 
+def month_committed() -> float:
+    """What this month's runs have cost or are expected to: a finished run its actual cost, a
+    queued or running one the larger of its cost so far and its estimate."""
+    total = 0.0
+    for row in TradingAgentsRunStore().cost_rows(since=month_start_utc()):
+        spent = float(row["cost_usd"])
+        pending = row["status"] not in runs.TERMINAL
+        total += max(spent, float(row["estimate_usd"] or 0.0)) if pending else spent
+    return round(total, 6)
+
+
+def run_limit_usd(cfg: Settings, committed_elsewhere: float) -> float:
+    """The most one run's metered spend may reach: its per-run cap, or what is left of the monthly
+    cap after ``committed_elsewhere`` when that is less."""
+    return max(0.0, min(cfg.per_run_cap_usd, cfg.monthly_cap_usd - committed_elsewhere))
+
+
+def refuse_unpriced(expected: Estimate) -> None:
+    """A metered model with no known price cannot be capped, so no run starts on it."""
+    if expected.unpriced_models:
+        names = ", ".join(expected.unpriced_models)
+        raise ModelUnavailableError(
+            f"{names} has no known price, so a run on it could not be held to a spend cap. Choose "
+            "a priced model for TradingAgents, or a local one.",
+            model_ref=expected.unpriced_models[0],
+        )
+
+
 def check_can_start(
     cfg: Settings, models: ResolvedModels, analysts: Sequence[str], rate_for: RateFor
 ) -> Estimate:
-    """Refuse a run the monthly cap cannot afford; otherwise return its estimate (stored on the
-    run as ``estimate_usd``). Raises ``FeatureDisabledError`` with the flag off and
-    ``BudgetExceededError`` (the numbers in the message and context) over the cap. A run on
-    CLI subscriptions only is never blocked by the dollar cap."""
+    """Refuse a run the caps cannot afford; otherwise return its estimate (stored on the run as
+    ``estimate_usd``). Raises ``FeatureDisabledError`` with the flag off, ``ModelUnavailableError``
+    for a metered model with no price and ``BudgetExceededError`` (the numbers in the message and
+    context) when this month's committed spend plus the estimate passes the monthly cap — a cap
+    of 0 forbids every run that is not entirely on CLI subscriptions."""
     trading_agents.require_flag()
     expected = estimate(cfg, models, analysts, rate_for)
     if expected.plan_included:
         return expected
-    spent = month_spend()
+    refuse_unpriced(expected)
+    committed = month_committed()
     cap = cfg.monthly_cap_usd
-    if spent + expected.median_usd > cap:
+    if cap <= 0 or committed + expected.median_usd > cap:
         raise BudgetExceededError(
-            f"This run is expected to cost about ${expected.median_usd:.2f}, and ${spent:.2f} of "
-            f"the ${cap:.2f} monthly TradingAgents cap is already spent this month.",
-            month_spend_usd=spent,
+            f"This run is expected to cost about ${expected.median_usd:.2f}, and ${committed:.2f} of "
+            f"the ${cap:.2f} monthly TradingAgents cap is already spent or promised to other "
+            "runs this month.",
+            month_spend_usd=committed,
             estimate_usd=expected.median_usd,
             monthly_cap_usd=cap,
         )
     return expected
-
-
-def run_cap_reached(spent_usd: float, cap_usd: float) -> bool:
-    """Whether a run's metered spend has reached its per-run cap (the runner stops it)."""
-    return spent_usd >= cap_usd
-
-
-def calls_cap_reached(calls: int, max_calls: int) -> bool:
-    """Whether a run has made its allowed number of model calls (the runner stops it)."""
-    return calls >= max_calls

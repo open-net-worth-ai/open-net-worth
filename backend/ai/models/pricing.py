@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import logging
 
+from backend.core.local_endpoint import is_local_base_url as _is_local_base_url
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -295,19 +297,6 @@ def cache_read_discount(model: str) -> float:
         if normalized.startswith(prefix):
             return discount
     return _OAI_CACHE_READ_DEFAULT
-
-
-def _is_local_base_url(base_url: str) -> bool:
-    """Return True if base_url points at a local process (Ollama/LM Studio/vLLM)."""
-    url = base_url.lower().strip()
-    return (
-        url.startswith("http://localhost")
-        or url.startswith("https://localhost")
-        or url.startswith("http://127.")
-        or url.startswith("https://127.")
-        or url.startswith("http://[::1]")
-        or url.startswith("http://0.0.0.0")
-    )
 
 
 def _openai_rates(model: str) -> tuple[float, float] | None:

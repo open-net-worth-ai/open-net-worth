@@ -321,6 +321,7 @@ _DISCLOSURE_KEYS = {
     "average_price_omitted",
     "partial_cost",
     "cash_omitted",
+    "cash_floored",
 }
 
 
@@ -371,3 +372,28 @@ def test_nothing_the_models_do_not_need_is_ever_sent(world, seed, level):
     else:
         assert set(portfolio) == {"cash", "currency", "positions"}
         assert all(set(p) == _POSITION_KEYS for p in portfolio["positions"])
+
+
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
+def test_cash_to_deploy_is_the_headline_cash_and_settlement_cash_with_margin_and_untracked(world):
+    _account("Everyday Bank", 1000.0, "cash")
+    _account("Brokerage One", 300.0, "investment", value_source="holdings")
+    _account("Margin Broker", -200.0, "investment", value_source="holdings")
+    _account("Brokerage Total", 4000.0, "investment", value_source="total")
+    classes = ledger_service.net_worth("USD")["breakdown"]["account_classes"]
+    headline = classes["cash"] + classes.get("settlement_cash", 0.0)
+    portfolio, disclosure = context.build("ACME", "investments")
+    assert headline == 1100.0  # 1,000 + (300 - 200); the untracked 4,000 is its own band
+    assert portfolio["cash"] == headline
+    assert disclosure["cash_floored"] is False
+
+
+@pytest.mark.flags(allow_brokerage_total_valuation=True)
+def test_a_margin_debit_larger_than_the_cash_floors_to_zero_and_says_so(world):
+    _account("Everyday Bank", 100.0, "cash")
+    _account("Margin Broker", -500.0, "investment", value_source="holdings")
+    classes = ledger_service.net_worth("USD")["breakdown"]["account_classes"]
+    assert classes["cash"] + classes.get("settlement_cash", 0.0) == -400.0
+    portfolio, disclosure = context.build("ACME", "investments")
+    assert portfolio["cash"] == 0.0
+    assert disclosure["cash_floored"] is True

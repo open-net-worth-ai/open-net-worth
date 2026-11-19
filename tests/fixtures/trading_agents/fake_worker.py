@@ -7,7 +7,7 @@ Modes: ``normal`` (a short analysis ending in a result), ``crash`` (one call, th
 result), ``hang`` (one call, then never ends), ``overcap`` (calls until the bridge refuses one,
 then reports it), ``badline`` (garbage between valid lines, then a result), ``bigline`` (one line
 past the runner's limit), ``midline`` (a 3 MiB line, past the 2 MiB limit but under the old one),
-``spoof`` (progress for a stage no node has, the same stage over and over, and an ``llm_call``
+``resulthang`` (a result, then it never exits), ``spoof`` (progress for a stage no node has, the same stage over and over, and an ``llm_call``
 for a call the bridge never served, then a result).
 """
 
@@ -125,6 +125,9 @@ def main() -> None:
         print("this is not json", flush=True)
         emit({"type": "mystery"})
         normal(request)
+    elif mode == "resulthang":
+        normal(request)
+        time.sleep(3600)
     elif mode == "spoof":
         spoof(request)
     elif mode == "midline":

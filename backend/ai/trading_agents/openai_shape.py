@@ -44,6 +44,8 @@ class Usage:
     cache_read_tokens: int = 0
     cost_usd: Optional[float] = None
     cost_basis: Optional[str] = None
+    # The endpoint itself said what the call cost (not a table estimate).
+    cost_reported: bool = False
 
     @property
     def prompt_tokens(self) -> int:
@@ -294,6 +296,7 @@ class ReplyBuilder:
         if isinstance(cost, (int, float)) and not isinstance(cost, bool):
             usage.cost_usd = (usage.cost_usd or 0.0) + float(cost)
         usage.cost_basis = event.get("cost_basis") or usage.cost_basis
+        usage.cost_reported = usage.cost_reported or bool(event.get("cost_reported"))
         self._usage_rows += 1
 
 

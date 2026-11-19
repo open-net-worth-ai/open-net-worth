@@ -7,12 +7,13 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from backend.ai.trading_agents import llm_bridge, runner, worker_session
+from backend.ai.trading_agents import bridge_models, llm_bridge, runner, worker_session
 from backend.ai.trading_agents.llm_bridge import ALIAS_DEEP, ALIAS_QUICK, BridgeModel
 from backend.core import paths
 from backend.core.errors import (
@@ -65,7 +66,10 @@ def runner_env(db_isolated, tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(runner, "get_settings", lambda: SimpleNamespace(onw_qa_mode=False))
     ModelConfigStore().save(
-        {"default_model": "anthropic:model-a", "providers": {"anthropic": {"api_key": "test-key"}}}
+        {
+            "default_model": "anthropic:claude-sonnet-4-5",
+            "providers": {"anthropic": {"api_key": "test-key"}},
+        }
     )
     store = TradingAgentsConfigStore()
     store.write(enabled=True, config={"disclaimer_accepted_at": "2026-11-19T00:00:00+00:00"})
@@ -141,6 +145,8 @@ async def stop_runner():
     await runner.shutdown()
 
 
+real_resolve = settings.resolve_models
+
 pytestmark = pytest.mark.flags(trading_agents=True)
 
 
@@ -171,9 +177,9 @@ async def test_a_run_ends_done_with_its_result_progress_and_attributed_cost():
     assert row["cost_usd"] == pytest.approx(0.08)
     roles = {r: v["calls"] for r, v in row["cost_by_role"].items()}
     assert roles == {"analyst_market": 1, "research_manager": 1, "other": 2}
-    assert set(row["cost_by_model"]) == {"anthropic:model-a"}
+    assert set(row["cost_by_model"]) == {"anthropic:claude-sonnet-4-5"}
     assert row["estimate_usd"] == 0.4 and row["cap_usd"] == 2.0
-    assert row["config_snapshot"]["deep"] == "anthropic:model-a"
+    assert row["config_snapshot"]["deep"] == "anthropic:claude-sonnet-4-5"
     assert row["context_sent"]["portfolio"] is None
     assert row["started_at"] is not None and row["finished_at"] is not None
 
@@ -212,11 +218,33 @@ async def test_plan_included_calls_are_counted_not_charged(runner_env):
     assert row["plan_included_calls"] == 4 and row["cost_usd"] == 0 and row["unpriced_calls"] == 0
 
 
-async def test_a_priceless_metered_call_is_counted_unpriced(runner_env):
-    use_provider(runner_env.monkeypatch, FakeProvider(cost=None))
+async def test_a_metered_call_with_no_price_and_no_reported_cost_is_counted_unpriced(runner_env):
+    """A provider emits 0.0 — not nothing — for a model it cannot price."""
+    runner_env.monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: None)
+    use_provider(runner_env.monkeypatch, FakeProvider(cost=0.0))
     run_id = await submit()
     await settle()
-    assert run_of(run_id)["unpriced_calls"] == 4
+    row = run_of(run_id)
+    assert row["unpriced_calls"] == 4 and row["cost_usd"] == 0 and row["plan_included_calls"] == 0
+
+
+async def test_a_priced_call_and_a_call_the_endpoint_priced_are_not_unpriced(runner_env):
+    run_id = await submit()
+    await settle()
+    assert run_of(run_id)["unpriced_calls"] == 0
+    runner_env.monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: None)
+    provider = FakeProvider(cost=0.01)
+    original = provider.stream_chat
+
+    async def reported(*args, **kwargs):
+        async for event in original(*args, **kwargs):
+            yield {**event, "cost_reported": True} if event["type"] == "usage" else event
+
+    provider.stream_chat = reported
+    use_provider(runner_env.monkeypatch, provider)
+    second = await submit()
+    await settle()
+    assert run_of(second)["unpriced_calls"] == 0
 
 
 async def test_garbage_between_valid_lines_is_ignored():
@@ -312,6 +340,52 @@ async def test_the_spend_cap_stops_the_run_and_kills_the_process(runner_env):
     assert row["status"] == "stopped_budget" and "spend cap" in row["error"]
     assert row["cap_usd"] == 0.10 and 0.10 < row["cost_usd"] < 0.20
     assert not alive(int((runner_env.tmp / "worker.pid").read_text()))
+
+
+async def test_a_result_that_arrived_before_the_timeout_does_not_make_the_run_done(runner_env):
+    worker("resulthang", runner_env.tmp, pid_file=True)
+    runner_env.monkeypatch.setattr(worker_session, "RUN_TIMEOUT_SECONDS", 1.5)
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    assert row["status"] == "timed_out" and row["signal"] is None
+
+
+async def test_what_is_left_of_the_month_is_a_live_limit_on_the_run(runner_env):
+    worker("overcap", runner_env.tmp)
+    use_provider(runner_env.monkeypatch, FakeProvider(cost=0.02))
+    TradingAgentsConfigStore().write(config={"monthly_cap_usd": 0.05})
+    earlier = runs.apply_run_change(
+        "create",
+        ticker="ACME",
+        analysts=["market"],
+        config_snapshot={},
+        context_level="ticker",
+        cap_usd=2.0,
+    )["id"]
+    runs.apply_run_change("start", run_id=earlier)
+    runs.apply_run_change("usage", run_id=earlier, llm_calls=1, cost_usd=0.04)
+    runs.apply_run_change("finish", run_id=earlier, signal="Hold")
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    assert row["status"] == "stopped_budget" and "monthly cap" in row["error"]
+    assert row["llm_calls"] == 1 and row["cost_usd"] == pytest.approx(0.02)
+
+
+async def test_an_all_subscription_run_is_not_held_to_the_monthly_cap(runner_env):
+    use_provider(runner_env.monkeypatch, FakeProvider(basis="plan_included"))
+    TradingAgentsConfigStore().write(config={"monthly_cap_usd": 0.0})
+    runner_env.monkeypatch.setattr(
+        settings,
+        "resolve_models",
+        lambda cfg: replace(
+            real_resolve(cfg), deep_transport="claude_cli", quick_transport="claude_cli"
+        ),
+    )
+    run_id = await submit()
+    await settle()
+    assert run_of(run_id)["status"] == "done"
 
 
 async def test_the_call_cap_stops_the_run(runner_env):
@@ -446,7 +520,9 @@ async def test_the_budget_check_receives_the_resolved_run(runner_env):
     run_id = await submit(analysts=["market", "news"])
     await settle()
     assert seen["analysts"] == ["market", "news"]
-    assert seen["models"].deep == "anthropic:model-a" and seen["cfg"].per_run_cap_usd == 2.0
+    assert (
+        seen["models"].deep == "anthropic:claude-sonnet-4-5" and seen["cfg"].per_run_cap_usd == 2.0
+    )
     assert run_of(run_id)["estimate_usd"] == 1.25
 
 
