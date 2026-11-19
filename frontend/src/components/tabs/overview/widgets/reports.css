@@ -562,6 +562,16 @@
   padding: 4px;
 }
 
+/* Rows fill the menu, as the chart-type menu's do: the whole row picks, not just its text. */
+.ov-rf-pop--menu [role='menu'] {
+  display: flex;
+  flex-direction: column;
+}
+
+.ov-rf-pop--menu .kebab-item {
+  width: 100%;
+}
+
 .ov-rf-pop--menu .ov-rf-range {
   padding: 6px 8px 8px;
 }

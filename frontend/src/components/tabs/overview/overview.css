@@ -2111,7 +2111,7 @@
   width: min(1180px, 100%);
   height: calc(100vh - 64px);
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: stretch;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2161,6 +2161,23 @@
   min-width: 0;
   min-height: 0;
   display: flex;
+}
+
+/* The editor: preview and settings side by side, the footer under both. */
+.ov-fs-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.ov-fs-foot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
 
 /* A widget with filters: Appearance is the bottom band of the editor, the preview the space
@@ -2297,14 +2314,14 @@
   gap: 4px;
   /* The floating Lucius dock (lucius.css .lx-dock) sits above every modal at the viewport's
      bottom-right — exactly over Discard / Save. The rail's foot clears it. */
-  padding: 4px 20px 0;
+  padding: 4px 20px 16px;
   border-left: 1px solid var(--line);
   background: var(--surface);
   overflow-y: auto;
 }
 
 @media (max-width: 900px) {
-  .ov-fs-shell {
+  .ov-fs-body {
     flex-direction: column;
   }
   .ov-fs-rail {
@@ -2498,25 +2515,6 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.ov-fs-actions {
-  position: sticky;
-  bottom: 0;
-  margin-top: auto;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  /* Discard / Save sit at the bottom right, like any dialog's; the bar's own background
-     covers what scrolls beneath it. */
-  padding: 14px 0 18px;
-  background: var(--surface);
-}
-
-/* Lucius's floating button sits over the window's bottom right: room for it under the buttons,
-   only while it is on screen. */
-body:has(.lx-dock) .ov-fs-actions {
-  padding-bottom: 64px;
 }
 
 .ov-fs-close {

@@ -18,8 +18,9 @@ import type { WidgetDefinition, WidgetInstance } from '../types'
 import { CUSTOM_PERIOD, reportHasFilters, reportScope } from './reportScope'
 
 const POPOVER_W = 320
-/** A period-only widget's menu: a menu's width, room for Custom's From / To rows. */
-const MENU_W = 248
+/** A period-only widget's menu: a menu's width — wider only while Custom shows From / To. */
+const MENU_W = 176
+const MENU_CUSTOM_W = 248
 
 interface Props {
   instance: WidgetInstance
@@ -31,6 +32,11 @@ interface Props {
 
 export function ReportFilter({ instance, def, onPatch, label }: Props) {
   const sc = reportScope(instance, def)
+  const popWidth = reportHasFilters(def)
+    ? POPOVER_W
+    : sc.periodLabel === CUSTOM_PERIOD
+      ? MENU_CUSTOM_W
+      : MENU_W
   // A phone gets a bottom sheet with thumb-sized rows; a pointer gets the anchored popover.
   const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
@@ -46,10 +52,10 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
   useLayoutEffect(() => {
     if (!open || isMobile || !wrapRef.current) return
     const r = wrapRef.current.getBoundingClientRect()
-    const w = reportHasFilters(def) ? POPOVER_W : MENU_W
+    const w = popWidth
     const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8)
     setPos({ top: r.bottom + 6, left: Math.max(8, left), maxH: window.innerHeight - r.bottom - 20 })
-  }, [open, isMobile])
+  }, [open, isMobile, popWidth])
 
   useEffect(() => {
     if (!open || isMobile) return
@@ -135,7 +141,7 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
                 ? {
                     top: pos.top,
                     left: pos.left,
-                    width: reportHasFilters(def) ? POPOVER_W : MENU_W,
+                    width: popWidth,
                     maxHeight: pos.maxH,
                     pointerEvents: 'auto',
                   }

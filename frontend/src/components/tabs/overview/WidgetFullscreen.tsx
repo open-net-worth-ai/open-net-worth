@@ -857,48 +857,52 @@ export function WidgetFullscreen({
             }}
           >
             <Dialog.Title className="ui-visually-hidden">{label} — full screen</Dialog.Title>
-            <div className="ov-fs-main">
-              <div className="ov-fs-preview">{preview}</div>
-              {/* A widget with filters: how it looks goes under the preview, what it counts
-                  in the column on the right. */}
-              {filters && (
-                <div className="ov-fs-below">
-                  <div className="ov-fs-bar-h">Appearance</div>
-                  <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
-                </div>
-              )}
-              {(hasData || hasLux) && (
-                <div className="ov-fs-data">
-                  {hasData && (
-                    <div className="ov-fs-data-sec">
-                      <div className="ov-fs-bar-h">Data</div>
-                      <div className="ov-fs-inline">{data.map((c) => c.node)}</div>
-                    </div>
-                  )}
-                  {hasLux && <div className="ov-fs-data-sec">{lux.map((c) => c.node)}</div>}
-                </div>
-              )}
-            </div>
-            <div className="ov-fs-rail">
-              {filters ? (
-                <>
-                  <div className="ov-fs-bar-h">Filters</div>
-                  {filters}
-                </>
-              ) : (
-                <>
-                  <div className="ov-fs-bar-h">Appearance</div>
-                  <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
-                </>
-              )}
-              <div className="ov-fs-actions">
-                <Button variant="secondary" size="sm" onClick={onDiscard}>
-                  Discard
-                </Button>
-                <Button variant="primary" size="sm" onClick={onSave}>
-                  Save changes
-                </Button>
+            <div className="ov-fs-body">
+              <div className="ov-fs-main">
+                <div className="ov-fs-preview">{preview}</div>
+                {/* A widget with filters: how it looks goes under the preview, what it counts
+                    in the column on the right. */}
+                {filters && (
+                  <div className="ov-fs-below">
+                    <div className="ov-fs-bar-h">Appearance</div>
+                    <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                  </div>
+                )}
+                {(hasData || hasLux) && (
+                  <div className="ov-fs-data">
+                    {hasData && (
+                      <div className="ov-fs-data-sec">
+                        <div className="ov-fs-bar-h">Data</div>
+                        <div className="ov-fs-inline">{data.map((c) => c.node)}</div>
+                      </div>
+                    )}
+                    {hasLux && <div className="ov-fs-data-sec">{lux.map((c) => c.node)}</div>}
+                  </div>
+                )}
               </div>
+              <div className="ov-fs-rail">
+                {filters ? (
+                  <>
+                    <div className="ov-fs-bar-h">Filters</div>
+                    {filters}
+                  </>
+                ) : (
+                  <>
+                    <div className="ov-fs-bar-h">Appearance</div>
+                    <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                  </>
+                )}
+              </div>
+            </div>
+            {/* The editor's footer, full width under the preview and the settings: the app's
+                workspace-modal footer (a top divider, its buttons on the right). */}
+            <div className="ov-fs-foot">
+              <Button variant="secondary" size="sm" onClick={onDiscard}>
+                Discard
+              </Button>
+              <Button variant="primary" size="sm" onClick={onSave}>
+                Save changes
+              </Button>
             </div>
             <button
               type="button"

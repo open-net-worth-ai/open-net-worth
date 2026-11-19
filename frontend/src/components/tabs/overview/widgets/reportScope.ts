@@ -31,7 +31,12 @@ export const SERIES_PERIOD_OPTIONS = [
 ]
 
 // All three are drawn by ReportFilterControls, in the header pill and in the settings panel.
-export function periodSetting(options: string[], fallback: string): WidgetSettingSchema {
+export function periodSetting(
+  options: string[],
+  fallback: string,
+  /** Send the default period too, rather than leaving the server its own default window. */
+  sendDefault = false,
+): WidgetSettingSchema {
   return {
     key: 'period',
     type: 'segment',
@@ -39,6 +44,7 @@ export function periodSetting(options: string[], fallback: string): WidgetSettin
     options,
     default: fallback,
     inline: true,
+    ...(sendDefault ? { sendDefault: true } : {}),
   }
 }
 
@@ -100,7 +106,7 @@ export function reportScope(instance: WidgetInstance, def: WidgetDefinition): Wi
       ? custom
         ? `${custom.from}:${custom.to}`
         : undefined
-      : label && label !== fallback
+      : label && (label !== fallback || setting?.sendDefault)
         ? PERIOD_BY_LABEL[label]
         : undefined
   const periodText = custom ? monthSpan(custom.from, custom.to) : label

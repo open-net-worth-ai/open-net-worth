@@ -592,10 +592,12 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     group: 'Reports',
     dsize: 3,
     dh: 188,
-    desc: 'Share of income saved last month or over a period, as a gauge.',
+    desc: 'Share of income saved this month or over a period, as a gauge.',
     title: 'Savings rate',
     source: { tab: 'plan', label: 'Plan' },
-    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'Last month')],
+    // This month by default, sent as a period: the server's own default is the last complete
+    // month, which read as "Oct" in November.
+    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'This month', true)],
     icon: icon('<path d="M4 14a8 8 0 0 1 16 0" /><path d="M12 14l4-3" />'),
   },
   {

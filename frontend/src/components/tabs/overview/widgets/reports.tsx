@@ -810,7 +810,8 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
   }
   const rate = Math.round(savings.rate_pct)
   // A chosen period stands on its own; the trailing average belongs to the default view.
-  const trailing = period ? null : data?.savings.trailing
+  // The 3-month average is the same whatever the period: it is the saving habit, not this window.
+  const trailing = data?.savings?.trailing
   // One line under the gauge; the 3-month average is on the gauge's hover.
   const avgTip = trailing
     ? `${trailing.months}-month average (${fMonth(`${trailing.from}-01`, 'short')} to ` +
