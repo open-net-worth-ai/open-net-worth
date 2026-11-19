@@ -156,7 +156,7 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
                   ]
                 : []),
               {
-                label: 'Set up manually',
+                label: 'Create manually',
                 icon: (
                   <span className="a3-menu-ic">
                     <Wrench size={14} aria-hidden="true" />

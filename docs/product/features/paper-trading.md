@@ -24,7 +24,7 @@ connected over MCP.
 ## Start a paper portfolio
 
 Open **Intelligence → Paper Trading**, click **New paper portfolio** (**+** on a phone) and pick
-**Set up manually**. (With none yet, the page offers **Create manually** itself.) Give it a
+**Create manually**. (With none yet, the page offers **Create manually** itself.) Give it a
 name, then start with:
 
 - **Cash**: the same amount as your investments, 10,000, 100,000, or another amount.
