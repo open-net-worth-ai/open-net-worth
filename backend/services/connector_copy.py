@@ -372,6 +372,7 @@ SHORT: dict[str, str] = {
     "web_search:firecrawl": "Search + full-page scraping, JS-rendered pages included",
     "telegram": "Chat with Lucius and get alerts on Telegram.",
     "voice": "Talk to Lucius out loud from the chat.",
+    "trading_agents": "Multi-agent stock research with a five-step rating. Research only.",
     "webhook": "Send notifications to any URL.",
     "rest": "Let Lucius call any HTTP API you point it at.",
     "simplefin": "Bank and card accounts from the US and Canada, via a setup token.",
@@ -438,6 +439,16 @@ LONG: dict[str, str] = {
         "conversation going while Lucius does the real work with the same tools, permissions "
         "and approval cards as the chat; his answers are read out word for word. Runs on your "
         "LiveKit project."
+    ),
+    "trading_agents": (
+        "Runs the open-source TradingAgents project on a stock: analysts read the market, news, "
+        "sentiment and fundamentals, a bull and a bear argue, a trader and a risk panel weigh "
+        "in, and a portfolio manager gives a five-step rating with written reports. It is "
+        "research, not advice, and it never places an order. Every model call goes through your "
+        "own AI provider and counts in Cost and performance, with a per-run and a monthly cap "
+        "you set. It runs in its own environment on this computer. You choose what it may know "
+        "about your holdings: your investments with their real amounts, only the stock being "
+        "analysed, or nothing; account names, transactions, income and budgets are never sent."
     ),
     "telegram": (
         "Message your own bot to ask questions, send photos, and approve changes, with the same "

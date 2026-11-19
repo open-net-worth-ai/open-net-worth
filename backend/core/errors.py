@@ -241,6 +241,38 @@ class ProviderDisabledError(ConfigurationError):
     code = "provider_disabled"
 
 
+class FeatureDisabledError(ConflictError):
+    """A feature that is switched off (its release flag or its connector) was asked for. Maps to
+    HTTP 409; a router never branches on the switch — the service raises this."""
+
+    code = "feature_disabled"
+
+
+class NotInstalledError(ConflictError):
+    """An integration that runs from its own installed environment has none (yet)."""
+
+    code = "not_installed"
+
+
+class ModelUnavailableError(ConfigurationError):
+    """The AI model a feature was told to use cannot serve it (its provider is disabled or no
+    model is chosen). Never rerouted to another provider; ``model_ref`` (context) names it."""
+
+    code = "model_unavailable"
+
+
+class BudgetExceededError(ConflictError):
+    """Starting the work would pass a spend cap the owner set. The message carries the numbers."""
+
+    code = "budget_exceeded"
+
+
+class TooManyRunsError(ConflictError):
+    """The queue of long-running jobs is full; try again when one has finished."""
+
+    code = "too_many_runs"
+
+
 class MentionError(OpenNetWorthError):
     """A mention descriptor registration or guard check failed.
 
@@ -289,6 +321,11 @@ _STATUS_BY_CODE: dict[str, int] = {
     "config": 500,
     "provider_disabled": 409,
     "redirect_not_registered": 409,
+    "feature_disabled": 409,
+    "not_installed": 409,
+    "model_unavailable": 409,
+    "budget_exceeded": 409,
+    "too_many_runs": 429,
     "mention_error": 422,
     "data_integrity": 500,
     "missing_filter": 400,

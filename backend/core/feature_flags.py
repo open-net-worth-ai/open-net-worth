@@ -274,6 +274,24 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 15),
         remove_by=date(2027, 5, 15),
     ),
+    Flag(
+        name="trading_agents",
+        title="TradingAgents",
+        description=(
+            "Multi-agent stock research from the asset page and through Lucius: analysts, a "
+            "bull and bear debate, a trader, a risk debate and a portfolio manager end in a "
+            "five-step rating (Buy to Sell) with written reports. It runs the open-source "
+            "TradingAgents project in its own environment, and every model call goes through "
+            "your own AI provider with spend caps you set; it never places an order. Choose "
+            "what it may know about your holdings: your investments, only the stock being "
+            "analysed, or nothing. Off: the connector, the card and Lucius's tools are hidden "
+            "and past runs are kept."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 19),
+        remove_by=date(2027, 5, 19),
+    ),
 )
 
 

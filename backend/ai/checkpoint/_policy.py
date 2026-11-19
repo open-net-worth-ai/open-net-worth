@@ -304,6 +304,10 @@ _EXCLUDED_TABLES = frozenset(
         # a cited LLM paragraph, rebuildable from the price provider's bars and `evidence`;
         # same "derived, never snapshotted" class as asset_brief.
         "price_movement_notes",
+        # TradingAgents runs (flag trading_agents) — a run is written by a background worker long
+        # after the turn that started it, and holds recorded spend; a /rewind must neither delete
+        # a finished analysis nor un-spend its cost.
+        "trading_agents_runs",
     }
 )
 

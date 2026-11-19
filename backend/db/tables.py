@@ -1707,3 +1707,61 @@ mcp_oauth_tokens = Table(
     CheckConstraint("kind IN ('access','refresh')", name=conv("ck_mcp_oauth_tokens_kind")),
     Index("ix_mcp_oauth_tokens_grant", "grant_id"),
 )
+
+# ── trading_agents_runs — one row per TradingAgents analysis (flag ``trading_agents``) ─────────
+# A run is research, never money: not net worth, budget or the ledger. Real columns (not a
+# payload) because the cost panel and the monthly cap aggregate over them. Written only through
+# ``services.trading_agents.runs.apply_run_change``; holds no key or token. ``context_sent`` is the
+# exact portfolio context the models received, kept for the owner to audit. Tier-2, NO book_id,
+# checkpoint-EXCLUDED (a /rewind must not delete a finished run or its recorded spend).
+trading_agents_runs = Table(
+    "trading_agents_runs",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("ticker", Text, nullable=False),
+    Column("instrument_id", Text, nullable=True),
+    Column("trade_date", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("requested_by", Text, nullable=False),
+    Column("session_id", Text, nullable=True),
+    Column("analysts", JSON, nullable=False),
+    Column("config_snapshot", JSON, nullable=False),
+    Column("context_level", Text, nullable=False),
+    Column("context_sent", JSON, nullable=False),
+    Column("progress", JSON, nullable=False),
+    Column("signal", Text, nullable=True),
+    Column("decision_text", Text, nullable=True),
+    Column("reports", JSON, nullable=True),
+    Column("llm_calls", Integer, nullable=False, server_default=text("0")),
+    Column("input_tokens", Integer, nullable=False, server_default=text("0")),
+    Column("output_tokens", Integer, nullable=False, server_default=text("0")),
+    Column("cache_read_tokens", Integer, nullable=False, server_default=text("0")),
+    Column("cache_creation_tokens", Integer, nullable=False, server_default=text("0")),
+    Column("cost_usd", Float, nullable=False, server_default=text("0")),
+    Column("plan_included_calls", Integer, nullable=False, server_default=text("0")),
+    Column("unpriced_calls", Integer, nullable=False, server_default=text("0")),
+    Column("cost_by_role", JSON, nullable=False),
+    Column("cost_by_model", JSON, nullable=False),
+    Column("estimate_usd", Float, nullable=True),
+    Column("cap_usd", Float, nullable=False),
+    Column("error", Text, nullable=True),
+    Column("created_at", Text, nullable=False),
+    Column("started_at", Text, nullable=True),
+    Column("finished_at", Text, nullable=True),
+    CheckConstraint(
+        "status IN ('queued','running','done','failed','cancelled','stopped_budget',"
+        "'stopped_calls','timed_out','interrupted')",
+        name=conv("ck_trading_agents_runs_status"),
+    ),
+    CheckConstraint(
+        "requested_by IN ('user','lucius','automation')",
+        name=conv("ck_trading_agents_runs_requested_by"),
+    ),
+    CheckConstraint(
+        "context_level IN ('investments','position','ticker')",
+        name=conv("ck_trading_agents_runs_context_level"),
+    ),
+    Index("ix_trading_agents_runs_ticker_created", "ticker", "created_at"),
+    Index("ix_trading_agents_runs_status", "status"),
+    Index("ix_trading_agents_runs_created", "created_at"),
+)

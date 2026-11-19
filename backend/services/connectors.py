@@ -86,6 +86,12 @@ def _voice_calls_on() -> bool:
     return enabled("voice_calls")
 
 
+def _trading_agents_on() -> bool:
+    from backend.services import trading_agents
+
+    return trading_agents.flag_on()
+
+
 def _actual_budget_on() -> bool:
     from backend.services.actual_flag import on
 
@@ -101,6 +107,8 @@ def _entries(rows: dict[str, Row]) -> Iterator[tuple[ConnectorKind, Row]]:
             continue  # behind the `voice_calls` flag: off, the hub is exactly the old one
         if builtin.id == "actual_budget" and not _actual_budget_on():
             continue  # behind the `actual_budget_sync` flag
+        if builtin.id == "trading_agents" and not _trading_agents_on():
+            continue  # behind the `trading_agents` flag
         kind = kind_of(builtin.id)
         row = rows.get(builtin.id) or _default_row(builtin, kind)
         seen.add(builtin.id)

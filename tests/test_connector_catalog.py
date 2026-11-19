@@ -13,6 +13,7 @@ def test_catalog_lists_every_kind_the_migration_creates():
         "webhook",
         "telegram",
         "voice",
+        "trading_agents",
         "simplefin",
         "plaid",
         "lunch_money",
@@ -166,6 +167,34 @@ def _row(kind: str, config: dict | None = None, **row) -> dict:
 )
 def test_the_set_up_rule_of_each_kind(kind, config, have, expected):
     assert CATALOG[kind].configured(_row(kind, config), frozenset(have)) is expected
+
+
+@pytest.mark.parametrize(
+    "install_status, accepted, expected",
+    [
+        ("ready", "2026-11-19T10:00:00+00:00", True),
+        ("ready", "", False),  # installed, disclaimer not accepted
+        ("installing", "2026-11-19T10:00:00+00:00", False),
+        ("failed", "2026-11-19T10:00:00+00:00", False),
+        (None, "2026-11-19T10:00:00+00:00", False),
+    ],
+)
+def test_trading_agents_is_set_up_once_installed_and_the_disclaimer_is_accepted(
+    install_status, accepted, expected
+):
+    row = _row(
+        "trading_agents",
+        {"disclaimer_accepted_at": accepted},
+        state={"install_status": install_status} if install_status else {},
+    )
+    assert CATALOG["trading_agents"].configured(row, frozenset()) is expected
+
+
+def test_trading_agents_holds_only_optional_data_vendor_keys_and_no_llm_key():
+    kind = CATALOG["trading_agents"]
+    assert {f.name for f in kind.secret_fields} == {"alpha_vantage_api_key", "fred_api_key"}
+    assert set(kind.revealable_fields) == {"alpha_vantage_api_key", "fred_api_key"}
+    assert kind.pausable and not kind.multi
 
 
 def _banks(*statuses):

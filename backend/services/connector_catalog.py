@@ -207,6 +207,14 @@ def _email_configured(row: Row, have: Have) -> bool:
     )
 
 
+def _trading_agents_configured(row: Row, have: Have) -> bool:
+    """Installed (``state.install_status``) and the disclaimer accepted; the data-vendor keys
+    are optional."""
+    return row["state"].get("install_status") == "ready" and bool(
+        _text(row["config"].get("disclaimer_accepted_at"))
+    )
+
+
 def _search_provider(connector_id: str) -> dict:
     provider_id = connector_id[len(WEB_SEARCH_PREFIX) :]
     return next((p for p in SEARCH_PROVIDERS if p["id"] == provider_id), {})
@@ -582,6 +590,32 @@ _KINDS: tuple[ConnectorKind, ...] = (
             "tts_model",
             "tts_voice",
             "noise_filter",
+        ),
+    ),
+    _kind(
+        # Multi-agent stock research (flag ``trading_agents``). The two secrets are DATA-vendor
+        # keys, both optional: every model call goes through the owner's own AI provider, so no
+        # LLM key ever lives here. It reads as set up once it is installed and the owner has
+        # accepted the disclaimer. Settings are validated by ``services.trading_agents.settings``.
+        "trading_agents",
+        "TradingAgents",
+        _trading_agents_configured,
+        secret_fields=_secrets("alpha_vantage_api_key", "fred_api_key"),
+        config_keys=(
+            "deep_model",
+            "quick_model",
+            "analysts",
+            "max_debate_rounds",
+            "max_risk_rounds",
+            "max_tool_rounds",
+            "max_llm_calls",
+            "bridge_concurrency",
+            "per_run_cap_usd",
+            "monthly_cap_usd",
+            "context_level",
+            "output_language",
+            "sec_edgar_user_agent",
+            "disclaimer_accepted_at",
         ),
     ),
     _kind(

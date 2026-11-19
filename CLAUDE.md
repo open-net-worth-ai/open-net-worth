@@ -76,6 +76,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
 | Followed portfolios (flag `followed_portfolios`; information only — no account, no trade sizing) | `followed_portfolios.service.apply_followed_portfolio_change` |
 | Paper trading (flag `paper_trading`; a SIMULATED book — never net worth, never an order; only its router, tools, Automations and the scheduler may import it) | `paper_trading.service.apply_paper_change` |
+| TradingAgents runs (flag `trading_agents`; multi-agent research — never money, never an order; spec `docs/specs/trading-agents.md`) | `trading_agents.runs.apply_run_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
 | Intel delivery (now / later / skip, flag `intel_delivery_decider`) | `news_delivery.apply_delivery_change` |
