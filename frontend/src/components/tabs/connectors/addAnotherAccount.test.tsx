@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-// A second copy of a directory MCP server (two IBKR logins, two Stripe keys) is a second server at the same
-// URL: the directory offers it on the already-added card, numbers its name, and warns that the
-// vendor's sign-in may land on the first account again (owner, 2026-11-19).
+// A second copy of an MCP server (two IBKR logins, two Stripe keys) is a second server at the same
+// URL. It starts from the ⋮ menu on the first one's settings page, opens the add form at that
+// address with its name numbered, and warns that the vendor's sign-in may land on the first account
+// again (owner, 2026-11-19 / 2026-11-20).
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, fireEvent, screen } from '@testing-library/react'
@@ -35,14 +36,14 @@ function server(
   }
 }
 
-function openPreview(connectors: Connector[], previewId: string) {
+function openAnother(connectors: Connector[], anotherId: string) {
   return render(
     <DirectoryModal
       open
       onClose={() => {}}
       connectors={connectors}
       onFocusConnector={() => {}}
-      previewId={previewId}
+      anotherId={anotherId}
     />,
   )
 }
@@ -60,34 +61,55 @@ describe('adding another account of a sign-in server', () => {
     expect(sameAddressAs('https://mcp.acme.test/mcp', two)).toBeNull()
   })
 
-  it('offers Add another on the added card and opens the add form with a warning', () => {
-    openPreview([server('api-ibkr-com', IBKR_URL)], 'mcp-ibkr')
-    expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Add another' }))
+  it('opens the add form at the same address, with a warning', () => {
+    openAnother([server('api-ibkr-com', IBKR_URL)], 'mcp:api-ibkr-com')
     const note = screen.getByRole('note').textContent
     expect(note).toMatch(/You already added Interactive Brokers at this address/)
     expect(note).toMatch(/Sign out of Interactive Brokers in your browser first/)
     expect(screen.getByDisplayValue(IBKR_URL)).toBeTruthy()
   })
 
-  it('does not offer it before the first account is added', () => {
-    openPreview([], 'mcp-ibkr')
-    expect(screen.queryByRole('button', { name: 'Add another' })).toBeNull()
+  it('goes Back to the settings page it was opened from', () => {
+    const onFocusConnector = vi.fn()
+    render(
+      <DirectoryModal
+        open
+        onClose={() => {}}
+        connectors={[server('api-ibkr-com', IBKR_URL)]}
+        onFocusConnector={onFocusConnector}
+        anotherId="mcp:api-ibkr-com"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/ }))
+    expect(onFocusConnector).toHaveBeenCalledWith('mcp:api-ibkr-com')
   })
 
-  it('offers it for a server that takes a key too, without the sign-out warning', () => {
+  it('works for a server that takes a key, without the sign-out warning', () => {
     const stripe = MCP_INSTALL_PRESETS['mcp-stripe'].url!
-    openPreview([server('mcp-stripe-com', stripe, 'Stripe')], 'mcp-stripe')
-    fireEvent.click(screen.getByRole('button', { name: 'Add another' }))
+    openAnother([server('mcp-stripe-com', stripe, 'Stripe')], 'mcp:mcp-stripe-com')
     expect(screen.getByDisplayValue(stripe)).toBeTruthy()
     const note = screen.getByRole('note').textContent
     expect(note).toMatch(/You already added Stripe at this address/)
     expect(note).not.toMatch(/Sign out/)
   })
 
-  it('does not offer it while the one already added has never connected', () => {
-    const halfAdded = { ...server('api-ibkr-com', IBKR_URL, 'api.ibkr.com', []), enabled: false }
-    openPreview([halfAdded], 'mcp-ibkr')
+  it('works for a custom server that is not in the directory', () => {
+    const url = 'https://mcp.acme-broker.test/v1/mcp'
+    openAnother([server('acme', url, 'ACME Broker')], 'mcp:acme')
+    expect(screen.getByDisplayValue(url)).toBeTruthy()
+    expect(screen.getByRole('note').textContent).toMatch(/You already added ACME Broker/)
+  })
+
+  it('is no longer a second button on the directory card', () => {
+    render(
+      <DirectoryModal
+        open
+        onClose={() => {}}
+        connectors={[server('api-ibkr-com', IBKR_URL)]}
+        onFocusConnector={() => {}}
+        previewId="mcp-ibkr"
+      />,
+    )
     expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Add another' })).toBeNull()
   })

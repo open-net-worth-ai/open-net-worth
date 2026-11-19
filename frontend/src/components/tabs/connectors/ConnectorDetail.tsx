@@ -80,6 +80,9 @@ export interface ConnectorDetailProps {
    *  reopens THAT instead, and never reaches this. */
   onEditConnection: () => void
   onRefreshTools: () => void
+  /** MCP only, once it has connected: add a second server at this address — another login or
+   *  key at the same broker, with its own tools and permissions. */
+  onAddAnother?: () => void
   /** Remove for real. Called only AFTER the confirmation step when `removable`; for a
    *  connector that cannot be removed it is called straight from the kebab, to say so. */
   onRemove: () => void | Promise<void>
@@ -154,6 +157,7 @@ export function ConnectorDetail({
   onViewDetails,
   onEditConnection,
   onRefreshTools,
+  onAddAnother,
   onRemove,
   onUsePrompt,
   onSetToolPermission,
@@ -339,6 +343,7 @@ export function ConnectorDetail({
       : entry.mcp
         ? [{ label: 'Edit configuration', onClick: onEditConnection }]
         : []),
+    ...(onAddAnother ? [{ label: 'Add another', onClick: onAddAnother }] : []),
     { label: 'Refresh tools list', onClick: onRefreshTools },
     {
       label: 'Remove connector',

@@ -146,6 +146,13 @@ export interface McpOAuthState {
   cancel: () => void
 }
 
+export interface McpStartOptions {
+  /** This address already has a server and the user is adding another one there. */
+  another?: SameAddress
+  /** The form's address and credential kind, over the entry's preset — copied from that server. */
+  prefill?: { url: string; auth: McpAuth }
+}
+
 export interface McpAddFlow {
   step: McpStep
   /** `edit` reopens the flow on a saved server; `add` is the four-step add. */
@@ -182,8 +189,7 @@ export interface McpAddFlow {
   idFixed: boolean
   /** The OAuth Sign-in button's own state — meaningful only while `form.auth === 'oauth'`. */
   oauth: McpOAuthState
-  /** `another`: this entry is already added and the user is adding another one of it. */
-  start: (entry?: DirectoryRow, opts?: { another?: SameAddress }) => void
+  start: (entry?: DirectoryRow, opts?: McpStartOptions) => void
   /** Set while this add points at an address a server already uses — from "Add another", or a
    *  Custom MCP server typed at that address. The form says so and the name is numbered. */
   sameAddress: SameAddress | null
@@ -429,7 +435,7 @@ export function useMcpAddFlow({
     ? { auth_type: editing.authType, auth_header: editing.authHeader }
     : undefined
 
-  const start = (entry?: DirectoryRow, opts?: { another?: SameAddress }) => {
+  const start = (entry?: DirectoryRow, opts?: McpStartOptions) => {
     // Disown whatever probe the LAST time through this flow left running. The host modal
     // (`DirectoryModal`) has its own "Back to directory" control that hides this flow's view
     // (`setMcpOpen(false)`) without ever calling `back()` — it doesn't own a probe token to
@@ -449,15 +455,15 @@ export function useMcpAddFlow({
     setAnother(opts?.another ?? null)
     setFormState({
       ...EMPTY_MCP_FORM,
-      transport: preset?.transport ?? 'remote',
-      url: preset?.url ?? '',
+      transport: opts?.prefill ? 'remote' : (preset?.transport ?? 'remote'),
+      url: opts?.prefill?.url ?? preset?.url ?? '',
       command: preset?.command ?? '',
       args: preset?.args ?? '',
       env: preset?.env ?? '',
       // A preset states the credential its server actually takes. No preset (a bare "Custom
       // MCP server") means no information at all, so `none` is the honest default — the
       // probe's own real response, not a guess, is what actually reveals an auth need.
-      auth: preset?.auth ?? 'none',
+      auth: opts?.prefill?.auth ?? preset?.auth ?? 'none',
     })
     // A catalog entry supplies the publisher we vouch for; a custom server claims no author,
     // and must never borrow ours (spec §5) — hence `unknown`, not `unverified`.

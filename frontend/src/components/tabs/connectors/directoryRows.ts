@@ -201,13 +201,6 @@ export function setupTargetFor(
   return row.mcp ? { kind: 'add', id: row.id } : { kind: 'form', id: row.id }
 }
 
-/** Any MCP server from the directory can be added more than once — two sign-ins, two API
- *  keys, two local commands with different keys — each a server of its own. The generic
- *  "Custom MCP server" slot has its own add link and is never "added". */
-export function canAddAnotherAccount(d: DirectoryRow): boolean {
-  return !!d.mcp && !d.generic
-}
-
 /** Another server at an address already in use: `of` is what the user calls the one they
  *  have, `name` the default for the new one ("Interactive Brokers 2"). */
 export interface SameAddress {

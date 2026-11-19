@@ -661,3 +661,18 @@ describe('ConnectorDetail synced accounts', () => {
     expect(screen.queryByTestId('accounts-list')).toBeNull()
   })
 })
+
+describe('Add another, in the ⋮ menu', () => {
+  it('is a menu item when the page is given one, and calls it', () => {
+    const onAddAnother = vi.fn()
+    const { container } = renderDetail(entry({ mcp: true }), { onAddAnother })
+    const item = within(openKebab(container)).getByText('Add another')
+    fireEvent.click(item)
+    expect(onAddAnother).toHaveBeenCalledTimes(1)
+  })
+
+  it('is not in the menu otherwise', () => {
+    const { container } = renderDetail(entry({ mcp: true }))
+    expect(within(openKebab(container)).queryByText('Add another')).toBeNull()
+  })
+})

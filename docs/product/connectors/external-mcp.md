@@ -152,10 +152,11 @@ marked **from your connection**. A long list shows its first nine tools; **Show 
 
 ### More than one account
 
-Any server from **Browse & add** can be added more than once — two Interactive Brokers logins, or
-two Stripe keys. Once the first one has connected, open its card and click **Add another** (or use
+A server can be added more than once — two Interactive Brokers logins, or two Stripe keys. Once
+the first one has connected, open its settings page, click **⋮** and choose **Add another** (or use
 **Add MCP server** with the same address; the form says when an address is already in use). Each
-one is a separate server with its own sign-in or key, tools and permissions. It's named "Interactive Brokers 2" by default; rename it
+one is a separate server with its own sign-in or key, tools and permissions. It's named
+"Interactive Brokers 2" by default; rename it
 on the last step to something you'll recognise, like "IBKR joint". Lucius sees each one's name on
 its tools, so ask it about one or both.
 
