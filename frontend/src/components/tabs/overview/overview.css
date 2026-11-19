@@ -2724,8 +2724,13 @@
   overflow-y: visible;
 }
 
-/* While a widget is open full screen or in its editor, Lucius's floating button steps aside
-   (the editor covers it), so nothing sits over Discard / Save. */
-body:has(.ov-fs-shell) .lx-dock {
-  display: none;
+/* Lucius's floating button stays in view while a widget is open full screen or in its editor:
+   the window ends above it (the button is 22px off the bottom and ~44px tall), so it never
+   sits over Discard / Save. */
+body:has(.lx-dock.lx-collapsed) .ov-fs-backdrop {
+  padding-bottom: 80px;
+}
+
+body:has(.lx-dock.lx-collapsed) .ov-fs-shell {
+  height: calc(100vh - 110px);
 }
