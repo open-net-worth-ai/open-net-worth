@@ -34,6 +34,7 @@ import { displayTicker } from './assetDisplay'
 import { QuoteStats } from './QuoteStats'
 import { MarketStatusChip } from './MarketStatusChip'
 import { AnalystConsensus, AnalystConsensusRailCard } from './AnalystConsensus'
+import { TradingAgentsCard } from './TradingAgentsCard'
 import { NewsCardGrid } from './NewsCardGrid'
 import { LatestDevelopments } from './LatestDevelopments'
 import { PriceMovementTimeline } from './PriceMovementTimeline'
@@ -1181,6 +1182,9 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                     ) : undefined
                   }
                 />
+              )}
+              {data.has_ticker && asset.asset_class === 'equity' && asset.ticker && (
+                <TradingAgentsCard instrumentId={instrumentId} ticker={asset.ticker} />
               )}
               <AnalystConsensus
                 data={analyst.data}

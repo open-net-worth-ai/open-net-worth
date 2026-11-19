@@ -10,6 +10,9 @@ import type { SectionProps } from '../ds'
 import { BackgroundAiHealthPanel } from './BackgroundAiHealthPanel'
 import { ModelTelemetryPanel } from './ModelTelemetryPanel'
 import { SearchFetchCostPanel } from './SearchFetchCostPanel'
+import { TradingAgentsCostPanel } from './TradingAgentsCostPanel'
+import { costWindowQuery, localDateKey } from './costWindow'
+import type { CostWindow } from './costWindow'
 
 interface Totals {
   turns: number
@@ -38,7 +41,8 @@ interface CostSummary {
   window_days: number
 }
 
-type CostWindow = 'today' | 'yesterday' | '7' | '30' | '0'
+// A surface bucket whose key is not a name an owner would read.
+const SURFACE_LABELS: Record<string, string> = { trading_agents: 'TradingAgents' }
 
 const COST_WINDOWS: readonly (readonly [CostWindow, string])[] = [
   ['today', 'Today'],
@@ -67,16 +71,6 @@ const tok = (value: number) =>
       : String(value)
 
 const trendUsd = (value: number) => `US$${value.toFixed(Math.abs(value) < 0.1 ? 4 : 2)}`
-
-function localDateKey(daysAgo = 0) {
-  const date = new Date()
-  date.setHours(12, 0, 0, 0)
-  date.setDate(date.getDate() - daysAgo)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 interface TrendPoint {
   key: string
@@ -203,12 +197,7 @@ export function AiUsageSection(props: SectionProps) {
   const [window, setWindow] = useState<CostWindow>('today')
   const [menuOpen, setMenuOpen] = useState(false)
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const costKey =
-    window === 'today' || window === 'yesterday'
-      ? `/api/cost/summary?range=${window}&tz=${timezone}`
-      : window === '7' || window === '30'
-        ? `/api/cost/summary?start=${localDateKey(Number(window) - 1)}&end=${localDateKey()}&tz=${timezone}`
-        : `/api/cost/summary?days=0&tz=${timezone}`
+  const costKey = `/api/cost/summary?${costWindowQuery(window, timezone)}`
   const cost = useCachedFetchState<CostSummary>(costKey, () => getJson<CostSummary>(costKey), {
     staleTime: 30_000,
   })
@@ -224,9 +213,12 @@ export function AiUsageSection(props: SectionProps) {
           : Math.max(1, summary?.window_days || 1)
   const projected = (totalCost / windowDays) * 30
   const windowLabel = COST_WINDOWS.find(([value]) => value === window)?.[1] ?? 'Today'
-  const bars = (totals: Record<string, Totals> | undefined) =>
+  const bars = (totals: Record<string, Totals> | undefined, labels: Record<string, string> = {}) =>
     Object.entries(totals ?? {})
-      .map(([label, value]) => [label, value.cost_usd, value.turns] as [string, number, number])
+      .map(
+        ([key, value]) =>
+          [labels[key] ?? key, value.cost_usd, value.turns] as [string, number, number],
+      )
       .sort((a, b) => b[1] - a[1])
   const searchFetch = bars(summary?.by_search_fetch)
 
@@ -310,7 +302,7 @@ export function AiUsageSection(props: SectionProps) {
         {summary ? <CostTrendChart summary={summary} window={window} /> : null}
         {(
           [
-            ['By surface', bars(summary?.by_surface)],
+            ['By surface', bars(summary?.by_surface, SURFACE_LABELS)],
             ['By provider', bars(summary?.by_provider)],
             ['By model', bars(summary?.by_model)],
           ] as [string, [string, number, number][]][]
@@ -361,6 +353,13 @@ export function AiUsageSection(props: SectionProps) {
       </Panel>
 
       <SearchFetchCostPanel rows={searchFetch} formatCost={trendUsd} periodLabel={windowLabel} />
+
+      <TradingAgentsCostPanel
+        window={window}
+        windowLabel={windowLabel}
+        formatCost={trendUsd}
+        formatTokens={tok}
+      />
 
       <ModelTelemetryPanel />
 

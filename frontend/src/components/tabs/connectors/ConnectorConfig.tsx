@@ -38,6 +38,7 @@ import { AlpacaSection } from './AlpacaSection'
 import { IbkrSection } from './IbkrSection'
 import { YahooFinanceSection } from './YahooFinanceSection'
 import { CoinGeckoSection } from './CoinGeckoSection'
+import { TradingAgentsSection } from './TradingAgentsSection'
 import type { Connector } from './types'
 
 const WEB_SEARCH_PREFIX = 'web_search:'
@@ -64,6 +65,7 @@ const CONFIGURABLE_KINDS = new Set([
   'ibkr',
   'yahoo_finance',
   'coingecko',
+  'trading_agents',
   'rest',
 ])
 
@@ -141,6 +143,8 @@ function configForm({
       return <YahooFinanceSection />
     case 'coingecko':
       return <CoinGeckoSection />
+    case 'trading_agents':
+      return <TradingAgentsSection />
     case 'rest':
       return (
         <RestSection connectorId={connector.id} onCreated={onCreated} onSaveError={onSaveError} />

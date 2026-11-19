@@ -256,12 +256,29 @@ function restToolParts(tool: string): { api: string; endpoint: string } | null {
 export function permissionTitle(change: ProposedChange): string {
   const tool = change.type === 'tool_permission' && change.grant_tool ? change.grant_tool : ''
   const rest = restToolParts(tool)
-  return humanizeType(rest ? rest.endpoint : tool || change.type)
+  return TOOL_TITLES[tool] ?? humanizeType(rest ? rest.endpoint : tool || change.type)
+}
+
+/** A tool whose name humanizes badly (a brand with its own capitalisation). */
+const TOOL_TITLES: Record<string, string> = {
+  start_trading_agents_analysis: 'Start TradingAgents analysis',
+}
+
+/** The ticker a TradingAgents start card is about: the header's subject pill, so the lead
+ *  never repeats it. Staged `preview.data.ticker` is the normalised symbol. */
+function tradingAgentsTicker(change: ProposedChange): string | null {
+  const display = (change.display || {}) as Record<string, unknown>
+  const staged =
+    isRecord(display.preview) && isRecord(display.preview.data) ? display.preview.data.ticker : null
+  const asked = isRecord(display.arguments) ? display.arguments.ticker : null
+  const ticker = typeof staged === 'string' && staged ? staged : asked
+  return typeof ticker === 'string' && ticker ? ticker : null
 }
 
 /** What a permission card's tool belongs to, for the label beside its title: the REST API it
  *  calls. Null for every other tool. */
 export function permissionSubject(change: ProposedChange): string | null {
+  if (change.grant_tool === 'start_trading_agents_analysis') return tradingAgentsTicker(change)
   const rest = restToolParts(change.grant_tool ?? '')
   return rest ? humanizeType(rest.api) : null
 }

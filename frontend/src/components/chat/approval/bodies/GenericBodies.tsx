@@ -33,6 +33,7 @@ import {
   withNamesInPlace,
 } from '../cardTypes'
 import { BatchCell } from './BatchBody'
+import { TradingAgentsRunPreview } from './TradingAgentsBodies'
 import { fBase } from '../../../../utils/format'
 import { pluralize } from '../../../../utils/pluralize'
 
@@ -402,6 +403,7 @@ function NamedArgsPreview({ preview }: { preview: ToolPreview }) {
 const PREVIEW_RENDERERS: Record<string, (preview: ToolPreview) => ReactElement> = {
   field_diff: (preview) => <FieldDiffPreview preview={preview} />,
   named_args: (preview) => <NamedArgsPreview preview={preview} />,
+  trading_agents_run: (preview) => <TradingAgentsRunPreview preview={preview} />,
 }
 
 export function ToolPreviewBody({ preview }: { preview: ToolPreview }) {

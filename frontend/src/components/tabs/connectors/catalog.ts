@@ -475,6 +475,27 @@ export const CATALOG: CatalogEntry[] = [
     tools: [],
   },
   {
+    id: 'trading_agents',
+    flag: 'trading_agents',
+    name: 'TradingAgents',
+    families: ['Data source'],
+    categories: ['Market data'],
+    icon: 'investments',
+    hue: 'var(--accent)',
+    // sub/desc: read live from `services/connector_copy.py` SHORT/LONG["trading_agents"].
+    // No privacyUrl or service: the run's data goes to several vendors, named in the setup
+    // panel's Data sources section instead of behind one link.
+    publisher: 'TauricResearch',
+    verification: 'unverified',
+    // The repo is its only home. No supportUrl: the catalog's own rule wants a GitHub support
+    // link to be `${repoUrl}/issues` AND every URL of an entry distinct, which a project whose
+    // homepage is its repo cannot satisfy.
+    homepageUrl: 'https://github.com/TauricResearch/TradingAgents',
+    mcp: false,
+    popular: false,
+    tools: [],
+  },
+  {
     // Any HTTP API the owner points it at. Each one added becomes its own connector
     // (`rest:<slug>`), so this entry never reads as installed: it is always "add another".
     id: 'rest',

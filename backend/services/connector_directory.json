@@ -224,6 +224,24 @@
       }
     },
     {
+      "id": "trading_agents",
+      "name": "TradingAgents",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Market data"
+      ],
+      "publisher": "TauricResearch",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      },
+      "flag": "trading_agents"
+    },
+    {
       "id": "rest",
       "name": "REST API",
       "families": [

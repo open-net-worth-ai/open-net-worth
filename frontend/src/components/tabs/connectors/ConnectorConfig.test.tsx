@@ -578,6 +578,10 @@ describe('a connector with no form of its own', () => {
     expect(hasConfigForm(connector())).toBe(true)
   })
 
+  it('is offered to TradingAgents, which has a setup form of its own', () => {
+    expect(hasConfigForm(connector({ id: 'trading_agents', kind: 'trading_agents' }))).toBe(true)
+  })
+
   it('is refused to a kind that has no form', () => {
     expect(hasConfigForm(connector({ id: 'something', kind: 'something' }))).toBe(false)
   })
