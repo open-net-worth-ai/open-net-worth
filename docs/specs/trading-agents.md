@@ -411,16 +411,18 @@ Thin router: validate → one service/runner call → shape. All behind `require
 | Method | Path | Body / query | Returns |
 |---|---|---|---|
 | GET | `/api/trading-agents/status` | — | `availability`, install state/version, deep/quick model + transport, caps, month spend, queue length, disclaimer accepted |
+| GET | `/api/trading-agents/config` | — | the §3 settings (model refs as saved, `null` = default) + `has_alpha_vantage_api_key` / `has_fred_api_key` (presence only, never a value) |
+| PUT | `/api/trading-agents/config` | any §3 setting + `alpha_vantage_api_key`, `fred_api_key` | the new config; `null` resets a setting / clears a key, blank keeps a key; `ValidationError` names `context.field` |
 | POST | `/api/trading-agents/install` | — | 202; progress via status + data events |
 | POST | `/api/trading-agents/disclaimer` | `{accepted:true}` | sets `disclaimer_accepted_at` |
 | POST | `/api/trading-agents/estimate` | `{ticker, analysts?}` | `{estimate_usd, low, high, basis:"history|static", plan_included:bool}` |
 | GET | `/api/trading-agents/context-preview` | `ticker, context_level` | the exact dict that would be sent + `disclosure` |
 | POST | `/api/trading-agents/runs` | `{ticker, trade_date?, analysts?, context_level?}` | 202 `{run_id}` |
 | GET | `/api/trading-agents/runs` | `ticker?, status?, limit, offset` | page + total |
-| GET | `/api/trading-agents/runs/{id}` | — | full run (reports uncapped) |
+| GET | `/api/trading-agents/runs/{id}` | — | full run (reports uncapped) + `thesis_judgment` (absent without a thesis) |
 | POST | `/api/trading-agents/runs/{id}/cancel` | — | run |
 | DELETE | `/api/trading-agents/runs/{id}` | — | 204 (terminal runs only) |
-| GET | `/api/cost/trading-agents` | `days` or `range`, `tz` | §10.3 aggregation |
+| GET | `/api/cost/trading-agents` | `days`, `range`, `start`/`end` (win over both), `tz` | §10.3 aggregation |
 
 - The LLM bridge is **not** a route of the main app (§4.2).
 - `api/demo_lockdown.py`: every mutating route above is **refused** in demo; read routes allowed.

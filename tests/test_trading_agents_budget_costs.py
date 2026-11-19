@@ -194,6 +194,32 @@ def test_trading_agents_calls_have_their_own_surface_bucket():
 # ── cost figures ─────────────────────────────────────────────────────────────
 
 
+def test_the_cost_route_takes_an_explicit_window(client):
+    old = _run(cost_usd=0.40)
+    _age(old["id"], 10)
+    _run(cost_usd=0.25)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+    got = client.get(
+        "/api/cost/trading-agents", params={"start": week_ago, "end": today, "tz": "UTC"}
+    )
+    assert got.status_code == 200
+    body = got.json()
+    assert body["window"] == {"days": 30, "start": week_ago, "end": today}
+    assert body["totals"]["runs"] == 1 and body["totals"]["metered_usd"] == pytest.approx(0.25)
+    only_end = client.get("/api/cost/trading-agents", params={"end": week_ago, "tz": "UTC"}).json()
+    assert only_end["totals"]["runs"] == 1 and only_end["totals"]["metered_usd"] == pytest.approx(
+        0.4
+    )
+    # an explicit window beats the preset, as in /api/cost/summary
+    both = client.get(
+        "/api/cost/trading-agents",
+        params={"range": "today", "start": week_ago, "end": today, "tz": "UTC"},
+    ).json()
+    assert both["totals"]["runs"] == 1 and both["window"]["start"] == week_ago
+    assert client.get("/api/cost/trading-agents", params={"start": "last week"}).status_code == 422
+
+
 def _book():
     _run(
         cost_usd=0.10,

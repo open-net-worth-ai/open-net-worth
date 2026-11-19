@@ -93,9 +93,13 @@ def get_budget_status(tz: Optional[str] = Query(None)):
 def trading_agents_cost(
     days: int = 30,
     range_: Optional[str] = Query(None, alias="range"),
+    start: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    end: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     tz: Optional[str] = Query(None),
 ):
     """TradingAgents spend from the run rows: totals, month vs cap, by role / model / ticker /
-    day, recent runs. Same ``days`` / ``range`` / ``tz`` as ``/api/cost/summary``."""
-    start, end = cost_service.resolve_preset(range_, tz)
+    day, recent runs. ``days`` / ``range`` / ``tz`` are those of ``/api/cost/summary``; an explicit
+    inclusive ``start`` / ``end`` (``YYYY-MM-DD``, in ``tz``) takes precedence over both."""
+    if start is None and end is None:
+        start, end = cost_service.resolve_preset(range_, tz)
     return trading_agents_costs.summary(days=days, start=start, end=end, tz=tz)

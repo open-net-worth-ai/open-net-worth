@@ -227,6 +227,165 @@ def test_a_fourth_waiting_run_is_too_many(client):
     assert TradingAgentsRunStore().count() == runner.MAX_PENDING
 
 
+# ── config ───────────────────────────────────────────────────────────────────────────────
+
+
+CONFIG_KEYS = {
+    "deep_model", "quick_model", "analysts", "max_debate_rounds", "max_risk_rounds",
+    "max_tool_rounds", "max_llm_calls", "bridge_concurrency", "per_run_cap_usd",
+    "monthly_cap_usd", "context_level", "output_language", "sec_edgar_user_agent",
+    "has_alpha_vantage_api_key", "has_fred_api_key",
+}  # fmt: skip
+
+
+@pytest.mark.flag_both("trading_agents")
+def test_the_config_routes_are_a_typed_refusal_with_the_flag_off(client):
+    from backend.services import trading_agents
+
+    got, put = client.get(f"{BASE}/config"), client.put(f"{BASE}/config", json={})
+    if trading_agents.flag_on():
+        assert got.status_code == 200 and put.status_code == 200
+        return
+    for response in (got, put):
+        assert response.status_code == 409
+        assert error_of(response)["code"] == "feature_disabled"
+
+
+@pytest.mark.flags(trading_agents=True)
+def test_the_config_is_the_defaults_with_key_presence_only(client):
+    got = client.get(f"{BASE}/config").json()
+    assert set(got) == CONFIG_KEYS
+    assert got["deep_model"] is None and got["bridge_concurrency"] is None
+    assert got["max_tool_rounds"] == 8 and got["output_language"] == "English"
+    assert got["has_alpha_vantage_api_key"] is False and got["has_fred_api_key"] is False
+
+
+@pytest.mark.flags(trading_agents=True)
+def test_a_saved_key_is_reported_as_presence_never_as_a_value(client):
+    ready()
+    put = client.put(
+        f"{BASE}/config",
+        json={"alpha_vantage_api_key": "SECRET-av-123", "max_tool_rounds": 12},
+    )
+    assert put.status_code == 200
+    for body in (put.json(), client.get(f"{BASE}/config").json()):
+        assert "SECRET-av-123" not in str(body)
+        assert body["has_alpha_vantage_api_key"] is True and body["has_fred_api_key"] is False
+        assert body["max_tool_rounds"] == 12
+    assert "SECRET-av-123" not in client.get(f"{BASE}/status").text
+
+
+@pytest.mark.flags(trading_agents=True)
+def test_a_blank_key_keeps_the_secret_and_null_clears_it(client):
+    ready()
+    client.put(f"{BASE}/config", json={"fred_api_key": "SECRET-fred-1"})
+    kept = client.put(f"{BASE}/config", json={"fred_api_key": "  ", "output_language": "German"})
+    assert kept.json()["has_fred_api_key"] is True and kept.json()["output_language"] == "German"
+    absent = client.put(f"{BASE}/config", json={"max_risk_rounds": 2})
+    assert absent.json()["has_fred_api_key"] is True
+    assert TradingAgentsConfigStore().secrets() == {"fred_api_key": "SECRET-fred-1"}
+    cleared = client.put(f"{BASE}/config", json={"fred_api_key": None})
+    assert cleared.json()["has_fred_api_key"] is False
+    assert TradingAgentsConfigStore().secrets() == {}
+
+
+@pytest.mark.flags(trading_agents=True)
+def test_a_null_setting_resets_to_its_default_and_the_models_are_checked(client):
+    ready()
+    saved = client.put(
+        f"{BASE}/config",
+        json={"deep_model": "anthropic:model-b", "bridge_concurrency": 3, "analysts": ["news"]},
+    ).json()
+    assert saved["deep_model"] == "anthropic:model-b" and saved["bridge_concurrency"] == 3
+    assert saved["analysts"] == ["news"]
+    reset = client.put(
+        f"{BASE}/config", json={"deep_model": None, "bridge_concurrency": None}
+    ).json()
+    assert reset["deep_model"] is None and reset["bridge_concurrency"] is None
+    assert reset["analysts"] == ["news"]
+
+
+@pytest.mark.flags(trading_agents=True)
+@pytest.mark.parametrize(
+    ("body", "field"),
+    [
+        ({"max_debate_rounds": 4}, "max_debate_rounds"),
+        ({"max_tool_rounds": "8"}, "max_tool_rounds"),
+        ({"max_llm_calls": True}, "max_llm_calls"),
+        ({"bridge_concurrency": 9}, "bridge_concurrency"),
+        ({"per_run_cap_usd": 0.01}, "per_run_cap_usd"),
+        ({"monthly_cap_usd": 1001}, "monthly_cap_usd"),
+        ({"analysts": ["market", "tea"]}, "analysts"),
+        ({"analysts": []}, "analysts"),
+        ({"context_level": "everything"}, "context_level"),
+        ({"output_language": "x" * 33}, "output_language"),
+        ({"sec_edgar_user_agent": "  "}, "sec_edgar_user_agent"),
+        ({"deep_model": "no-colon"}, "deep_model"),
+        ({"quick_model": "ghost:model-z"}, "quick_model"),
+        ({"fred_api_key": 5}, "fred_api_key"),
+    ],
+)
+def test_an_invalid_config_names_its_field_and_writes_nothing(client, body, field):
+    ready()
+    refused = client.put(f"{BASE}/config", json={"max_risk_rounds": 3, **body})
+    assert refused.status_code == 422
+    assert error_of(refused)["code"] == "validation"
+    assert error_of(refused)["context"]["field"] == field
+    assert client.get(f"{BASE}/config").json()["max_risk_rounds"] == 1
+
+
+@pytest.mark.flags(trading_agents=True)
+def test_a_disabled_provider_cannot_be_saved_as_a_model(client):
+    ModelConfigStore().save(
+        {
+            "default_model": "anthropic:model-a",
+            "providers": {
+                "anthropic": {"api_key": "test-key"},
+                "acme-ai": {"api_key": "test-key", "enabled": False},
+            },
+        }
+    )
+    refused = client.put(f"{BASE}/config", json={"deep_model": "acme-ai:model-a"})
+    assert refused.status_code == 422 and error_of(refused)["context"]["field"] == "deep_model"
+
+
+@pytest.mark.flags(trading_agents=True)
+def test_an_unknown_config_key_and_the_disclaimer_stamp_are_refused(client):
+    assert client.put(f"{BASE}/config", json={"enabled": False}).status_code == 422
+    assert client.put(f"{BASE}/config", json={"disclaimer_accepted_at": "x"}).status_code == 422
+    assert client.get(f"{BASE}/status").json()["disclaimer_accepted"] is False
+
+
+# ── thesis judgment on a run ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.flags(trading_agents=True)
+def test_a_run_carries_the_thesis_judgment_only_with_a_thesis(client, monkeypatch):
+    from backend.services import thesis_judgment
+
+    ready()
+    run_id = submit(client).json()["run_id"]
+    assert "thesis_judgment" not in client.get(f"{BASE}/runs/{run_id}").json()
+
+    thesis = {
+        "role": "speculative",
+        "reason": "Holding 3+ years on ACME hardware",
+        "breaks_if": "The ACME roadmap is abandoned",
+        "stop_below": 50.0,
+        "fair_value": 140.0,
+        "trim_above": 180.0,
+    }
+    judged = thesis_judgment.judge(thesis, 85.0, held=True, currency="USD", ticker="ACME")
+    seen = []
+    monkeypatch.setattr(
+        thesis_judgment, "for_ticker", lambda symbol, price, **kw: seen.append(symbol) or judged
+    )
+    body = client.get(f"{BASE}/runs/{run_id}").json()
+    assert seen == ["ACME"]
+    assert body["thesis_judgment"]["stance"] == "intact" and body["thesis_judgment"]["cite"]
+    assert body["status"] == "queued"
+
+
 # ── cancel and delete ────────────────────────────────────────────────────────────────────
 
 
@@ -256,6 +415,7 @@ def test_only_a_finished_run_can_be_deleted(client):
 @pytest.mark.parametrize(
     ("method", "path"),
     [
+        ("PUT", f"{BASE}/config"),
         ("POST", f"{BASE}/install"),
         ("POST", f"{BASE}/disclaimer"),
         ("POST", f"{BASE}/estimate"),
@@ -272,6 +432,7 @@ def test_the_demo_refuses_every_mutating_route(method, path):
     "path",
     [
         f"{BASE}/status",
+        f"{BASE}/config",
         f"{BASE}/context-preview",
         f"{BASE}/runs",
         f"{BASE}/runs/tar_x",

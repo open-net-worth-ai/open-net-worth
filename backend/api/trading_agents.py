@@ -1,6 +1,8 @@
 """TradingAgents — multi-agent stock research as a plugin of Lucius (flag ``trading_agents``).
 
 GET    /api/trading-agents/status                 — availability, install, models, caps, spend, queue
+GET    /api/trading-agents/config                 — the settings and which data-vendor keys are saved
+PUT    /api/trading-agents/config                 — PATCH-shaped; blank key keeps a secret, null clears it
 POST   /api/trading-agents/install                — 202; progress through status + data events
 POST   /api/trading-agents/disclaimer             — accept the research-only notice
 POST   /api/trading-agents/estimate               — expected cost of a run, no cap check, no write
@@ -19,10 +21,10 @@ with its HTTP status and ``{code, message, context}``.
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Optional, TypeVar
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.ai.models.pricing import list_price_rates
 from backend.ai.trading_agents import runner
@@ -71,9 +73,42 @@ class RunBody(BaseModel):
     context_level: Optional[str] = Field(None, max_length=16)
 
 
+class ConfigBody(BaseModel):
+    """Every field optional and untyped: absent keeps, ``null`` resets a setting or clears a key,
+    and the service's validators (not pydantic's coercion) judge each value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    deep_model: Any = None
+    quick_model: Any = None
+    analysts: Any = None
+    max_debate_rounds: Any = None
+    max_risk_rounds: Any = None
+    max_tool_rounds: Any = None
+    max_llm_calls: Any = None
+    bridge_concurrency: Any = None
+    per_run_cap_usd: Any = None
+    monthly_cap_usd: Any = None
+    context_level: Any = None
+    output_language: Any = None
+    sec_edgar_user_agent: Any = None
+    alpha_vantage_api_key: Any = None
+    fred_api_key: Any = None
+
+
 @router.get("/status")
 def get_status():
     return queries.status(runner.pending_count())
+
+
+@router.get("/config")
+def get_config():
+    return _run(queries.get_config)
+
+
+@router.put("/config")
+def put_config(body: ConfigBody):
+    return _run(queries.update_config, body.model_dump(exclude_unset=True))
 
 
 @router.post("/install", status_code=202)

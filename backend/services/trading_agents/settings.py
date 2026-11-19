@@ -134,7 +134,9 @@ def _concurrency(value: Any) -> Optional[int]:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 8:
-        raise ValidationError("bridge_concurrency must be a whole number from 1 to 8.")
+        raise ValidationError(
+            "bridge_concurrency must be a whole number from 1 to 8.", field="bridge_concurrency"
+        )
     return value
 
 
@@ -172,6 +174,19 @@ def validate_config(changes: dict) -> dict:
         else:
             out[key] = _text(key, value, _MAX_USER_AGENT)
     return out
+
+
+def check_model_refs(patch: dict) -> None:
+    """Refuse a saved model the owner's providers cannot serve (unknown or turned off), so the
+    setup form fails on the field instead of every later run. Takes a ``validate_config`` patch."""
+    for key in ("deep_model", "quick_model"):
+        ref = patch.get(key)
+        if not ref:
+            continue
+        try:
+            _transport(ref)
+        except ModelUnavailableError as exc:
+            raise ValidationError(exc.message or str(exc), field=key, model_ref=ref) from exc
 
 
 def _validate_secrets(secrets: dict) -> dict:

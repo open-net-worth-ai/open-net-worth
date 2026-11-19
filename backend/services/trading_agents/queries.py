@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 from backend.core.errors import ModelUnavailableError, NotFoundError, ValidationError
-from backend.db.trading_agents_config_store import TradingAgentsConfigStore
+from backend.db.trading_agents_config_store import SECRET_KEYS, TradingAgentsConfigStore
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
-from backend.services import trading_agents
+from backend.services import thesis_judgment, trading_agents
 from backend.services.trading_agents import budget, context, install, runs, settings, ticker
 
 MAX_PAGE = 200
@@ -109,11 +109,51 @@ def list_runs(
 
 
 def get_run(run_id: str) -> dict:
+    """The full run; ``thesis_judgment`` is present only while the owner has a thesis on its
+    ticker (computed from the price on every read, never stored)."""
     trading_agents.require_flag()
     row = TradingAgentsRunStore().get(run_id)
     if row is None:
         raise NotFoundError(f"No TradingAgents run {run_id!r}.", run_id=run_id)
-    return row
+    judgment = thesis_judgment.compact(thesis_judgment.for_ticker(row["ticker"], None))
+    return {**row, "thesis_judgment": judgment} if judgment else row
+
+
+def get_config() -> dict:
+    """The connector's settings as the setup form edits them: every key of ``settings.Settings``
+    the owner sets (model refs as saved, ``None`` = default) and only the PRESENCE of each
+    data-vendor key — a value is revealed through the connector secret-reveal path alone."""
+    trading_agents.require_flag()
+    cfg = settings.load()
+    held = TradingAgentsConfigStore().secrets()
+    return {
+        "deep_model": cfg.deep_model,
+        "quick_model": cfg.quick_model,
+        "analysts": list(cfg.analysts),
+        "max_debate_rounds": cfg.max_debate_rounds,
+        "max_risk_rounds": cfg.max_risk_rounds,
+        "max_tool_rounds": cfg.max_tool_rounds,
+        "max_llm_calls": cfg.max_llm_calls,
+        "bridge_concurrency": cfg.bridge_concurrency,
+        "per_run_cap_usd": cfg.per_run_cap_usd,
+        "monthly_cap_usd": cfg.monthly_cap_usd,
+        "context_level": cfg.context_level,
+        "output_language": cfg.output_language,
+        "sec_edgar_user_agent": cfg.sec_edgar_user_agent,
+        **{f"has_{key}": key in held for key in SECRET_KEYS},
+    }
+
+
+def update_config(changes: dict) -> dict:
+    """Apply a PATCH-shaped settings change and return ``get_config()``. A setting that is
+    ``None`` resets to its default; a data-vendor key that is blank keeps the saved one and
+    ``None`` clears it. Nothing is written when any part is refused."""
+    trading_agents.require_flag()
+    secrets = {k: changes[k] for k in SECRET_KEYS if k in changes}
+    config = {k: v for k, v in changes.items() if k not in secrets}
+    settings.check_model_refs(settings.validate_config(config))
+    settings.update(config, secrets=secrets)
+    return get_config()
 
 
 def delete_run(run_id: str) -> None:
