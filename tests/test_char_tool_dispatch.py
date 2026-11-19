@@ -73,6 +73,23 @@ def test_unified_automation_tools_in_registered_set():
     assert _AUTOMATION_TOOLS <= names
 
 
+# ── registry snapshot: TradingAgents tools (flag trading_agents) ──────────────────
+# Registered whatever the flag says (it hides and refuses them, never un-registers them). Only
+# the start tool asks first; none of the four returns a position-style proposed_change.
+
+_TRADING_AGENTS_TOOLS = {
+    "start_trading_agents_analysis",
+    "get_trading_agents_run",
+    "list_trading_agents_runs",
+    "cancel_trading_agents_run",
+}
+
+
+def test_trading_agents_tools_in_registered_set():
+    names = {t["name"] for t in TOOL_SCHEMAS}
+    assert _TRADING_AGENTS_TOOLS <= names
+
+
 # ── registry snapshot: Lucius parity tools (PARITY #3/#4/#5) ─────────────────────
 # Three tools that close medium-priority gaps from the parity audit:
 #

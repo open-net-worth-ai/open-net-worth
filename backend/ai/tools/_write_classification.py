@@ -94,6 +94,9 @@ READ_ONLY_TOOLS = frozenset(
         "get_alerts",
         # Reads the stored follows (a `search` calls the public filing sources, writes nothing).
         "get_followed_portfolios",
+        # TradingAgents run reads (flag trading_agents): read the runs table, write nothing.
+        "get_trading_agents_run",
+        "list_trading_agents_runs",
         "get_investment_theses",
         # Paper trading reads: derived from the paper event ledger, priced with
         # record_history=False; they write nothing. preview_paper_orders runs the same planner

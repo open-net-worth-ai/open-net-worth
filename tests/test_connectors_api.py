@@ -31,13 +31,20 @@ def client(db_isolated, monkeypatch):
     return TestClient(app)
 
 
+@pytest.mark.flag_both("trading_agents")
 def test_list_has_builtins_never_500(client):
+    from backend.services import trading_agents
+
     res = client.get("/api/connectors")
     assert res.status_code == 200
     ids = {c["id"] for c in res.json()["connectors"]}
     web_search_ids = {i for i in ids if i.startswith("web_search:")}
     assert len(web_search_ids) == 6  # one card per web-search provider (incl. key-free DuckDuckGo)
-    assert ids - web_search_ids == {
+    flagged = (
+        {"trading_agents"} if trading_agents.flag_on() else set()
+    )  # a card only while its flag is on
+    assert ("trading_agents" in ids) is trading_agents.flag_on()
+    assert ids - web_search_ids - flagged == {
         "email",
         "voice",
         "webhook",

@@ -104,7 +104,7 @@ def _assert_no_secret(value: Any, path: str = "config_snapshot") -> None:
             _assert_no_secret(item, path)
 
 
-def _trade_date(value: Optional[str]) -> str:
+def normalize_trade_date(value: Optional[str]) -> str:
     today = user_today()
     if value is None:
         return today.isoformat()
@@ -136,7 +136,7 @@ def _create_row(kw: dict) -> dict:
         "id": new_id("tar"),
         "ticker": ticker_mod.normalize(kw.get("ticker")),
         "instrument_id": kw.get("instrument_id"),
-        "trade_date": _trade_date(kw.get("trade_date")),
+        "trade_date": normalize_trade_date(kw.get("trade_date")),
         "status": QUEUED,
         "requested_by": requested_by,
         "session_id": kw.get("session_id"),

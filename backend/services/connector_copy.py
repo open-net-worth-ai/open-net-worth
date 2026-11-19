@@ -339,6 +339,20 @@ TOOLS: dict[str, list[ConnectorTool]] = {
     "webhook": [
         _t("webhook_send_message", "Send a message to the user's configured webhook right now."),
     ],
+    "trading_agents": [
+        _t(
+            "start_trading_agents_analysis",
+            "Queue a TradingAgents research run on a stock (confirm-first: costs money or quota).",
+            read_only=False,
+        ),
+        _t(
+            "get_trading_agents_run",
+            "Read a run: status, rating, reports, cost and what was shared.",
+            read_only=True,
+        ),
+        _t("list_trading_agents_runs", "List past runs, newest first.", read_only=True),
+        _t("cancel_trading_agents_run", "Stop a queued or running run.", read_only=False),
+    ],
 }
 
 # Short subtitle (card + detail header) per kind.

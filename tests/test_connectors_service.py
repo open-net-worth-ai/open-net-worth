@@ -30,7 +30,10 @@ def _svc():
 # ── default / empty state ──────────────────────────────────────────────────────
 
 
+@pytest.mark.flag_both("trading_agents")
 def test_empty_state_has_builtin_transports_no_mcp():
+    from backend.services import trading_agents
+
     svc = _svc()
     views = svc.list_connectors()
     ids = {v.id for v in views}
@@ -41,7 +44,10 @@ def test_empty_state_has_builtin_transports_no_mcp():
     # Serper, Google PSE, Firecrawl); no servers → no mcp connector.
     web_search_ids = {i for i in ids if i.startswith("web_search:")}
     assert len(web_search_ids) == 6
-    assert ids - web_search_ids == {
+    # TradingAgents is a built-in only while its release flag is on.
+    flagged = {"trading_agents"} if trading_agents.flag_on() else set()
+    assert ("trading_agents" in ids) is trading_agents.flag_on()
+    assert ids - web_search_ids - flagged == {
         "email",
         "voice",
         "webhook",

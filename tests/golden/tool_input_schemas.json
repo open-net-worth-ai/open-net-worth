@@ -11533,5 +11533,100 @@
       }
     },
     "additionalProperties": false
+  },
+  "start_trading_agents_analysis": {
+    "additionalProperties": false,
+    "properties": {
+      "ticker": {
+        "description": "The stock to analyse, e.g. ACME or ACME.L.",
+        "type": "string"
+      },
+      "trade_date": {
+        "type": "string",
+        "description": "The day to analyse as YYYY-MM-DD, never in the future. Default today."
+      },
+      "analysts": {
+        "items": {
+          "enum": [
+            "market",
+            "social",
+            "news",
+            "fundamentals"
+          ],
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Which analysts to run. Default: the ones set on the TradingAgents connector."
+      },
+      "context_level": {
+        "enum": [
+          "investments",
+          "position",
+          "ticker"
+        ],
+        "type": "string",
+        "description": "What it may know about the owner's holdings: `investments` (cash and every investment position, real amounts), `position` (cash and only this ticker's position) or `ticker` (nothing). Default: the level set on the connector."
+      }
+    },
+    "required": [
+      "ticker"
+    ],
+    "type": "object"
+  },
+  "get_trading_agents_run": {
+    "additionalProperties": false,
+    "properties": {
+      "run_id": {
+        "description": "The run id `start_trading_agents_analysis` returned (tar_...).",
+        "type": "string"
+      }
+    },
+    "required": [
+      "run_id"
+    ],
+    "type": "object"
+  },
+  "list_trading_agents_runs": {
+    "additionalProperties": false,
+    "properties": {
+      "ticker": {
+        "type": "string",
+        "description": "Only runs on this ticker."
+      },
+      "status": {
+        "enum": [
+          "queued",
+          "running",
+          "done",
+          "failed",
+          "cancelled",
+          "stopped_budget",
+          "stopped_calls",
+          "timed_out",
+          "interrupted"
+        ],
+        "type": "string",
+        "description": "Only runs in this status."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "How many runs, newest first. Default 10, max 20."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "cancel_trading_agents_run": {
+    "additionalProperties": false,
+    "properties": {
+      "run_id": {
+        "description": "The queued or running run to stop.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "run_id"
+    ],
+    "type": "object"
   }
 }
