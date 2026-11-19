@@ -259,11 +259,17 @@ jobs:
   # gates on (it was a step of test-windows and held `ci ok` to ~33 min). Pushes to main only:
   # on every PR it cost a Windows runner 50+ min. Remaining failures: docs/WINDOWS.md.
   test-windows-full:
-    name: test (windows, full suite, informational)
+    # Sharded: in one runner it reached 93% in 50 min and was cut off (a timeout reads as a
+    # CANCELLED run, even with continue-on-error).
+    name: test (windows, full suite ${{ matrix.shard }}/3, informational)
     if: ${{ github.event_name == 'push' }}
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 40
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     defaults:
       run:
         shell: bash
@@ -276,7 +282,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           editable: "true"
       - name: Full suite (informational)
-        run: python -m pytest -q -p no:randomly -m "not integration" -n auto --no-header -rfE tests
+        run: >
+          python -m pytest -q -p no:randomly -m "not integration" -n auto --no-header -rfE
+          --shard=${{ matrix.shard }}/3 tests
 
   # --- db: the ENTIRE tests/db suite again, against real Postgres. This is the
   # second-dialect gate (spec 2026-08-05 D1): any SQLite-only SQL fails here,
