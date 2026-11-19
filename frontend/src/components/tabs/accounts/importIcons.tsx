@@ -1,3 +1,5 @@
+import { LuciusMark } from '../../../ui/LuciusMark'
+
 /** The import flow's stroke icons and the Lucius spark, shared by the modal and its Booked
  *  screen. */
 export function Ic({ d, size = 16, sw = 1.8 }: { d: string; size?: number; sw?: number }) {
@@ -15,14 +17,9 @@ export function Ic({ d, size = 16, sw = 1.8 }: { d: string; size?: number; sw?: 
     />
   )
 }
-/** The handoff's own Lucius spark, verbatim from `flow3.jsx` (a filled four-point star
- *  with a smaller second sparkle) — the glyph the Choose, Read and Booked steps all use. */
+/** The Lucius mark the Choose, Read and Booked steps all use. */
 export function Spark({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2l2.1 6.4L20 10l-5.9 1.6L12 18l-2.1-6.4L4 10l5.9-1.6L12 2zm7 12l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" />
-    </svg>
-  )
+  return <LuciusMark size={size} aria-hidden="true" />
 }
 export const I_CHECK = '<path d="M20 6 9 17l-5-5"/>'
 export const I_WARN =

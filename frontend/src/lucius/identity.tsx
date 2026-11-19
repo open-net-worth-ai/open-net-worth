@@ -8,6 +8,7 @@
 // Rule: symbol characters (⬡ ◈ ↕) render optically off-centre in their box;
 // these inline SVGs sit dead-centre at any size.
 
+import { LuciusMark } from '../ui/LuciusMark'
 import { colorFor } from './mentionColors'
 
 // ── inline SVGs for common entity chips ──────────────────────────────────────
@@ -24,7 +25,7 @@ export const GLYPH_SVG: Record<string, string> = {
   transaction:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 21V4M8.5 4 5.5 7M8.5 4 11.5 7"/><path d="M15.5 3v17M15.5 20 12.5 17M15.5 20 18.5 17"/></svg>',
   agent:
-    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 13.7 10.3 21 12 13.7 13.7 12 21 10.3 13.7 3 12 10.3 10.3Z"/></svg>',
+    '<svg viewBox="-315 -315 630 630" fill="currentColor"><path d="M227.33 70.18 302.43 0 227.33 -70.18 204.61 0ZM-227.33 70.18 -204.61 0 -227.33 -70.18 -302.43 0ZM70.18 227.33 0 204.61 -70.18 227.33 0 302.43ZM70.18 -227.33 0 -302.43 -70.18 -227.33 0 -204.61ZM144.68 -144.68 210.38 -111.12 213.85 -213.85 111.12 -210.38ZM144.68 144.68 111.12 210.38 213.85 213.85 210.38 111.12ZM-210.38 -111.12 -144.68 -144.68 -111.12 -210.38 -213.85 -213.85ZM-111.12 210.38 -144.68 144.68 -210.38 111.12 -213.85 213.85Z"/></svg>',
   skill:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4 9.5 20"/></svg>',
   // The sidebar's Connectors icon (lucide Share2) — for a connector with no brand mark of its
@@ -75,38 +76,24 @@ export function initials(name: string): string {
   return (w.length === 1 ? first.slice(0, 2) : (first[0] ?? '') + (last[0] ?? '')).toUpperCase()
 }
 
-// ── Spark — the Lucius identity mark (star SVG, used in brand/pill) ───────────
+// ── Spark — the Lucius identity mark (the diamond's octagon, used in brand/pill) ──
 export function Spark({
   size = 15,
   className,
-  filled = false,
   ariaHidden,
 }: {
   size?: number
   className?: string
-  /** Solid star instead of outline — a thin stroke reads as washed-out at icon-only
-   *  sizes (e.g. a collapsed mobile button with no label to carry the rest of the
-   *  affordance). The two small accent crosses stay stroke-only either way: they are
-   *  open line segments with no enclosed area, so `fill` has nothing to fill. */
+  /** Kept for callers from the star era; the octagon is always solid. */
   filled?: boolean
   ariaHidden?: boolean | 'true' | 'false'
 }) {
   return (
-    <svg
+    <LuciusMark
       className={className ? `acct-spark ${className}` : 'acct-spark'}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill={filled ? 'currentColor' : 'none'}
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      size={size}
       aria-hidden={ariaHidden}
-    >
-      <path d="M9.94 14.06A2 2 0 0 0 8.5 12.6l-5.4-1.4a.4.4 0 0 1 0-.78l5.4-1.4A2 2 0 0 0 9.94 7.6l1.4-5.4a.4.4 0 0 1 .78 0l1.4 5.4A2 2 0 0 0 14.96 9l5.4 1.4a.4.4 0 0 1 0 .78l-5.4 1.4a2 2 0 0 0-1.44 1.44l-1.4 5.4a.4.4 0 0 1-.78 0z" />
-      <path d="M19 4v3M20.5 5.5h-3M18 17v2M19 18h-2" />
-    </svg>
+    />
   )
 }
 

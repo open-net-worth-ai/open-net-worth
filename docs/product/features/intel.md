@@ -44,7 +44,7 @@ For a story rather than one stock — an IPO, a war, interest rates:
 
 1. Open the **Topics & macro** tab.
 2. Type it into **Follow another topic** — e.g. *"SpaceX IPO and relevant stocks"* — and click
-   **Add via Lucius ✦**. Lucius sets up the search terms and related tickers.
+   **Add via Lucius**. Lucius sets up the search terms and related tickers.
 3. Click the topic to edit its name, its **Instructions for Lucius** (what to watch for and flag),
    and its tickers.
 

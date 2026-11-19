@@ -16,7 +16,7 @@ describe('RefreshingBanner', () => {
 
   it('falls back to a neutral caption when the stage is not yet known', () => {
     render(<RefreshingBanner />)
-    expect(screen.getByText('Refreshing ✦')).toBeTruthy()
+    expect(screen.getByText('Refreshing')).toBeTruthy()
   })
 
   it('exposes a polite status role for assistive tech', () => {

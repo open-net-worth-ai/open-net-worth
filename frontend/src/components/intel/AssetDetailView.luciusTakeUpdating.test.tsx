@@ -104,7 +104,7 @@ describe("AssetDetailView — Lucius's take card, scoped background-refresh indi
     render(<AssetDetailView instrumentId="kstl" />)
 
     // The card itself rendered (gated on portfolio_impact).
-    const label = screen.getByText("Lucius's take on your position ✦")
+    const label = screen.getByText("Lucius's take on your position")
     const badge = screen.getByRole('status', {
       name: "Lucius's take is updating in the background",
     })
@@ -119,7 +119,7 @@ describe("AssetDetailView — Lucius's take card, scoped background-refresh indi
 
     render(<AssetDetailView instrumentId="kstl" />)
 
-    expect(screen.getByText("Lucius's take on your position ✦")).toBeTruthy()
+    expect(screen.getByText("Lucius's take on your position")).toBeTruthy()
     expect(
       screen.queryByRole('status', { name: "Lucius's take is updating in the background" }),
     ).toBeNull()
@@ -143,7 +143,7 @@ describe("AssetDetailView — Lucius's take card, scoped background-refresh indi
 
     render(<AssetDetailView instrumentId="kstl" />)
 
-    expect(screen.queryByText("Lucius's take on your position ✦")).toBeNull()
+    expect(screen.queryByText("Lucius's take on your position")).toBeNull()
     expect(
       screen.queryByRole('status', { name: "Lucius's take is updating in the background" }),
     ).toBeNull()
@@ -224,6 +224,6 @@ describe("AssetDetailView — Lucius's take card, scoped background-refresh indi
       name: "Lucius's take is updating in the background",
     })
     expect(badge.textContent).toContain('Generating')
-    expect(screen.queryByText('Searching the web for news ✦')).toBeNull()
+    expect(screen.queryByText('Searching the web for news')).toBeNull()
   })
 })

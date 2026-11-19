@@ -1,3 +1,4 @@
+import { LuciusMark } from '../ui/LuciusMark'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, TextField } from './ui'
 import { Badge } from './ui/Badge'
@@ -739,7 +740,7 @@ export function CommandPalette({
                   }}
                 >
                   <span className="cmdk-item-icon" aria-hidden="true">
-                    ✦
+                    <LuciusMark size="1em" aria-hidden="true" />
                   </span>
                   <span className="cmdk-item-label">
                     <span className="cmdk-item-ask-prefix">Ask Lucius: </span>

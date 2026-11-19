@@ -21,7 +21,7 @@ describe('ResearchingStatus', () => {
 
   it('shows a neutral, non-cycling caption when no stage is known yet', () => {
     render(<ResearchingStatus />)
-    expect(screen.getByText('Refreshing ✦')).toBeTruthy()
+    expect(screen.getByText('Refreshing')).toBeTruthy()
     // None of the real stage labels are guessed while the stage is unknown.
     for (const label of Object.values(STAGE_LABELS)) {
       expect(screen.queryByText(label)).toBeFalsy()
@@ -30,6 +30,6 @@ describe('ResearchingStatus', () => {
 
   it('treats a null stage the same as unknown', () => {
     render(<ResearchingStatus stage={null} />)
-    expect(screen.getByText('Refreshing ✦')).toBeTruthy()
+    expect(screen.getByText('Refreshing')).toBeTruthy()
   })
 })

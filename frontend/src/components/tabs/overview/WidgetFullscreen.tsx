@@ -12,6 +12,7 @@
 // (the edits already landed). This is the SAME live-preview-with-discard
 // model Customize mode uses for the whole layout — just scoped to one item.
 
+import { LuciusMark } from '../../../ui/LuciusMark'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, ReactElement, ReactNode } from 'react'
@@ -644,7 +645,7 @@ export function WidgetFullscreen({
               onAskLucius?.(p)
             }}
           >
-            ✦ Regenerate
+            <LuciusMark size="1em" aria-hidden="true" /> Regenerate
           </button>
         </div>
       ),

@@ -1,3 +1,4 @@
+import { LuciusMark } from '../../ui/LuciusMark'
 import { useEffect, useState } from 'react'
 import { authFetch } from '../../api/client'
 import { InfoPopover, Panel, Skeleton, Text } from '../ui'
@@ -217,7 +218,9 @@ export function FundamentalsSnapshot({ instrumentId }: Props) {
         {(data?.narrative || narrating) && (
           <div className="asd-pi-wrap">
             <div className="asd-pi-head">
-              <p className="asd-pi-label">Fundamental Analysis ✦</p>
+              <p className="asd-pi-label">
+                Fundamental Analysis <LuciusMark size="1em" aria-hidden="true" />
+              </p>
               {narrating && (
                 <span
                   className="asd-pi-updating"

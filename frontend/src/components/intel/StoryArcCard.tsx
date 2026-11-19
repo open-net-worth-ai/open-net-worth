@@ -1,3 +1,4 @@
+import { LuciusMark } from '../../ui/LuciusMark'
 import { useState } from 'react'
 import { authFetch } from '../../api/client'
 import {
@@ -248,7 +249,10 @@ export function StoryArcCard({
         {/* footer */}
         <div className="intel-story-foot">
           <button type="button" className="intel-story-ask" onClick={askLucius}>
-            Ask Lucius <span className="intel-story-ask-spark">✦</span>
+            Ask Lucius{' '}
+            <span className="intel-story-ask-spark">
+              <LuciusMark size="1em" aria-hidden="true" />
+            </span>
           </button>
           <div className="intel-story-foot-actions">
             {archived ? (

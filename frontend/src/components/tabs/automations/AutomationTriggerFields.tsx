@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Clock3, Sparkles, Zap } from 'lucide-react'
+import { Clock3, Zap } from 'lucide-react'
+import { LuciusMark } from '../../../ui/icons'
 import type { AutomationEventType, AutomationTrigger, ScheduleType } from '../../../api/automations'
 import type { AutomationOptions } from './AutomationTriggerSummary'
 import { EMPTY_AUTOMATION_OPTIONS, missingTriggerFields } from './AutomationTriggerSummary'
@@ -315,7 +316,7 @@ export function AutomationTriggerFields({
                   className="a3-linkbtn a3-lucius-link"
                   onClick={onAskForCadence}
                 >
-                  <Sparkles size={12} aria-hidden="true" />
+                  <LuciusMark size={12} aria-hidden="true" />
                   Create via Lucius for a custom cadence
                 </button>
               ) : undefined

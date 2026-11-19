@@ -13,7 +13,7 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import type { InvestmentSignal } from '../../../types/investmentSignals'
 import type { DerivedBook } from './useInvestmentsBook'
-import { Sparkles, ArrowRight, ChevronRight } from '../../../ui/icons'
+import { LuciusMark, ArrowRight, ChevronRight } from '../../../ui/icons'
 import { Skeleton } from '../../ui/Skeleton'
 import { usePortfolioDrivers } from '../../../hooks/usePortfolioDrivers'
 import { DriverChips } from '../../shared/DriverChips'
@@ -87,7 +87,7 @@ function BriefSkeleton({
     <section ref={rootRef} className="intel-brief-card" aria-busy="true">
       <div className="intel-brief-head">
         <span className="lx-mark">
-          <Sparkles size={13} />
+          <LuciusMark size={13} />
         </span>
         <span className="intel-brief-title">Portfolio brief</span>
       </div>
@@ -157,7 +157,7 @@ export function Brief({
     <section ref={rootRef} className="intel-brief-card">
       <div className="intel-brief-head">
         <span className="lx-mark">
-          <Sparkles size={13} />
+          <LuciusMark size={13} />
         </span>
         <span className="intel-brief-title">Portfolio brief</span>
         {decisionsCount > 0 && <span className="intel-brief-pill">{decisionsCount} to decide</span>}

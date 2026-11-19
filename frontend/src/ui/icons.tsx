@@ -159,6 +159,9 @@ export {
   Image as ImageIcon,
 } from 'lucide-react'
 
+// Lucius's own mark (the diamond's octagon) — use this, not Sparkles, for anything Lucius does.
+export { LuciusMark } from './LuciusMark'
+
 // Shared sizing for the sidebar nav icons. (.sidebar-icon svg in index.css also
 // boxes them to 20×20; strokeWidth 1.5 matches the app's thin-line house style.)
 export const NAV_ICON_PROPS = { size: 20, strokeWidth: 1.5 } as const

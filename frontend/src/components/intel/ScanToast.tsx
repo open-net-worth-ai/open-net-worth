@@ -1,4 +1,4 @@
-import { Check, X } from '../../ui/icons'
+import { Check, LuciusMark, X } from '../../ui/icons'
 
 // Scan progress indicator — distinct from the chat "Ask Lucius" flow. A centered
 // bottom pill: a spinner while the scan runs, then a teal-check summary that
@@ -32,7 +32,10 @@ export function ScanToast({ scan, onClose }: { scan: ScanState; onClose: () => v
           <div className="intel-scan-title">
             {scanning ? (
               <>
-                Analysing key developments <span className="intel-scan-spark">✦</span>
+                Analysing key developments{' '}
+                <span className="intel-scan-spark">
+                  <LuciusMark size="1em" aria-hidden="true" />
+                </span>
               </>
             ) : error ? (
               'Scan failed'

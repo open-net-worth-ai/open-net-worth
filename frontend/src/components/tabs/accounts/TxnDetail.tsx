@@ -1,4 +1,5 @@
 // TxnDetail.tsx — transaction detail drawer: View ⇄ Edit modes
+import { LuciusMark } from '../../../ui/LuciusMark'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { StatementViewer } from './StatementsSection'
@@ -242,7 +243,12 @@ const SVG_D: Record<string, string> = {
   opening: '<path d="M5 21V4"/><path d="M5 4h11l-2 3.5L16 11H5"/>',
 }
 function DSourceIcon({ source }: { source: string }) {
-  if (source === 'ai') return <span className="acct-src-ic lucius">✦</span>
+  if (source === 'ai')
+    return (
+      <span className="acct-src-ic lucius">
+        <LuciusMark size="1em" aria-hidden="true" />
+      </span>
+    )
   return (
     <span className={`acct-src-ic${source === 'agent' ? ' agent' : ''}`}>
       <svg

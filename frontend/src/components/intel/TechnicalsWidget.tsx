@@ -1,3 +1,4 @@
+import { LuciusMark } from '../../ui/LuciusMark'
 import { useEffect, useState } from 'react'
 import { authFetch } from '../../api/client'
 import { Badge, InfoPopover, Panel, SegmentedControl, Skeleton, Text } from '../ui'
@@ -204,7 +205,9 @@ export function TechnicalsWidget({ instrumentId }: Props) {
         {(data?.narrative || narrating) && (
           <div className="asd-pi-wrap">
             <div className="asd-pi-head">
-              <p className="asd-pi-label">Technical Analysis ✦</p>
+              <p className="asd-pi-label">
+                Technical Analysis <LuciusMark size="1em" aria-hidden="true" />
+              </p>
               {narrating && (
                 <span
                   className="asd-pi-updating"

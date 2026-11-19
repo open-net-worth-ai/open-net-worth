@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Check, Sparkles } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { LuciusMark } from '../../../../ui/icons'
 import { authFetch } from '../../../../api/client'
 import { useCategories } from '../../../../hooks/useCategories'
 import { useChatComposerOptional } from '../../../../state/chatComposer'
@@ -313,7 +314,7 @@ function CategorizeWithLucius({ r, onClose }: { r: RunRecord; onClose: () => voi
       size="sm"
       variant="primary"
       className="bs-run-lucius"
-      iconLeft={<Sparkles size={13} aria-hidden="true" />}
+      iconLeft={<LuciusMark size={13} aria-hidden="true" />}
       onClick={() => {
         composer.setPendingText(prompt)
         composer.requestOpen(true)

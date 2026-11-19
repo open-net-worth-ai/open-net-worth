@@ -2,6 +2,7 @@
 // Mounted as the root route component inside <RouterProvider>.
 // Reads auth/logout/authChanged from router context via useRouteContext.
 
+import { LuciusMark } from './ui/LuciusMark'
 import { useGatewayIdentity } from './hooks/useGatewayIdentity'
 import {
   Fragment,
@@ -1510,7 +1511,8 @@ function RouterShellInner() {
                           }}
                           title="Lucius — ⌘/"
                         >
-                          Lucius ✦<kbd className="cmdk-btn-kbd">⌘/</kbd>
+                          Lucius <LuciusMark size="1em" aria-hidden="true" />
+                          <kbd className="cmdk-btn-kbd">⌘/</kbd>
                         </button>
                       )}
                     </div>

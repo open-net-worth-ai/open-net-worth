@@ -1,3 +1,4 @@
+import { LuciusMark } from '../../ui/LuciusMark'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { entityRefProps } from '../../utils/mentionable'
@@ -994,7 +995,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                   return (
                     <div className="asd-pi-wrap">
                       <div className="asd-pi-head">
-                        <p className="asd-pi-label">Lucius's take on your position ✦</p>
+                        <p className="asd-pi-label">
+                          Lucius's take on your position{' '}
+                          <LuciusMark size="1em" aria-hidden="true" />
+                        </p>
                         {/* Card-scoped counterpart to the page-level RefreshingBanner (owner
                             clarification, ADR addendum "an on-demand top-up"): the banner alone
                             doesn't make clear THIS card is what's being refreshed. */}

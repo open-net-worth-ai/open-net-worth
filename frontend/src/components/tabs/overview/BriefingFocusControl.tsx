@@ -1,6 +1,7 @@
 // The daily briefing widget's prompt box. Unlike a Lucius-generated widget (whose prompt goes to
 // chat), this edits the briefing's own standing instruction on the server — and Regenerate
 // rewrites the card with it.
+import { LuciusMark } from '../../../ui/LuciusMark'
 import { useEffect, useState } from 'react'
 import { Text } from '../../ui'
 import { readBriefingFocus, saveBriefingFocus } from '../../shared/briefingFocus'
@@ -65,7 +66,13 @@ export function BriefingFocusControl({
         disabled={value == null || status === 'saving'}
         onClick={() => void regenerate()}
       >
-        {status === 'saving' ? 'Regenerating…' : '✦ Regenerate'}
+        {status === 'saving' ? (
+          'Regenerating…'
+        ) : (
+          <>
+            <LuciusMark size="1em" aria-hidden="true" /> Regenerate
+          </>
+        )}
       </button>
     </div>
   )

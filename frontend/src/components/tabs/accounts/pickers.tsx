@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Sparkles, Plus, X, Check, ChevronLeft, ChevronRight, Settings } from '../../../ui/icons'
+import { LuciusMark, Plus, X, Check, ChevronLeft, ChevronRight, Settings } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { fDate } from '../../../utils/format'
 import type { Account, Category } from './types'
@@ -156,11 +156,11 @@ export function SourceIcon({
   if (source === 'ai')
     return variant === 'mono' ? (
       <span className="acct-src-ic" title="Added by Lucius">
-        <Sparkles size={13} aria-hidden="true" />
+        <LuciusMark size={13} aria-hidden="true" />
       </span>
     ) : (
       <span className="acct-src-ic lucius" title="Added by Lucius">
-        ✦
+        <LuciusMark size="1em" aria-hidden="true" />
       </span>
     )
   if (source === 'bank')

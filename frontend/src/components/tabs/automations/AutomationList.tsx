@@ -1,4 +1,5 @@
-import { ArrowUpDown, ChevronDown, Plus, Search, Sparkles, Wrench } from 'lucide-react'
+import { ArrowUpDown, ChevronDown, Plus, Search, Wrench } from 'lucide-react'
+import { LuciusMark } from '../../../ui/icons'
 import type { Automation, AutomationDraft } from '../../../api/automations'
 import { AutomationCard } from './AutomationCard'
 import { AutomationFinishedSection } from './AutomationFinishedSection'
@@ -172,7 +173,7 @@ export function AutomationList({
               label: 'Create with Lucius',
               icon: (
                 <span className="a3-menu-ic lucius">
-                  <Sparkles size={13} aria-hidden="true" />
+                  <LuciusMark size={13} aria-hidden="true" />
                 </span>
               ),
               onSelect: () => onAskLucius(NEW_AUTOMATION_PROMPT),

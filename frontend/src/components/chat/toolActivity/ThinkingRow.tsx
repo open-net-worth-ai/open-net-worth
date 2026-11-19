@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { SAFE_MARKDOWN_COMPONENTS } from '../../ui/safeMarkdown'
 import remarkGfm from 'remark-gfm'
-import { ChevronDown, Sparkles } from '../../../ui/icons'
+import { ChevronDown, LuciusMark } from '../../../ui/icons'
 import { previewText } from './previewText'
 
 /** The row itself, for use INSIDE an existing `.msg-toolact__rail`. */
@@ -52,9 +52,9 @@ export function ThinkingRow({ text, streaming }: { text: string; streaming?: boo
         onClick={() => setChoice(!open)}
       >
         <span className="msg-toolact__icon">
-          {/* Sparkles is the app's Lucius mark ("Ask Lucius about…") — the reasoning is
+          {/* LuciusMark is the app's Lucius mark ("Ask Lucius about…") — the reasoning is
               Lucius's, so it wears Lucius's icon rather than a generic brain. */}
-          <Sparkles size={14} strokeWidth={1.5} aria-hidden="true" />
+          <LuciusMark size={14} strokeWidth={1.5} aria-hidden="true" />
         </span>
         <span className="msg-toolact__label msg-toolact__label--think">
           {/* OPEN: a plain header. The clamped preview is the first two lines of the very

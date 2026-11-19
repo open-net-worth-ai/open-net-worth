@@ -1,6 +1,7 @@
 // ImportModal.tsx — every route (Lucius AND manual column mapping) previews + commits
 // through the ONE server decision pipeline; the manual mapping is sent to the server as a
 // TEACH (saved as the source's format profile) before the same decision preview runs.
+import { LuciusMark } from '../../../ui/LuciusMark'
 import { Fragment, useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react'
 import { authFetch } from '../../../api/client'
 import { Modal, Button, FormField, Select, EmptyState, SegmentedControl } from '../../ui'
@@ -726,7 +727,9 @@ function LuciusNote({ preview }: { preview: ImportPreviewResult }) {
   if (!profile && !flagged && !routing) return null
   return (
     <div className="imp3-lunote">
-      <i>✦</i>
+      <i>
+        <LuciusMark size="1em" aria-hidden="true" />
+      </i>
       <div className="imp3-lunote-b">
         {profile && <span>{profile}</span>}
         {flagged && (
@@ -6433,7 +6436,9 @@ export function ImportModal({
                       <div className="imp3-cmp-src pad">{d.description}</div>
                     )}
                     <div className="imp3-why">
-                      <i aria-hidden="true">✦</i>
+                      <i aria-hidden="true">
+                        <LuciusMark size="1em" aria-hidden="true" />
+                      </i>
                       <span>{reason}</span>
                     </div>
                     {resolved && hasChangeAlternative && (
@@ -7635,12 +7640,18 @@ export function ImportModal({
                         <div className="imp3-teach">
                           {teach === 'saved' ? (
                             <span className="imp3-teach-t">
-                              <i>✦</i>Saved — applies to future imports from this source.
+                              <i>
+                                <LuciusMark size="1em" aria-hidden="true" />
+                              </i>
+                              Saved — applies to future imports from this source.
                             </span>
                           ) : (
                             <>
                               <span className="imp3-teach-t">
-                                <i>✦</i>Remember something about {account?.name || 'this source'}’s
+                                <i>
+                                  <LuciusMark size="1em" aria-hidden="true" />
+                                </i>
+                                Remember something about {account?.name || 'this source'}’s
                                 statements?
                               </span>
                               {teach === 'editing' ? (

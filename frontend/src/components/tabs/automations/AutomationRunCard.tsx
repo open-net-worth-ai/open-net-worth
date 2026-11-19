@@ -1,4 +1,5 @@
-import { Check, ChevronRight, FileText, Folder, Sparkles, X } from 'lucide-react'
+import { Check, ChevronRight, FileText, Folder, X } from 'lucide-react'
+import { LuciusMark } from '../../../ui/icons'
 import { useToolOwnerLogos } from '../../chat/toolActivity/useToolOwnerLogos'
 import { useAccounts } from '../../../hooks/serverState/useAccounts'
 import { AccIcon } from '../accounts/ds'
@@ -289,7 +290,7 @@ function ContextFiles({
       {values.map((item) => (
         <div className="a3-file" key={item}>
           <span className={`kind${remembered ? ' remembered' : ''}`}>
-            {remembered ? <Sparkles size={11} /> : <FileText size={12} />}
+            {remembered ? <LuciusMark size={11} /> : <FileText size={12} />}
           </span>
           <span className="n">{item}</span>
         </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, InfoPopover, TextField } from '../ui'
-import { Sparkles } from '../../ui/icons'
+import { LuciusMark } from '../../ui/icons'
 import { IntelCardHead } from './IntelCardHead'
 import type { WatchlistItem } from './WatchlistsSection'
 
@@ -30,7 +30,7 @@ export function TopicsStrip({ topics, onEditTopic, onAddTopic }: Props) {
   return (
     <section className="intel-brief-card">
       <IntelCardHead
-        icon={<Sparkles size={13} />}
+        icon={<LuciusMark size={13} />}
         title="Topics you follow"
         info={<InfoPopover text={ABOUT} width={300} />}
       />
@@ -94,7 +94,7 @@ function FollowTopicRow({ onAdd }: { onAdd: (t: string) => void }) {
         aria-label="Follow another topic"
       />
       <Button variant="primary" onClick={submit} disabled={!val.trim()}>
-        Add via Lucius ✦
+        Add via Lucius <LuciusMark size="1em" aria-hidden="true" />
       </Button>
     </div>
   )
