@@ -10139,9 +10139,13 @@ button.acct-alert-src {
   flex-shrink: 0;
   padding-right: 4px;
 }
+/* Centred on the line box the × sits ~1px above lowercase tag text (whose x-height centre is below
+   it), so it reads as floating high — drop it onto the letters. */
 .acct-tagf-x {
   display: inline-flex;
   align-items: center;
+  position: relative;
+  top: 1px;
   border: none;
   background: transparent;
   color: var(--muted);
