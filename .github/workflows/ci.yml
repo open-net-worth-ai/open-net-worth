@@ -253,12 +253,29 @@ jobs:
           tests/test_desktop_runtime_build.py tests/test_keep_awake.py tests/test_cli_auto_upgrade.py
           tests/test_cli_status.py tests/test_cli_upgrade_request.py tests/test_cli_background.py
           tests/test_cli_help.py
-      # Pushes to main only, in parallel: run serially on every PR it took 50+ min, and the run
-      # (and the windows runner) stayed busy that long for a result nobody gates on.
+
+  # --- test-windows-full: the WHOLE suite on Windows, as information only. Its own job, outside
+  # `ci ok`'s needs, so the gate reports in minutes instead of waiting ~30 for a result nobody
+  # gates on (it was a step of test-windows and held `ci ok` to ~33 min). Pushes to main only:
+  # on every PR it cost a Windows runner 50+ min. Remaining failures: docs/WINDOWS.md.
+  test-windows-full:
+    name: test (windows, full suite, informational)
+    if: ${{ github.event_name == 'push' }}
+    runs-on: windows-latest
+    timeout-minutes: 50
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-backend
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          editable: "true"
       - name: Full suite (informational)
-        if: ${{ always() && github.event_name == 'push' }}
-        continue-on-error: true
-        timeout-minutes: 30
         run: python -m pytest -q -p no:randomly -m "not integration" -n auto --no-header -rfE tests
 
   # --- db: the ENTIRE tests/db suite again, against real Postgres. This is the
