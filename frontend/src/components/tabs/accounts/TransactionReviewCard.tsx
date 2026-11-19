@@ -5,8 +5,8 @@ import type { Account, Category, Txn } from './types'
 import type { CatKind } from './AddCategoryModal'
 import { ReviewChoices, ReviewSummary } from './ReviewSummary'
 import { TransactionReviewPeek } from './TransactionReviewPeek'
-import { SourceIcon, type PayeeOption } from './pickers'
-import { HAS_PAYEE, ReviewDetails, type ReviewEditing } from './ReviewDetails'
+import { SourceIcon } from './pickers'
+import { ReviewTags } from './ReviewTags'
 import { useListFitsStage, useSmoothCardHeight } from './reviewCardHeight'
 
 interface Props {
@@ -42,8 +42,6 @@ interface Props {
   onAllDetails: () => void
   /** Straight to the drawer's editor, with this card's unsaved picks filled in. */
   onEditAll: () => void
-  /** Payee picker options for the tapped-open card. */
-  payeeOptions: PayeeOption[]
   /** "Create “name”" in the category search: makes the category (palette colour, like every
    *  other create) and resolves to it, so the card can pick it. */
   onCreateCategory?: (name: string, kind: CatKind) => Promise<Category>
@@ -82,20 +80,11 @@ function swipeThreshold(card: HTMLDivElement | null): number {
 
 export function TransactionReviewCard(props: Props) {
   const { txn, account, draft, busy } = props
-  // Tapped open: the facts panel shows the editable rows. Per card — the card is keyed by row,
-  // so the next one always arrives closed.
-  const [expanded, setExpanded] = useState(false)
-  // The one value being edited in place on the open card (payee search, memo), if any.
-  const [editing, setEditing] = useState<ReviewEditing>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   // The draft as of now — a category create resolves after a request, and must not write back
   // a draft from before whatever the reviewer changed meanwhile.
   const draftRef = useRef(draft)
   draftRef.current = draft
-  const collapse = () => {
-    setEditing(null)
-    setExpanded(false)
-  }
   const createCategory = props.onCreateCategory
     ? (name: string) => {
         setCreateError(null)
@@ -302,19 +291,17 @@ export function TransactionReviewCard(props: Props) {
           {/* Two grounds, no rule between them: the facts on a panel tinted by kind, the one
               decision (the category) on the plain surface it rests on — YNAB's card language. */}
           <div
-            className={'acct-review-facts' + (expanded ? ' is-expanded' : '')}
+            className="acct-review-facts"
             data-kind={draft.kind}
-            // A tap anywhere on the facts opens the card — the thumb's reach, unlike the head's
-            // corner. Controls inside (and the open rows) keep their own taps.
+            // A tap on the facts opens the full transaction — the card itself edits only the
+            // category and tags; payee, date, memo and the rest are the drawer's (owner,
+            // 2026-11-19). Controls inside keep their own taps.
             onClick={(event) => {
               const target = event.target as Element
-              if (expanded || target.closest('button, input, select, textarea, a, label')) return
-              setExpanded(true)
+              if (target.closest('button, input, select, textarea, a, label')) return
+              props.onAllDetails()
             }}
           >
-            {/* The account name, then the source line on a row of its own. Details and Edit used
-                to sit in this corner, out of a phone thumb's reach; a tap on the facts (or the
-                Details pill below the amount) opens the card instead (2026-11-19). */}
             <div className="acct-review-card-head">
               <b>
                 <Wallet size={16} aria-hidden="true" />
@@ -332,45 +319,7 @@ export function TransactionReviewCard(props: Props) {
                 <span className="acct-review-source-text">{sourceLine(txn)}</span>
               </span>
             </div>
-            <ReviewSummary
-              txn={txn}
-              accounts={props.accounts}
-              draft={draft}
-              onEditPayee={
-                expanded && HAS_PAYEE.has(draft.kind) ? () => setEditing('payee') : undefined
-              }
-              onDateChange={
-                expanded ? (date) => props.onDraftChange({ ...draft, date }) : undefined
-              }
-            />
-            {expanded ? (
-              <ReviewDetails
-                txn={txn}
-                draft={draft}
-                onDraftChange={props.onDraftChange}
-                payeeOptions={props.payeeOptions}
-                editing={editing}
-                onEdit={setEditing}
-                onAllDetails={props.onAllDetails}
-                onCollapse={collapse}
-              />
-            ) : (
-              <div className="acct-review-expand-row">
-                <button
-                  type="button"
-                  className="acct-review-expand"
-                  aria-expanded="false"
-                  onClick={() => setExpanded(true)}
-                >
-                  <Info size={14} aria-hidden="true" />
-                  Details
-                </button>
-                <button type="button" className="acct-review-expand" onClick={props.onEditAll}>
-                  <Pencil size={14} aria-hidden="true" />
-                  Edit
-                </button>
-              </div>
-            )}
+            <ReviewSummary txn={txn} accounts={props.accounts} draft={draft} />
           </div>
           <ReviewChoices
             txn={txn}
@@ -381,6 +330,23 @@ export function TransactionReviewCard(props: Props) {
             suggestedCategoryIds={props.suggestedCategoryIds}
             onCreateCategory={createCategory}
           />
+          {/* The card's other decision: tags, tapped from your own — no typing needed. */}
+          <ReviewTags
+            tags={draft.tags}
+            onChange={(tags) => props.onDraftChange({ ...draft, tags })}
+          />
+          {/* Everything else is the drawer's. Down here, in the thumb's reach; both carry the
+              card's unsaved category and tags into it. */}
+          <div className="acct-review-expand-row">
+            <button type="button" className="acct-review-expand" onClick={props.onAllDetails}>
+              <Info size={14} aria-hidden="true" />
+              Details
+            </button>
+            <button type="button" className="acct-review-expand" onClick={props.onEditAll}>
+              <Pencil size={14} aria-hidden="true" />
+              Edit
+            </button>
+          </div>
           {createError && <p className="acct-review-validation">{createError}</p>}
           {validationError && <p className="acct-review-validation">{validationError}</p>}
         </div>

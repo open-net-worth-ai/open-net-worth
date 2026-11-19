@@ -261,6 +261,19 @@ export function TransactionSurfacesProvider({
     [openReview, openTransaction, openTransactionById, reviewScope],
   )
 
+  /** The drawer for a review card's row, wearing the card's unsaved picks (see EditSeed). */
+  const openWithPicks = useCallback((txn: Txn, draft: ReviewDraft, mode: 'view' | 'edit') => {
+    const seed = reviewDraftSeed(txn, draft)
+    const shown: Txn = seed
+      ? {
+          ...txn,
+          ...(seed.category !== undefined ? { category: seed.category } : {}),
+          ...(seed.tags ? { tags: seed.tags } : {}),
+        }
+      : txn
+    setDetail({ id: txn.id, txn: shown, mode, seed: seed ?? undefined })
+  }, [])
+
   const approve = useCallback(
     async (txn: Txn, draft: ReviewDraft): Promise<Txn> => {
       const invalid = validateReviewDraft(txn, draft, accounts)
@@ -316,21 +329,12 @@ export function TransactionSurfacesProvider({
         onReviewEverywhere={() => setReviewAccountId(null)}
         onApprove={approve}
         onReject={(txn) => deleteTransaction(txn.id)}
-        // "All details": the drawer opens on the card's unsaved picks — straight into the editor
-        // when there are any, so nothing has to be chosen twice (Discord feedback, 2026-11-19).
-        onAllDetails={(txn, draft) => {
-          const seed = reviewDraftSeed(txn, draft)
-          setDetail({ id: txn.id, txn, mode: seed ? 'edit' : 'view', seed: seed ?? undefined })
-        }}
-        onEditAll={(txn, draft) =>
-          setDetail({
-            id: txn.id,
-            txn,
-            mode: 'edit',
-            seed: reviewDraftSeed(txn, draft) ?? undefined,
-          })
-        }
-        payeeOptions={payeeOptions}
+        // The card's unsaved category and tags travel into the drawer both ways in: Details
+        // shows them in the view, and Edit (or the view's own Edit) starts the editor from them
+        // — picking on the card and then not seeing it in the drawer read as lost (owner,
+        // 2026-11-19). Nothing is saved until Approve or the drawer's own Save.
+        onAllDetails={(txn, draft) => openWithPicks(txn, draft, 'view')}
+        onEditAll={(txn, draft) => openWithPicks(txn, draft, 'edit')}
         // The same create every surface uses: the palette colour cycles by category count.
         onCreateCategory={(name, kind) => createCategory(name, kind, categories.length)}
         rowChanged={rowChange}
@@ -361,7 +365,14 @@ export function TransactionSurfacesProvider({
           }}
           onMarkReviewed={(txn) => {
             clearDetailFailure()
-            void updateTransaction(txn.id, { needs_review: false })
+            // Opened from a review card, the view shows the card's picks — so approving here
+            // saves them too, exactly as the card's own Approve would.
+            const seed = detail.id === txn.id ? detail.seed : undefined
+            void updateTransaction(txn.id, {
+              needs_review: false,
+              ...(seed?.category !== undefined ? { category: seed.category } : {}),
+              ...(seed?.tags ? { tags: seed.tags } : {}),
+            })
               .then((updated) => {
                 setDetail((d) => (d && d.id === txn.id ? { ...d, txn: updated } : d))
                 noteRowChange(updated)

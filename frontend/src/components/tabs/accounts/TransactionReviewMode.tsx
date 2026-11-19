@@ -7,7 +7,6 @@ import { ReviewConfetti } from './ReviewConfetti'
 import { TransactionReviewCard } from './TransactionReviewCard'
 import { useReviewWaitingElsewhere } from './useReviewWaitingElsewhere'
 import { startingReviewDraft, validateReviewDraft, type ReviewDraft } from './transactionReview'
-import type { PayeeOption } from './pickers'
 import type { CatKind } from './AddCategoryModal'
 import type { Account, ApiTxn, Category, Txn } from './types'
 
@@ -55,8 +54,6 @@ export interface TransactionReviewModeProps {
   onAllDetails: (txn: Txn, draft: ReviewDraft) => void
   /** The drawer straight into its editor, with the card's unsaved picks filled in. */
   onEditAll: (txn: Txn, draft: ReviewDraft) => void
-  /** The tapped-open card's payee picker. */
-  payeeOptions?: PayeeOption[]
   /** "Create “name”" in the card's category search. */
   onCreateCategory?: (name: string, kind: CatKind) => Promise<Category>
   /** Reopens the review across every account — offered once an account's own runs out. */
@@ -94,7 +91,6 @@ export function TransactionReviewMode({
   onReject,
   onAllDetails,
   onEditAll,
-  payeeOptions = NO_PAYEE_OPTIONS,
   onCreateCategory,
   onReviewEverywhere,
   rowChanged = null,
@@ -498,7 +494,6 @@ export function TransactionReviewMode({
               onSkip={skip}
               onAllDetails={() => onAllDetails(current, draft)}
               onEditAll={() => onEditAll(current, draft)}
-              payeeOptions={payeeOptions}
               onCreateCategory={onCreateCategory}
             />
           )}
@@ -540,5 +535,3 @@ export function TransactionReviewMode({
     </>
   )
 }
-
-const NO_PAYEE_OPTIONS: PayeeOption[] = []

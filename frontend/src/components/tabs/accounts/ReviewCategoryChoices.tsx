@@ -36,8 +36,6 @@ export function ReviewChipChooser({
   resultsTestId = 'review-choice-results',
   limit = 4,
   onCreate,
-  startSearching = false,
-  onCloseSearch,
 }: {
   caption: string
   options: ReviewChoiceOption[]
@@ -54,12 +52,8 @@ export function ReviewChipChooser({
   limit?: number
   /** Offered as "Create “name”" when the search matches no option by name. */
   onCreate?: (name: string) => void
-  /** Open already in search — for a chooser opened by tapping its value (the payee). */
-  startSearching?: boolean
-  /** Closing the search (✕, Escape or a pick) when the chooser has no chip row to return to. */
-  onCloseSearch?: () => void
 }) {
-  const [searching, setSearching] = useState(startSearching)
+  const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   // On a touch screen, focusing the field on open throws the on-screen keyboard over the
   // chips the search was opened to browse. The keyboard belongs to a tap on the field itself.
@@ -96,7 +90,6 @@ export function ReviewChipChooser({
   const close = () => {
     setSearching(false)
     setQuery('')
-    onCloseSearch?.()
   }
   const pick = (id: string | null) => {
     onChange(id)

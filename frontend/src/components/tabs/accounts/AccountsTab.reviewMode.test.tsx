@@ -242,16 +242,17 @@ describe('AccountsTab — transaction review mode', () => {
     renderTab()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
-    // A change on the card, then All details: the drawer opens straight into the editor with it.
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
-    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Memo' }), {
-      target: { value: 'From card' },
+    // A tag picked on the card, then Edit: the editor opens with it.
+    fireEvent.click(await screen.findByRole('button', { name: 'Tag' }))
+    fireEvent.change(screen.getByLabelText('Find or create a tag'), {
+      target: { value: 'from-card' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
+    fireEvent.click(screen.getByRole('button', { name: /Create “from-card”/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     const save = await screen.findByRole('button', { name: 'Save changes' })
-    // On the card AND, seeded, in the drawer's Memo field.
-    expect(screen.getAllByDisplayValue('From card')).toHaveLength(2)
+    // On the card AND, carried, in the drawer's Tags field.
+    expect(screen.getAllByRole('button', { name: 'Remove tag from-card' })).toHaveLength(2)
 
     fireEvent.click(save)
     await waitFor(() => expect(document.querySelector('.acct-detail-wrap')).toBeNull())
@@ -266,6 +267,56 @@ describe('AccountsTab — transaction review mode', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     expect(await screen.findByRole('button', { name: 'Save changes' })).toBeTruthy()
     expect(screen.getByRole('dialog', { name: 'Review transactions' })).toBeTruthy()
+  })
+
+  it('Details shows the card picks in the drawer, and its own Edit starts from them', async () => {
+    renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Tag' }))
+    fireEvent.change(screen.getByLabelText('Find or create a tag'), {
+      target: { value: 'picked-here' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Create “picked-here”/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+
+    // The view shows the tag the card picked, not the saved row's (none).
+    await waitFor(() =>
+      expect(
+        [...document.querySelectorAll('.acct-detail .acct-detail-tag')].map((t) => t.textContent),
+      ).toEqual(['picked-here']),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Edit transaction' }))
+    expect(await screen.findAllByRole('button', { name: 'Remove tag picked-here' })).toHaveLength(2)
+  })
+
+  it('approving from the drawer saves the card picks it shows', async () => {
+    renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Tag' }))
+    fireEvent.change(screen.getByLabelText('Find or create a tag'), {
+      target: { value: 'picked-here' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Create “picked-here”/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    const drawer = await waitFor(() => {
+      const el = document.querySelector('.acct-detail') as HTMLElement
+      expect(el).toBeTruthy()
+      return el
+    })
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Approve' }))
+    await waitFor(() => {
+      const call = mockAuthFetch.mock.calls.find(
+        ([url, init]) => url === '/api/transactions/txn-review' && init?.method === 'PUT',
+      )
+      expect(call).toBeTruthy()
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual(
+        expect.objectContaining({ needs_review: false, tags: ['picked-here'] }),
+      )
+    })
   })
 
   it('does not create a payee from an untouched imported description', async () => {
@@ -298,12 +349,7 @@ describe('AccountsTab — transaction review mode', () => {
     renderTab()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
-    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Memo' }), {
-      target: { value: 'From card' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     await waitFor(() =>
       expect(document.querySelector('.acct-detail-wrap.above-modal')).toBeTruthy(),

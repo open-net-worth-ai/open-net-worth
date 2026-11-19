@@ -41,7 +41,7 @@ describe('Transaction Review mode deck and actions', () => {
   })
 
   it('guards the Details pill hover behind a hover-capable pointer so a tap never paints it first', () => {
-    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.acct-review-expand:hover \{/)
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.acct-review-expand:hover[,\s]/)
     expect(css).not.toMatch(/\n\.acct-review-expand:hover \{/)
   })
 

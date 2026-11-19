@@ -442,7 +442,10 @@ describe('TransactionReviewMode — compact queue', () => {
       within(card)
         .getAllByRole('button', { hidden: true })
         .map((chip) => chip.textContent)
-        .filter((label) => label !== 'Details' && label !== 'Edit' && label !== 'Other')
+        .filter(
+          (label) =>
+            label !== 'Details' && label !== 'Edit' && label !== 'Other' && label !== 'Tag',
+        )
     const rear = screen.getByTestId('transaction-review-card-rear')
     // The rear card is the income: its own selection first, then the income ranking.
     expect(chips(rear)).toEqual(['Salary', 'Interest'])
@@ -647,22 +650,18 @@ describe('TransactionReviewMode — compact queue', () => {
         has_more: false,
       }),
     )
-    const onAllDetails = vi.fn()
-    renderMode({ onAllDetails })
+    const onEditAll = vi.fn()
+    renderMode({ onEditAll })
 
     await screen.findByRole('heading', { name: /Transfer to Brokerage USD/ })
     expect(screen.getByText('110.00 USD')).toBeTruthy()
     expect(screen.queryByLabelText('Amount')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    // A transfer has no payee row.
-    expect(screen.queryByLabelText('Payee')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
-    expect(onAllDetails).toHaveBeenCalledWith(
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(onEditAll).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'txn-transfer' }),
       expect.objectContaining({ kind: 'transfer' }),
     )
   })
-
   it('drops a card the drawer marked reviewed, and patches one the drawer edited, in place', async () => {
     mockAuthFetch.mockResolvedValue(
       okJson({
@@ -714,53 +713,16 @@ describe('TransactionReviewMode — compact queue', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('opens the card in place from Details, and hands the drawer the card draft', async () => {
+  it('Details opens the drawer carrying the card picks', async () => {
     const onAllDetails = vi.fn()
     renderMode({ onAllDetails })
     await screen.findByRole('heading', { name: 'Kroger' })
-    expect(screen.queryByTestId('review-details')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    expect(screen.getByTestId('review-details')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Other' }))
     fireEvent.click(screen.getByRole('button', { name: 'Dining out' }))
-    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
     expect(onAllDetails).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'txn-new' }),
       expect.objectContaining({ category: 'dining' }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Less' }))
-    expect(screen.queryByTestId('review-details')).toBeNull()
-  })
-
-  it('opens the payee search in place from the heading, and a pick fills it', async () => {
-    const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
-      ...txn,
-      needsReview: false,
-    }))
-    renderMode({
-      onApprove,
-      payeeOptions: [
-        { value: 'Harbor Cafe', label: 'Harbor Cafe', defaultCategory: null },
-        { value: 'Corner Cafe', label: 'Corner Cafe', defaultCategory: null },
-        { value: 'Kroger', label: 'Kroger', defaultCategory: null },
-      ],
-    })
-    await screen.findByRole('heading', { name: 'Kroger' })
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    // No text field on the open card itself — the heading is a button.
-    expect(screen.queryByLabelText('Payee')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Kroger' }))
-    fireEvent.change(screen.getByLabelText('Search payees'), { target: { value: 'cafe' } })
-    const results = screen.getByTestId('review-payee-results')
-    expect(within(results).getByRole('button', { name: 'Corner Cafe' })).toBeTruthy()
-    expect(within(results).getByRole('button', { name: /Create “cafe”/ })).toBeTruthy()
-    fireEvent.click(within(results).getByRole('button', { name: 'Harbor Cafe' }))
-    expect(screen.queryByTestId('review-payee-results')).toBeNull()
-    expect(screen.getByRole('heading', { name: 'Harbor Cafe' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
-    expect(onApprove.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ payee: 'Harbor Cafe', payeeEdited: true }),
     )
   })
 
@@ -806,11 +768,14 @@ describe('TransactionReviewMode — compact queue', () => {
     expect(screen.queryByTestId('review-details')).toBeNull()
   })
 
-  it('a tap anywhere on the facts opens the card', async () => {
-    renderMode()
+  it('a tap on the facts opens the drawer — the card edits only category and tags', async () => {
+    const onAllDetails = vi.fn()
+    renderMode({ onAllDetails })
     await screen.findByRole('heading', { name: 'Kroger' })
     fireEvent.click(screen.getByRole('heading', { name: 'Kroger' }))
-    expect(screen.getByTestId('review-details')).toBeTruthy()
+    expect(onAllDetails).toHaveBeenCalledTimes(1)
+    // No payee, date or memo field anywhere on the card.
+    expect(screen.queryByRole('textbox')).toBeNull()
   })
 
   it('lets a transfer card change where the money went, in the source currency only', async () => {
@@ -913,8 +878,8 @@ describe('TransactionReviewMode — compact queue', () => {
         has_more: false,
       }),
     )
-    const onAllDetails = vi.fn()
-    renderMode({ onAllDetails })
+    const onEditAll = vi.fn()
+    renderMode({ onEditAll })
 
     // The split's own lines, read-only, with their figures — not a lone pill.
     await screen.findByText('Split across 2 categories')
@@ -923,9 +888,8 @@ describe('TransactionReviewMode — compact queue', () => {
     expect(front.getByText('Dining out').textContent).toBe('Dining out53.29 SGD')
     expect(screen.queryByRole('button', { name: 'Other' })).toBeNull()
     expect(screen.queryByText('Choose a category')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
-    expect(onAllDetails).toHaveBeenCalledWith(
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(onEditAll).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'txn-split' }),
       expect.anything(),
     )
@@ -1158,20 +1122,13 @@ describe('TransactionReviewMode — edits and actions', () => {
     expect(screen.queryByRole('button', { name: 'Ask Lucius' })).toBeNull()
   })
 
-  it('edits memo, date and tags in place and approves them with the category', async () => {
+  it('tags picked on the card are approved with the category', async () => {
     const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
       ...txn,
       needsReview: false,
     }))
     renderMode({ onApprove })
     await screen.findByRole('heading', { name: 'Kroger' })
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    // The memo row opens its own editor; the date line is the device's picker.
-    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Memo' }), { target: { value: 'Snacks' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
-    expect(screen.getByRole('button', { name: /^Memo/ }).textContent).toContain('Snacks')
-    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-15' } })
     fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
     fireEvent.change(screen.getByLabelText('Find or create a tag'), {
       target: { value: 'Work Trip' },
@@ -1179,13 +1136,9 @@ describe('TransactionReviewMode — edits and actions', () => {
     fireEvent.click(screen.getByRole('button', { name: /Create “work-trip”/ }))
     expect(screen.getByRole('button', { name: 'Remove tag work-trip' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
-    // No Amount editor on the card: the money stays the drawer's job.
-    expect(screen.queryByLabelText('Amount')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
-    expect(onApprove.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ memo: 'Snacks', date: '2026-09-15', tags: ['work-trip'] }),
-    )
+    expect(onApprove.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ tags: ['work-trip'] }))
   })
 
   it('swipes from a category chip, and a tap on one still selects it', async () => {
@@ -1214,26 +1167,25 @@ describe('TransactionReviewMode — edits and actions', () => {
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
   })
 
-  it('swipes from an untouched field on the open card, but not from the one being edited', async () => {
+  it('swipes from an untouched field, but not from the one being typed in', async () => {
     renderMode()
     await screen.findByRole('heading', { name: 'Kroger' })
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
     const card = screen.getByTestId('transaction-review-card')
-    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
-    const memo = screen.getByRole('textbox', { name: 'Memo' })
+    fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
+    const search = screen.getByLabelText('Find or create a tag')
 
     // Being typed in: the drag is the field's (caret, selection) — the card stays.
-    memo.focus()
-    fireEvent.pointerDown(memo, { pointerId: 20, clientX: 300, clientY: 100 })
-    fireEvent.pointerMove(memo, { pointerId: 20, clientX: 150, clientY: 102 })
-    fireEvent.pointerUp(memo, { pointerId: 20, clientX: 150, clientY: 102 })
+    search.focus()
+    fireEvent.pointerDown(search, { pointerId: 20, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(search, { pointerId: 20, clientX: 150, clientY: 102 })
+    fireEvent.pointerUp(search, { pointerId: 20, clientX: 150, clientY: 102 })
     expect(card.classList.contains('is-exiting-left')).toBe(false)
 
     // Untouched: just part of the card — a left drag skips it.
-    memo.blur()
-    fireEvent.pointerDown(memo, { pointerId: 21, clientX: 300, clientY: 100 })
-    fireEvent.pointerMove(memo, { pointerId: 21, clientX: 150, clientY: 102 })
-    fireEvent.pointerUp(memo, { pointerId: 21, clientX: 150, clientY: 102 })
+    search.blur()
+    fireEvent.pointerDown(search, { pointerId: 21, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(search, { pointerId: 21, clientX: 150, clientY: 102 })
+    fireEvent.pointerUp(search, { pointerId: 21, clientX: 150, clientY: 102 })
     expect(card.classList.contains('is-exiting-left')).toBe(true)
   })
 

@@ -1,4 +1,4 @@
-import { Info, Pencil, Wallet } from '../../../ui/icons'
+import { Info, Pencil, Plus, Wallet } from '../../../ui/icons'
 import { sourceLine, type ReviewDraft } from './transactionReview'
 import { SourceIcon } from './pickers'
 import { ReviewChoices, ReviewSummary } from './ReviewSummary'
@@ -46,17 +46,6 @@ export function TransactionReviewPeek({
           </span>
         </div>
         <ReviewSummary txn={txn} accounts={accounts} draft={draft} />
-        {/* The front card's closed "Details" pill, as decoration — a span, never a button. */}
-        <span className="acct-review-expand-row">
-          <span className="acct-review-expand">
-            <Info size={14} aria-hidden="true" />
-            Details
-          </span>
-          <span className="acct-review-expand">
-            <Pencil size={14} aria-hidden="true" />
-            Edit
-          </span>
-        </span>
       </div>
       <ReviewChoices
         txn={txn}
@@ -66,6 +55,31 @@ export function TransactionReviewPeek({
         onDraftChange={() => {}}
         suggestedCategoryIds={suggestedCategoryIds}
       />
+      {/* The front card's Tags and Details/Edit, as decoration — spans, never buttons. */}
+      <div className="acct-review-tags-block">
+        <span className="acct-review-category-caption">Tags</span>
+        <span className="acct-review-tags">
+          {draft.tags.map((tag) => (
+            <span key={tag} className="acct-review-tag is-chosen">
+              {tag}
+            </span>
+          ))}
+          <span className="acct-review-tag is-add">
+            <Plus size={12} aria-hidden="true" />
+            Tag
+          </span>
+        </span>
+      </div>
+      <span className="acct-review-expand-row">
+        <span className="acct-review-expand">
+          <Info size={14} aria-hidden="true" />
+          Details
+        </span>
+        <span className="acct-review-expand">
+          <Pencil size={14} aria-hidden="true" />
+          Edit
+        </span>
+      </span>
     </div>
   )
 }
