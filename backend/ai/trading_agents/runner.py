@@ -14,11 +14,11 @@ nothing runs unless a test injected its own worker (``set_worker_cmd_for_tests``
 from __future__ import annotations
 
 import asyncio
-import importlib
 import logging
 from collections import deque
 from typing import Callable, Optional
 
+from backend.ai.models.pricing import list_price_rates
 from backend.ai.trading_agents import worker_session
 from backend.ai.trading_agents.worker_session import Job, RunSession
 from backend.core.config import get_settings
@@ -30,7 +30,7 @@ from backend.core.errors import (
 )
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
 from backend.services import trading_agents
-from backend.services.trading_agents import context, install, runs, settings, ticker
+from backend.services.trading_agents import budget, context, install, runs, settings, ticker
 
 log = logging.getLogger(__name__)
 
@@ -46,14 +46,12 @@ _worker_cmd: Optional[list[str]] = None
 
 def _default_budget_check(
     cfg: settings.Settings, models: settings.ResolvedModels, analysts: list[str]
-) -> Optional[float]:
-    """The estimate for the run, or ``BudgetExceededError`` when the monthly cap would be passed
-    (``services.trading_agents.budget.check_can_start``)."""
-    budget = importlib.import_module("backend.services.trading_agents.budget")
-    return budget.check_can_start(cfg=cfg, models=models, analysts=analysts)
+) -> budget.Estimate:
+    """The run's estimate, or ``BudgetExceededError`` when the monthly cap would be passed."""
+    return budget.check_can_start(cfg, models, analysts, list_price_rates)
 
 
-_budget_check: Callable[..., Optional[float]] = _default_budget_check
+_budget_check: Callable[..., budget.Estimate] = _default_budget_check
 
 
 def set_worker_cmd_for_tests(command: Optional[list[str]]) -> None:
@@ -62,7 +60,7 @@ def set_worker_cmd_for_tests(command: Optional[list[str]]) -> None:
     _worker_cmd = list(command) if command else None
 
 
-def set_budget_check_for_tests(check: Optional[Callable[..., Optional[float]]]) -> None:
+def set_budget_check_for_tests(check: Optional[Callable[..., budget.Estimate]]) -> None:
     global _budget_check
     _budget_check = check or _default_budget_check
 
@@ -81,20 +79,6 @@ def _require_runnable() -> None:
             "TradingAgents does not run in a QA process without a test worker.",
             status="qa_mode",
         )
-
-
-def _snapshot(cfg: settings.Settings, models: settings.ResolvedModels, analysts: list[str]) -> dict:
-    return {
-        "models": models.as_dict(),
-        "analysts": analysts,
-        "max_debate_rounds": cfg.max_debate_rounds,
-        "max_risk_rounds": cfg.max_risk_rounds,
-        "max_tool_rounds": cfg.max_tool_rounds,
-        "max_llm_calls": cfg.max_llm_calls,
-        "bridge_concurrency": settings.bridge_concurrency(cfg, models),
-        "output_language": cfg.output_language,
-        "ta_commit": install.TA_COMMIT,
-    }
 
 
 async def submit(
@@ -135,11 +119,11 @@ async def submit(
         requested_by=requested_by,
         session_id=session_id,
         analysts=chosen,
-        config_snapshot=_snapshot(cfg, models, chosen),
+        config_snapshot=budget.config_snapshot(cfg, models),
         context_level=cfg.context_level,
         portfolio=portfolio,
         disclosure=disclosure,
-        estimate_usd=estimate,
+        estimate_usd=estimate.median_usd,
         cap_usd=cfg.per_run_cap_usd,
     )
     _queue.append(
@@ -187,6 +171,7 @@ async def _drain() -> None:
 
 async def cancel(run_id: str) -> dict:
     """Cancel a queued or running run and return the run as it then is."""
+    trading_agents.require_flag()
     queued = next((j for j in _queue if j.run_id == run_id), None)
     if queued is not None:
         _queue.remove(queued)

@@ -113,6 +113,8 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/automations(/.*)?$",
         # A paper portfolio's autopilot runs Lucius on a schedule: model spend, like an Automation.
         r"^/api/paper/portfolios/[^/]+/autopilot(/.*)?$",
+        # TradingAgents runs a subprocess of its own venv and spends model tokens per run.
+        r"^/api/trading-agents(/.*)?$",
         r"^/api/memory(/.*)?$",
         r"^/api/channels(/.*)?$",
         r"^/api/chat-pairing(/.*)?$",

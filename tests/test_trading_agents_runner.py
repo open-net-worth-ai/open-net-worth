@@ -26,7 +26,21 @@ from backend.db.cost_log_store import CostLogStore
 from backend.db.model_config_store import ModelConfigStore
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
-from backend.services.trading_agents import runs, settings
+from backend.services.trading_agents import budget, runs, settings
+
+
+def estimate_of(median: float) -> budget.Estimate:
+    return budget.Estimate(
+        median_usd=median,
+        low_usd=median,
+        high_usd=median,
+        calls=10,
+        basis=budget.BASIS_STATIC,
+        sample_size=0,
+        plan_included=False,
+        priced=True,
+    )
+
 
 FAKE_WORKER = Path(__file__).parent / "fixtures" / "trading_agents" / "fake_worker.py"
 
@@ -58,7 +72,7 @@ def runner_env(db_isolated, tmp_path, monkeypatch):
     store.merge_state({"install_status": "ready"})
     provider = FakeProvider()
     use_provider(monkeypatch, provider)
-    runner.set_budget_check_for_tests(lambda **_: 0.4)
+    runner.set_budget_check_for_tests(lambda **_: estimate_of(0.4))
     worker("normal", tmp_path)
     yield SimpleNamespace(provider=provider, tmp=tmp_path, monkeypatch=monkeypatch)
     runner.set_worker_cmd_for_tests(None)
@@ -159,7 +173,7 @@ async def test_a_run_ends_done_with_its_result_progress_and_attributed_cost():
     assert roles == {"analyst_market": 1, "research_manager": 1, "other": 2}
     assert set(row["cost_by_model"]) == {"anthropic:model-a"}
     assert row["estimate_usd"] == 0.4 and row["cap_usd"] == 2.0
-    assert row["config_snapshot"]["models"]["deep"] == "anthropic:model-a"
+    assert row["config_snapshot"]["deep"] == "anthropic:model-a"
     assert row["context_sent"]["portfolio"] is None
     assert row["started_at"] is not None and row["finished_at"] is not None
 
@@ -390,7 +404,7 @@ async def test_the_budget_check_can_refuse_before_any_row_exists():
 
 async def test_the_budget_check_receives_the_resolved_run(runner_env):
     seen = {}
-    runner.set_budget_check_for_tests(lambda **kw: seen.update(kw) or 1.25)
+    runner.set_budget_check_for_tests(lambda **kw: seen.update(kw) or estimate_of(1.25))
     run_id = await submit(analysts=["market", "news"])
     await settle()
     assert seen["analysts"] == ["market", "news"]
@@ -432,7 +446,9 @@ async def test_the_chosen_analysts_and_level_are_frozen_into_the_row():
     await settle()
     row = run_of(run_id)
     assert row["analysts"] == ["fundamentals"] and row["requested_by"] == "lucius"
-    assert row["config_snapshot"]["ta_commit"] and "api_key" not in str(row["config_snapshot"])
+    cfg = settings.load()
+    assert row["config_snapshot"] == budget.config_snapshot(cfg, settings.resolve_models(cfg))
+    assert "api_key" not in str(row["config_snapshot"])
     assert settings.load().context_level == "investments"
 
 
@@ -471,3 +487,21 @@ async def test_shutting_down_ends_the_run_in_flight_as_interrupted(runner_env):
     row = run_of(run_id)
     assert row["status"] == "interrupted"
     assert not alive(int((runner_env.tmp / "worker.pid").read_text()))
+
+
+async def test_the_default_budget_check_prices_the_run_and_stores_its_median(runner_env):
+    runner.set_budget_check_for_tests(None)
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    cfg = settings.load()
+    expected = budget.estimate(
+        cfg, settings.resolve_models(cfg), cfg.analysts, runner.list_price_rates
+    )
+    assert row["estimate_usd"] == expected.median_usd
+    assert row["context_sent"] == {
+        "ticker": "ACME",
+        "portfolio": None,
+        "disclosure": row["context_sent"]["disclosure"],
+    }
+    assert row["context_sent"]["disclosure"]["level"] == "ticker"
