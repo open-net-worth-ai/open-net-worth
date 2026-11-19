@@ -2505,10 +2505,11 @@
   bottom: 0;
   margin-top: auto;
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  /* The room under the buttons that clears the Lucius dock is the bar's own, so nothing
-     scrolls through below it (it was the rail's padding, and settings showed beneath Save). */
-  padding: 14px 0 72px;
+  /* Discard / Save sit at the bottom right, like any dialog's; the bar's own background
+     covers what scrolls beneath it. */
+  padding: 14px 0 18px;
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
