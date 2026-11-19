@@ -22,7 +22,7 @@ export const TOTAL_PERIOD_OPTIONS = Object.keys(PERIOD_BY_LABEL)
 /** Widgets that chart month by month: a one-month window would be a single bar. */
 export const SERIES_PERIOD_OPTIONS = ['3 months', '6 months', '12 months', 'This year']
 
-// All three are set from the widget's own header filter (ReportFilter), not the settings panel.
+// All three are drawn by ReportFilterControls, in the header pill and in the settings panel.
 export function periodSetting(options: string[], fallback: string): WidgetSettingSchema {
   return {
     key: 'period',

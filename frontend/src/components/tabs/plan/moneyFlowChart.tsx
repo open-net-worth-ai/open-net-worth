@@ -133,6 +133,21 @@ export function MoneyFlowChart({
     setHover(null)
     setTip(null)
   }
+  const actionFor = (n: LaidNode | undefined): (() => void) | undefined =>
+    !n
+      ? undefined
+      : clickable(n)
+        ? () => onOpenCategory!(n)
+        : drillable(n)
+          ? () => {
+              clear()
+              onDrill!(n)
+            }
+          : undefined
+  // A ribbon opens what it flows into (or, failing that, what it leaves): the wide band is the
+  // easy thing to tap, not the thin bar at its end.
+  const linkAction = (l: { source: string; target: string }) =>
+    actionFor(byId.get(l.target)) ?? actionFor(byId.get(l.source))
 
   return (
     <div
@@ -181,7 +196,12 @@ export function MoneyFlowChart({
           {laid.links.map((l, i) => (
             <path
               key={l.key}
-              className={'mf-lnk' + (hot?.links.has(l.key) ? ' is-hot' : '')}
+              className={
+                'mf-lnk' +
+                (hot?.links.has(l.key) ? ' is-hot' : '') +
+                (linkAction(l) ? ' is-link' : '')
+              }
+              onClick={linkAction(l)}
               d={l.path}
               stroke={`url(#${gradId}-${i})`}
               strokeWidth={l.width}
@@ -193,6 +213,7 @@ export function MoneyFlowChart({
                 place(e, {
                   title: `${byId.get(l.source)!.label} → ${byId.get(l.target)!.label}`,
                   body: fBase(l.amount),
+                  hint: nodeTip(byId.get(l.target)!).hint ?? nodeTip(byId.get(l.source)!).hint,
                 })
               }}
               onMouseMove={move}
@@ -213,14 +234,7 @@ export function MoneyFlowChart({
             ))}
         </g>
         {laid.nodes.map((n) => {
-          const open = clickable(n)
-            ? () => onOpenCategory!(n)
-            : drillable(n)
-              ? () => {
-                  clear()
-                  onDrill!(n)
-                }
-              : undefined
+          const open = actionFor(n)
           return (
             <g
               key={n.id}

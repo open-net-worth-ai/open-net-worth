@@ -16,6 +16,7 @@ vi.mock('../../../../hooks/useIsMobile', () => ({ useIsMobile: () => phone.on })
 import { ReportFilter } from './ReportFilter'
 import { reportsWidgetComponents } from './reports'
 import { WIDGET_DEFINITIONS } from '../definitions'
+import { WidgetFullscreen } from '../WidgetFullscreen'
 import type { WidgetInstance } from '../types'
 
 afterEach(() => {
@@ -117,5 +118,26 @@ describe('ReportFilter', () => {
       />,
     )
     expect(screen.getByRole('button', { name: 'Filter: 12 months' })).toBeTruthy()
+  })
+
+  it("shows the same filters in the widget's settings panel, and a choice there patches it", async () => {
+    serveLists()
+    const onPatch = vi.fn()
+    render(
+      <WidgetFullscreen
+        instance={inst({})}
+        def={defOf('rep-spendcat')}
+        Content={() => null}
+        onPatch={onPatch}
+        onDiscard={vi.fn()}
+        onSave={vi.fn()}
+        mode="edit"
+      />,
+    )
+    expect(screen.getByText('Filters')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '3 months' }))
+    expect(onPatch).toHaveBeenCalledWith({ config: { period: '3 months' } })
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Bravo' }))
+    expect(onPatch).toHaveBeenLastCalledWith({ config: { categories: ['cat_b'] } })
   })
 })

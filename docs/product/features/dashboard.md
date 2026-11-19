@@ -123,7 +123,8 @@ that month.
 ### Filtering a report: period, categories and tags
 
 Every Reports widget has a filter in its own header: a small pill naming what it shows (for
-example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place:
+example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place. The same
+filters are also at the top of the widget's settings panel (**Edit**), under **Filters**:
 
 - **Period.** Spending by category, Top merchants, Savings rate and Money flow can show
   **This month**, **Last month**, **3 months**, **6 months**, **12 months** or **This year**,
@@ -142,7 +143,8 @@ so a narrowed figure is never mistaken for your whole book. Each widget keeps it
 until you pick something else: Spending by category and Top merchants this month, Savings rate
 and Money flow the last full month, the month-by-month charts the last 6 months.
 
-In **Money flow**, click a spending group to see its categories, then click a category to open
+In **Money flow**, click a spending group (its bar, its label or the ribbon flowing into it) to
+see its categories, then click a category the same way to open
 its transactions in Accounts, for the same months and tags. **All groups** goes back.
 
 In Reports, **Top merchants** can be shown as a list, bars or a pie (the header menu), and each

@@ -1,7 +1,7 @@
 // The filter on a Reports widget's own header: a pill naming what the widget covers ("3 months
 // · Dining · #travel") that opens a popover with Period, Categories and Tags. A choice applies
-// as it is made and is saved with the widget — the settings panel keeps only how the widget
-// looks. The popover portals to <body> (like ChartToggleMenu): the trigger sits inside a
+// as it is made and is saved with the widget; the settings panel shows the same controls
+// (ReportFilterControls). The popover portals to <body> (like ChartToggleMenu): the trigger sits inside a
 // clipped, scrolling card. On a phone the same controls open in a bottom sheet instead.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -65,10 +65,6 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
     }
   }, [open, isMobile])
 
-  // A widget offers only the filters its definition declares (Savings rate: a period alone).
-  const has = (key: string) => !!def.settings?.some((s) => s.key === key)
-  const patch = (next: Record<string, unknown>) =>
-    onPatch({ config: { ...instance.config, ...next } })
   const catText =
     sc.categories.length === 0
       ? ''
@@ -79,29 +75,7 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
     sc.tags.length === 0 ? '' : sc.tags.length === 1 ? `#${sc.tags[0]}` : `${sc.tags.length} tags`
   const filtered = sc.categories.length > 0 || sc.tags.length > 0
   const summary = [label, catText, tagText].filter(Boolean).join(' · ')
-
-  const body = (
-    <>
-      <PeriodSection def={def} value={sc.periodLabel} onPick={(p) => patch({ period: p })} />
-      {has('categories') && (
-        <CategorySection
-          value={sc.categories}
-          options={Array.isArray(cats) ? cats : []}
-          onChange={(next) => patch({ categories: next })}
-        />
-      )}
-      {has('tags') && <TagSection value={sc.tags} onChange={(next) => patch({ tags: next })} />}
-      {filtered && (
-        <button
-          type="button"
-          className="ov-rf-reset"
-          onClick={() => patch({ categories: [], tags: [] })}
-        >
-          Clear categories and tags
-        </button>
-      )}
-    </>
-  )
+  const body = <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
 
   return (
     <div className="kebab-wrap ov-rf-wrap" ref={wrapRef}>
@@ -153,6 +127,48 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
           document.body,
         )}
     </div>
+  )
+}
+
+/** Period, Categories and Tags — the same controls in the header popover and in the widget's
+ *  settings panel, so a filter can be set from either place. */
+export function ReportFilterControls({
+  instance,
+  def,
+  onPatch,
+}: {
+  instance: WidgetInstance
+  def: WidgetDefinition
+  onPatch: (patch: Partial<WidgetInstance>) => void
+}) {
+  const sc = reportScope(instance, def)
+  const { data: cats } = useCategories()
+  // A widget offers only the filters its definition declares (Savings rate: a period alone).
+  const has = (key: string) => !!def.settings?.some((s) => s.key === key)
+  const patch = (next: Record<string, unknown>) =>
+    onPatch({ config: { ...instance.config, ...next } })
+  const filtered = sc.categories.length > 0 || sc.tags.length > 0
+  return (
+    <>
+      <PeriodSection def={def} value={sc.periodLabel} onPick={(p) => patch({ period: p })} />
+      {has('categories') && (
+        <CategorySection
+          value={sc.categories}
+          options={Array.isArray(cats) ? cats : []}
+          onChange={(next) => patch({ categories: next })}
+        />
+      )}
+      {has('tags') && <TagSection value={sc.tags} onChange={(next) => patch({ tags: next })} />}
+      {filtered && (
+        <button
+          type="button"
+          className="ov-rf-reset"
+          onClick={() => patch({ categories: [], tags: [] })}
+        >
+          Clear categories and tags
+        </button>
+      )}
+    </>
   )
 }
 

@@ -483,3 +483,11 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* The same filter controls in the widget's settings panel, above Appearance. */
+.ov-fs-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+}

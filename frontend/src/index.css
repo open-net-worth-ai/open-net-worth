@@ -20694,7 +20694,8 @@ body.hide-amounts .mask * {
 .mf-svg--dim .mf-node.is-hot {
   opacity: 1;
 }
-.mf-node.is-link {
+.mf-node.is-link,
+.mf-lnk.is-link {
   cursor: pointer;
 }
 .mf-node.is-link:hover .mf-lbl-name {

@@ -29,6 +29,7 @@ import { resolveCategoryIds } from './categoryRefs'
 import { GridItemContext } from './gridItemContext'
 import { BriefingFocusControl } from './BriefingFocusControl'
 import { vizOptionsFor, vizOf } from './vizModel'
+import { ReportFilterControls } from './widgets/ReportFilter'
 import type {
   HeightMode,
   RegisterDeepLink,
@@ -495,8 +496,13 @@ export function WidgetFullscreen({
   // widget def gets for free, never a hand-built per-widget control) + the
   // list row-cap, in that order (mirrors the handoff). ──────────────────────
   const data: Ctrl[] = []
-  // An inline setting (a Reports widget's period, categories, tags) is set from the widget's own
-  // header filter, so it isn't repeated here.
+  const filters = def.settings?.some((st) => st.inline) ? (
+    <div className="ov-fs-filters">
+      <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
+    </div>
+  ) : null
+  // A Reports widget's period, categories and tags are drawn as one Filters section (the same
+  // controls as the widget's header pill), not one generic row each.
   ;(def.settings || [])
     .filter((st) => !st.inline)
     .forEach((st) => {
@@ -710,6 +716,12 @@ export function WidgetFullscreen({
         }
       >
         <div className="ov-fs-sheet">
+          {filters && (
+            <>
+              <div className="ov-fs-bar-h">Filters</div>
+              {filters}
+            </>
+          )}
           {appearance.map((c) => c.node)}
           {hasData && (
             <>
@@ -803,6 +815,12 @@ export function WidgetFullscreen({
               )}
             </div>
             <div className="ov-fs-rail">
+              {filters && (
+                <>
+                  <div className="ov-fs-bar-h">Filters</div>
+                  {filters}
+                </>
+              )}
               <div className="ov-fs-bar-h">Appearance</div>
               <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
               <div className="ov-fs-actions">
