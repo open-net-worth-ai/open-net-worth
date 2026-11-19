@@ -135,10 +135,12 @@
   color: var(--bg);
 }
 @media (hover: hover) {
+  /* Lucius's colour is the ink now, so its hover is the ink CTA's: a step toward the page,
+     words staying the page colour (a fixed white vanished on the light-grey hover, on dark). */
   .ui-btn.fi-lucius:hover {
-    background: color-mix(in srgb, var(--lucius) 85%, var(--bg));
-    border-color: color-mix(in srgb, var(--lucius) 85%, #fff);
-    color: var(--ink-on-accent);
+    background: color-mix(in srgb, var(--lucius) 86%, var(--bg));
+    border-color: color-mix(in srgb, var(--lucius) 86%, var(--bg));
+    color: var(--bg);
   }
 }
 
