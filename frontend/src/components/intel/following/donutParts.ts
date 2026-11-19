@@ -1,11 +1,11 @@
 /** The categorical colours of the Holdings sector ring and its legend. */
 export const PALETTE = [
-  'var(--lucius)',
+  'var(--violet)',
   'var(--good)',
   'var(--warn)',
   'var(--info, #4ea1f3)',
   'var(--bad)',
-  'color-mix(in srgb, var(--lucius) 55%, var(--good))',
+  'color-mix(in srgb, var(--violet) 55%, var(--good))',
 ]
 
 /** Past the palette's six colours, the same six again, paler: a portfolio has up to eleven

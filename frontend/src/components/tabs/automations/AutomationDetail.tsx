@@ -406,7 +406,7 @@ function permissionMarkStyle(source: string): React.CSSProperties {
         ? '#2aabee'
         : source.toLowerCase().includes('gmail')
           ? '#ea4335'
-          : 'var(--lucius)'
+          : 'var(--violet)'
   return {
     color,
     background: `color-mix(in srgb, ${color} 16%, transparent)`,
