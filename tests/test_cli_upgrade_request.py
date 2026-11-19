@@ -1131,3 +1131,29 @@ def test_a_stop_request_does_not_restart(monkeypatch, plain_serve):
     FakeUvicorn(monkeypatch, during)
 
     assert plain_serve.run() == 0
+
+
+def test_a_failure_report_held_for_a_moment_is_still_removed_not_a_crash(path, monkeypatch, capsys):
+    """Windows refuses the remove while the server's watcher still reads the file (WinError 32);
+    `onw upgrade` waits that out instead of dying with a traceback."""
+    real_clear = upgrade_request.clear
+    refusals = [PermissionError("being read")]
+
+    def clear(target):
+        if refusals:
+            raise refusals.pop()
+        real_clear(target)
+
+    monkeypatch.setattr(upgrade_request, "clear", clear)
+    monkeypatch.setattr(upgrade_request, "_CLEAR_BACKOFF_SECONDS", 0)
+    upgrade_request.write_state(path, FAILED, "It's offline.")
+
+    assert (
+        upgrade_request._report(
+            path, SERVER, handoff_log=None, wait=1.0, restart_wait=1.0, poll=0.001
+        )
+        == 1
+    )
+
+    assert "It's offline." in capsys.readouterr().err
+    assert not path.exists()
