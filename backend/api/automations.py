@@ -30,6 +30,10 @@ class AutomationCreate(BaseModel):
     effort: str = "medium"
     status: str = "active"
     max_runs: Optional[int] = None
+    # A paper-trading Automation: may only read, write paper and its own workspace. Fixed once
+    # created (an update cannot change it).
+    simulation_only: bool = False
+    paper_portfolio_id: Optional[str] = Field(None, max_length=80)
 
 
 class AutomationPatch(BaseModel):

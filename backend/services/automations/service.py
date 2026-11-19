@@ -120,6 +120,11 @@ def validate_automation(
         "effort": effort,
         "max_runs": max_runs,
         "provenance": dict(provenance),
+        # Fixed at creation: not in _EDITABLE_FIELDS, so no update can switch it off (or on). The
+        # server decides, not the client: an Automation bound to a paper portfolio is paper-only
+        # whether or not its creator remembered to say so.
+        "simulation_only": bool(clean.get("simulation_only") or clean.get("paper_portfolio_id")),
+        "paper_portfolio_id": str(clean.get("paper_portfolio_id") or "").strip() or None,
     }
 
 

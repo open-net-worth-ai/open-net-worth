@@ -256,6 +256,9 @@ _KNOWN_FRONTEND_EXTRAS: frozenset[str] = frozenset(
         # invalidateQueryCache('/api/desktop/') to drop every cached /api/desktop/* read. Exact
         # match on purpose — a startswith skip would also hide a missing /api/desktop/<route>.
         "/api/desktop/",
+        # The same for Paper Trading: api/paperTrading.ts builds every paper key from PAPER_KEY
+        # and invalidates them all with startsWith(PAPER_KEY). Exact match, for the same reason.
+        "/api/paper",
     }
 )
 

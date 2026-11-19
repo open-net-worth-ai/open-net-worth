@@ -88,11 +88,13 @@ def _bearer(token: str = _GOOD_TOKEN) -> dict:
 
 def test_mcp_offers_the_whole_registry():
     """Inbound MCP authorization tiering is REMOVED: a Bearer-authenticated caller is the
-    operator, so the offered surface is the registry itself — no allowlist filter."""
+    operator, so the offered surface is the registry itself — no allowlist filter. The one
+    exception is a feature whose flag is off: its tools are not listed (catalog.FLAGGED_TOOLS)."""
+    from backend.ai.tools.catalog import flag_hidden_tools
     from backend.mcp.adapter import mcp_tool_descriptors
 
     offered = {d["name"] for d in mcp_tool_descriptors()}
-    assert offered == {t["name"] for t in TOOL_SCHEMAS}
+    assert offered == {t["name"] for t in TOOL_SCHEMAS} - flag_hidden_tools()
 
 
 def test_args_summary_reads_description_not_the_retired_note_field():
@@ -285,7 +287,9 @@ def test_tools_list_advertises_the_registry(mcp_env):
     assert res.status_code == 200
     tools = res.json()["result"]["tools"]
     names = {t["name"] for t in tools}
-    assert names == {t["name"] for t in TOOL_SCHEMAS}
+    from backend.ai.tools.catalog import flag_hidden_tools
+
+    assert names == {t["name"] for t in TOOL_SCHEMAS} - flag_hidden_tools()
     # descriptor shape — annotations are client-UX hints (see _annotations_for)
     for t in tools:
         assert set(t) == {"name", "description", "inputSchema", "annotations"}

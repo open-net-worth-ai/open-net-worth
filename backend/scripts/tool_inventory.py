@@ -328,7 +328,10 @@ def inventory() -> list[dict[str, Any]]:
 # rather than picking one arbitrarily. `assign_budget`'s own `assignments` param is already
 # correctly plural, so the batch shape is not hidden — only the tool's own verb-object name
 # reads as a domain (budget/money), matching its sibling.
-UNCOUNTABLE_OBJECTS = {"money", "cash", "history", "config", "data", "budget"}
+# "activity" is the same mass noun as "history": `get_paper_activity` filters ONE portfolio's
+# activity by a list of event `kinds`, it does not act on several activities (the name is final,
+# PRD/RFC 2026-11-15 paper trading §9).
+UNCOUNTABLE_OBJECTS = {"money", "cash", "history", "config", "data", "budget", "activity"}
 
 # Floor for the --lint vacuous-pass guard (see main()). Set far below the real registry
 # size so adding or removing tools never touches it — it catches "the registry is empty",

@@ -299,6 +299,75 @@ forbidden_modules = [
     "backend.sandbox",
 ]
 
+# Contract 6 — paper trading is a simulated book that nothing real can see (ADR
+# 2026-11-15-paper-trading-is-a-simulated-book-never-an-order-path). Only its four callers
+# import it DIRECTLY: its router, its Lucius tools, the Automations service, and the scheduler
+# (backend.scheduler is outside root_packages, so it needs no line here). Net worth, the
+# dashboard, investments, Intel, the briefing, returns and planning can never read a paper
+# figure. Indirect chains through those callers (api.main -> api.paper_trading -> paper) are
+# the callers' own business, hence allow_indirect_imports.
+[[tool.importlinter.contracts]]
+name = "Only its four callers import paper trading"
+type = "forbidden"
+source_modules = [
+    "backend.cli",
+    "backend.api",
+    "backend.ai",
+    "backend.services",
+    "backend.db",
+    "backend.core",
+    "backend.monitoring",
+    "backend.connectors",
+    "backend.ingest",
+    "backend.models",
+    "backend.mcp",
+    "backend.sandbox",
+]
+forbidden_modules = ["backend.services.paper_trading"]
+allow_indirect_imports = true
+# A caller that does not exist yet (the build adds them one step at a time) is not an error.
+unmatched_ignore_imports_alerting = "none"
+ignore_imports = [
+    "backend.services.paper_trading.** -> backend.services.paper_trading.**",
+    "backend.services.paper_trading.** -> backend.services.paper_trading",
+    "backend.api.paper_trading -> backend.services.paper_trading.**",
+    "backend.ai.tools.paper_trading -> backend.services.paper_trading.**",
+    "backend.services.automations.** -> backend.services.paper_trading.**",
+]
+
+# Contract 7 — paper trading cannot reach a real write choke. It reads prices, FX, instruments,
+# theses and pure math; it never imports the ledger, lots, positions, accounts, planning,
+# options, owned assets or any bank/broker aggregation, so no bug in it can write the real book.
+# Today's holdings arrive through services.holdings_snapshot (read-only), which is why that
+# module is the one exception it may import.
+[[tool.importlinter.contracts]]
+name = "Paper trading cannot reach a real write choke"
+type = "forbidden"
+source_modules = ["backend.services.paper_trading"]
+forbidden_modules = [
+    "backend.services.ledger",
+    "backend.services.lots",
+    "backend.services.positions",
+    "backend.services.accounts",
+    "backend.services.planning",
+    "backend.services.options",
+    "backend.services.owned_assets",
+    "backend.services.owned_assets_attachments",
+    "backend.services.owned_assets_disposal",
+    "backend.services.owned_assets_marks",
+    "backend.services.owned_assets_rules",
+    "backend.services.aggregation",
+    "backend.services.equity",
+    "backend.services.equity_release",
+    "backend.services.income",
+    "backend.services.transaction_links",
+]
+allow_indirect_imports = true
+unmatched_ignore_imports_alerting = "none"
+ignore_imports = [
+    "backend.services.paper_trading.** -> backend.services.holdings_snapshot",
+]
+
 # Contract 5 — the code-execution sandbox is a SECRET-FREE leaf
 # (script-bundling-skills S2). backend.sandbox runs a bundle's python as an
 # isolated subprocess; its load-bearing security property is that the

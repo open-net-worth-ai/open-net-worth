@@ -588,6 +588,42 @@ async def _run_followed_portfolios() -> None:
         logger.exception("scheduler: followed_portfolios error: %s", exc)
 
 
+async def _run_paper_tick() -> None:
+    """Paper trading: retry open paper orders (flag-gated inside; nothing runs with no open
+    orders). A simulated book — never an order to any broker."""
+    try:
+        from backend.services.paper_trading import engine
+
+        result = await asyncio.to_thread(engine.tick)
+        if result.get("filled") or result.get("expired"):
+            logger.info("scheduler: paper tick — %s", result)
+    except Exception as exc:
+        logger.exception("scheduler: paper tick error: %s", exc)
+
+
+async def _run_paper_daily() -> None:
+    """Paper trading: dated lifecycle events and today's value row, idempotent, hourly."""
+    try:
+        from backend.services.paper_trading import engine
+
+        await asyncio.to_thread(engine.daily)
+    except Exception as exc:
+        logger.exception("scheduler: paper daily error: %s", exc)
+
+
+async def _run_paper_autopilot() -> None:
+    """Paper trading: run each Auto paper portfolio's due review (flag-gated inside). A review is
+    one Lucius turn that may trade only that simulated portfolio, within its mandate."""
+    try:
+        from backend.services.paper_trading import autopilot_run
+
+        result = await autopilot_run.run_due()
+        if result:
+            logger.info("scheduler: paper autopilot — %s", result)
+    except Exception as exc:
+        logger.exception("scheduler: paper autopilot error: %s", exc)
+
+
 async def _run_bank_data_sync() -> None:
     """Tick of the AI-free bank sync (ADR 2026-11-13): runs each connector in "Sync without AI"
     mode when its own schedule says it is due. Nothing at all while ``bank_data_sync`` is off."""
@@ -707,6 +743,42 @@ def start() -> None:
             misfire_grace_time=120,
             max_instances=1,
         )
+
+    # Paper trading — retry waiting paper orders every minute (one batched quote, only for
+    # assets with open orders) and refresh each run's value row hourly. Flag-gated at run time.
+    _scheduler.add_job(
+        _run_paper_tick,
+        trigger=IntervalTrigger(seconds=60),
+        id="paper_tick",
+        replace_existing=True,
+        misfire_grace_time=120,
+        max_instances=1,
+    )
+    _scheduler.add_job(
+        _run_paper_daily,
+        trigger=IntervalTrigger(hours=1, start_date=datetime.now() + timedelta(minutes=2)),
+        id="paper_daily",
+        replace_existing=True,
+        misfire_grace_time=3600,
+        max_instances=1,
+    )
+    # Tickers held on paper are followed by Intel like watched ones, by name only
+    # (core.paper_follow; ADR 2026-11-15-paper-trading-…, amended 2026-11-18).
+    try:
+        from backend.services.paper_trading import follow as paper_follow
+
+        paper_follow.register()
+    except Exception as exc:
+        logger.exception("scheduler: paper follow registration failed: %s", exc)
+    # Paper autopilot — each Auto portfolio's due review (and any "Review now"), one at a time.
+    _scheduler.add_job(
+        _run_paper_autopilot,
+        trigger=IntervalTrigger(seconds=60, start_date=datetime.now() + timedelta(seconds=30)),
+        id="paper_autopilot",
+        replace_existing=True,
+        misfire_grace_time=300,
+        max_instances=1,
+    )
 
     # Followed portfolios — filings land quarterly (13F) or a few times a month (House), so
     # twice a day is generous. Calls SEC / House Clerk, hence not on a QA run.

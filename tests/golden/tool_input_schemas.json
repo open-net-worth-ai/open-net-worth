@@ -10056,6 +10056,14 @@
         "minimum": 1,
         "type": "integer",
         "description": "Optional positive run cap."
+      },
+      "simulation_only": {
+        "type": "boolean",
+        "description": "True makes a PAPER-ONLY Automation: it can read, place and manage paper orders and nothing else (no real write, no connector, no web, no broker). Set it for any paper-trading Automation. Fixed once created."
+      },
+      "paper_portfolio_id": {
+        "type": "string",
+        "description": "The paper portfolio this Automation trades (implies simulation_only)."
       }
     },
     "required": [
@@ -10894,5 +10902,474 @@
     },
     "type": "object",
     "required": []
+  },
+  "cancel_paper_orders": {
+    "additionalProperties": false,
+    "properties": {
+      "order_ids": {
+        "description": "Open paper order ids (pord_…).",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "order_ids"
+    ],
+    "type": "object"
+  },
+  "create_paper_portfolio": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Its name."
+      },
+      "start_with": {
+        "default": "cash",
+        "description": "cash; holdings = a copy of the owner's holdings at today's prices; followed = a followed portfolio's weights bought with `cash`.",
+        "enum": [
+          "cash",
+          "holdings",
+          "followed"
+        ],
+        "type": "string"
+      },
+      "cash": {
+        "type": "number",
+        "description": "Starting cash in the home currency (default 10,000)."
+      },
+      "followed_portfolio": {
+        "type": "string",
+        "description": "With start_with=followed: the followed portfolio's name or id."
+      },
+      "home_currency": {
+        "type": "string",
+        "description": "Three-letter code; default the base currency. Fixed later."
+      },
+      "benchmark": {
+        "type": "string",
+        "description": "Default the preferred one."
+      },
+      "settings": {
+        "additionalProperties": true,
+        "type": "object",
+        "description": "Fill settings over the defaults: slippage_bps, fx_spread_pct, metal_premium_buy_pct, metal_discount_sell_pct, fractional, auto_convert, extended_hours, commission {fixed, pct}."
+      },
+      "mandate": {
+        "additionalProperties": true,
+        "type": "object",
+        "description": "The portfolio's mandate (all optional): goal (its aim in words), max_position_pct (max % of the portfolio in one holding), max_sector_pct (in one sector), min_cash_pct, max_positions, stop_loss_pct (a holding down this much from cost is flagged), universe (the only symbols it may buy). A buy that breaks one is refused unless the owner agrees to break it."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "delete_paper_portfolios": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolios": {
+        "description": "Paper portfolios by name or id.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "portfolios"
+    ],
+    "type": "object"
+  },
+  "get_paper_activity": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolio": {
+        "description": "The paper portfolio, by name or id.",
+        "type": "string"
+      },
+      "kinds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Only these event kinds: buy, sell, convert, deposit, withdraw, dividend, distribution, split, freeze, mark, fee."
+      },
+      "asset_key": {
+        "type": "string",
+        "description": "Only this asset's events."
+      },
+      "origin": {
+        "type": "string",
+        "description": "Only orders placed by: owner, lucius, or automation:<id>."
+      },
+      "since": {
+        "type": "string",
+        "description": "From this date (YYYY-MM-DD)."
+      },
+      "until": {
+        "type": "string",
+        "description": "Up to this date (YYYY-MM-DD)."
+      },
+      "cursor": {
+        "default": 0,
+        "description": "next_cursor from the previous page.",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "limit": {
+        "default": 25,
+        "description": "Rows per page.",
+        "maximum": 50,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "portfolio"
+    ],
+    "type": "object"
+  },
+  "get_paper_portfolios": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolio": {
+        "type": "string",
+        "description": "One paper portfolio by name or id, with its holdings, open orders and recent activity. Omit to list every paper portfolio."
+      },
+      "include_archived": {
+        "default": false,
+        "description": "Also list archived runs (Start over keeps each old run).",
+        "type": "boolean"
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "get_paper_results": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolios": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Paper portfolios by name or id. Omit for every active one."
+      },
+      "range": {
+        "default": "ALL",
+        "description": "The window for the return figures.",
+        "enum": [
+          "1M",
+          "3M",
+          "1Y",
+          "ALL"
+        ],
+        "type": "string"
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "place_paper_orders": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolio": {
+        "description": "The active paper portfolio, by name or id.",
+        "type": "string"
+      },
+      "orders": {
+        "description": "The orders, at most 20. Sells are placed first.",
+        "items": {
+          "properties": {
+            "asset": {
+              "description": "What to trade: an asset_key from a holding or a previous result (inst:…, ccy:EUR, ctr:…), or a ticker / coin / index symbol such as ACME, BTC, ^GSPC.",
+              "type": "string"
+            },
+            "side": {
+              "description": "buy or sell.",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Shares, coins or units."
+            },
+            "notional": {
+              "type": "number",
+              "description": "Or an amount of money in the asset's currency instead."
+            },
+            "order_type": {
+              "enum": [
+                "market",
+                "limit",
+                "stop"
+              ],
+              "type": "string",
+              "description": "Default market. Mutual funds always fill at the next NAV."
+            },
+            "limit_price": {
+              "type": "number"
+            },
+            "stop_price": {
+              "type": "number"
+            },
+            "tif": {
+              "enum": [
+                "day",
+                "gtc"
+              ],
+              "type": "string",
+              "description": "Good for today (default) or until cancelled."
+            },
+            "extended_ok": {
+              "type": "boolean",
+              "description": "Stocks and ETFs: also fill pre- and after-market, not only in the regular session. Only when the owner asks for it; the portfolio's extended_hours setting does the same for every order."
+            },
+            "note": {
+              "type": "string",
+              "description": "Why — the journal note shown on the trade (280 characters)."
+            },
+            "from_currency": {
+              "type": "string",
+              "description": "Currency conversions only: the currency paid (default home)."
+            },
+            "price": {
+              "type": "number",
+              "description": "Assets priced by the owner only: the price to trade at."
+            },
+            "override_mandate": {
+              "type": "boolean",
+              "description": "Place a buy that breaks the portfolio's mandate anyway. ONLY after the owner, told which rule it breaks, said yes in this conversation. Never in an Automation."
+            }
+          },
+          "required": [
+            "asset",
+            "side"
+          ],
+          "type": "object"
+        },
+        "maxItems": 20,
+        "type": "array"
+      }
+    },
+    "required": [
+      "portfolio",
+      "orders"
+    ],
+    "type": "object"
+  },
+  "preview_paper_orders": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolio": {
+        "description": "The active paper portfolio, by name or id.",
+        "type": "string"
+      },
+      "orders": {
+        "description": "The orders, at most 20. Sells are placed first.",
+        "items": {
+          "properties": {
+            "asset": {
+              "description": "What to trade: an asset_key from a holding or a previous result (inst:…, ccy:EUR, ctr:…), or a ticker / coin / index symbol such as ACME, BTC, ^GSPC.",
+              "type": "string"
+            },
+            "side": {
+              "description": "buy or sell.",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Shares, coins or units."
+            },
+            "notional": {
+              "type": "number",
+              "description": "Or an amount of money in the asset's currency instead."
+            },
+            "order_type": {
+              "enum": [
+                "market",
+                "limit",
+                "stop"
+              ],
+              "type": "string",
+              "description": "Default market. Mutual funds always fill at the next NAV."
+            },
+            "limit_price": {
+              "type": "number"
+            },
+            "stop_price": {
+              "type": "number"
+            },
+            "tif": {
+              "enum": [
+                "day",
+                "gtc"
+              ],
+              "type": "string",
+              "description": "Good for today (default) or until cancelled."
+            },
+            "extended_ok": {
+              "type": "boolean",
+              "description": "Stocks and ETFs: also fill pre- and after-market, not only in the regular session. Only when the owner asks for it; the portfolio's extended_hours setting does the same for every order."
+            },
+            "note": {
+              "type": "string",
+              "description": "Why — the journal note shown on the trade (280 characters)."
+            },
+            "from_currency": {
+              "type": "string",
+              "description": "Currency conversions only: the currency paid (default home)."
+            },
+            "price": {
+              "type": "number",
+              "description": "Assets priced by the owner only: the price to trade at."
+            },
+            "override_mandate": {
+              "type": "boolean",
+              "description": "Place a buy that breaks the portfolio's mandate anyway. ONLY after the owner, told which rule it breaks, said yes in this conversation. Never in an Automation."
+            }
+          },
+          "required": [
+            "asset",
+            "side"
+          ],
+          "type": "object"
+        },
+        "maxItems": 20,
+        "type": "array"
+      }
+    },
+    "required": [
+      "portfolio",
+      "orders"
+    ],
+    "type": "object"
+  },
+  "record_paper_marks": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolio": {
+        "description": "The paper portfolio, by name or id.",
+        "type": "string"
+      },
+      "marks": {
+        "description": "New prices.",
+        "items": {
+          "properties": {
+            "asset_key": {
+              "description": "The asset priced by the owner (ctr:…).",
+              "type": "string"
+            },
+            "price": {
+              "description": "Its price, in its own currency.",
+              "type": "number"
+            },
+            "date": {
+              "type": "string",
+              "description": "YYYY-MM-DD; default today."
+            }
+          },
+          "required": [
+            "asset_key",
+            "price"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "portfolio",
+      "marks"
+    ],
+    "type": "object"
+  },
+  "update_paper_portfolios": {
+    "additionalProperties": false,
+    "properties": {
+      "updates": {
+        "description": "One entry per portfolio.",
+        "items": {
+          "properties": {
+            "portfolio": {
+              "description": "The paper portfolio, by name or id.",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "benchmark": {
+              "type": "string"
+            },
+            "settings": {
+              "additionalProperties": true,
+              "type": "object",
+              "description": "Fill settings to change."
+            },
+            "mandate": {
+              "additionalProperties": true,
+              "type": "object",
+              "description": "Replace the whole mandate ({} clears it); ask the owner first. Its fields are create_paper_portfolio's mandate."
+            },
+            "archive": {
+              "type": "boolean",
+              "description": "True archives it (kept, readable)."
+            },
+            "start_over": {
+              "type": "boolean",
+              "description": "True archives this run and starts a new one with the same settings and cash."
+            }
+          },
+          "required": [
+            "portfolio"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "updates"
+    ],
+    "type": "object"
+  },
+  "get_paper_news": {
+    "additionalProperties": false,
+    "properties": {
+      "portfolio": {
+        "description": "The paper portfolio, by name or id.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "portfolio"
+    ],
+    "type": "object"
+  },
+  "record_autopilot_memo": {
+    "additionalProperties": false,
+    "properties": {
+      "memo": {
+        "description": "What the owner reads: 3 to 6 plain sentences on what you checked, what you did or why you did nothing (1,200 characters at most).",
+        "type": "string"
+      },
+      "watching": {
+        "type": "string",
+        "description": "What you are watching before the next review, one sentence."
+      }
+    },
+    "required": [
+      "memo"
+    ],
+    "type": "object"
   }
 }

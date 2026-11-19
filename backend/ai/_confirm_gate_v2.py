@@ -96,6 +96,15 @@ def can_render_card(surface: Optional[str]) -> bool:
 # stored value always outranks this answer.
 WORKSPACE_DOMAINS = frozenset({"memory", "skills", "artifacts", "notification_log"})
 
+# ``SIMULATION_DOMAINS`` is the one declaration of what is SIMULATED — pretend money that never
+# reaches the owner's book or a broker (paper trading, ADR
+# 2026-11-15-paper-trading-is-a-simulated-book-never-an-order-path). A write that stays inside it
+# (placing or cancelling a paper order, creating a paper portfolio) is seeded Always allow, like a
+# workspace write: no money moves, and asking would make paper trading pointless. A tool that
+# declares ``destructive=True`` (deleting a paper portfolio and its history) is the exception and
+# stays Ask. Mixed with any domain outside these sets, a tool still asks.
+SIMULATION_DOMAINS = frozenset({"paper"})
+
 
 def needs_approval(
     tool_name: str,
@@ -103,6 +112,7 @@ def needs_approval(
     writes: bool,
     domains: tuple[str, ...] = (),
     external_effect: bool = False,
+    destructive: bool = False,
 ) -> bool:
     """Whether ``tool_name`` is SEEDED Ask — it changes the owner's book, or acts outside their data.
 
@@ -116,7 +126,13 @@ def needs_approval(
         return True
     if not writes or tool_name in GATE_EXEMPT_READ_SHAPED:
         return False
-    return not (domains and set(domains) <= WORKSPACE_DOMAINS)
+    if not domains:
+        return True
+    if set(domains) <= WORKSPACE_DOMAINS:
+        return False
+    if set(domains) <= WORKSPACE_DOMAINS | SIMULATION_DOMAINS:
+        return destructive
+    return True
 
 
 def declined_result(tool_name: str) -> tuple[str, None]:

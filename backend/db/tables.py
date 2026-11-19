@@ -784,6 +784,48 @@ lots = book_payload_table(
     Column("txn_id", Text, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True),
     Index("ix_lots_txn_id", "txn_id"),
 )
+# Paper trading (ADR 2026-11-15-paper-trading-is-a-simulated-book-never-an-order-path): a
+# separate SIMULATED book — pretend money, never part of net worth, never an order. The event
+# ledger is the truth (holdings, cash and P&L derive from it); orders, events and the daily value
+# snapshot promote the columns the fill engine queries every tick. Children cascade with their
+# portfolio. Written only by services.paper_trading.service.apply_paper_change.
+paper_portfolios = book_payload_table("paper_portfolios")
+paper_contracts = book_payload_table("paper_contracts")
+paper_orders = book_payload_table(
+    "paper_orders",
+    Column(
+        "portfolio_id",
+        Text,
+        ForeignKey("paper_portfolios.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("status", Text, nullable=False),
+    Index("ix_paper_orders_book_status", "book_id", "status"),
+    Index("ix_paper_orders_portfolio", "portfolio_id"),
+)
+paper_events = book_payload_table(
+    "paper_events",
+    Column(
+        "portfolio_id",
+        Text,
+        ForeignKey("paper_portfolios.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("idem_key", Text, nullable=True),
+    Index("ix_paper_events_portfolio", "portfolio_id"),
+    Index("ux_paper_events_portfolio_idem", "portfolio_id", "idem_key", unique=True),
+)
+paper_values = book_payload_table(
+    "paper_values",
+    Column(
+        "portfolio_id",
+        Text,
+        ForeignKey("paper_portfolios.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("date", Text, nullable=False),
+    Index("ux_paper_values_portfolio_date", "portfolio_id", "date", unique=True),
+)
 grants = book_payload_table("grants")
 vest_events = book_payload_table("vest_events")
 option_contracts = book_payload_table("option_contracts")

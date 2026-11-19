@@ -16,7 +16,8 @@ import { WatchPulseCard } from '../intel/WatchPulseCard'
 import { IntelFeedPanel } from '../intel/IntelFeedPanel'
 import { TopicsStrip } from '../intel/TopicsStrip'
 import { TickerDesk } from '../intel/TickerDesk'
-import { FOLLOWING_TAB, listIdOf, tabOfList, tabOfStory } from '../intel/intelTabs'
+import { FOLLOWING_TAB, PAPER_TAB, listIdOf, tabOfList, tabOfStory } from '../intel/intelTabs'
+import { PaperTab } from '../intel/paper/PaperTab'
 import { FollowingTab } from '../intel/following/FollowingTab'
 import { useFlag } from '../../hooks/useFlag'
 import { useWatchPulse } from '../../hooks/useWatchPulse'
@@ -45,6 +46,14 @@ import { useWatchlistRemoval } from '../intel/useWatchlistRemoval'
 function withFollowing<T extends { key: string }>(tabs: T[]): (T | typeof FOLLOWING_TAB)[] {
   const at = tabs.findIndex((t) => t.key === 'holdings') + 1
   return [...tabs.slice(0, at), FOLLOWING_TAB, ...tabs.slice(at)]
+}
+
+/** Paper Trading (flag `paper_trading`) sits right after Copy Trading, or after My holdings
+ *  when Copy Trading is off. */
+function withPaper<T extends { key: string }>(tabs: T[]): (T | typeof PAPER_TAB)[] {
+  const ct = tabs.findIndex((t) => t.key === 'copy-trading')
+  const at = ct >= 0 ? ct + 1 : tabs.findIndex((t) => t.key === 'holdings') + 1
+  return [...tabs.slice(0, at), PAPER_TAB, ...tabs.slice(at)]
 }
 
 const HOLDINGS_MESSAGE =
@@ -164,6 +173,12 @@ function IntelFeed({
   useEffect(() => {
     if (tab === 'copy-trading' && followingFlag === false) setTab('holdings')
   }, [tab, followingFlag, setTab])
+  // Paper Trading likewise: behind `paper_trading`, never stranded when the flag goes off.
+  const paperFlag = useFlag('paper_trading')
+  const paperOn = paperFlag === true
+  useEffect(() => {
+    if (tab === 'paper-trading' && paperFlag === false) setTab('holdings')
+  }, [tab, paperFlag, setTab])
   // The sidebar card shows the tab's list: My holdings on Holdings, the list on a list tab (none
   // on Topics & macro — topics are in no list; its lead card lists and adds them).
   const activeListId = tabListId ?? watchlists.find((w) => w.is_auto_sync)?.id ?? 'default'
@@ -281,7 +296,7 @@ function IntelFeed({
             ariaLabel="Intelligence view"
             value={tab}
             onChange={nav.setTab}
-            tabs={followingOn ? withFollowing(tabs) : tabs}
+            tabs={((t) => (paperOn ? withPaper(t) : t))(followingOn ? withFollowing(tabs) : tabs)}
           />
           <button
             type="button"
@@ -302,7 +317,12 @@ function IntelFeed({
         )}
         {/* A flag switched off while this tab was remembered shows nothing here: the effect
             above is already sending the visit back to My holdings. */}
-        {tab !== 'copy-trading' && (
+        {tab === 'paper-trading' && paperOn && (
+          <div role="tabpanel" className="fol-shell">
+            <PaperTab onAskLucius={onChatSuggest} />
+          </div>
+        )}
+        {tab !== 'copy-trading' && tab !== 'paper-trading' && (
           <div className={`intel-layout${tab === 'macro' ? ' intel-layout--solo' : ''}`}>
             <div className="intel-feed">
               <div

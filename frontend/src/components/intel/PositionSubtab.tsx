@@ -15,6 +15,7 @@ import {
   getCurrencySymbol,
   priceDigits,
 } from '../../utils/format'
+import { PaperPositionsPanel } from './paper/PaperPositionsPanel'
 import type { AssetPosition } from '../../types/assetDetail'
 import type { RealizedPnl, IncomeSummary } from '../../types/portfolio'
 
@@ -229,6 +230,9 @@ export function PositionSubtab({
           </div>
         </Panel>
       )}
+
+      {/* Paper Trading positions in this asset: their own labelled table, never in the totals above. */}
+      <PaperPositionsPanel instrumentId={instrumentId} />
 
       {positionId ? (
         <LotsPanel

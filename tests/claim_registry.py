@@ -108,6 +108,7 @@ NOT_A_TOOL: dict[str, str] = {
     "auto_pay": "a commitment KIND (purchase|loan_repayment|auto_pay|goal), not a tool",
     "auto_applied": "a field on the get_agent_metrics response payload",
     "import_review_default": "a profile.json setting name, not a tool",
+    "auto_convert": "a paper portfolio fill-setting key (services.paper_trading.model), not a tool",
     # A self-improvement PROPOSAL KEY an agent's reflection loop may emit, listed in
     # services/agent_reflection.py's forbidden-key set. It is a dict key rather than a
     # `def`, which is why backend_symbols() does not cover it.

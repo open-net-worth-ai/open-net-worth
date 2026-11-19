@@ -111,6 +111,8 @@ _LOCKED: tuple[_Rule, ...] = (
     *_rules(
         _WRITE,
         r"^/api/automations(/.*)?$",
+        # A paper portfolio's autopilot runs Lucius on a schedule: model spend, like an Automation.
+        r"^/api/paper/portfolios/[^/]+/autopilot(/.*)?$",
         r"^/api/memory(/.*)?$",
         r"^/api/channels(/.*)?$",
         r"^/api/chat-pairing(/.*)?$",

@@ -167,6 +167,20 @@ def test_enforced_offer_stops_at_its_call_limit(monkeypatch):
     assert sum("not available on this run" in r for r in results) == 2
 
 
+def test_an_enforced_offer_takes_a_callers_own_budget():
+    snap = _skill_scope.snapshot_scope()
+    try:
+        _skill_scope.set_offer_scope(["get_live_prices"])
+        _skill_scope.enforce_offer(max_calls=20)
+        allowed = [not _skill_scope.offer_refuses("get_live_prices") for _ in range(21)]
+        assert allowed == [True] * 20 + [False]
+        _skill_scope.enforce_offer()  # the default stays 8
+        allowed = [not _skill_scope.offer_refuses("get_live_prices") for _ in range(9)]
+        assert allowed == [True] * 8 + [False]
+    finally:
+        _skill_scope.restore_scope(snap)
+
+
 def test_a_turn_that_keeps_calling_after_refusal_is_ended(monkeypatch):
     """A refused call starts another model round, so without an end only the timeout stops it."""
     provider = _ScriptedProvider([[("get_net_worth", {})]] * 300)

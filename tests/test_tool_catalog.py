@@ -84,7 +84,15 @@ def test_completeness_every_schema_in_catalog():
 
     catalog = build_tool_catalog()
     catalog_names = set(_catalog_names(catalog))
-    schema_names = {s["name"] for s in TOOL_SCHEMAS} - _CATALOG_HIDDEN - hidden_connector_tools()
+    from backend.ai.tools.catalog import flag_hidden_tools
+
+    # A feature whose flag is off is absent the same way (catalog.FLAGGED_TOOLS).
+    schema_names = (
+        {s["name"] for s in TOOL_SCHEMAS}
+        - _CATALOG_HIDDEN
+        - hidden_connector_tools()
+        - flag_hidden_tools()
+    )
 
     missing_from_catalog = schema_names - catalog_names
     assert not missing_from_catalog, (

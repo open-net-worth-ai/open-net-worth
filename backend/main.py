@@ -175,6 +175,8 @@ from backend.api.networth_history import router as networth_history_router
 from backend.api.news_sources import router as news_sources_router
 from backend.api.notification_log import router as notification_log_router
 from backend.api.options import router as options_router
+from backend.api.paper_trading import qa_router as paper_trading_qa_router
+from backend.api.paper_trading import router as paper_trading_router
 from backend.api.payees import router as payees_router
 from backend.api.plaid_api import router as plaid_router
 from backend.api.plan_outlook import router as plan_outlook_router
@@ -244,6 +246,7 @@ async def _headless_turn_runner(
     lean_prompt=False,
     enforce_offer=False,
     effort="medium",
+    max_tool_calls=None,
 ) -> str:
     """The headless-turn runner registered on the ``core.headless_turn`` seam (below, in
     ``lifespan``) so a service can run one Lucius turn WITHOUT ``services`` importing ``ai``
@@ -275,6 +278,9 @@ async def _headless_turn_runner(
     lean_prompt = use the short system prompt instead of the full conversational one — right
     for a zero-tool completion that only has to return text.
 
+    max_tool_calls = with ``enforce_offer``, how many tool calls the turn may make (None → the
+    default, ``_skill_scope.ENFORCED_OFFER_MAX_CALLS``).
+
     enforce_offer = make ``allowed_tools`` a real ceiling for this turn. Without it an offer is
     advisory: a call outside it still dispatches, and nobody is here to tap a card.
     """
@@ -299,7 +305,7 @@ async def _headless_turn_runner(
     if allowed_tools is not None:
         _skill_scope.set_offer_scope(allowed_tools)
     if enforce_offer:
-        _skill_scope.enforce_offer()
+        _skill_scope.enforce_offer(max_tool_calls)
     run_model = model or ModelConfigStore().resolved()["model"]
     short_id = str(uuid.uuid4())[:8]
     session_id = f"headless-{short_id}"
@@ -1183,6 +1189,7 @@ app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
 app.include_router(investment_theses_router)
 app.include_router(followed_portfolios_router)
+app.include_router(paper_trading_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)
@@ -1237,6 +1244,7 @@ app.include_router(matches_router)
 app.include_router(market_data_router)
 if _settings.onw_qa_mode:
     app.include_router(market_data_qa_router)
+    app.include_router(paper_trading_qa_router)
 app.include_router(memory_router)
 app.include_router(equity_router)
 app.include_router(income_router)

@@ -172,6 +172,12 @@ In every mode:
   (**N to review** in Accounts), and only you can approve them — even in **Skip all approvals**.
   It can still edit or re-flag those rows.
 
+**A Paper only Automation** (one tied to a paper portfolio, or one you asked Lucius to make paper
+only) can only read your book, trade paper and save artifacts, in every mode. Every other write,
+every connector tool (a broker's order tool included), web search, page fetches, and memory or
+skill changes are refused. This is fixed when the Automation is created. See
+[Paper Trading](../features/paper-trading.md).
+
 **An Automation never borrows your chat permissions.** In **Manually approve**, even a tool you've
 set to **Always allow** elsewhere pauses — unless it's on this Automation's own **Always
 allowed** list. Tapping **Always allow** on a card during a run adds the tool to that list. To

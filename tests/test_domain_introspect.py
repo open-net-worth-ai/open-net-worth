@@ -56,6 +56,7 @@ def test_discovers_every_write_choke_from_source():
         "lot",
         "option",
         "owned_asset",
+        "paper",
         "position",
         "receipt",
     }
@@ -71,8 +72,11 @@ def test_discovers_every_write_choke_from_source():
     # `_ASSET_OPS` handler table, which the AST scan cannot see (so only those 3 are found
     # now), and `lot` gained amend, dispose_amend and dispose_undo; 66 once
     # `followed_portfolio` joined with follow/refresh/unfollow/set_ticker (2026-11-10); 67 once
-    # `income` gained `amend` (a dividend corrected from its holding's Dividends table, 2026-11-11).
-    assert sum(len(c.ops) for c in chokes) == 67
+    # `income` gained `amend` (a dividend corrected from its holding's Dividends table, 2026-11-11);
+    # 76 once `paper` (services.paper_trading.service.apply_paper_change, the simulated book)
+    # joined with create/update/archive/start_over/delete/place/cancel/mark/lifecycle (2026-11-15);
+    # 80 once its autopilot added autopilot/autopilot_memo/autopilot_trigger/autopilot_run_now.
+    assert sum(len(c.ops) for c in chokes) == 80
 
 
 def test_discriminator_split_is_eight_type_three_op():
@@ -99,6 +103,7 @@ def test_discriminator_split_is_eight_type_three_op():
         "automation",
         "followed_portfolio",
         "owned_asset",
+        "paper",
     ]
     assert by_disc["option"] == "type"
 
@@ -555,9 +560,11 @@ def test_output_stays_bounded():
     views = [
         {"name": f"get_thing_{i}", "description": "x" * 400, "input_schema": {}} for i in range(300)
     ]
+    # 6000 -> 6500 (2026-11-15): the `ops` index is one short line per real op, and `paper`'s
+    # 9 ops took it to ~6,050. Still bounded: it lists names only, never shapes.
     for target in ("", "ops", "views", "ops/budget."):
         size = len(json.dumps(di.describe(target, views=views)))
-        assert size < 6000, f"describe({target!r}) returned {size} chars"
+        assert size < 6500, f"describe({target!r}) returned {size} chars"
     assert len(json.dumps(di.describe("ops/budget.assign"))) < 2000
 
 

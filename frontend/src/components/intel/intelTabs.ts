@@ -13,7 +13,7 @@ import type { Watchlist, WatchlistItem } from './WatchlistsSection'
 // is per story, so a story on two tabs is marked read on both at once — the tab badges just no
 // longer add up.
 
-export type IntelTabKey = 'holdings' | 'macro' | 'copy-trading' | `list:${string}`
+export type IntelTabKey = 'holdings' | 'macro' | 'copy-trading' | 'paper-trading' | `list:${string}`
 
 export interface IntelTab {
   key: IntelTabKey
@@ -31,6 +31,9 @@ export const FOLLOWING_TAB: IntelTab = { key: 'copy-trading', label: 'Copy Tradi
 /** Its old key, from before the rename to Copy Trading (owner, 2026-11-14): a saved link or a
  *  remembered tab still opens it. */
 const LEGACY_FOLLOWING_KEY = 'portfolios'
+
+/** Paper Trading (PROTOTYPE branch): your paper portfolios, right after Copy Trading. */
+export const PAPER_TAB: IntelTab = { key: 'paper-trading', label: 'Paper Trading' }
 
 export const listTabKey = (id: string): IntelTabKey => `list:${id}`
 
@@ -65,7 +68,8 @@ export function resolveTabKey(
   watchlists: Watchlist[],
   lastList?: string | null,
 ): IntelTabKey | null {
-  if (raw === 'holdings' || raw === 'macro' || raw === 'copy-trading') return raw
+  if (raw === 'holdings' || raw === 'macro' || raw === 'copy-trading' || raw === 'paper-trading')
+    return raw
   if (raw === LEGACY_FOLLOWING_KEY) return 'copy-trading'
   const own = ownLists(watchlists)
   if (raw === 'watching') {
@@ -93,7 +97,12 @@ export function partitionByTab(
   watched: Set<string>,
   tickersByList: Map<string, Set<string>>,
 ): Record<IntelTabKey, StoryArc[]> {
-  const out: Record<IntelTabKey, StoryArc[]> = { holdings: [], macro: [], 'copy-trading': [] }
+  const out: Record<IntelTabKey, StoryArc[]> = {
+    holdings: [],
+    macro: [],
+    'copy-trading': [],
+    'paper-trading': [],
+  }
   for (const id of tickersByList.keys()) out[listTabKey(id)] = []
   for (const s of stories) {
     const scope = storyScope(s, held, watched)

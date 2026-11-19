@@ -1,6 +1,10 @@
 {
   "_comment": "Code area → product doc pages a change there most likely affects. Used by scripts/docs_impact.py (commit-msg hook) to suggest pages. Order matters: first match wins per file.",
   "areas": [
+    { "glob": "backend/services/paper_trading/**", "docs": ["docs/product/features/paper-trading.md"] },
+    { "glob": "backend/*/paper_trading*", "docs": ["docs/product/features/paper-trading.md"] },
+    { "glob": "backend/ai/simulation_guard.py", "docs": ["docs/product/features/paper-trading.md", "docs/product/lucius/automations.md"] },
+    { "glob": "frontend/src/components/intel/paper/**", "docs": ["docs/product/features/paper-trading.md"] },
     { "glob": "backend/*/followed_portfolio*", "docs": ["docs/product/features/copy-trading.md"] },
     { "glob": "backend/services/followed_portfolios/**", "docs": ["docs/product/features/copy-trading.md"] },
     { "glob": "frontend/src/components/intel/following/**", "docs": ["docs/product/features/copy-trading.md"] },

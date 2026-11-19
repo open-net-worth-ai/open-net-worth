@@ -1,0 +1,128 @@
+import '../following/following.css'
+
+import { useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import { Button, EmptyState, ErrorState, TabSkeleton } from '../../ui'
+import { Spark } from '../../../lucius/identity'
+import { NewPortfolioDialog } from './NewPortfolioDialog'
+import { PaperCard } from './PaperCard'
+import { PaperPortfolioPage } from './PaperPortfolioPage'
+import { usePaperList } from './usePaper'
+
+/** Intelligence › Paper Trading: your paper portfolios as cards; open one to trade on paper. */
+export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void }) {
+  const list = usePaperList()
+  // The open portfolio lives in the address (`?paper=<id>`), as Copy Trading's does: a reload
+  // or a shared link opens it again, and Back returns to the list. Copy Trading's Paper-copy
+  // lands here with it.
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as { paper?: string }
+  const openId = search.paper || null
+  const setOpenId = (id: string | null) =>
+    void navigate({
+      to: '/intel',
+      search: ((prev: Record<string, unknown>) => ({ ...prev, paper: id ?? undefined })) as never,
+    } as never)
+  const [creating, setCreating] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+
+  if (openId)
+    return (
+      <PaperPortfolioPage
+        id={openId}
+        onBack={() => setOpenId(null)}
+        onOpen={setOpenId}
+        onAskLucius={onAskLucius}
+      />
+    )
+  if (list.initialLoading)
+    return <TabSkeleton variant="holdings" label="Loading paper portfolios" header={false} />
+  if (!list.data)
+    return (
+      <ErrorState
+        title="Paper portfolios didn't load"
+        message="Check that the app is running, then try again."
+        onRetry={() => void list.refresh()}
+      />
+    )
+
+  const { portfolios, archived } = list.data
+  // Lucius has its own create tool, so it can set one up from an idea in plain words.
+  const withLucius = onAskLucius && (
+    <Button
+      size="sm"
+      variant="primary"
+      className="fi-lucius"
+      iconLeft={<Spark size={15} ariaHidden />}
+      onClick={() =>
+        onAskLucius(
+          'Set up a paper portfolio with me. Ask what idea I want to test, suggest the ' +
+            'starting cash and the first trades, then create it.',
+        )
+      }
+    >
+      Create with Lucius
+    </Button>
+  )
+  const dialog = (
+    <NewPortfolioDialog
+      open={creating}
+      onClose={() => setCreating(false)}
+      onCreated={(id) => {
+        setCreating(false)
+        setOpenId(id)
+      }}
+    />
+  )
+
+  if (portfolios.length === 0 && archived.length === 0)
+    return (
+      <div className="fol-page">
+        <EmptyState
+          fill
+          title="Try an idea before you put money in"
+          body="Trade with pretend money at real prices. Never in your net worth."
+          action={
+            <div className="paper-actions">
+              {withLucius}
+              <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+                Create manually
+              </Button>
+            </div>
+          }
+        />
+        {dialog}
+      </div>
+    )
+
+  const shown = showArchived ? archived : portfolios
+  return (
+    <div className="fol-page">
+      <section className="fol-sec" aria-label="Paper portfolios">
+        <div className="paper-toolbar">
+          <div className="paper-actions">
+            {withLucius}
+            <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+              Create manually
+            </Button>
+          </div>
+        </div>
+        {shown.length > 0 ? (
+          <div className="fol-cards">
+            {shown.map((p) => (
+              <PaperCard key={p.id} p={p} onOpen={() => setOpenId(p.id)} />
+            ))}
+          </div>
+        ) : (
+          <p className="fol-by">No active paper portfolios</p>
+        )}
+        {archived.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setShowArchived((v) => !v)}>
+            {showArchived ? 'Back to active' : `Archived runs (${archived.length})`}
+          </Button>
+        )}
+      </section>
+      {dialog}
+    </div>
+  )
+}

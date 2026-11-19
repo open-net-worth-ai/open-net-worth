@@ -287,7 +287,11 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # re-wording raise sets). show_visual (flag inline_visuals, ~2.6K chars after trimming):
     # inline charts, figures and timelines whose numbers are references into earlier tool
     # results (docs/design/inline-visuals.md). CORE, so it also counts in the offer below.
-    budget = 483_700
+    # 2026-11-15/18: 483_700 -> 498_300. Paper Trading's twelve tools (ADR 2026-11-15-paper-
+    # trading-is-a-simulated-book-never-an-order-path), their mandate fields and the autopilot's
+    # get_paper_news + record_autopilot_memo included: 14,597 chars measured. Not CORE, so the
+    # default offer is unchanged.
+    budget = 498_300
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

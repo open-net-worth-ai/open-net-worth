@@ -46,6 +46,10 @@ a setting the day it appears:
   editing a skill, creating an artifact and marking notifications read change only Lucius's
   workspace, not your book, so they don't stop for a card. Set any of them to **Ask** if you want to
   see each one. This is a deliberate choice: skill and memory writes start at Always allow.
+- **Paper trading runs (Always allow).** Creating a paper portfolio and placing, cancelling or
+  pricing paper orders is pretend money that never reaches your book or a broker, so it doesn't
+  stop for a card. Deleting a paper portfolio and its history still asks. See
+  [Paper Trading](../features/paper-trading.md).
 - **Changing your book, or sending something out, asks (Ask).** Logging or editing a transaction,
   moving budget money, creating an account, turning a connector on or off, and sending an email, a
   Telegram message or a webhook.
