@@ -224,6 +224,12 @@ _DAILY_ANALYSIS_CAP = 500  # rolling-24h ceiling — raised from 50; never expec
 _FINISHED_RETENTION_DAYS = 7  # a done/failed pending_analysis row has no further use once its
 # cooldown/audit window has passed (`recently_failed`'s own gate only ever looks back a few
 # hours) — this table never deleted a finished row before this fix, so it grew forever.
+# A permanently-failed row is only read inside 6-hour windows (the news-screen and spike
+# cooldowns; the failure cooldown is 0), so it goes after a day: a refusal storm kept ~16k failed
+# rows that every tick scanned in full (2026-11-19). Deleted at most _RETENTION_BATCH per tick,
+# oldest first, so a backlog drains over several ticks instead of one long write transaction.
+_FAILED_RETENTION_DAYS = 1
+_RETENTION_BATCH = 500
 _STALE_CLAIM_TIMEOUT_SECONDS = 1200  # 20 min — the lease-expiry backstop a real message queue
 # gets for free (visibility timeout) and this DIY claim/pending/done/failed table never had
 # (owner incident 2026-08-29: 126 rows found stuck in `claimed` forever, oldest 70 days, after
@@ -1636,10 +1642,15 @@ async def run_analysis_sweep() -> int:
         logger.warning("analyst: stuck refresh_stage reconcile failed: %s", type(exc).__name__)
 
     try:
-        cutoff_finished = (
-            datetime.now(timezone.utc) - timedelta(days=_FINISHED_RETENTION_DAYS)
-        ).isoformat()
-        removed = await asyncio.to_thread(pa_store.delete_finished_older_than, cutoff_finished)
+        now = datetime.now(timezone.utc)
+        cutoff_finished = (now - timedelta(days=_FINISHED_RETENTION_DAYS)).isoformat()
+        cutoff_failed = (now - timedelta(days=_FAILED_RETENTION_DAYS)).isoformat()
+        removed = await asyncio.to_thread(
+            pa_store.delete_finished_older_than,
+            cutoff_finished,
+            failed_cutoff_iso=cutoff_failed,
+            limit=_RETENTION_BATCH,
+        )
         if removed:
             logger.info("analyst: retention swept %d finished pending_analysis row(s)", removed)
     except Exception as exc:

@@ -273,6 +273,55 @@ def test_delete_finished_older_than_returns_zero_when_table_empty(db_isolated):
     assert store.delete_finished_older_than(datetime.now(timezone.utc).isoformat()) == 0
 
 
+def _permanently_failed(store, subject: str, failed_at: str) -> dict:
+    row = store.add(subject, subject[-1].upper(), f"s-{subject}", "crash", {})
+    for _ in range(3):  # 3rd attempt permanently fails
+        store.mark_failed(row["id"], "Err")
+    store.update_by_id(row["id"], {"failed_at": failed_at})
+    return row
+
+
+def test_failed_rows_can_have_a_shorter_cutoff_than_done_rows(db_isolated):
+    """A refusal storm left ~16k failed rows that every tick scanned (2026-11-19): failed rows
+    get their own, shorter window while done rows keep theirs."""
+    store = _store(db_isolated)
+    now = datetime.now(timezone.utc)
+    two_days = (now - timedelta(days=2)).isoformat()
+
+    done = store.add("asset:a", "A", "s-a", "crash", {})
+    store.mark_done(done["id"])
+    store.update_by_id(done["id"], {"done_at": two_days})
+    failed = _permanently_failed(store, "asset:b", two_days)
+    fresh_failed = _permanently_failed(store, "asset:c", now.isoformat())
+
+    removed = store.delete_finished_older_than(
+        (now - timedelta(days=7)).isoformat(),
+        failed_cutoff_iso=(now - timedelta(days=1)).isoformat(),
+    )
+
+    assert removed == 1
+    assert store.find_by_id(failed["id"]) is None
+    assert store.find_by_id(done["id"]) is not None  # done keeps its 7-day window
+    assert store.find_by_id(fresh_failed["id"]) is not None
+
+
+def test_a_limit_deletes_a_backlog_in_bounded_oldest_first_batches(db_isolated):
+    """One run must never delete thousands of rows in a single write transaction."""
+    store = _store(db_isolated)
+    now = datetime.now(timezone.utc)
+    rows = [
+        _permanently_failed(store, f"asset:{c}", (now - timedelta(days=10 - i)).isoformat())
+        for i, c in enumerate("abcde")
+    ]
+    cutoff = (now - timedelta(days=1)).isoformat()
+
+    assert store.delete_finished_older_than(cutoff, limit=2) == 2
+    assert [store.find_by_id(r["id"]) is None for r in rows] == [True, True, False, False, False]
+    assert store.delete_finished_older_than(cutoff, limit=2) == 2
+    assert store.delete_finished_older_than(cutoff, limit=2) == 1
+    assert store.delete_finished_older_than(cutoff, limit=2) == 0
+
+
 # ── has_recent tests (Phase 3a: news-spike cooldown) ─────────────────────────
 
 

@@ -238,31 +238,46 @@ class PendingAnalysisStore(PayloadTableStore):
                 return True
         return False
 
-    def delete_finished_older_than(self, cutoff_iso: str) -> int:
+    def delete_finished_older_than(
+        self,
+        cutoff_iso: str,
+        *,
+        failed_cutoff_iso: str | None = None,
+        limit: int | None = None,
+    ) -> int:
         """Delete every DONE or permanently-FAILED row whose own completion timestamp is
         older than `cutoff_iso` — this table never deleted a finished row before, so it grew
         forever (a done/failed row has no further use once its audit/cooldown window has
         passed; `recently_failed`'s own cooldown check only ever looks back a few hours).
         `done_at`/`failed_at` are each status's own completion stamp (`mark_done`/
         `mark_failed`) — a `pending`/`claimed` row is never a candidate, whatever its
-        `created_at`. Returns the number of rows removed."""
-        with self._use_conn(None) as conn:
-            stale = list(
-                conn.execute(
-                    select(self._table.c.id, self._table.c.seq, self._table.c.payload).where(
-                        or_(
-                            and_(
-                                self._table.c.payload["status"].as_string() == "done",
-                                self._table.c.payload["done_at"].as_string() < cutoff_iso,
-                            ),
-                            and_(
-                                self._table.c.payload["status"].as_string() == "failed",
-                                self._table.c.payload["failed_at"].as_string() < cutoff_iso,
-                            ),
-                        )
-                    )
+        `created_at`. Returns the number of rows removed.
+
+        `failed_cutoff_iso` gives FAILED rows their own (shorter) window — default: the same
+        `cutoff_iso`. `limit` deletes at most that many rows per call, oldest first, so a big
+        backlog drains over several calls instead of one long write transaction (a refusal
+        storm left ~16k failed rows, 2026-11-19)."""
+        failed_cutoff = failed_cutoff_iso or cutoff_iso
+        query = (
+            select(self._table.c.id, self._table.c.seq, self._table.c.payload)
+            .where(
+                or_(
+                    and_(
+                        self._table.c.payload["status"].as_string() == "done",
+                        self._table.c.payload["done_at"].as_string() < cutoff_iso,
+                    ),
+                    and_(
+                        self._table.c.payload["status"].as_string() == "failed",
+                        self._table.c.payload["failed_at"].as_string() < failed_cutoff,
+                    ),
                 )
             )
+            .order_by(self._table.c.seq)
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        with self._use_conn(None) as conn:
+            stale = list(conn.execute(query))
             if not stale:
                 return 0
             self._fire_hook(conn, [(r.id, dict(r._mapping)) for r in stale])

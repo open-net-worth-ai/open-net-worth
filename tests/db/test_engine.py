@@ -159,3 +159,23 @@ def test_env_override_into_missing_directory_works(tmp_path, monkeypatch):
     with eng.get_engine().connect() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM t")).scalar() == 1
     eng.dispose_engine()
+
+
+def test_sqlite_pool_serves_every_worker_thread_without_starving_the_loop(tmp_path, monkeypatch):
+    """~50 worker threads (FastAPI's 40 + asyncio's executor) share the SQLite engine. With the
+    default 15 connections they exhausted the pool and the event loop's own small reads queued
+    behind them for seconds (loop_watch BLOCKED in the pool's checkout, 2026-11-19). WAL lets
+    readers run concurrently, so 40 connections can be open at once without waiting."""
+    monkeypatch.setenv("ONW_DATABASE_URL", f"sqlite:///{tmp_path}/pool.db")
+    from backend.db import engine as eng
+
+    eng.dispose_engine()
+    engine = eng.get_engine()
+    held = [engine.connect() for _ in range(40)]
+    try:
+        for conn in held:
+            assert conn.execute(text("SELECT 1")).scalar() == 1
+    finally:
+        for conn in held:
+            conn.close()
+        eng.dispose_engine()

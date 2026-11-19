@@ -79,13 +79,27 @@ def _attach_request_timing(eng: Engine) -> None:
         req_timing.record_db(elapsed_ms, rc if isinstance(rc, int) and rc > 0 else 0)
 
 
+_SQLITE_MAX_OVERFLOW = 45
+
+
 def _make_engine(url: str) -> Engine:
     # hide_parameters=True (FR-M5) — keep bound SQL VALUES out of every DBAPIError's str():
     # an IntegrityError reaches both the LLM context (ai/assistant.py's str(exc)) and the boot
     # log (migrate.py's {exc}), and the "[parameters: (...)]" tail would otherwise leak row
     # data there. The URL channel stays covered separately by migrate._redact_url.
     if url.startswith("sqlite"):
-        eng = create_engine(url, connect_args={"check_same_thread": False}, hide_parameters=True)
+        # max_overflow: ~50 worker threads (FastAPI's 40 + asyncio's executor) share this engine.
+        # The default 5+10 ran dry under load and the event loop's own small reads queued in
+        # the pool's checkout for seconds (loop_watch BLOCKED, 2026-11-19). WAL lets readers run
+        # concurrently and SQLite still serialises writers itself, so more connections cost only
+        # file handles — and overflow ones are closed as soon as they are returned.
+        eng = create_engine(
+            url,
+            connect_args={"check_same_thread": False},
+            hide_parameters=True,
+            pool_size=5,
+            max_overflow=_SQLITE_MAX_OVERFLOW,
+        )
         sqlite_path = resolved_sqlite_path(url)
 
         @event.listens_for(eng, "connect")
