@@ -664,3 +664,19 @@ def test_a_failing_connector_points_lucius_at_its_card():
 def test_a_status_check_on_named_connectors_stays_on_topic(svc):
     out = _call("get_connector_status", {"connectors": ["email"]})
     assert "more_in_directory" not in out
+
+
+def test_a_switched_off_mcp_server_offers_the_card_that_turns_it_on(svc):
+    """UAT 2026-11-19: an OAuth sign-in left its server dormant; Lucius said "not connected"
+    and pointed at the Suggested card instead of the server the user had already added."""
+    store = _mcp_store()
+    _server(store, "api-acme-com", name="api.acme.com", enabled=False)
+    _server(store, "drive", name="Drive", enabled=True)
+
+    rows = _call("get_connector_status", {"connectors": ["mcp:api-acme-com", "mcp:drive"]})[
+        "connectors"
+    ]
+    off = rows["mcp:api-acme-com"]
+    assert off["enabled"] is False
+    assert "connectors.open_setup" in off["fix"] and "'mcp:api-acme-com'" in off["fix"]
+    assert "fix" not in rows["mcp:drive"]

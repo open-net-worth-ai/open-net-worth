@@ -548,7 +548,7 @@ export function ConnectorDetail({
     </>
   ) : (
     <Btn size="lg" variant="primary" onClick={connect}>
-      {setupPending ? 'Connect' : 'Resume'}
+      {setupPending || entry.neverConnected ? 'Connect' : 'Resume'}
     </Btn>
   )
   const phoneFix = isMobile && !running ? stateAction : null

@@ -152,7 +152,8 @@ marked **from your connection**. A long list shows its first nine tools; **Show 
 
 Not ready to connect yet (real keys still to come, a build still to finish)? Click **Save** instead
 of **Connect**, on the form or on a failed test. The server is kept, switched off and untested;
-turn it on from its settings when you're ready, and it is tested then.
+turn it on from its settings when you're ready, and it is tested then. Until it has connected once,
+its row says **Finish setup**.
 
 A local command needs its runtime installed on the machine running Open Net Worth — Node.js for
 `npx`, [uv](https://docs.astral.sh/uv/) for `uvx`.
@@ -294,6 +295,11 @@ app registration at the vendor, paste its client ID, and try again.
 
 **"Sign in above, then test the connection."** — finish the OAuth sign-in before clicking
 Connect again.
+
+**Finish setup** (or, before this version, **Disconnected**) on a server you just signed in to —
+the sign-in worked, but the add was left before its last step, so the server was kept switched off
+and Lucius has none of its tools. Open it and click **Connect** (or add it again from Browse & add). Asked
+about it, Lucius offers the same card.
 
 **Was connected — sign-in expired** — click **Reconnect** (or **Edit configuration**) and sign in
 again.

@@ -521,9 +521,25 @@ describe('Connect is credentials-first, not a flag flip', () => {
         name: 'IRAS Tax Tables',
         kind: 'mcp',
         config: { url: 'https://mcp.example' },
+        // It connected once (its tools are saved), so switching it back on is a Resume.
+        tools: [{ name: 'get_rates', description: '', source: 'mcp' }],
       }),
     )
     clickResume()
+    expect(onSetEnabled).toHaveBeenCalledWith(true)
+  })
+
+  it('says Connect, not Resume, for an MCP server that never connected (UAT 2026-11-19)', () => {
+    const { onSetEnabled } = renderDetail(
+      connector({
+        id: 'mcp:api-acme-com',
+        name: 'api.acme.com',
+        kind: 'mcp',
+        config: { url: 'https://api.acme.com/mcp' },
+      }),
+    )
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+    clickConnect()
     expect(onSetEnabled).toHaveBeenCalledWith(true)
   })
 })

@@ -210,6 +210,13 @@ export function isInstalled(c: Connector): boolean {
  *  switched off": a connector the user deliberately disabled is not a problem to be
  *  solved (spec §1). This is why `health.ts`'s `needsAttention` is NOT reused — it
  *  deliberately flags `configured_disabled`, which this design rejects. */
+/** An MCP server that is off and has never listed a tool. Connecting once saves its tools,
+ *  and a Pause keeps them — so off with none means it never connected (an abandoned OAuth
+ *  add, or "Save without connecting"), not that the user paused it. */
+export function mcpNeverConnected(c: Connector): boolean {
+  return c.id.startsWith(MCP_PREFIX) && !c.enabled && !(c.tools ?? []).length
+}
+
 export function statusOf(c: Connector): {
   statusText: string
   tone: StatusTone
@@ -233,6 +240,12 @@ export function statusOf(c: Connector): {
     }
   }
   if (c.enabled) return { statusText: 'Connected', tone: 'good', attention: false }
+  // An MCP server that is off and has never listed a tool never connected: an OAuth sign-in
+  // whose add was abandoned, or "Save without connecting". "Disconnected" read as broken and
+  // hid the one step left (UAT 2026-11-19). Still no attention: off is never a problem (§1).
+  if (mcpNeverConnected(c)) {
+    return { statusText: 'Finish setup', tone: 'warn', attention: false }
+  }
   // "Disconnected" implies a connection that existed and then dropped — wrong for a
   // connector that has never been set up at all, which reads as "something broke" rather
   // than "nothing's been entered yet". An MCP server is configured the moment it's in the
@@ -381,6 +394,7 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // An MCP server is configured the moment it is in the store — its endpoint WAS the
     // setup. Everything else earns it by holding credentials.
     configured: mcp || c.status !== 'not_configured',
+    neverConnected: mcpNeverConnected(c),
     sub: selfDescribed || provenance?.sub || c.short_description || endpointOf(c) || '',
     desc: selfDescribed
       ? ''

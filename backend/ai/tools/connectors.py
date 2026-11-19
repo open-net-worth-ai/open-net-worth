@@ -127,8 +127,18 @@ def _status_row(view) -> dict:
         # Lucius used to answer an expired sign-in with "open Connectors yourself" and offered
         # the card only when asked (owner, 2026-11-13): say here that the card is the fix.
         row["fix"] = FIX_HINT.format(id=view.id)
+    elif view.kind == "mcp" and not view.enabled:
+        # A switched-off MCP server contributes no tools, so "not connected" is true — but a
+        # user who just signed in to it reads that as broken (UAT 2026-11-19: an IBKR OAuth
+        # sign-in left dormant, Lucius pointed at the Suggested card instead of this row).
+        row["fix"] = OFF_HINT.format(id=view.id)
     return row
 
+
+OFF_HINT = (
+    "Added but switched off, so none of its tools are available. Say so by its name, and "
+    "offer the card that turns it on: run_screen_command connectors.open_setup with id '{id}'."
+)
 
 FIX_HINT = (
     "Offer the card that fixes it: run_screen_command connectors.open_setup with id '{id}'. "

@@ -418,6 +418,9 @@ export interface ConnectorDetailEntry extends ConnectorEntry {
    *  with no credentials cannot be connected by flipping a flag, so the detail page's
    *  Connect opens its configuration form instead of PATCHing `enabled` (spec §3). */
   configured: boolean
+  /** An MCP server that has never connected (`mcpNeverConnected`): its switch-on says Connect,
+   *  not Resume — nobody paused it. */
+  neverConnected?: boolean
   desc: string
   /** The outside service a native connector runs on (catalog `service`): its name in `desc`
    *  is linked. */
