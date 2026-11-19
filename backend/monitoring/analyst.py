@@ -438,15 +438,9 @@ def _output_skeleton(include_key_issues: bool, is_held: bool = True) -> str:
     B / asset-brief consolidation) appends the two ONLY-when-asked fields — never shown to the
     model at all when False, so an ordinary call (topic, crash, a not-held asset) pays no extra
     prompt tokens for their JSON shape either."""
-    analysis_hint = (
-        "<think it through here FIRST — what the evidence shows, whether it's genuinely new, "
-        "and each bull/bear case, before you fill anything else. Not shown to the user.>"
-        if include_key_issues
-        else "<think it through here FIRST — what the evidence shows and whether it's "
-        "genuinely new — before you fill anything else. Not shown to the user.>"
-    )
     base = (
-        f'{{"analysis": "{analysis_hint}", '
+        '{"assessment": "<1-2 sentences: what the evidence shows, and whether it is genuinely '
+        'new>", '
         '"materiality": "new|update|no_change|awaiting_detail|noise", '
         '"decision_relevant": true|false, '
         '"why": "<the one fact that matters, 1-2 sentences>", '
@@ -771,32 +765,31 @@ def _build_prompts(
         + "FOUR EXAMPLES of the expected shape, brevity, and materiality/decision_relevant call — "
         "Acme Corp ($ACME) is a FICTIONAL placeholder; study the STYLE only, NEVER copy its "
         "name, numbers, or wording into a real answer:\n"
-        '  new, decision-relevant → {"analysis": "Q4 beat consensus by ~17% and guidance was '
-        "raised — a genuinely new, substantive development; sizing it against a ~1.2% position "
-        'makes it supportive but not decisive.", "materiality": "new", "decision_relevant": '
-        'true, "why": '
+        '  new, decision-relevant → {"assessment": "Q4 beat consensus by ~17% and guidance was '
+        'raised — a genuinely new, substantive development.", "materiality": "new", '
+        '"decision_relevant": true, "why": '
         '"Acme posted Q4 revenue of $2.1B, ~17% above the $1.8B consensus, and raised full-year '
         'guidance.", "headline": "Acme Beats Q4 Revenue By 17%, Raises Guidance", '
         '"impact": "A ~1.2% portfolio position for you, so supportive but not '
         'decisive.", "actions": ["Hold"], "message": "Acme beat Q4 revenue by ~17% ($2.1B vs '
         "$1.8B) and raised FY guidance. At ~1.2% of portfolio it's supportive but not "
         'decisive. Hold."}\n'
-        '  new, but NOT decision-relevant → {"analysis": "Index inclusion is a passive, '
-        'mechanical event with no new business fact — decision_relevant is false.", '
-        '"materiality": "new", "decision_relevant": false, '
+        '  new, but NOT decision-relevant → {"assessment": "Index inclusion is a passive, '
+        'mechanical event with no new business fact.", "materiality": "new", '
+        '"decision_relevant": false, '
         '"why": "Acme was added to a small-cap index, a passive/mechanical inclusion with no new '
         'business fact.", "impact": "", "actions": ["No action needed"], "message": "Acme was '
         "added to a minor index — a passive, mechanical inclusion, not a new business "
         'development. No action needed."}\n'
-        '  no_change → {"analysis": "This restates the Acme-Beta merger already in the prior '
-        'note, with no new terms — no_change.", "materiality": "no_change", '
-        '"decision_relevant": false, "why": "Same '
+        '  no_change → {"assessment": "This restates the Acme-Beta merger already in the prior '
+        'note, with no new terms.", "materiality": "no_change", "decision_relevant": false, '
+        '"why": "Same '
         "Acme-Beta merger already in the prior note — a re-syndicated restatement with no new "
         'terms.", "impact": "", "actions": ["No action needed"], "message": "Nothing new on the '
         'Acme-Beta merger — a re-syndicated restatement, no fresh terms. No action needed."}\n'
-        '  noise → {"analysis": "The surge is market-wide roundups and forex commentary that '
-        'only name Acme in passing — nothing specific to Acme.", "materiality": "noise", '
-        '"decision_relevant": false, "why": "Generic market roundups mentioning Acme in passing '
+        '  noise → {"assessment": "The surge is market-wide roundups that only name Acme in '
+        'passing.", "materiality": "noise", "decision_relevant": false, "why": "Generic market '
+        "roundups mentioning Acme in passing "
         '— no Acme-specific development.", "impact": "", "actions": ["No action needed"], '
         '"message": "Nothing Acme-specific in the coverage. No action needed."}\n'
         "Now do the SAME for the REAL position and news below. Respond with valid JSON only. Fill "
@@ -938,31 +931,29 @@ class _AnalysisOutput(BaseModel):
     redundant channel alongside the explicit prose in ``_build_prompts`` — belt-and-suspenders,
     not the only source.
 
-    ``analysis`` is declared FIRST, same load-bearing pattern as
-    ``statements.lucius_pass._DECISIONS_SCHEMA``'s own ``analysis`` property (required, listed
-    first — property ORDER drives generation order under constrained decoding): it gives the
-    model a visible place to work through the evidence and, for a held/watched subject, the
-    key_issues bull/bear cases, BEFORE committing to the later fields that depend on that
-    reasoning. Root-cause fix (owner report 2026-08-31, live-reproduced on the demo's real
+    ``assessment`` is declared FIRST (property ORDER drives generation order under constrained
+    decoding): a short, plain statement of what the evidence shows and whether it is new,
+    written before the later fields that depend on that judgement — which also gives a
+    non-thinking provider the same "look before you answer" step. Root-cause fix it keeps
+    (owner report 2026-08-31, live-reproduced on the demo's real
     Cloudflare/GLDM/VOO/VXUS instruments): the CLI's own structured-output tool-calling,
     combined with extended thinking, was repeatedly wrapping the whole answer in a stray string
     instead of emitting real tool-call parameters — a documented upstream interaction bug
     (anthropics/anthropic-sdk-python#1204/#1240: thinking + tool_use + a json_schema response
     format can produce a thinking-only turn or a malformed-prefix-then-valid-JSON blob).
-    Thinking stays ON here (owner decision, 2026-08-31: unlike ``lucius_pass``'s flat schema,
-    which tested clean either way, this schema's reasoning quality matters and disabling
-    thinking is not an acceptable trade — see this field instead). ``analysis`` is NOT surfaced
-    to the user anywhere; it exists purely to give the model an explicit reasoning channel
-    inside the structured output itself, the same role hidden thinking would otherwise play,
-    without the interaction bug that hidden thinking triggers for this particular schema."""
+    Thinking stays ON here (owner decision, 2026-08-31: this schema's reasoning quality matters).
 
-    analysis: str = Field(
+    It was named ``analysis`` and described as a place to "think it through … not shown to the
+    user" until 2026-11-19. With thinking on, Claude refused every such request as
+    ``[reasoning_extraction]`` (an output field framed as the model's hidden reasoning), so the
+    analyst failed ~1.5k rows a day while every other job succeeded. Framed as a visible
+    assessment, it keeps its JSON-stabilising role without asking for private reasoning —
+    never word it as a reasoning or thinking channel again."""
+
+    assessment: str = Field(
         default="",
-        description="Think it through here FIRST, before any other field: what does the "
-        "evidence actually show, is there a genuine new development, and — if key_issues/"
-        "portfolio_narrative are being asked for below — work out each bull/bear case here "
-        "before writing them out in key_issues. Not shown to the user; a brief sentence or "
-        "two is enough for a simple call with no key_issues ask.",
+        description="One or two sentences: what the evidence shows, and whether it is a "
+        "genuinely new development or a restatement of something already known.",
     )
     why: str = Field(
         min_length=1,
@@ -1110,12 +1101,12 @@ class _AnalysisOutput(BaseModel):
         checked where it is stored (``position_verdict.normalize``)."""
         return value if isinstance(value, dict) else {}
 
-    @field_validator("portfolio_narrative", "analysis", mode="before")
+    @field_validator("portfolio_narrative", "assessment", mode="before")
     @classmethod
     def _coerce_portfolio_narrative(cls, value: object) -> object:
         """Same defensive-coercion philosophy as `_coerce_key_issues` — a non-string value
         (a list, a dict, a number) folds to "" rather than failing the whole parse. Covers
-        `analysis` too (never user-facing, so a garbled value is never worse than "")."""
+        `assessment` too (never user-facing, so a garbled value is never worse than "")."""
         return value if isinstance(value, str) else ""
 
     @field_validator("duplicate_of_id", "contradicts_id", mode="before")
