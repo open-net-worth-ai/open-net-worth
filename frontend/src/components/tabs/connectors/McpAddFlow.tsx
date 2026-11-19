@@ -921,8 +921,8 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
     >
       {flow.step === 'form' && flow.anotherAccount && flow.form.auth === 'oauth' && (
         <span className="rd-help" role="note">
-          Adding another account. Sign out of this service in your browser first, or its sign-in may
-          put you straight back into the account you already added.
+          Adding another. Sign out of this service in your browser first, or its sign-in may put you
+          straight back into the account you already added.
         </span>
       )}
       {flow.step === 'form' && <McpConnectionFields flow={flow} />}

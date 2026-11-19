@@ -212,8 +212,9 @@ export function anotherAccountName(connectors: Connector[], entry: DirectoryRow)
   return `${entry.name} ${already + 1}`
 }
 
-/** A sign-in (OAuth) server from the directory: each sign-in is one account, so a second
- *  one is a second server at the same URL. A key or local server has no account to choose. */
+/** Any MCP server from the directory can be added more than once — two sign-ins, two API
+ *  keys, two local commands with different keys — each a server of its own. The generic
+ *  "Custom MCP server" slot has its own add link and is never "added". */
 export function canAddAnotherAccount(d: DirectoryRow): boolean {
-  return !!d.mcp && MCP_INSTALL_PRESETS[d.id]?.auth === 'oauth'
+  return !!d.mcp && !d.generic
 }

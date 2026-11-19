@@ -152,13 +152,15 @@ marked **from your connection**. A long list shows its first nine tools; **Show 
 
 ### More than one account
 
-Each sign-in is one account. To add a second (two Interactive Brokers logins, say), open the
-connector's card in **Browse & add** and click **Add another account**. It's named "Interactive
-Brokers 2" by default; rename it on the last step to something you'll recognise, like "IBKR joint".
-Lucius sees each account's name on its tools, so ask it about one account or both.
+Any server from **Browse & add** can be added more than once — two Interactive Brokers logins, or
+two Stripe keys. Open its card and click **Add another**. Each one is a separate server with its
+own sign-in or key, tools and permissions. It's named "Interactive Brokers 2" by default; rename it
+on the last step to something you'll recognise, like "IBKR joint". Lucius sees each one's name on
+its tools, so ask it about one or both.
 
-Sign out of the vendor in your browser first. Otherwise its sign-in may put you straight back into
-the account you already added, and you'd have the same account twice.
+For a server you sign in to, sign out of the vendor in your browser first. Otherwise its sign-in
+may put you straight back into the account you already added, and you'd have the same account
+twice.
 
 Not ready to connect yet (real keys still to come, a build still to finish)? Click **Save** instead
 of **Connect**, on the form or on a failed test. The server is kept, switched off and untested;

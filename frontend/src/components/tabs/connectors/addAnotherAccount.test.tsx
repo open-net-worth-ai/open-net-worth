@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-// A second account of a sign-in MCP server (two IBKR logins) is a second server at the same
+// A second copy of a directory MCP server (two IBKR logins, two Stripe keys) is a second server at the same
 // URL: the directory offers it on the already-added card, numbers its name, and warns that the
 // vendor's sign-in may land on the first account again (owner, 2026-11-19).
 
@@ -51,23 +51,24 @@ describe('adding another account of a sign-in server', () => {
     expect(anotherAccountName(two, ibkr)).toBe('Interactive Brokers 3')
   })
 
-  it('offers Add another account on the added card and opens the add form with a warning', () => {
+  it('offers Add another on the added card and opens the add form with a warning', () => {
     openPreview([server('api-ibkr-com', IBKR_URL)], 'mcp-ibkr')
     expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Add another account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add another' }))
     expect(screen.getByRole('note').textContent).toMatch(/Sign out of this service/)
     expect(screen.getByDisplayValue(IBKR_URL)).toBeTruthy()
   })
 
   it('does not offer it before the first account is added', () => {
     openPreview([], 'mcp-ibkr')
-    expect(screen.queryByRole('button', { name: 'Add another account' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add another' })).toBeNull()
   })
 
-  it('does not offer it for a server that takes a key, not a sign-in', () => {
+  it('offers it for a server that takes a key too, without the sign-out warning', () => {
     const stripe = MCP_INSTALL_PRESETS['mcp-stripe'].url!
     openPreview([server('mcp-stripe-com', stripe, 'Stripe')], 'mcp-stripe')
-    expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Add another account' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Add another' }))
+    expect(screen.getByDisplayValue(stripe)).toBeTruthy()
+    expect(screen.queryByRole('note')).toBeNull()
   })
 })

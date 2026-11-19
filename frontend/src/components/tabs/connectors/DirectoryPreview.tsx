@@ -76,7 +76,7 @@ export function PreviewAction({
       <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
         {settings}
         <Btn size="lg" className={className} onClick={() => onAddAnother(d)}>
-          Add another account
+          Add another
         </Btn>
       </span>
     )
