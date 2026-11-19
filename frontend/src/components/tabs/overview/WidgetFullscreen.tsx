@@ -372,7 +372,7 @@ export function WidgetFullscreen({
 }: WidgetFullscreenProps) {
   const isPhone = useIsMobile()
   const [viewMode, setViewMode] = useState(mode)
-  // A Reports widget's settings split into two tabs: how it looks, and what it counts.
+  // On a phone, a Reports widget's settings split into two tabs: how it looks, what it counts.
   const [railTab, setRailTab] = useState<'appearance' | 'filters'>('appearance')
   const cfg = instance.config || {}
   const isAutoh = AUTOH_IDS.has(instance.defId)
@@ -809,10 +809,27 @@ export function WidgetFullscreen({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="ov-fs-backdrop">
-          <Dialog.Content className="ov-fs-shell" aria-describedby={undefined}>
+          <Dialog.Content
+            className={'ov-fs-shell' + (filters ? ' ov-fs-shell--split' : '')}
+            aria-describedby={undefined}
+            // Focus the editor itself, not the card's first control: that drew a focus ring
+            // around the widget's filter pill every time Edit opened.
+            onOpenAutoFocus={(e) => {
+              e.preventDefault()
+              ;(e.currentTarget as HTMLElement | null)?.focus()
+            }}
+          >
             <Dialog.Title className="ui-visually-hidden">{label} — full screen</Dialog.Title>
             <div className="ov-fs-main">
               <div className="ov-fs-preview">{preview}</div>
+              {/* A widget with filters: how it looks goes under the preview, what it counts
+                  in the column on the right. */}
+              {filters && (
+                <div className="ov-fs-below">
+                  <div className="ov-fs-bar-h">Appearance</div>
+                  <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                </div>
+              )}
               {(hasData || hasLux) && (
                 <div className="ov-fs-data">
                   {hasData && (
@@ -826,11 +843,16 @@ export function WidgetFullscreen({
               )}
             </div>
             <div className="ov-fs-rail">
-              {railTabs ?? <div className="ov-fs-bar-h">Appearance</div>}
-              {onFilters ? (
-                filters
+              {filters ? (
+                <>
+                  <div className="ov-fs-bar-h">Filters</div>
+                  {filters}
+                </>
               ) : (
-                <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                <>
+                  <div className="ov-fs-bar-h">Appearance</div>
+                  <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                </>
               )}
               <div className="ov-fs-actions">
                 <Button variant="secondary" size="sm" onClick={onDiscard}>

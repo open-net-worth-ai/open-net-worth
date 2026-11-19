@@ -134,9 +134,9 @@ describe('ReportFilter', () => {
         mode="edit"
       />,
     )
-    // Appearance comes first; the filters are their own tab.
-    expect(screen.queryByRole('button', { name: '3 months' })).toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: 'Filters' }))
+    // Filters in the right-hand column, Appearance under the preview.
+    expect(screen.getByText('Filters')).toBeTruthy()
+    expect(screen.getByText('Appearance')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '3 months' }))
     expect(onPatch).toHaveBeenCalledWith({ config: { period: '3 months' } })
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Bravo' }))
