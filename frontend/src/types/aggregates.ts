@@ -334,8 +334,9 @@ export interface ReportPeriodBlock extends MonthPoint {
 export interface ReportsRollup {
   base_currency: string
   months: string[]
-  /** The tags every figure was narrowed to (empty: no filter). */
+  /** The tags and categories (ids) every figure was narrowed to (empty: no filter). */
   tags: string[]
+  categories: string[]
   /** Present when a `period` was asked for. */
   period?: ReportPeriodBlock
   points: MonthPoint[]
@@ -598,6 +599,7 @@ export interface CashFlowGraph {
   months: string[]
   period: ReportPeriod | null
   tags: string[]
+  categories: string[]
   base_currency: string
   income_total: number
   spend_total: number

@@ -48,6 +48,9 @@ export interface WidgetSettingSchema {
    *  `tags` = transaction tags (none chosen = no filter). */
   type: 'segment' | 'url' | 'pairs' | 'categories' | 'categoryIds' | 'tags'
   label: string
+  /** Set on the widget itself (a Reports widget's header filter), so the settings panel leaves
+   *  it out. */
+  inline?: boolean
   options?: string[]
   default: unknown
   /** `categoryIds` only: the category label to use when none of the stored ids exist in

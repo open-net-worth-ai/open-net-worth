@@ -116,16 +116,18 @@ export function usePlanningSummary(ym?: string): QueryCacheResult<PlanningSummar
 }
 
 /** Trailing-window income/expense rollups. */
-/** A report's scope: a period (omitted: the widget's long-standing default window) and the
- *  tags it is narrowed to. */
+/** A report's scope: a period (omitted: the widget's long-standing default window), and the
+ *  tags and categories (ids) it is narrowed to. */
 export interface ReportScope {
   period?: ReportPeriod
   tags?: string[]
+  categories?: string[]
 }
 
-function scopeQuery({ period, tags }: ReportScope = {}): string {
+function scopeQuery({ period, tags, categories }: ReportScope = {}): string {
   const parts = period ? [`period=${period}`] : []
   for (const tag of [...(tags ?? [])].sort()) parts.push(`tag=${encodeURIComponent(tag)}`)
+  for (const id of [...(categories ?? [])].sort()) parts.push(`category=${encodeURIComponent(id)}`)
   return parts.length ? `&${parts.join('&')}` : ''
 }
 
