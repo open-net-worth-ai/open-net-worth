@@ -1,9 +1,12 @@
 import type { SVGProps } from 'react'
 
 // Lucius's mark: an eight-point star cut from the Open Net Worth diamond (public/logo-mark.svg,
-// same coordinates) — its four compass facets and four corner facets, nothing else. It takes
-// lucide's props so it drops in where a Sparkles icon used to be.
+// same coordinates) — its table (centre octagon), four compass facets and four corner facets.
+// The table is not optional: without it the eight facets around an empty middle read as a
+// dashed "unchecked" circle at 12–15px. It takes lucide's props so it drops in where a
+// Sparkles icon used to be.
 const STAR =
+  'M-126.58 126.58 0 179.01 126.58 126.58 179.01 0 126.58 -126.58 0 -179.01 -126.58 -126.58 -179.01 0Z' +
   'M227.33 70.18 302.43 0 227.33 -70.18 204.61 0Z' +
   'M-227.33 70.18 -204.61 0 -227.33 -70.18 -302.43 0Z' +
   'M70.18 227.33 0 204.61 -70.18 227.33 0 302.43Z' +

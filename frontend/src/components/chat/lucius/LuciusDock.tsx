@@ -378,7 +378,6 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
           }}
           aria-label={needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
         >
-          <Spark size={13} />
           {needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
         </button>
       )}

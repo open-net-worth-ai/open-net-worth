@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle2, ChevronUp, Mic, MicOff, PhoneOff, X } from 'lucide-react'
-import { Spark } from '../../../lucius/identity'
 import { desktopClientBridge } from '../../../platform/desktop'
 import {
   dismissProblem,
@@ -123,7 +122,6 @@ export function VoiceCallPill({
               onAsk()
             }}
           >
-            <Spark size={13} />
             Ask Lucius
           </button>
         </>

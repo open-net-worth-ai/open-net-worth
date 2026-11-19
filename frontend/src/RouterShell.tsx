@@ -47,7 +47,7 @@ import {
   EyeOff,
   NAV_ICON_PROPS,
 } from './ui/icons'
-import { Spark } from './lucius/identity'
+import { AppLogoMark } from './ui/AppLogoMark'
 import { PortfolioProvider, usePortfolioContext } from './state/portfolio'
 import { TickerStrip } from './components/TickerStrip'
 import { Tooltip } from './components/ui/Tooltip'
@@ -254,7 +254,7 @@ const MIN_CONTENT_W = 1200 // min content width before collapsing; tuned so a
 // while the same laptop keeps the nav expanded when the panel is closed (1312 ≥ 1200).
 
 const TAB_ICONS: Record<TabId, ReactElement> = {
-  lucius: <Spark size={20} />,
+  lucius: <AppLogoMark size={20} />,
   dashboard: <LayoutGrid {...ICON_PROPS} />,
   inbox: <InboxIcon {...ICON_PROPS} />,
   investments: <TrendingUp {...ICON_PROPS} />,

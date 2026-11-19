@@ -53,12 +53,13 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    /* Ink on every theme: a white pill on dark, a black one on light. */
-    --lx-pill-bg: var(--ink);
-    --lx-pill-fg: var(--bg);
+    /* A bezel, not a fill: the page colour inside a hairline of ink, with ink words — a dark
+       pill ringed in white on dark, a white one ringed in black on light. */
+    --lx-pill-bg: var(--bg);
+    --lx-pill-fg: var(--ink);
     color: var(--lx-pill-fg);
     background: var(--lx-pill-bg);
-    border: none;
+    border: 1px solid var(--lx-pill-fg);
     border-radius: 999px;
     padding: 12px 20px;
     font-size: 13.5px;
@@ -74,7 +75,8 @@
   /* The pill with voice calls on: Call │ Ask Lucius at rest, and the whole call inside it. It
      is right-anchored, so it grows leftward; its width steps by mode, never by content. */
   .lx-dock-pill--call {
-    --lx-pill-w: 11rem;
+    /* Fits Call + "Ask Lucius" with matching air either side (no mark beside the words). */
+    --lx-pill-w: 8.75rem;
     width: var(--lx-pill-w);
     min-height: var(--tap-min);
     padding: 0 var(--space-2);

@@ -33,7 +33,7 @@ import {
 import { openReportProblem } from '../../state/reportProblem'
 import { CONFIG_TABS, TAB_LABELS, type MobileNavTarget, type TabId } from '../../tabs'
 import { useLuciusChat } from '../../state/luciusChat'
-import { Spark } from '../../lucius/identity'
+import { AppLogoMark } from '../../ui/AppLogoMark'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { SIGN_OUT_COPY, type SignOutScope } from '../../utils/gatewaySignOut'
 import type { GatewayIdentity } from '../../hooks/useGatewayIdentity'
@@ -171,7 +171,11 @@ export function MobileTabBar({
         >
           <span className="mb-tab-indicator" aria-hidden="true" />
           <span className="mb-tab-icon">
-            {anyWorking ? <span className="lx-dock-dot" aria-hidden="true" /> : <Spark size={20} />}
+            {anyWorking ? (
+              <span className="lx-dock-dot" aria-hidden="true" />
+            ) : (
+              <AppLogoMark size={20} />
+            )}
           </span>
           <span className="mb-tab-label">Lucius</span>
           {hasBadge && <span className="mb-tab-badge" aria-hidden="true" />}
