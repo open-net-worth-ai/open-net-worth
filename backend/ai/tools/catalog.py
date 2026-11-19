@@ -56,12 +56,12 @@ FLAGGED_TOOLS: dict[str, frozenset[str]] = {
 
 def flag_hidden_tools() -> frozenset[str]:
     """The tools of every feature whose flag is off (an unreadable flag counts as off)."""
-    from backend.services.feature_flags import enabled
+    from backend.services.feature_flags import enabled as flag_enabled
 
     hidden: set[str] = set()
     for flag, names in FLAGGED_TOOLS.items():
         try:
-            on = enabled(flag)
+            on = flag_enabled(flag)
         except Exception:
             on = False
         if not on:
