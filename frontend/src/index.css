@@ -21470,13 +21470,6 @@ body.hide-amounts .mf-lbl-amt {
     justify-content: space-between;
   }
 }
-.paper-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-5);
-  margin-bottom: var(--space-6);
-}
 .paper-preview {
   background: var(--bg-2);
   border-radius: var(--radius-lg);

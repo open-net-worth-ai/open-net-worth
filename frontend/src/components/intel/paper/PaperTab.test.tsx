@@ -214,6 +214,30 @@ describe('Paper Trading', () => {
     expect(within(open).getAllByText('NVDA').length).toBeGreaterThan(0)
   })
 
+  it('searches the portfolios, and creates from one New menu as Automations does', async () => {
+    api.list.mockResolvedValue({
+      portfolios: [card, { ...card, id: 'ppf_2', name: 'Dividend run', weights: [] }],
+      archived: [],
+    })
+    const onAskLucius = vi.fn()
+    render(<PaperTab onAskLucius={onAskLucius} />)
+    await screen.findByRole('button', { name: 'Open Buy-zone strategy' })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search paper portfolios' }), {
+      target: { value: 'dividend' },
+    })
+    expect(screen.queryByRole('button', { name: 'Open Buy-zone strategy' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open Dividend run' })).toBeTruthy()
+    // A holding's symbol finds its portfolio too.
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search paper portfolios' }), {
+      target: { value: 'nvda' },
+    })
+    expect(screen.getByRole('button', { name: 'Open Buy-zone strategy' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Create manually' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New paper portfolio' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Create with Lucius/ }))
+    expect(onAskLucius).toHaveBeenCalled()
+  })
+
   it('opens a portfolio, looks a symbol up, previews and places a paper buy', async () => {
     render(<PaperTab />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
