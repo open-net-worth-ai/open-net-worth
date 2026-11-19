@@ -4,7 +4,7 @@
 // (ReportFilterControls). The popover portals to <body> (like ChartToggleMenu): the trigger sits inside a
 // clipped, scrolling card. On a phone the same controls open in a bottom sheet instead.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from '../../../../ui/icons'
 import { BottomSheet } from '../../../ui/BottomSheet'
@@ -398,7 +398,8 @@ function CheckSection({
   title: string
   noun: string
   value: string[]
-  options: { id: string; label: string }[]
+  /** `group` heads a run of rows (a category's kind); options arrive ordered by it. */
+  options: { id: string; label: string; group?: string }[]
   onChange: (next: string[]) => void
   empty?: string
   hint?: string
@@ -439,15 +440,25 @@ function CheckSection({
                 No {noun.replace(/s$/, '').replace(/ie$/, 'y')} matches.
               </span>
             ) : (
-              shown.map((c) => (
-                <Checkbox
-                  key={c.id}
-                  className="ov-rf-check"
-                  label={c.label}
-                  checked={chosen.has(c.id)}
-                  onChange={() => toggle(c.id)}
-                />
-              ))
+              shown.map((c, i) => {
+                // A heading where the kind changes, after the rows ticked when it opened.
+                const prev = shown[i - 1]
+                const head =
+                  c.group &&
+                  !pinned.has(c.id) &&
+                  (!prev || pinned.has(prev.id) || prev.group !== c.group)
+                return (
+                  <Fragment key={c.id}>
+                    {head && <span className="ov-rf-group">{c.group}</span>}
+                    <Checkbox
+                      className="ov-rf-check"
+                      label={c.label}
+                      checked={chosen.has(c.id)}
+                      onChange={() => toggle(c.id)}
+                    />
+                  </Fragment>
+                )
+              })
             )}
           </div>
         </>
@@ -457,19 +468,35 @@ function CheckSection({
   )
 }
 
+/** A category's kind, in the order the list shows them. */
+const KIND_ORDER = ['expense', 'income', 'investment', 'transfer', 'adjustment']
+const KIND_LABEL: Record<string, string> = {
+  expense: 'Spending',
+  income: 'Income',
+  investment: 'Investments',
+  transfer: 'Transfers',
+  adjustment: 'Adjustments',
+}
+
 function CategorySection({
   value,
   options,
   onChange,
 }: {
   value: string[]
-  options: { id: string; label?: string }[]
+  options: { id: string; label?: string; kind?: string }[]
   onChange: (next: string[]) => void
 }) {
   const list = options
     .filter((c) => c.id !== 'split')
-    .map((c) => ({ id: c.id, label: c.label || c.id }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((c) => {
+      const kind = KIND_ORDER.includes(c.kind ?? '') ? c.kind! : 'expense'
+      return { id: c.id, label: c.label || c.id, kind, group: KIND_LABEL[kind] }
+    })
+    .sort(
+      (a, b) =>
+        KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.label.localeCompare(b.label),
+    )
   return (
     <CheckSection
       title="Categories"
