@@ -129,3 +129,29 @@ def test_no_model_is_a_note_on_the_run_not_a_failure(bank):
     run = import_runs.get(result["run_id"])
     assert run["status"] == "done"
     assert any("no AI model" in w for w in run["warnings"])
+
+
+def test_the_followup_pass_takes_its_queue_off_the_event_loop(bank, monkeypatch):
+    """The pass runs on the shared scheduler loop every tick; its queue read-modify-write is a
+    SQLite write under a lock, which on the loop thread froze every request (2026-11-19)."""
+    import threading
+
+    settings.save("gocardless", lucius_followup=True)
+    runner.run_now(GC, "manual", runner.opted_accounts("gocardless"))
+    headless_turn.register_runner(FakeLucius("{}"))
+    threads: list[int] = []
+    original = budget.mutate
+
+    def _recording(key, fn):
+        threads.append(threading.get_ident())
+        return original(key, fn)
+
+    monkeypatch.setattr(budget, "mutate", _recording)
+
+    async def _go():
+        await bank_data_sync.run_followups()
+        return threading.get_ident()
+
+    loop_thread = asyncio.run(_go())
+    assert threads, "the pass never took its queue"
+    assert loop_thread not in threads

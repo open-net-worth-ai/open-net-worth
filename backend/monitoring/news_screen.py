@@ -38,6 +38,7 @@ counts DISTINCT screen EVENTS (`recent_material_events`), not pending ROWS.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -305,7 +306,38 @@ def _cluster_already_screened(cand_tokens: set[str], recent_events: list[dict]) 
 
 
 async def _screen(by_subject: dict[str, list[dict]], subject_items: dict[str, dict]) -> None:
+    """Pick, screen, record. This runs on the shared event loop (inside the RSS poll), so both
+    database halves go to a worker thread and only the model call stays on the loop: a SQLite
+    read or write on the loop thread waits there and freezes every request (loop_watch BLOCKED
+    on `recent_material_events`, 2026-11-19)."""
     pa_store = PendingAnalysisStore()
+    picked = await asyncio.to_thread(_pick_candidates, by_subject, subject_items, pa_store)
+    if picked is None:
+        return
+    candidates, model = picked
+
+    try:
+        user_prompt, system_prompt = _build_prompt(candidates)
+        result = await complete_model(
+            user_prompt,
+            _ScreenOutput,
+            system=system_prompt,
+            model=model,
+            max_tokens=_SCREEN_MAX_TOKENS,
+            source="news_screen",
+        )
+    except Exception as exc:
+        logger.warning("news_screen: LLM seam unavailable — no-op (%s)", type(exc).__name__)
+        return
+
+    await asyncio.to_thread(_record_screen, candidates, result, pa_store)
+
+
+def _pick_candidates(
+    by_subject: dict[str, list[dict]], subject_items: dict[str, dict], pa_store
+) -> tuple[list[tuple[str, dict, list[dict]]], str] | None:
+    """The screen's candidates this tick (and the model to ask), or None when there is nothing
+    to screen. Synchronous database reads — call it off the event loop."""
     since_iso = (datetime.now(timezone.utc) - timedelta(hours=_COOLDOWN_HOURS)).isoformat()
 
     candidates: list[tuple[str, dict, list[dict]]] = []
@@ -331,25 +363,16 @@ async def _screen(by_subject: dict[str, list[dict]], subject_items: dict[str, di
     remaining = _remaining_daily_budget()
     if remaining <= 0:
         logger.info("news_screen: daily cap (%d) reached — skipping screen", _DAILY_SCREEN_CAP)
-        return
+        return None
     candidates = candidates[:remaining]
     if not candidates:
-        return
+        return None
+    return candidates, _screen_model()
 
-    try:
-        user_prompt, system_prompt = _build_prompt(candidates)
-        result = await complete_model(
-            user_prompt,
-            _ScreenOutput,
-            system=system_prompt,
-            model=_screen_model(),
-            max_tokens=_SCREEN_MAX_TOKENS,
-            source="news_screen",
-        )
-    except Exception as exc:
-        logger.warning("news_screen: LLM seam unavailable — no-op (%s)", type(exc).__name__)
-        return
 
+def _record_screen(candidates: list[tuple[str, dict, list[dict]]], result, pa_store) -> None:
+    """Charge the budget and queue the material clusters. Synchronous database writes — call
+    it off the event loop."""
     # A completed call (even one whose reply couldn't be validated into a usable result) DID spend
     # tokens — charge the budget here, before the None check, matching the pre-structured behavior
     # (an LLM-unavailable call raises above and is never charged).
@@ -396,7 +419,7 @@ async def handle_arrivals(rows: list[dict]) -> None:
         rows = [r for r in rows if not _is_backlog_arrival(r)]
         if not rows:
             return
-        subject_items = _watched_subjects_and_items()
+        subject_items = await asyncio.to_thread(_watched_subjects_and_items)
         if not subject_items:
             return
         by_subject: dict[str, list[dict]] = {}

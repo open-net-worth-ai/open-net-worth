@@ -1708,10 +1708,10 @@ async def run_analysis_sweep() -> int:
             # Handled entirely as part of its linked topic row (above, or on the way — `ordered`
             # guarantees the topic row comes first this tick). Never claimed/processed here.
             continue
-        if not pa_store.claim(row_id):
+        if not await asyncio.to_thread(pa_store.claim, row_id):
             continue
         linked_row = topic_to_linked.get(row_id)
-        if linked_row is not None and not pa_store.claim(linked_row["id"]):
+        if linked_row is not None and not await asyncio.to_thread(pa_store.claim, linked_row["id"]):
             # H2 fix (security-review 2026-08-29): claim the ABSORBED asset row too, before
             # any slow work starts — the SAME concurrency guard the solo path above already
             # gets. Without this, the asset row's status stayed "pending" for the entire
@@ -1736,9 +1736,9 @@ async def run_analysis_sweep() -> int:
                 analyzed += await _process_row(row, pa_store, evidence_cache)
         except Exception as exc:
             logger.warning("analyst: sweep row %s failed: %s", row_id, type(exc).__name__)
-            pa_store.mark_failed(row_id, type(exc).__name__)
+            await asyncio.to_thread(pa_store.mark_failed, row_id, type(exc).__name__)
             if linked_row is not None:
-                pa_store.mark_failed(linked_row["id"], type(exc).__name__)
+                await asyncio.to_thread(pa_store.mark_failed, linked_row["id"], type(exc).__name__)
 
     await _run_stale_brief_precompute(pa_store)
     await _run_stale_facts_peers_precompute()
@@ -3298,8 +3298,8 @@ async def _process_linked_pair(
             topic_subject,
             asset_subject,
         )
-        pa_store.mark_done(topic_row["id"])
-        pa_store.mark_done(asset_row["id"])
+        await asyncio.to_thread(pa_store.mark_done, topic_row["id"])
+        await asyncio.to_thread(pa_store.mark_done, asset_row["id"])
         return 0
 
     # Framed around the held asset side — richer, position-grounded context (see docstring).
@@ -3351,15 +3351,15 @@ async def _process_linked_pair(
             asset_subject,
             topic_subject,
         )
-        pa_store.mark_done(topic_row["id"])
-        pa_store.mark_done(asset_row["id"])
+        await asyncio.to_thread(pa_store.mark_done, topic_row["id"])
+        await asyncio.to_thread(pa_store.mark_done, asset_row["id"])
         return 2
 
     parsed = _with_thesis_line(result.model_dump(), thesis)
     if not _analysis_matches_subject(asset_row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", asset_subject)
-        pa_store.mark_done(topic_row["id"])
-        pa_store.mark_done(asset_row["id"])
+        await asyncio.to_thread(pa_store.mark_done, topic_row["id"])
+        await asyncio.to_thread(pa_store.mark_done, asset_row["id"])
         return 2
     materiality = _materiality_of(parsed)
     decision_relevant = _decision_relevant_of(parsed)
@@ -3482,8 +3482,8 @@ async def _process_linked_pair(
             topic_reason,
         )
 
-    pa_store.mark_done(topic_row["id"])
-    pa_store.mark_done(asset_row["id"])
+    await asyncio.to_thread(pa_store.mark_done, topic_row["id"])
+    await asyncio.to_thread(pa_store.mark_done, asset_row["id"])
     return 2
 
 
@@ -3571,7 +3571,7 @@ async def _process_row(
             row.get("trigger"),
             subject,
         )
-        pa_store.mark_done(row_id)
+        await asyncio.to_thread(pa_store.mark_done, row_id)
         return 0
     watermark = (signal or {}).get("evidence_watermark") or None
     # Background precompute (Problem B point 2, ADR .../cross-subject-fan-out-and-asset-brief-
@@ -3640,7 +3640,7 @@ async def _process_row(
     t_evidence = time.monotonic()
     if not evidence:
         logger.debug("analyst: no evidence for %s — marking done", ticker or subject)
-        pa_store.mark_done(row_id)
+        await asyncio.to_thread(pa_store.mark_done, row_id)
         return 0
 
     thesis = None
@@ -3694,13 +3694,13 @@ async def _process_row(
         # empty body. Mark the row done so it isn't reprocessed forever.
         logger.warning("analyst: no usable analysis for %s — skipping upsert/push", subject)
         _log_phase_timing()
-        pa_store.mark_done(row_id)
+        await asyncio.to_thread(pa_store.mark_done, row_id)
         return 1
     parsed = _with_thesis_line(result.model_dump(), thesis)
     if not _analysis_matches_subject(row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", subject)
         _log_phase_timing()
-        pa_store.mark_done(row_id)
+        await asyncio.to_thread(pa_store.mark_done, row_id)
         return 1
     materiality = _materiality_of(parsed)
     decision_relevant = _decision_relevant_of(parsed)
@@ -3788,7 +3788,7 @@ async def _process_row(
             subject,
         )
     _log_phase_timing()
-    pa_store.mark_done(row_id)
+    await asyncio.to_thread(pa_store.mark_done, row_id)
     return 1
 
 

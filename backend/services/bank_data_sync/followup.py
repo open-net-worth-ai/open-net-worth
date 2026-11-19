@@ -189,17 +189,21 @@ async def categorise(p, pending: dict) -> int:
 
 async def run_pending() -> int:
     """The scheduler tick's follow-up pass: each queued run once, then forgotten. The queue is
-    taken under the lock, so a run finishing meanwhile is kept for the next tick."""
+    taken under the lock, so a run finishing meanwhile is kept for the next tick.
+
+    Runs on the shared scheduler loop every tick: every settings read and the queue's
+    read-modify-write go to a worker thread, never the loop thread (a SQLite write there waits
+    for the writer and freezes every request — loop_watch BLOCKED, 2026-11-19)."""
     total = 0
-    for p in settings.capable_providers():
+    for p in await asyncio.to_thread(settings.capable_providers):
 
         def take(entry: dict) -> list:
             queued = list(entry.get("pending_followups") or [])
             entry["pending_followups"] = []
             return queued
 
-        queued = budget.mutate(p.key, take)
-        if not queued or not settings.get(p.key)["lucius_followup"]:
+        queued = await asyncio.to_thread(budget.mutate, p.key, take)
+        if not queued or not (await asyncio.to_thread(settings.get, p.key))["lucius_followup"]:
             continue
         for pending in queued:
             total += await categorise(p, pending)
