@@ -189,9 +189,9 @@ function useReports(instance: WidgetInstance, def: WidgetDefinition, merchantLim
     error: query.error && query.data == null ? "Couldn't load the monthly report." : '',
     meta,
     span,
-    periodLabel: sc.periodLabel,
+    periodLabel: sc.periodText,
     // The chosen period's own name while its months are still loading (never the default's).
-    chosen: sc.scope.period ? sc.periodLabel : '',
+    chosen: sc.scope.period ? sc.periodText : '',
     tags: sc.tags,
     categories: sc.categories,
   }

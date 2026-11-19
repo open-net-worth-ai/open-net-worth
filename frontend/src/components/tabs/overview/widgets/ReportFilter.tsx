@@ -12,10 +12,8 @@ import { useIsMobile } from '../../../../hooks/useIsMobile'
 import { useCategories } from '../../../../hooks/serverState'
 import { useTransactionTags } from '../../accounts/tagOptions'
 import type { WidgetDefinition, WidgetInstance } from '../types'
-import { reportScope } from './reportScope'
+import { CUSTOM_PERIOD, reportScope } from './reportScope'
 
-/** How many tags show before "N more" — the most used come first. */
-const TAG_CHIPS_SHOWN = 12
 const POPOVER_W = 320
 
 interface Props {
@@ -150,7 +148,13 @@ export function ReportFilterControls({
   const filtered = sc.categories.length > 0 || sc.tags.length > 0
   return (
     <>
-      <PeriodSection def={def} value={sc.periodLabel} onPick={(p) => patch({ period: p })} />
+      <PeriodSection
+        def={def}
+        value={sc.periodLabel}
+        custom={sc.custom}
+        config={instance.config ?? {}}
+        onPatch={patch}
+      />
       {has('categories') && (
         <CategorySection
           value={sc.categories}
@@ -172,16 +176,39 @@ export function ReportFilterControls({
   )
 }
 
+/** YYYY-MM for the month `back` months before this one. */
+function monthsAgo(back: number): string {
+  const d = new Date()
+  const i = d.getFullYear() * 12 + d.getMonth() - back
+  return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`
+}
+
 function PeriodSection({
   def,
   value,
-  onPick,
+  custom,
+  config,
+  onPatch,
 }: {
   def: WidgetDefinition
   value: string
-  onPick: (label: string) => void
+  custom: { from: string; to: string } | null
+  config: Record<string, unknown>
+  onPatch: (next: Record<string, unknown>) => void
 }) {
   const options = def.settings?.find((s) => s.key === 'period')?.options ?? []
+  const from = typeof config.periodFrom === 'string' ? config.periodFrom : ''
+  const to = typeof config.periodTo === 'string' ? config.periodTo : ''
+  const pick = (o: string) =>
+    o === CUSTOM_PERIOD && !custom
+      ? // First time on Custom: the last three full months, to edit from there.
+        onPatch({ period: o, periodFrom: from || monthsAgo(3), periodTo: to || monthsAgo(1) })
+      : onPatch({ period: o })
+  // A From after the To (or a To before the From) moves the other end with it.
+  const setFrom = (v: string) =>
+    v && onPatch({ periodFrom: v, ...(to && v > to ? { periodTo: v } : {}) })
+  const setTo = (v: string) =>
+    v && onPatch({ periodTo: v, ...(from && v < from ? { periodFrom: v } : {}) })
   return (
     <section className="ov-rf-sec">
       <h4 className="ov-rf-h">Period</h4>
@@ -192,12 +219,103 @@ function PeriodSection({
             type="button"
             className={'ov-fs-chip' + (value === o ? ' on' : '')}
             aria-pressed={value === o}
-            onClick={() => onPick(o)}
+            onClick={() => pick(o)}
           >
             {o}
           </button>
         ))}
       </div>
+      {value === CUSTOM_PERIOD && (
+        <div className="ov-rf-range">
+          <label className="ov-rf-range-f">
+            <span>From</span>
+            <input
+              type="month"
+              className="ov-fs-input"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </label>
+          <label className="ov-rf-range-f">
+            <span>To</span>
+            <input
+              type="month"
+              className="ov-fs-input"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </label>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** A searchable list of checkboxes — Categories and Tags alike. */
+function CheckSection({
+  title,
+  noun,
+  value,
+  options,
+  onChange,
+  empty,
+  hint,
+}: {
+  title: string
+  noun: string
+  value: string[]
+  options: { id: string; label: string }[]
+  onChange: (next: string[]) => void
+  empty?: string
+  hint?: string
+}) {
+  const [q, setQ] = useState('')
+  const chosen = new Set(value)
+  const needle = q.trim().toLowerCase()
+  // The ones chosen when the filter opened come first, so they never hide below the fold —
+  // fixed for as long as it stays open, so a row never jumps under a finger mid-tap.
+  const [pinned] = useState(() => new Set(value))
+  const matches = (c: { label: string }) => !needle || c.label.toLowerCase().includes(needle)
+  const shown = [
+    ...options.filter((c) => pinned.has(c.id)),
+    ...options.filter((c) => !pinned.has(c.id) && matches(c)),
+  ]
+  const toggle = (id: string) =>
+    onChange(chosen.has(id) ? value.filter((v) => v !== id) : [...value, id])
+  return (
+    <section className="ov-rf-sec">
+      <h4 className="ov-rf-h">
+        {title}
+        <span className="ov-rf-h-note">{value.length ? `${value.length} chosen` : 'All'}</span>
+      </h4>
+      {options.length === 0 && empty ? (
+        <span className="ov-fs-ctl-hint">{empty}</span>
+      ) : (
+        <>
+          <input
+            className="ov-fs-input"
+            placeholder={`Search ${noun}`}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label={`Search ${noun}`}
+          />
+          <div className="ov-rf-list" role="group" aria-label={title}>
+            {shown.length === 0 ? (
+              <span className="ov-fs-ctl-hint">
+                No {noun.replace(/s$/, '').replace(/ie$/, 'y')} matches.
+              </span>
+            ) : (
+              shown.map((c) => (
+                <label key={c.id} className="ov-rf-check">
+                  <input type="checkbox" checked={chosen.has(c.id)} onChange={() => toggle(c.id)} />
+                  <span>{c.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </>
+      )}
+      {hint && <span className="ov-fs-ctl-hint">{hint}</span>}
     </section>
   )
 }
@@ -211,104 +329,42 @@ function CategorySection({
   options: { id: string; label?: string }[]
   onChange: (next: string[]) => void
 }) {
-  const [q, setQ] = useState('')
-  const chosen = new Set(value)
-  const needle = q.trim().toLowerCase()
   const list = options
     .filter((c) => c.id !== 'split')
     .map((c) => ({ id: c.id, label: c.label || c.id }))
     .sort((a, b) => a.label.localeCompare(b.label))
-  // The categories chosen when the filter opened come first, so they never hide below the
-  // fold — fixed for as long as it stays open, so a row never jumps under a finger mid-tap.
-  const [pinned] = useState(() => new Set(value))
-  const matches = (c: { label: string }) => !needle || c.label.toLowerCase().includes(needle)
-  const shown = [
-    ...list.filter((c) => pinned.has(c.id)),
-    ...list.filter((c) => !pinned.has(c.id) && matches(c)),
-  ]
-  const toggle = (id: string) =>
-    onChange(chosen.has(id) ? value.filter((v) => v !== id) : [...value, id])
   return (
-    <section className="ov-rf-sec">
-      <h4 className="ov-rf-h">
-        Categories
-        <span className="ov-rf-h-note">{value.length ? `${value.length} chosen` : 'All'}</span>
-      </h4>
-      <input
-        className="ov-fs-input"
-        placeholder="Search categories"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        aria-label="Search categories"
-      />
-      <div className="ov-rf-list" role="group" aria-label="Categories">
-        {shown.length === 0 ? (
-          <span className="ov-fs-ctl-hint">No category matches.</span>
-        ) : (
-          shown.map((c) => (
-            <label key={c.id} className="ov-rf-check">
-              <input type="checkbox" checked={chosen.has(c.id)} onChange={() => toggle(c.id)} />
-              <span>{c.label}</span>
-            </label>
-          ))
-        )}
-      </div>
-    </section>
+    <CheckSection
+      title="Categories"
+      noun="categories"
+      value={value}
+      options={list}
+      onChange={onChange}
+    />
   )
 }
 
 function TagSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
   const tags = useTransactionTags()
-  const [showAll, setShowAll] = useState(false)
   const known = new Set(tags)
   // A chosen tag no transaction carries any more stays listed, so it can still be removed.
-  const all = [...value.filter((t) => !known.has(t)), ...tags]
-  const chosen = new Set(value)
-  const shown = showAll
-    ? all
-    : [...all.slice(0, TAG_CHIPS_SHOWN), ...all.slice(TAG_CHIPS_SHOWN).filter((t) => chosen.has(t))]
-  const hidden = all.length - shown.length
-  const toggle = (tag: string) =>
-    onChange(chosen.has(tag) ? value.filter((t) => t !== tag) : [...value, tag])
+  const all = [...value.filter((t) => !known.has(t)), ...tags].map((t) => ({
+    id: t,
+    label: `#${t}`,
+  }))
   return (
-    <section className="ov-rf-sec">
-      <h4 className="ov-rf-h">
-        Tags
-        <span className="ov-rf-h-note">{value.length ? `${value.length} chosen` : 'All'}</span>
-      </h4>
-      {all.length === 0 ? (
-        <span className="ov-fs-ctl-hint">
-          No tags yet. Add one to a transaction in Accounts to filter by it here.
-        </span>
-      ) : (
-        <div className="ov-fs-seg" role="group" aria-label="Tags">
-          {shown.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              className={'ov-fs-chip' + (chosen.has(tag) ? ' on' : '')}
-              aria-pressed={chosen.has(tag)}
-              onClick={() => toggle(tag)}
-            >
-              #{tag}
-            </button>
-          ))}
-          {(hidden > 0 || showAll) && all.length > TAG_CHIPS_SHOWN && (
-            <button
-              type="button"
-              className="ov-fs-chip ov-fs-chip--more"
-              onClick={() => setShowAll((v) => !v)}
-            >
-              {showAll ? 'Fewer' : `${hidden} more`}
-            </button>
-          )}
-        </div>
-      )}
-      <span className="ov-fs-ctl-hint">
-        {value.length === 0
-          ? 'Pick tags to count only transactions carrying any of them.'
-          : `Counts only transactions tagged ${value.map((t) => '#' + t).join(' or ')}.`}
-      </span>
-    </section>
+    <CheckSection
+      title="Tags"
+      noun="tags"
+      value={value}
+      options={all}
+      onChange={onChange}
+      empty="No tags yet. Add one to a transaction in Accounts to filter by it here."
+      hint={
+        value.length
+          ? `Counts only transactions tagged ${value.map((t) => '#' + t).join(' or ')}.`
+          : undefined
+      }
+    />
   )
 }

@@ -317,7 +317,8 @@ export type ReportPeriod = 'this_month' | 'last_month' | '3m' | '6m' | '12m' | '
 
 /** A whole report period summed — what a widget with a Period setting shows. */
 export interface ReportPeriodBlock extends MonthPoint {
-  id: ReportPeriod
+  /** A named period, or a custom range "YYYY-MM:YYYY-MM". */
+  id: ReportPeriod | string
   from: string
   to: string
   months: string[]

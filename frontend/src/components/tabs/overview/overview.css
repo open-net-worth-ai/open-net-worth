@@ -2163,6 +2163,20 @@
   display: flex;
 }
 
+/* Editing: the card at the height it has on the dashboard (--ov-fs-h), not stretched to the
+   window — a short list read as a mostly empty box. Full screen (view) still fills. */
+.ov-fs-shell:not(.ov-fs-shell--view) .ov-fs-preview {
+  align-items: flex-start;
+  overflow-y: auto;
+}
+
+.ov-fs-shell:not(.ov-fs-shell--view) .ov-fs-card {
+  flex: 0 0 auto;
+  width: 100%;
+  height: var(--ov-fs-h, 100%);
+  max-height: 100%;
+}
+
 .ov-fs-card > .panel,
 .ov-fs-card > section {
   flex: 1 1 auto;
@@ -2250,7 +2264,7 @@
   gap: 4px;
   /* The floating Lucius dock (lucius.css .lx-dock) sits above every modal at the viewport's
      bottom-right — exactly over Discard / Save. The rail's foot clears it. */
-  padding: 4px 20px 72px;
+  padding: 4px 20px 0;
   border-left: 1px solid var(--line);
   background: var(--surface);
   overflow-y: auto;
@@ -2459,7 +2473,9 @@
   margin-top: auto;
   display: flex;
   gap: 8px;
-  padding: 14px 0 2px;
+  /* The room under the buttons that clears the Lucius dock is the bar's own, so nothing
+     scrolls through below it (it was the rail's padding, and settings showed beneath Save). */
+  padding: 14px 0 72px;
   background: var(--surface);
   border-top: 1px solid var(--line);
 }

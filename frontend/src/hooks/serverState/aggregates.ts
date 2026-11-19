@@ -119,7 +119,8 @@ export function usePlanningSummary(ym?: string): QueryCacheResult<PlanningSummar
 /** A report's scope: a period (omitted: the widget's long-standing default window), and the
  *  tags and categories (ids) it is narrowed to. */
 export interface ReportScope {
-  period?: ReportPeriod
+  /** A named period, or a custom range "YYYY-MM:YYYY-MM". */
+  period?: ReportPeriod | string
   tags?: string[]
   categories?: string[]
 }

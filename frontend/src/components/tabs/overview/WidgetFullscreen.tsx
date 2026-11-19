@@ -16,7 +16,7 @@ import { LuciusMark } from '../../../ui/LuciusMark'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, ReactElement, ReactNode } from 'react'
-import { Button } from '../../ui'
+import { Button, SegmentedControl } from '../../ui'
 import { BottomSheet } from '../../ui/BottomSheet'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { CheckboxGroup } from '../../ui/CheckboxGroup'
@@ -372,6 +372,8 @@ export function WidgetFullscreen({
 }: WidgetFullscreenProps) {
   const isPhone = useIsMobile()
   const [viewMode, setViewMode] = useState(mode)
+  // A Reports widget's settings split into two tabs: how it looks, and what it counts.
+  const [railTab, setRailTab] = useState<'appearance' | 'filters'>('appearance')
   const cfg = instance.config || {}
   const isAutoh = AUTOH_IDS.has(instance.defId)
   const vizOpts = vizOptionsFor(def)
@@ -501,6 +503,20 @@ export function WidgetFullscreen({
       <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
     </div>
   ) : null
+  const railTabs = filters ? (
+    <div className="ov-fs-railtabs">
+      <SegmentedControl
+        ariaLabel="Settings"
+        value={railTab}
+        onChange={setRailTab}
+        options={[
+          { value: 'appearance', label: 'Appearance' },
+          { value: 'filters', label: 'Filters' },
+        ]}
+      />
+    </div>
+  ) : null
+  const onFilters = !!filters && railTab === 'filters'
   // A Reports widget's period, categories and tags are drawn as one Filters section (the same
   // controls as the widget's header pill), not one generic row each.
   ;(def.settings || [])
@@ -672,7 +688,7 @@ export function WidgetFullscreen({
         (instance.hideTitle ? ' ov-fs-card--no-title' : '') +
         (instance.accent ? ' ov-fs-card--accent' : '')
       }
-      style={accentStyle}
+      style={{ ...accentStyle, ['--ov-fs-h' as string]: `${instance.h}px` }}
     >
       <GridItemContext.Provider
         value={{
@@ -716,20 +732,15 @@ export function WidgetFullscreen({
         }
       >
         <div className="ov-fs-sheet">
-          {filters && (
-            <>
-              <div className="ov-fs-bar-h">Filters</div>
-              {filters}
-            </>
-          )}
-          {appearance.map((c) => c.node)}
-          {hasData && (
+          {railTabs}
+          {onFilters ? filters : appearance.map((c) => c.node)}
+          {!onFilters && hasData && (
             <>
               <div className="ov-fs-bar-h">Data</div>
               {data.map((c) => c.node)}
             </>
           )}
-          {hasLux && lux.map((c) => c.node)}
+          {!onFilters && hasLux && lux.map((c) => c.node)}
         </div>
       </BottomSheet>
     )
@@ -815,14 +826,12 @@ export function WidgetFullscreen({
               )}
             </div>
             <div className="ov-fs-rail">
-              {filters && (
-                <>
-                  <div className="ov-fs-bar-h">Filters</div>
-                  {filters}
-                </>
+              {railTabs ?? <div className="ov-fs-bar-h">Appearance</div>}
+              {onFilters ? (
+                filters
+              ) : (
+                <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
               )}
-              <div className="ov-fs-bar-h">Appearance</div>
-              <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
               <div className="ov-fs-actions">
                 <Button variant="secondary" size="sm" onClick={onDiscard}>
                   Discard

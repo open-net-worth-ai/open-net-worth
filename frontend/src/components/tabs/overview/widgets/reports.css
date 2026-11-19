@@ -484,10 +484,59 @@
   cursor: pointer;
 }
 
-/* The same filter controls in the widget's settings panel, above Appearance. */
+/* The same filter controls in the widget's settings panel (its Filters tab), each section a
+   row like the panel's own controls: same padding, same divider, same label size. */
 .ov-fs-filters {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 18px;
+}
+
+.ov-fs-filters .ov-rf-sec {
+  padding: 12px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+.ov-fs-filters .ov-rf-sec:last-of-type {
+  border-bottom: none;
+}
+
+.ov-fs-filters .ov-rf-h {
+  font-size: 11.5px;
+}
+
+.ov-fs-filters .ov-rf-list {
+  max-height: 260px;
+}
+
+.ov-fs-filters .ov-rf-reset {
+  align-self: flex-start;
+  margin: 4px 2px 0;
+}
+
+/* Appearance | Filters, at the top of the settings panel. */
+.ov-fs-railtabs {
+  padding: 14px 0 4px;
+}
+
+.ov-fs-railtabs .ui-segmented {
+  width: 100%;
+}
+
+.ov-fs-railtabs .ui-segmented__seg {
+  flex: 1;
+}
+
+/* A custom period: From and To months, side by side. */
+.ov-rf-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ov-rf-range-f {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--faint);
 }

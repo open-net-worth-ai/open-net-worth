@@ -43,6 +43,22 @@ def test_last_month_and_this_year_cross_january_correctly():
     assert report_window.period_months("12m", jan)[0] == "2026-02"
 
 
+def test_a_custom_range_covers_both_months_and_every_one_between():
+    assert report_window.period_months("2025-11:2026-02", TODAY) == [
+        "2025-11",
+        "2025-12",
+        "2026-01",
+        "2026-02",
+    ]
+    assert report_window.period_months("2026-03:2026-03", TODAY) == ["2026-03"]
+
+
+@pytest.mark.parametrize("bad", ["2026-05:2026-02", "2026-13:2026-14", "2026-1:2026-02"])
+def test_a_malformed_or_backwards_range_is_refused(bad):
+    with pytest.raises(ValidationError):
+        report_window.period_months(bad, TODAY)
+
+
 def test_an_unknown_period_is_refused():
     with pytest.raises(ValidationError):
         report_window.period_months("2w", TODAY)

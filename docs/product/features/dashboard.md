@@ -124,17 +124,20 @@ that month.
 
 Every Reports widget has a filter in its own header: a small pill naming what it shows (for
 example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place. The same
-filters are also at the top of the widget's settings panel (**Edit**), under **Filters**:
+filters are also in the widget's settings panel (**Edit**), on its **Filters** tab beside
+**Appearance**:
 
 - **Period.** Spending by category, Top merchants, Savings rate and Money flow can show
   **This month**, **Last month**, **3 months**, **6 months**, **12 months** or **This year**,
   added up as one figure. **3/6/12 months** end with this month, so they include the month in
   progress. Spending trends, Income vs expense and Income & expense table chart month by month,
-  so they offer **3 months**, **6 months**, **12 months** or **This year**.
+  so they offer **3 months**, **6 months**, **12 months** or **This year**. Every one also
+  offers **Custom**: pick a **From** and a **To** month, and it covers both and every month
+  between.
 - **Categories.** Pick one or more (search the list) to count only those categories. A split
   transaction counts only its split in the chosen category.
-- **Tags.** Pick one or more to count only transactions carrying any of them, for example
-  everything tagged *#trip*.
+- **Tags.** Search the list and pick one or more to count only transactions carrying any of
+  them, for example everything tagged *#trip*.
 
 Categories and tags combine: *Dining* and *#trip* shows dining on trips. A choice applies as
 you make it and stays with the widget; **Clear categories and tags** goes back to everything.

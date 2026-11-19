@@ -134,10 +134,67 @@ describe('ReportFilter', () => {
         mode="edit"
       />,
     )
-    expect(screen.getByText('Filters')).toBeTruthy()
+    // Appearance comes first; the filters are their own tab.
+    expect(screen.queryByRole('button', { name: '3 months' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Filters' }))
     fireEvent.click(screen.getByRole('button', { name: '3 months' }))
     expect(onPatch).toHaveBeenCalledWith({ config: { period: '3 months' } })
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Bravo' }))
     expect(onPatch).toHaveBeenLastCalledWith({ config: { categories: ['cat_b'] } })
+  })
+
+  it('picks a custom range of months, and keeps From never after To', () => {
+    serveLists()
+    const onPatch = vi.fn()
+    const { rerender } = render(
+      <ReportFilter
+        instance={inst({})}
+        def={defOf('rep-spendcat')}
+        onPatch={onPatch}
+        label="This month"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Filter:/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }))
+    const first = onPatch.mock.calls[0]![0].config
+    expect(first.period).toBe('Custom')
+    expect(first.periodFrom <= first.periodTo).toBe(true)
+    rerender(
+      <ReportFilter
+        instance={inst({ period: 'Custom', periodFrom: '2026-01', periodTo: '2026-03' })}
+        def={defOf('rep-spendcat')}
+        onPatch={onPatch}
+        label="Jan – Mar"
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-05' } })
+    expect(onPatch).toHaveBeenLastCalledWith({
+      config: { period: 'Custom', periodFrom: '2026-05', periodTo: '2026-05' },
+    })
+  })
+
+  it('searches tags the way it searches categories', async () => {
+    authFetch.mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve(
+            url.startsWith('/api/categories')
+              ? CATS
+              : { tags: [{ tag: 'trip' }, { tag: 'work' }], items: ['trip', 'work'] },
+          ),
+      } as Response),
+    )
+    render(
+      <ReportFilter
+        instance={inst({})}
+        def={defOf('rep-spendcat')}
+        onPatch={vi.fn()}
+        label="This month"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Filter:/ }))
+    expect(await screen.findByRole('textbox', { name: 'Search tags' })).toBeTruthy()
   })
 })
