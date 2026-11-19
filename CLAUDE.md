@@ -23,6 +23,9 @@ Fresh clone: `make setup start` (venv, deps, DB migration, frontend build, edita
 the `onw` CLI, then run). No `.env` needed — data defaults to `~/.open-net-worth/`, outside the
 checkout. `AUTH_PASSWORD=… docker compose up` on Windows (the password is REQUIRED under Docker).
 `onw autostart on` / `make autostart` installs a boot service (launchd/systemd).
+**Restart the owner's live server only with `onw restart`** (graceful, in place, however it runs).
+Never `launchctl kickstart -k` or kill whatever holds :8080 — both SIGKILL it mid-write; parallel
+sessions doing so took it down twice in 20 minutes (2026-11-19).
 
 Users don't clone: they `uv tool install open-net-worth` (wheel built by `make wheel`) or pull
 `ghcr.io/open-net-worth-ai/open-net-worth`. A release is a manual, gated, signed act —
