@@ -174,16 +174,6 @@
   text-align: center;
 }
 
-.ov-savings-flag {
-  color: var(--warn);
-  cursor: help;
-  white-space: nowrap;
-}
-
-.ov-savings-flag svg {
-  vertical-align: -1px;
-}
-
 /* ── Income & expense table (rep-table) ──────────────────────────────────
    Simplified 2-level hierarchy — Income / Spending groups, each with a flat
    list of category rows (no group→subgroup→category tree; see reports.tsx

@@ -66,8 +66,6 @@ export interface PortfolioAttention {
   /** Months of the user's average spending the cash covers; null while spending is unknown.
    *  The Cash Flow runway itself (same cash, same burn), not a separate division. */
   cash_months?: number | null
-  /** Open credit cards with no purchases in the burn's window: the runway cannot see them. */
-  cards_missing_spending?: string[]
   has_investments: boolean
 }
 
@@ -330,7 +328,6 @@ export interface ReportPeriodBlock extends MonthPoint {
     saved: number
     rate_pct: number
     known: boolean
-    cards_missing_spending: string[]
   }
 }
 
@@ -373,8 +370,6 @@ export interface ReportsRollup {
     rate_pct: number
     known: boolean
     ym: string
-    /** Open credit cards with no purchases in `ym`: their spending is not in `spent`. */
-    cards_missing_spending: string[]
     /** The average over the last complete months (`reports_rollup.trailing_saving`) — the very
      *  figure the Outlook checks its saving lever against; `null` with under two active months. */
     trailing: {
@@ -468,8 +463,6 @@ export interface CashflowProjections {
     /** Liquid cash at +0, +1, +2 … months, floored at zero. */
     trajectory: number[]
     known: boolean
-    /** Open credit cards with no purchases in the burn's window. */
-    cards_missing_spending: string[]
   }
 }
 

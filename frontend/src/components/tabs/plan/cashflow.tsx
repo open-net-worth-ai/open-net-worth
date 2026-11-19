@@ -23,7 +23,6 @@ import { FilterSelect } from './budgetParts'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { thisMonth } from '../../../hooks/useBudget'
 import { MoneyFlowModal } from './moneyFlowModal'
-import { cardCaveat } from '../../../utils/cardCaveat'
 import type { RegisterFilter } from './budget'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -787,9 +786,6 @@ export function CashFlowTab(props: CashFlowTabProps) {
   const rwyN = Number(runway)
   const rwyTone =
     data.income_runway_months == null ? '' : rwyN < 3 ? 'neg' : rwyN < 6 ? 'warn' : 'pos'
-  const caveat = cardCaveat(data.cards_missing_spending)
-  const cardsNote =
-    caveat && `${caveat}. The runway and the projection read better than the book is.`
   const minBal = future.length > 0 ? Math.min(...future.map((m) => m.balance)) : 0
   const minMonth = future.find((m) => m.balance === minBal)
   const totalNet = future.reduce((s, m) => s + m.net, 0)
@@ -1072,7 +1068,6 @@ export function CashFlowTab(props: CashFlowTabProps) {
             <span className="v mask">{fCF(endBal)}</span>
           </div>
         </div>
-        {cardsNote && <div className="cfx-card-note">{cardsNote}</div>}
       </div>
 
       {/* ── Outlook + filter ── */}

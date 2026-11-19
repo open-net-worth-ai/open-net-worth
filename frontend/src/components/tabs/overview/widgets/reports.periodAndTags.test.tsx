@@ -251,7 +251,7 @@ describe('Money flow card', () => {
 })
 
 describe('Savings rate card', () => {
-  it('says one line under the gauge and explains a card with no purchases on hover', async () => {
+  it('says one line under the gauge, with the 3-month average on hover', async () => {
     authFetch.mockImplementation(() =>
       jsonOk({
         ...ROLLUP,
@@ -264,7 +264,6 @@ describe('Savings rate card', () => {
           rate_pct: 40,
           known: true,
           ym: '2026-10',
-          cards_missing_spending: ['ACME Card'],
           trailing: { monthly: 1800, rate_pct: 36, months: 3, from: '2026-08', to: '2026-10' },
         },
       }),
@@ -273,12 +272,10 @@ describe('Savings rate card', () => {
     const { container } = render(
       <Comp instance={instanceOf('rep-savings')} def={defOf('rep-savings')} onPatch={vi.fn()} />,
     )
-    const flag = await screen.findByText(/1 card missing/)
-    expect(flag.closest('[title]')!.getAttribute('title')).toMatch(
-      /No purchases recorded on ACME Card in October.*may be too high/,
-    )
+    await screen.findByText('40%')
     expect(container.querySelectorAll('.ov-savings-sub')).toHaveLength(1)
     expect(screen.queryByText(/3-month average/)).toBeNull()
+    expect(screen.queryByText(/card/i)).toBeNull()
     expect(container.querySelector('.ov-savings-gauge-wrap')!.getAttribute('title')).toMatch(
       /3-month average \(Aug to Oct\)/,
     )

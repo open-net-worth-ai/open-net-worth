@@ -29,7 +29,6 @@ import { WidgetPlaceholder } from '../WidgetPlaceholder'
 import { OvChart, TICK, GRID, amountsHidden, areaFill, kTick, resolveColor } from '../charts'
 import { useFire } from '../../../../hooks/useFire'
 import { usePlanningSummary, useCashflowProjections } from '../../../../hooks/serverState'
-import { cardCaveat } from '../../../../utils/cardCaveat'
 import type { PlanningSummary } from '../../../../types/aggregates'
 
 // ── shared: small icons + a footer "All X →" link ───────────────────────────
@@ -991,7 +990,6 @@ const PlanRunway: ComponentType<WidgetContentProps> = ({ instance, def }) => {
   const cash = data.cash
   const burn = data.burn
   const runway = data.runway_months
-  const caveat = cardCaveat(data.cards_missing_spending)
   const points = data.trajectory
   const ACC = resolveColor('var(--accent)')
   const cfg = {
@@ -1051,11 +1049,6 @@ const PlanRunway: ComponentType<WidgetContentProps> = ({ instance, def }) => {
           color="var(--good)"
         />
       </div>
-      {caveat && (
-        <Text as="p" size="xs" tone="faint">
-          {caveat}
-        </Text>
-      )}
       <OvChart config={cfg} sig={`${cash}|${burn}|${data.horizon_months}`} minHeight={110} />
     </WidgetShell>
   )

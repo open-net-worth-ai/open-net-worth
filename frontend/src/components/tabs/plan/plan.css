@@ -6149,15 +6149,6 @@
 .cfx-stat .v.neg {
   color: var(--bad);
 }
-/* The spending-based figures above read better than the book is while a card's purchases are
-   missing. */
-.cfx-card-note {
-  margin-top: 10px;
-  font-size: var(--text-sm);
-  color: var(--warn);
-  line-height: 1.4;
-}
-
 /* ── Outlook + filter bar ── */
 /* Pinned (owner 2026-07-03): the lowest-point summary + Collapse/Export/Today/filters stay
    visible while the projection scrolls; the table header stacks directly below via the same

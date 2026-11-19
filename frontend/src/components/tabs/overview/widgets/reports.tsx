@@ -91,7 +91,7 @@ import {
 import { SeriesLegend, type LegendGroup } from './seriesLegend'
 import { fitMode } from '../grid'
 import { vizOf } from '../vizModel'
-import { AlertTriangle, ArrowRight } from '../../../../ui/icons'
+import { ArrowRight } from '../../../../ui/icons'
 
 Chart.register(
   ArcElement,
@@ -755,7 +755,6 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def }) => {
     )
   }
   const rate = Math.round(savings.rate_pct)
-  const missing = savings.cards_missing_spending ?? []
   // A chosen period stands on its own; the trailing average belongs to the default view.
   const trailing = period ? null : data?.savings.trailing
   const savedMonth = data?.savings.ym
@@ -764,22 +763,11 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def }) => {
     : savedMonth && savedMonth !== data?.current?.ym
       ? fMonth(`${savedMonth}-01`, 'short')
       : 'this month'
-  const whenLong = period
-    ? meta
-    : savedMonth && savedMonth !== data?.current?.ym
-      ? fMonth(`${savedMonth}-01`, 'long')
-      : 'this month'
-  // One line under the gauge. The rest is on hover: the 3-month average on the gauge, and why a
-  // card with no purchases makes the rate read high on the marker.
+  // One line under the gauge; the 3-month average is on the gauge's hover.
   const avgTip = trailing
     ? `${trailing.months}-month average (${fMonth(`${trailing.from}-01`, 'short')} to ` +
       `${fMonth(`${trailing.to}-01`, 'short')}): ${fBaseCompact(trailing.monthly)} a month` +
       (trailing.rate_pct != null ? `, ${Math.round(trailing.rate_pct)}%` : '')
-    : undefined
-  const missingTip = missing.length
-    ? `No purchases recorded on ${missing.join(', ')} ${whenLong === 'this month' ? 'this month' : `in ${whenLong}`}, ` +
-      `so ${missing.length === 1 ? 'its' : 'their'} spending isn't counted and this rate may be ` +
-      `too high. Import ${missing.length === 1 ? 'its statement' : 'their statements'} to fix it.`
     : undefined
   return (
     <WidgetShell title={instance.title} base={def.title} bodyAlign="center" meta={when}>
@@ -795,18 +783,6 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def }) => {
         <Text as="p" size="xs" tone="faint" className="ov-savings-sub">
           <span className="money">{fBaseCompact(savings.saved)}</span> of{' '}
           <span className="money">{fBaseCompact(savings.income)}</span> saved
-          {missingTip && (
-            <span
-              className="ov-savings-flag"
-              title={missingTip}
-              aria-label={missingTip}
-              tabIndex={0}
-            >
-              {' · '}
-              <AlertTriangle size={11} aria-hidden="true" />{' '}
-              {missing.length === 1 ? '1 card missing' : `${missing.length} cards missing`}
-            </span>
-          )}
         </Text>
       </div>
     </WidgetShell>

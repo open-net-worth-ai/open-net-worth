@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from backend.core.fx import base_currency
 from backend.core.user_time import user_today
-from backend.services import card_coverage, report_window
 from backend.services import ledger as ledger_service
 from backend.services import planning as planning_service
+from backend.services import report_window
 from backend.services.fx_cache import load_fx_cache
 
 DEFAULT_MONTHS = 6
@@ -417,16 +417,6 @@ def trailing_saving() -> dict | None:
     }
 
 
-def _with_card_caveat(savings: dict) -> dict:
-    """Name the cards with no purchases in the savings month: their spending is not in `spent`,
-    so the rate is flattered until it is imported."""
-    ym = savings["ym"]
-    return {
-        **savings,
-        "cards_missing_spending": card_coverage.cards_without_activity(f"{ym}-01", f"{ym}-31"),
-    }
-
-
 def reports_aggregates(
     months: int = DEFAULT_MONTHS,
     merchant_limit: int = 10,
@@ -473,7 +463,7 @@ def reports_aggregates(
         "current_month": this_month,
         "spending_month": spending_ym,
         "merchants": _merchants([spending_ym], merchant_limit, tags),
-        "savings": {**_with_card_caveat(_latest_savings(points)), "trailing": trailing_saving()},
+        "savings": {**_latest_savings(points), "trailing": trailing_saving()},
     }
     if period:
         out["period"] = _period_block(period, points, merchant_limit, tags)
@@ -491,10 +481,5 @@ def _period_block(period: str, points: list[dict], merchant_limit: int, tags) ->
         "to": yms[-1],
         **summary,
         "merchants": _merchants(yms, merchant_limit, tags),
-        "savings": {
-            **_savings(summary),
-            "cards_missing_spending": card_coverage.cards_without_activity(
-                f"{yms[0]}-01", f"{yms[-1]}-31"
-            ),
-        },
+        "savings": _savings(summary),
     }

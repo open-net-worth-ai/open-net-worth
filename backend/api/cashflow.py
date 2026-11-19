@@ -33,7 +33,6 @@ Response shape:
     "monthly_expenses_avg":  float,
     "baseline_source":       "transactions" | "profile" | "mixed",
     "income_runway_months":  float | null,
-    "cards_missing_spending": [str],   open credit cards with no purchases in the burn's window
     "simulation_active":     bool,
     "income_override":       float | null,
     "expense_override":      float | null

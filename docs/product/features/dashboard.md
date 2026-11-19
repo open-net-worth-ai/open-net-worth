@@ -207,10 +207,9 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
   runway** widget: your cash on hand divided by your monthly burn (your recurring bills plus
   everyday spending, not one-off purchases), so all three always quote the same number of months.
   It stays quiet until Open Net Worth knows what you spend.
-- **A credit card with no purchases yet** (none in the period) means its spending isn't in your
-  savings rate, burn or runway, so those figures read better than your real situation. Burn and
-  runway say **Card spending not included yet** and name the card; Savings rate shows an amber
-  **1 card missing** marker that names it on hover. Both go away once you import its purchases.
+- Savings rate, burn and runway count only the spending you've recorded. If a card's statement
+  isn't imported yet, its spending is missing and those figures read better than they will once
+  it is.
 - **Next 30 days** lists everything going out from today through day 30 — commitments
   (instalments, auto-debits and goal set-asides alike), recurring bills such as rent or a
   subscription, and each credit card's unpaid statement on its due date — and the recurring
@@ -235,9 +234,7 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
   gauge for the **3-month average** with its months (for example "3-month average (Jul to Sep):
   $3.17K a month, 55%"): the same figure the [Outlook](retirement-planning.md) checks your saving
   against. Both differ from the Budget screen's month-in-progress pace and from Cash Flow's
-  projected average, which cover other periods. If a credit card has no purchases recorded in
-  that month, an amber **1 card missing** marker follows: that card's spending isn't counted, so
-  the rate reads high until you import its statement. Hover it for the card's name.
+  projected average, which cover other periods.
 - **Asset allocation**, **Reachability** and **Where money is held** each say what their total
   adds up: allocation shows each class as a share of your assets (the shares add up to 100%)
   with your **Debts** as a separate line underneath, never a negative percentage; reachability
