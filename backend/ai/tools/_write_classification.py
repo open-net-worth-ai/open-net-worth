@@ -127,6 +127,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_asset_fundamentals",
         "get_asset_technicals",
         "get_budget_month",
+        "get_spending_advice_before_payment",
         # The pluggable-budget-engines Lucius surface (ai/tools/budget_engines.py, RFC
         # 2026-08-22-pluggable-budget-engines.md Decision F) — these three read the ENGINES
         # registry / call an engine's fold()/draft(), never a store write. list_budget_engines

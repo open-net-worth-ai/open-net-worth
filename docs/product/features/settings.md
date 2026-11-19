@@ -86,7 +86,8 @@ removed) and disappears from this list. When the list is empty there is nothing 
 Right now the list holds **Permissions v2**, a new way of deciding when Lucius asks you before
 using a tool; see [Permissions v2](../lucius/permissions-v2.md). It also holds **Voice calls**: talk to Lucius out loud
 from the chat; see [Voice calls](../connectors/voice-calls.md). **Actual Budget** is here too, off
-by default: see [Import from Actual Budget](actual-budget-import.md). And **Investment accounts valued by
+by default: see [Import from Actual Budget](actual-budget-import.md). **Ask Lucius before you
+buy** is here too, off by default: see [Skills](../lucius/skills.md#ask-lucius-before-you-buy-experimental). And **Investment accounts valued by
 Brokerage total or Live holdings**: a typed or synced total that holdings are carved out of; see
 [Accounts](accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).
 These are on by default and can be turned off here: Permissions v2, [Web search reads its

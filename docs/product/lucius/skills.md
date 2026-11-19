@@ -42,7 +42,7 @@ A new install comes with these. Find them in **Skills** in the sidebar.
 | `budget-review` | "Am I over budget?" / "Adjust my targets" |
 | `balance-mismatch-tracer` | "The app says 1,240 but my bank says 1,180" — matches your bank's own rows (a screenshot, statement or pasted list) against the app's, and names the rows that make up the gap |
 | `subscription-audit` | "What am I subscribed to?" — monthly and yearly cost, what went up, what looks forgotten |
-| `can-i-afford-it` | "Can I afford a $30k car?" / "How long would my cash last?" |
+| `can-i-afford-it` | "Can I afford a $30k car?" / "How long would my cash last?" / "Can I buy these headphones?" |
 | `on-track` | "Am I on track?" — savings goals and financial independence |
 | `investment-checkup` | "How's my portfolio?" — returns vs benchmark, drift, what your funds hold, fees |
 | `onboarding-new-user` | Runs by itself the first time, while the book is still empty |
@@ -134,3 +134,24 @@ using the words you'd actually type.
 - [Automations](automations.md) — run a skill on a schedule
 - [Mentioning things in chat](mentions.md) — `@` and `/` in the message box
 - [Permissions](permissions.md) — what a skill can't override
+
+## Ask Lucius before you buy (experimental)
+
+Lucius tells you before you spend, not after. Ask in chat, on Telegram or by voice, for
+example "Can I buy a 1,400 laptop?" or "Is 84 at ACME Store OK for a gift, on Card A?". Lucius
+checks, in your own numbers:
+
+- what is left in that category's envelope, and what this leaves;
+- if it's short, where the difference could come from: Ready to Assign or another envelope;
+- whether your cash still covers the bills due before your next expected income;
+- for a card, whether its payment is already short, and what an unpaid balance costs.
+
+You get one of four answers, with the reasons: **yes**; **yes, if you move money**; **wait
+until** a named date (only when a bill before payday would be short, and never for something
+you mark essential); or **not this month**. "Buy anyway" is always an option, and Lucius never
+moves money for you: covering a shortfall is a budget change you approve as usual. Nothing is
+written to your book.
+
+Off by default: switch on **Ask Lucius before you buy** in Settings → Developer →
+[Experimental](../features/settings.md#experimental-features). With it off, Lucius answers
+"can I afford it" from your cash and runway, as before.

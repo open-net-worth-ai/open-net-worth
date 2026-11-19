@@ -1207,7 +1207,12 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
     ),
     # 2026-10-11 (e98c3e2a5): the load step spelled as a find_tools(names=[...]) call.
     "can-i-afford-it": frozenset(
-        {"ef68daa96434d875063bbc6b9676fa62a470e67d2ae56e7ae13da6189cadc163"}
+        {
+            "ef68daa96434d875063bbc6b9676fa62a470e67d2ae56e7ae13da6189cadc163",
+            # 2026-11-20: before an everyday purchase, ask get_spending_advice_before_payment
+            # (envelope, bills before payday, the card) instead of the runway path alone.
+            "8cd26eec6be5f49734ce048b2346a1010b8eb2473ea20d606de53eee2ff06bc1",
+        }
     ),
     "on-track": frozenset(
         {

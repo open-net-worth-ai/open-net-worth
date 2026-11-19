@@ -321,6 +321,19 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 28),
         kind="kill_switch",
     ),
+    Flag(
+        name="spending_advice",
+        title="Ask Lucius before you buy",
+        description=(
+            "Ask Lucius before you buy: whether a purchase fits your budget, leaves your bills "
+            "covered until payday, and whether the card you'd use is in good shape. Off: "
+            "Lucius answers 'can I afford it' from your cash and runway only."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 20),
+        remove_by=date(2027, 3, 31),
+    ),
 )
 
 
