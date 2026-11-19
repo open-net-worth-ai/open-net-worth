@@ -253,6 +253,52 @@ secret is shown once, with **Copy client ID** and **Copy secret** buttons. An ap
 **Firewalls.** If you limit who can reach your address, allow Anthropic's outbound range
 (`160.79.104.0/21`) for Claude and OpenAI's published egress addresses for ChatGPT.
 
+### Behind a reverse proxy or a sign-in gateway
+
+If something in front of Open Net Worth asks for its own login (Authelia, Authentik, Cloudflare
+Access, oauth2-proxy, a basic-auth proxy), Claude and ChatGPT can't get past it: adding the
+connector fails at "Connecting to the server" with **Not found** or a **302**. Let these paths
+through to Open Net Worth and keep everything else behind your gateway:
+
+| Path | What it is |
+|---|---|
+| `/mcp` | The MCP endpoint. It still needs a token from Open Net Worth. |
+| `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp` | Where the app learns who issues tokens |
+| `/.well-known/oauth-authorization-server` | The sign-in endpoints |
+| `/oauth/*` | Authorize, token, revoke, and the approval page itself (`/oauth/consent`) |
+| `/api/oauth/consent*` | The approval page's password check, Allow / Deny and the app's icon |
+| `/assets/*`, `/theme-stamp.js`, `/logo-mark.svg`, `/favicon.svg`, `/favicon.ico`, `/manifest.webmanifest` | The approval page's scripts, styles and icons (no data) |
+
+Each of these is still locked by Open Net Worth: `/mcp` refuses a request without a token, and a
+token is issued only after you type your password on the approval page. Without the last two
+rows, approving works only in a browser already signed in to your gateway; on a phone it lands
+on the gateway's login instead.
+
+As an Authelia rule (`access_control`, `policy: bypass`, above your other rules for the domain):
+
+```yaml
+- domain: wealth.example.com
+  policy: bypass
+  resources:
+    - '^/mcp([/?].*)?$'
+    - '^/\.well-known/oauth-(protected-resource|authorization-server)([/?].*)?$'
+    - '^/oauth/.*$'
+    - '^/api/oauth/consent.*$'
+    - '^/assets/.*$'
+    - '^/(theme-stamp\.js|logo-mark\.svg|favicon\.(svg|ico)|manifest\.webmanifest)$'
+```
+
+With Cloudflare Access, add a second self-hosted application for the same hostname with these
+paths and a **Bypass** policy for **Everyone**; the more specific path wins, so the rest of the
+site keeps your existing login.
+
+The proxy itself needs only the usual: pass `X-Forwarded-Proto: https`, and allow long-lived
+requests (HAProxy: `timeout tunnel 3600s`).
+
+To check from a terminal, `curl -I https://wealth.example.com/mcp` should answer `401` with a
+`WWW-Authenticate` header naming `resource_metadata`. A `302` means the gateway is still in the
+way.
+
 ## What a connected app can do
 
 An app holding your API token, or approved with **Also let it make changes**, **acts as you**: it

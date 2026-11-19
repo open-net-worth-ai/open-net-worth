@@ -169,3 +169,56 @@ def test_the_endpoints_take_a_period_and_tags_and_refuse_a_bad_period(book, monk
     assert flow["spend_total"] == pytest.approx(385.5)
     rollup = client.get("/api/reports/rollup?period=last_month&tag=trip-qa&tag=nope").json()
     assert rollup["period"]["expense_total"] == pytest.approx(325.5)
+
+
+def test_a_category_keeps_only_that_categorys_money(book):
+    out = reports_rollup.month_summary("2026-09", categories=[book["food"]])
+    assert {r["label"]: r["amount"] for r in out["expense_rows"]} == {
+        "QA Food": pytest.approx(65.5)  # both Food rows, tagged or not; Hotels left out
+    }
+    assert out["income_total"] == 0.0  # the salary is uncategorized, not Food
+
+
+def test_categories_and_tags_together_narrow_to_both(book):
+    out = reports_rollup.month_summary("2026-09", ["trip-qa"], [book["food"]])
+    assert {r["label"]: r["amount"] for r in out["expense_rows"]} == {
+        "QA Food": pytest.approx(25.5)  # Food AND #trip-qa
+    }
+
+
+def test_merchants_and_money_flow_follow_the_category(book, monkeypatch):
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    out = reports_rollup.reports_aggregates(period="3m", categories=[book["hotels"]])
+    assert {m["label"] for m in out["period"]["merchants"]} == {"QA Inn"}
+    flow = cash_flow_graph.cash_flow_graph(period="3m", categories=[book["hotels"]])
+    assert flow["spend_total"] == pytest.approx(300.0)
+    assert flow["categories"] == [book["hotels"]]
+
+
+def test_a_split_counts_only_its_chosen_part_among_merchants():
+    t = {
+        "base_amount": -100.0,
+        "splits": [
+            {"category": "cat_a", "amount": -75.0},
+            {"category": "cat_b", "amount": -25.0},
+        ],
+    }
+    rates: dict = {}
+    original = reports_rollup.ledger_service.txn_base_amount
+    try:
+        reports_rollup.ledger_service.txn_base_amount = lambda t, b, r: t["base_amount"]
+        assert reports_rollup._merchant_amount(t, {"cat_b"}, "SGD", rates) == pytest.approx(25.0)
+        assert reports_rollup._merchant_amount(t, set(), "SGD", rates) == pytest.approx(100.0)
+    finally:
+        reports_rollup.ledger_service.txn_base_amount = original
+
+
+def test_the_endpoints_take_categories(book, monkeypatch):
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    client = TestClient(app)
+    rollup = client.get(f"/api/reports/rollup?period=last_month&category={book['food']}").json()
+    assert rollup["period"]["expense_total"] == pytest.approx(65.5)
+    flow = client.get(f"/api/cashflow/flow?month=2026-09&category={book['hotels']}").json()
+    assert flow["spend_total"] == pytest.approx(300.0)

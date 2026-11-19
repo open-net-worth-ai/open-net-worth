@@ -22,8 +22,16 @@ export const TOTAL_PERIOD_OPTIONS = Object.keys(PERIOD_BY_LABEL)
 /** Widgets that chart month by month: a one-month window would be a single bar. */
 export const SERIES_PERIOD_OPTIONS = ['3 months', '6 months', '12 months', 'This year']
 
+// All three are set from the widget's own header filter (ReportFilter), not the settings panel.
 export function periodSetting(options: string[], fallback: string): WidgetSettingSchema {
-  return { key: 'period', type: 'segment', label: 'Period', options, default: fallback }
+  return {
+    key: 'period',
+    type: 'segment',
+    label: 'Period',
+    options,
+    default: fallback,
+    inline: true,
+  }
 }
 
 export const TAGS_SETTING: WidgetSettingSchema = {
@@ -31,6 +39,15 @@ export const TAGS_SETTING: WidgetSettingSchema = {
   type: 'tags',
   label: 'Tags',
   default: [],
+  inline: true,
+}
+
+export const CATEGORIES_SETTING: WidgetSettingSchema = {
+  key: 'categories',
+  type: 'categoryIds',
+  label: 'Categories',
+  default: [],
+  inline: true,
 }
 
 export interface WidgetReportScope {
@@ -39,6 +56,11 @@ export interface WidgetReportScope {
   /** The chosen option's label, for the widget's header. */
   periodLabel: string
   tags: string[]
+  categories: string[]
+}
+
+function stringList(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((t): t is string => typeof t === 'string' && !!t) : []
 }
 
 export function reportScope(instance: WidgetInstance, def: WidgetDefinition): WidgetReportScope {
@@ -46,12 +68,10 @@ export function reportScope(instance: WidgetInstance, def: WidgetDefinition): Wi
   const fallback = typeof setting?.default === 'string' ? setting.default : ''
   const chosen = instance.config?.period
   const label = typeof chosen === 'string' && setting?.options?.includes(chosen) ? chosen : fallback
-  const raw = instance.config?.tags
-  const tags = Array.isArray(raw)
-    ? raw.filter((t): t is string => typeof t === 'string' && !!t)
-    : []
+  const tags = stringList(instance.config?.tags)
+  const categories = stringList(instance.config?.categories)
   const period = label && label !== fallback ? PERIOD_BY_LABEL[label] : undefined
-  return { scope: { period, tags }, periodLabel: label, tags }
+  return { scope: { period, tags, categories }, periodLabel: label, tags, categories }
 }
 
 /** "Aug – Oct 2026", or one month's name. */

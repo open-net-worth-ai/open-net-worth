@@ -186,7 +186,16 @@ def _cleared(top: dict, now: bool) -> str | None:
     return "cleared" if now else "uncleared"
 
 
-def split_edit(ctx: Context, top: dict, n: dict) -> dict:
+def payee_fields(n: dict, changed) -> dict:
+    """The payee as an edit sends it: a new name, or none at all when it was cleared."""
+    if "description" not in changed:
+        return {}
+    if n["description"]:
+        return {"payee_name": n["description"][:200]}
+    return {"payee_id": None, "payee_name": None}
+
+
+def split_edit(ctx: Context, top: dict, n: dict, changed=()) -> dict:
     """The whole of a split, for an app that rewrites all its lines together: its account, date,
     amount, payee, and every line. ``subtransactions`` empty makes it a plain row again."""
     leg, outflow = _signed(n)
@@ -208,6 +217,8 @@ def split_edit(ctx: Context, top: dict, n: dict) -> dict:
         op["account_id"] = ctx.ynab_acct[leg[0]]
     if n["description"]:
         op["payee_name"] = n["description"][:200]
+    else:
+        op |= payee_fields(n, changed)
     return op
 
 
@@ -235,8 +246,7 @@ def _plain_fields(ctx: Context, top: dict, b: dict, n: dict, changed: list[str])
         op["amount"] = _milli(leg[1], outflow)
         if ctx.ynab_acct[leg[0]] != top["account_id"]:
             op["account_id"] = ctx.ynab_acct[leg[0]]
-    if "description" in changed and n["description"]:
-        op["payee_name"] = n["description"][:200]
+    op |= payee_fields(n, changed)
     if {"category", "splits"} & set(changed):
         op["category_id"] = _category_id(ctx, n["category"])
     return op
@@ -280,20 +290,11 @@ def update_payloads(ctx: Context, refs: list[str], b: dict, n: dict) -> list[dic
         if extra:
             if not whole_split(top, b):
                 raise Unsupported(f"this is one part of a larger {app} split; edit it in {app}")
-            ops = [split_edit(ctx, top, n)]
+            ops = [split_edit(ctx, top, n, changed)]
         else:
-            ops = [
-                {
-                    "id": top["id"],
-                    **(
-                        {"payee_name": n["description"][:200]}
-                        if "description" in changed and n["description"]
-                        else {}
-                    ),
-                }
-            ]
+            ops = [{"id": top["id"], **payee_fields(n, changed)}]
     elif shape == "plain" and n["splits"] and edits_splits:
-        ops = [split_edit(ctx, top, n)]
+        ops = [split_edit(ctx, top, n, changed)]
     elif shape == "plain":
         ops = [{"id": top["id"], **_plain_fields(ctx, top, b, n, changed)}]
     else:

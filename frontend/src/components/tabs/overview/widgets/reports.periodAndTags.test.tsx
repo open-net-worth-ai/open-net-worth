@@ -5,7 +5,7 @@
 // widget now has a Period and a Tags setting: the default option keeps the window the widget
 // always had (no `period` sent), any other sends one, and tags travel as repeated `tag=`.
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const authFetch = vi.hoisted(() => vi.fn())
@@ -45,6 +45,7 @@ describe('reportScope', () => {
     expect(reportScope(instanceOf('rep-spendcat'), defOf('rep-spendcat')).scope).toEqual({
       period: undefined,
       tags: [],
+      categories: [],
     })
     expect(
       reportScope(instanceOf('rep-trends', { period: '6 months' }), defOf('rep-trends')).scope
@@ -57,7 +58,7 @@ describe('reportScope', () => {
       instanceOf('rep-sankey', { period: 'This year', tags: ['trip', 42, ''] }),
       defOf('rep-sankey'),
     )
-    expect(sc.scope).toEqual({ period: 'ytd', tags: ['trip'] })
+    expect(sc.scope).toEqual({ period: 'ytd', tags: ['trip'], categories: [] })
     expect(sc.periodLabel).toBe('This year')
   })
 
@@ -120,7 +121,9 @@ describe('a Reports widget set to a period and a tag', () => {
       />,
     )
     await waitFor(() => expect(screen.getByText('Hotels')).toBeTruthy())
-    const url = authFetch.mock.calls[0]![0] as string
+    const url = authFetch.mock.calls
+      .map((c) => c[0] as string)
+      .find((u) => u.startsWith('/api/reports/rollup'))!
     expect(url).toContain('period=3m')
     expect(url).toContain('tag=trip')
     expect(screen.getByText(/#trip/)).toBeTruthy()
@@ -227,7 +230,9 @@ describe('Money flow card', () => {
       />,
     )
     const group = await screen.findByRole('link', { name: /Travel:/ })
-    expect(authFetch.mock.calls[0]![0]).toContain('period=3m')
+    expect(
+      authFetch.mock.calls.map((c) => c[0] as string).find((u) => u.includes('compact=true')),
+    ).toContain('period=3m')
     fireEvent.click(group)
 
     await screen.findByRole('button', { name: /All groups/ })
@@ -278,6 +283,118 @@ describe('Savings rate card', () => {
     expect(screen.queryByText(/card/i)).toBeNull()
     expect(container.querySelector('.ov-savings-gauge-wrap')!.getAttribute('title')).toMatch(
       /3-month average \(Aug to Oct\)/,
+    )
+  })
+})
+
+describe('the header filter', () => {
+  const CATS = [
+    { id: 'cat_dining', label: 'Dining' },
+    { id: 'cat_hotels', label: 'Hotels' },
+  ]
+  function route() {
+    authFetch.mockImplementation((url: string) =>
+      jsonOk(
+        url.startsWith('/api/categories')
+          ? CATS
+          : url.startsWith('/api/transactions/tags')
+            ? { tags: [{ tag: 'trip', count: 3 }] }
+            : ROLLUP,
+      ),
+    )
+  }
+
+  it('names the period and filters on the widget, and a pick saves to the widget at once', async () => {
+    route()
+    const onPatch = vi.fn()
+    const Comp = reportsWidgetComponents['rep-spendcat']!
+    render(
+      <Comp
+        instance={instanceOf('rep-spendcat', { period: '3 months', categories: ['cat_dining'] })}
+        def={defOf('rep-spendcat')}
+        onPatch={onPatch}
+      />,
+    )
+    const pill = await screen.findByRole('button', { name: /Filter: Aug – Oct · Dining/ })
+    expect(authFetch.mock.calls.some((c) => String(c[0]).includes('category=cat_dining'))).toBe(
+      true,
+    )
+    fireEvent.click(pill)
+    const pop = await screen.findByRole('dialog', { name: 'Filter this widget' })
+    fireEvent.click(await within(pop).findByRole('checkbox', { name: 'Hotels' }))
+    expect(onPatch).toHaveBeenLastCalledWith({
+      config: { period: '3 months', categories: ['cat_dining', 'cat_hotels'] },
+    })
+    fireEvent.click(within(pop).getByRole('button', { name: '6 months' }))
+    expect(onPatch).toHaveBeenLastCalledWith({
+      config: { period: '6 months', categories: ['cat_dining'] },
+    })
+    fireEvent.click(within(pop).getByRole('button', { name: /Clear categories and tags/ }))
+    expect(onPatch).toHaveBeenLastCalledWith({
+      config: { period: '3 months', categories: [], tags: [] },
+    })
+  })
+
+  it('keeps the filter on an empty widget, so a filter that matches nothing can be undone', async () => {
+    const empty = { ...PERIOD_POINT, expense_rows: [], expense_total: 0 }
+    authFetch.mockImplementation((url: string) =>
+      jsonOk(
+        url.startsWith('/api/categories')
+          ? CATS
+          : { ...ROLLUP, points: [empty], period: { ...ROLLUP.period, ...empty } },
+      ),
+    )
+    const Comp = reportsWidgetComponents['rep-spendcat']!
+    render(
+      <Comp
+        instance={instanceOf('rep-spendcat', { period: '3 months', categories: ['cat_hotels'] })}
+        def={defOf('rep-spendcat')}
+        onPatch={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText(/No spending in Aug – Oct · 1 category/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Filter: Aug – Oct · Hotels/ })).toBeTruthy()
+  })
+
+  it('offers only a period on Savings rate', async () => {
+    route()
+    const Comp = reportsWidgetComponents['rep-savings']!
+    authFetch.mockImplementation((url: string) =>
+      jsonOk(
+        url.startsWith('/api/categories')
+          ? CATS
+          : {
+              ...ROLLUP,
+              period: undefined,
+              savings: { income: 10, spent: 5, saved: 5, rate_pct: 50, known: true, ym: '2026-10' },
+            },
+      ),
+    )
+    render(
+      <Comp instance={instanceOf('rep-savings')} def={defOf('rep-savings')} onPatch={vi.fn()} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /^Filter:/ }))
+    const pop = await screen.findByRole('dialog', { name: 'Filter this widget' })
+    expect(within(pop).getByText('Period')).toBeTruthy()
+    expect(within(pop).queryByText('Categories')).toBeNull()
+    expect(within(pop).queryByText('Tags')).toBeNull()
+  })
+
+  it('opens a merchant over the chosen categories too', async () => {
+    authFetch.mockImplementation(() => jsonOk(ROLLUP))
+    const onOpenRegister = vi.fn()
+    const Comp = reportsWidgetComponents['rep-merchants']!
+    render(
+      <Comp
+        instance={instanceOf('rep-merchants', { period: '3 months', categories: ['cat_hotels'] })}
+        def={defOf('rep-merchants')}
+        onPatch={vi.fn()}
+        onOpenRegister={onOpenRegister}
+      />,
+    )
+    fireEvent.click(await screen.findByText('QA Inn'))
+    expect(onOpenRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ payee: 'QA Inn', category: ['cat_hotels'] }),
     )
   })
 })

@@ -341,3 +341,94 @@
   font-weight: 600;
   color: var(--ink);
 }
+
+/* ── Report filter (ReportFilter.tsx): the header pill and its popover. The pill reuses the
+   chart toggle's trigger; a filtered widget's pill is accented so a narrowed figure is never
+   mistaken for the whole book. ── */
+
+.ov-rf-trigger {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.ov-rf-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.ov-rf-trigger.is-filtered {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--ink);
+}
+
+.ov-rf-pop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ov-rf-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov-rf-h {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.ov-rf-h-note {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ov-rf-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.ov-rf-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ov-rf-check:hover {
+  background: var(--hover);
+}
+
+.ov-rf-check span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-rf-reset {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}

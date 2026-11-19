@@ -120,31 +120,33 @@ they show the latest month in the last six that has some, and say so: for exampl
 *September. Nothing spent in October yet.* Clicking a merchant then opens its transactions for
 that month.
 
-### Choosing a period and tags
+### Filtering a report: period, categories and tags
 
-Every Reports widget has a **Period** setting (open the widget's settings):
+Every Reports widget has a filter in its own header: a small pill naming what it shows (for
+example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place:
 
-- **Spending by category**, **Top merchants**, **Savings rate** and **Money flow** can show
+- **Period.** Spending by category, Top merchants, Savings rate and Money flow can show
   **This month**, **Last month**, **3 months**, **6 months**, **12 months** or **This year**,
   added up as one figure. **3/6/12 months** end with this month, so they include the month in
-  progress.
-- **Spending trends**, **Income vs expense** and **Income & expense table** chart month by
-  month, so they offer **3 months**, **6 months**, **12 months** or **This year**.
+  progress. Spending trends, Income vs expense and Income & expense table chart month by month,
+  so they offer **3 months**, **6 months**, **12 months** or **This year**.
+- **Categories.** Pick one or more (search the list) to count only those categories. A split
+  transaction counts only its split in the chosen category.
+- **Tags.** Pick one or more to count only transactions carrying any of them, for example
+  everything tagged *#trip*.
 
-Each widget keeps its usual window until you pick something else: Spending by category and Top
-merchants this month, Savings rate and Money flow the last full month, the month-by-month charts
-the last 6 months. A widget set to another period names it in its header (for example
-*Aug – Oct*).
-
-All of them except Savings rate also have a **Tags** setting. Pick one or more tags and the widget
-counts only transactions carrying any of them, for example everything tagged *#trip*. The header
-shows the tags. With no tags picked, nothing is filtered.
+Categories and tags combine: *Dining* and *#trip* shows dining on trips. A choice applies as
+you make it and stays with the widget; **Clear categories and tags** goes back to everything.
+Savings rate offers a period only. A filtered widget's pill is outlined in the accent colour,
+so a narrowed figure is never mistaken for your whole book. Each widget keeps its usual window
+until you pick something else: Spending by category and Top merchants this month, Savings rate
+and Money flow the last full month, the month-by-month charts the last 6 months.
 
 In **Money flow**, click a spending group to see its categories, then click a category to open
 its transactions in Accounts, for the same months and tags. **All groups** goes back.
 
 In Reports, **Top merchants** can be shown as a list, bars or a pie (the header menu), and each
-merchant opens its transactions for the widget's month or period (and tags) in any of them. **Income vs expense** opens on
+merchant opens its transactions for the widget's month or period (and its categories and tags) in any of them. **Income vs expense** opens on
 Totals (an Income bar and an Expenses bar per month); switch Detail to By category for each side
 stacked in its own colour family — green for income, red and amber for spending — with a legend
 split into Income and Expenses. **Spending trends** draws a dashed line at your average monthly
