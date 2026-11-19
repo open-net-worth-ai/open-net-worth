@@ -263,3 +263,18 @@ def test_this_months_savings_rate_counts_the_profiles_monthly_income(book, monke
     # Another period keeps what actually came in.
     sep = reports_rollup.reports_aggregates(period="last_month")["period"]["savings"]
     assert sep["income"] == pytest.approx(3000.0)
+
+
+def test_a_widgets_all_rows_asks_for_every_merchant_and_transaction(book, monkeypatch):
+    """A list widget's All sends 0: every payee, every recently added transaction."""
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    one = reports_rollup.reports_aggregates(period="3m", merchant_limit=1)["period"]["merchants"]
+    every = reports_rollup.reports_aggregates(period="3m", merchant_limit=0)["period"]["merchants"]
+    assert len(one) == 1
+    assert {m["label"] for m in every} >= {"QA Inn", "QA Cafe", "QA Mart"}
+    client = TestClient(app)
+    capped = client.get("/api/transactions/recently-added?limit=2&exclude_openings=true").json()
+    whole = client.get("/api/transactions/recently-added?limit=0&exclude_openings=true").json()
+    assert len(capped["transactions"]) == 2
+    assert len(whole["transactions"]) == whole["total"] == 6

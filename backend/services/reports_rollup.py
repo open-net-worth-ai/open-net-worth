@@ -391,7 +391,8 @@ def _merchants(
         for key, meta in totals.items()
     ]
     rows.sort(key=lambda r: r["amount"], reverse=True)
-    return rows[:limit]
+    # 0 = every payee (a widget's All).
+    return rows[:limit] if limit > 0 else rows
 
 
 def _side_totals(points: list[dict], key: str) -> dict:

@@ -79,7 +79,7 @@ on its name (the first view can't be deleted).
 **Widget menu** — outside Customize mode, each widget's **⋯** menu offers **Edit…** (the same
 settings as **Edit** in Customize — title, chart type, categories and so on), **Display…** (accent
 color, hide title, fixed height), **Share with Lucius**, **Duplicate** and **Remove**, and a
-link to the tab it comes from.
+link to the tab it comes from. Every list widget's **Rows** setting includes **All**.
 
 **Build with Lucius** — in **Add widget**, describe what you want ("my USD exposure over time")
 and Lucius builds the widget. An empty view also offers **Build with Lucius** to assemble a whole

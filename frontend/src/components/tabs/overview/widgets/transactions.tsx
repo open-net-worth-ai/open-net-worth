@@ -136,8 +136,9 @@ function TxnListBody({
 
 const RecentlyAdded: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate }) => {
   const version = useDataVersion(['ledger'])
-  const cap = rowCap(instance, def) ?? 25
-  const key = `/api/transactions/recently-added?limit=${cap}&exclude_openings=true`
+  // All rows: limit=0 asks the server for every one.
+  const cap = rowCap(instance, def)
+  const key = `/api/transactions/recently-added?limit=${cap ?? 0}&exclude_openings=true`
   const { data, initialLoading } = useQueryCache(key, () => fetchTxnPage(key), {
     staleTime: 30_000,
     version,
@@ -171,8 +172,9 @@ const RecentlyAdded: ComponentType<WidgetContentProps> = ({ instance, def, onNav
 
 const RecentTransactions: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate }) => {
   const version = useDataVersion(['ledger'])
-  const cap = rowCap(instance, def) ?? 25
-  const key = `/api/transactions?limit=${cap}`
+  // All rows: no limit at all.
+  const cap = rowCap(instance, def)
+  const key = cap == null ? '/api/transactions' : `/api/transactions?limit=${cap}`
   const { data, initialLoading } = useQueryCache(key, () => fetchTxnPage(key), {
     staleTime: 30_000,
     version,
@@ -226,9 +228,9 @@ const CategoryTransactions: ComponentType<WidgetContentProps> = ({
         fallbackLabel,
       )
     : []
-  const cap = rowCap(instance, def) ?? 25
+  const cap = rowCap(instance, def)
   const params = new URLSearchParams(categoryIds.map((c) => ['category', c]))
-  params.set('limit', String(cap))
+  if (cap != null) params.set('limit', String(cap))
   const key = `/api/transactions?${params.toString()}`
   const { data } = useQueryCache(key, () => fetchTxnPage(key), {
     staleTime: 30_000,

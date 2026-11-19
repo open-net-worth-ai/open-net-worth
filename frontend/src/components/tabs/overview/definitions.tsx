@@ -260,7 +260,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     defId: 'recent-added-txns',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Recently added',
     group: 'Cash flow',
     dsize: 4,
@@ -274,7 +274,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     defId: 'recent-txns',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Recent transactions',
     group: 'Cash flow',
     dsize: 4,
@@ -288,7 +288,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     defId: 'category-txns',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Category transactions',
     group: 'Cash flow',
     dsize: 4,
@@ -305,7 +305,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     // Category transactions with a home: titled and preset to the starter Subscriptions
     // category. Its Categories setting still takes any others.
     defId: 'subscriptions',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Subscriptions',
     group: 'Cash flow',
     dsize: 4,
@@ -602,7 +602,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     defId: 'rep-merchants',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Top merchants',
     group: 'Reports',
     dsize: 4,

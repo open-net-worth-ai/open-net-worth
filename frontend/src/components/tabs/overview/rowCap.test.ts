@@ -19,10 +19,16 @@ describe('rowCap', () => {
     expect(rowCap({ limit: ALL_ROWS }, merchants)).toBeNull()
   })
 
-  it('offers 5 / 10 / 15 / 25 on merchant and transaction lists', () => {
+  it('offers 5 / 10 / 15 / 25 / All on merchant and transaction lists', () => {
     for (const id of ['rep-merchants', 'recent-txns', 'recent-added-txns', 'subscriptions']) {
       const def = WIDGET_DEFINITIONS.find((d) => d.defId === id)!
-      expect(def.rows?.options).toEqual([5, 10, 15, 25])
+      expect(def.rows?.options).toEqual([5, 10, 15, 25, 'all'])
+    }
+  })
+
+  it('lets every list widget show all its rows', () => {
+    for (const def of WIDGET_DEFINITIONS.filter((d) => d.rows)) {
+      expect(def.rows!.options).toContain('all')
     }
   })
 

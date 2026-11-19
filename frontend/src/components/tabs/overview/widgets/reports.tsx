@@ -860,13 +860,14 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
   onNavigate,
   onOpenRegister,
 }) => {
-  const cap = rowCap(instance, def) ?? 25
+  // All rows: merchant_limit=0 asks the server for every payee.
+  const cap = rowCap(instance, def)
   // Grouped by payee and ranked server-side (no endpoint does per-month payee spend — see the
   // header note), so the browser no longer pulls the month's raw expense legs to fold them.
   const { data, loading, error, meta, span, chosen, tags, categories } = useReports(
     instance,
     def,
-    cap,
+    cap ?? 0,
   )
   const shown = spendingMonth(data)
   const rows = shown.merchants.slice(0, cap)
