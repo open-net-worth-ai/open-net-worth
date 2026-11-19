@@ -45,3 +45,34 @@ describe('Rebalance — MATH-38 trade sizing uses the server figure, never round
     expect(container.textContent).toMatch(/TRIM|BUY/)
   })
 })
+
+describe('Rebalance — Place with Lucius', () => {
+  it('types the trades into the composer and opens Lucius without sending', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const { ChatComposerProvider, useChatComposer } = await import('../../../state/chatComposer')
+    const seen: { text: string | null; opened: number } = { text: null, opened: 0 }
+    function Probe() {
+      const c = useChatComposer()
+      seen.text = c.pendingText
+      c.subscribeOpen(() => {
+        seen.opened += 1
+      })
+      return null
+    }
+    render(
+      <ChatComposerProvider>
+        <Probe />
+        <Rebalance
+          thresholdPp={3}
+          alloc={[
+            { cls: 'equity', cur: 60, tgt: 50, driftPp: 10, tradeBase: -100_000 },
+            { cls: 'bonds', cur: 20, tgt: 30, driftPp: -10, tradeBase: 100_000 },
+          ]}
+        />
+      </ChatComposerProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /place with lucius/i }))
+    expect(seen.text).toBe('Help me place my rebalancing trades (trim equity, buy bonds).')
+    expect(seen.opened).toBeGreaterThan(0)
+  })
+})

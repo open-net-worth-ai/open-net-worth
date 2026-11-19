@@ -2,6 +2,9 @@
 // Shows trades needed to bring each asset class back to its target allocation.
 
 import { fBase } from '../../../utils/format'
+import { useChatComposerOptional } from '../../../state/chatComposer'
+import { LuciusMark } from '../../../ui/icons'
+import { Button } from '../../ui'
 import { MaskedText } from '../../ui/MaskedText'
 import type { UntrackedExcluded } from '../../../types/aggregates'
 import { UntrackedNote } from './UntrackedHoldings'
@@ -46,7 +49,14 @@ function Card({
   )
 }
 
+/** The request a tap on "Place with Lucius" types into the composer — never sent on its own. */
+function rebalancePrompt(trades: { act: string; cls: string }[]): string {
+  const list = trades.map((t) => `${t.act} ${t.cls}`).join(', ')
+  return `Help me place my rebalancing trades (${list}).`
+}
+
 export function Rebalance({ alloc, thresholdPp, untracked }: Props) {
+  const composer = useChatComposerOptional()
   const hasTargets = alloc.some((a) => a.tgt > 0)
   const untrackedNote = untracked ? <UntrackedNote u={untracked} action="rebalance" /> : null
 
@@ -103,9 +113,25 @@ export function Rebalance({ alloc, thresholdPp, untracked }: Props) {
       )}
       {trades.length > 0 && (
         <div className="mk-rb-foot">
+          {composer && (
+            <div className="mk-rb-actions">
+              <Button
+                variant="primary"
+                size="sm"
+                className="fi-lucius"
+                iconLeft={<LuciusMark size={14} aria-hidden="true" />}
+                onClick={() => {
+                  composer.setPendingText(rebalancePrompt(trades))
+                  composer.requestOpen()
+                }}
+              >
+                Place with Lucius
+              </Button>
+            </div>
+          )}
           <div className="mk-rb-note">
-            Suggested trades to place at your brokerage — ONW tracks your book, it doesn&apos;t
-            execute.
+            Lucius can place these through a connected brokerage, asking you to confirm each order —
+            or place them yourself.
           </div>
         </div>
       )}
