@@ -181,7 +181,12 @@ export interface McpAddFlow {
   idFixed: boolean
   /** The OAuth Sign-in button's own state — meaningful only while `form.auth === 'oauth'`. */
   oauth: McpOAuthState
-  start: (entry?: DirectoryRow) => void
+  /** `anotherAccount`: this entry is already added and the user is adding a second account of
+   *  it — the name defaults to that one (e.g. "Interactive Brokers 2") and the form warns that
+   *  the vendor may sign them back into the first account. */
+  start: (entry?: DirectoryRow, opts?: { anotherAccount?: string }) => void
+  /** The default name of the extra account being added, or null for an ordinary add. */
+  anotherAccount: string | null
   runConnect: () => void
   back: () => void
   finish: () => void
@@ -249,6 +254,7 @@ export function useMcpAddFlow({
   // The directory card's name, when the flow began from one. A server's self-reported name is
   // often a package slug (Coinbase's CLI says `coinbase`), so the card we list it under wins.
   const catalogNameRef = useRef<string | null>(null)
+  const [anotherAccount, setAnotherAccount] = useState<string | null>(null)
 
   // ── OAuth sign-in (RFC `2026-08-14-mcp-oauth` §4.2/§4.3) ──────────────────────
   // `connected` alone is not enough to seed `signed_in`: a refresh can fail and mark
@@ -365,7 +371,10 @@ export function useMcpAddFlow({
           const candidates = servers.filter(
             (s) => s.auth_type === 'oauth' && s.url === urlAtSignIn.trim(),
           )
-          const found = candidates.find((s) => !known.has(s.id)) ?? candidates[0]
+          // Only a server that did not exist before this sign-in. Falling back to an older one
+          // at the same URL would rename and re-arm the account already added (two accounts
+          // of one broker share a URL).
+          const found = candidates.find((s) => !known.has(s.id))
           if (!found) {
             setOauthStatus('error')
             setOauthError("Signed in, but couldn't find the new server — try again.")
@@ -413,7 +422,7 @@ export function useMcpAddFlow({
     ? { auth_type: editing.authType, auth_header: editing.authHeader }
     : undefined
 
-  const start = (entry?: DirectoryRow) => {
+  const start = (entry?: DirectoryRow, opts?: { anotherAccount?: string }) => {
     // Disown whatever probe the LAST time through this flow left running. The host modal
     // (`DirectoryModal`) has its own "Back to directory" control that hides this flow's view
     // (`setMcpOpen(false)`) without ever calling `back()` — it doesn't own a probe token to
@@ -429,7 +438,9 @@ export function useMcpAddFlow({
     setOauthClientId('')
     const preset = entry ? MCP_INSTALL_PRESETS[entry.id] : undefined
     // The generic slot names no server — the server's own report has to do there.
-    catalogNameRef.current = entry && entry.id !== 'mcp-custom' ? entry.name : null
+    catalogNameRef.current =
+      opts?.anotherAccount ?? (entry && entry.id !== 'mcp-custom' ? entry.name : null)
+    setAnotherAccount(opts?.anotherAccount ?? null)
     setFormState({
       ...EMPTY_MCP_FORM,
       transport: preset?.transport ?? 'remote',
@@ -765,6 +776,7 @@ export function useMcpAddFlow({
     saveDormant,
     canSave,
     discardAbandonedOAuthServer,
+    anotherAccount,
   }
 }
 
@@ -907,6 +919,12 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
         ...(connecting ? { flex: 1 } : {}),
       }}
     >
+      {flow.step === 'form' && flow.anotherAccount && flow.form.auth === 'oauth' && (
+        <span className="rd-help" role="note">
+          Adding another account. Sign out of this service in your browser first, or its sign-in may
+          put you straight back into the account you already added.
+        </span>
+      )}
       {flow.step === 'form' && <McpConnectionFields flow={flow} />}
 
       {flow.step === 'connecting' && <McpConnectingState flow={flow} />}

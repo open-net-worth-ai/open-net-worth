@@ -150,6 +150,16 @@ marked **from your connection**. A long list shows its first nine tools; **Show 
      any **Environment variables**, one `NAME=value` per line (a private key may span several lines).
 4. Click **Connect**, review the tools, and click **Add server** — the same as steps 4–5 above.
 
+### More than one account
+
+Each sign-in is one account. To add a second (two Interactive Brokers logins, say), open the
+connector's card in **Browse & add** and click **Add another account**. It's named "Interactive
+Brokers 2" by default; rename it on the last step to something you'll recognise, like "IBKR joint".
+Lucius sees each account's name on its tools, so ask it about one account or both.
+
+Sign out of the vendor in your browser first. Otherwise its sign-in may put you straight back into
+the account you already added, and you'd have the same account twice.
+
 Not ready to connect yet (real keys still to come, a build still to finish)? Click **Save** instead
 of **Connect**, on the form or on a failed test. The server is kept, switched off and untested;
 turn it on from its settings when you're ready, and it is tested then. Until it has connected once,

@@ -16,7 +16,7 @@ import { DirectoryPreview, PreviewAction } from './DirectoryPreview'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
 import { type DirectoryRow, type DirectoryFamilyFilter, type DirectorySort } from './catalog'
-import { resolveDirectory } from './directoryRows'
+import { anotherAccountName, resolveDirectory } from './directoryRows'
 import { toEntry } from './adapter'
 import { REST_LAUNCHER_ID } from './restApi'
 import type { ConnectorCategory, FocusConnectorOptions } from './model'
@@ -165,6 +165,12 @@ export function DirectoryModal({
     onFocusConnector(entry.installedId ?? entry.id)
   }
 
+  const addAnother = (entry: DirectoryRow) => {
+    flow.start(entry, { anotherAccount: anotherAccountName(connectors, entry) })
+    setPreview(null)
+    setMcpOpen(true)
+  }
+
   const add = (entry: DirectoryRow) => {
     if (entry.mcp) {
       flow.start(entry)
@@ -207,7 +213,13 @@ export function DirectoryModal({
   ) : preview && isMobile ? (
     // The header's ‹ Back and the sheet's ✕ already leave, so on a phone the footer carries
     // the action instead: always in view, in thumb reach, and steady while the body scrolls.
-    <PreviewAction d={preview} onAdd={add} onConfigure={configure} className="cn-foot-action" />
+    <PreviewAction
+      d={preview}
+      onAdd={add}
+      onConfigure={configure}
+      onAddAnother={addAnother}
+      className="cn-foot-action"
+    />
   ) : preview ? (
     <Btn onClick={() => setPreview(null)}>Back</Btn>
   ) : (
@@ -261,6 +273,7 @@ export function DirectoryModal({
           liveTools={live?.tools?.map((t) => t.name)}
           onAdd={add}
           onConfigure={configure}
+          onAddAnother={addAnother}
           actionInFooter={isMobile}
         />
       ) : (

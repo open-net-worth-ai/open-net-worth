@@ -200,3 +200,20 @@ export function setupTargetFor(
   if (row.installed) return { kind: 'settings', id: row.installedId ?? row.id }
   return row.mcp ? { kind: 'add', id: row.id } : { kind: 'form', id: row.id }
 }
+
+/** The default name of one more account of an already-added sign-in server: a second account
+ *  is a second server at the SAME URL, so it is numbered after every server already there
+ *  ("Interactive Brokers 2") — two rows, and two sets of Lucius's tools, never read alike. */
+export function anotherAccountName(connectors: Connector[], entry: DirectoryRow): string {
+  const url = endpointKey(MCP_INSTALL_PRESETS[entry.id]?.url)
+  const already = connectors.filter(
+    (c) => c.id.startsWith(MCP_PREFIX) && endpointKey(toEntry(c).url) === url,
+  ).length
+  return `${entry.name} ${already + 1}`
+}
+
+/** A sign-in (OAuth) server from the directory: each sign-in is one account, so a second
+ *  one is a second server at the same URL. A key or local server has no account to choose. */
+export function canAddAnotherAccount(d: DirectoryRow): boolean {
+  return !!d.mcp && MCP_INSTALL_PRESETS[d.id]?.auth === 'oauth'
+}
