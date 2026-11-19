@@ -103,7 +103,7 @@ The **Autopilot** tab's switch sets who trades a paper portfolio:
 - **Off** (the default): only you, and Lucius when you ask him in chat.
 - **On**: Lucius reviews the portfolio on a schedule (every weekday or every Monday, at 10:00
   your time), places the trades he decides on, and writes a short memo of what he checked, what
-  he did and what he is watching next. The portfolio shows an **Autopilot** tag, and each order
+  he did and what he is watching next. The portfolio and its card show an **Autopilot** tag with Lucius's star, and each order
   he places says **Autopilot**.
 
 Autopilot needs a mandate: it is what you approve in advance. Every review:

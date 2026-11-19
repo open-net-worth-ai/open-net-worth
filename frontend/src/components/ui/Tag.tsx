@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import { X } from '../../ui/icons'
 
-/** `warn`: a caution about what the chip sits beside (an estimate, a missing report). */
-export type TagTone = 'accent' | 'muted' | 'warn'
+/** `warn`: a caution about what the chip sits beside (an estimate, a missing report).
+ *  `lucius`: something Lucius runs on his own (a paper portfolio's autopilot): solid ink, the
+ *  loudest chip, so it reads apart from the blue ones beside it. Pair it with `LuciusMark`. */
+export type TagTone = 'accent' | 'muted' | 'warn' | 'lucius'
 
 export interface TagProps {
   children: ReactNode

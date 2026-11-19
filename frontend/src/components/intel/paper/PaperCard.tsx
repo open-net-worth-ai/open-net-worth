@@ -1,4 +1,5 @@
 import { Tag } from '../../ui'
+import { AutopilotTag } from './AutopilotTag'
 import { Donut } from '../following/Donut'
 import { signedPct, toneOf } from '../following/following.format'
 import { fCurrency } from '../../../utils/format'
@@ -16,6 +17,7 @@ export function PaperCard({ p, onOpen }: { p: Card; onOpen: () => void }) {
       <div className="fol-card-main">
         <div className="fol-card-name paper-card-name">
           {p.name} <Tag>Paper</Tag>
+          {p.autopilot_mode === 'auto' && <AutopilotTag />}
         </div>
         <div className="fol-card-who">
           {/* A cash start names nothing; the line keeps its height so cards stay aligned. */}

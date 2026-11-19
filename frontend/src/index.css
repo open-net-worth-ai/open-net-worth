@@ -7749,6 +7749,10 @@ body.hide-amounts .mask * {
     color: var(--warn);
     background: color-mix(in srgb, var(--warn) 15%, transparent);
   }
+  .ui-tag--lucius {
+    color: var(--bg);
+    background: var(--ink);
+  }
   .ui-tag__remove {
     all: unset;
     display: inline-flex;

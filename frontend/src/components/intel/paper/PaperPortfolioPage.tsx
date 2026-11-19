@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs, TabSkeleton, Tag } from '../../ui'
+import { AutopilotTag } from './AutopilotTag'
 import { Spark } from '../../../lucius/identity'
 import { fCurrency, fDate } from '../../../utils/format'
 import { SortTable, type Column } from '../following/SortTable'
@@ -115,7 +116,7 @@ export function PaperPortfolioPage({
             <h2 className="fol-title paper-title">
               <span className="fol-title-name">{p.name}</span>
               <Tag>Paper</Tag>
-              {data.autopilot?.mode === 'auto' && <Tag tone="accent">Autopilot</Tag>}
+              {data.autopilot?.mode === 'auto' && <AutopilotTag />}
               <span className="fol-title-by">
                 {p.source && (
                   <>
