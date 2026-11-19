@@ -26,6 +26,19 @@ import { SplitChip } from './SplitView'
 import { TagField } from './TagField'
 import { Check, Circle } from '../../../ui/icons'
 
+// The click that ends an inline edit (by landing outside the cell) only ends it: without this it
+// also reached a row's onClick and opened that transaction's drawer (owner report 2026-11-19).
+// Module-level because the click usually lands on ANOTHER row. Cleared right after that click is
+// dispatched, so it can never eat a later one.
+let swallowRowClick = false
+function swallowNextRowClick() {
+  swallowRowClick = true
+  document.addEventListener('click', () => setTimeout(() => (swallowRowClick = false)), {
+    once: true,
+    capture: true,
+  })
+}
+
 export interface RowPatch {
   date?: string
   description?: string
@@ -177,6 +190,7 @@ export function TxnRow({
     }
   }
   const scheduleOpen = () => {
+    if (swallowRowClick) return
     cancelOpen()
     openTimer.current = setTimeout(() => {
       openTimer.current = null
@@ -193,8 +207,18 @@ export function TxnRow({
         close()
       }
     }
+    // Focus is in the editor, so its cell is the one being edited; a press anywhere else ends it.
+    const onDown = (e: PointerEvent) => {
+      const cell = (document.activeElement as HTMLElement | null)?.closest('[data-edit]')
+      if (cell && cell.contains(e.target as Node)) return
+      swallowNextRowClick()
+    }
     document.addEventListener('keydown', onEsc, true)
-    return () => document.removeEventListener('keydown', onEsc, true)
+    document.addEventListener('pointerdown', onDown, true)
+    return () => {
+      document.removeEventListener('keydown', onEsc, true)
+      document.removeEventListener('pointerdown', onDown, true)
+    }
   }, [edit])
   const editCell = (field: string) => (e: React.MouseEvent) => {
     e.stopPropagation()
