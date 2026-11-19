@@ -1098,12 +1098,10 @@
   gap: 8px;
   max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.ov-responsive-toolbar::-webkit-scrollbar {
-  display: none;
+  /* Never a scroller: a trackpad swipe over a header slid its buttons sideways (a hidden
+     scrollbar). Its controls shrink instead (a filter pill shortens its own label). */
+  overflow-x: clip;
+  overflow-clip-margin: 4px;
 }
 
 .ov-responsive-metric-row > * {
@@ -2214,14 +2212,16 @@
   flex: 0 0 auto;
   width: 100%;
   /* At least its dashboard height, taller when its content needs it (switching a list to a
-     pie), never past the space it has. */
+     pie); past the space it has, the preview scrolls. */
   height: auto;
   min-height: min(var(--ov-fs-h, 100%), 100%);
-  max-height: 100%;
+  max-height: none;
 }
 
 .ov-fs-shell:not(.ov-fs-shell--view) .ov-fs-card > .panel {
   height: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .ov-fs-card > .panel,
@@ -2697,11 +2697,18 @@
   width: 100%;
   height: auto;
   min-height: 0;
-  max-height: 100%;
+}
+
+/* A card taller than the window (a pie with a long legend) grows, and the preview around it
+   scrolls: capped at the window's height, its content spilled out and was clipped. */
+.ov-fs-card--fit,
+.ov-fs-card--fit > .panel {
+  max-height: none;
 }
 
 .ov-fs-card--fit > .panel {
   height: auto;
+  overflow-y: visible;
 }
 
 /* Lucius's floating button (bottom right of the window, ~24px in, up to ~180px wide) can sit
