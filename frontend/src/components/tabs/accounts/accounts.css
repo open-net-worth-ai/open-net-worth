@@ -2665,8 +2665,10 @@
   color: var(--ink);
   font-weight: 700;
 }
+/* The keyboard-highlighted suggestion. --surface2 matched the popover's own --modal-bg in dark mode,
+   so arrowing through the list moved an invisible highlight; same tone as the other pickers' .hi. */
 .acct-sug-item.hi {
-  background: var(--surface2);
+  background: var(--hover-surface2);
 }
 .acct-sug-dot {
   width: 9px;
