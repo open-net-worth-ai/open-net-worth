@@ -6,7 +6,7 @@ overall totals, per-model and per-provider breakdowns (AI-only — asset_brief.p
 search/fetch API costs get their own per-search-provider breakdown instead), per-day time
 series, per-source breakdown (interactive chat vs agent/scheduled turns), and
 per-surface-bucket breakdown (chat / memory / intel / agents / briefing / ledger /
-suggestions / vision / compaction / other) derived from the ``source`` field.
+suggestions / vision / compaction / trading_agents / other) derived from the ``source`` field.
 
 Merge contract: daily aggregates cover only evicted records; the raw log covers the
 rest.  There is no overlap — a record is rolled into the daily table before it is
@@ -48,6 +48,9 @@ _CHAT_SOURCE = "chat"
 _MEMORY_PREFIX = "memory"
 _INTEL_PREFIX = "intel"
 _AGENT_PREFIX = "agent:"
+# TradingAgents' model calls (ai/trading_agents/llm_bridge.py records source="trading_agents").
+# Its own bucket, shown as "TradingAgents": a run is many calls and a distinct, owner-capped spend.
+_TRADING_AGENTS_SOURCE = "trading_agents"
 
 # backend/monitoring/*'s per-asset background pipeline (asset_brief.py's search/fetch/
 # synthesis, analyst.py's held/watched analysis, price_monitor.py, news_screen.py) predates
@@ -127,6 +130,8 @@ def _source_to_bucket(source: str) -> str:
         return "intel"
     if source.startswith(_AGENT_PREFIX) or source in _AGENT_SOURCES:
         return "agents"
+    if source == _TRADING_AGENTS_SOURCE:
+        return "trading_agents"
     if source in _BRIEFING_SOURCES:
         return "briefing"
     if source in _LEDGER_SOURCES:
@@ -448,7 +453,7 @@ def cost_summary(
         by_source             — {source: totals}; raw source field values
         by_surface            — {bucket: totals}; source bucketed into
                                 chat / memory / intel / agents / briefing / ledger /
-                                suggestions / vision / compaction / other
+                                suggestions / vision / compaction / trading_agents / other
         recent                — last 20 records, most-recent first
         window_days           — the ``days`` param used (0 = all time)
         projected_monthly_usd — trailing-7d spend ÷ 7 × 30.4

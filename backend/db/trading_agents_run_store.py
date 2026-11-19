@@ -11,12 +11,38 @@ hook.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator, Optional, Sequence
+from typing import Iterator, List, Optional, Sequence
 
 from sqlalchemy import Connection, delete, func, insert, select, update
 
 from backend.db.engine import get_engine, locked_unit_of_work
 from backend.db.tables import trading_agents_runs as runs
+
+# Everything a cost figure reads: the run's totals and its breakdowns, never the reports, the
+# decision, the audited context or the progress log.
+_COST_COLUMNS = (
+    "id",
+    "ticker",
+    "trade_date",
+    "status",
+    "signal",
+    "analysts",
+    "config_snapshot",
+    "llm_calls",
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_creation_tokens",
+    "cost_usd",
+    "plan_included_calls",
+    "unpriced_calls",
+    "cost_by_role",
+    "cost_by_model",
+    "estimate_usd",
+    "cap_usd",
+    "created_at",
+    "finished_at",
+)
 
 
 def _row(result) -> Optional[dict]:
@@ -77,3 +103,21 @@ class TradingAgentsRunStore:
         stmt = _filtered(select(func.count()).select_from(runs), ticker, statuses)
         with get_engine().connect() as c:
             return int(c.execute(stmt).scalar_one())
+
+    def cost_rows(
+        self,
+        *,
+        statuses: Optional[Sequence[str]] = None,
+        since: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[dict]:
+        """Newest first, the cost columns only. ``since`` is an inclusive UTC ISO ``created_at``
+        lower bound."""
+        stmt = _filtered(select(*(runs.c[name] for name in _COST_COLUMNS)), None, statuses)
+        if since:
+            stmt = stmt.where(runs.c.created_at >= since)
+        stmt = stmt.order_by(runs.c.created_at.desc(), runs.c.id.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        with get_engine().connect() as c:
+            return [dict(r) for r in c.execute(stmt).mappings()]

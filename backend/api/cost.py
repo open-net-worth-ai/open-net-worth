@@ -6,6 +6,7 @@ Endpoints:
   GET  /api/cost/budget          — read the monthly AI-spend budget
   PUT  /api/cost/budget          — set (or clear) the monthly AI-spend budget
   GET  /api/cost/budget/status   — current-month spend vs budget
+  GET  /api/cost/trading-agents  — TradingAgents spend, runs and caps (flag ``trading_agents``)
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 
 from backend.db.app_config_store import AppConfigStore
 from backend.services import cost as cost_service
+from backend.services.trading_agents import costs as trading_agents_costs
 
 router = APIRouter()
 
@@ -85,3 +87,15 @@ def get_budget_status(tz: Optional[str] = Query(None)):
     """
     budget = AppConfigStore().get_budget()
     return cost_service.cost_budget_status(budget_usd=budget, tz=tz)
+
+
+@router.get("/api/cost/trading-agents")
+def trading_agents_cost(
+    days: int = 30,
+    range_: Optional[str] = Query(None, alias="range"),
+    tz: Optional[str] = Query(None),
+):
+    """TradingAgents spend from the run rows: totals, month vs cap, by role / model / ticker /
+    day, recent runs. Same ``days`` / ``range`` / ``tz`` as ``/api/cost/summary``."""
+    start, end = cost_service.resolve_preset(range_, tz)
+    return trading_agents_costs.summary(days=days, start=start, end=end, tz=tz)
