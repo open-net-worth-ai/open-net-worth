@@ -249,8 +249,6 @@ def _attention(
         "thin_cash": runway_months is not None
         and 0 < cash_total
         and runway_months < THIN_CASH_MONTHS,
-        # Cards whose spending the runway cannot see yet (an empty card flatters it).
-        "cards_missing_spending": runway["cards_missing_spending"] if runway else [],
         "has_investments": any(
             r["asset_class"] in _INVESTMENT_CLASSES and r["base_value"] > 0 for r in rows
         ),

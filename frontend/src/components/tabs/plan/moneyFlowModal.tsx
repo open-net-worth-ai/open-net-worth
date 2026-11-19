@@ -10,7 +10,11 @@ import { nextMonth, prevMonth, thisMonth } from '../../../hooks/useBudget'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { useElementSize } from '../../../hooks/useElementWidth'
 import type { CashFlowGraph, CashFlowNode } from '../../../types/aggregates'
-import { drillGroup, flowNodeColor } from '../../shared/moneyFlowLayout'
+import {
+  MONEY_FLOW_COMPACT_BELOW_PX,
+  drillGroup,
+  flowNodeColor,
+} from '../../shared/moneyFlowLayout'
 import { PlanningModal } from './PlanningModal'
 import { MoneyFlowChart } from './moneyFlowChart'
 import { Chevron, X } from './icons'
@@ -19,8 +23,6 @@ import { fBase } from './planData'
 import type { RegisterFilter } from './budget'
 
 type View = 'flow' | 'table'
-
-const COMPACT_BELOW_PX = 720
 
 function Kpi({ value, label, tone }: { value: string; label: string; tone?: 'pos' | 'neg' }) {
   return (
@@ -110,7 +112,7 @@ export function MoneyFlowModal({
   // desktop both are the same URL, so the cache serves them with one request.
   // Five columns need room: a phone, a tablet or a narrow window gets the 3-column graph.
   const [bodyRef, body] = useElementSize<HTMLDivElement>()
-  const compact = isMobile || (body.w > 0 && body.w < COMPACT_BELOW_PX)
+  const compact = isMobile || (body.w > 0 && body.w < MONEY_FLOW_COMPACT_BELOW_PX)
   const query = useCashFlowGraph(month, false)
   const chartQuery = useCashFlowGraph(month, compact)
   // Stepping months keeps the previous month on screen (dimmed) until the next arrives, so the

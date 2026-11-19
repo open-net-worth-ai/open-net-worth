@@ -120,8 +120,31 @@ they show the latest month in the last six that has some, and say so: for exampl
 *September. Nothing spent in October yet.* Clicking a merchant then opens its transactions for
 that month.
 
+### Choosing a period and tags
+
+Every Reports widget has a **Period** setting (open the widget's settings):
+
+- **Spending by category**, **Top merchants**, **Savings rate** and **Money flow** can show
+  **This month**, **Last month**, **3 months**, **6 months**, **12 months** or **This year**,
+  added up as one figure. **3/6/12 months** end with this month, so they include the month in
+  progress.
+- **Spending trends**, **Income vs expense** and **Income & expense table** chart month by
+  month, so they offer **3 months**, **6 months**, **12 months** or **This year**.
+
+Each widget keeps its usual window until you pick something else: Spending by category and Top
+merchants this month, Savings rate and Money flow the last full month, the month-by-month charts
+the last 6 months. A widget set to another period names it in its header (for example
+*Aug – Oct*).
+
+All of them except Savings rate also have a **Tags** setting. Pick one or more tags and the widget
+counts only transactions carrying any of them, for example everything tagged *#trip*. The header
+shows the tags. With no tags picked, nothing is filtered.
+
+In **Money flow**, click a spending group to see its categories, then click a category to open
+its transactions in Accounts, for the same months and tags. **All groups** goes back.
+
 In Reports, **Top merchants** can be shown as a list, bars or a pie (the header menu), and each
-merchant opens its transactions for the month in any of them. **Income vs expense** opens on
+merchant opens its transactions for the widget's month or period (and tags) in any of them. **Income vs expense** opens on
 Totals (an Income bar and an Expenses bar per month); switch Detail to By category for each side
 stacked in its own colour family — green for income, red and amber for spending — with a legend
 split into Income and Expenses. **Spending trends** draws a dashed line at your average monthly
@@ -184,9 +207,9 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
   runway** widget: your cash on hand divided by your monthly burn (your recurring bills plus
   everyday spending, not one-off purchases), so all three always quote the same number of months.
   It stays quiet until Open Net Worth knows what you spend.
-- **A credit card with no purchases yet** (none in the period) means its spending isn't in your
-  savings rate, burn or runway, so those figures read better than your real situation. They say
-  **Card spending not included yet** and name the card until you import its purchases.
+- Savings rate, burn and runway count only the spending you've recorded. If a card's statement
+  isn't imported yet, its spending is missing and those figures read better than they will once
+  it is.
 - **Next 30 days** lists everything going out from today through day 30 — commitments
   (instalments, auto-debits and goal set-asides alike), recurring bills such as rent or a
   subscription, and each credit card's unpaid statement on its due date — and the recurring
@@ -205,14 +228,13 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
 - **Money flow** says under the diagram that it is **Net of refunds and reimbursements**: a
   refund reduces the category it came from. Plan → Cash Flow shows gross In and Out, so the same
   month reads larger there, and its footnote says so.
-- **Savings rate** is the last complete month that had income, labelled with its month ("in
-  September"); partway through a month with income it says "so far this month". It is
-  **Income − spending recorded in that month**. Under it, one line gives the **3-month average**
-  with its months (for example "3-month average (Jul to Sep): $3.17K a month, 55%"): the same
-  figure the [Outlook](retirement-planning.md) checks your saving against, so
-  the two most-used numbers sit together with their periods. Both differ from the Budget
-  screen's month-in-progress pace and from Cash Flow's projected average, which cover other
-  periods.
+- **Savings rate** is the last complete month that had income, named in the card's header
+  ("Sep"); partway through a month with income it says "this month". It is **Income − spending
+  recorded in that month**, shown as one line under the gauge ("$3.2K of $5.8K saved"). Hover the
+  gauge for the **3-month average** with its months (for example "3-month average (Jul to Sep):
+  $3.17K a month, 55%"): the same figure the [Outlook](retirement-planning.md) checks your saving
+  against. Both differ from the Budget screen's month-in-progress pace and from Cash Flow's
+  projected average, which cover other periods.
 - **Asset allocation**, **Reachability** and **Where money is held** each say what their total
   adds up: allocation shows each class as a share of your assets (the shares add up to 100%)
   with your **Debts** as a separate line underneath, never a negative percentage; reachability

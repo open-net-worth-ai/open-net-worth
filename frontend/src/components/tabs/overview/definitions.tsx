@@ -7,6 +7,12 @@
 import type { ReactElement } from 'react'
 import type { WidgetDefinition, WidgetGroup } from './types'
 import type { PresetWidget } from './grid'
+import {
+  SERIES_PERIOD_OPTIONS,
+  TAGS_SETTING,
+  TOTAL_PERIOD_OPTIONS,
+  periodSetting,
+} from './widgets/reportScope'
 
 const icon = (paths: string, viewBox = '0 0 24 24'): ReactElement => (
   <svg
@@ -519,10 +525,11 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     group: 'Reports',
     dsize: 4,
     dh: 300,
-    desc: 'Where money goes this month — donut, bar, or list.',
+    desc: 'Where money goes — this month or any period, filtered by tag — donut, bar, or list.',
     title: 'Spending by category',
     shape: 'breakdown',
     source: { tab: 'plan', label: 'Plan' },
+    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'This month'), TAGS_SETTING],
     icon: icon('<path d="M21 12A9 9 0 1 1 12 3" /><path d="M12 3a9 9 0 0 1 9 9h-9z" />'),
   },
   {
@@ -531,9 +538,10 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     group: 'Reports',
     dsize: 6,
     dh: 240,
-    desc: 'Monthly spend stacked by category over the last 6 months, against your average.',
+    desc: 'Monthly spend stacked by category over 3 to 12 months, against your average.',
     title: 'Spending trends',
     source: { tab: 'plan', label: 'Plan' },
+    settings: [periodSetting(SERIES_PERIOD_OPTIONS, '6 months'), TAGS_SETTING],
     icon: icon(
       '<rect x="4" y="11" width="3.5" height="9" rx="1" /><rect x="10.2" y="6" width="3.5" height="14" rx="1" /><rect x="16.5" y="9" width="3.5" height="11" rx="1" />',
     ),
@@ -548,6 +556,8 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     title: 'Income vs expense',
     source: { tab: 'plan', label: 'Plan' },
     settings: [
+      periodSetting(SERIES_PERIOD_OPTIONS, '6 months'),
+      TAGS_SETTING,
       {
         key: 'detail',
         type: 'segment',
@@ -569,6 +579,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     desc: 'Hierarchical income/spending breakdown with this-month, average, and total columns.',
     title: 'Income & expense table',
     source: { tab: 'plan', label: 'Plan' },
+    settings: [periodSetting(SERIES_PERIOD_OPTIONS, '6 months'), TAGS_SETTING],
     icon: icon(
       '<rect x="3.5" y="4.5" width="17" height="15" rx="2" /><line x1="3.5" y1="9" x2="20.5" y2="9" /><line x1="9" y1="9" x2="9" y2="19.5" />',
     ),
@@ -579,9 +590,10 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     group: 'Reports',
     dsize: 3,
     dh: 188,
-    desc: 'Share of income saved this month, as a gauge.',
+    desc: 'Share of income saved last month or over a period, as a gauge.',
     title: 'Savings rate',
     source: { tab: 'plan', label: 'Plan' },
+    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'Last month')],
     icon: icon('<path d="M4 14a8 8 0 0 1 16 0" /><path d="M12 14l4-3" />'),
   },
   {
@@ -591,10 +603,11 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     group: 'Reports',
     dsize: 4,
     dh: 240,
-    desc: 'Where you spent the most this month, ranked — list, bar, or pie.',
+    desc: 'Where you spent the most this month or over a period, ranked — list, bar, or pie.',
     title: 'Top merchants',
     shape: 'breakdown',
     source: { tab: 'accounts', label: 'Accounts' },
+    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'This month'), TAGS_SETTING],
     icon: icon(
       '<path d="M4 7h13l-1.5 8.5a2 2 0 0 1-2 1.5H7.5a2 2 0 0 1-2-1.5L4 7z" /><path d="M4 7L3 3" /><circle cx="8" cy="20" r="1" /><circle cx="15" cy="20" r="1" />',
     ),
@@ -604,10 +617,11 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     label: 'Money flow',
     group: 'Reports',
     dsize: 6,
-    dh: 300,
-    desc: 'Where income comes from and where it goes — flow diagram.',
+    dh: 400,
+    desc: 'Where income comes from and where it goes, over any period — click a group for its categories.',
     title: 'Money flow',
     source: { tab: 'plan', label: 'Plan' },
+    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'Last month'), TAGS_SETTING],
     icon: icon(
       '<path d="M3 6c6 0 6 5 12 5s6-5 6-5" /><path d="M3 12c6 0 6 6 12 6" /><path d="M3 18h6" />',
     ),

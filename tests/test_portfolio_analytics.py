@@ -1142,7 +1142,6 @@ def _runway(cash: float, burn: float | None, months: float | None) -> dict:
         "burn": burn or 0.0,
         "months": months,
         "expense_growth_pct": 0.0,
-        "cards_missing_spending": [],
     }
 
 

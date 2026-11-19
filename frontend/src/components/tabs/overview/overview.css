@@ -2332,6 +2332,10 @@
   font-weight: 700;
 }
 
+.ov-fs-chip--more {
+  border-style: dashed;
+}
+
 .ov-fs-ctl-hint {
   font-size: 11px;
   color: var(--faint);

@@ -735,6 +735,10 @@ function RouterShellInner() {
     dateOn?: string
     /** Dashboard Top merchants deep-link: one payee by name (the register's `payee` token). */
     payee?: string
+    /** With `month`: the LAST month of a range (`YYYY-MM`) — a report period's span. */
+    monthTo?: string
+    /** Transactions carrying any of these tags — a report narrowed to tags. */
+    tag?: string[]
     /** A bank sync run's report: everything one write batch booked (the `importBatch` token). */
     batch?: string
     /** What the register's filter chip calls that batch ("Enable Banking sync · Nov 14"). */

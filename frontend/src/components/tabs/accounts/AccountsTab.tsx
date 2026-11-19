@@ -222,6 +222,10 @@ export function AccountsTab({
     dateOn?: string
     /** Dashboard Top merchants deep-link: one payee, by name. */
     payee?: string
+    /** With `month`: the LAST month of a range (`YYYY-MM`) — a report period's span. */
+    monthTo?: string
+    /** Transactions carrying any of these tags — a report narrowed to tags. */
+    tag?: string[]
     /** A bank sync run's report: exactly what one write batch booked, across accounts. */
     batch?: string
     batchLabel?: string
@@ -937,6 +941,7 @@ export function AccountsTab({
       !registerFilter?.uncategorized &&
       !registerFilter?.dateOn &&
       !registerFilter?.payee &&
+      !registerFilter?.tag?.length &&
       !registerFilter?.batch
     )
       return
@@ -947,6 +952,8 @@ export function AccountsTab({
       kind,
       dateOn,
       payee,
+      monthTo,
+      tag,
       batch,
       batchLabel,
     } = registerFilter
@@ -983,13 +990,20 @@ export function AccountsTab({
       }
       if (month) {
         const [y, m] = month.split('-').map(Number)
+        const [ty, tm] = (monthTo || month).split('-').map(Number)
         if (y && m) {
           next.preset = 'custom'
           next.cfM = m
           next.cfY = y
-          next.ctM = m
-          next.ctY = y
+          next.ctM = tm || m
+          next.ctY = ty || y
         }
+      }
+      if (tag?.length) {
+        next.tokens = [
+          ...next.tokens.filter((t) => t.field !== 'tag'),
+          ...tag.map((t) => ({ field: 'tag' as const, value: t, label: '#' + t })),
+        ]
       }
       if (payee) {
         next.tokens = [
