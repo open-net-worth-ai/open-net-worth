@@ -6,8 +6,11 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from '../../../../ui/icons'
+import { ChevronDown, ChevronLeft, ChevronRight } from '../../../../ui/icons'
 import { BottomSheet } from '../../../ui/BottomSheet'
+import { Checkbox } from '../../../ui'
+import { ChartToggleMenu } from '../ChartToggleMenu'
+import { fMonth } from '../../../../utils/format'
 import { useIsMobile } from '../../../../hooks/useIsMobile'
 import { useCategories } from '../../../../hooks/serverState'
 import { useTransactionTags } from '../../accounts/tagOptions'
@@ -50,6 +53,8 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node
       if (wrapRef.current?.contains(t) || popRef.current?.contains(t)) return
+      // The Period menu portals to <body> too: choosing from it isn't a click outside.
+      if (t instanceof Element && t.closest('.kebab-menu--portal')) return
       setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
@@ -115,7 +120,13 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
             ref={popRef}
             style={
               pos
-                ? { top: pos.top, left: pos.left, width: POPOVER_W, maxHeight: pos.maxH }
+                ? {
+                    top: pos.top,
+                    left: pos.left,
+                    width: POPOVER_W,
+                    maxHeight: pos.maxH,
+                    pointerEvents: 'auto',
+                  }
                 : { visibility: 'hidden' }
             }
             onClick={(e) => e.stopPropagation()}
@@ -212,42 +223,113 @@ function PeriodSection({
   return (
     <section className="ov-rf-sec">
       <h4 className="ov-rf-h">Period</h4>
-      <div className="ov-fs-seg" role="group" aria-label="Period">
-        {options.map((o) => (
-          <button
-            key={o}
-            type="button"
-            className={'ov-fs-chip' + (value === o ? ' on' : '')}
-            aria-pressed={value === o}
-            onClick={() => pick(o)}
-          >
-            {o}
-          </button>
-        ))}
+      <div>
+        <ChartToggleMenu
+          ariaLabel="Period"
+          value={value}
+          options={options.map((o) => ({ value: o, label: o }))}
+          onChange={pick}
+        />
       </div>
       {value === CUSTOM_PERIOD && (
-        <div className="ov-rf-range">
-          <label className="ov-rf-range-f">
-            <span>From</span>
-            <input
-              type="month"
-              className="ov-fs-input"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </label>
-          <label className="ov-rf-range-f">
-            <span>To</span>
-            <input
-              type="month"
-              className="ov-fs-input"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </label>
-        </div>
+        <CustomRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
       )}
     </section>
+  )
+}
+
+const MONTH_NAMES = Array.from({ length: 12 }, (_, i) =>
+  fMonth(`2000-${String(i + 1).padStart(2, '0')}`, 'short', 'never'),
+)
+
+/** From and To, each a month button that opens a year-and-month grid in place. */
+function CustomRange({
+  from,
+  to,
+  setFrom,
+  setTo,
+}: {
+  from: string
+  to: string
+  setFrom: (v: string) => void
+  setTo: (v: string) => void
+}) {
+  const [editing, setEditing] = useState<'from' | 'to' | null>(null)
+  const field = (key: 'from' | 'to', label: string, v: string) => (
+    <div className="ov-rf-range-f">
+      <span className="ov-rf-range-l">{label}</span>
+      <button
+        type="button"
+        className={'ov-charttoggle__trigger' + (editing === key ? ' is-open' : '')}
+        aria-expanded={editing === key}
+        aria-label={`${label}: ${v ? fMonth(v, 'short', 'always') : 'not set'}`}
+        onClick={() => setEditing((e) => (e === key ? null : key))}
+      >
+        <span>{v ? fMonth(v, 'short', 'always') : 'Pick a month'}</span>
+        <ChevronDown size={11} strokeWidth={2.2} aria-hidden="true" />
+      </button>
+    </div>
+  )
+  return (
+    <>
+      <div className="ov-rf-range">
+        {field('from', 'From', from)}
+        {field('to', 'To', to)}
+      </div>
+      {editing && (
+        <MonthGrid
+          value={editing === 'from' ? from : to}
+          onPick={(m) => {
+            if (editing === 'from') setFrom(m)
+            else setTo(m)
+            setEditing(null)
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+function MonthGrid({ value, onPick }: { value: string; onPick: (m: string) => void }) {
+  const [year, setYear] = useState(() => Number((value || monthsAgo(0)).slice(0, 4)))
+  return (
+    <div className="ov-rf-mgrid" role="group" aria-label="Pick a month">
+      <div className="ov-rf-mgrid-head">
+        <button
+          type="button"
+          className="ov-rf-mgrid-step"
+          aria-label="Previous year"
+          onClick={() => setYear((y) => y - 1)}
+        >
+          <ChevronLeft size={14} aria-hidden="true" />
+        </button>
+        <span>{year}</span>
+        <button
+          type="button"
+          className="ov-rf-mgrid-step"
+          aria-label="Next year"
+          onClick={() => setYear((y) => y + 1)}
+        >
+          <ChevronRight size={14} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="ov-rf-mgrid-months">
+        {MONTH_NAMES.map((name, i) => {
+          const m = `${year}-${String(i + 1).padStart(2, '0')}`
+          return (
+            <button
+              key={m}
+              type="button"
+              className={'ov-fs-chip' + (m === value ? ' on' : '')}
+              aria-pressed={m === value}
+              onClick={() => onPick(m)}
+            >
+              {name}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -306,10 +388,13 @@ function CheckSection({
               </span>
             ) : (
               shown.map((c) => (
-                <label key={c.id} className="ov-rf-check">
-                  <input type="checkbox" checked={chosen.has(c.id)} onChange={() => toggle(c.id)} />
-                  <span>{c.label}</span>
-                </label>
+                <Checkbox
+                  key={c.id}
+                  className="ov-rf-check"
+                  label={c.label}
+                  checked={chosen.has(c.id)}
+                  onChange={() => toggle(c.id)}
+                />
               ))
             )}
           </div>

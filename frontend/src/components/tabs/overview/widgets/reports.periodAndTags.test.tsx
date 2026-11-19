@@ -325,7 +325,8 @@ describe('the header filter', () => {
     expect(onPatch).toHaveBeenLastCalledWith({
       config: { period: '3 months', categories: ['cat_dining', 'cat_hotels'] },
     })
-    fireEvent.click(within(pop).getByRole('button', { name: '6 months' }))
+    fireEvent.click(within(pop).getByRole('button', { name: 'Period' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '6 months' }))
     expect(onPatch).toHaveBeenLastCalledWith({
       config: { period: '6 months', categories: ['cat_dining'] },
     })

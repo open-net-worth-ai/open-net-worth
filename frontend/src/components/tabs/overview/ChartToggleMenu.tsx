@@ -67,7 +67,13 @@ export function ChartToggleMenu<T extends string>({
             className="kebab-menu kebab-menu--portal"
             role="menu"
             ref={menuRef}
-            style={pos ? { top: pos.top, left: pos.left } : { visibility: 'hidden' }}
+            // Inside a modal (the widget editor) <body> has pointer-events: none; the menu
+            // portals there, so it takes its own clicks back.
+            style={
+              pos
+                ? { top: pos.top, left: pos.left, pointerEvents: 'auto' }
+                : { visibility: 'hidden' }
+            }
           >
             {options.map((o) => {
               const active = o.value === value

@@ -328,7 +328,9 @@ function SwatchRow({
           onClick={() => onPick(c.key)}
         />
       ))}
-      <ColorPicker value={hex} onChange={(v) => onPick(v)} />
+      <span className="ov-fs-sw-custom">
+        <ColorPicker value={hex} onChange={(v) => onPick(v)} selected={isCustom} />
+      </span>
     </div>
   )
 }
@@ -685,6 +687,7 @@ export function WidgetFullscreen({
     <div
       className={
         'ov-fs-card' +
+        (fitMode(def.defId, instance.heightMode) ? ' ov-fs-card--fit' : '') +
         (instance.hideTitle ? ' ov-fs-card--no-title' : '') +
         (instance.accent ? ' ov-fs-card--accent' : '')
       }
@@ -774,7 +777,21 @@ export function WidgetFullscreen({
       >
         <Dialog.Portal>
           <Dialog.Overlay className="ov-fs-backdrop">
-            <Dialog.Content className="ov-fs-shell ov-fs-shell--view" aria-describedby={undefined}>
+            <Dialog.Content
+              className="ov-fs-shell ov-fs-shell--view"
+              aria-describedby={undefined}
+              // As in Edit: focus the window, not its first button (that ringed Edit on open).
+              onOpenAutoFocus={(e) => {
+                e.preventDefault()
+                ;(e.currentTarget as HTMLElement | null)?.focus()
+              }}
+              // A widget's own menus (Period, chart type) portal to <body>: picking from one is not a
+              // click outside the editor.
+              onInteractOutside={(e) => {
+                const t = e.target
+                if (t instanceof Element && t.closest('.kebab-menu--portal')) e.preventDefault()
+              }}
+            >
               <Dialog.Title className="ui-visually-hidden">{label} — full screen</Dialog.Title>
               <div className="ov-fs-main">
                 <div className="ov-fs-viewbar">
@@ -817,6 +834,12 @@ export function WidgetFullscreen({
             onOpenAutoFocus={(e) => {
               e.preventDefault()
               ;(e.currentTarget as HTMLElement | null)?.focus()
+            }}
+            // A widget's own menus (Period, chart type) portal to <body>: picking from one is not a
+            // click outside the editor.
+            onInteractOutside={(e) => {
+              const t = e.target
+              if (t instanceof Element && t.closest('.kebab-menu--portal')) e.preventDefault()
             }}
           >
             <Dialog.Title className="ui-visually-hidden">{label} — full screen</Dialog.Title>

@@ -137,7 +137,8 @@ describe('ReportFilter', () => {
     // Filters in the right-hand column, Appearance under the preview.
     expect(screen.getByText('Filters')).toBeTruthy()
     expect(screen.getByText('Appearance')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '3 months' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Period' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '3 months' }))
     expect(onPatch).toHaveBeenCalledWith({ config: { period: '3 months' } })
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Bravo' }))
     expect(onPatch).toHaveBeenLastCalledWith({ config: { categories: ['cat_b'] } })
@@ -155,7 +156,8 @@ describe('ReportFilter', () => {
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: /^Filter:/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Custom' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Period' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom' }))
     const first = onPatch.mock.calls[0]![0].config
     expect(first.period).toBe('Custom')
     expect(first.periodFrom <= first.periodTo).toBe(true)
@@ -167,7 +169,9 @@ describe('ReportFilter', () => {
         label="Jan – Mar"
       />,
     )
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-05' } })
+    // From opens a month grid; May lands after To (Mar), so To moves with it.
+    fireEvent.click(screen.getByRole('button', { name: /^From:/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'May' }))
     expect(onPatch).toHaveBeenLastCalledWith({
       config: { period: 'Custom', periodFrom: '2026-05', periodTo: '2026-05' },
     })

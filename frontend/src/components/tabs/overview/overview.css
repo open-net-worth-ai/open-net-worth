@@ -2511,7 +2511,12 @@
      covers what scrolls beneath it. */
   padding: 14px 0 18px;
   background: var(--surface);
-  border-top: 1px solid var(--line);
+}
+
+/* Lucius's floating button sits over the window's bottom right: room for it under the buttons,
+   only while it is on screen. */
+body:has(.lx-dock) .ov-fs-actions {
+  padding-bottom: 64px;
 }
 
 .ov-fs-close {
@@ -2680,4 +2685,23 @@
 .ov-fs-shell:focus,
 .ov-fs-shell:focus-visible {
   outline: none;
+}
+
+/* A widget that sizes to its content (Net worth, a list on Fit) keeps that height in full
+   screen too, centred — stretched to the window it was a few lines in an empty box. */
+.ov-fs-preview:has(> .ov-fs-card--fit) {
+  align-items: safe center;
+  overflow-y: auto;
+}
+
+.ov-fs-card--fit {
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.ov-fs-card--fit > .panel {
+  height: auto;
 }
