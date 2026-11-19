@@ -21,6 +21,11 @@ export const SECTION_H = 30 // grid units for a full-width section header row
 // Canvas-types: content stretches to fill the cell.
 export const FILL_IDS = new Set(['hero', 'image', 'embed'])
 
+// A breakdown whose legend scrolls inside its own box (Spending by category's list, bars or
+// pie). It keeps the height it is given: grown to its content, a long pie legend pushed every
+// widget below it down.
+export const OWN_SCROLL_IDS = new Set(['rep-spendcat'])
+
 // List-type widgets whose visible row count the user can cap (3/5/10/All).
 export const LIST_IDS = new Set([
   'movers',
@@ -290,7 +295,8 @@ export function responsiveHeight(item: GridItem, measuredHeight?: number, fitNow
   // `fitNow`: the widget asked to fit its content for now (useFitContentWhen) —
   // e.g. the net-worth card while it has no chart to fill its box with.
   if (fitNow || fitMode(item.defId, item.heightMode)) return measured
-  if (AUTOH_IDS.has(item.defId) || FILL_IDS.has(item.defId)) return base
+  if (AUTOH_IDS.has(item.defId) || FILL_IDS.has(item.defId) || OWN_SCROLL_IDS.has(item.defId))
+    return base
   return Math.max(base, measured)
 }
 

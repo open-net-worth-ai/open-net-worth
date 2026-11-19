@@ -614,3 +614,12 @@ describe('phone order', () => {
     expect(ids(phoneOrdered(items, ['gone', 'c']))).toEqual(['c', 'a', 'b'])
   })
 })
+
+describe('a breakdown keeps the height it is given', () => {
+  it('does not grow Spending by category to a long pie legend', async () => {
+    const { responsiveHeight } = await import('./grid')
+    const item = { instanceId: 'w', defId: 'rep-spendcat', x: 0, y: 0, w: 6, h: 300 }
+    // Its legend scrolls inside the box; growing to it pushed every widget below down.
+    expect(responsiveHeight(item as never, 760)).toBe(300)
+  })
+})
