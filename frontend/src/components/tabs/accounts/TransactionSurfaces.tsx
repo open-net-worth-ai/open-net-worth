@@ -322,6 +322,14 @@ export function TransactionSurfacesProvider({
           const seed = reviewDraftSeed(txn, draft)
           setDetail({ id: txn.id, txn, mode: seed ? 'edit' : 'view', seed: seed ?? undefined })
         }}
+        onEditAll={(txn, draft) =>
+          setDetail({
+            id: txn.id,
+            txn,
+            mode: 'edit',
+            seed: reviewDraftSeed(txn, draft) ?? undefined,
+          })
+        }
         payeeOptions={payeeOptions}
         // The same create every surface uses: the palette colour cycles by category count.
         onCreateCategory={(name, kind) => createCategory(name, kind, categories.length)}

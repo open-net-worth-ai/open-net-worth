@@ -823,6 +823,13 @@
 .acct-review-facts:not(.is-expanded) {
   cursor: pointer;
 }
+/* Details (opens the card in place) and Edit (the drawer's editor), side by side, left. */
+.acct-review-expand-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 -8px -10px;
+}
 .acct-review-expand {
   /* The old corner Details button's own look (primary, semibold, footer-size type), moved under
      the amount and left-aligned like the rest of the card; the negative margin puts its text on
@@ -831,7 +838,6 @@
   align-items: center;
   gap: 7px;
   min-height: 36px;
-  margin: 6px 0 -8px -10px;
   padding: 0 10px;
   border: 0;
   border-radius: var(--radius-sm);

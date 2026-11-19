@@ -53,6 +53,8 @@ export interface TransactionReviewModeProps {
   /** The full drawer for this row, carrying the card's unsaved picks (one way: closing the
    *  drawer leaves the card's draft as it was). */
   onAllDetails: (txn: Txn, draft: ReviewDraft) => void
+  /** The drawer straight into its editor, with the card's unsaved picks filled in. */
+  onEditAll: (txn: Txn, draft: ReviewDraft) => void
   /** The tapped-open card's payee picker. */
   payeeOptions?: PayeeOption[]
   /** "Create “name”" in the card's category search. */
@@ -91,6 +93,7 @@ export function TransactionReviewMode({
   onApprove,
   onReject,
   onAllDetails,
+  onEditAll,
   payeeOptions = NO_PAYEE_OPTIONS,
   onCreateCategory,
   onReviewEverywhere,
@@ -494,6 +497,7 @@ export function TransactionReviewMode({
               onApprove={approve}
               onSkip={skip}
               onAllDetails={() => onAllDetails(current, draft)}
+              onEditAll={() => onEditAll(current, draft)}
               payeeOptions={payeeOptions}
               onCreateCategory={onCreateCategory}
             />

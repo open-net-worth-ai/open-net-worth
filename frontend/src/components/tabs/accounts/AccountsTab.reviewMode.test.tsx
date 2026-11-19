@@ -259,6 +259,15 @@ describe('AccountsTab — transaction review mode', () => {
     expect(screen.getByRole('dialog', { name: 'Review transactions' })).toBeTruthy()
   })
 
+  it('Edit opens the drawer straight into its editor, even with nothing changed on the card', async () => {
+    renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Review transactions' })).toBeTruthy()
+  })
+
   it('does not create a payee from an untouched imported description', async () => {
     setupMocks({ ...TXN, payee_id: null, description: 'RAW BANK MERCHANT 184', memo: '' })
     renderTab()

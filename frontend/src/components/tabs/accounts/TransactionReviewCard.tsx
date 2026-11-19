@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeftRight, Check, Info, Wallet, X } from '../../../ui/icons'
+import { ArrowLeftRight, Check, Info, Pencil, Wallet, X } from '../../../ui/icons'
 import { sourceLine, validateReviewDraft, type ReviewDraft } from './transactionReview'
 import type { Account, Category, Txn } from './types'
 import type { CatKind } from './AddCategoryModal'
@@ -40,6 +40,8 @@ interface Props {
   /** The full drawer, carrying this card's unsaved picks: for the rare edits the card itself
    *  does not offer (splits, receipts, the original charge). */
   onAllDetails: () => void
+  /** Straight to the drawer's editor, with this card's unsaved picks filled in. */
+  onEditAll: () => void
   /** Payee picker options for the tapped-open card. */
   payeeOptions: PayeeOption[]
   /** "Create “name”" in the category search: makes the category (palette colour, like every
@@ -353,15 +355,21 @@ export function TransactionReviewCard(props: Props) {
                 onCollapse={collapse}
               />
             ) : (
-              <button
-                type="button"
-                className="acct-review-expand"
-                aria-expanded="false"
-                onClick={() => setExpanded(true)}
-              >
-                <Info size={14} aria-hidden="true" />
-                Details
-              </button>
+              <div className="acct-review-expand-row">
+                <button
+                  type="button"
+                  className="acct-review-expand"
+                  aria-expanded="false"
+                  onClick={() => setExpanded(true)}
+                >
+                  <Info size={14} aria-hidden="true" />
+                  Details
+                </button>
+                <button type="button" className="acct-review-expand" onClick={props.onEditAll}>
+                  <Pencil size={14} aria-hidden="true" />
+                  Edit
+                </button>
+              </div>
             )}
           </div>
           <ReviewChoices

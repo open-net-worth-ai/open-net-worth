@@ -141,6 +141,7 @@ function renderMode(over: Partial<React.ComponentProps<typeof TransactionReviewM
     onReject: vi.fn(async () => undefined),
     onAskLucius: vi.fn(async () => undefined),
     onAllDetails: vi.fn(),
+    onEditAll: vi.fn(),
     ...over,
   }
   return { ...render(<TransactionReviewMode {...props} />), props }
@@ -788,6 +789,21 @@ describe('TransactionReviewMode — compact queue', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
     expect(onApprove.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ category: 'cat_new' }))
+  })
+
+  it('Edit sits beside Details and hands the drawer editor the card draft', async () => {
+    const onEditAll = vi.fn()
+    renderMode({ onEditAll })
+    await screen.findByRole('heading', { name: 'Kroger' })
+    fireEvent.click(screen.getByRole('button', { name: 'Other' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dining out' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(onEditAll).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'txn-new' }),
+      expect.objectContaining({ category: 'dining' }),
+    )
+    // Edit never opens the card in place — that is Details.
+    expect(screen.queryByTestId('review-details')).toBeNull()
   })
 
   it('a tap anywhere on the facts opens the card', async () => {
