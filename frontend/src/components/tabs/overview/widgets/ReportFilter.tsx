@@ -470,12 +470,13 @@ function CheckSection({
 
 /** A category's kind, in the order the list shows them. */
 const KIND_ORDER = ['expense', 'income', 'investment', 'transfer', 'adjustment']
+// The names the rest of the app gives these kinds (the register's Type filter).
 const KIND_LABEL: Record<string, string> = {
-  expense: 'Spending',
+  expense: 'Expense',
   income: 'Income',
-  investment: 'Investments',
-  transfer: 'Transfers',
-  adjustment: 'Adjustments',
+  investment: 'Investment',
+  transfer: 'Transfer',
+  adjustment: 'Adjustment',
 }
 
 function CategorySection({

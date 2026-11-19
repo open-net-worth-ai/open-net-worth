@@ -133,8 +133,8 @@ instead, and its editor shows **Period** with its other settings:
   so they offer **3 months**, **6 months**, **12 months** or **This year**. Every one also
   offers **Custom**: pick a **From** and a **To** month and year, and it covers both and every
   month between.
-- **Categories.** Pick one or more (search the list, grouped by kind: Spending, Income,
-  Investments, Transfers) to count only those categories. A split
+- **Categories.** Pick one or more (search the list, grouped by kind: Expense, Income,
+  Investment, Transfer) to count only those categories. A split
   transaction counts only its split in the chosen category.
 - **Tags.** Search the list and pick one or more to count only transactions carrying any of
   them, for example everything tagged *#trip*.

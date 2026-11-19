@@ -202,7 +202,7 @@ describe('ReportFilter', () => {
     expect(await screen.findByRole('textbox', { name: 'Search tags' })).toBeTruthy()
   })
 
-  it('groups the categories by kind: spending, then income', async () => {
+  it('groups the categories by kind: expense, then income', async () => {
     authFetch.mockImplementation((url: string) =>
       Promise.resolve({
         ok: true,
@@ -230,6 +230,6 @@ describe('ReportFilter', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Filter:/ }))
     const list = await screen.findByRole('group', { name: 'Categories' })
     await within(list).findByText('Salary')
-    expect(list.textContent).toBe('SpendingDiningRentIncomeSalary')
+    expect(list.textContent).toBe('ExpenseDiningRentIncomeSalary')
   })
 })
