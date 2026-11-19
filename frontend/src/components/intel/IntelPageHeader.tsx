@@ -1,3 +1,4 @@
+import { TAB_SUBTITLES } from '../../tabs'
 import { Button, Cluster, PageHeader } from '../ui'
 import { Radar } from '../../ui/icons'
 import { FreshnessChip } from './FreshnessChip'
@@ -18,7 +19,7 @@ export function IntelPageHeader({
     <PageHeader
       className="intel-page-header"
       title="Intelligence"
-      subtitle="Market signals, watchlists, and your portfolio brief"
+      subtitle={TAB_SUBTITLES.intel}
       actions={
         <Cluster className="intel-header-actions">
           {cfg?.enabled && (

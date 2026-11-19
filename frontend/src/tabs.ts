@@ -117,7 +117,7 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
   assets: 'Things you own — property, vehicles, valuables — valued by a dated mark',
   commitments: "Dated obligations and how you'll fund them",
   plan: 'Budgets, projections, and retirement planning',
-  intel: 'Market signals, watchlists, and your portfolio brief',
+  intel: "What's moving what you hold, watch and follow — plus copy and paper trading",
   skills: 'Reusable playbooks Lucius can run for you — one-click routines',
   automations:
     'Run on a schedule or when something happens. Every run is a conversation you can pick back up.',
