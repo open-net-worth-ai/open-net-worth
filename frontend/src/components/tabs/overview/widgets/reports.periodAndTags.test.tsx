@@ -399,4 +399,20 @@ describe('the header filter', () => {
       expect.objectContaining({ payee: 'QA Inn', category: ['cat_hotels'] }),
     )
   })
+
+  it('shows every merchant on All, not none', async () => {
+    authFetch.mockImplementation(() => jsonOk(ROLLUP))
+    const Comp = reportsWidgetComponents['rep-merchants']!
+    render(
+      <Comp
+        instance={{ ...instanceOf('rep-merchants', { period: '3 months' }), limit: 0 }}
+        def={defOf('rep-merchants')}
+        onPatch={vi.fn()}
+      />,
+    )
+    // All is "no row cap": slice(0, null) read it as zero rows.
+    expect(await screen.findByText('QA Inn')).toBeTruthy()
+    const key = authFetch.mock.calls.map((c) => String(c[0])).find((u) => u.includes('rollup'))
+    expect(key).toContain('merchant_limit=0')
+  })
 })

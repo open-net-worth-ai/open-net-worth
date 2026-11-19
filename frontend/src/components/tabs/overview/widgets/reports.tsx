@@ -870,7 +870,7 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
     cap ?? 0,
   )
   const shown = spendingMonth(data)
-  const rows = shown.merchants.slice(0, cap)
+  const rows = cap == null ? shown.merchants : shown.merchants.slice(0, cap)
   const month = shown.ym
   const filter = filterPill(
     instance,
