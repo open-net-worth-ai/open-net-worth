@@ -824,28 +824,28 @@
   cursor: pointer;
 }
 .acct-review-expand {
-  display: flex;
+  /* The old corner Details button's own look (primary, semibold, footer-size type), moved under
+     the amount and left-aligned like the rest of the card; the negative margin puts its text on
+     the content edge. */
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  /* A quiet hint, not a button-shaped bar: the whole facts panel is the tap target anyway. */
-  width: fit-content;
-  min-height: 32px;
-  margin: 6px auto -6px;
+  gap: 7px;
+  min-height: 36px;
+  margin: 6px 0 -8px -10px;
   padding: 0 10px;
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
+  color: var(--primary);
   background: transparent;
-  color: var(--muted);
   font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: 650;
   cursor: pointer;
 }
 /* Hover-capable pointers only: on touch, an unguarded :hover paints on tap before the action. */
 @media (hover: hover) {
   .acct-review-expand:hover {
-    color: var(--ink);
+    background: color-mix(in srgb, var(--primary) 9%, transparent);
   }
 }
 .acct-review-expand:focus-visible,

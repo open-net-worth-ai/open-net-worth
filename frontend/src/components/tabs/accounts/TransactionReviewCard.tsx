@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeftRight, Check, ChevronDown, Wallet, X } from '../../../ui/icons'
+import { ArrowLeftRight, Check, Info, Wallet, X } from '../../../ui/icons'
 import { sourceLine, validateReviewDraft, type ReviewDraft } from './transactionReview'
 import type { Account, Category, Txn } from './types'
 import type { CatKind } from './AddCategoryModal'
@@ -359,7 +359,7 @@ export function TransactionReviewCard(props: Props) {
                 aria-expanded="false"
                 onClick={() => setExpanded(true)}
               >
-                <ChevronDown size={14} aria-hidden="true" />
+                <Info size={14} aria-hidden="true" />
                 Details
               </button>
             )}

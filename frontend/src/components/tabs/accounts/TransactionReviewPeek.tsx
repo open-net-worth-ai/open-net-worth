@@ -1,4 +1,4 @@
-import { ChevronDown, Wallet } from '../../../ui/icons'
+import { Info, Wallet } from '../../../ui/icons'
 import { sourceLine, type ReviewDraft } from './transactionReview'
 import { SourceIcon } from './pickers'
 import { ReviewChoices, ReviewSummary } from './ReviewSummary'
@@ -48,7 +48,7 @@ export function TransactionReviewPeek({
         <ReviewSummary txn={txn} accounts={accounts} draft={draft} />
         {/* The front card's closed "Details" pill, as decoration — a span, never a button. */}
         <span className="acct-review-expand">
-          <ChevronDown size={14} aria-hidden="true" />
+          <Info size={14} aria-hidden="true" />
           Details
         </span>
       </div>
