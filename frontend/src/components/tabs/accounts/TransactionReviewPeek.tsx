@@ -55,21 +55,23 @@ export function TransactionReviewPeek({
         onDraftChange={() => {}}
         suggestedCategoryIds={suggestedCategoryIds}
       />
-      {/* The front card's Tags and Details/Edit, as decoration — spans, never buttons. */}
-      <div className="acct-review-tags-block">
-        <span className="acct-review-category-caption">Tags</span>
-        <span className="acct-review-tags">
-          {draft.tags.map((tag) => (
-            <span key={tag} className="acct-review-tag is-chosen">
-              {tag}
+      {/* The front card's Tags and bottom row, as decoration — spans, never buttons. */}
+      {draft.tags.length > 0 && (
+        <div className="acct-review-tags-block">
+          <span className="acct-review-category-caption">Tags</span>
+          <span className="acct-review-tags">
+            {draft.tags.map((tag) => (
+              <span key={tag} className="acct-review-tag is-chosen">
+                {tag}
+              </span>
+            ))}
+            <span className="acct-review-tag is-add">
+              <Plus size={12} aria-hidden="true" />
+              Tag
             </span>
-          ))}
-          <span className="acct-review-tag is-add">
-            <Plus size={12} aria-hidden="true" />
-            Tag
           </span>
-        </span>
-      </div>
+        </div>
+      )}
       <span className="acct-review-expand-row">
         <span className="acct-review-expand">
           <Info size={14} aria-hidden="true" />
@@ -79,6 +81,12 @@ export function TransactionReviewPeek({
           <Pencil size={14} aria-hidden="true" />
           Edit
         </span>
+        {draft.tags.length === 0 && (
+          <span className="acct-review-expand">
+            <Plus size={14} aria-hidden="true" />
+            Tag
+          </span>
+        )}
       </span>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeftRight, Check, Info, Pencil, Wallet, X } from '../../../ui/icons'
+import { ArrowLeftRight, Check, Info, Pencil, Plus, Wallet, X } from '../../../ui/icons'
 import { sourceLine, validateReviewDraft, type ReviewDraft } from './transactionReview'
 import type { Account, Category, Txn } from './types'
 import type { CatKind } from './AddCategoryModal'
@@ -81,6 +81,9 @@ function swipeThreshold(card: HTMLDivElement | null): number {
 export function TransactionReviewCard(props: Props) {
   const { txn, account, draft, busy } = props
   const [createError, setCreateError] = useState<string | null>(null)
+  // The tag cloud, open. Per card — the card is keyed by row, so the next one arrives closed.
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const showTags = tagsOpen || draft.tags.length > 0
   // The draft as of now — a category create resolves after a request, and must not write back
   // a draft from before whatever the reviewer changed meanwhile.
   const draftRef = useRef(draft)
@@ -330,11 +333,16 @@ export function TransactionReviewCard(props: Props) {
             suggestedCategoryIds={props.suggestedCategoryIds}
             onCreateCategory={createCategory}
           />
-          {/* The card's other decision: tags, tapped from your own — no typing needed. */}
-          <ReviewTags
-            tags={draft.tags}
-            onChange={(tags) => props.onDraftChange({ ...draft, tags })}
-          />
+          {/* The card's other decision: tags, tapped from your own — no typing needed. Only
+              once there are some or the cloud is open; otherwise "+ Tag" waits in the row below. */}
+          {showTags && (
+            <ReviewTags
+              tags={draft.tags}
+              onChange={(tags) => props.onDraftChange({ ...draft, tags })}
+              open={tagsOpen}
+              onOpenChange={setTagsOpen}
+            />
+          )}
           {/* Everything else is the drawer's. Down here, in the thumb's reach; both carry the
               card's unsaved category and tags into it. */}
           <div className="acct-review-expand-row">
@@ -346,6 +354,17 @@ export function TransactionReviewCard(props: Props) {
               <Pencil size={14} aria-hidden="true" />
               Edit
             </button>
+            {!showTags && (
+              <button
+                type="button"
+                className="acct-review-expand"
+                aria-expanded="false"
+                onClick={() => setTagsOpen(true)}
+              >
+                <Plus size={14} aria-hidden="true" />
+                Tag
+              </button>
+            )}
           </div>
           {createError && <p className="acct-review-validation">{createError}</p>}
           {validationError && <p className="acct-review-validation">{validationError}</p>}

@@ -1122,6 +1122,21 @@ describe('TransactionReviewMode — edits and actions', () => {
     expect(screen.queryByRole('button', { name: 'Ask Lucius' })).toBeNull()
   })
 
+  it('an untagged card offers only “+ Tag” in its bottom row, and the Tags row once tagged', async () => {
+    renderMode()
+    await screen.findByRole('heading', { name: 'Kroger' })
+    const card = within(screen.getByTestId('transaction-review-card'))
+    expect(card.queryByText('Tags')).toBeNull()
+    fireEvent.click(card.getByRole('button', { name: 'Tag' }))
+    fireEvent.change(card.getByLabelText('Find or create a tag'), { target: { value: 'gift' } })
+    fireEvent.click(card.getByRole('button', { name: /Create “gift”/ }))
+    fireEvent.click(card.getByRole('button', { name: 'Done' }))
+    // Tagged: the row stays, with its own "+ Tag"; the bottom row's is gone.
+    expect(card.getByText('Tags')).toBeTruthy()
+    expect(card.getByRole('button', { name: 'Remove tag gift' })).toBeTruthy()
+    expect(card.getAllByRole('button', { name: 'Tag' })).toHaveLength(1)
+  })
+
   it('tags picked on the card are approved with the category', async () => {
     const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
       ...txn,

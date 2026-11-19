@@ -13,14 +13,20 @@ import { tagItems, useTransactionTags } from './tagOptions'
 /** How many of your tags the cloud offers before you search. */
 const CLOUD_LIMIT = 10
 
+/** Shown only once the row has tags, or the cloud is open: not everyone tags, so an untagged
+ *  card offers just "+ Tag" in its bottom row (owner, 2026-11-19). `open` is the card's. */
 export function ReviewTags({
   tags,
   onChange,
+  open,
+  onOpenChange,
 }: {
   tags: string[]
   onChange: (tags: string[]) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const setOpen = onOpenChange
   const remove = (tag: string) => onChange(tags.filter((t) => t !== tag))
   const chosen = tags.map((tag) => (
     <button

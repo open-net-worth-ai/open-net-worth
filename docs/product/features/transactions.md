@@ -117,10 +117,10 @@ holding area.
 1. In Accounts, click **N to review** to list them, or **Start review** to go through them one
    card at a time.
 2. On each card, pick the category. If it isn't among the suggestions, tap **Other** and search;
-   a name that matches no category offers **Create**, which makes it and picks it. Below it,
-   **Tags**: tap **+ Tag** and pick from your tags, or search to find or create one. The category
-   and tags are the only things you change on the card itself, and they're saved when you
-   approve it.
+   a name that matches no category offers **Create**, which makes it and picks it. To tag it,
+   tap **+ Tag** (beside **Details** and **Edit**) and pick from your tags, or search to find or
+   create one; once a card has tags they show under the category. The category and tags are the
+   only things you change on the card itself, and they're saved when you approve it.
    For anything else — payee, date, memo, amount, splits, receipts — tap the card or **Details**
    to open the full transaction, or **Edit** to go straight to its editor. Both show the category
    and tags you picked on the card. If you close the editor with edits you haven't saved, it asks
