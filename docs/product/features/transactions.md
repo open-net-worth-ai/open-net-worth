@@ -101,7 +101,9 @@ The Starting Balance transaction is always cleared.
 
 ## Find transactions
 
-Type in the search box above the register to search payee, memo and category. Click into the
+Type in the search box above the register to search payee, description, memo, category and
+tags, then press Enter or pick a suggestion; the list closes and the register filters. To match
+only a tag, pick its `#tag` suggestion or type `#japan-trip`. Click into the
 empty box for one-click filters — **Uncategorized**, **Uncleared** and **Needs review** — or type
 them: `uncategorized`, `status:uncleared`, `status:review`, `status:hidden`. Cleared and Uncleared are one choice:
 picking one replaces the other.

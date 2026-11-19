@@ -5436,13 +5436,17 @@ def txn_matches_q(
         cat = str(t.get("category") or "")
         return needle in cat.lower() or needle in cat_labels.get(cat, "").lower()
     # any: transaction id OR note/category-key (the same note-or-category substring test
-    # TransactionStore._matches_text does for its own `q` param) OR payee name OR category
-    # label. Including the opaque id lets the register's ordinary search box reopen a row
-    # copied from an audit log, URL, or tool result without requiring a separate id syntax.
+    # TransactionStore._matches_text does for its own `q` param) OR a tag OR payee name OR
+    # category label. Including the opaque id lets the register's ordinary search box reopen a
+    # row copied from an audit log, URL, or tool result without requiring a separate id syntax.
+    # Tags count since the register shows them: "Find X in any field" found nothing for a
+    # word the row visibly carried as a tag (owner report 2026-11-19).
     if any(
         needle in str(t.get(field) or "").lower()
         for field in ("id", "description", "memo", "category")
     ):
+        return True
+    if any(needle in str(tag).lower() for tag in (t.get("tags") or [])):
         return True
     if needle in cat_labels.get(str(t.get("category") or ""), "").lower():
         return True
