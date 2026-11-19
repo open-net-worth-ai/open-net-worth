@@ -51,17 +51,19 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import httpx
 
 from backend.core.errors import ExternalServiceError, RedirectNotRegisteredError, ValidationError
+from backend.core.user_time import user_today
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services import ledger as ledger_service
-from backend.services.aggregation import balance_kinds, parallel
+from backend.services.aggregation import balance_kinds, parallel, row_ids
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -567,6 +569,42 @@ def _error_code(resp: httpx.Response) -> str:
     return code if code.replace("_", "").isalnum() and code.isupper() and len(code) <= 40 else ""
 
 
+class PeriodRefusedError(ExternalServiceError):
+    """The bank won't serve the dates asked for (``WRONG_TRANSACTIONS_PERIOD``; N26 says
+    ``PERIOD_INVALID``). ``date_from`` is the first day it says it serves, "" when it doesn't say."""
+
+    def __init__(self, date_from: str) -> None:
+        super().__init__("Enable Banking: the bank won't serve that date range")
+        self.date_from = date_from
+
+
+_ISO_DAY = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
+
+def _period_refused(resp: httpx.Response) -> Optional[str]:
+    """The first day the bank serves when ``resp`` refuses the date range ("" if it names none),
+    None when it isn't that refusal. Only a well-formed date is ever read from the body."""
+    try:
+        body = resp.json() or {}
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(body, dict):
+        return None
+    if body.get("error") != "WRONG_TRANSACTIONS_PERIOD" and body.get("code") != "PERIOD_INVALID":
+        return None
+    detail = body.get("detail")
+    raw = detail.get("date_from") if isinstance(detail, dict) else None
+    if raw is None and isinstance(detail, str):
+        raw = detail.split("dateTo")[0]  # N26: "dateFrom=YYYY-MM-DD,dateTo=YYYY-MM-DD"
+    found = _ISO_DAY.search(str(raw or ""))
+    if not found:
+        return ""
+    try:
+        return date.fromisoformat(found.group(1)).isoformat()
+    except ValueError:
+        return ""
+
+
 def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
     """GET wrapper for the account/transaction endpoints that NEVER lets a raw exception
     escape (mirrors ``lunch_money._safe_get``/``ynab._safe_get``) and bounds the response
@@ -590,6 +628,9 @@ def _safe_get(token: str, path: str, params: dict) -> httpx.Response:
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
         status, code = exc.response.status_code, _error_code(exc.response)
+        served_from = _period_refused(exc.response)
+        if served_from is not None:
+            raise PeriodRefusedError(served_from) from None
         if code in _SESSION_ENDED:
             # The FAQ: act on the error code, not the HTTP status. A revoked or expired consent
             # can still list its accounts; only reads refuse (401 CLOSED_SESSION on the sandbox).
@@ -693,21 +734,69 @@ def fetch_account_transactions(
     both real, documented, server-side params — the client-side-windowing fallback this
     function's earlier TODO reserved is not needed. Returns ``(transactions, complete)``.
     Raises ``ExternalServiceError`` (never the raw httpx exception — see ``_safe_get``) on
-    a transport/HTTP failure."""
+    a transport/HTTP failure.
+
+    A ``continuation_key`` already sent ends the read: some banks hand back the same key, and
+    with it the same page, for ever (Actual Budget #8846, every row twice). That read is whole —
+    the bank has nothing further to give — or a first import would be refused as cut short on
+    every sync."""
     transactions: list[dict] = []
     continuation_key: Optional[str] = None
+    sent: set[str] = set()
     for _ in range(_MAX_FETCH_PAGES):
         params: dict = {"date_from": date_from, "date_to": date_to}
         if continuation_key:
             params["continuation_key"] = continuation_key
+            sent.add(continuation_key)
         resp = _safe_get(token, f"/accounts/{account_uid}/transactions", params)
         data = resp.json() or {}
         page = data.get("transactions") or []
-        transactions.extend(page)
         continuation_key = data.get("continuation_key")
+        if continuation_key and continuation_key in sent:
+            # Often the page itself is a repeat: a row identical to one already read is that row
+            # again (an id-less one would otherwise be booked a second time, numbered ``#2``).
+            logger.warning("enable_banking: the bank repeated a page key; the read ends there")
+            transactions.extend(t for t in page if t not in transactions)
+            return transactions, True
+        transactions.extend(page)
         if not continuation_key:
             return transactions, True
     return transactions, False
+
+
+# What to ask for after a refused range when the bank names no first day: as Sure does.
+_FALLBACK_DAYS = (89, 60, 30)
+
+
+def fetch_served_transactions(
+    token: str, account_uid: str, *, date_from: str, date_to: str
+) -> tuple[list[dict], bool, str]:
+    """``fetch_account_transactions`` for the range the bank will serve: ``(transactions,
+    complete, read_from)``. A bank that refuses the range (``PeriodRefusedError``; many serve
+    less than 90 days of history) is asked again from the first day it names, else 89, 60 and
+    30 days back — never earlier than asked. ``read_from`` is the first day actually read: rows
+    before it were not looked at, so nothing there may be read as gone."""
+    end = date.fromisoformat(date_to[:10])
+    tries = [date_from]
+    refused: Optional[PeriodRefusedError] = None
+    while tries:
+        start = tries.pop(0)
+        try:
+            txns, complete = fetch_account_transactions(
+                token, account_uid, date_from=start, date_to=date_to
+            )
+            return txns, complete, start
+        except PeriodRefusedError as exc:
+            if refused is None:
+                refused = exc
+                fallback = [(end - timedelta(days=n)).isoformat() for n in _FALLBACK_DAYS]
+                if date_from < exc.date_from <= date_to:
+                    tries = [exc.date_from, *(d for d in fallback if d > exc.date_from)]
+                else:
+                    tries = [d for d in fallback if d > date_from]
+    raise ExternalServiceError(
+        "Enable Banking: the bank won't serve this account's transactions for any recent range"
+    )
 
 
 # ── mapping helpers ──────────────────────────────────────────────────────────────────
@@ -747,10 +836,16 @@ def _account_to_common(
     eb_account: dict, balance: Optional[float] = None, kinds: Optional[dict] = None
 ) -> dict:
     """An Enable Banking account → the common ``accounts[]`` shape (RFC §A). ``kinds``: its
-    balance by kind (``balance_kinds.split``)."""
+    balance by kind (``balance_kinds.split``); a bank that sent balances in several currencies
+    (``by_currency``) is read in the account's own."""
     kind = str(eb_account.get("cash_account_type") or "").upper()
+    kinds = dict(kinds or {})
+    by_currency = kinds.pop("by_currency", None) or {}
+    own = by_currency.get(str(eb_account.get("currency") or "").upper())
+    if own:
+        balance, kinds = own
     return {
-        **(kinds or {}),
+        **kinds,
         "provider_account_id": _account_uid(eb_account),
         "name": _account_name(eb_account),
         "mask": _account_mask(eb_account),
@@ -761,7 +856,24 @@ def _account_to_common(
         # No currency from the bank means _account_currency filled in the base: a balance must
         # never be booked as if the bank had said so (account_value_sync fails closed on this).
         "currency_inferred": not eb_account.get("currency"),
+        "credit_limit": _credit_limit(eb_account),
     }
+
+
+def _credit_limit(eb_account: dict) -> Optional[float]:
+    """The card's credit limit from its details (``credit_limit``), in the account's own
+    currency only, else None. On a current account the same field is its overdraft."""
+    limit = eb_account.get("credit_limit")
+    if not isinstance(limit, dict):
+        return None
+    currency = str(limit.get("currency") or "").upper()
+    if currency and currency != str(eb_account.get("currency") or "").upper():
+        return None
+    try:
+        amount = abs(float(limit.get("amount")))
+    except (TypeError, ValueError):
+        return None
+    return amount or None
 
 
 def fetch_account_balances(token: str, account_uid: str) -> tuple[Optional[float], dict]:
@@ -775,6 +887,7 @@ def fetch_account_balances(token: str, account_uid: str) -> tuple[Optional[float
         logger.warning("enable_banking balances unavailable: %s", exc)
         return None, balance_kinds.split({})
     by_type: dict[str, float] = {}
+    by_currency: dict[str, dict[str, float]] = {}
     for b in data.get("balances") or []:
         if not isinstance(b, dict):
             continue
@@ -782,7 +895,18 @@ def fetch_account_balances(token: str, account_uid: str) -> tuple[Optional[float
             amount = float((b.get("balance_amount") or {}).get("amount"))
         except (TypeError, ValueError):
             continue
-        by_type.setdefault(str(b.get("balance_type") or "").upper(), amount)
+        kind = str(b.get("balance_type") or "").upper()
+        by_type.setdefault(kind, amount)
+        currency = str((b.get("balance_amount") or {}).get("currency") or "").upper()
+        by_currency.setdefault(currency, {}).setdefault(kind, amount)
+    best, kinds = _figures(by_type)
+    if len(by_currency) > 1:
+        # A multi-currency account (Revolut, Wise …): read later in the account's own currency.
+        kinds["by_currency"] = {c: _figures(t) for c, t in by_currency.items() if c}
+    return best, kinds
+
+
+def _figures(by_type: dict[str, float]) -> tuple[Optional[float], dict]:
     best = next((by_type[k] for k in _BALANCE_PREFERENCE if k in by_type), None)
     if best is None:
         best = next(iter(by_type.values()), None)
@@ -790,11 +914,12 @@ def fetch_account_balances(token: str, account_uid: str) -> tuple[Optional[float
 
 
 def _txn_id(eb_txn: dict) -> str:
-    """The bank's immutable id for a transaction, ``entry_reference``, or "" without one.
+    """The bank's immutable id for a transaction, ``entry_reference``, or "" without one or
+    with a placeholder (``row_ids.real_id``).
     Never ``transaction_id``: Enable Banking documents it as a fetch handle that "can not be
     used to uniquely identify transactions and may change if the list of transactions is
     requested again" — keyed on it, a re-listed row came back as new and booked twice."""
-    return str(eb_txn.get("entry_reference") or "").strip()
+    return row_ids.real_id(eb_txn.get("entry_reference"))
 
 
 def _txn_amount(eb_txn: dict) -> tuple[float | None, str]:
@@ -832,12 +957,18 @@ def _txn_amount(eb_txn: dict) -> tuple[float | None, str]:
 
 
 def _txn_date(eb_txn: dict) -> str:
-    """Booking date (``booking_date``, then ``value_date``), else today (UTC)."""
-    raw = eb_txn.get("booking_date") or eb_txn.get("value_date") or ""
-    try:
-        return datetime.fromisoformat(str(raw)).date().isoformat()
-    except (TypeError, ValueError):
-        return datetime.now(timezone.utc).date().isoformat()
+    """Booking date, then value date, then ``transaction_date`` (the card purchase's own date —
+    often all a pending row carries), else the user's today. ``transaction_date`` comes after the
+    other two so a row that had either keeps the date, and the key, it was booked under."""
+    for key in ("booking_date", "value_date", "transaction_date"):
+        raw = eb_txn.get(key)
+        if not raw:
+            continue
+        try:
+            return datetime.fromisoformat(str(raw)).date().isoformat()
+        except (TypeError, ValueError):
+            continue
+    return user_today().isoformat()
 
 
 def _txn_description(eb_txn: dict) -> str:
@@ -1010,16 +1141,9 @@ def with_hash_aliases(rows: list[dict]) -> list[dict]:
     entry_reference: a row booked while the bank gave it none (a pending row, often) is then
     recognised, not booked again. Only a hash no other row in the read shares — for two
     identical charges the hash can't say which is which, and the wrong guess hides a real one;
-    those fall to the duplicate check, which asks."""
-    counts: dict[str, int] = {}
-    for row in rows:
-        counts[row.get("_content_hash") or ""] = counts.get(row.get("_content_hash") or "", 0) + 1
-    for row in rows:
-        content_hash = row.pop("_content_hash", None)
-        ref = row["external_refs"][0]["ref"]
-        if content_hash and content_hash != ref and counts[content_hash] == 1:
-            row["ref_aliases"] = [*row["ref_aliases"], content_hash]
-    return rows
+    those fall to the duplicate check, which asks. An entry_reference the bank gave several
+    different rows is not trusted to tell them apart (``row_ids.settle``)."""
+    return row_ids.settle(rows)
 
 
 def _bank_label(bank: dict, banks: list[dict]) -> Optional[str]:
@@ -1199,12 +1323,13 @@ def fetch_window(
     accounts = [_account_to_common(a, *b) for a, b in zip(eb_accounts, balances)]
 
     rows: list[dict] = []
+    read_from: Optional[str] = None
     for eb_account in eb_accounts:
         account_uid = _account_uid(eb_account)
         if not account_uid or accounts_only:
             continue
         try:
-            txns, account_complete = fetch_account_transactions(
+            txns, account_complete, served_from = fetch_served_transactions(
                 token, _api_uid(eb_account), date_from=since, date_to=before
             )
         except (ExternalServiceError, httpx.HTTPError) as exc:
@@ -1222,10 +1347,21 @@ def fetch_window(
             complete = False
             continue
         complete = complete and account_complete
+        if served_from > since:
+            # Read from a later day than asked: nothing earlier was looked at.
+            read_from = max(read_from or served_from, served_from)
+            # One account's read (the sync) is already named by its caller.
+            named = "" if account else f"{_account_name(eb_account)}: "
+            warnings.append(
+                f"{named}the bank serves transactions only from {served_from}, so nothing "
+                "earlier was read"
+            )
         currency_hint = _account_currency(eb_account)
         built = (_txn_to_row(eb_txn, account_uid, currency_hint) for eb_txn in txns)
         rows.extend(with_hash_aliases([row for row in built if row is not None]))
-    return FetchWindow(accounts=accounts, rows=rows, complete=complete, warnings=warnings)
+    return FetchWindow(
+        accounts=accounts, rows=rows, complete=complete, warnings=warnings, read_from=read_from
+    )
 
 
 def classify_error(exc: Exception) -> str:

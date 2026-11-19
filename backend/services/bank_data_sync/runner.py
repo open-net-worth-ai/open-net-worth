@@ -171,7 +171,8 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
     if whole:
         # Pending bookings the bank no longer lists are dropped only after a whole read: one
         # cut short just didn't reach them.
-        out.read[app_id] = since
+        # From the first day the bank actually served (later than asked when it refused the range).
+        out.read[app_id] = max(since, str((result.get("window") or {}).get("since") or since))
     out.read_as[app_id] = pid
     remembered = relink.read_as(p.key).get(app_id)
     if relink.is_relinked(p.key, app_id, pid) or (
@@ -195,6 +196,8 @@ def _fetch_account(p: Provider, account: dict, run_id: str, out: _Fetched) -> st
                 "working": _figure(acc.get("working_balance")),
                 # Credit left on a card, never its balance (balances.bank_figure).
                 "available": _figure(acc.get("available_to_spend")),
+                # The card's limit as the bank states it (Enable Banking's details), or None.
+                "limit": _figure(acc.get("credit_limit")),
                 "currency": acc.get("currency"),
                 "pending": sum(float(r.get("amount") or 0) for r in rows if r.get("pending")),
             }
