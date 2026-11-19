@@ -7,7 +7,7 @@ import { FieldSelect } from '../../tabs/connectors/VoicePicker'
 import type { SelectOptGroup } from '../../ui'
 import type { ModelOption } from '../../../api/models'
 import { useModels } from '../../../hooks/useModels'
-import { fDateTime } from '../../../utils/format'
+import { fDateTime, fScheduleWhen } from '../../../utils/format'
 import {
   runPaperAutopilot,
   setPaperAutopilot,
@@ -61,7 +61,7 @@ function modelOptions(
   return groups
 }
 
-const at = (iso: string) => fDateTime(iso, 'short', 'always')
+const at = (iso: string) => fDateTime(iso)
 const effortLabel = (e?: string) =>
   `${(e || 'medium')[0]!.toUpperCase()}${(e || 'medium').slice(1)} effort`
 /** "Default", or the model's own name without its provider. */
@@ -253,7 +253,7 @@ function stateLine(a: PaperAutopilot): string {
   if (a.mode === 'manual') return 'Autopilot off'
   if (a.paused_reason) return a.paused_reason
   if (a.running) return 'Reviewing now'
-  return a.next_run_at ? `Next review: ${at(a.next_run_at)}` : 'Autopilot on'
+  return a.next_run_at ? `Next review: ${fScheduleWhen(a.next_run_at)}` : 'Autopilot on'
 }
 
 const reviewCount = (n: number) => (n === 1 ? '1 review' : `${n} reviews`)
