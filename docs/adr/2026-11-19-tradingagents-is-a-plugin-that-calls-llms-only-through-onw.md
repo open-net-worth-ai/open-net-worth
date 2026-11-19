@@ -1,0 +1,167 @@
+---
+number: 2026-11-19
+title: TradingAgents is a plugin that calls LLMs only through ONW
+status: Accepted
+date: 2026-11-19
+deciders: orchestrating agent (Claude) + repo owner
+---
+
+# 2026-11-19. TradingAgents is a plugin that calls LLMs only through ONW
+
+## Context
+
+TradingAgents (TauricResearch, Apache-2.0) runs a multi-agent research pipeline on one ticker: four
+analysts, a bull/bear debate, a research manager, a trader, a three-way risk debate and a portfolio
+manager, ending in a five-step rating. We want it on the asset page and behind Lucius, with the
+owner's real investing amounts as context so the trader and risk team can size advice against what
+is held.
+
+The forces:
+
+- It is third-party code with a heavy tree (pandas 3, LangChain, LangGraph, three vendor SDKs) and
+  its own LLM clients that read vendor API keys. Importing it into ONW's interpreter would put that
+  tree, and a path to a vendor, inside the process that holds every secret.
+- Every model call in ONW goes through one provider config, one permission/disable switch and one
+  cost path (`ai/cost_tracker`). A second set of keys and a second meter is exactly what
+  `docs/INVARIANTS.md` rules out for AI spend.
+- Real amounts are PII-grade data. They go to the owner's own AI provider only, at a level the
+  owner picks, and the owner sees the exact payload before it leaves.
+- Subscription transports (Claude Code, Codex, Antigravity) are ONW's way to run on a plan rather
+  than a key. Their sessions are pooled or parked for Lucius's multi-round turns; TradingAgents
+  re-sends its whole transcript each call and never wants that.
+- Research is not money: no net worth, budget or ledger number may move, and nothing may place an
+  order.
+
+Facts of the pinned source that shaped the build are in `docs/specs/trading-agents-pinned-findings.md`.
+
+## Decision
+
+We will integrate TradingAgents as a **runtime-installed plugin in its own process**, and let it
+reach a model **only through an ONW loopback bridge**.
+
+1. **Isolation.** The environment is a venv of its own under `<data dir>/integrations/trading_agents/`,
+   built by a click on the connector page (never at boot, never from a tool, refused in a demo and
+   in QA) from ONE pinned commit, `9fa1196fffbcfd9de5146d2dd2869df84ab99838` (v0.7.1, 2026-11-04;
+   `install.TA_COMMIT`). It is installed, not vendored. A bump is a code review against the pinned
+   findings plus a release note. A run is one subprocess, `<venv python> -I ta_worker.py`, started
+   only by `ai/trading_agents/runner.py` (one at a time, at most 3 queued). The worker imports the
+   standard library and `tradingagents` only, and nothing imports it (import-linter contract plus an
+   AST test). Its environment is `scrubbed_environ()` plus the per-run bridge token and the two
+   optional data-vendor keys, never an LLM key. All three TradingAgents paths (results, cache,
+   memory log) are forced into the connector's scratch folder, never `~/.tradingagents`.
+2. **The loopback LLM bridge.** TradingAgents is configured with its `openai_compatible` provider
+   pointed at a per-run server on `127.0.0.1` (`ai/trading_agents/llm_bridge.py`), authenticated by a
+   token valid for that run only, accepting loopback peers only. The worker sees two aliases,
+   `onw-deep` and `onw-quick`; any other model name is refused, so it cannot choose a model the owner
+   did not approve. The bridge translates OpenAI chat-completions to ONW's provider messages
+   (`openai_shape.py`, pure) and calls the owner's own `AIProvider`, so a provider the owner turned
+   off refuses the call and is never rerouted. **No key reaches the worker** because the worker never
+   needs one: a vendor key would be a way around the owner's provider choice, the usage totals and
+   the caps. It runs no tool: TradingAgents' own data tools run in the worker and the bridge only
+   hands the model's tool calls back. Nothing logs a message body (bodies carry amounts); a call
+   logs id, alias, tokens, latency and status.
+3. **One cost path, measured at the bridge.** The bridge records one cost row per call under the
+   source `trading_agents`, stamped with the run id, in the bridge's own process: tokens and dollars
+   never come from the worker, which is untrusted for accounting. A transport that already records
+   cost inside `stream_chat` (Antigravity, `RECORDS_COST_IN_STREAM_CHAT`) takes the run's
+   `cost_attribution` instead of a second row.
+4. **CLI transports and the one-shot turn.** `core/one_shot_turn.one_shot_turn()` marks the task, and
+   the CLI transports' own "may I keep this open" switches read it and say no: a fresh CLI process
+   per request, no pooled session, no parked Codex turn (so ADR
+   `2026-10-05-codex-turns-stay-open-across-tool-rounds` is unchanged for Lucius). The bridge reads
+   each provider stream to `done` instead of cutting it at the first tool call, because the Claude
+   Code and Antigravity transports report the round's usage after its calls. Subscription calls are
+   stamped `plan_included`: counted as calls, not dollars, and never blocked by the monthly dollar
+   cap. A CLI transport gets 2 parallel calls by default (4 on an API). Evidence: **proven live for
+   Claude Code; Codex and Antigravity are covered by fixtures only** and are not claimed as live-proven.
+5. **Real-amount context at three levels.** `services/trading_agents/context.py` builds the
+   `PortfolioContext` TradingAgents takes (`cash`, one `currency`, `positions[{ticker, quantity,
+   average_price}]`), from `investments_book` (never recomputed): `investments` (the default;
+   investable cash and every held, vested position of an investment account), `position` (cash and
+   the analysed ticker only) or `ticker` (`None`, which TradingAgents reads as "not provided", never
+   as a flat book). Everything is converted to the ticker's quote currency at current rates and every
+   conversion is disclosed; a figure with no known rate is left out and named, never converted 1:1.
+   No account name, institution, transaction, payee, income, budget, net worth, liability, retirement
+   balance, owned asset, thesis, memory or profile ever leaves. The exact dict is frozen onto the
+   run (`context_sent`) and shown to the owner before it starts. Data vendors get the ticker and the
+   date, never an amount.
+6. **Caps are enforced, not displayed.** A per-run dollar cap and a model-call cap are enforced by
+   the bridge itself (it refuses to admit the next call), with the runner as backstop, so a cap is
+   overshot by at most the calls already in flight. A 30-minute wall clock ends a run as `timed_out`.
+   The monthly cap is checked once, at submit, against the run's estimate (median of the last ten
+   matching finished runs, else a static heuristic) and refuses the run with the numbers in the
+   message. The statuses `stopped_budget`, `stopped_calls`, `timed_out` and `interrupted` (an app
+   restart; `recover()` at boot) are terminal and keep what was spent.
+7. **A write choke and a flag.** `runs.apply_run_change` is the one writer of `trading_agents_runs`
+   (one transaction per op, validated transitions, a data event after commit), behind flag
+   `trading_agents` (default off: the connector, card and tools hide, runs are kept). The Lucius
+   start tool is `external_effect`, seeded Ask, returns at once, and judges the result against the
+   owner's thesis afterwards through `services/thesis_judgment`; the thesis text never goes to the
+   worker.
+
+## Consequences
+
+### Positive
+
+- No LLM key, vendor client or third-party import exists in ONW's process or in the worker's
+  environment; turning a provider off turns TradingAgents off for it.
+- Spend is in the same usage totals, per-source breakdown and run rows as everything else, with a
+  hard stop a runaway debate cannot pass.
+- The owner sees, before every run, the exact amounts that leave and who receives them.
+- Removing the plugin is deleting a folder; run rows survive.
+
+### Negative
+
+- A large install (a Python venv with pandas, LangChain and three vendor SDKs we never use) and a
+  15-minute install timeout.
+- TradingAgents' `Memory Log` node keeps ONE decision log in a shared memory folder across runs, so
+  text derived from an earlier run's portfolio context (decision text, past context) can be read back
+  into a later run of the same tool, including at a lower context level than the earlier run. It
+  stays on this computer and inside the owner's provider's scope, but it is shared state we do not
+  own. `remove_environment` deletes it; there is no per-run isolation of it.
+- One run at a time, and a subscription run is slow (a fresh CLI process per call).
+- The pinned source's quirks are ours to carry: there is no Risk Judge node, analysts and the memory
+  node run in parallel, and ONW's `max_risk_rounds` is `max_risk_discuss_rounds` in TradingAgents
+  (translated in the worker). Both model tiers run at medium effort, as TradingAgents sends none.
+- Codex and Antigravity carry only fixture evidence until someone runs them live.
+
+### Follow-ups
+
+- Run a live Codex and a live Antigravity analysis and record the result here.
+- Re-read `docs/specs/trading-agents-pinned-findings.md` against any new commit before moving
+  `TA_COMMIT`.
+- Product page `docs/product/features/trading-agents.md`; `NOTICE` carries the Apache-2.0
+  attribution.
+
+## Alternatives considered
+
+- **Import `tradingagents` into ONW's interpreter** — rejected: dependency conflicts (pandas 3) and
+  a vendor client with a key inside the process that holds every secret.
+- **Give the worker the owner's vendor key** — rejected: bypasses provider disable, the usage totals
+  and the caps, and puts a key in an untrusted process. It would also make subscription transports
+  impossible.
+- **Let TradingAgents talk to vendors with its own keys and meter its spend afterwards** — rejected:
+  a second cost path that can only report, not stop.
+- **Take tokens and cost from the worker's own report** — rejected: the worker is untrusted for
+  accounting; the bridge sees every call.
+- **Reuse Lucius's pooled CLI sessions and parked Codex turns** — rejected: TradingAgents re-sends
+  its transcript and never answers a parked call in-thread; pooling would leak state between calls
+  and park turns nobody resumes.
+- **Cut the provider stream at the first tool call** — rejected: usage arrives after the calls on
+  Claude Code and Antigravity, so cost would be lost.
+- **Send the whole book, or no choice** — rejected: the owner picks one of three levels, defaulting
+  to investments only, and sees the payload first.
+- **Vendor the source into the repo** — rejected: heavy, Apache-2.0 attribution aside, and it would
+  make a bump a merge rather than a pin.
+
+## Agent provenance
+
+- **Decided by:** orchestrating Claude agent, with work-package implementers WP1 to WP8 on
+  `feat/trading-agents`.
+- **Lane / branch:** `feat/trading-agents` (head `a266ec4b` when written).
+- **Alternatives weighed:** in-process import, worker-held vendor keys, post-hoc metering, pooled CLI
+  sessions, vendoring (see above).
+- **Driving artifacts:** `docs/specs/trading-agents.md`, `docs/specs/trading-agents-pinned-findings.md`,
+  `docs/specs/trading-agents-ui.md`.
+- **Why this way (one line):** the worker is third-party code that must never hold a key or meter
+  itself, so every model call crosses one loopback bridge that is ONW's provider, cost row and cap.

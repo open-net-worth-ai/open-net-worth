@@ -57,6 +57,15 @@
     { "glob": "frontend/src/components/tabs/settings/sections/Shortcuts*", "docs": ["docs/product/features/phone-shortcuts.md", "docs/product/features/settings.md"] },
     { "glob": "backend/services/shortcuts/**", "docs": ["docs/product/features/phone-shortcuts.md"] },
     { "glob": "backend/api/shortcuts*", "docs": ["docs/product/features/phone-shortcuts.md"] },
+    { "glob": "backend/services/trading_agents/**", "docs": ["docs/product/features/trading-agents.md"] },
+    { "glob": "backend/ai/trading_agents/**", "docs": ["docs/product/features/trading-agents.md"] },
+    { "glob": "backend/ai/tools/trading_agents*", "docs": ["docs/product/features/trading-agents.md"] },
+    { "glob": "backend/api/trading_agents*", "docs": ["docs/product/features/trading-agents.md"] },
+    { "glob": "backend/db/trading_agents*", "docs": ["docs/product/features/trading-agents.md"] },
+    { "glob": "frontend/src/components/intel/TradingAgents*", "docs": ["docs/product/features/trading-agents.md"] },
+    { "glob": "frontend/src/components/tabs/connectors/TradingAgents*", "docs": ["docs/product/features/trading-agents.md"] },
+    { "glob": "frontend/src/components/tabs/settings/sections/TradingAgents*", "docs": ["docs/product/features/trading-agents.md", "docs/product/features/settings.md"] },
+    { "glob": "frontend/src/components/chat/approval/bodies/TradingAgents*", "docs": ["docs/product/features/trading-agents.md"] },
     { "glob": "frontend/src/**", "docs": ["docs/product/features", "docs/product/getting-started"] },
     { "glob": "backend/api/**", "docs": ["docs/product/features", "docs/product/reference"] }
   ]

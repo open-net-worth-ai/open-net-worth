@@ -127,3 +127,17 @@ eslint-plugin-react-hooks, eslint-plugin-react-refresh, @eslint/js,
 @types/* packages (node, diff, prismjs, react, react-dom)      — MIT
 
 ================================================================================
+
+================================================================================
+INSTALLED AT RUNTIME, NOT DISTRIBUTED — never vendored, never in the wheel or
+the image. Downloaded only when the owner clicks Install on the TradingAgents
+connector page, into a separate virtual environment in their own data folder.
+================================================================================
+
+TradingAgents (https://github.com/TauricResearch/TradingAgents)   Apache-2.0
+  Copyright (c) its authors (TauricResearch). Pinned to one commit,
+  9fa1196fffbcfd9de5146d2dd2869df84ab99838 (v0.7.1), in
+  backend/services/trading_agents/install.py. It runs as a separate process and
+  reaches an AI model only through Open Net Worth; its own dependencies are
+  installed with it and carry their own licenses.
+
