@@ -18,6 +18,7 @@ import type { RegisterDeepLink, WidgetContentProps } from '../types'
 import { WidgetShell } from '../WidgetShell'
 import { WidgetPlaceholder } from '../WidgetPlaceholder'
 import { monthSpan, reportScope, tagsText } from './reportScope'
+import { ReportFilter } from './ReportFilter'
 import { useElementSize } from '../../../../hooks/useElementWidth'
 import { useIsMobile } from '../../../../hooks/useIsMobile'
 
@@ -57,6 +58,7 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({
   def,
   onNavigate,
   onOpenRegister,
+  onPatch,
 }) => {
   const month = lastFullMonth()
   const sc = reportScope(instance, def)
@@ -69,7 +71,17 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({
   const query = useCashFlowGraph(month, compact, sc.scope)
   const g = query.data
   const [drilled, setDrilled] = useState<{ id: string; label: string } | null>(null)
-  const where = [spanOf(g, month), tagsText(sc.tags)].filter(Boolean).join(' · ')
+  const span = spanOf(g, month)
+  const cats = sc.categories.length
+    ? sc.categories.length === 1
+      ? '1 category'
+      : `${sc.categories.length} categories`
+    : ''
+  // What the card is narrowed to, for its empty state and its accessible name.
+  const where = [span, cats, tagsText(sc.tags)].filter(Boolean).join(' · ')
+  const filter = onPatch ? (
+    <ReportFilter instance={instance} def={def} onPatch={onPatch} label={span} />
+  ) : undefined
   const link =
     onNavigate && def.source?.tab ? (
       <button type="button" className="ov-panel-link" onClick={() => onNavigate(def.source!.tab)}>
@@ -89,7 +101,7 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({
 
   if (query.initialLoading && !g) {
     return (
-      <WidgetShell title={instance.title} base={def.title} fill>
+      <WidgetShell title={instance.title} base={def.title} fill actions={filter}>
         <div className="ov-mf" ref={bodyRef}>
           <Skeleton height="100%" />
         </div>
@@ -98,7 +110,7 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({
   }
   if (!g || g.flow_total <= 0) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
         <WidgetPlaceholder
           detail={
             !g ? "Couldn't load the money flow." : `No income or spending recorded in ${where}.`
@@ -109,13 +121,19 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({
   }
   const meta = (
     <>
-      {where} ·{' '}
       <span className="money">{fBaseCompact(g.shortfall > 0 ? g.shortfall : g.saved)}</span>
       {g.shortfall > 0 ? ' over' : ' saved'}
     </>
   )
   return (
-    <WidgetShell title={instance.title} base={def.title} fill footer={footer} meta={meta}>
+    <WidgetShell
+      title={instance.title}
+      base={def.title}
+      fill
+      footer={footer}
+      meta={meta}
+      actions={filter}
+    >
       <div className="ov-mf" ref={bodyRef}>
         {drilled && compact ? (
           <DrilledGroup

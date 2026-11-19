@@ -26,9 +26,13 @@ def _window(monkeypatch, points):
     monkeypatch.setattr(reports_rollup, "user_today", lambda: _dt.date(2026, 10, 14))
     by_ym = {p["ym"]: p for p in points}
     monkeypatch.setattr(
-        reports_rollup, "month_summary", lambda ym, tags=None: by_ym.get(ym) or _point(ym)
+        reports_rollup,
+        "month_summary",
+        lambda ym, tags=None, categories=None: by_ym.get(ym) or _point(ym),
     )
-    monkeypatch.setattr(reports_rollup, "_merchants", lambda yms, limit, tags=None: [])
+    monkeypatch.setattr(
+        reports_rollup, "_merchants", lambda yms, limit, tags=None, categories=None: []
+    )
     monkeypatch.setattr(reports_rollup, "base_currency", lambda: "USD")
     return reports_rollup.reports_aggregates(months=len(points))
 
@@ -184,10 +188,14 @@ def _window_with_merchants(monkeypatch, points):
     monkeypatch.setattr(reports_rollup, "user_today", lambda: _dt.date(2026, 10, 14))
     by_ym = {p["ym"]: p for p in points}
     monkeypatch.setattr(
-        reports_rollup, "month_summary", lambda ym, tags=None: by_ym.get(ym) or _point(ym)
+        reports_rollup,
+        "month_summary",
+        lambda ym, tags=None, categories=None: by_ym.get(ym) or _point(ym),
     )
     monkeypatch.setattr(
-        reports_rollup, "_merchants", lambda yms, limit, tags=None: asked.extend(yms) or []
+        reports_rollup,
+        "_merchants",
+        lambda yms, limit, tags=None, categories=None: asked.extend(yms) or [],
     )
     monkeypatch.setattr(reports_rollup, "base_currency", lambda: "USD")
     return reports_rollup.reports_aggregates(months=len(points)), asked

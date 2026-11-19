@@ -26,7 +26,6 @@ import { ColorPicker } from '../accounts/ds'
 import { AUTOH_IDS, fitMode } from './grid'
 import { ALL_ROWS, CURATED_ACCENTS, DEFAULT_CUSTOM_HEX, rowCap } from './widgetDisplayShared'
 import { resolveCategoryIds } from './categoryRefs'
-import { useTransactionTags } from '../accounts/tagOptions'
 import { GridItemContext } from './gridItemContext'
 import { BriefingFocusControl } from './BriefingFocusControl'
 import { vizOptionsFor, vizOf } from './vizModel'
@@ -496,84 +495,83 @@ export function WidgetFullscreen({
   // widget def gets for free, never a hand-built per-widget control) + the
   // list row-cap, in that order (mirrors the handoff). ──────────────────────
   const data: Ctrl[] = []
-  ;(def.settings || []).forEach((st) => {
-    const cur = cfg[st.key] !== undefined ? cfg[st.key] : st.default
-    if (st.type === 'segment' && st.options) {
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <div className="ov-fs-ctl" key={st.key}>
-            <span className="ov-fs-ctl-l">{st.label}</span>
-            <div className="ov-fs-seg">
-              {st.options.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  className={'ov-fs-chip' + (cur === o ? ' on' : '')}
-                  onClick={() => onPatch({ config: { ...cfg, [st.key]: o } })}
-                >
-                  {o}
-                </button>
-              ))}
+  // An inline setting (a Reports widget's period, categories, tags) is set from the widget's own
+  // header filter, so it isn't repeated here.
+  ;(def.settings || [])
+    .filter((st) => !st.inline)
+    .forEach((st) => {
+      const cur = cfg[st.key] !== undefined ? cfg[st.key] : st.default
+      if (st.type === 'segment' && st.options) {
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <div className="ov-fs-ctl" key={st.key}>
+              <span className="ov-fs-ctl-l">{st.label}</span>
+              <div className="ov-fs-seg">
+                {st.options.map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    className={'ov-fs-chip' + (cur === o ? ' on' : '')}
+                    onClick={() => onPatch({ config: { ...cfg, [st.key]: o } })}
+                  >
+                    {o}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ),
-      })
-    } else if (st.type === 'categories' || st.type === 'categoryIds' || st.type === 'tags') {
-      const Row =
-        st.type === 'categoryIds'
-          ? LedgerCategorySettingRow
-          : st.type === 'tags'
-            ? TagSettingRow
-            : CategorySettingRow
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <Row
-            key={st.key}
-            schema={st}
-            value={(cur as string[]) || []}
-            onPatch={(next: string[]) => onPatch({ config: { ...cfg, [st.key]: next } })}
-          />
-        ),
-      })
-    } else if (st.type === 'pairs') {
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <div className="ov-fs-ctl ov-fs-ctl-wide" key={st.key}>
-            <span className="ov-fs-ctl-l">{st.label}</span>
-            <PairsEditor
-              value={cur}
-              onChange={(v) => onPatch({ config: { ...cfg, [st.key]: v } })}
+          ),
+        })
+      } else if (st.type === 'categories' || st.type === 'categoryIds') {
+        const Row = st.type === 'categoryIds' ? LedgerCategorySettingRow : CategorySettingRow
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <Row
+              key={st.key}
+              schema={st}
+              value={(cur as string[]) || []}
+              onPatch={(next: string[]) => onPatch({ config: { ...cfg, [st.key]: next } })}
             />
-          </div>
-        ),
-      })
-    } else if (st.type === 'url') {
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <div className="ov-fs-ctl" key={st.key}>
-            <span className="ov-fs-ctl-l">{st.label}</span>
-            <input
-              className="ov-fs-input"
-              defaultValue={typeof cur === 'string' ? cur : ''}
-              placeholder="https://…"
-              onBlur={(e) => onPatch({ config: { ...cfg, [st.key]: e.target.value.trim() } })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur()
-              }}
-            />
-          </div>
-        ),
-      })
-    }
-  })
+          ),
+        })
+      } else if (st.type === 'pairs') {
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <div className="ov-fs-ctl ov-fs-ctl-wide" key={st.key}>
+              <span className="ov-fs-ctl-l">{st.label}</span>
+              <PairsEditor
+                value={cur}
+                onChange={(v) => onPatch({ config: { ...cfg, [st.key]: v } })}
+              />
+            </div>
+          ),
+        })
+      } else if (st.type === 'url') {
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <div className="ov-fs-ctl" key={st.key}>
+              <span className="ov-fs-ctl-l">{st.label}</span>
+              <input
+                className="ov-fs-input"
+                defaultValue={typeof cur === 'string' ? cur : ''}
+                placeholder="https://…"
+                onBlur={(e) => onPatch({ config: { ...cfg, [st.key]: e.target.value.trim() } })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                }}
+              />
+            </div>
+          ),
+        })
+      }
+    })
   if (def.rows) {
     const shown = rowCap(instance, def)
     appearance.push({
@@ -859,76 +857,6 @@ function LedgerCategorySettingRow({
   // Show what the widget actually lists — a stale preset id resolves the same way here.
   const shown = resolveCategoryIds(value, list, schema.fallbackLabel)
   return <CategoryPickerRow schema={schema} value={shown} onPatch={onPatch} options={options} />
-}
-
-/** How many tags show before "Show all" — the most used come first. */
-const TAG_CHIPS_SHOWN = 12
-
-/** Transaction tags as toggle chips, most used first. None chosen means the widget isn't
- *  filtered: "All" is on, and choosing it clears the rest. Chips, not a dropdown — a popover
- *  near the panel's foot spilled over the Save button. */
-function TagSettingRow({ schema, value, onPatch }: CategorySettingProps) {
-  const tags = useTransactionTags()
-  const [showAll, setShowAll] = useState(false)
-  const known = new Set(tags)
-  // A chosen tag no transaction carries any more stays listed, so it can still be removed.
-  const all = [...value.filter((t) => !known.has(t)), ...tags]
-  const chosen = new Set(value)
-  // Collapsed, the chosen tags always show even when they rank below the cut.
-  const shown = showAll
-    ? all
-    : [...all.slice(0, TAG_CHIPS_SHOWN), ...all.slice(TAG_CHIPS_SHOWN).filter((t) => chosen.has(t))]
-  const hidden = all.length - shown.length
-  const toggle = (tag: string) =>
-    onPatch(chosen.has(tag) ? value.filter((t) => t !== tag) : [...value, tag])
-  return (
-    <div className="ov-fs-ctl ov-fs-ctl-wide">
-      <span className="ov-fs-ctl-l">{schema.label}</span>
-      {all.length === 0 ? (
-        <span className="ov-fs-ctl-hint">
-          No tags yet. Add one to a transaction in Accounts to filter by it here.
-        </span>
-      ) : (
-        <>
-          <div className="ov-fs-seg" role="group" aria-label={schema.label}>
-            <button
-              type="button"
-              className={'ov-fs-chip' + (value.length === 0 ? ' on' : '')}
-              aria-pressed={value.length === 0}
-              onClick={() => onPatch([])}
-            >
-              All
-            </button>
-            {shown.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                className={'ov-fs-chip' + (chosen.has(tag) ? ' on' : '')}
-                aria-pressed={chosen.has(tag)}
-                onClick={() => toggle(tag)}
-              >
-                #{tag}
-              </button>
-            ))}
-            {(hidden > 0 || showAll) && all.length > TAG_CHIPS_SHOWN && (
-              <button
-                type="button"
-                className="ov-fs-chip ov-fs-chip--more"
-                onClick={() => setShowAll((v) => !v)}
-              >
-                {showAll ? 'Fewer' : `${hidden} more`}
-              </button>
-            )}
-          </div>
-          <span className="ov-fs-ctl-hint">
-            {value.length === 0
-              ? 'Counts every transaction. Pick tags to count only those carrying any of them.'
-              : `Counts only transactions tagged ${value.map((t) => '#' + t).join(' or ')}.`}
-          </span>
-        </>
-      )}
-    </div>
-  )
 }
 
 function CategoryPickerRow({

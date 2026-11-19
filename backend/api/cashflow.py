@@ -110,10 +110,12 @@ def get_cashflow_flow(
     compact: bool = False,
     period: Optional[str] = None,
     tag: Optional[list[str]] = Query(None),
+    category: Optional[list[str]] = Query(None),
 ):
     """The money-flow (Sankey) graph for one month — default the last full month — or for a
     whole `period` (this_month, last_month, 3m, 6m, 12m, ytd). `tag` (repeatable) keeps only
-    transactions carrying one of them. `compact` returns the Dashboard card's three columns
+    transactions carrying one of them, `category` (repeatable ids) only those categories.
+    `compact` returns the Dashboard card's three columns
     instead of the full five."""
     from fastapi import HTTPException
 
@@ -122,7 +124,7 @@ def get_cashflow_flow(
 
     try:
         return cash_flow_graph_service.cash_flow_graph(
-            month, compact=compact, period=period, tags=tag
+            month, compact=compact, period=period, tags=tag, categories=category
         )
     except ValidationError as exc:
         raise HTTPException(400, str(exc)) from exc

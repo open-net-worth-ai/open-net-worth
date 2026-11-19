@@ -229,26 +229,29 @@ def cash_flow_graph(
     compact: bool = False,
     period: str | None = None,
     tags: list[str] | None = None,
+    categories: list[str] | None = None,
 ) -> dict:
     """The money-flow graph for `month` (YYYY-MM; default the last full month), or for every
     month of `period` added together (`report_window.PERIODS`). `tags` keeps only the
-    transactions carrying any of them."""
+    transactions carrying any of them, `categories` (ids) only those categories."""
     tags = [t for t in tags or [] if t and t.strip()] or None
+    categories = [c for c in categories or [] if c] or None
     if period:
         yms = report_window.period_months(period)
-        summary = report_window.combine([month_summary(ym, tags) for ym in yms])
+        summary = report_window.combine([month_summary(ym, tags, categories) for ym in yms])
     else:
         ym = month or default_month()
         if not _MONTH_RE.match(ym):
             raise ValidationError(f"month must be YYYY-MM, got {ym!r}")
         yms = [ym]
-        summary = month_summary(ym, tags)
+        summary = month_summary(ym, tags, categories)
     graph = build_graph(summary, compact=compact)
     return {
         "month": yms[-1],
         "months": yms,
         "period": period,
         "tags": tags or [],
+        "categories": categories or [],
         "base_currency": base_currency(),
         **graph,
     }
