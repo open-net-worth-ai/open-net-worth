@@ -214,6 +214,16 @@ def test_only_the_opening_message_is_titled(client):
     assert scheduled == [("s-post", "why is my cash off since the import?")]
 
 
+def test_the_onboarding_welcome_is_titled_and_announced(client):
+    """The welcome is named by the server when it opens, which no client asked for — so the
+    live poll must announce it, or the sidebar shows the placeholder until a reload."""
+    c, _ = client
+    _send(c, "s-welcome", "__ONBOARDING_INIT__")
+
+    assert _meta("s-welcome")["title"] == "Getting started"
+    assert "s-welcome" in session_titles.recently_titled()
+
+
 def test_patch_without_auto_is_a_rename(client):
     c, _ = client
     SessionStore().write_title("s-patch", "New conversation", source="auto")
@@ -231,3 +241,37 @@ def test_live_listing_reports_recent_titles(client, monkeypatch):
     monkeypatch.setattr(session_titles, "_recent", {"s-live": 9e12})
     body = c.get("/api/sessions/live").json()
     assert body["titled"] == {"s-live": 9e12}
+
+
+def test_a_call_is_named_from_its_first_real_request(monkeypatch):
+    """Both of the owner's calls were titled with their greeting (2026-11-07)."""
+    from backend.ai import assistant
+
+    metas = {
+        "s1": {"title_source": "auto"},
+        "s2": {"title_source": "ai"},
+        "s3": {"title_source": "user"},
+    }
+    store = type("Store", (), {"get_meta": lambda _self, sid: metas.get(sid)})()
+    monkeypatch.setattr(assistant, "_store", lambda: store)
+    asked = []
+    monkeypatch.setattr(
+        session_titles, "schedule_title", lambda sid, text: asked.append((sid, text)) or True
+    )
+
+    assert session_titles.title_from_request("s1", "Check my ACME spending") is True
+    assert asked == [("s1", "Check my ACME spending")]
+    assert session_titles.title_from_request("s2", "Another one") is False
+    assert session_titles.title_from_request("s3", "Another one") is False
+    assert len(asked) == 1
+    assert session_titles.title_from_request("new", "A first request") is True
+
+
+def test_an_unreadable_title_never_fails_the_request(monkeypatch):
+    from backend.ai import assistant
+
+    def broken():
+        raise RuntimeError("no store")
+
+    monkeypatch.setattr(assistant, "_store", broken)
+    assert session_titles.title_from_request("s1", "words") is False

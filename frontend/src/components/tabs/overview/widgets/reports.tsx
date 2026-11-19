@@ -66,17 +66,18 @@ import {
   Legend,
   Filler,
 } from 'chart.js'
-import { cardCaveat } from '../../../../utils/cardCaveat'
 import { fBase, fBaseCompact, fMonth } from '../../../../utils/format'
-import type { ReportsRollup, StackedSeries } from '../../../../types/aggregates'
+import type { MonthPoint, ReportsRollup, StackedSeries } from '../../../../types/aggregates'
 import { Text } from '../../../ui'
 import { useReportsRollup } from '../../../../hooks/serverState'
-import type { WidgetContentProps } from '../types'
+import type { WidgetContentProps, WidgetDefinition, WidgetInstance } from '../types'
 import { WidgetShell } from '../WidgetShell'
 import { rowCap } from '../widgetDisplayShared'
 import { WidgetPlaceholder, WidgetSkeleton } from '../WidgetPlaceholder'
 import { RankedList } from '../RankedList'
 import { CashFlowCard } from './cashFlowCard'
+import { monthSpan, reportScope, tagsText } from './reportScope'
+import { ReportFilter } from './ReportFilter'
 import { BreakdownBody, type BreakdownRow } from '../Breakdown'
 import {
   OvChart,
@@ -139,28 +140,76 @@ function withColor<T extends { color: string }>(rows: T[]): T[] {
 const REPORT_MONTHS = 6
 
 /** The month the spending widgets show. A new month has no spending for its first days, and
- *  "No spending recorded this month yet" over a full September read as a broken import. */
+ *  "No spending recorded this month yet" over a full September read as a broken import.
+ *  A widget set to a period shows that whole period instead. */
 function spendingMonth(data: ReportsRollup | null) {
+  if (data?.period) {
+    const p = data.period
+    return {
+      point: p as MonthPoint,
+      ym: p.from,
+      to: p.to,
+      fellBack: false,
+      note: null,
+      merchants: p.merchants,
+    }
+  }
   const point = data?.points.find((p) => p.ym === data.spending_month) ?? data?.current
   const fellBack = !!data && data.spending_month !== data.current_month
   return {
     point,
     ym: point?.ym,
+    to: point?.ym,
     fellBack,
     note: fellBack
       ? `${fMonth(data.spending_month, 'long')}. Nothing spent in ${fMonth(data.current_month, 'long')} yet.`
       : null,
+    merchants: data?.merchants ?? [],
   }
 }
 
-/** The one report read, with this group's error/loading conventions applied. */
-function useReports(merchantLimit = 10) {
-  const query = useReportsRollup(REPORT_MONTHS, merchantLimit)
+/** The one report read for this widget's period and tags, with this group's error/loading
+ *  conventions applied. `meta` is what the header says about the period and tags, if they
+ *  differ from the widget's default. */
+function useReports(instance: WidgetInstance, def: WidgetDefinition, merchantLimit = 10) {
+  const sc = reportScope(instance, def)
+  const query = useReportsRollup(REPORT_MONTHS, merchantLimit, sc.scope)
+  const data = query.data ?? null
+  const span = data?.period ? monthSpan(data.period.from, data.period.to) : ''
+  const cats = sc.categories.length
+    ? sc.categories.length === 1
+      ? '1 category'
+      : `${sc.categories.length} categories`
+    : ''
+  // What the widget is narrowed to, for its empty state ("No spending in Sep – Nov · #trip").
+  const meta = [span, cats, tagsText(sc.tags)].filter(Boolean).join(' · ')
   return {
-    data: query.data ?? null,
+    data,
     loading: query.initialLoading,
     error: query.error && query.data == null ? "Couldn't load the monthly report." : '',
+    meta,
+    span,
+    periodLabel: sc.periodLabel,
+    tags: sc.tags,
+    categories: sc.categories,
   }
+}
+
+/** The header filter, when the widget can be edited (a preview has no `onPatch`). */
+function filterPill(
+  instance: WidgetInstance,
+  def: WidgetDefinition,
+  onPatch: WidgetContentProps['onPatch'] | undefined,
+  label: string,
+) {
+  return onPatch ? (
+    <ReportFilter instance={instance} def={def} onPatch={onPatch} label={label} />
+  ) : undefined
+}
+
+/** "No spending recorded…", naming the period and tags a widget is narrowed to. */
+function emptyFor(what: string, meta: string, fallback: string): string {
+  return meta ? `No ${what} in ${meta}.` : fallback
 }
 
 function MonthNote({ children }: { children: string }) {
@@ -175,9 +224,15 @@ function MonthNote({ children }: { children: string }) {
 // same shape as the Net-worth group's alloc/reach/venues widgets ───────────
 
 const SpendCategories: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
-  const { data, loading, error } = useReports()
+  const { data, loading, error, meta, span } = useReports(instance, def)
   const viz = vizOf(instance, def) || 'list'
   const shown = spendingMonth(data)
+  const filter = filterPill(
+    instance,
+    def,
+    onPatch,
+    span || (shown.fellBack && shown.ym ? fMonth(shown.ym, 'short') : 'This month'),
+  )
   // Server-ranked, server-summed; the widget attaches a fallback colour and renders.
   const rows: BreakdownRow[] = withColor(shown.point?.expense_rows ?? []).map((r) => ({
     key: r.key,
@@ -188,15 +243,17 @@ const SpendCategories: ComponentType<WidgetContentProps> = ({ instance, def, onP
 
   if (loading) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
         <div className="ov-chart-skeleton" aria-hidden />
       </WidgetShell>
     )
   }
   if (error || !rows.length) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
-        <WidgetPlaceholder detail={error || 'No spending recorded this month yet.'} />
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
+        <WidgetPlaceholder
+          detail={error || emptyFor('spending', meta, 'No spending recorded this month yet.')}
+        />
       </WidgetShell>
     )
   }
@@ -204,6 +261,7 @@ const SpendCategories: ComponentType<WidgetContentProps> = ({ instance, def, onP
     <WidgetShell
       title={instance.title}
       base={def.title}
+      actions={filter}
       fill={viz !== 'list'}
       chart={{
         value: viz,
@@ -263,20 +321,31 @@ function avgLabelPlugin(avg: number) {
   }
 }
 
-const SpendingTrends: ComponentType<WidgetContentProps> = ({ instance, def }) => {
-  const { data, loading, error } = useReports()
+const SpendingTrends: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
+  const { data, loading, error, meta, span, periodLabel } = useReports(instance, def)
+  const filter = filterPill(instance, def, onPatch, span || periodLabel)
   const points = data?.points ?? []
   if (loading) {
     return (
-      <WidgetShell title={instance.title} base={def.title} fill bodyClass="ov-rep-body">
+      <WidgetShell
+        title={instance.title}
+        base={def.title}
+        fill
+        bodyClass="ov-rep-body"
+        actions={filter}
+      >
         <div className="ov-chart-skeleton" aria-hidden />
       </WidgetShell>
     )
   }
   if (error || !points.length) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
-        <WidgetPlaceholder detail={error || 'Not enough transaction history yet.'} />
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
+        <WidgetPlaceholder
+          detail={
+            error || emptyFor('income or spending', meta, 'Not enough transaction history yet.')
+          }
+        />
       </WidgetShell>
     )
   }
@@ -342,6 +411,7 @@ const SpendingTrends: ComponentType<WidgetContentProps> = ({ instance, def }) =>
           avg <span className="money">{fBaseCompact(avgSpend)}</span>/mo
         </>
       }
+      actions={filter}
     >
       <SeriesLegend
         groups={[{ items: series.map((s) => ({ key: s.key, label: s.label, color: s.color })) }]}
@@ -396,20 +466,31 @@ function sideSeries(series: StackedSeries[], side: Side) {
   })
 }
 
-const IncomeExpense: ComponentType<WidgetContentProps> = ({ instance, def }) => {
-  const { data, loading, error } = useReports()
+const IncomeExpense: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
+  const { data, loading, error, meta, span, periodLabel } = useReports(instance, def)
+  const filter = filterPill(instance, def, onPatch, span || periodLabel)
   const points = data?.points ?? []
   if (loading) {
     return (
-      <WidgetShell title={instance.title} base={def.title} fill bodyClass="ov-rep-body">
+      <WidgetShell
+        title={instance.title}
+        base={def.title}
+        fill
+        bodyClass="ov-rep-body"
+        actions={filter}
+      >
         <div className="ov-chart-skeleton" aria-hidden />
       </WidgetShell>
     )
   }
   if (error || !points.length) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
-        <WidgetPlaceholder detail={error || 'Not enough transaction history yet.'} />
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
+        <WidgetPlaceholder
+          detail={
+            error || emptyFor('income or spending', meta, 'Not enough transaction history yet.')
+          }
+        />
       </WidgetShell>
     )
   }
@@ -509,6 +590,7 @@ const IncomeExpense: ComponentType<WidgetContentProps> = ({ instance, def }) => 
           </b>
         </>
       }
+      actions={filter}
     >
       <SeriesLegend groups={groups} />
       <OvChart
@@ -524,8 +606,9 @@ const IncomeExpense: ComponentType<WidgetContentProps> = ({ instance, def }) => 
 
 // ── 4. income & expense table — a simplified 2-level hierarchy ─────────────
 
-const IncExpTable: ComponentType<WidgetContentProps> = ({ instance, def }) => {
-  const { data, loading, error } = useReports()
+const IncExpTable: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
+  const { data, loading, error, meta, span, periodLabel } = useReports(instance, def)
+  const filter = filterPill(instance, def, onPatch, span || periodLabel)
   const points = data?.points ?? []
   const [open, setOpen] = useState<{ income: boolean; expense: boolean }>({
     income: true,
@@ -535,15 +618,19 @@ const IncExpTable: ComponentType<WidgetContentProps> = ({ instance, def }) => {
 
   if (loading) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
         <div className="ov-chart-skeleton" aria-hidden />
       </WidgetShell>
     )
   }
   if (error || !data || !points.length) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
-        <WidgetPlaceholder detail={error || 'Not enough transaction history yet.'} />
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
+        <WidgetPlaceholder
+          detail={
+            error || emptyFor('income or spending', meta, 'Not enough transaction history yet.')
+          }
+        />
       </WidgetShell>
     )
   }
@@ -580,7 +667,7 @@ const IncExpTable: ComponentType<WidgetContentProps> = ({ instance, def }) => {
     <span className={'ov-iet-chev' + (open[k] ? ' open' : '')} />
   )
   return (
-    <WidgetShell title={instance.title} base={def.title}>
+    <WidgetShell title={instance.title} base={def.title} actions={filter}>
       <div className="ov-iet">
         <div className="ov-iet-head">
           <span>Category</span>
@@ -688,63 +775,60 @@ function gaugeConfig(value: number, total: number, color: string) {
   }
 }
 
-const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def }) => {
+const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
   // Saved amount and rate come from the server's own savings figure — the same month totals
   // the rest of this group renders, so the gauge can't disagree with the table beside it.
-  const { data, loading, error } = useReports()
-  const savings = data?.savings
+  const { data, loading, error, meta, span } = useReports(instance, def)
+  const period = data?.period
+  const savedYm = data?.savings?.ym
+  const filter = filterPill(
+    instance,
+    def,
+    onPatch,
+    span ||
+      (savedYm && savedYm !== data?.current?.ym ? fMonth(`${savedYm}-01`, 'short') : 'This month'),
+  )
+  const savings = period?.savings ?? data?.savings
   if (loading) {
     return (
-      <WidgetShell title={instance.title} base={def.title} bodyAlign="center">
+      <WidgetShell title={instance.title} base={def.title} bodyAlign="center" actions={filter}>
         <div className="ov-chart-skeleton" aria-hidden />
       </WidgetShell>
     )
   }
   if (error || !savings?.known) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
-        <WidgetPlaceholder detail={error || 'No income recorded in the last few months.'} />
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
+        <WidgetPlaceholder
+          detail={error || emptyFor('income', meta, 'No income recorded in the last few months.')}
+        />
       </WidgetShell>
     )
   }
   const rate = Math.round(savings.rate_pct)
-  const caveat = cardCaveat(savings.cards_missing_spending)
-  const trailing = savings.trailing
+  // A chosen period stands on its own; the trailing average belongs to the default view.
+  const trailing = period ? null : data?.savings.trailing
+  // One line under the gauge; the 3-month average is on the gauge's hover.
+  const avgTip = trailing
+    ? `${trailing.months}-month average (${fMonth(`${trailing.from}-01`, 'short')} to ` +
+      `${fMonth(`${trailing.to}-01`, 'short')}): ${fBaseCompact(trailing.monthly)} a month` +
+      (trailing.rate_pct != null ? `, ${Math.round(trailing.rate_pct)}%` : '')
+    : undefined
   return (
-    <WidgetShell title={instance.title} base={def.title} bodyAlign="center">
+    <WidgetShell title={instance.title} base={def.title} bodyAlign="center" actions={filter}>
       <div className="ov-savings">
-        <div className="ov-savings-gauge-wrap">
+        <div className="ov-savings-gauge-wrap" title={avgTip}>
           <OvChart
             config={gaugeConfig(savings.saved, savings.income, 'var(--good)')}
-            sig={`${data?.current?.ym}:${savings.saved}:${savings.income}`}
+            sig={`${period?.id ?? data?.current?.ym}:${savings.saved}:${savings.income}`}
             minHeight={80}
           />
           <div className="ov-savings-pct money">{rate}%</div>
         </div>
         <Text as="p" size="xs" tone="faint" className="ov-savings-sub">
-          <span className="money">{fBase(savings.saved)}</span> saved of{' '}
-          <span className="money">{fBase(savings.income)}</span> earned
-          {savings.ym !== data?.current?.ym
-            ? ` in ${fMonth(`${savings.ym}-01`, 'long')}`
-            : ' so far this month'}
+          <span className="money">{fBaseCompact(savings.saved)}</span> of{' '}
+          <span className="money">{fBaseCompact(savings.income)}</span> saved
         </Text>
-        {trailing && (
-          <Text as="p" size="xs" tone="faint" className="ov-savings-sub">
-            {trailing.months}-month average ({fMonth(`${trailing.from}-01`, 'short')} to{' '}
-            {fMonth(`${trailing.to}-01`, 'short')}):{' '}
-            <span className="money">{fBaseCompact(trailing.monthly)}</span> a month
-            {trailing.rate_pct != null && (
-              <>
-                , <span className="money">{Math.round(trailing.rate_pct)}%</span>
-              </>
-            )}
-          </Text>
-        )}
-        {caveat && (
-          <Text as="p" size="xs" tone="faint" className="ov-savings-sub">
-            {caveat}
-          </Text>
-        )}
       </div>
     </WidgetShell>
   )
@@ -765,25 +849,37 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
   const cap = rowCap(instance, def) ?? 25
   // Grouped by payee and ranked server-side (no endpoint does per-month payee spend — see the
   // header note), so the browser no longer pulls the month's raw expense legs to fold them.
-  const { data, loading, error } = useReports(cap)
-  const rows = (data?.merchants ?? []).slice(0, cap)
+  const { data, loading, error, meta, span, tags, categories } = useReports(instance, def, cap)
   const shown = spendingMonth(data)
+  const rows = shown.merchants.slice(0, cap)
   const month = shown.ym
-  const when = shown.fellBack && month ? `in ${fMonth(month, 'long')}` : 'this month'
+  const filter = filterPill(
+    instance,
+    def,
+    onPatch,
+    span || (shown.fellBack && month ? fMonth(month, 'short') : 'This month'),
+  )
+  const when = data?.period
+    ? `in ${meta}`
+    : shown.fellBack && month
+      ? `in ${fMonth(month, 'long')}`
+      : 'this month'
   const viz = vizOf(instance, def) || 'list'
   // A card that fits its content cannot also fill it: the chart gets a height of its own.
   const fit = fitMode(def.defId, instance.heightMode)
   if (loading) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
         <WidgetSkeleton rows={5} />
       </WidgetShell>
     )
   }
   if (error || !rows.length) {
     return (
-      <WidgetShell title={instance.title} base={def.title}>
-        <WidgetPlaceholder detail={error || 'No spending recorded this month yet.'} />
+      <WidgetShell title={instance.title} base={def.title} actions={filter}>
+        <WidgetPlaceholder
+          detail={error || emptyFor('spending', meta, 'No spending recorded this month yet.')}
+        />
       </WidgetShell>
     )
   }
@@ -799,13 +895,20 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
   }))
   const canSelect = (r: { key: string }) => !r.key.startsWith('d:')
   const open = onOpenRegister
-    ? (r: { label: string }) => onOpenRegister({ payee: r.label, month })
+    ? (r: { label: string }) =>
+        onOpenRegister({
+          payee: r.label,
+          month,
+          monthTo: shown.to !== month ? shown.to : undefined,
+          tag: tags.length ? tags : undefined,
+          category: categories.length ? categories : undefined,
+        })
     : undefined
   return (
     <WidgetShell
       title={instance.title}
       base={def.title}
-      meta={shown.fellBack && month ? fMonth(month, 'long') : 'this month'}
+      actions={filter}
       fill={viz !== 'list' && !fit}
       chart={{
         value: viz,

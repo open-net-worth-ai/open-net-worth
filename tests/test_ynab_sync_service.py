@@ -566,15 +566,13 @@ def test_the_scheduler_tick_runs_a_due_sync_once(world):
     assert ynab_sync.status()["next_run_at"] and ynab_sync.run_if_due() is False
 
 
-def test_the_plain_importer_steps_aside_for_a_synced_plan(world):
-    from backend.core.errors import ValidationError
-
+def test_a_synced_plan_can_still_be_read(world):
+    """Reading changes nothing; "already booked" keeps a synced row from being offered again
+    (tests/test_ynab_fetch_while_syncing.py)."""
     YnabConfigStore().update({"budget_id": ynab_stub.PLAN})
     enable()
-    with pytest.raises(ValidationError, match="two-way"):
-        ynab_service.fetch_window(YnabConfigStore(), "2000-01-01", "2999-01-01", None)
-    ynab_sync.update_settings(False, None, None)
-    ynab_service.fetch_window(YnabConfigStore(), "2000-01-01", "2999-01-01", None)
+    window = ynab_service.fetch_window(YnabConfigStore(), "2000-01-01", "2999-01-01", None)
+    assert window.rows and world.writes == []
 
 
 def test_a_ledger_delete_against_a_ynab_edit_is_a_conflict_either_side_can_win(world):

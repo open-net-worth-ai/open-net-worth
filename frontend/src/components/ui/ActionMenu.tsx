@@ -21,6 +21,13 @@ export interface ActionMenuProps {
   title?: string
   trigger?: ReactNode
   className?: string
+  /** The trigger button's own class, for a menu opened by a labelled button rather than the
+   *  default ⋯ icon (e.g. "Add your own" in a dialog footer). Replaces `kebab-trigger`. */
+  triggerClassName?: string
+  /** `above` opens the desktop menu over the trigger whatever room is below it — for a trigger
+   *  on a dialog's bottom edge, where "below" is outside the dialog. Default: below, flipping
+   *  up only when the window has no room. */
+  placement?: 'auto' | 'above'
   /** Fires whenever the menu opens/closes. The dropdown itself is portaled to `document.body`
    *  (below) — outside the trigger's own DOM subtree — so a caller that closes on its OWN
    *  `mouseleave` (e.g. a hover-triggered flyout) sees the cursor "leave" the instant it
@@ -35,6 +42,8 @@ export function ActionMenu({
   title,
   trigger = <MoreHorizontal size={16} aria-hidden="true" />,
   className,
+  triggerClassName,
+  placement = 'auto',
   onOpenChange,
 }: ActionMenuProps) {
   const [open, setOpen] = useState(false)
@@ -74,11 +83,11 @@ export function ActionMenu({
     const triggerBox = triggerRef.current.getBoundingClientRect()
     const menuBox = menuRef.current.getBoundingClientRect()
     const top =
-      triggerBox.bottom + menuBox.height + 8 > window.innerHeight
+      placement === 'above' || triggerBox.bottom + menuBox.height + 8 > window.innerHeight
         ? triggerBox.top - menuBox.height - 4
         : triggerBox.bottom + 4
     setPosition({ top, left: Math.max(4, triggerBox.right - menuBox.width) })
-  }, [open, isMobile])
+  }, [open, isMobile, placement])
 
   useLayoutEffect(() => {
     if (!open || !requestedFocus.current) return
@@ -211,7 +220,7 @@ export function ActionMenu({
       <button
         ref={triggerRef}
         type="button"
-        className="kebab-trigger"
+        className={triggerClassName ?? 'kebab-trigger'}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}

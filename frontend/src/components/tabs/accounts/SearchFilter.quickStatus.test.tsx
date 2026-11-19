@@ -55,4 +55,18 @@ describe('SearchFilter — quick picks', () => {
     expect(screen.queryByText('Uncleared', { selector: '.acct-sug-txt' })).toBeNull()
     expect(screen.getByText('Uncategorized')).toBeTruthy()
   })
+
+  it('closes the list once a pick is made; a click or ↓ on the box brings it back', () => {
+    const { addToken, input } = setup()
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(addToken).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.click(input)
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByText('Uncleared'))
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(screen.getByRole('listbox')).toBeTruthy()
+  })
 })

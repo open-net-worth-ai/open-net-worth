@@ -96,12 +96,18 @@ class AnswerTiming:
 
 
 class TurnTiming:
+    SOUND_FORGOTTEN_S = 30.0  # a sound that long ago with no words wasn't the start of these
+
     def __init__(self) -> None:
         self._stopped: float | None = None
         self._was_speaking = False
+        self._began: float | None = None
 
     def user_state(self, state: str) -> None:
         if state == "speaking":
+            now = time.monotonic()
+            if self._began is None or now - self._began > self.SOUND_FORGOTTEN_S:
+                self._began = now
             self._stopped, self._was_speaking = None, True
         elif self._was_speaking:
             self._stopped, self._was_speaking = time.monotonic(), False
@@ -109,10 +115,22 @@ class TurnTiming:
     def _since(self) -> str:
         return "?" if self._stopped is None else f"{time.monotonic() - self._stopped:.2f}s"
 
+    def words(self, final: bool) -> None:
+        """How long their words took to come back. A call's words reached the screen about 12
+        seconds late, and nothing here could say where the time went (owner's call, 2026-11-08)."""
+        if self._began is not None:
+            log.info(
+                "voice timing: first words %.2fs after they began", time.monotonic() - self._began
+            )
+            self._began = None
+        if final:
+            log.info("voice timing: final words %s after they stopped", self._since())
+
     def handed(self) -> None:
         log.info("voice timing: handed to Lucius %s after they stopped", self._since())
 
     def agent_speaking(self) -> None:
+        self._began = None  # a sound that came to nothing isn't when what they say next began
         if self._stopped is not None:
             log.info("voice timing: first sound %s after they stopped", self._since())
             self._stopped = None

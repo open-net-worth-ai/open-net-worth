@@ -1,0 +1,40 @@
+# Spec: DS-UI-02 — Lucius's delete card names the lot, and its answer says what happened
+# Covers: docs/qa/acceptance/delete-safety.md
+id: DS-UI-02
+acceptance_ids:
+  - DS-DUP-LUCIUS
+title: "Lucius warns before deleting a purchase a lot uses"
+description: >
+  Asking Lucius to delete a purchase linked to a lot raises a confirmation card that lists the lot,
+  and after approval Lucius's answer tells the user the lot kept its shares and cost. Needs a model:
+  runs on a disposable QA clone with the QA model configured.
+
+acceptance_criteria:
+  - AC1: The confirmation card lists the transaction and the lot ("shares bought") before anything changes
+  - AC2: After Approve, Lucius's answer says the lot kept its shares and cost but no longer has a linked purchase
+
+browser_use_task: |
+  Navigate to {app_url} and wait for the app to finish loading.
+
+  Open Accounts and find an investment transaction whose description starts with "Bought". Note
+  its date, amount and description.
+
+  Open Lucius (the chat) and send: "Delete the transaction on <date> for <amount> described
+  '<description>'. Use delete_transactions." Wait for the confirmation card.
+  Record CARD=pass only if the card lists that transaction and a row naming "shares bought".
+
+  Click Approve (or Allow once). Wait for Lucius's answer to finish.
+  Record ANSWER=pass only if the answer says the lot keeps its shares and cost, or that it no
+  longer has a linked purchase.
+
+  Return exactly one of:
+  - "PASS: DS-UI-02 — CARD=<summary>; ANSWER=<summary>"
+  - "FAIL: DS-UI-02 — <the failed check and what was shown instead>"
+  If there is no "Bought" transaction, return "SKIP: DS-UI-02 — no linked purchase in this book".
+
+max_steps: 40
+timeout_seconds: 300
+
+expected:
+  pass_condition: "result contains 'PASS'"
+  screenshot_name: "DS-UI-02-lucius-delete-card.png"

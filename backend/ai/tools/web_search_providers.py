@@ -70,6 +70,7 @@ from backend.ai.tools.misc import (
 )
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import schema_of
+from backend.core import search_citations
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,9 @@ async def _search_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
         logger.error("%s_search failed: %s", spec.id, exc)
         raise
     logger.info("%s_search returned %d results", spec.id, len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
+    cleaned = sanitize_search_results(results)
+    search_citations.record(cleaned)
+    return json.dumps(cleaned, ensure_ascii=False), None
 
 
 async def _fetch_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:

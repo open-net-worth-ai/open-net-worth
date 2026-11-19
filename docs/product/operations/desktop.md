@@ -72,7 +72,7 @@ download screens instead. Your last local book is remembered; switch back from t
 **Connection** screen (**On this computer**).
 
 When the app starts, it waits up to a minute for the server to answer, so a server on this
-computer that starts at login (`onw autostart install`) has time to come up. If it still can't be
+computer that starts at login (`onw autostart on`) has time to come up. If it still can't be
 reached, you see **Can't reach your server.** with **Try again** and **Change connection…** (which
 also offers **On this computer**, to use a local book instead). The app keeps checking in the background on that screen — it
 shows **Trying again in 8s…** counting down to the next check, waiting a little longer each time up

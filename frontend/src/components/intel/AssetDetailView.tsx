@@ -1,13 +1,13 @@
+import { LuciusMark } from '../../ui/LuciusMark'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { entityRefProps } from '../../utils/mentionable'
 import { EntityRow } from '../../lucius/EntityRow'
 import { useAssetDetail } from '../../hooks/useAssetDetail'
+import { usePositionIncome } from './usePositionIncome'
 import { useAnalystConsensus } from '../../hooks/useAnalystConsensus'
 import { useRegisterHandles, useRegisterScreenPrompts } from '../../lucius/useScreenContract'
 import type { ScreenHandle } from '../../state/screenSnapshot'
-import { fetchPositionIncome } from '../../api/portfolio'
-import type { IncomeSummary } from '../../types/portfolio'
 import { keyIssuesPassActive } from '../../types/assetDetail'
 import { Button, EmptyState, ErrorState, Panel, Text } from '../ui'
 import { Info, Sunrise, Sunset, RotateCcw, TrendingUp, TrendingDown } from '../../ui/icons'
@@ -166,25 +166,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
   // different shapes of the same endpoint). Null while loading, on error, or when there's no
   // single position_id to scope to (a merged multi-account holding) — every consumer renders
   // an em-dash in that case, matching PositionSubtab's own realized-pnl fallback.
-  const [income, setIncome] = useState<IncomeSummary | null>(null)
-  const incomePositionId = data?.position?.held ? data.position.position_id : null
-  useEffect(() => {
-    if (!incomePositionId) {
-      setIncome(null)
-      return
-    }
-    let alive = true
-    fetchPositionIncome(incomePositionId)
-      .then((d) => {
-        if (alive) setIncome(d)
-      })
-      .catch(() => {
-        /* leave null → an em-dash */
-      })
-    return () => {
-      alive = false
-    }
-  }, [incomePositionId])
+  const income = usePositionIncome(data?.position?.held ? data.position.position_id : null)
 
   // Build handles for deep content: news articles (individually fetchable via their URL),
   // price series behind the chart, the currently-inactive tab as a view handle so Lucius
@@ -1013,7 +995,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                   return (
                     <div className="asd-pi-wrap">
                       <div className="asd-pi-head">
-                        <p className="asd-pi-label">Lucius's take on your position ✦</p>
+                        <p className="asd-pi-label">
+                          Lucius's take on your position{' '}
+                          <LuciusMark size="1em" aria-hidden="true" />
+                        </p>
                         {/* Card-scoped counterpart to the page-level RefreshingBanner (owner
                             clarification, ADR addendum "an on-demand top-up"): the banner alone
                             doesn't make clear THIS card is what's being refreshed. */}

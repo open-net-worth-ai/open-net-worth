@@ -130,10 +130,10 @@ def test_first_greeting_is_concise_before_asking_for_a_name(db_isolated):
 
 
 def test_the_skill_says_where_a_budget_app_import_is(db_isolated):
-    """YNAB and Actual budgets import from Data sync, and the person runs it from that screen."""
+    """YNAB and Actual budgets import from Data Sync, and the person runs it from that screen."""
     body = _onboarding_skill_body()
     assert "YNAB" in body and "Actual Budget" in body
-    assert "Automations > Data sync" in body
+    assert "Automations > Data Sync" in body
     assert "not built yet" not in body
 
 

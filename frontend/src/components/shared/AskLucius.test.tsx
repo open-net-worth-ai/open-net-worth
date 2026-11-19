@@ -13,7 +13,7 @@ function Spy({ onState }: { onState: (m: MentionRef[]) => void }) {
   return null
 }
 
-describe('LuciusAskButton (the ✦ affordance)', () => {
+describe('LuciusAskButton (the Lucius-mark affordance)', () => {
   it('renders a real, labeled <button>', () => {
     const { container } = render(
       <ChatComposerProvider>
@@ -30,7 +30,7 @@ describe('LuciusAskButton (the ✦ affordance)', () => {
     expect(btn!.tagName).toBe('BUTTON')
     expect(btn!.getAttribute('type')).toBe('button')
     expect(btn!.getAttribute('aria-label')).toBe('Ask Lucius about AAPL holding')
-    expect(btn!.textContent).toBe('✦')
+    expect(btn!.querySelector('svg')).not.toBeNull()
   })
 
   it('dispatches the correct MentionRef into the composer store on click', () => {

@@ -25,7 +25,7 @@ book from other devices, run Open Net Worth as a server (see
 
 | How you run it | Listens on |
 |---|---|
-| `onw start`, `make start`, `python3 -m backend.main`, `onw autostart install` | `127.0.0.1:8080` — this computer only |
+| `onw start`, `make start`, `python3 -m backend.main`, `onw autostart on` | `127.0.0.1:8080` — this computer only |
 | Docker (`docker-compose.yml`) | `127.0.0.1:8080` on the host — this computer only |
 | `make serve` (developer target) | `0.0.0.0:8080` — **every device on your network** |
 
@@ -57,7 +57,7 @@ your devices to each other, encrypted, without opening anything to the internet.
    onw start --host 0.0.0.0
    ```
 
-   As a boot service: `onw autostart stop`, then `HOST=0.0.0.0 onw autostart install`.
+   As a boot service: `onw autostart off`, then `HOST=0.0.0.0 onw autostart on`.
    Docker: in `docker-compose.yml`, change the `ports:` line to `"0.0.0.0:${PORT:-8080}:8080"` and
    run `docker compose up -d`.
 3. On your other device, open `http://<computer's Tailscale name or IP>:8080` and sign in with

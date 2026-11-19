@@ -372,6 +372,20 @@ class TransactionStore:
         with self._eng().connect() as conn:
             return {pid: (int(n), last or "") for pid, n, last in conn.execute(stmt)}
 
+    def tag_usage(self) -> dict[str, tuple[int, str]]:
+        """Per tag: how many live transactions carry it, and the latest date among them. Reads
+        only the `tags`/`date` columns — never a payload decode."""
+        stmt = select(transactions.c.tags, func.substr(transactions.c.date, 1, 10)).where(
+            transactions.c.deleted == 0
+        )
+        out: dict[str, tuple[int, str]] = {}
+        with self._eng().connect() as conn:
+            for tags, day in conn.execute(stmt):
+                for tag in {str(t).strip() for t in (tags or []) if str(t).strip()}:
+                    n, last = out.get(tag, (0, ""))
+                    out[tag] = (n + 1, max(last, day or ""))
+        return out
+
     def earliest_date(self) -> str | None:
         """The earliest non-deleted transaction day (``YYYY-MM-DD``), or None when there is none
         — what ``min(date[:10])`` over ``all()`` gives, from the ``date`` column alone."""
@@ -1078,10 +1092,24 @@ class TransactionStore:
                     self._sync_children(conn, tid, merged, existing_splits, existing_refs)
         return patched
 
+    def replace_at_end(self, item: dict, *, conn: Connection) -> dict:
+        """Rewrite a row under its own id and move it to the end of insertion order: what
+        ``delete`` + ``upsert`` gave ``update_transaction``, without removing the row. A true
+        removal would fire ``lots.txn_id``'s ON DELETE SET NULL on every edit of a cash row."""
+        txn_id = cast(str, item.get("id"))
+        existing = self._row(conn, txn_id)
+        existing_splits = self._existing_children(conn, transaction_splits, "split_id", txn_id)
+        existing_refs = self._existing_children(conn, transaction_external_refs, "ref_id", txn_id)
+        fire_db_write_hook("transactions", [(txn_id, existing)], conn=conn)
+        self._write_parent(conn, txn_id, self._next_seq(conn), item, is_update=True)
+        self._sync_children(conn, txn_id, item, existing_splits, existing_refs)
+        return item
+
     def delete(self, id_val: str, *, conn: Connection | None = None) -> bool:
         """Hard-delete one transaction (and, via ON DELETE CASCADE, its splits/external_refs
         rows). Real production callers: a row THEY just re-appended a second time
-        (``update_transaction``/``set_account_opening``'s cleanup step) — a transaction is
+        (``set_account_opening``'s cleanup step, ``update_transaction``'s only when the rebuild
+        came back under another id) — a transaction is
         otherwise only ever soft-deleted; and ``services.ledger._cascade_delete_account_
         transactions``, the account-force-delete choke, which hard-deletes every row (live
         or already soft-deleted) referencing an account being removed so its

@@ -132,12 +132,15 @@ def is_gated_tool(tool_name: str) -> bool:
     if not GATE_ALL_WRITES:
         return False
     from backend.ai import _confirm_gate as _policy
-    from backend.ai.tools.registry import mutated_domains
+    from backend.ai.tools.registry import is_rest_send, mutated_domains
 
     # Canonicalize so a legacy alias resolves to the same read-shaped exemption / write verdict
     # its canonical name gets — a grant/exemption is keyed on the canonical name everywhere else.
     canonical = tool_name
-    return _policy.needs_approval(canonical, writes=bool(mutated_domains(canonical)))
+    # A REST connector's send is a request that leaves this install, like ``email_send_message``
+    # — but it is named at runtime, so ``EXTERNAL_EFFECT_TOOLS`` cannot list it.
+    writes = bool(mutated_domains(canonical)) or is_rest_send(canonical)
+    return _policy.needs_approval(canonical, writes=writes)
 
 
 def effective_level(tool_name: str) -> str:

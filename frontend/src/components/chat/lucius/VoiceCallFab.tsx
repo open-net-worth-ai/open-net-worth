@@ -58,7 +58,7 @@ export function VoiceCallFab({
   const sessionId = call.sessionId ?? readActiveId()
   return (
     <div className="lx-call-float mb-anchored">
-      <VoiceCallNotice sessionId={sessionId} onOpenChat={onOpenChat} />
+      <VoiceCallNotice sessionId={sessionId} onOpenChat={onOpenChat} everyCall />
       {call.phase !== 'idle' ? (
         <ActiveCallPill />
       ) : (

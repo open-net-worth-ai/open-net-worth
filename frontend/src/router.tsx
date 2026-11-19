@@ -103,11 +103,15 @@ export function validateAccountsSearch(search: Record<string, unknown>): {
   account?: string
   txn?: string
   review?: 'transactions'
+  batch?: string
+  batchLabel?: string
 } {
   return {
     account: typeof search.account === 'string' ? search.account : undefined,
     txn: typeof search.txn === 'string' ? search.txn : undefined,
     review: search.review === 'transactions' ? search.review : undefined,
+    batch: typeof search.batch === 'string' ? search.batch : undefined,
+    batchLabel: typeof search.batchLabel === 'string' ? search.batchLabel : undefined,
   }
 }
 
@@ -119,6 +123,8 @@ const accountsRoute = createRoute({
   // open the SAME drawer the register opens rather than a chat-only lookalike. Mirrors the
   // /commitments?open=<id> precedent (a Plan budget row deep-linking its commitment).
   // ?review=transactions is a one-shot command that opens the compact review queue.
+  // ?batch=<id> is a one-shot command: the register, filtered to one write batch (a bank sync's
+  // run report links its run here); ?batchLabel= names the filter chip after that run.
   validateSearch: validateAccountsSearch,
 })
 // Assets tab — /assets. `assetRoute` (below) is already taken by the instrument-detail
@@ -164,6 +170,8 @@ const automationsRoute = createRoute({
     // Deep-link from a Connectors provider section's "Automate with a template" — opens the
     // editor prefilled with `sync_<provider>` and is cleared once consumed (Automations.tsx).
     template: typeof search.template === 'string' ? search.template : undefined,
+    // What the template is for (a followed portfolio's name): fills its `[name]`.
+    for: typeof search.for === 'string' ? search.for : undefined,
     // `view=sync` shows the data syncs (fixed rules, no AI); `sync=ynab` opens one, and
     // `report` one of its runs.
     view: typeof search.view === 'string' ? search.view : undefined,
@@ -184,6 +192,24 @@ const connectorsRoute = createRoute({
   // SLUG_ALIASES generates the old /integrations → /connectors redirect (a frozen historical
   // URL, not the tab id — see SLUG_ALIASES's own comment).
   path: '/connectors',
+})
+// A provider's return after consent: /connectors/callback/<connector id>. The path says whose
+// return it is — Enable Banking refuses a redirect URL with a query string — and this hands it
+// on as /connectors?connector=<id>&…, which ConnectorsTab finishes. A bare state + code on
+// /connectors is never taken as a provider's return.
+export function connectorCallbackSearch(connector: string, search: Record<string, unknown>) {
+  return { ...search, connector }
+}
+const connectorCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/connectors/callback/$connector',
+  beforeLoad: ({ params, location }) => {
+    const search = connectorCallbackSearch(
+      params.connector,
+      location.search as Record<string, unknown>,
+    )
+    throw redirect({ to: '/connectors', search: search as never, replace: true })
+  },
 })
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -289,6 +315,8 @@ const routeTree = rootRoute.addChildren([
   automationsRoute,
   buildRoute,
   profileRoute,
+  // Drill-in before parent
+  connectorCallbackRoute,
   connectorsRoute,
   settingsRoute,
   helpIndexRoute,

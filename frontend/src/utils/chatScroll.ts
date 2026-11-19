@@ -12,6 +12,35 @@ export function isNearBottom(
   return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
 }
 
+/** The message the reader's eye is on, and where it sits, while older ones load in above it. */
+export interface HeldPlace {
+  node: Element
+  top: number
+  /** The commit that finishes the load has been asked for: let go after it. */
+  last: boolean
+}
+
+/** The first message showing at the top of `el`, or null with none on screen. */
+export function placeOf(el: HTMLElement | null): HeldPlace | null {
+  if (!el) return null
+  const edge = el.getBoundingClientRect().top
+  const node = [...el.querySelectorAll('.msg-bubble')].find(
+    (bubble) => bubble.getBoundingClientRect().bottom > edge,
+  )
+  return node ? { node, top: node.getBoundingClientRect().top, last: false } : null
+}
+
+/** Puts that message back where it was. By the message, not by scrollHeight: older messages
+ *  arrive in two commits (the fetched page, then the wider window), and a browser that anchors
+ *  on its own has already moved the view, so by height the first went uncorrected in WebKit and
+ *  the second was corrected twice in Chromium (measured, 2026-11-08). */
+export function restorePlace(el: HTMLElement, held: HeldPlace): void {
+  if (!held.node.isConnected) return
+  const drift = held.node.getBoundingClientRect().top - held.top
+  if (Math.abs(drift) >= 1) el.scrollTop += drift
+  held.top = held.node.getBoundingClientRect().top
+}
+
 // How long after a scroll-down gesture landing in the "near" band re-arms the follow.
 const DOWN_INTENT_MS = 600
 

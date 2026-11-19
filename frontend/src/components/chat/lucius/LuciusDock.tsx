@@ -378,7 +378,6 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
           }}
           aria-label={needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
         >
-          <Spark size={13} />
           {needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
         </button>
       )}
@@ -446,6 +445,7 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
               <LastAnswerReveal
                 key={m.id}
                 message={m}
+                messages={messages}
                 sessionId={activeId}
                 live={i === lastExchange.length - 1}
               >
@@ -479,10 +479,7 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
               sessionId={activeId}
               lastUser={messages.findLast((m) => m.role === 'user')}
             />
-            <VoiceCallSpokenMessage
-              sessionId={activeId}
-              lastAssistant={messages.findLast((m) => m.role === 'assistant')}
-            />
+            <VoiceCallSpokenMessage sessionId={activeId} messages={messages} />
           </div>
         )}
 

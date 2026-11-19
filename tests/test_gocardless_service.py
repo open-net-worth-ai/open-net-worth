@@ -103,6 +103,18 @@ class FakeGoCardless:
                 return httpx.Response(200, json={})
             return httpx.Response(200, json=self.requisitions[rid])
         for acc in (ACC, ACC2, ACC3):
+            if path == f"/accounts/{acc}/balances/":
+                return httpx.Response(
+                    200,
+                    json={
+                        "balances": [
+                            {
+                                "balanceType": "closingBooked",
+                                "balanceAmount": {"amount": "100.00", "currency": "EUR"},
+                            }
+                        ]
+                    },
+                )
             if path == f"/accounts/{acc}/details/":
                 return httpx.Response(
                     200,
@@ -331,14 +343,17 @@ def test_renewing_a_working_bank_keeps_it_until_the_new_consent_is_linked(fake):
     assert {r["provider_account_id"] for r in window.rows} == {ACC}
     assert window.warnings == [] and window.complete is True
 
-    # Finished at the bank: the renewal takes over and the old requisition is revoked.
+    # Finished at the bank: the renewal takes over and the old requisition is revoked. The new
+    # account has the old one's IBAN and currency, so it keeps the old id here and GoCardless's
+    # new id is only what the calls use.
     fake.requisitions[REQ2] = {"status": "LN", "accounts": [ACC3]}
     window = svc.fetch_window(store, "2026-05-01", "2026-05-31", None)
     assert ("DELETE", f"/requisitions/{REQ}/", {}) in fake.calls
     [bank] = store.banks()
     assert (bank["requisition_id"], bank["replaces"]) == (REQ2, None)
-    assert {r["provider_account_id"] for r in window.rows} == {ACC3}
-    assert ACC not in store.accounts_meta()
+    assert bank["api_account_ids"] == {ACC: ACC3}
+    assert {r["provider_account_id"] for r in window.rows} == {ACC}
+    assert ("GET", f"/accounts/{ACC3}/transactions/") in {c[:2] for c in fake.calls}
 
 
 def test_relinking_an_unknown_bank_is_refused(fake):
@@ -385,7 +400,10 @@ def test_fetch_window_maps_booked_and_pending_rows(fake):
             "name": "ACME Current",
             "mask": "1234",
             "currency": "EUR",
-            "balance": None,
+            "balance": 100.0,
+            "cleared_balance": 100.0,
+            "working_balance": None,
+            "available_to_spend": None,
             "account_type": "cash",
         }
     ]
@@ -542,3 +560,141 @@ def test_the_fake_matches_the_wire_shape():
     # Guard: the fake returns what the OpenAPI spec names (transactions.booked/pending).
     body = json.loads(FakeGoCardless()._route("GET", f"/accounts/{ACC}/transactions/", {}).text)
     assert set(body["transactions"]) == {"booked", "pending"}
+
+
+# ── what a row carries beyond its description (2026-11-13 audit) ──────────────────────
+
+
+def _row_of(txn: dict) -> dict:
+    row = svc._txn_to_row(txn, ACC, "GBP", pending=False)
+    assert row is not None
+    return row
+
+
+def test_the_counterparty_is_the_payee_and_the_bank_wording_stays_the_description():
+    row = _row_of(
+        {
+            "transactionId": "t1",
+            "bookingDate": "2026-11-10",
+            "transactionAmount": {"amount": "-12.40", "currency": "GBP"},
+            "remittanceInformationUnstructured": "CARD 1234 ACME STORES LONDON",
+            "creditorName": "Acme Grocer",
+            "debtorName": "A. Person",
+        }
+    )
+    assert row["description"] == "CARD 1234 ACME STORES LONDON"
+    assert row["payee"] == "Acme Grocer"  # money out → who was paid
+    assert row["memo"] is None
+
+
+def test_money_in_names_who_paid():
+    row = _row_of(
+        {
+            "transactionId": "t2",
+            "bookingDate": "2026-11-10",
+            "transactionAmount": {"amount": "2500.00", "currency": "GBP"},
+            "debtorName": "ACME LTD",
+            "creditorName": "A. Person",
+        }
+    )
+    assert row["payee"] == "ACME LTD"
+
+
+def test_no_counterparty_leaves_the_payee_to_the_description():
+    row = _row_of(
+        {
+            "transactionId": "t2b",
+            "bookingDate": "2026-11-10",
+            "transactionAmount": {"amount": "-3.00", "currency": "GBP"},
+            "remittanceInformationUnstructured": "ACME CAFE",
+        }
+    )
+    assert row["payee"] is None
+
+
+def test_a_purchase_in_another_currency_keeps_what_was_actually_paid():
+    row = _row_of(
+        {
+            "transactionId": "t3",
+            "bookingDate": "2026-11-09",
+            "transactionAmount": {"amount": "-42.10", "currency": "GBP"},
+            "remittanceInformationUnstructured": "CAFE ACME PARIS",
+            "currencyExchange": [
+                {
+                    "sourceCurrency": "EUR",
+                    "exchangeRate": "1.1401",
+                    "instructedAmount": {"amount": "48.00", "currency": "EUR"},
+                    "targetCurrency": "GBP",
+                }
+            ],
+        }
+    )
+    assert (row["amount"], row["currency"]) == (-42.10, "GBP")
+    # The ledger's own fields for the original charge (the duplicate check reads them), not
+    # text in the memo, which is the user's.
+    assert (row["original_amount"], row["original_currency"]) == (48.0, "EUR")
+    assert row["memo"] is None
+
+
+def test_a_purchase_in_the_accounts_own_currency_has_no_original_charge():
+    row = _row_of(
+        {
+            "transactionId": "t3b",
+            "bookingDate": "2026-11-09",
+            "transactionAmount": {"amount": "-5.00", "currency": "GBP"},
+            "currencyExchange": {"instructedAmount": {"amount": "5.00", "currency": "GBP"}},
+        }
+    )
+    assert (row["original_amount"], row["original_currency"]) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "code, hint",
+    [
+        ("5411", "Grocery stores and supermarkets"),
+        ("6300", "Insurance"),
+        ("8220", "Colleges and universities"),
+        ("3015", "Airlines"),  # a block the networks give one industry
+        ("0000", None),  # unknown: no hint rather than a guess
+        (None, None),
+    ],
+)
+def test_the_merchant_category_code_becomes_the_banks_category_hint(code, hint):
+    txn = {
+        "transactionId": "t5",
+        "bookingDate": "2026-11-09",
+        "transactionAmount": {"amount": "-9.00", "currency": "GBP"},
+    }
+    if code is not None:
+        txn["merchantCategoryCode"] = code
+    assert _row_of(txn)["category_hint"] == hint
+
+
+def test_a_booking_datetime_alone_still_dates_the_row():
+    row = _row_of(
+        {
+            "transactionId": "t4",
+            "bookingDateTime": "2026-11-08T23:59:59Z",
+            "transactionAmount": {"amount": "-1.00", "currency": "GBP"},
+        }
+    )
+    assert row["date"] == "2026-11-08"
+
+
+def test_rejected_keys_mark_the_connector_until_good_ones_sign_in(fake):
+    from backend.db.gocardless_config_store import GoCardlessConfigStore
+
+    """Saving keys GoCardless refuses must not read Connected (2026-11-13 e2e)."""
+    store = GoCardlessConfigStore()
+    store.update({"secret_id": "SID", "secret_key": "WRONG"})
+    with pytest.raises(ValidationError):
+        svc.list_institutions("GB")
+    cfg = store.get()
+    assert (cfg["last_status"], cfg["last_synced_at"]) == ("auth_error", None)
+    assert "rejected" in cfg["last_error"]
+
+    store.update({"secret_key": "SKEY"})
+    store.clear_token()
+    svc.list_institutions("GB")
+    cfg = store.get()
+    assert (cfg["last_status"], cfg["last_error"]) == ("never_run", None)

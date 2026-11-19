@@ -302,7 +302,7 @@ const CASES: ProviderCase[] = [
       name: 'Enable Banking',
       kind: 'enable_banking',
     }),
-    fields: ['Application ID', 'Private key (PEM)'],
+    fields: ['Application ID', 'Private key'],
     saveLabel: 'Save',
     saveUrl: '/api/enable-banking/config',
     fillBeforeSave: [
@@ -312,7 +312,7 @@ const CASES: ProviderCase[] = [
         // gitleaks' private-key rule (it does content-shape matching, not context-aware
         // "is this a fixture" detection). The field itself doesn't validate PEM-ness; this
         // only proves the multi-line value reaches Save.
-        label: 'Private key (PEM)',
+        label: 'Private key',
         value: 'not-a-real-key-line-one\nnot-a-real-key-line-two',
       },
     ],
@@ -360,13 +360,11 @@ const CASES: ProviderCase[] = [
       kind: 'telegram',
       config: {},
     }),
-    fields: ['Bot token', 'Allowed chat IDs'],
+    // A new bot starts on Pairing, which needs no chat ID — that box appears once it's saved.
+    fields: ['Bot token', 'Who can chat'],
     saveLabel: 'Save',
     saveUrl: '/api/telegram/config',
-    fillBeforeSave: [
-      { label: 'Bot token', value: 'test-bot-token' },
-      { label: 'Allowed chat IDs', value: '123456789' },
-    ],
+    fillBeforeSave: [{ label: 'Bot token', value: 'test-bot-token' }],
   },
   {
     name: 'Web search (Tavily)',

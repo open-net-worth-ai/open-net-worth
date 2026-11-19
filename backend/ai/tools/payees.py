@@ -981,7 +981,7 @@ class AddPayeeRulesInput(ToolInput):
         "  • 'regex'    — Python regex matched against the full description.\n\n"
         "Single rule: payee_id + match_type + value. Several in one call (same payee or "
         "different payees): `rules` — [{payee_id, match_type, value}, ...].\n\n"
-        "Use get_payees to find payee ids. Confirm with the user before adding."
+        "Use get_payees to find payee ids."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1059,7 +1059,7 @@ class RemovePayeeRulesInput(ToolInput):
         "payee_ids as a LIST. Different indices per payee in one call: `removals` — "
         "[{payee_id, index}, ...] — removals on the SAME payee are applied "
         "highest-index-first so every index you listed still refers to the row you meant, "
-        "regardless of order. Confirm with the user before removing."
+        "regardless of order."
     ),
     input_schema=schema_of(RemovePayeeRulesInput, tool_name="remove_payee_rules"),
     mutates=("payees", "ledger"),
@@ -1165,7 +1165,7 @@ class SetPayeesRulesInput(ToolInput):
         "payees: payee_ids as a LIST. A different replacement list per payee in one call: "
         "`updates` — [{payee_id, rules}, ...].\n\n"
         "Each rule is {match_type: 'contains'|'is'|'regex', value: '<pattern>'}. An empty "
-        "list clears all rules for that payee. Confirm with the user before replacing."
+        "list clears all rules for that payee."
     ),
     input_schema=schema_of(SetPayeesRulesInput, tool_name="set_payees_rules"),
     mutates=("payees", "ledger"),

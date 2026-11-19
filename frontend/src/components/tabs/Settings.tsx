@@ -10,7 +10,7 @@
 // and the Lucius-dock exemption; settings.css restyles that shell to the prototype's exact
 // geometry. The route is kept (rather than becoming pure UI state) because Overview
 // deep-links into it with ?sub=data.
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { lazyChunk } from '../../lazyChunk'
 import type { ComponentType } from 'react'
 import { useNavigate } from '@tanstack/react-router'
@@ -42,7 +42,13 @@ import {
   X,
 } from '../../ui/icons'
 import type { IconProps } from '../../ui/icons'
-import { SectionBackProvider, SectionBusyProvider, useToast } from './settings/ds'
+import {
+  SavingIndicator,
+  SectionBackProvider,
+  SectionBusyProvider,
+  SectionSavingProvider,
+  useToast,
+} from './settings/ds'
 import { SettingsVersion } from './settings/SettingsVersion'
 import type { SectionBack } from './settings/ds'
 import { Spark } from '../../lucius/identity'
@@ -99,8 +105,8 @@ const loadShortcutsSection = () => import('./settings/sections/ShortcutsSection'
 const ShortcutsSection = lazyChunk(() =>
   loadShortcutsSection().then((m) => ({ default: m.ShortcutsSection })),
 )
-const loadMcpSection = () => import('./settings/sections/McpSection')
-const McpSection = lazyChunk(() => loadMcpSection().then((m) => ({ default: m.McpSection })))
+const loadMcpSection = () => import('./settings/sections/McpPage')
+const McpSection = lazyChunk(() => loadMcpSection().then((m) => ({ default: m.McpPage })))
 const loadDeveloperSection = () => import('./settings/sections/DeveloperSectionSwitch')
 const DeveloperSection = lazyChunk(() =>
   loadDeveloperSection().then((m) => ({ default: m.DeveloperSectionSwitch })),
@@ -229,7 +235,7 @@ const SECTION_TERMS: Record<Section, string> = {
   help: 'help docs documentation guide manual support how to getting started',
   shortcuts:
     'iphone ios android apple pay shortcut phone spend log home screen tap to pay tasker macrodroid capture setup code',
-  mcp: 'mcp claude desktop cursor vs code copilot chatgpt cline continue client external ai apps api token connect stdio onw',
+  mcp: 'mcp claude desktop cursor vs code copilot chatgpt cline continue client external ai apps api token connect stdio onw oauth claude.ai connector connected apps revoke',
   developer:
     'extensions logs script skills python code execution sql database query queries read-only lucius reads',
 }
@@ -385,6 +391,13 @@ export function Settings({
   // Sections declare their first load via useSectionBusy; the pane renders the skeleton.
   const [busyCount, setBusyCount] = useState(0)
   const bumpBusy = useRef((delta: number) => setBusyCount((n) => Math.max(0, n + delta))).current
+  // Sections wrap their writes in useSaving(); the shell shows one "Saving…" pill for all of them.
+  const [savingCount, setSavingCount] = useState(0)
+  const [savedCount, setSavedCount] = useState(0)
+  const bumpSaving = useCallback((delta: number, failed?: boolean) => {
+    setSavingCount((n) => Math.max(0, n + delta))
+    if (delta < 0 && !failed) setSavedCount((n) => n + 1)
+  }, [])
 
   const active = SECTIONS.find((s) => s.key === section) || SECTIONS[0]!
 
@@ -588,24 +601,26 @@ export function Settings({
               </div>
             ) : (
               <SectionBusyProvider onChange={bumpBusy}>
-                <SectionBackProvider value={setBack}>
-                  {Body ? (
-                    <Suspense fallback={<SectionFallback />}>
-                      <Body
+                <SectionSavingProvider onChange={bumpSaving}>
+                  <SectionBackProvider value={setBack}>
+                    {Body ? (
+                      <Suspense fallback={<SectionFallback />}>
+                        <Body
+                          toast={toast}
+                          actionBarSlot={actionBarSlot}
+                          gatewayMode={gatewayMode}
+                          openSection={(key) => setSec(key as Section)}
+                        />
+                      </Suspense>
+                    ) : (
+                      <ProfileSection
                         toast={toast}
+                        onReviewDefaultChange={onReviewDefaultChange}
                         actionBarSlot={actionBarSlot}
-                        gatewayMode={gatewayMode}
-                        openSection={(key) => setSec(key as Section)}
                       />
-                    </Suspense>
-                  ) : (
-                    <ProfileSection
-                      toast={toast}
-                      onReviewDefaultChange={onReviewDefaultChange}
-                      actionBarSlot={actionBarSlot}
-                    />
-                  )}
-                </SectionBackProvider>
+                    )}
+                  </SectionBackProvider>
+                </SectionSavingProvider>
               </SectionBusyProvider>
             )}
           </div>
@@ -617,6 +632,11 @@ export function Settings({
         <div className="rd-set-actionbar-slot" ref={setActionBarSlot} />
       </div>
       {toastNode}
+      <SavingIndicator
+        active={savingCount > 0}
+        savedCount={savedCount}
+        quiet={Boolean(toastNode)}
+      />
     </Modal>
   )
 }

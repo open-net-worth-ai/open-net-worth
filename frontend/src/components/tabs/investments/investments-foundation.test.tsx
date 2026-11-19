@@ -96,9 +96,9 @@ describe('amber→Lucius migration regression', () => {
 // ── Token drift: --lucius present in generated artifacts ──────────────────────
 
 describe('--lucius token in generated artifacts', () => {
-  it('defines one theme-independent --lucius token at #7C6CF5', () => {
+  it('defines one --lucius token that follows the theme ink', () => {
     const css = readFileSync(resolve(__dirname, '../../../index.tokens.generated.css'), 'utf8')
-    expect(css.match(/--lucius:\s*#7C6CF5;/g)).toHaveLength(1)
+    expect(css.match(/--lucius:\s*var\(--ink\);/g)).toHaveLength(1)
     const warmTheme = css.match(/:root\[data-theme='warm'\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
     const lightTheme = css.match(/:root\[data-theme='light'\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
     expect(warmTheme).not.toContain('--lucius:')
@@ -141,13 +141,13 @@ describe('--lucius token in generated artifacts', () => {
       .join('\n')
     const luciusPurpleHex = /#(?:7C6CF5|5D4BD8)/gi
     const allowedPurple = new Map([
-      [tokenSource, 3],
-      [generatedCss, 4],
+      [tokenSource, 2],
+      [generatedCss, 3],
       [widgetDisplay, 1],
     ])
 
     expect(tokenSource).toContain("['violet', '#7C6CF5', '#5D4BD8']")
-    expect(tokenSource).toContain("['lucius', '#7C6CF5']")
+    expect(tokenSource).toContain("['lucius', 'var(--ink)']")
     for (const [source, occurrences] of allowedPurple) {
       expect(source.match(luciusPurpleHex) ?? []).toHaveLength(occurrences)
     }

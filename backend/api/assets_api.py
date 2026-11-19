@@ -35,7 +35,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from backend.core.errors import MissingFxRateError, OpenNetWorthError, to_http_status
 from backend.services import owned_assets as owned_assets_service
 from backend.services.attachment_ingress import persist_inbound_file
-from backend.services.attachment_parse import PasswordProtectedPdfError
+from backend.services.attachment_parse import (
+    SUPPORTED_UPLOADS,
+    PasswordProtectedPdfError,
+    UnsupportedFileError,
+)
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
@@ -45,9 +49,7 @@ _log = logging.getLogger(__name__)
 # its limit too.
 _MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 _TOO_LARGE = "That file is over 25 MB."
-_UNSUPPORTED = (
-    "Unsupported file type. Supported: images, CSV, Excel (xlsx), PDF, OFX/QFX, QIF, MT940, CAMT."
-)
+_UNSUPPORTED = f"That file type can't be read. Supported: {SUPPORTED_UPLOADS}."
 _PASSWORD_PROTECTED = "That file is password-protected — remove the password and upload it again."
 _UNREADABLE = "That file couldn't be read — it may be damaged. Try another copy."
 _NOT_AN_IMAGE = "The photo must be an image."
@@ -277,7 +279,7 @@ def _persist(file: UploadFile, content: bytes, channel: str, unsupported: str):
         message = str(exc)
         if isinstance(exc, PasswordProtectedPdfError) or message.startswith("password_required:"):
             return _upload_refusal(422, "password_protected", _PASSWORD_PROTECTED)
-        if message.startswith("Unsupported file type"):
+        if isinstance(exc, UnsupportedFileError):
             return _upload_refusal(415, "unsupported_type", unsupported)
         _log.info("asset upload %r unreadable: %s", file.filename, message)
         return _upload_refusal(422, "validation", _UNREADABLE)

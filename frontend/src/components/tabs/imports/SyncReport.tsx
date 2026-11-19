@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Badge, Button, Cluster, Panel, SegmentedControl, Stack, SummaryBar, Text } from '../../ui'
 import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
+import { fDate } from '../../../utils/format'
 import { ReviewCard } from './ReviewItem'
 import { sendSync, useSyncStatus } from './sync'
 import type { AssignedChange, CategoryChange, Note, RunRecord, TxnChange } from './runs'
@@ -67,7 +68,7 @@ function TxnTable({ changes }: { changes: TxnChange[] }) {
       <tbody>
         {changes.map((c, i) => (
           <tr key={`${c.txn_id}-${i}`}>
-            <td data-label="Date">{c.date ?? ''}</td>
+            <td data-label="Date">{c.date ? fDate(c.date, 'short', 'always') : ''}</td>
             <td data-label="Payee" className="imp-table__wrap">
               {c.payee || '(no payee)'}
             </td>

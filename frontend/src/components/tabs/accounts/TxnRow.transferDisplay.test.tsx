@@ -20,6 +20,8 @@ function makeAccount(id: string, name: string): Account {
     name,
     kind: 'asset',
     type: 'cash',
+    role: 'cash',
+    holdingsBase: 0,
     institution: 'Harbor',
     currency: 'USD',
     initialBalance: 0,

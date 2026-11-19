@@ -426,20 +426,31 @@ def forecast_income(horizon_months: int = 12, base: str | None = None) -> dict:
 
 def apply_income_change(change: dict) -> dict:
     """The single write entrypoint for income mutations. ``change["type"]`` ∈
-    {"record", "delete"}. Shared by the AI apply tool + the REST routes so turn-checkpoints
-    cover every income write (the writes funnel through JsonStore._save_raw → write hook).
+    {"record", "amend", "delete"}. Shared by the AI apply tool + the REST routes so
+    turn-checkpoints cover every income write (the writes funnel through the write hook).
 
     record: books the cash leg (via ledger.create_transaction, tagged "dividend") OR a DRP
             lot (via lots.apply_lot_change), then appends the linking income event. Idempotent
             on a client idempotency_key (a second apply with the same key is a no-op).
-    delete: removes the income event. (The booked cash txn / DRP lot are left in place — the
-            user undoes those via the ledger / lots surfaces, mirroring how realized events
-            and their cash legs are independent; a checkpoint restore reverts all files.)
+    amend:  corrects the event and edits its cash row in place, in one unit of work
+            (services/income_corrections).
+    delete: removes the income event. The booked cash txn / DRP lot are left in place —
+            unless ``remove_cash`` is set (the Dividends table's Delete): then the cash row
+            that is still this dividend's own goes with it, a transfer the user made of it
+            stays, and a DRP lot always stays.
     """
     ctype = change.get("type")
     if ctype == "record":
         return _record_receipt(_apply_record(change), "create", ctype)
+    if ctype == "amend":
+        from backend.services.income_corrections import amend_income
+
+        return _record_receipt(amend_income(change), "update", ctype)
     if ctype == "delete":
+        if change.get("remove_cash"):
+            from backend.services.income_corrections import delete_income_and_cash
+
+            return _record_receipt(delete_income_and_cash(change), "delete", ctype)
         return _record_receipt(_apply_delete(change), "delete", ctype)
     return {"error": f"unknown change type: {ctype}"}
 

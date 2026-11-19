@@ -205,6 +205,9 @@ def run_job(path: Path) -> int:
     ok = False
     try:
         wait_for_exit(job["wait_pid"])
+        if job.get("restart_only"):  # `onw restart`: nothing to install
+            log("Restarting.")
+            return 0
         log(f"Upgrading from {job['previous_version']} to {job['version']}.")
         ok = install_and_confirm(job, log=log, attempts=job.get("attempts", _WINDOWS_ATTEMPTS))
         log(f"Now on {job['version']}." if ok else "The upgrade did not complete.")

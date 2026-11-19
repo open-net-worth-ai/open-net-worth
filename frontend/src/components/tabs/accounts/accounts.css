@@ -814,39 +814,206 @@
 .acct-review-swipe-hint svg {
   flex: none;
 }
-/* Details (the drawer, read-only) and Edit, side by side; the head's left block wraps first. */
-.acct-review-head-actions {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
+/* The closed card's "Details" pill: a tap on it — or anywhere on the facts — opens the card's
+   editable rows. Thumb height, centred under the amount. */
+.acct-review-facts:not(.is-expanded) {
+  cursor: pointer;
 }
-.acct-review-edit-all {
-  display: inline-flex;
+.acct-review-expand {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--primary);
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-pill);
   background: transparent;
+  color: var(--muted);
   font: inherit;
-  /* The footer's button size, not the card's body size — "font: inherit" alone made Details
-     and Edit the largest type on the card, bigger than Approve (owner, 2026-09-21). */
-  font-size: var(--text-sm);
-  font-weight: 650;
+  font-size: var(--text-xs);
+  font-weight: 600;
   cursor: pointer;
 }
 /* Hover-capable pointers only: on touch, an unguarded :hover paints on tap before the action. */
 @media (hover: hover) {
-  .acct-review-edit-all:hover {
-    background: color-mix(in srgb, var(--primary) 9%, transparent);
+  .acct-review-expand:hover {
+    color: var(--ink);
+    border-color: var(--muted);
   }
 }
-.acct-review-edit-all:focus-visible {
+.acct-review-expand:focus-visible,
+.acct-review-detail-link:focus-visible,
+.acct-review-detail-less:focus-visible,
+.acct-review-tag:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+/* The tapped-open rows: label left, value right. No rules between them — the fields' own boxes
+   already separate the rows. */
+.acct-review-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+.acct-review-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+.acct-review-detail-row.is-open {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 4px 0;
+}
+.acct-review-detail-label {
+  flex: none;
+  width: 72px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.acct-review-detail-value {
+  flex: 1;
+  min-width: 0;
+}
+.acct-review-detail-input,
+.acct-review-detail-value .acct-addin {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  color-scheme: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+}
+/* Read as plain values on the card; a field only looks like a field while you touch it. */
+@media (hover: hover) {
+  .acct-review-detail-input:hover,
+  .acct-review-detail-value .acct-addin:hover {
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+}
+.acct-review-detail-input:focus,
+.acct-review-detail-value .acct-addin:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.acct-review-detail-input::placeholder,
+.acct-review-detail-value .acct-addin::placeholder {
+  color: var(--faint);
+}
+.acct-review-detail-value .acct-payf-caret {
+  display: none;
+}
+.acct-review-detail-input::-webkit-calendar-picker-indicator {
+  opacity: 0.45;
+  cursor: pointer;
+}
+/* The tag search is a real search box, so it keeps its outline. */
+.acct-review-detail-row.is-open .acct-review-detail-input {
+  flex: none;
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+.acct-review-detail-static {
+  flex: 1;
+  min-width: 0;
+  /* Lines up with the text inside the fields above (their 8px padding + 1px border). */
+  padding-left: 9px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.acct-review-detail-hint {
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+.acct-review-detail-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2px;
+}
+.acct-review-detail-link,
+.acct-review-detail-less {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.acct-review-detail-link {
+  color: var(--primary);
+}
+.acct-review-detail-less {
+  color: var(--muted);
+}
+.acct-review-tags-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.acct-review-tags {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.acct-review-detail-row:not(.is-open) > .acct-review-tags {
+  padding-left: 9px;
+}
+/* Opened, the rows show the memo (and the bank text) themselves: the summary's one-line
+   preview of them would be the same words twice. */
+.acct-review-facts.is-expanded .acct-review-summary-details p {
+  display: none;
+}
+/* Tag chips: a 32px tap target each — the cloud is meant to be tapped, not typed into. */
+.acct-review-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.acct-review-tag.is-chosen {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+.acct-review-tag.is-add {
+  border-style: dashed;
+}
+.acct-review-tag.is-create {
+  color: var(--accent);
+  font-weight: 600;
 }
 .acct-review-validation {
   margin: 0 var(--acct-review-card-pad) var(--acct-review-card-pad);
@@ -1028,9 +1195,6 @@
   }
   .acct-review-summary-details {
     margin-top: 12px;
-  }
-  .acct-review-edit-all {
-    padding-inline: 9px;
   }
   .acct-review-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2344,7 +2508,9 @@
   align-items: center;
   gap: 5px;
   min-height: 22px;
-  padding: 0 10px;
+  /* Plus Jakarta Sans carries extra room above its letters, so a centred line box reads low;
+     the 1px lifts the label to the pill's optical middle. */
+  padding: 0 10px 1px;
   border-radius: 999px;
   font: inherit;
   font-size: 11px;
@@ -2663,8 +2829,10 @@
   color: var(--ink);
   font-weight: 700;
 }
+/* The keyboard-highlighted suggestion. --surface2 matched the popover's own --modal-bg in dark mode,
+   so arrowing through the list moved an invisible highlight; same tone as the other pickers' .hi. */
 .acct-sug-item.hi {
-  background: var(--surface2);
+  background: var(--hover-surface2);
 }
 .acct-sug-dot {
   width: 9px;
@@ -4022,6 +4190,12 @@ select.acct-addin {
   gap: 8px;
 }
 /* grouped account picker (inline add row) */
+/* The Link picker's line beside an account another link already holds (a bank sync link). */
+.acct-acctsel-note {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+}
 .acct-acctsel {
   position: relative;
   width: 100%;
@@ -5218,15 +5392,6 @@ select.acct-addin {
 }
 .acct-bm-menu.memo {
   min-width: 240px;
-}
-.acct-bm-menu::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 7px solid transparent;
-  border-top-color: var(--modal-bg);
 }
 .acct-bm-lbl {
   font-size: 10px;
@@ -6468,11 +6633,11 @@ select.acct-addin {
   z-index: 80;
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
-  border-radius: var(--radius-pill);
+  border-radius: var(--toast-radius);
   box-shadow: var(--shadow-toast);
-  padding: 10px 18px;
-  font-size: 12.5px;
-  font-weight: 600;
+  padding: var(--toast-padding);
+  font-size: var(--toast-font-size);
+  font-weight: var(--toast-font-weight);
   color: var(--toast-ink);
   animation: acct-toast-in 0.2s ease;
 }
@@ -9981,3 +10146,214 @@ button.acct-alert-src {
    import_v3/import3.css (same class names, same values), imported by ImportModal.tsx
    and registered in frontend/scripts/check-css-classes.mjs. The re-derived subset that
    used to live here is superseded; do not reintroduce a second imp3-* definition site. */
+
+/* Account value card for an investment/retirement account valued by Brokerage total or
+   Live holdings (ADR 2026-11-10): the figures, the side note and the source dot. */
+.acct-src-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
+  flex-wrap: wrap;
+}
+.acct-src-wait {
+  color: var(--faint);
+}
+.acct-src-side {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.acct-src-side b {
+  color: var(--ink);
+  font-weight: 600;
+}
+/* Where the total comes from can run long ("Value synced via SimpleFIN · last changed Nov 10"):
+   it wraps instead of pushing Reconcile off a phone screen. */
+.acct-src-stat {
+  white-space: normal;
+  min-width: 0;
+}
+.acct-src-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--good);
+  flex: none;
+}
+.acct-src-dot--warn {
+  background: var(--warn);
+}
+.acct-row-src {
+  color: var(--faint);
+}
+.acct-row-src--warn {
+  color: var(--warn);
+}
+/* The edit pencil after the account name — desktop only; phones keep the ⋯ menu. */
+.acct-head-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.acct-head-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.acct-head-edit:hover,
+.acct-head-edit:focus-visible {
+  background: var(--surface2);
+  color: var(--ink);
+}
+@media (max-width: 640px) {
+  .acct-head-edit {
+    display: none;
+  }
+}
+/* "Linked to" row in Edit account: same shape as the value-source options below it. */
+.acct-link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--good);
+}
+.acct-link-main {
+  flex: 1;
+  min-width: 0;
+}
+.acct-link-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acct-link-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+/* Where a Brokerage total comes from, inside Reconcile. */
+.acct-pop-note {
+  margin: -6px 0 10px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.acct-pop-note--lead {
+  margin: 0 0 10px;
+  max-width: 260px;
+}
+/* A single figure sits where the breakdown's first figure would, at the same size. */
+.acct-src-one {
+  margin-top: 10px;
+}
+
+/* ── TagField: search / select / create tags (drawer, register cell, add row) ── */
+.acct-tagf {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: 6px 9px;
+  cursor: text;
+}
+.acct-tagf:focus-within {
+  border-color: var(--accent);
+}
+.acct-tagf.compact {
+  min-height: 30px;
+  flex-wrap: nowrap;
+  /* Scrolls (no bar) so ←/→ can bring a clipped chip into view. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+}
+.acct-tagf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+/* Centred on the line box the × sits ~1px above lowercase tag text (whose x-height centre is below
+   it), so it reads as floating high — drop it onto the letters. */
+.acct-tagf.compact::-webkit-scrollbar {
+  display: none;
+}
+/* The chip picked with ←/→ — Backspace/Delete removes it. */
+.acct-tagf-chip.sel {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.acct-tagf-x {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  top: 1px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .acct-tagf-x:hover {
+    color: var(--ink);
+  }
+}
+.acct-tagf-in {
+  flex: 1;
+  min-width: 70px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.acct-tagf.compact .acct-tagf-in {
+  font-size: 12px;
+  min-width: 48px;
+}
+.acct-tagf-in:focus {
+  outline: none;
+}
+.acct-tagf-pop {
+  width: 260px;
+}
+/* Register Tags cell (read view): chips on one line, clipped. */
+.acct-td-tags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: text;
+}
+.acct-td-tags .acct-detail-tag {
+  flex-shrink: 0;
+}

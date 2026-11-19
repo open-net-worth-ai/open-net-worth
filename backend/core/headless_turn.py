@@ -14,6 +14,7 @@ returning the assistant's text output.
 * ``allowed_tools`` is the EXPLICIT tool offer. ``None`` = the ordinary interactive offer;
   ``[]`` (what self-harness passes) = offer NOTHING, a pure completion. ``None`` and ``[]``
   mean different things and must never be collapsed with ``or``.
+* ``max_tool_calls`` (optional) is that ceiling's call budget; omitted, the default (8).
 * ``enforce_offer=True`` makes that offer a real ceiling; without it an offer is advisory and a
   call outside it still dispatches. Required for a turn that reads untrusted text unattended.
 * ``model=None`` resolves to the instance default inside the runner.

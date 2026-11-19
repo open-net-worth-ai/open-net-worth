@@ -21,6 +21,7 @@ import logging
 
 from backend.core.fx import base_currency
 from backend.db import read_cache
+from backend.models.account import UNTRACKED_HOLDINGS_BAND
 from backend.services import cashflow as cashflow_service
 from backend.services import investments_book as investments_book_service
 from backend.services import ledger as ledger_service
@@ -35,7 +36,8 @@ CONTINGENT_FLAG_PCT = 25.0
 # flat amount, which meant nothing across base currencies and fired on a day-one book.
 THIN_CASH_MONTHS = 3
 MAX_TREEMAP_LEAVES = 60
-_INVESTMENT_CLASSES = frozenset({"equity", "crypto", "commodity"})
+# `untracked_holdings`: a Brokerage total account's holdings not entered yet — still invested.
+_INVESTMENT_CLASSES = frozenset({"equity", "crypto", "commodity", UNTRACKED_HOLDINGS_BAND})
 # The two bands a liability account can carry (`models.account.ACCOUNT_BAND`). An overpaid card
 # has a POSITIVE balance, so the sign test alone does not exclude it from reach.
 _DEBT_CLASSES = frozenset({"credit", "loan"})
@@ -247,8 +249,6 @@ def _attention(
         "thin_cash": runway_months is not None
         and 0 < cash_total
         and runway_months < THIN_CASH_MONTHS,
-        # Cards whose spending the runway cannot see yet (an empty card flatters it).
-        "cards_missing_spending": runway["cards_missing_spending"] if runway else [],
         "has_investments": any(
             r["asset_class"] in _INVESTMENT_CLASSES and r["base_value"] > 0 for r in rows
         ),

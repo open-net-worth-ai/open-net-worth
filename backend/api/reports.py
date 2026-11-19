@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from backend.api._deps import _bearer_token
@@ -38,13 +38,31 @@ router = APIRouter()
 
 
 @router.get("/api/reports/rollup")
-def get_reports_rollup(months: int = 6, merchant_limit: int = 10):
+def get_reports_rollup(
+    months: int = 6,
+    merchant_limit: int = 10,
+    period: Optional[str] = None,
+    tag: Optional[list[str]] = Query(None),
+    category: Optional[list[str]] = Query(None),
+):
     """Trailing-window income/expense: per-month category rows and totals, the top-N + "Other"
     stacked series, the category table's current/average/total columns, top merchants and the
-    savings rate."""
+    savings rate. `period` (this_month, last_month, 3m, 6m, 12m, ytd) sets the window and adds
+    the whole period's totals; `tag` (repeatable) keeps only transactions carrying one, `category` (repeatable ids) only
+    those categories."""
+    from backend.core.errors import ValidationError
     from backend.services import reports_rollup as reports_rollup_service
 
-    return reports_rollup_service.reports_aggregates(months=months, merchant_limit=merchant_limit)
+    try:
+        return reports_rollup_service.reports_aggregates(
+            months=months,
+            merchant_limit=merchant_limit,
+            period=period,
+            tags=tag,
+            categories=category,
+        )
+    except ValidationError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/api/reports")

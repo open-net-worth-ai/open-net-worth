@@ -15,6 +15,8 @@ export interface McpLaunch {
   root: string | null
   /** The checkout this instance runs from, when it runs from one. */
   source_root: string | null
+  /** This instance runs in a container, so none of its paths exist on the user's computer. */
+  container: boolean
 }
 
 export const FALLBACK_LAUNCH: McpLaunch = {
@@ -24,15 +26,30 @@ export const FALLBACK_LAUNCH: McpLaunch = {
   command_found: false,
   root: null,
   source_root: null,
+  container: false,
 }
 
-export type StdioVariant = 'installed' | 'source'
+/** `remote`: the AI app's computer runs its own `onw`, pointed at this instance's address —
+ *  the only form that works for Docker, where nothing in the container exists on the host. */
+export type StdioVariant = 'installed' | 'source' | 'remote'
+
+export const STDIO_VARIANTS: ReadonlyArray<readonly [StdioVariant, string]> = [
+  ['installed', 'Installed (onw)'],
+  ['source', 'Running from source'],
+  ['remote', 'Docker or another computer'],
+]
+
+export const defaultVariant = (launch: McpLaunch): StdioVariant =>
+  launch.container ? 'remote' : 'installed'
 
 export interface SnippetContext {
   origin: string
   token: string
   launch: McpLaunch
   variant: StdioVariant
+  /** `remote` only: the generic `mcp-remote` bridge through npx, so nothing from Open Net
+   *  Worth is installed on the AI app's computer. */
+  npx?: boolean
 }
 
 export interface McpClientGuide {
@@ -69,7 +86,30 @@ function stdioServer(ctx: SnippetContext, type?: 'stdio'): Record<string, unknow
   const env = ctx.launch.desktop
     ? { ONW_ROOT: ctx.launch.root ?? '', ONW_API_TOKEN: ctx.token }
     : { ONW_BASE_URL: ctx.origin, ONW_API_TOKEN: ctx.token }
-  return { ...head, command: ctx.launch.command, args: ctx.launch.args, env }
+  // A path this server found is a path on THIS machine, never on the AI app's.
+  const remote = ctx.variant === 'remote' && !ctx.launch.desktop
+  if (remote && ctx.npx) return { ...head, ...npxServer(ctx) }
+  const command = remote ? 'onw' : ctx.launch.command
+  const args = remote ? ['mcp'] : ctx.launch.args
+  return { ...head, command, args, env }
+}
+
+/** `mcp-remote` through npx. The token rides in env, referenced as `${ONW_AUTH}`, because some
+ *  apps split an argument that contains a space. */
+function npxServer(ctx: SnippetContext): Record<string, unknown> {
+  const insecure = ctx.origin.startsWith('http://') ? ['--allow-http'] : []
+  return {
+    command: 'npx',
+    args: [
+      '-y',
+      'mcp-remote',
+      `${ctx.origin}/mcp`,
+      ...insecure,
+      '--header',
+      'Authorization:${ONW_AUTH}',
+    ],
+    env: { ONW_AUTH: `Bearer ${ctx.token}` },
+  }
 }
 
 const remoteServer = (ctx: SnippetContext) => ({
@@ -121,18 +161,6 @@ ${stdio}`
     },
   },
   {
-    id: 'chatgpt',
-    label: 'ChatGPT',
-    transport: 'remote',
-    where:
-      "ChatGPT → Settings → Connectors (Developer mode on) → Add custom connector. ChatGPT runs in OpenAI's cloud, so it needs a PUBLIC url — localhost is not reachable.",
-    snippet: (ctx) => `MCP server URL:
-${ctx.origin}/mcp
-
-Authentication: Bearer token (Authorization header)
-Authorization: Bearer ${ctx.token}`,
-  },
-  {
     id: 'http',
     label: 'Generic HTTP / remote',
     transport: 'remote',
@@ -151,12 +179,29 @@ Authorization: Bearer ${ctx.token}`,
 ]
 
 /** One plain sentence on what the stdio `command` is and when it needs a hand. */
-export function launchNote(launch: McpLaunch, variant: StdioVariant): string {
+export function launchNote(launch: McpLaunch, variant: StdioVariant, npx = false): string {
   if (launch.desktop) {
     return (
       'The command is the Python bundled inside this app — nothing else to install. This app ' +
       'picks a new address each time it starts, so the bridge finds it through ONW_ROOT (your ' +
       'book folder); Open Net Worth must be running. If you move the app, copy the config again.'
+    )
+  }
+  if (variant === 'remote' && npx && !launch.desktop) {
+    return (
+      'Runs mcp-remote, a generic MCP bridge with no Open Net Worth code, through npx — needs ' +
+      'Node.js on the computer running the AI app, and nothing else. Copy this config from that ' +
+      'computer, so the address is one it can reach. If your AI app can\'t find "npx", use the ' +
+      'full path printed by `which npx` (Windows: `where npx`).'
+    )
+  }
+  if (variant === 'remote') {
+    return (
+      'For Docker, or an AI app on another computer: on the computer running the AI app, install ' +
+      'the bridge with uv tool install open-net-worth — no server needed there. It only passes ' +
+      'messages to this address, so it needs no update when this instance updates. Copy this ' +
+      "config from that computer, so the address is one it can reach. If your AI app can't find " +
+      '"onw", use the full path printed by `which onw` (Windows: `where onw`).'
     )
   }
   if (variant === 'source') {

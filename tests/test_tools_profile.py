@@ -131,6 +131,28 @@ class TestUpdateProfile:
         assert "profile" in body
         assert body["profile"]["risk_tolerance"] == "aggressive"
 
+    def test_instructions_change_reports_the_line_diff(self, isolated_profile):
+        call("update_profile", changes={"notes": "Always reply briefly.\nUse SGD."})
+        body, _ = call(
+            "update_profile",
+            changes={"notes": "Always reply briefly.\nMeal rule: ACME dinner after 17:00."},
+        )
+        assert body["changed"] == [
+            {
+                "field": "notes",
+                "label": "Instructions",
+                "type": "text",
+                "diff": {"added": ["Meal rule: ACME dinner after 17:00."], "removed": ["Use SGD."]},
+            }
+        ]
+
+    def test_unchanged_or_other_fields_report_no_instructions_diff(self, isolated_profile):
+        call("update_profile", changes={"notes": "Use SGD."})
+        same, _ = call("update_profile", changes={"notes": "Use SGD."})
+        other, _ = call("update_profile", changes={"risk_tolerance": "aggressive"})
+        assert "changed" not in same
+        assert "changed" not in other
+
     def test_updates_string_field(self, isolated_profile):
         call("update_profile", changes={"name": "Carol"})
         body, _ = call("get_profile")

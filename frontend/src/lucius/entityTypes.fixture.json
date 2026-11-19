@@ -48,6 +48,13 @@
         "showInPopover": true
       },
       {
+        "key": "untracked_holdings",
+        "label": "Untracked holdings (invested, holdings not entered — not cash)",
+        "type": "money",
+        "sensitive": false,
+        "showInPopover": true
+      },
+      {
         "key": "fixed_deposit",
         "label": "Fixed deposits",
         "type": "money",

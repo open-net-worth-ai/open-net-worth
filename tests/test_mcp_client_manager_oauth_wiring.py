@@ -55,6 +55,8 @@ def _fake_urlopen(captured):
     def fake(request, timeout=None):
         captured.setdefault("auth_headers", []).append(request.headers.get("Authorization"))
         body = json.loads(request.data)
+        if "id" not in body:  # notifications/initialized
+            return _FakeResp(b"")
         method = body["method"]
         result = (
             {"tools": []}
@@ -120,7 +122,8 @@ def test_fire_uses_the_refreshed_token_not_the_stored_stale_one(manager, monkeyp
     text, proposed, _images = asyncio.run(mgr.call_external_tool("mcp__mercury__list_files", {}))
     assert proposed is None
     assert refresh_calls == ["mercury"]
-    assert captured["auth_headers"] == ["Bearer freshly-refreshed"]
+    # initialize + notifications/initialized + tools/call — every one carries the fresh token.
+    assert captured["auth_headers"] == ["Bearer freshly-refreshed"] * 3
 
 
 def test_a_401_on_a_read_asks_for_sign_in_and_keeps_the_tools(manager, monkeypatch):
@@ -177,5 +180,6 @@ def test_discover_uses_the_refreshed_token(manager, monkeypatch):
     )
 
     mgr.connect_enabled()
-    assert captured["auth_headers"] == ["Bearer fresh-for-discovery", "Bearer fresh-for-discovery"]
+    # initialize + notifications/initialized + tools/list.
+    assert captured["auth_headers"] == ["Bearer fresh-for-discovery"] * 3
     assert store.find("mercury").last_status == "ok"

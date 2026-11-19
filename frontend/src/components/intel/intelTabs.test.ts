@@ -66,12 +66,12 @@ const WATCHED = new Set(['NVDA', 'AMD'])
 const ids = (xs: StoryArc[] | undefined) => (xs ?? []).map((s) => s.id)
 
 describe('buildTabs', () => {
-  it('is My holdings, your lists in their order, then Macro & topics', () => {
+  it('is My holdings, then Topics & macro, then your lists in their order', () => {
     expect(buildTabs(LISTS).map((t) => t.key)).toEqual([
       'holdings',
+      'macro',
       'list:wl-tech',
       'list:wl-div',
-      'macro',
     ])
   })
 
@@ -85,6 +85,11 @@ describe('resolveTabKey', () => {
     expect(resolveTabKey('holdings', LISTS)).toBe('holdings')
     expect(resolveTabKey('macro', LISTS)).toBe('macro')
     expect(resolveTabKey('list:wl-div', LISTS)).toBe('list:wl-div')
+  })
+
+  it('opens Copy Trading by its key, and by its old key from before the rename', () => {
+    expect(resolveTabKey('copy-trading', LISTS)).toBe('copy-trading')
+    expect(resolveTabKey('portfolios', LISTS)).toBe('copy-trading')
   })
 
   it('opens the last list for the legacy "watching", else the first', () => {

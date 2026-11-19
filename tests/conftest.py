@@ -84,6 +84,9 @@ from tests.db.conftest import (  # noqa: F401
     seed_stub_accounts,  # noqa: F401
 )
 
+# Paper trading's isolated-book + QA-market fixtures, visible to every test file the same way.
+from tests.paper_helpers import paper_client, paper_db  # noqa: E402,F401
+
 
 def drop_stored_review(statement_id: str) -> None:
     """Take a statement's next preview down the RECOMPUTE path. A reopen returns the stored review
@@ -265,6 +268,27 @@ def _clear_tier2_tables(engine) -> None:
 # teardown half) — `statement_formats` is registered on `backend.db.tables.metadata` like
 # every other Tier-2 table, so it is wiped after every test with no per-store fixture
 # needed; a test using `db_isolated`/`db_engine` gets a genuinely fresh table regardless.
+
+
+@pytest.fixture(autouse=True)
+def _no_real_codex_catalog_fetch(monkeypatch):
+    """A test that probes a real `codex` on PATH must never make it fetch its model list from
+    OpenAI (network, and a write into the CLI's home). The fetch fails as an offline CLI's would;
+    a test of the refresh itself puts its own fake back."""
+    from backend.ai.models import codex_cli_catalog
+
+    monkeypatch.setattr(codex_cli_catalog, "_list_models", lambda binary, env: None)
+    monkeypatch.setattr(codex_cli_catalog, "_last_failure", None)
+    monkeypatch.setattr(codex_cli_catalog, "_fetched", None)
+
+
+@pytest.fixture(autouse=True)
+def _simplefin_feed_per_test():
+    """SimpleFIN shares one answer between a run's per-account reads for a couple of minutes
+    (``simplefin._feed``): start every test without one."""
+    from backend.services.aggregation import simplefin
+
+    simplefin._forget_shared()
 
 
 @pytest.fixture(autouse=True)
@@ -794,6 +818,24 @@ def _no_tool_call_flusher_thread(monkeypatch):
     _call_log._drain()
     yield
     _call_log._drain()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_telegram_token_check(request, monkeypatch):
+    """Saving a Telegram token asks Telegram who it belongs to (``getMe``). No test may reach
+    Telegram: the check answers as an unreachable Telegram would (``None`` — the save lands, no
+    username). A test that needs a verdict patches its own; tests of the check itself mark
+    themselves ``real_telegram_token_check`` and fake the Bot instead."""
+    if "real_telegram_token_check" in request.keywords:
+        yield
+        return
+    from backend.connectors.telegram import botapi
+
+    async def _offline(_token):
+        return None
+
+    monkeypatch.setattr(botapi, "check_token", _offline)
+    yield
 
 
 @pytest.fixture(autouse=True)

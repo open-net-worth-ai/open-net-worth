@@ -36,6 +36,8 @@ from backend.services.ynab_sync import (
     conflicts,
     context,
     delta,
+    openings,
+    pull,
     recorder,
     starts,
     txn_sync,
@@ -274,7 +276,12 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> str | None:
             recorder.phase("reconciling Assigned")
             _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
             _compared(base, fresh)
+        openings.pull(ctx, st, tally)
         starts.review(ctx, st)
+        if current().caps.memo_tags and not st.get("note_tags_read"):
+            recorder.phase("reading tags in notes")
+            pull.add_note_tags()
+            st["note_tags_read"] = True
     except BaseException:
         _carry_unsettled(st, change, held)
         raise
@@ -415,7 +422,20 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     }
     sync_state.schedule_next(st, started)
     sync_state.save(st)
+    if error is None and tally["requests"]:
+        _vouch_for_connector()
     data_events.publish(["*"])
+
+
+def _vouch_for_connector() -> None:
+    """A run that reached the app disproves a stored "couldn't reach" on its connector. Never
+    raises: the run's own result stands without it."""
+    try:
+        current().config_store().clear_reach_failure()
+    except Exception:
+        logger.warning(
+            "%s sync: couldn't clear the connector's stale status", current().name, exc_info=True
+        )
 
 
 def _hold_off_for_others() -> None:

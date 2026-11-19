@@ -104,6 +104,14 @@ class AggregatorConfigStore:
             }
         )
 
+    def clear_reach_failure(self) -> None:
+        """Drop a stored "couldn't reach" / unknown failure once something else reached the
+        provider with the same credentials (a budget app's sync run). A credentials failure
+        stays for the user to fix, and "Last fetched" doesn't move: no fetch ran."""
+        with self._unit(None) as c:
+            if self.get(conn=c).get("last_status") in ("connect_error", "error"):
+                self._record({"last_status": "ok", "last_error": None}, conn=c)
+
     def is_configured(self) -> bool:
         raise NotImplementedError
 

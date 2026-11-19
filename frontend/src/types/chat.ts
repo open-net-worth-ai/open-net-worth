@@ -581,6 +581,9 @@ export type MessageBlock =
   | { type: 'change'; change: ProposedChange }
   | { type: 'duplicate_review'; duplicates: PotentialDuplicate[]; batchId?: string }
   | { type: 'artifact'; artifact: ArtifactRef }
+  /** `draft`: a drawing Lucius is still writing — live only, replaced by the finished one.
+   *  `sealed`: its call is complete, so a further draft is another drawing. */
+  | { type: 'visual'; visual: VisualSpec; draft?: boolean; sealed?: boolean }
   | { type: 'receipt'; receipt: WriteReceipt }
   | {
       type: 'screen_command'
@@ -671,6 +674,8 @@ export interface Message {
   // A restore of an EARLIER message rewound past this turn: no Restore while that restore
   // stands; undoing it clears the flag (the checkpoint is kept for exactly that).
   checkpointSuperseded?: boolean
+  // An answer written for a voice call that was never read out: the owner spoke first and moved on.
+  unheard?: boolean
   // Set the instant sendMessage() queues this (user) message into an already-busy
   // conversation, instead of opening a fresh turn (RFC mid-turn injection, acceptance C1/
   // C2). 'queued' is the only value today — there is no error variant (C3: a turn that
@@ -687,4 +692,54 @@ export interface Message {
   // messages delivered in the same event-loop tick are still guaranteed strictly
   // increasing (see `nextTimestamp`), so display order never ties.
   ts?: number
+}
+
+/** How a visual's raw numbers are written. The client only formats them — it never derives one. */
+export type VisualFormat = 'money' | 'number' | 'percent' | 'percent_points'
+
+export interface VisualTile {
+  label: string
+  value: number
+  compare?: number | null
+  compare_label?: string | null
+  format?: VisualFormat
+  currency?: string | null
+  /** value − compare, worked out by the server; null without a comparison. */
+  delta?: number | null
+  delta_pct?: number | null
+  /** Which way is good, as Lucius said (spending: down); colours the delta. */
+  better?: 'up' | 'down' | null
+}
+
+export type VisualChartKind = 'line' | 'bar' | 'diverging' | 'stack' | 'progress'
+
+export type VisualBlock =
+  | { type: 'stats'; tiles: VisualTile[] }
+  | {
+      type: 'chart'
+      kind: VisualChartKind
+      format?: VisualFormat
+      currency?: string | null
+      labels: string[]
+      series: { name: string; values: (number | null)[] }[]
+      targets?: (number | null)[] | null
+    }
+  | {
+      type: 'timeline'
+      format?: VisualFormat | null
+      currency?: string | null
+      items: { date: string; label: string; value?: number | null }[]
+    }
+
+/** The resolved spec `show_visual` returns (backend ai/visual_spec.py) — live `visual` SSE event
+ *  and the reloaded transcript block carry the same shape. */
+export interface VisualSpec {
+  id: string
+  title?: string | null
+  as_of?: string
+  caption?: string[]
+  /** Reference blocks — absent when the visual is only Lucius's own drawing (`code`). */
+  blocks?: VisualBlock[]
+  /** SVG / HTML Lucius wrote itself; run in a sandboxed frame (`visual/VisualDrawing.tsx`). */
+  code?: string
 }

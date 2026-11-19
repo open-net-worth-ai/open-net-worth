@@ -23,16 +23,21 @@ this module only shapes what a Lucius turn sees before it decides to call that c
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 from typing import Optional
 
 from backend.core.errors import ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.core.user_time import user_today
 from backend.models.account import AccountType
+from backend.services import connector_window
 from backend.services import ledger as ledger_service
-from backend.services.aggregation import providers
-from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
+from backend.services.aggregation import balance_kinds, providers
+from backend.services.aggregation.providers import (
+    DERIVED_PREFIX,
+    FetchWindow,
+    Provider,
+    UnknownProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +59,14 @@ _MAX_FETCH_ROWS = 5000
 # (RFC §A step 4, AC9). Identity fields (external_refs/provider_account_id) are NOT in this
 # list: they are structural keys the ledger dedup floor and the snapshot store key off of,
 # never rendered as prose, and must stay byte-stable across re-fetches of the same row.
-_ROW_TEXT_FIELDS = ("description", "memo", "currency", "category_hint")
+_ROW_TEXT_FIELDS = (
+    "description",
+    "memo",
+    "currency",
+    "category_hint",
+    "payee",
+    "original_currency",
+)
 _ACCOUNT_TEXT_FIELDS = ("name", "mask", "currency", "institution")
 _POSITION_TEXT_FIELDS = ("symbol", "currency")
 # Cap on any single string leaf inside a stashed `raw` payload (S-F3) — generous enough for
@@ -66,22 +78,32 @@ _RAW_MAX_DEPTH = 8
 # email_snapshots.py capping raw_message_id the same way. Never sanitized (RFC §A step 4's
 # own carve-out: these are structural keys, not prose), only bounded.
 _ID_MAX_LEN = 512
+# Row keys that never leave this service: the raw evidence (in the snapshot store) and the
+# refs an earlier version keyed a row on (only step 7 reads them).
+_PRIVATE_ROW_KEYS = frozenset({"raw", "ref_aliases"})
+# How close a booked row's amount must be for a provider-handle alias to count (step 7).
+_SAME_AMOUNT_TOL = 0.005
+
+
+def _count_reads(provider: Provider, account: Optional[str]) -> None:
+    """Note a transaction read against the bank's daily limit BEFORE the call — every caller of
+    this seam, a Lucius fetch tool as much as the AI-free sync, spends the same per-account
+    budget (``bank_data_sync.budget``). A no-op for a provider with no app-side limit. Never
+    fails the fetch."""
+    if provider.daily_reads is None:
+        return
+    try:
+        from backend.services.bank_data_sync import budget
+
+        ids = [account] if account else list(_linked_accounts_by_provider_id(provider.key))
+        for pid in ids:
+            budget.note_read(provider, pid)
+    except Exception:  # noqa: BLE001 — bookkeeping only
+        logger.warning("connector_fetch: could not count a %s read", provider.key, exc_info=True)
 
 
 def _resolve_provider(provider_key: str) -> Provider:
-    try:
-        return providers.resolve([provider_key])[0]
-    except UnknownProvider:
-        raise
-
-
-def _window_defaults(
-    provider: Provider, since: Optional[str], before: Optional[str]
-) -> tuple[str, str]:
-    today = user_today()
-    resolved_before = before or today.isoformat()
-    resolved_since = since or (today - timedelta(days=provider.lookback_days)).isoformat()
-    return resolved_since, resolved_before
+    return providers.resolve([provider_key])[0]
 
 
 def _cap_identity_fields(out: dict) -> None:
@@ -101,6 +123,9 @@ def _cap_identity_fields(out: dict) -> None:
                 entry = {**entry, "ref": entry["ref"][:_ID_MAX_LEN]}
             capped.append(entry)
         out["external_refs"] = capped
+    aliases = out.get("ref_aliases")
+    if isinstance(aliases, list):
+        out["ref_aliases"] = [a[:_ID_MAX_LEN] for a in aliases if isinstance(a, str) and a]
 
 
 def _sanitize_row(row: dict) -> dict:
@@ -156,7 +181,7 @@ def _sanitize_extra(extra: dict) -> dict:
     return out
 
 
-def _sanitize_raw(value: object, *, _depth: int = 0) -> object:
+def sanitize_raw(value: object, *, _depth: int = 0) -> object:
     """Recursively sanitize every STRING LEAF of a provider's raw evidence dict (S-F3) —
     ``raw`` is stashed unsanitized-and-unbounded today, but it is readable by Lucius via
     ``run_sql_query`` against the ``connector_snapshots`` table, so it is exactly as
@@ -170,15 +195,48 @@ def _sanitize_raw(value: object, *, _depth: int = 0) -> object:
     if isinstance(value, str):
         return sanitize_untrusted(value, max_len=_RAW_LEAF_MAX_LEN)
     if isinstance(value, dict):
-        return {k: _sanitize_raw(v, _depth=_depth + 1) for k, v in value.items()}
+        return {k: sanitize_raw(v, _depth=_depth + 1) for k, v in value.items()}
     if isinstance(value, list):
-        return [_sanitize_raw(v, _depth=_depth + 1) for v in value]
+        return [sanitize_raw(v, _depth=_depth + 1) for v in value]
     return value
 
 
 def _row_ref(row: dict) -> str:
     refs = row.get("external_refs") or []
     return str(refs[0]["ref"]) if refs and isinstance(refs[0], dict) else ""
+
+
+def _row_aliases(row: dict) -> list[str]:
+    return [a for a in row.get("ref_aliases") or [] if isinstance(a, str) and a]
+
+
+def _booked_under_alias(provider_key: str, row: dict, known: dict) -> Optional[str]:
+    """The booked transaction an earlier version filed this row under (its ``ref_aliases``),
+    or None. An alias that hashes the row's content is the row itself. One that is a provider
+    handle (Enable Banking's old ``transaction_id``, which may be handed to another row on a
+    later listing) counts only when the booked row has the same date and amount — a stale
+    handle must never hide a new transaction."""
+    for alias in _row_aliases(row):
+        txn_id = known.get((provider_key, alias))
+        if txn_id is None:
+            continue
+        if alias.startswith(DERIVED_PREFIX) or _same_date_and_amount(txn_id, row):
+            return txn_id
+    return None
+
+
+def _same_date_and_amount(txn_id: str, row: dict) -> bool:
+    booked = ledger_service.booked_row_snapshot(
+        txn_id, prefer_account_id=row.get("linked_account_id")
+    )
+    try:
+        return (
+            booked is not None
+            and str(booked.get("date") or "")[:10] == str(row.get("date") or "")[:10]
+            and abs(float(booked["amount"]) - float(row["amount"])) <= _SAME_AMOUNT_TOL
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def _resolve_account_ref(account: str, accounts: list[dict]) -> tuple[Optional[str], Optional[str]]:
@@ -231,6 +289,15 @@ def _linked_account_ids(provider_key: str) -> dict[str, str]:
     }
 
 
+def _balance_fields(account: dict) -> dict:
+    """The account's balances under the book's own names (``balance_kinds.book_terms``):
+    ``balance`` (working: settled + pending), ``cleared_balance`` (settled only),
+    ``available_to_spend`` (overdraft or credit included) — each None when the bank didn't
+    send it."""
+    shown = balance_kinds.book_terms(account)
+    return {k: shown.get(k) for k in ("balance", "cleared_balance", "available_to_spend")}
+
+
 def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
     """The LINKED-only account view (``currency``/``balance`` always ``None`` — no live
     provider call backs them) — what ``provider_accounts()`` returns when the provider call
@@ -243,7 +310,7 @@ def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
                 "name": info.get("name") or "",
                 "mask": info.get("mask") or "",
                 "currency": None,
-                "balance": None,
+                **_balance_fields({}),
             }
         )
         | {
@@ -299,10 +366,25 @@ def _empty_result(
         "counts": {
             "fetched": 0,
             "already_booked": 0,
+            "pending_skipped": 0,
             "returned": 0,
             "truncated": False,
             "changes": 0,
         },
+    }
+
+
+def _openings_of_linked(rows: list[dict]) -> dict[str, str]:
+    """Linked account id -> its Starting Balance transaction, for the rows a provider marked
+    ``is_opening`` (a balance the account's opening already holds, carrying no ref of its own)."""
+    wanted = {r.get("linked_account_id") for r in rows if r.get("is_opening")}
+    wanted.discard(None)
+    if not wanted:
+        return {}
+    return {
+        a["id"]: a["opening_txn_id"]
+        for a in ledger_service.accounts.all()
+        if a["id"] in wanted and a.get("opening_txn_id")
     }
 
 
@@ -318,6 +400,64 @@ def fetch(
     offset: int = 0,
     plan_id: Optional[str] = None,
 ) -> dict:
+    """What a fetch TOOL returns: ``_fetch`` with its rows bounded to ``limit`` from ``offset``
+    (CLAUDE.md: tool results are bounded at the tool). See ``_fetch``."""
+    limit = max(1, min(_HARD_MAX_LIMIT, int(limit or _DEFAULT_LIMIT)))
+    return _fetch(
+        provider_key,
+        since=since,
+        before=before,
+        account=account,
+        include_booked=include_booked,
+        include_pending=include_pending,
+        limit=limit,
+        offset=offset,
+        plan_id=plan_id,
+    )
+
+
+def fetch_all(
+    provider_key: str,
+    *,
+    since: Optional[str] = None,
+    before: Optional[str] = None,
+    account: Optional[str] = None,
+    include_booked: bool = False,
+    include_pending: bool = False,
+) -> dict:
+    """The same fetch with every unbooked, posted row of the window in ONE provider read — no
+    ``limit``/``offset`` slice, so no second read is spent paging (the bank data sync's caller:
+    a GoCardless account may be read only 4 times a day). ``_MAX_FETCH_ROWS`` still caps it and
+    marks the window incomplete. Never handed to a model.
+
+    ``account`` here is a LINKED provider account id (from ``Account.external_ids``), never a
+    name, so the account-resolution probe is skipped: on Enable Banking that probe alone re-reads
+    every account's details and balance, against the bank's daily limit."""
+    return _fetch(
+        provider_key,
+        since=since,
+        before=before,
+        account=account,
+        include_booked=include_booked,
+        include_pending=include_pending,
+        limit=None,
+        probe=False,
+    )
+
+
+def _fetch(
+    provider_key: str,
+    *,
+    since: Optional[str] = None,
+    before: Optional[str] = None,
+    account: Optional[str] = None,
+    include_booked: bool = False,
+    include_pending: bool = False,
+    limit: Optional[int] = _DEFAULT_LIMIT,
+    offset: int = 0,
+    plan_id: Optional[str] = None,
+    probe: bool = True,
+) -> dict:
     """Fetch + normalize + stash + link + filter one provider's window (RFC §A). ``plan_id``
     is YNAB's only: which plan to read (omitted = the saved or only one). NEVER
     raises for a provider-side failure — a dormant connector, an auth/rate/connect error,
@@ -327,8 +467,9 @@ def fetch(
     valid one)."""
     provider = _resolve_provider(provider_key)
     store = provider.store()
-    since_resolved, before_resolved = _window_defaults(provider, since, before)
-    limit = max(1, min(_HARD_MAX_LIMIT, int(limit or _DEFAULT_LIMIT)))
+    since_resolved, before_resolved, window_warning = connector_window.default_window(
+        provider, since, before
+    )
     offset = max(0, int(offset or 0))
 
     # ── step 1: dormant gate ────────────────────────────────────────────────────────────
@@ -343,7 +484,7 @@ def fetch(
 
     # ── step 1b: resolve `account` (provider id OR name, RFC §A) before the real fetch ──
     resolved_account = account
-    if account:
+    if account and probe:
         try:
             accounts_probe = provider.fetch_window(
                 since=since_resolved,
@@ -369,6 +510,7 @@ def fetch(
             )
 
     # ── step 2: fetch ────────────────────────────────────────────────────────────────────
+    _count_reads(provider, resolved_account)
     try:
         window: FetchWindow = provider.fetch_window(
             since=since_resolved, before=before_resolved, account=resolved_account, plan_id=plan_id
@@ -389,6 +531,7 @@ def fetch(
     # ── steps 3-4: normalize (already done by fetch_window) + sanitize ─────────────────
     accounts = [_sanitize_account(a) for a in window.accounts]
     rows = [_sanitize_row(r) for r in window.rows]
+    connector_window.number_repeated_refs(rows)
     rows_truncated = len(rows) > _MAX_FETCH_ROWS
     if rows_truncated:
         logger.warning(
@@ -406,7 +549,7 @@ def fetch(
         {
             "ref": _row_ref(r),
             "provider_account_id": r.get("provider_account_id"),
-            "raw": _sanitize_raw(r.get("raw")),
+            "raw": sanitize_raw(r.get("raw")),
             "normalized": {
                 "date": r.get("date"),
                 "amount": r.get("amount"),
@@ -429,24 +572,36 @@ def fetch(
 
     # ── step 7: filter already-booked rows unless include_booked ───────────────────────
     known = ledger_service.known_external_refs(provider_key)
+    openings = _openings_of_linked(rows)
+    # A row's aliases are refs it was stashed under too: never "vanished" for a new key.
     seen_refs = {_row_ref(r) for r in rows if _row_ref(r)}
+    seen_refs |= {a for r in rows for a in _row_aliases(r)}
     kept: list[dict] = []
     already_booked = 0
+    pending_skipped = 0
     for r in rows:
         ref = _row_ref(r)
         txn_id = known.get((provider_key, ref))
+        if txn_id is None:
+            txn_id = _booked_under_alias(provider_key, r, known)
+        if r.pop("is_opening", False) and txn_id is None:
+            txn_id = openings.get(r.get("linked_account_id"))
         if txn_id is not None:
             already_booked += 1
             if not include_booked:
                 continue
             r["booked_txn_id"] = txn_id
         if not include_pending and r.get("pending"):
+            pending_skipped += 1
             continue
         kept.append(r)
 
     fetched_count = len(rows)
-    truncated = (offset + limit) < len(kept)
-    returned = kept[offset : offset + limit]
+    if limit is None:  # fetch_all: the whole window, one read
+        truncated, returned = False, kept[offset:]
+    else:
+        truncated = (offset + limit) < len(kept)
+        returned = kept[offset : offset + limit]
     window_complete = window.complete and not truncated and not rows_truncated
 
     # ── step 8: vanished check — only on a COMPLETE, non-truncated window ──────────────
@@ -468,7 +623,7 @@ def fetch(
         store.update(sanitized_extra)
 
     # ── step 11: bound + return (never leaks "raw" — that lives only in the snapshot store) ──
-    public_rows = [{k: v for k, v in r.items() if k != "raw"} for r in returned]
+    public_rows = [{k: v for k, v in r.items() if k not in _PRIVATE_ROW_KEYS} for r in returned]
     result = {
         "status": "ok",
         "error": None,
@@ -483,10 +638,14 @@ def fetch(
         "changes": changes,
         # Part of the provider failed while the rest answered (one of several Plaid banks with
         # an expired login, say) — say so, so it is never a silent gap.
-        "warnings": [sanitize_untrusted(w, max_len=300) for w in window.warnings],
+        "warnings": [sanitize_untrusted(w, max_len=300) for w in window.warnings]
+        + ([window_warning] if window_warning else []),
         "counts": {
             "fetched": fetched_count,
             "already_booked": already_booked,
+            # Left out on purpose (not yet posted) — without it, fetched ≠ already_booked +
+            # returned reads as a missing row (a real model said so, 2026-11-13).
+            "pending_skipped": pending_skipped,
             "returned": len(public_rows),
             "truncated": truncated,
             "changes": len(changes),
@@ -505,8 +664,8 @@ def fetch(
 def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     """The account list ONLY, no transaction fetch — ``GET /api/connectors/{id}/accounts``
     (``api/connectors_api.py``, L1) calls this directly. Returns ``{status, provider_label,
-    accounts: [{provider_account_id, name, mask, currency, balance, account_type,
-    linked_account_id}]}`` — ``account_type`` is the provider's suggested app type, or None.
+    accounts: [{provider_account_id, name, mask, currency, balance, cleared_balance,
+    available_to_spend, account_type, linked_account_id}]}`` (balances: ``_balance_fields``) — ``account_type`` is the provider's suggested app type, or None.
 
     A pure READ (C-B2/S-F7): unlike ``fetch()``, this NEVER calls ``store.record_status``
     or publishes a sync event — opening the Connectors tab's link picker must not look like
@@ -573,13 +732,24 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
                 "name": clean.get("name"),
                 "mask": clean.get("mask"),
                 "currency": clean.get("currency"),
-                "balance": clean.get("balance"),
+                **_balance_fields(clean),
                 "account_type": _known_account_type(clean.get("account_type")),
                 "institution": clean.get("institution"),
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
             }
         )
+    # Linked here, but missing from the list. With every bank answering, the bank no longer
+    # lists them (closed, or linked again under a new id); with one that couldn't be read
+    # (an expired sign-in) they may well still be there. Flagged either way, never "Other".
+    flag = "unread" if window.warnings else "not_listed"
     accounts.extend(
-        a for a in _linked_only_accounts(linked) if a["provider_account_id"] not in seen
+        {**a, flag: True}
+        for a in _linked_only_accounts(linked)
+        if a["provider_account_id"] not in seen
     )
-    return {"status": "ok", "provider_label": provider.label, "accounts": accounts}
+    result = {"status": "ok", "provider_label": provider.label, "accounts": accounts}
+    if window.warnings:
+        # A bank that couldn't be read is named, never an empty "ok" (its linked accounts
+        # still show above, from the linked view).
+        result["warnings"] = [sanitize_untrusted(w, max_len=300) for w in window.warnings]
+    return result

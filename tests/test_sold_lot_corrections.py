@@ -187,9 +187,10 @@ def test_a_note_edit_keeps_the_purchase_transaction(isolated):
     assert LotStore().find_by_id(lot_id)["txn_id"] == txn_id
     assert TransactionStore().find_by_id(txn_id) is not None
 
-    _amend(lot_id, unit_cost=60.0)  # a real cost change still re-books the cash
+    _amend(lot_id, unit_cost=60.0)  # a real cost change edits the same row
 
-    assert LotStore().find_by_id(lot_id)["txn_id"] != txn_id
+    assert LotStore().find_by_id(lot_id)["txn_id"] == txn_id
+    assert TransactionStore().find_by_id(txn_id)["from_amount"] == 120.0
 
 
 # ── Review findings (2026-10-13) ─────────────────────────────────────────────────

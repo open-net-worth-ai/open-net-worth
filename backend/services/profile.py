@@ -6,6 +6,7 @@ without coupling to the HTTP layer (api → services → db → core).
 
 from __future__ import annotations
 
+import difflib
 import math
 import time
 from datetime import date, datetime
@@ -406,6 +407,36 @@ def currency_sensitive_fields(profile: dict) -> list[dict]:
             sum(float(cb.get("limit") or 0) for cb in budgets.values()),
         )
     return out
+
+
+def text_diff(before: object, after: object) -> dict:
+    """Line diff of a free-text field: ``{"added": [...], "removed": [...]}``, both empty when
+    the text is unchanged. Blank lines are not content and never appear."""
+    old = str(before or "").splitlines()
+    new = str(after or "").splitlines()
+    added: list[str] = []
+    removed: list[str] = []
+    for line in difflib.ndiff(old, new):
+        text = line[2:].strip()
+        if not text:
+            continue
+        if line.startswith("+ "):
+            added.append(text)
+        elif line.startswith("- "):
+            removed.append(text)
+    return {"added": added, "removed": removed}
+
+
+def refuse_base_currency_change_on_demo(old_base: Optional[str], new_base: Optional[str]) -> None:
+    """A public demo's book is shared by every visitor, so one visitor switching the base
+    currency re-denominates it for all of them. Raise before anything is written."""
+    from backend.core.config import get_settings
+    from backend.core.errors import ValidationError
+
+    if not new_base or new_base.upper() == (old_base or "").upper():
+        return
+    if get_settings().demo_mode:
+        raise ValidationError("The base currency is locked on the public demo.")
 
 
 def handle_base_currency_change(

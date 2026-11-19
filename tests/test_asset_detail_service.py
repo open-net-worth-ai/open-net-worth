@@ -323,15 +323,16 @@ def test_watchlist_block_item_id_null_when_not_following(isolated):
 
 
 def test_resolved_exchange_persisted_to_instrument(isolated, monkeypatch):
-    """A live exchange lookup (search_symbol) is persisted back onto the instrument's
-    identifiers so the cold Yahoo call is a one-time cost, not paid on every read."""
+    """The exchange the instrument's own ticker's quote names is persisted back onto its
+    identifiers (marked as quote-checked) so the lookup is a one-time cost, not paid on every
+    read."""
     inst = _inst(isolated["tmp_path"], price_source_id="ONWAI.DE", name="ONWAI Corp")
     assert inst["identifiers"] == {}  # precondition: no exchange stored
     InstrumentStore().bulk_insert([inst])
 
     monkeypatch.setattr(
-        "backend.services.prices.search_symbol",
-        lambda *a, **k: {"symbol": "ONWAI.DE", "exchange": "XETRA"},
+        "backend.services.prices.fetch_quote_snapshots",
+        lambda symbols: {"ONWAI.DE": {"exchange": "XETRA"}},
     )
 
     detail = read_asset_detail("inst-1")
@@ -339,21 +340,22 @@ def test_resolved_exchange_persisted_to_instrument(isolated, monkeypatch):
 
     persisted = InstrumentStore().find_by_id("inst-1")
     assert persisted["identifiers"]["exchange"] == "XETRA"
+    assert persisted["identifiers"]["exchange_source"] == "quote"
 
 
-def test_persisted_exchange_skips_repeat_search(isolated, monkeypatch):
-    """Once the exchange is persisted, a subsequent read must NOT call search_symbol again —
-    this is the regression guard: a cold open was re-paying the live Yahoo lookup every time."""
+def test_persisted_exchange_skips_repeat_lookup(isolated, monkeypatch):
+    """Once the exchange is persisted, a subsequent read must NOT look it up again — a cold
+    open was re-paying the live Yahoo lookup every time."""
     inst = _inst(isolated["tmp_path"], price_source_id="ONWAI.DE", name="ONWAI Corp")
     InstrumentStore().bulk_insert([inst])
 
     calls = {"n": 0}
 
-    def _counting_search(*a, **k):
+    def _counting_quote(symbols):
         calls["n"] += 1
-        return {"symbol": "ONWAI.DE", "exchange": "XETRA"}
+        return {"ONWAI.DE": {"exchange": "XETRA"}}
 
-    monkeypatch.setattr("backend.services.prices.search_symbol", _counting_search)
+    monkeypatch.setattr("backend.services.prices.fetch_quote_snapshots", _counting_quote)
 
     read_asset_detail("inst-1")  # resolves + persists
     read_asset_detail("inst-1")  # must reuse the persisted value
@@ -367,8 +369,8 @@ def test_exchange_persist_preserves_other_identifiers(isolated, monkeypatch):
     InstrumentStore().bulk_insert([inst])
 
     monkeypatch.setattr(
-        "backend.services.prices.search_symbol",
-        lambda *a, **k: {"symbol": "ONWAI.DE", "exchange": "XETRA"},
+        "backend.services.prices.fetch_quote_snapshots",
+        lambda symbols: {"ONWAI.DE": {"exchange": "XETRA"}},
     )
 
     read_asset_detail("inst-1")
@@ -376,6 +378,24 @@ def test_exchange_persist_preserves_other_identifiers(isolated, monkeypatch):
     persisted = InstrumentStore().find_by_id("inst-1")["identifiers"]
     assert persisted["exchange"] == "XETRA"
     assert persisted["isin"] == "DE000X7Q9K21"
+
+
+def test_a_search_result_for_another_company_never_names_the_exchange(isolated, monkeypatch):
+    """The WBD scar, end to end through the page's read: a stored label from the old search
+    path ("Milan", another company's listing) is replaced by the ticker's own quote."""
+    inst = _inst(isolated["tmp_path"], price_source_id="ACME", name="Acme Corp")
+    inst["identifiers"] = {"exchange": "Milan"}
+    InstrumentStore().bulk_insert([inst])
+    monkeypatch.setattr(
+        "backend.services.prices.search_symbol",
+        lambda *a, **k: {"symbol": "ACME.MI", "exchange": "Milan"},
+    )
+    monkeypatch.setattr(
+        "backend.services.prices.fetch_quote_snapshots",
+        lambda symbols: {"ACME": {"exchange": "NasdaqGS"}},
+    )
+    assert read_asset_detail("inst-1")["asset"]["exchange"] == "NasdaqGS"
+    assert InstrumentStore().find_by_id("inst-1")["identifiers"]["exchange"] == "NasdaqGS"
 
 
 # ── analyst_consensus ──────────────────────────────────────────────────────────

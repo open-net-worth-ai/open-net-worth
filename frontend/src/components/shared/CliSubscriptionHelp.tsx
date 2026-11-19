@@ -16,6 +16,10 @@ export interface CliSubscriptionHelpProps {
   onCheck: () => Promise<unknown>
   /** Private Cloud: the sign-in happens in the in-app Terminal on the server, not on this computer. */
   terminal?: { onOpen: () => void }
+  /** Bumped by the parent to open the steps — e.g. "Use this" was pressed before signing in. */
+  openRequest?: number
+  /** Open the sign-in steps on their own the first time the CLI reads as signed out. */
+  openWhenSignedOut?: boolean
 }
 
 const PROVIDERS = {
@@ -156,18 +160,18 @@ function SignInSteps({
   const command = inContainer ? CONTAINER_LOGIN[provider] : details.login
   const signIn =
     inContainer && provider === 'codex_cli'
-      ? 'It shows a link and a code: open the link on any device and enter the code.'
+      ? 'Open the link it shows on any device and enter the code.'
       : details.signIn
   return (
     <Stack gap="--space-3">
       <Text as="p" size="sm">
         {inContainer
-          ? `${details.label} comes with the Open Net Worth container and runs inside it, so it can't use a sign-in from your computer or server. Run this on the machine hosting the container, with your own container name if you changed it.`
+          ? `${details.label} runs inside the container. Sign it in from the machine running Docker:`
           : 'Run this on the computer running Open Net Worth.'}
       </Text>
       <CopyCommand command={command} label={`Copy ${details.label} sign-in command`} />
       <Text as="p" size="sm" tone="muted">
-        {signIn} This updates on its own once you&rsquo;re signed in.
+        {signIn} This updates on its own.
       </Text>
     </Stack>
   )
@@ -215,8 +219,22 @@ export function CliSubscriptionHelp({
   inContainer,
   onCheck,
   terminal,
+  openRequest,
+  openWhenSignedOut,
 }: CliSubscriptionHelpProps) {
   const [open, setOpen] = useState(false)
+  // A new request opens the steps — adjusted during render, React's pattern for a prop change.
+  const [seenRequest, setSeenRequest] = useState(openRequest ?? 0)
+  if ((openRequest ?? 0) !== seenRequest) {
+    setSeenRequest(openRequest ?? 0)
+    if (openRequest) setOpen(true)
+  }
+  // Once only: a reader who closes the steps keeps them closed across the 4s re-checks.
+  const [autoOpened, setAutoOpened] = useState(false)
+  if (openWhenSignedOut && !autoOpened && detected && signIn === 'not_signed_in') {
+    setAutoOpened(true)
+    setOpen(true)
+  }
   const check = useRef(onCheck)
   useEffect(() => {
     check.current = onCheck

@@ -141,11 +141,12 @@ def payload_table(name: str) -> Table:
     )
 
 
-def book_payload_table(name: str) -> Table:
+def book_payload_table(name: str, *extra: Any) -> Table:
     """Tier-1 book-scoped flat-list table: ``payload_table()`` PLUS a book_id FK column and a
     book-LEADING unique seq index — the money core's exact index shape (ix_<name>_book_seq).
     The one schema helper every book-scoped flat-list store (planning wave 4a, investments
-    wave b) is built from."""
+    wave b) is built from. ``extra`` adds promoted columns/indexes (``lots.txn_id``); the store
+    keeps them in step through ``_insert_row``/``_payload_values``."""
     return Table(
         name,
         metadata,
@@ -154,6 +155,7 @@ def book_payload_table(name: str) -> Table:
         Column("id", Text, primary_key=True),
         Column("payload", JSON, nullable=False),
         Index(f"ix_{name}_book_seq", "book_id", "seq", unique=True),
+        *extra,
     )
 
 
@@ -218,6 +220,14 @@ class PayloadTableStore:
         one-method override rather than four repeated method bodies."""
         return {"seq": seq, "id": id_val, "payload": item}
 
+    def _payload_values(self, item: dict) -> dict:
+        """Column values for a payload UPDATE — overridden by a store with a promoted column."""
+        return {"payload": item}
+
+    def _row_item(self, row: Any) -> dict:
+        """The item one fetched row reads as — overridden by a store with a promoted column."""
+        return row.payload
+
     def _next_seq(self, conn) -> int:
         return conn.execute(select(func.coalesce(func.max(self._table.c.seq), -1))).scalar_one() + 1
 
@@ -262,11 +272,12 @@ class PayloadTableStore:
         fresh, lock-free read."""
         if conn is not None:
             return [
-                r.payload for r in conn.execute(select(self._table).order_by(self._table.c.seq))
+                self._row_item(r)
+                for r in conn.execute(select(self._table).order_by(self._table.c.seq))
             ]
         with self._eng().connect() as owned_conn:
             return [
-                r.payload
+                self._row_item(r)
                 for r in owned_conn.execute(select(self._table).order_by(self._table.c.seq))
             ]
 
@@ -339,7 +350,9 @@ class PayloadTableStore:
             self._fire_hook(conn, [(id_val, existing)])
             if existing is not None:
                 conn.execute(
-                    sa_update(self._table).where(self._table.c.id == id_val).values(payload=item)
+                    sa_update(self._table)
+                    .where(self._table.c.id == id_val)
+                    .values(**self._payload_values(item))
                 )
             else:
                 seq = self._next_seq(conn)
@@ -358,7 +371,9 @@ class PayloadTableStore:
             merged = {**existing["payload"], **changes}
             self._fire_hook(conn, [(id_val, existing)])
             conn.execute(
-                sa_update(self._table).where(self._table.c.id == id_val).values(payload=merged)
+                sa_update(self._table)
+                .where(self._table.c.id == id_val)
+                .values(**self._payload_values(merged))
             )
         return merged
 
@@ -383,7 +398,9 @@ class PayloadTableStore:
                 self._fire_hook(conn, hook_rows)
                 for iid, merged in patched.items():
                     conn.execute(
-                        sa_update(self._table).where(self._table.c.id == iid).values(payload=merged)
+                        sa_update(self._table)
+                        .where(self._table.c.id == iid)
+                        .values(**self._payload_values(merged))
                     )
         return patched
 

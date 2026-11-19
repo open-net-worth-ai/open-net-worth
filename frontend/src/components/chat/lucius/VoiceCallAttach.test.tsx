@@ -42,7 +42,7 @@ describe('VoiceCallAttach', () => {
     await waitFor(() => expect(chat.sendMessage).toHaveBeenCalledOnce())
     const [text, attachments, effort, silent, model] = chat.sendMessage.mock.calls[0] as unknown[]
     expect([text, effort, silent, model]).toEqual(['', 'medium', false, 'acme-model'])
-    expect((attachments as { ref_id: string }[])[0].ref_id).toBe('r1')
+    expect((attachments as { ref_id: string }[])[0]?.ref_id).toBe('r1')
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })
 
@@ -57,11 +57,17 @@ describe('VoiceCallAttach', () => {
   })
 
   it('says when a file could not be uploaded, instead of leaving you to think he has it', async () => {
-    authFetch.mockResolvedValue({ ok: false })
+    authFetch.mockResolvedValue({
+      ok: false,
+      status: 415,
+      json: async () => ({ detail: "Lucius can't read a .pdf file. Supported: CSV." }),
+    })
     const { container } = render(<VoiceCallAttach disabled={false} busy={false} />)
     pickFile(container)
     await waitFor(() =>
-      expect(screen.getByRole('status').textContent).toBe("Couldn't send acme.pdf."),
+      expect(screen.getByRole('status').textContent).toBe(
+        "Couldn't send acme.pdf. Lucius can't read a .pdf file. Supported: CSV.",
+      ),
     )
     expect(chat.sendMessage).not.toHaveBeenCalled()
   })

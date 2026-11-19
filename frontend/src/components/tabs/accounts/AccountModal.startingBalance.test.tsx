@@ -139,7 +139,7 @@ describe('edit — the opening is reported, not edited', () => {
   it('shows the opening and its date read-only', () => {
     renderEdit(baseAccount({ initialBalance: 4200, initialBalanceDate: '2026-01-01' }))
     expect(screen.getByText(/SGD 4,200/)).toBeTruthy()
-    expect(screen.getByText(/as of 2026-01-01/)).toBeTruthy()
+    expect(screen.getByText(/as of Jan 1, 2026/)).toBeTruthy()
   })
 
   it('shows a liability opening as a positive "owed" figure', () => {

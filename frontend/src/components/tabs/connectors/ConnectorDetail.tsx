@@ -34,13 +34,18 @@
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRight } from '../../../ui/icons'
+import { ArrowRight, ChevronDown } from '../../../ui/icons'
+import { ActionMenu } from '../../ui'
+import { useBankAutomateChoices } from '../automations/datasync/bankAutomate'
 import { templateKeyForConnector } from '../automations/automationTemplates'
 import { BackTitle, Badge, Btn, Kebab, Modal, Mono, type KebabItem } from './primitives'
 import { useConnectorSaveHost } from './formSave'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
+import { ConnectorAccountsList } from './ConnectorAccountsList'
+import { BankSyncSection } from '../automations/datasync/BankSyncSummary'
+import { cachedRestApi, getRestApi, restSlugOf, restToolLabel } from './restApi'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
   stampGroup,
@@ -64,6 +69,12 @@ export interface ConnectorDetailProps {
   /** True while a Reconnect click is waiting on an OAuth sign-in — the button says so instead
    *  of sitting there with no feedback while the popup runs. */
   reconnecting?: boolean
+  /** Present only while Reconnect waits on an OAuth sign-in. Its window may have been closed
+   *  where the app can't see it (the desktop app's system browser), so the button stays live —
+   *  another click starts a fresh sign-in — and this drops the one that's waiting. */
+  onCancelSignIn?: () => void
+  /** Starts a fresh sign-in in place of the waiting one. */
+  onRestartSignIn?: () => void
   onViewDetails: () => void
   /** MCP only — reopens the setup drawer pre-filled. A connector with a `configForm`
    *  reopens THAT instead, and never reaches this. */
@@ -120,12 +131,26 @@ export interface ConnectorDetailProps {
   onSaved?: () => void
 }
 
+/** Connectors whose `GET /api/connectors/{id}/accounts` lists accounts to link. */
+const ACCOUNT_CONNECTORS = new Set([
+  'plaid',
+  'gocardless',
+  'enable_banking',
+  'simplefin',
+  'lunch_flow',
+  'lunch_money',
+  'alpaca',
+  'ibkr',
+])
+
 export function ConnectorDetail({
   entry,
   onClose,
   onSetEnabled,
   onReconnect,
   reconnecting = false,
+  onCancelSignIn,
+  onRestartSignIn,
   onViewDetails,
   onEditConnection,
   onRefreshTools,
@@ -148,6 +173,26 @@ export function ConnectorDetail({
   // whenever the server's own view of the levels changes underneath us.
   const [perms, setPerms] = useState<PermissionMap>(entry.perms)
   useEffect(() => setPerms(entry.perms), [entry.id, entry.perms])
+  // A REST API's settings take a request to read: start it now, so Edit configuration opens on
+  // the whole form rather than a "Loading…" line it then replaces.
+  // The same read gives the page the API's Instructions for Lucius — a secret field, so not in
+  // the status feed MCP's handshake instructions arrive in.
+  const restSlug = restSlugOf(entry.id)
+  const [restNotes, setRestNotes] = useState<string>('')
+  useEffect(() => {
+    if (!restSlug) return
+    let live = true
+    getRestApi(restSlug)
+      .then((api) => live && setRestNotes(api.notes))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [restSlug])
+  // A save refreshes the cache, so the page shows the new text without another read.
+  const instructions = restSlug
+    ? (cachedRestApi(restSlug)?.notes ?? restNotes).trim()
+    : entry.instructions
 
   /**
    * Show the new level immediately — then ROLL IT BACK if the write did not land.
@@ -194,11 +239,18 @@ export function ConnectorDetail({
   const configuring = configuringId === entry.id
   // The config view's footer is the credential form's OWN Save (see ./formSave) — there is
   // one primary action per screen, and it writes rather than dismissing.
-  const formSave = useConnectorSaveHost()
+  // A write the form makes on its own (Telegram's "Save and connect", Approve, Add) refetches
+  // like the footer Save does — the header badge read "Not connected" over a live bot.
+  const formSave = useConnectorSaveHost(() => onConfigClosed?.())
   const navigate = useNavigate()
   const automateKey = templateKeyForConnector(entry.kind)
   const openTemplate = (key: string) =>
     void navigate({ to: '/automations', search: { template: key } as never } as never)
+  // A bank connector's Automate offers both ways: its no-AI sync and a Lucius Automation.
+  const bankChoices = useBankAutomateChoices(
+    entry.kind,
+    automateKey ? () => openTemplate(automateKey) : null,
+  )
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const isMobile = useIsMobile()
   const [removing, setRemoving] = useState(false)
@@ -268,13 +320,20 @@ export function ConnectorDetail({
   const phoneRunningItems: KebabItem[] =
     isMobile && running
       ? [
-          ...(automateKey ? [{ label: 'Automate', onClick: () => openTemplate(automateKey) }] : []),
+          ...(bankChoices
+            ? bankChoices.map((c) => ({ label: c.label, onClick: c.onSelect }))
+            : automateKey
+              ? [{ label: 'Automate', onClick: () => openTemplate(automateKey) }]
+              : []),
           { label: 'Pause connector', onClick: () => setConfirmingPause(true) },
         ]
       : []
   const kebabItems: KebabItem[] = [
     ...phoneRunningItems,
-    { label: 'View details', onClick: onViewDetails },
+    // A directory landing page, which a REST API the owner added does not have: the directory
+    // lists only the entry that adds one, so this opened a plain Browse & add (owner,
+    // 2026-11-11). Its own page already shows everything about it.
+    ...(entry.kind === 'rest' ? [] : [{ label: 'View details', onClick: onViewDetails }]),
     ...(configForm
       ? [{ label: 'Edit configuration', onClick: () => setConfiguringId(entry.id) }]
       : entry.mcp
@@ -315,7 +374,14 @@ export function ConnectorDetail({
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Identity entry={entry} />
-        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--muted)',
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
           {entry.mcp ? (
             <>
               Remove <strong>{entry.name}</strong>? Lucius loses{' '}
@@ -358,7 +424,14 @@ export function ConnectorDetail({
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Identity entry={entry} />
-        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--muted)',
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
           Pause <strong>{entry.name}</strong>? {pauseVerb(entry)} until you resume. Your saved
           credentials and settings stay put — resuming won&apos;t ask for them again. To clear your
           saved credentials instead, use Remove connector from the menu.
@@ -375,10 +448,27 @@ export function ConnectorDetail({
         onClose={onClose}
         size="lg"
         footer={
-          save ? (
-            <Btn variant="primary" disabled={!save.dirty || save.saving} onClick={saveConfig}>
-              {save.saving ? 'Saving…' : 'Save'}
+          // A saved connector whose form holds no edits gets Done, not a greyed-out Save:
+          // after a successful save the only control left used to be a dead button, with the
+          // way out hidden in the `‹ <name>` title (2026-11-15). Done appears only when there is
+          // nothing to lose; a never-saved form keeps Save, so Done can't read as "set up".
+          save && !save.dirty && !save.saving && entry.configured ? (
+            <Btn variant="primary" onClick={leaveConfig}>
+              Done
             </Btn>
+          ) : save ? (
+            // Something on screen only takes effect on Save: say so beside it, where the eye
+            // already is (owner, 2026-11-16 — a lit-up Save alone didn't read as "not done yet").
+            <>
+              {save.dirty && !save.saving && (
+                <span className="cn-foot-hint" role="status">
+                  Save so your changes take effect
+                </span>
+              )}
+              <Btn variant="primary" disabled={!save.dirty || save.saving} onClick={saveConfig}>
+                {save.saving ? 'Saving…' : 'Save'}
+              </Btn>
+            </>
           ) : (
             // A form that publishes no save (still loading, or failed to load) gets the
             // plain dismiss — offering Save over a form with nothing in it would be a lie.
@@ -413,6 +503,15 @@ export function ConnectorDetail({
       <Btn size="lg" variant="primary" onClick={() => setConfiguringId(entry.id)}>
         Reconnect
       </Btn>
+    ) : onCancelSignIn ? (
+      <>
+        <Btn size="lg" variant="ghost" onClick={onCancelSignIn}>
+          Cancel
+        </Btn>
+        <Btn size="lg" variant="primary" onClick={onRestartSignIn ?? onReconnect}>
+          Open sign-in again
+        </Btn>
+      </>
     ) : (
       <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
         {!reconnecting
@@ -424,7 +523,19 @@ export function ConnectorDetail({
     )
   ) : entry.enabled ? (
     <>
-      {automateKey ? (
+      {bankChoices ? (
+        <ActionMenu
+          label="Automate"
+          items={bankChoices.map((c) => ({ label: c.label, onSelect: c.onSelect }))}
+          trigger={
+            <>
+              Automate
+              <ChevronDown size={14} aria-hidden="true" />
+            </>
+          }
+          triggerClassName="rd-btn secondary lg cn-automate-trigger"
+        />
+      ) : automateKey ? (
         // Puts the connector to work: opens its Automation template (logging from
         // the mailbox, a bank or broker sync) as an unsaved draft.
         <Btn size="lg" onClick={() => openTemplate(automateKey)}>
@@ -500,7 +611,14 @@ export function ConnectorDetail({
           ) : null}
 
           {entry.desc ? (
-            <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+            <p
+              style={{
+                fontSize: 'var(--text-base)',
+                color: 'var(--muted)',
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
               <LinkedDesc desc={entry.desc} service={entry.service} />
             </p>
           ) : null}
@@ -526,7 +644,7 @@ export function ConnectorDetail({
             description) and in the Details footer's "Vendor" field, so nothing is hidden — this
             line just answers one question cleanly: did WE build this. */}
           {entry.developer ? (
-            <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink)' }}>
+            <div style={{ fontSize: 'var(--text-base)', fontWeight: 400, color: 'var(--ink)' }}>
               Developed by{' '}
               {entry.mcp ? (
                 entry.developerUrl ? (
@@ -540,10 +658,12 @@ export function ConnectorDetail({
             </div>
           ) : null}
 
-          {entry.instructions ? (
+          {instructions ? (
             <details className="cn-fold">
-              <summary>The server&rsquo;s instructions for AI</summary>
-              <p>{entry.instructions}</p>
+              <summary>
+                {restSlug ? 'Instructions for Lucius' : 'The server\u2019s instructions for AI'}
+              </summary>
+              <p>{instructions}</p>
             </details>
           ) : null}
 
@@ -553,6 +673,16 @@ export function ConnectorDetail({
               verification={entry.verification}
               url={entry.url}
             />
+          ) : null}
+
+          {/* Linking the synced accounts is the step that makes anything arrive, so a connected
+            bank or broker shows them here — not only behind Edit configuration. */}
+          {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured && entry.enabled ? (
+            <ConnectorAccountsList provider={entry.id} providerLabel={entry.name} />
+          ) : null}
+          {/* Bank sync without AI (ADR 2026-11-13) — nothing for a connector without one. */}
+          {ACCOUNT_CONNECTORS.has(entry.id) && entry.configured ? (
+            <BankSyncSection provider={entry.id} />
           ) : null}
 
           {entry.prompts.length > 0 ? (
@@ -594,6 +724,8 @@ export function ConnectorDetail({
                   onSetGroup={(tools, level) =>
                     applyLevel(tools, level, onSetGroupPermission(tools, level))
                   }
+                  toolLabel={entry.kind === 'rest' ? restToolLabel : undefined}
+                  toolSub={entry.toolSubs ? (tool) => entry.toolSubs?.[tool] : undefined}
                 />
               </>
             ) : (
@@ -630,7 +762,7 @@ function Identity({
 }): JSX.Element {
   return (
     <div className={compact ? 'cn-idhead cn-idhead-compact' : 'cn-idhead'}>
-      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} size="lg" />
+      <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} letter={entry.letter} size="lg" />
       <div className="cn-idhead-main">
         <div className="cn-idhead-name">
           {entry.name}

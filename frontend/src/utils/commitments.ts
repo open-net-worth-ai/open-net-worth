@@ -1,6 +1,13 @@
 // Pure helpers for the Commitments tab — kept out of the component so they're unit-testable.
 import type { Commitment, CommitmentAction, FundingSource, Installment } from '../types/commitments'
-import { fCurrency, fDate, fMonth, getBaseCurrency, toBase as toBaseFx } from './format'
+import {
+  fCompactAmount,
+  fCurrency,
+  fDate,
+  fMonth,
+  getBaseCurrency,
+  toBase as toBaseFx,
+} from './format'
 
 export const KIND_LABELS: Record<string, string> = {
   purchase: 'Purchase',
@@ -115,17 +122,7 @@ export function monthLong(ym: string): string {
 export function fCompactCurrency(amt: number, ccy?: string): string {
   const code = (ccy || getBaseCurrency()).toUpperCase()
   const value = amt === 0 ? 0 : amt
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: code,
-      currencyDisplay: 'narrowSymbol',
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(value)
-  } catch {
-    return fCurrency(amt, code)
-  }
+  return fCompactAmount(value, code, 1)
 }
 
 /** Native amount, plus " · base" when the commitment's currency differs from base

@@ -81,8 +81,7 @@ class RestoreCheckpointInput(ToolInput):
         "snapshot is taken automatically).\n\n"
         "MANDATORY: before calling this, call list_checkpoints to find the right id, "
         "then tell the user exactly what restoring will do (use the impact summary — "
-        "e.g. 'this will bring back 147 transactions and revert your Main Checking balance') "
-        "and WAIT for the user to confirm. Never restore without explicit confirmation.\n\n"
+        "e.g. 'this will bring back 147 transactions and revert your Main Checking balance').\n\n"
         "mode: 'data' (default — revert data, keep the chat), 'conversation' (rewind "
         "the chat only, keep data), or 'both' (revert data and rewind the chat)."
     ),

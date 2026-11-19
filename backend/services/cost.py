@@ -238,9 +238,11 @@ def provider_of_model(model: str) -> str:
     if ":" in model:
         # A pinned override carries its provider key ahead of the colon. Local model ids
         # also contain a colon (llama3.3:70b), so only accept a known key.
-        entry = provider_entry(model.partition(":")[0])
-        if entry:
-            return str(entry.get("label") or model.partition(":")[0])
+        key = model.partition(":")[0]
+        if provider_entry(key):
+            from backend.db.model_config_store import ModelConfigStore  # noqa: PLC0415
+
+            return ModelConfigStore().display_label(key) or key
 
     for entry in PROVIDER_CATALOG:
         if model in (entry.get("model_hints") or []):

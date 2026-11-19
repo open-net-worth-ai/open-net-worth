@@ -6149,15 +6149,6 @@
 .cfx-stat .v.neg {
   color: var(--bad);
 }
-/* The spending-based figures above read better than the book is while a card's purchases are
-   missing. */
-.cfx-card-note {
-  margin-top: 10px;
-  font-size: var(--text-sm);
-  color: var(--warn);
-  line-height: 1.4;
-}
-
 /* ── Outlook + filter bar ── */
 /* Pinned (owner 2026-07-03): the lowest-point summary + Collapse/Export/Today/filters stay
    visible while the projection scrolls; the table header stacks directly below via the same
@@ -6884,11 +6875,12 @@
   background: var(--toast-bg);
   border: 1px solid var(--toast-bg);
   color: var(--toast-ink);
-  font-size: 12.5px;
-  padding: 9px 16px;
-  border-radius: 10px;
+  font-size: var(--toast-font-size);
+  padding: var(--toast-padding);
+  border-radius: var(--toast-radius);
   box-shadow: var(--shadow-toast);
   z-index: 65; /* z-local: above sticky headers/FAB, below plan modals */
+  font-weight: var(--toast-font-weight);
 }
 
 /* ── reassign-then-delete modal ── */

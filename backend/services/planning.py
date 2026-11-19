@@ -3107,6 +3107,45 @@ def history_activity_by_category(month: str) -> dict[str, float]:
     return out
 
 
+def _has_any_tag(txn: dict, wanted: frozenset[str]) -> bool:
+    return any(str(tag).strip().lower() in wanted for tag in (txn.get("tags") or []))
+
+
+def _report_txns(ctx: dict, tags: list[str] | None) -> list[dict]:
+    """The ledger rows a report reads: all of them, or only those carrying any of ``tags``."""
+    wanted = frozenset(t.strip().lower() for t in tags or [] if t and t.strip())
+    return [t for t in ctx["txns"] if _has_any_tag(t, wanted)] if wanted else ctx["txns"]
+
+
+def report_activity_by_category(month: str, tags: list[str] | None = None) -> dict[str, float]:
+    """Activity for ``month`` per category, as a report counts it: the SAME fold as the budget's
+    Activity, with history included (a report counts it — see
+    ``history_activity_by_category``), over every ledger row or only those carrying any of
+    ``tags``. A filtered report can then never disagree with the unfiltered one on what a leg
+    is, only on which legs are in; a split transaction is credited to each split's own
+    category, so narrowing to categories afterwards stays exact."""
+    ctx = _build_context(month)
+    no_cutoffs: dict = {}
+    return _activity_by_category(
+        _report_txns(ctx, tags),
+        month,
+        ctx["base"],
+        ctx["rates"],
+        ctx["plan_source_ids"],
+        no_cutoffs,
+        ctx["card_pay_env_of"],
+        ctx,
+    )
+
+
+def report_income_by_category(month: str, tags: list[str] | None = None) -> dict[str, float]:
+    """Income received in ``month`` per category (blank = uncategorized), over every ledger row
+    or only those carrying any of ``tags`` — ``income_view``'s own sum."""
+    ctx = _build_context(month)
+    sums = _income_received_ytd(_report_txns(ctx, tags), month, ctx["base"], ctx["rates"])
+    return {cat: received for cat, (received, _ytd) in sums.items()}
+
+
 def _income_received_ytd(
     txns: list[dict], month: str, base: str, rates: dict
 ) -> dict[str, tuple[float, float]]:

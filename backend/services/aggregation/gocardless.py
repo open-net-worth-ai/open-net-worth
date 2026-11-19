@@ -27,8 +27,10 @@ model's own ``add_transactions`` call, never here.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlparse
@@ -38,6 +40,8 @@ import httpx
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.gocardless_config_store import ENDED, LINKED, GoCardlessConfigStore
 from backend.services import ledger as ledger_service
+from backend.services.aggregation import balance_kinds, parallel
+from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,10 @@ _TOKEN_MARGIN_SECONDS = 60
 _MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _DEFAULT_ACCESS_DAYS = 90
 _DEFAULT_HISTORY_DAYS = 90
+# Listing the accounts reuses what it read this recently: a bank counts details, balance and
+# transaction reads each (often 4 a day per account), and opening the page must not spend them.
+_LISTING_TTL = timedelta(hours=6)
+_AGREEMENT_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 _RESET_HEADERS = ("HTTP_X_RATELIMIT_ACCOUNT_SUCCESS_RESET", "X-RateLimit-Account-Success-Reset")
 _INSTITUTION_ID = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
 # ISO 20022 cashAccountType → one of the seven app account types.
@@ -138,10 +146,12 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
         )
     except ExternalServiceError as exc:
         if "HTTP 401" in str(exc) or "HTTP 403" in str(exc):
-            raise ValidationError(
+            message = (
                 "GoCardless rejected the secret ID / secret key — check them in "
                 "bankaccountdata.gocardless.com → User secrets"
-            ) from None
+            )
+            store.note_credentials(rejected_with=message)
+            raise ValidationError(message) from None
         raise
     data = _json(resp) or {}
     access = str(data.get("access") or "").strip()
@@ -152,17 +162,40 @@ def _bearer(store: GoCardlessConfigStore, *, fresh: bool = False) -> str:
     except (TypeError, ValueError):
         lifetime = 0
     store.save_token(access, _iso(_now() + timedelta(seconds=lifetime)) if lifetime else None)
+    store.note_credentials(rejected_with=None)
     return access
 
 
+_BANK_REFUSED = (
+    "the bank refused access to this account: its consent ended or was revoked, or the account "
+    "is no longer active. Renew the bank on the GoCardless page"
+)
+
+
 def _authed(store: GoCardlessConfigStore, method: str, path: str, **kwargs) -> httpx.Response:
-    """One authenticated call, retried once with a fresh token when the cached one is refused."""
+    """One authenticated call, retried once with a fresh token when the cached one is refused.
+
+    An account read refused AGAIN with a token just minted is not the keys (minting worked): it
+    is that account's access — expired, revoked, or the account closed, all HTTP 401 at
+    GoCardless. Read as bad keys it stopped every bank's sync for a day (review 2026-11-15), so
+    it is raised as that bank's access instead (``bank_access``)."""
     try:
         return _request(method, path, token=_bearer(store), **kwargs)
     except ExternalServiceError as exc:
         if "HTTP 401" not in str(exc):
+            if path.startswith("/accounts/") and "HTTP 403" in str(exc):
+                raise ExternalServiceError(
+                    f"GoCardless HTTP 403 — {_BANK_REFUSED}", bank_access=True
+                ) from None
             raise
-    return _request(method, path, token=_bearer(store, fresh=True), **kwargs)
+    try:
+        return _request(method, path, token=_bearer(store, fresh=True), **kwargs)
+    except ExternalServiceError as exc:
+        if path.startswith("/accounts/") and ("HTTP 401" in str(exc) or "HTTP 403" in str(exc)):
+            raise ExternalServiceError(
+                f"GoCardless HTTP 401 — {_BANK_REFUSED}", bank_access=True
+            ) from None
+        raise
 
 
 # ── bank picker + consent link ───────────────────────────────────────────────────────
@@ -366,14 +399,51 @@ def remove_all_banks(store: GoCardlessConfigStore) -> None:
         _revoke(store, bank)
 
 
+def _parse_time(value: object) -> Optional[datetime]:
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _consent_dates(store: GoCardlessConfigStore, data: dict) -> dict:
+    """Bank fields dating the consent from the user's ACCEPTANCE, which GoCardless counts the
+    agreement's ``access_valid_for_days`` from (the estimate made at link time counted from the
+    request, so a consent finished days later read "Access ended" early). Read once, when the
+    requisition is linked: ``consent_dated`` stops every later read. ``{}`` when it couldn't be
+    read now — tried again at the next requisition read."""
+    agreement = str(data.get("agreement") or "").strip()
+    if not _AGREEMENT_ID.match(agreement):
+        return {"consent_dated": True}
+    try:
+        info = _json(_authed(store, "GET", f"/agreements/enduser/{agreement}/")) or {}
+    except ExternalServiceError as exc:
+        return {"consent_dated": True} if "HTTP 404" in str(exc) else {}
+    accepted, days = _parse_time(info.get("accepted")), _int(info.get("access_valid_for_days"))
+    if accepted is None or not days:
+        return {}
+    return {"consent_expires_at": _iso(accepted + timedelta(days=days)), "consent_dated": True}
+
+
 def _read_requisition(store: GoCardlessConfigStore, bank: dict) -> None:
-    """``GET /requisitions/{id}/`` → record its status and, once linked, its account ids."""
+    """``GET /requisitions/{id}/`` → record its status and, once linked, its account ids (under
+    the ids HERE: a renewal's accounts keep the ones the book's links use, ``_carry_links``)."""
     data = _json(_authed(store, "GET", f"/requisitions/{bank['requisition_id']}/")) or {}
     status = str(data.get("status") or "").strip().upper()
     fields: dict = {"status": status}
+    if status == LINKED and bank.get("status") != LINKED:
+        from backend.services.bank_data_sync import budget
+
+        budget.access_renewed("gocardless")  # a link or renewal just finished
     if status == LINKED:
-        fields["account_ids"] = [str(a) for a in (data.get("accounts") or []) if a]
+        here = {cur: stable for stable, cur in (bank.get("api_account_ids") or {}).items()}
+        fields["account_ids"] = [
+            here.get(str(a), str(a)) for a in (data.get("accounts") or []) if a
+        ]
         fields["linked_at"] = bank["linked_at"] or _iso(_now())
+        if not bank.get("consent_dated"):
+            fields.update(_consent_dates(store, data))
     bank.update(fields)
     store.update_bank(bank["key"], **fields)
 
@@ -397,10 +467,53 @@ def _refresh(store: GoCardlessConfigStore) -> list[str]:
     for bank in banks:
         old = by_requisition.get(bank["replaces"] or "")
         if bank["status"] == LINKED and old is not None:
+            warnings += _carry_links(store, bank, old)
             _revoke(store, old)
             store.drop_bank(old["key"])
             store.update_bank(bank["key"], replaces=None)
     return warnings
+
+
+def _carry_links(store: GoCardlessConfigStore, new: dict, old: dict) -> list[str]:
+    """A renewal gives every account a new id at GoCardless. Match each new account to the one it
+    renews by its full IBAN and currency (``_identity`` — a hash, never stored as the IBAN; a
+    multi-currency account's pots share one IBAN), and keep the OLD
+    id as its id here (``api_account_ids`` maps it to the new one for GoCardless's own calls), so
+    the book's links and every booked row's ref stay as they were. An account whose IBAN can't be
+    read — or one whose identity another account on the same side shares, which would be a guess —
+    is left under its new id (a link by hand, as before) and named in a warning."""
+    meta = store.accounts_meta()
+    old_identity: dict[str, Optional[str]] = {}
+    for stable in old["account_ids"]:
+        identity = (meta.get(stable) or {}).get("identity")
+        if not identity:  # cached before identities were kept: read once, from the old consent
+            identity = _read_account(store, old, stable, meta).get("identity")
+        old_identity[stable] = identity
+    new_details = {c: _read_account(store, new, c, {}) for c in new["account_ids"]}
+    old_seen = [i for i in old_identity.values() if i]
+    new_seen = [d.get("identity") for d in new_details.values() if d.get("identity")]
+    known = {i: a for a, i in old_identity.items() if i and old_seen.count(i) == 1}
+    ids: list[str] = []
+    api_ids: dict[str, str] = {}
+    for current, details in new_details.items():
+        identity = details.get("identity")
+        stable = known.get(identity) if identity and new_seen.count(identity) == 1 else None
+        if stable:
+            api_ids[stable] = current
+            with _META_LOCK:  # the fresher details, filed under the id the book knows it by
+                store.cache_account_meta(stable, details)
+        ids.append(stable or current)
+    if api_ids:
+        new.update(account_ids=ids, api_account_ids=api_ids)
+        store.update_bank(new["key"], account_ids=ids, api_account_ids=api_ids)
+    lost = [a for a in old["account_ids"] if a not in api_ids]
+    if not lost:
+        return []
+    return [
+        f"{_bank_name(new)}: {len(lost)} account(s) could not be matched to their earlier ones "
+        "(no IBAN, a refused read, or accounts sharing one IBAN and currency) — unlink them and "
+        "link the new ones"
+    ]
 
 
 def _unusable(bank: dict) -> str:
@@ -432,31 +545,89 @@ def _linked_banks(store: GoCardlessConfigStore) -> tuple[list[dict], list[str]]:
 # ── accounts + transactions ──────────────────────────────────────────────────────────
 
 
-def _account_meta(store: GoCardlessConfigStore, account_id: str, bank: dict, cache: dict) -> dict:
-    """Name/currency/type for one account — cached, because ``/details/`` is rate-limited."""
-    if account_id in cache:
-        return cache[account_id]
-    fallback = f"{_bank_name(bank)} account {account_id[-4:]}"
-    try:
-        details = (_json(_authed(store, "GET", f"/accounts/{account_id}/details/")) or {}).get(
-            "account"
-        ) or {}
-    except ExternalServiceError as exc:
-        logger.warning("gocardless: account details unavailable (%s)", exc)
-        return {"name": fallback, "currency": None, "mask": None}
+def _stale(stamp: object) -> bool:
+    at = _parse_time(stamp) if stamp else None
+    return at is None or _now() - at > _LISTING_TTL
+
+
+def _api_id(bank: dict, account_id: str) -> str:
+    """The id GoCardless knows this account by now. After a renewal it differs from the id the
+    account has HERE (``_carry_links``)."""
+    return (bank.get("api_account_ids") or {}).get(account_id, account_id)
+
+
+def _identity(institution_id: object, iban: object, currency: object) -> Optional[str]:
+    """A hash of the bank, the account's FULL IBAN and its currency — the same account across
+    consents (a multi-currency account's pots share an IBAN, so the currency tells them apart).
+    The IBAN itself is never kept. None when the bank gives no IBAN (a card's masked PAN is no
+    identity)."""
+    number = re.sub(r"\s+", "", str(iban or "")).upper()
+    if not number:
+        return None
+    code = str(currency or "").strip().upper()
+    key = f"gocardless-account:{institution_id}|{number}|{code}"
+    return hashlib.sha256(key.encode()).hexdigest()[:32]
+
+
+def _read_meta(store: GoCardlessConfigStore, api_id: str, bank: dict, fallback: dict) -> dict:
+    """``GET /accounts/{id}/details/`` → the account's stored meta. Raises
+    ``ExternalServiceError``: a read the bank refused or limited."""
+    details = (_json(_authed(store, "GET", f"/accounts/{api_id}/details/")) or {}).get(
+        "account"
+    ) or {}
     iban = str(details.get("iban") or details.get("bban") or details.get("maskedPan") or "")
-    meta = {
+    return {
         "name": str(
             details.get("name") or details.get("displayName") or details.get("product") or ""
         ).strip()
-        or fallback,
+        or fallback["name"],
         "currency": (str(details.get("currency") or "").upper() or None),
         "mask": iban[-4:] or None,
         "account_type": _ACCOUNT_TYPES.get(str(details.get("cashAccountType") or "").upper()),
+        "identity": _identity(
+            bank.get("institution_id"), details.get("iban"), details.get("currency")
+        ),
+        "read_at": _iso(_now()),
     }
-    store.cache_account_meta(account_id, meta)
-    cache[account_id] = meta
+
+
+def _read_account(store: GoCardlessConfigStore, bank: dict, account_id: str, cache: dict) -> dict:
+    """One account's details read live, ``{}`` when the bank won't give them."""
+    fallback = cache.get(account_id) or {"name": f"{_bank_name(bank)} account {account_id[-4:]}"}
+    try:
+        return _read_meta(store, _api_id(bank, account_id), bank, fallback)
+    except ExternalServiceError as exc:
+        logger.warning("gocardless: account details unavailable (%s)", exc)
+        return {}
+
+
+def _account_meta(
+    store: GoCardlessConfigStore, account_id: str, bank: dict, cache: dict, *, fresh: bool = False
+) -> dict:
+    """Name/currency/type for one account. ``fresh`` (listing the accounts): read from GoCardless
+    unless that was done within ``_LISTING_TTL``, the stored copy when the bank refuses.
+    Otherwise (a sync) the stored copy is used, so a sync never spends a ``/details/`` read
+    (rate-limited like transactions)."""
+    cached = cache.get(account_id)
+    if cached and not (fresh and _stale(cached.get("read_at"))):
+        return cached
+    fallback = cached or {
+        "name": f"{_bank_name(bank)} account {account_id[-4:]}",
+        "currency": None,
+        "mask": None,
+    }
+    try:
+        meta = _read_meta(store, _api_id(bank, account_id), bank, fallback)
+    except ExternalServiceError as exc:
+        logger.warning("gocardless: account details unavailable (%s)", exc)
+        return fallback
+    with _META_LOCK:  # accounts are read side by side; the stored copy is one shared map
+        store.cache_account_meta(account_id, meta)
+        cache[account_id] = meta
     return meta
+
+
+_META_LOCK = threading.Lock()
 
 
 def _account_to_common(account_id: str, meta: dict) -> dict:
@@ -470,8 +641,66 @@ def _account_to_common(account_id: str, meta: dict) -> dict:
     }
 
 
+# Booked balances first (what the ledger's cleared balance should match), then the rest.
+_BALANCE_PREFERENCE = (
+    "closingBooked",
+    "interimBooked",
+    "expected",
+    "interimAvailable",
+    "openingBooked",
+)
+
+
+def _account_balance(
+    store: GoCardlessConfigStore,
+    bank: dict,
+    account_id: str,
+    figures: dict,
+    *,
+    reuse: bool = False,
+) -> dict:
+    """``{balance, cleared_balance, working_balance, available_to_spend}`` (``balance_kinds``;
+    ``balance`` the one figure, booked preferred) from ``/accounts/{id}/balances/``. The bank
+    limits this endpoint on its own (often 4 a day, like transactions): a sync reads it live
+    with its transactions, and keeps the figure (``balance_cache``); listing the accounts
+    (``reuse``) takes that figure instead unless it is older than ``_LISTING_TTL``, and falls
+    back to it when the bank refuses. A refused or failed read is just no figure this time,
+    never a failed fetch."""
+    hit = figures.get(account_id)
+    kept = {k: v for k, v in hit.items() if k != "at"} if isinstance(hit, dict) else None
+    if reuse and kept and not _stale(hit.get("at")):
+        return kept
+    try:
+        data = _json(_authed(store, "GET", f"/accounts/{_api_id(bank, account_id)}/balances/"))
+    except ExternalServiceError:
+        return (kept if reuse and kept else None) or {"balance": None, **balance_kinds.split({})}
+    by_type: dict[str, float] = {}
+    for b in (data or {}).get("balances") or []:
+        try:
+            amount = float(((b or {}).get("balanceAmount") or {}).get("amount"))
+        except (TypeError, ValueError):
+            continue
+        by_type.setdefault(str((b or {}).get("balanceType") or ""), amount)
+    best = next((by_type[k] for k in _BALANCE_PREFERENCE if k in by_type), None)
+    if best is None:
+        best = next(iter(by_type.values()), None)
+    figure = {"balance": best, **balance_kinds.split(by_type)}
+    if best is not None:
+        with _META_LOCK:
+            store.cache_account_balance(account_id, {**figure, "at": _iso(_now())})
+    return figure
+
+
 def _txn_id(txn: dict) -> str:
-    return str(txn.get("transactionId") or txn.get("internalTransactionId") or "").strip()
+    """The row's id: GoCardless's own ``internalTransactionId`` first. The bank's
+    ``transactionId`` is bank-dependent and may change or repeat (GoCardless's docs): keyed on
+    it, a changed one booked the row twice and a repeated one hid a real transaction as
+    already booked (review 2026-11-15)."""
+    return str(txn.get("internalTransactionId") or txn.get("transactionId") or "").strip()
+
+
+def _bank_handle(txn: dict) -> str:
+    return str(txn.get("transactionId") or "").strip()
 
 
 def _txn_date(txn: dict) -> Optional[str]:
@@ -500,7 +729,64 @@ def _txn_description(txn: dict) -> str:
     info = (
         info or txn.get("creditorName") or txn.get("debtorName") or txn.get("additionalInformation")
     )
+    return str(info).strip() if info else ""
+
+
+def _ref_text(txn: dict) -> str:
+    """The text an id-less row's ref hashes. FROZEN: an id-less row's ref hashes it, so a change here books every such row again.
+    Improve ``_txn_description`` instead, which nothing keys on."""
+    info = txn.get("remittanceInformationUnstructured")
+    if not info:
+        for key in (
+            "remittanceInformationUnstructuredArray",
+            "remittanceInformationStructuredArray",
+        ):
+            arr = txn.get(key)
+            if isinstance(arr, list) and arr:
+                info = " ".join(str(x) for x in arr if x)
+                break
+    info = info or txn.get("remittanceInformationStructured")
+    info = (
+        info or txn.get("creditorName") or txn.get("debtorName") or txn.get("additionalInformation")
+    )
     return (str(info).strip() if info else "") or "GoCardless"
+
+
+def _txn_payee(txn: dict, amount: float) -> Optional[str]:
+    """The counterparty's own name — who was paid (money out) or who paid (money in) — or
+    ``None`` when the bank names neither. It becomes the row's payee; the description keeps
+    the bank's wording, which payee matching learns from."""
+    keys = ("creditorName", "debtorName") if amount < 0 else ("debtorName", "creditorName")
+    for key in keys:
+        name = " ".join(str(txn.get(key) or "").split())
+        if name:
+            return name[:120]
+    return None
+
+
+def _original_charge(txn: dict) -> tuple[Optional[float], Optional[str]]:
+    """A purchase made in another currency: what the merchant charged (``instructedAmount``),
+    beside the converted amount the account was debited. ``(None, None)`` for a row in the
+    account's own currency. It goes in the row's ``original_amount``/``original_currency`` —
+    the ledger's own fields for it, which the duplicate check compares — never in the memo."""
+    booked_in = str((txn.get("transactionAmount") or {}).get("currency") or "").upper()
+    for fx in _currency_exchanges(txn):
+        paid = fx.get("instructedAmount") if isinstance(fx.get("instructedAmount"), dict) else {}
+        currency = str(paid.get("currency") or fx.get("sourceCurrency") or "").upper()
+        try:
+            amount = abs(float(paid.get("amount")))
+        except (TypeError, ValueError):
+            continue
+        if currency and currency != booked_in and amount:
+            return amount, currency
+    return None, None
+
+
+def _currency_exchanges(txn: dict) -> list[dict]:
+    raw = txn.get("currencyExchange")
+    if isinstance(raw, dict):
+        return [raw]
+    return [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
 
 
 def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool) -> Optional[dict]:
@@ -516,14 +802,21 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         return None
     currency = str(amount_obj.get("currency") or currency_hint).upper()
     description = _txn_description(txn)
+    original_amount, original_currency = _original_charge(txn)
     txn_id = _txn_id(txn)
     ref = (
         f"{account_id}:{txn_id}"
         if txn_id
-        else derived_ref(account_id, date_str, amount, currency, description)
+        else derived_ref(account_id, date_str, amount, currency, _ref_text(txn))
     )
+    # Booked before the internal id came first, the row is filed under the bank's id: kept as
+    # an alias, it still reads as booked (only on the same date and amount — a provider handle,
+    # ``connector_fetch._booked_under_alias``) and a pending booking under it still settles.
+    handle = _bank_handle(txn)
+    aliases = [f"{account_id}:{handle}"] if handle and handle != txn_id else []
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
+        "ref_aliases": aliases,
         "raw": txn,
         "provider_account_id": account_id,
         "date": date_str,
@@ -531,13 +824,19 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         "currency": currency,
         "description": description,
         "memo": None,
+        "payee": _txn_payee(txn, amount),
+        "original_amount": original_amount,
+        "original_currency": original_currency,
+        "category_hint": merchant_category(txn.get("merchantCategoryCode")),
         "pending": pending,
         "supersedes_ref": None,
     }
 
 
-def _account_rows(store, account_id: str, currency: str, since: str, before: str) -> list[dict]:
-    path = f"/accounts/{account_id}/transactions/"
+def _account_rows(
+    store, account_id: str, api_id: str, currency: str, since: str, before: str
+) -> list[dict]:
+    path = f"/accounts/{api_id}/transactions/"
     params = {"date_from": since, "date_to": before}
     data = (_json(_authed(store, "GET", path, params=params)) or {}).get("transactions") or {}
     rows: list[dict] = []
@@ -565,30 +864,69 @@ def fetch_window(
     reads ``rate_limited``, not ``ok``)."""
     banks, warnings = _linked_banks(store)
     owned = [(b, a) for b in banks for a in b["account_ids"] if not account or a == account]
+    if account:
+        # ONE account (the bank data sync): its own bank's access ending is this read's failure,
+        # never an "ok" with nothing read (UAT 2026-11-14); other banks' trouble isn't its own.
+        stuck = next((b for b in store.banks() if account in (b.get("account_ids") or [])), None)
+        if not owned and stuck is not None:
+            raise ValidationError(_unusable(stuck), bank_access=True)
+        warnings = []
     cache = store.accounts_meta()
-    metas = {a: _account_meta(store, a, b, cache) for b, a in owned}
+    figures = store.balance_cache()
+    # Listing the accounts (the connector page, Lucius's list tool) reads their details and
+    # balance from GoCardless only when what is kept is older than ``_LISTING_TTL``. A sync
+    # reads the balance live beside its transactions, below, and keeps it.
+    # Every account at once (parallel.each): one request per account, a second or more each.
+    found = parallel.each(
+        lambda ba: _account_meta(store, ba[1], ba[0], cache, fresh=accounts_only), owned
+    )
+    metas = {a: meta for (_, a), meta in zip(owned, found)}
     accounts = [_account_to_common(a, metas[a]) for _, a in owned]
     if accounts_only:
+        read = parallel.each(
+            lambda ba: _account_balance(store, ba[0], ba[1], figures, reuse=True), owned
+        )
+        for acc, figure in zip(accounts, read):
+            acc.update(figure)
         return FetchWindow(accounts=accounts, rows=[], complete=not warnings, warnings=warnings)
 
     rows: list[dict] = []
     failures: list[ExternalServiceError] = []
+    notes: list[str] = []
+    by_id = {a["provider_account_id"]: a for a in accounts}
     for bank, account_id in owned:
         currency = metas[account_id].get("currency") or ledger_service.base_currency()
         try:
-            rows.extend(_account_rows(store, account_id, currency, since, before))
+            rows.extend(
+                _account_rows(store, account_id, _api_id(bank, account_id), currency, since, before)
+            )
         except ExternalServiceError as exc:
             failures.append(exc)
             warnings.append(f"{metas[account_id].get('name')} ({_bank_name(bank)}): {exc}")
+            continue
+        figure = _account_balance(store, bank, account_id, figures)
+        by_id[account_id].update(figure)
+        if figure["balance"] is None:
+            notes.append(
+                f"{metas[account_id].get('name')} ({_bank_name(bank)}): the bank gave no "
+                "balance this time (its daily balance reads may be used up), so the account "
+                "isn't compared with the bank's figure until a later sync gets one"
+            )
     if owned and len(failures) == len(owned):
         raise failures[-1]
-    return FetchWindow(accounts=accounts, rows=rows, complete=not warnings, warnings=warnings)
+    return FetchWindow(
+        accounts=accounts, rows=rows, complete=not warnings, warnings=[*warnings, *notes]
+    )
 
 
 def classify_error(exc: Exception) -> str:
     if isinstance(exc, ValidationError):
-        return "auth_error"
+        # One bank's access ended (``bank_access``) is that bank's, not the connector's keys: the
+        # sync goes on to the other banks' accounts (``auth_error`` stops it).
+        return "reconnect_needed" if exc.context.get("bank_access") else "auth_error"
     if isinstance(exc, ExternalServiceError):
+        if exc.context.get("bank_access"):
+            return "reconnect_needed"  # one bank's access, not the keys: the others read on
         msg = str(exc).lower()
         if "http 401" in msg or "http 403" in msg:
             return "auth_error"

@@ -124,7 +124,8 @@ def _resolve_provider_model(model_ref: str, store) -> "tuple[str, str]":
                 model_id = (resolved.get("model") or "").strip()
             if not provider_key:
                 provider_key = (
-                    _infer_provider_key(
+                    resolved.get("provider_key")
+                    or _infer_provider_key(
                         (resolved.get("provider") or "").strip().lower(),
                         (resolved.get("base_url") or "").strip(),
                     )
@@ -249,7 +250,8 @@ def resolve_extractor_ref(*, task: str = "chat_vision", store=None) -> str:
     if not model_id:
         return ""
     provider_key = (
-        _infer_provider_key(
+        resolved.get("provider_key")
+        or _infer_provider_key(
             (resolved.get("provider") or "").strip().lower(),
             (resolved.get("base_url") or "").strip(),
         )
@@ -280,7 +282,8 @@ def record_vision_capability(model_ref: str, supports: bool, source: str, *, sto
         try:
             resolved = store.resolved()
             provider_key = (
-                _infer_provider_key(
+                resolved.get("provider_key")
+                or _infer_provider_key(
                     (resolved.get("provider") or "").strip().lower(),
                     (resolved.get("base_url") or "").strip(),
                 )

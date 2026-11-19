@@ -1023,6 +1023,17 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "e67cce2de93f1c551792e15fd19b0133241af91cb5cecd8aa0569fcdce563de9",
             # 2026-10-11 (386d3faf6): before the Gotchas section and the trigger description.
             "bed09dd7c7e5af84c6b294a539e0af103656c97ddacf7f8e56b6de960f56c8e0",
+            # Three later rewrites that never added their old body here, so an install seeded
+            # before any of them still runs it: 7ef012ff, a655b1ca, 4c8f8177.
+            "9e12a52612159f657eee3fc72418b773422c9d5d0759ce049c7f9b4cce9e6e4f",
+            "d7a9e67ec096e582447c97002f496edf2d6cba4431ffde967b7764528904577f",
+            "f692a8a3418e03d6b6f20781404b549b98485d6d3e4fdf69b238f4fd09556fa1",
+            # 2026-11-13: never looked up the broker a new user named (a friend's moomoo went
+            # unmentioned); now its connector card is offered before they type holdings.
+            "66fcc3536112bef733be51d6af6f13ef3145f614a961fccc2f9ace28268ff94f",
+            # 2026-11-13 (543e39ea): an unlisted broker was dropped; now the official-server
+            # check of `beyond_directory` runs and the custom-server card is offered.
+            "e5ba7eaabb5d1a8be37fa5c74d1735d3d9388ccf69b762621bfdcff7c32be663",
         }
     ),
     # 2026-09-26: read the non-existent profile.monthly_budgets and wrote through
@@ -1178,6 +1189,10 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
     # references/trades.md, read before logging a trade).
     "log-transactions-from-email": frozenset(
         {
+            # 2026-11-13: a foreign purchase passes what the account was charged as settled_amount.
+            "f23a59135c5caa8bfc26cca70dfb397ab56fd824aac664fc2910357c71e154be",
+            # 2026-11-13: categories and payee hygiene moved to book-transactions.
+            "a06dac2762127b53292e18f8100e0858e84ebf22e7a2e622d08257a0d7be34ed",
             "23029f81e7d4ff685dcba55c25fdd84ae15cc3774e46e9beeef8a49af9aa8ba4",
             # 2026-10-11 (a607394d3): a fixed 1-day fetch window, sized for a 12-hour
             # schedule — a weekly one missed six days of mail. Now since the last completed run.
@@ -1239,6 +1254,9 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "e285d7433a577013205dc4cc0964d13e2a7af525088de990b6d67a50c6c64bc5",
             # 2026-11-06: before what's still open got its own line and a reminder to recheck.
             "853ae7eae7692d36d5bb4ffd635a1b9670d7dd21edef1b453adea5e593b559c0",
+            # 2026-11-12: a card bill counted only within 3 days, so one due in 5 went unsaid
+            # while the Dashboard flagged it. Now the same week the Dashboard uses.
+            "be8d1c0f677e52cacdfc8af1c2b88dc65eaf4d0a47194a2a54e8a204013fc25e",
         }
     ),
     # 2026-11-05: before one money test for every email, and connecting each item to the books.
@@ -1257,6 +1275,19 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "8c1ebb1af245d07ad6697f02135aead68ab65d749300f222a8cc351ddf9d245c",
             # 2026-11-06: before security notes were limited to finance apps.
             "d7c70868131e008f640a1fa61bb7370a15259954218acc1610d83390ffeb48fa",
+        }
+    ),
+    # 2026-11-13: also carry a foreign purchase's original amount and currency through.
+    "book-transactions": frozenset(
+        {
+            # 2026-11-13: moving the start is the user's call.
+            "d22d4839bbc34f3530f9fbd4b12fd131ee3fbb2ce98b6ef965d878b2445ac4e2",
+            # 2026-11-13: a sync no longer pulls history by default; alignment is for a range
+            # the user asked for.
+            "9c40f71a200705daa78f1c4ba231514386c2cfc3e98a3aa11dce78d50386c21f",
+            # 2026-11-13: a first import aligns the account start (align_account_start).
+            "5652046a02220d073f95020742dbda974ebde87063e6b6da1d9659032a725909",
+            "22e6e8ff517850cb61fad5a51b82b62be400bd39fb5164c5703c81b2a3359acc",
         }
     ),
 }
@@ -1332,6 +1363,8 @@ _ADDED_STARTERS: tuple[str, ...] = (
     "balance-mismatch-tracer",
     # 2026-11-05: the Email finance digest template runs it — logging plus what else needs them.
     "email-finance-digest",
+    # 2026-11-13: the bank-sync templates and the email-logging skill book through it.
+    "book-transactions",
 )
 
 # ── Built-in starter skills ────────────────────────────────────────────────────

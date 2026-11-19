@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 REQUEST_NAME = ".upgrade-request.json"
 STOP_NAME = ".stop-request"
+RESTART_WORD = "restart"  # what `onw restart` writes in that file. Anything else means stop.
 REQUESTED = "requested"
 WORKING = "working"
 FAILED = "failed"
@@ -68,7 +69,7 @@ def request_path() -> Path:
 
 
 def stop_path() -> Path:
-    """`onw stop` writes this, and the server removes it to say it heard."""
+    """`onw stop` and `onw restart` write this, and the server removes it to say it heard."""
     return request_path().with_name(STOP_NAME)
 
 
@@ -121,7 +122,7 @@ class Upgrader(Protocol):
 
 
 class RequestWatcher(threading.Thread):
-    """Watches for `onw upgrade` and `onw stop` while the server runs."""
+    """Watches for `onw upgrade`, `onw stop` and `onw restart` while the server runs."""
 
     def __init__(
         self,
@@ -130,7 +131,7 @@ class RequestWatcher(threading.Thread):
         ready: Callable[[], bool] = lambda: True,
         poll: float = WATCH_SECONDS,
         stop_file: Path | None = None,
-        request_stop: Callable[[], None] = lambda: None,
+        request_stop: Callable[[bool], None] = lambda _restart: None,
     ) -> None:
         super().__init__(name="upgrade-requests", daemon=True)
         self.path = path
@@ -164,8 +165,9 @@ class RequestWatcher(threading.Thread):
     def _stop_was_asked(self) -> bool:
         if self.stop_file is None or not self.stop_file.exists():
             return False
+        word = self.stop_file.read_text(encoding="utf-8").strip()
         clear(self.stop_file)  # first: a file it can't remove would stop every server after this
-        self.request_stop()
+        self.request_stop(word == RESTART_WORD)
         return True
 
     def handle(self) -> bool:

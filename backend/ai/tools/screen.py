@@ -348,9 +348,20 @@ def _validate_command_semantics(name: str, args: dict) -> str | None:
     connector_id = args.get("id")
     if connector_id == connector_directory.CUSTOM_SETUP_ID:
         return None
-    if connector_id not in connector_directory.entry_ids():
-        return connector_directory.unknown_id_message(str(connector_id))
-    return None
+    if connector_id in connector_directory.entry_ids() or _is_installed_id(connector_id):
+        return None
+    return connector_directory.unknown_id_message(str(connector_id))
+
+
+def _is_installed_id(connector_id: object) -> bool:
+    """An id ``get_connector_status`` lists (``mcp:<server>``, ``email``…) — its card fixes or
+    opens a connector the user already has."""
+    from backend.ai.tools._connector_gate import DISABLED_CONNECTORS
+    from backend.services import connectors as connectors_service
+
+    if not isinstance(connector_id, str) or connector_id in DISABLED_CONNECTORS:
+        return False
+    return any(v.id == connector_id for v in connectors_service.list_connectors())
 
 
 class RunScreenCommandInput(ToolInput):
@@ -423,9 +434,11 @@ async def run_screen_command(input_data: dict):
         # the wrong way (owner test, 2026-10-31).
         payload["note"] = (
             "The chat now shows a card for this connector, placed above your reply. Call it "
-            "'the card' — not a chip, and not 'below'. Its button: Connect goes straight to the "
-            "provider's own sign-in for a sign-in connector; Set up opens the form otherwise. "
-            "Nothing is connected until the user finishes it themselves."
+            "'the card' — not a chip, and not 'below'. Its button follows the connector's live "
+            "state: Connect goes straight to the provider's own sign-in for a sign-in connector, "
+            "Set up opens the form otherwise; for one already installed, Reconnect (or "
+            "Authenticate) while it is failing, Open once it works. Nothing is connected until "
+            "the user finishes it themselves."
             + ("" if not cmd.get("live") else " The form is already open on Connectors.")
         )
     elif not cmd.get("live"):

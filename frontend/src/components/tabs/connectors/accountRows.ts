@@ -8,12 +8,21 @@ export interface ProviderAccountRow {
   name: string
   mask: string
   currency: string
+  // The bank's balances in the book's own terms, each null when the bank doesn't send it:
+  // balance = settled + pending (working), cleared_balance = settled only, available_to_spend =
+  // overdraft or credit included. A bank with one undivided figure (Plaid) sends only balance.
   balance: number | null
+  cleared_balance?: number | null
+  available_to_spend?: number | null
   // The provider's suggested app account type (one of the seven), or null.
   account_type: AccountType | null
   // The bank the account sits at, when one connector links several (Plaid); else null.
   institution?: string | null
   linked_account_id: string | null
+  // Linked here, but the bank no longer lists it (closed, or the bank was linked again).
+  not_listed?: boolean
+  // Linked here, at a bank that couldn't be read just now (an expired sign-in, an outage).
+  unread?: boolean
 }
 
 export interface RowGroup {
@@ -34,15 +43,31 @@ const GROUP_LABELS: Record<AccountType, string> = {
 /** Rows grouped by suggested type, in the app's type order; untyped rows last as "Other".
  *  A provider that suggests no types at all gets ONE unlabelled group — headings that all
  *  say "Other" would only add noise. */
+export const GONE_GROUP = 'gone'
+export const UNREAD_GROUP = 'unread'
+
 export function groupRows(rows: ProviderAccountRow[]): RowGroup[] {
-  if (rows.every((r) => r.account_type == null)) return [{ key: 'all', label: '', rows }]
+  const listed = rows.filter((r) => !r.not_listed && !r.unread)
+  const tail: RowGroup[] = [
+    { key: UNREAD_GROUP, label: 'Bank not answering', rows: rows.filter((r) => r.unread) },
+    { key: GONE_GROUP, label: 'No longer at the bank', rows: rows.filter((r) => r.not_listed) },
+  ]
+  if (listed.every((r) => r.account_type == null)) {
+    return [{ key: 'all', label: '', rows: listed }, ...tail].filter((g) => g.rows.length > 0)
+  }
   const groups: RowGroup[] = TYPE_ORDER.map((t) => ({
     key: t,
     label: GROUP_LABELS[t],
-    rows: rows.filter((r) => r.account_type === t),
+    rows: listed.filter((r) => r.account_type === t),
   }))
-  groups.push({ key: 'other', label: 'Other', rows: rows.filter((r) => r.account_type == null) })
+  groups.push({ key: 'other', label: 'Other', rows: listed.filter((r) => r.account_type == null) })
+  groups.push(...tail)
   return groups.filter((g) => g.rows.length > 0)
+}
+
+/** The one figure a row shows: the working balance, else the settled one. */
+export function shownBalance(row: ProviderAccountRow): number | null {
+  return row.balance ?? row.cleared_balance ?? null
 }
 
 export function isOwed(row: ProviderAccountRow): boolean {
@@ -52,8 +77,10 @@ export function isOwed(row: ProviderAccountRow): boolean {
 /** The create form's seed for a provider account: its suggested type, and its balance in the
  *  form's terms — a card or loan's amount OWED is entered positive (the form signs it), and a
  *  provider may report it either way round. The balance comes ONLY with a known type: the form
- *  otherwise starts on Cash, where a card's prefilled debt would book as an asset. */
+ *  otherwise starts on Cash, where a card's prefilled debt would book as an asset. It is the
+ *  SETTLED figure when the bank sends one: a bank sync books pending rows on top, uncleared. */
 export function prefillFor(row: ProviderAccountRow, institution?: string): AccountPrefill {
+  const start = row.cleared_balance ?? row.balance
   return {
     type: row.account_type ?? undefined,
     name: row.name,
@@ -63,9 +90,9 @@ export function prefillFor(row: ProviderAccountRow, institution?: string): Accou
     // Unknown → left blank for the user to fill, rather than filing the account under "Plaid".
     institution: institution || row.institution || undefined,
     initial:
-      row.balance == null || row.account_type == null
+      start == null || row.account_type == null
         ? undefined
-        : String(isOwed(row) ? Math.abs(row.balance) : row.balance),
+        : String(isOwed(row) ? Math.abs(start) : start),
   }
 }
 

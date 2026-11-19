@@ -556,6 +556,89 @@ async def _run_ynab_sync() -> None:
         logger.exception("scheduler: ynab_sync error: %s", exc)
 
 
+async def _run_linked_account_totals() -> None:
+    """Tick of the linked-total sync (ADR 2026-11-10): reads each balance-reporting connector's
+    account list when due and moves a linked Brokerage total account to the total it reports.
+    Books no connector transaction and calls no model — a balance, not an ingest poll."""
+    try:
+        from backend.services import account_value_cost, account_value_sync
+
+        # A holding carved out before it had a price is trued up once its price lands.
+        await asyncio.to_thread(account_value_cost.settle)
+        if await asyncio.to_thread(account_value_sync.run_if_due):
+            logger.info("scheduler: linked_account_totals ran")
+    except Exception as exc:
+        logger.exception("scheduler: linked_account_totals error: %s", exc)
+
+
+async def _run_followed_portfolios() -> None:
+    """Re-read every followed portfolio's source for a new filing (flag-gated at run time, so
+    switching the flag needs no re-registration)."""
+    try:
+        from backend.services.feature_flags import enabled
+        from backend.services.followed_portfolios import service
+
+        if not enabled("followed_portfolios"):
+            return
+        result = await asyncio.to_thread(service.refresh_all)
+        warmed = await asyncio.to_thread(service.warm_featured)
+        if result["checked"] or warmed:
+            logger.info("scheduler: followed_portfolios — %s, %d previews warm", result, warmed)
+    except Exception as exc:
+        logger.exception("scheduler: followed_portfolios error: %s", exc)
+
+
+async def _run_paper_tick() -> None:
+    """Paper trading: retry open paper orders (flag-gated inside; nothing runs with no open
+    orders). A simulated book — never an order to any broker."""
+    try:
+        from backend.services.paper_trading import engine
+
+        result = await asyncio.to_thread(engine.tick)
+        if result.get("filled") or result.get("expired"):
+            logger.info("scheduler: paper tick — %s", result)
+    except Exception as exc:
+        logger.exception("scheduler: paper tick error: %s", exc)
+
+
+async def _run_paper_daily() -> None:
+    """Paper trading: dated lifecycle events and today's value row, idempotent, hourly."""
+    try:
+        from backend.services.paper_trading import engine
+
+        await asyncio.to_thread(engine.daily)
+    except Exception as exc:
+        logger.exception("scheduler: paper daily error: %s", exc)
+
+
+async def _run_paper_autopilot() -> None:
+    """Paper trading: run each Auto paper portfolio's due review (flag-gated inside). A review is
+    one Lucius turn that may trade only that simulated portfolio, within its mandate."""
+    try:
+        from backend.services.paper_trading import autopilot_run
+
+        result = await autopilot_run.run_due()
+        if result:
+            logger.info("scheduler: paper autopilot — %s", result)
+    except Exception as exc:
+        logger.exception("scheduler: paper autopilot error: %s", exc)
+
+
+async def _run_bank_data_sync() -> None:
+    """Tick of the AI-free bank sync (ADR 2026-11-13): runs each connector in "Sync without AI"
+    mode when its own schedule says it is due. Nothing at all while ``bank_data_sync`` is off."""
+    try:
+        from backend.services import bank_data_sync
+
+        if await asyncio.to_thread(bank_data_sync.run_if_due):
+            logger.info("scheduler: bank_data_sync ran")
+        # The opt-in Lucius follow-up runs here, on the loop, never inside the booking run.
+        if await bank_data_sync.run_followups():
+            logger.info("scheduler: bank_data_sync follow-up categorised rows")
+    except Exception as exc:
+        logger.exception("scheduler: bank_data_sync error: %s", exc)
+
+
 def _outward_jobs_allowed() -> bool:
     """False on a QA/isolated run (ONW_QA_MODE) unless it opts in with ONW_QA_RUN_SCHEDULES=1.
 
@@ -640,6 +723,75 @@ def start() -> None:
             max_instances=1,
         )
         logger.info("scheduler: ynab_sync scheduled — checked every 60s")
+        # Linked investment totals — one tick a minute; due every 6h, or at once for an account
+        # never read on its link. No-op unless `allow_brokerage_total_valuation` is on.
+        _scheduler.add_job(
+            _run_linked_account_totals,
+            trigger=IntervalTrigger(seconds=60),
+            id="linked_account_totals",  # a balance read, not an ingest poll
+            replace_existing=True,
+            misfire_grace_time=120,
+            max_instances=1,
+        )
+        # Bank sync without AI — one tick a minute; each connector's cadence (GoCardless 12 h,
+        # others 6 h) and read budget live in its own state. No-op while the flag is off.
+        _scheduler.add_job(
+            _run_bank_data_sync,
+            trigger=IntervalTrigger(seconds=60),
+            id="bank_data_sync",  # one generic tick, opt-in per connector — not an ingest:<provider> poll
+            replace_existing=True,
+            misfire_grace_time=120,
+            max_instances=1,
+        )
+
+    # Paper trading — retry waiting paper orders every minute (one batched quote, only for
+    # assets with open orders) and refresh each run's value row hourly. Flag-gated at run time.
+    _scheduler.add_job(
+        _run_paper_tick,
+        trigger=IntervalTrigger(seconds=60),
+        id="paper_tick",
+        replace_existing=True,
+        misfire_grace_time=120,
+        max_instances=1,
+    )
+    _scheduler.add_job(
+        _run_paper_daily,
+        trigger=IntervalTrigger(hours=1, start_date=datetime.now() + timedelta(minutes=2)),
+        id="paper_daily",
+        replace_existing=True,
+        misfire_grace_time=3600,
+        max_instances=1,
+    )
+    # Tickers held on paper are followed by Intel like watched ones, by name only
+    # (core.paper_follow; ADR 2026-11-15-paper-trading-…, amended 2026-11-18).
+    try:
+        from backend.services.paper_trading import follow as paper_follow
+
+        paper_follow.register()
+    except Exception as exc:
+        logger.exception("scheduler: paper follow registration failed: %s", exc)
+    # Paper autopilot — each Auto portfolio's due review (and any "Review now"), one at a time.
+    _scheduler.add_job(
+        _run_paper_autopilot,
+        trigger=IntervalTrigger(seconds=60, start_date=datetime.now() + timedelta(seconds=30)),
+        id="paper_autopilot",
+        replace_existing=True,
+        misfire_grace_time=300,
+        max_instances=1,
+    )
+
+    # Followed portfolios — filings land quarterly (13F) or a few times a month (House), so
+    # twice a day is generous. Calls SEC / House Clerk, hence not on a QA run.
+    if outward:
+        _scheduler.add_job(
+            _run_followed_portfolios,
+            # Soon after start: it also warms the Discover cards, which a first visit waits on.
+            trigger=IntervalTrigger(hours=12, start_date=datetime.now() + timedelta(minutes=1)),
+            id="followed_portfolios",
+            replace_existing=True,
+            misfire_grace_time=3600,
+            max_instances=1,
+        )
 
     # Batch reap sweep — polls pending batch ledger rows and applies results.
     # Runs every 5 minutes; no-op when the ledger is empty.

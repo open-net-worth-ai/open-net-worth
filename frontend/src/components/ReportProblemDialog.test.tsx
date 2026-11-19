@@ -71,16 +71,62 @@ describe('Report a problem dialog (browser)', () => {
     expect(screen.getByText('0.1.2')).toBeTruthy()
   })
 
-  it('says why it asks for an email, and links to the Discord community', async () => {
+  it('drops Cancel on a phone, where the sheet already closes by ✕, tap outside or drag', async () => {
+    stubServer()
+    await openDialog()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
+    cleanup()
+    closeReportProblem()
+    const phone = vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      matches: query === '(max-width: 639.98px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+    stubServer()
+    await openDialog()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Post on Discord' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send report' })).toBeTruthy()
+    phone.mockRestore()
+  })
+
+  it('says why it asks for an email', async () => {
     stubServer()
     await openDialog()
     expect(screen.getByText(/tell you when the fix is out/)).toBeTruthy()
-    const link = screen.getByRole('link', { name: 'Join us on Discord' })
-    expect(link.getAttribute('href')).toBe('https://discord.gg/gRRsQRgwE8')
+  })
+
+  it('posts on Discord beside Send: copies the report with its logs but never the email, and opens the invite', async () => {
+    stubServer()
+    await openDialog()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
-    fireEvent.click(link)
+    fireEvent.change(screen.getByLabelText(/What happened/), {
+      target: { value: 'It froze on import' },
+    })
+    fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'someone@example.com' } })
+    expect(
+      screen.getByText('Post on Discord copies your message for you to paste in #bugs.'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Post on Discord' }))
+    expect(
+      await screen.findByText(/^Copied — press (⌘V|Ctrl\+V) in #bugs to paste it\.$/),
+    ).toBeTruthy()
+    const copied = writeText.mock.calls[0]![0] as string
+    expect(copied).toContain('It froze on import')
+    expect(copied).toContain('Recent logs (masked)')
+    expect(copied).not.toContain('someone@example.com')
     expect(open).toHaveBeenCalledWith(
-      'https://discord.gg/gRRsQRgwE8',
+      'https://discord.gg/RTUMyHcUmN',
       '_blank',
       'noopener,noreferrer',
     )
@@ -109,7 +155,7 @@ describe('Report a problem dialog (browser)', () => {
     fireEvent.change(screen.getByLabelText(/What happened/), {
       target: { value: '  It froze  ' },
     })
-    fireEvent.change(screen.getByLabelText('Email (optional)'), {
+    fireEvent.change(screen.getByLabelText('Email'), {
       target: { value: 'me@example.com' },
     })
     fireEvent.change(screen.getByLabelText('Recent logs'), { target: { value: 'edited logs' } })
@@ -128,10 +174,12 @@ describe('Report a problem dialog (browser)', () => {
     await waitFor(() => expect(document.activeElement?.textContent).toBe('Close'))
   })
 
-  it('leaves the logs out when the box is unticked', async () => {
+  it('leaves the logs out when the box is unticked, and the folded line says so', async () => {
     const calls = stubServer()
     await openDialog()
+    expect(screen.getByText('Also sent: app details and recent logs (masked)')).toBeTruthy()
     fireEvent.click(screen.getByLabelText(/Include recent logs/))
+    expect(screen.getByText('Also sent: app details')).toBeTruthy()
     fireEvent.change(screen.getByLabelText(/What happened/), { target: { value: 'It froze' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
     await screen.findByText('Thank you. Your report was sent.')

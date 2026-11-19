@@ -214,15 +214,14 @@ class AssignBudgetInput(ToolInput):
 @tool(
     "assign_budget",
     description=(
-        "Propose ASSIGNING money into an envelope for a month (YNAB 'give every dollar a "
-        "job'). APPROVE-TIER, previews only. amount SETS the TOTAL for (month, envelope). "
+        "ASSIGN money into an envelope for a month (YNAB 'give every dollar a "
+        "job'). amount SETS the TOTAL for (month, envelope). "
         "envelope_id is the envelope's own id (get_budget_month's row envelope_id/key, or "
         "list_envelopes). Use move_money to shift between envelopes.\n\n"
         "MANY AT ONCE: pass `assignments` — [{envelope_id, amount, month?}] — to assign "
         "different amounts to several envelopes in ONE call instead of one call per envelope "
         "(a whole month's budgeting — 15-20 envelopes — in ONE call). Each row may override "
-        "month; the top-level month is the default. ONE confirm card covers the whole batch. "
-        "Approving the card writes it; nothing else to call."
+        "month; the top-level month is the default. Nothing else to call to apply it."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -314,14 +313,12 @@ class MoveMoneyInput(ToolInput):
 @tool(
     "move_money",
     description=(
-        "Propose MOVING assigned money between two envelopes within a month. APPROVE-TIER, "
-        "previews only. from/to must be DIFFERENT envelopes. Either end may be '__rta' (not "
+        "MOVE assigned money between two envelopes within a month. from/to must be DIFFERENT envelopes. Either end may be '__rta' (not "
         "both): to '__rta' releases money to Ready-to-Assign (capped at the source's "
         "available this month); from '__rta' funds FROM Ready-to-Assign (may go negative, "
         "like assign_budget).\n\n"
         "MANY AT ONCE: pass `moves` — [{from_envelope_id, to_envelope_id, amount, month?}] — "
-        "for several independent moves in ONE call instead of one call each. ONE confirm card "
-        "covers the whole batch. Approving the card writes it; nothing else to call."
+        "for several independent moves in ONE call instead of one call each. Nothing else to call to apply it."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -480,15 +477,13 @@ def _target_change_and_display(row: dict) -> tuple[dict, dict]:
 @tool(
     "set_envelope_targets",
     description=(
-        "Propose setting, snoozing, or clearing a funding TARGET on an envelope (basis for "
-        "the '$X more needed' pill), stored PER ENVELOPE (one per merged envelope). "
-        "APPROVE-TIER, previews only. type: monthly/weekly/yearly/by_date (see amount + "
+        "Set, snooze, or clear a funding TARGET on an envelope (basis for "
+        "the '$X more needed' pill), stored PER ENVELOPE (one per merged envelope). type: monthly/weekly/yearly/by_date (see amount + "
         "date). Deadline display fields: due_weekday (0-6, weekly), due_day (1-28/-1=last, "
         "monthly), date (yearly). snooze_until (YYYY-MM) suspends funding; alone=snooze, "
         "blank=un-snooze; type='' clears.\n\n"
         "MANY AT ONCE: pass `targets` — [{envelope_id, type?, amount?, date?, ...}] — to set a "
-        "different target on several envelopes in ONE call. ONE confirm card covers the whole "
-        "batch. Approving the card writes it; nothing else to call."
+        "different target on several envelopes in ONE call. Nothing else to call to apply it."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -526,10 +521,10 @@ class CreateEnvelopeGroupInput(ToolInput):
 @tool(
     "create_envelope_group",
     description=(
-        "Propose creating a new, EMPTY envelope group (a heading that holds budget envelopes — "
+        "Create a new, EMPTY envelope group (a heading that holds budget envelopes — "
         "categories belong to no group). Fill it afterwards with move_envelopes_to_group. Refused "
         "for the names of the app's own groups (Commitments, Credit Card Payments) and for "
-        "reserved `__x__` names. APPROVE-TIER."
+        "reserved `__x__` names."
     ),
     input_schema=schema_of(CreateEnvelopeGroupInput, tool_name="create_envelope_group"),
     mutates=("budget",),
@@ -571,8 +566,8 @@ class RenameEnvelopeGroupInput(ToolInput):
 @tool(
     "rename_envelope_groups",
     description=(
-        "Propose renaming a Planning group (and/or collapsing it) — a bucket of envelopes, "
-        "not a category grouping. APPROVE-TIER. Get the group_id from get_budget_month "
+        "Rename a Planning group (and/or collapsing it) — a bucket of envelopes, "
+        "not a category grouping. Get the group_id from get_budget_month "
         "(groups[].id).\n\n"
         "MANY AT ONCE: pass `groups` — [{group_id, name?, collapsed?}] — to rename several "
         "groups in ONE call."
@@ -652,7 +647,7 @@ class ReorderEnvelopeGroupsInput(ToolInput):
 @tool(
     "reorder_envelope_groups",
     description=(
-        "Propose reordering the Planning groups (buckets of envelopes). APPROVE-TIER. Pass "
+        "Reorder the Planning groups (buckets of envelopes). Pass "
         "`order` = the full list of group ids in the desired top-to-bottom order (ids from "
         "get_budget_month)."
     ),
@@ -678,7 +673,7 @@ class DeleteEnvelopeGroupInput(ToolInput):
     description=(
         "Delete Planning groups (buckets of envelopes) — `group_ids`, from get_budget_month or "
         "list_envelopes. Their envelopes are NOT lost: they move into the 'Others' catch-all "
-        "group. Approving the card writes it; nothing else to call."
+        "group. Nothing else to call to apply it."
     ),
     input_schema=schema_of(DeleteEnvelopeGroupInput, tool_name="delete_envelope_groups"),
     mutates=("budget",),
@@ -721,7 +716,7 @@ class MoveEnvelopesToGroupInput(ToolInput):
         "for an income category (income has no envelope and no group), and for an envelope "
         "holding several categories. Several "
         "envelopes go to the SAME group, appended in the given order (`index` places a single "
-        "one). Approving the card writes it; nothing else to call."
+        "one). Nothing else to call to apply it."
     ),
     input_schema=schema_of(MoveEnvelopesToGroupInput, tool_name="move_envelopes_to_group"),
     mutates=("budget",),
@@ -769,7 +764,7 @@ class ReorderEnvelopesInGroupInput(ToolInput):
     description=(
         "Reorder the envelopes WITHIN one Planning group: envelope_ids = ALL of that group's "
         "envelopes in the new order — same set, just reordered (move_envelopes_to_group adds "
-        "or removes one). Approving the card writes it; nothing else to call."
+        "or removes one). Nothing else to call to apply it."
     ),
     input_schema=schema_of(ReorderEnvelopesInGroupInput, tool_name="reorder_envelopes_in_group"),
     mutates=("budget",),
@@ -814,9 +809,8 @@ class AutoAssignInput(ToolInput):
 @tool(
     "auto_assign",
     description=(
-        "Propose an AUTO-ASSIGN operation for the current budget month: fill category Assigned "
-        "amounts in bulk using a named mode. Shows the user the assignments on a confirm card; "
-        "approving it applies them — there is nothing further to call. Ready to Assign is cash "
+        "Run an AUTO-ASSIGN operation for the current budget month: fill category Assigned "
+        "amounts in bulk using a named mode. Nothing else to call to apply it. Ready to Assign is cash "
         "not yet assigned to an envelope. An "
         "envelope HOLDS its own overspend until month-end — Ready to Assign does not move when "
         "a category goes red, cash or card — but covering that overspend costs Ready to "

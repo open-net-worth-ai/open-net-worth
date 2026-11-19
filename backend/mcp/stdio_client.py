@@ -49,6 +49,7 @@ from backend.mcp.client import (
     PROTOCOL_VERSION,
     Deadline,
     McpCallError,
+    McpToolError,
     split_result_content,
 )
 from backend.mcp.stdio_stderr import StderrTail
@@ -260,7 +261,7 @@ class StdioMcpClientConnection:
             result.get("content") if isinstance(result, dict) else None
         )
         if isinstance(result, dict) and result.get("isError"):
-            raise McpCallError(text or "external tool reported an error")
+            raise McpToolError(text or "external tool reported an error")
         return text, images
 
     def take_tools_changed(self) -> bool:

@@ -122,7 +122,18 @@ message. There's nothing to set. This is separate from [Memory](memory.md), whic
 
 Prices are calculated from each provider's published rates. With the Claude Code CLI on a
 Claude plan, the figure is what that usage would cost at list price — your plan covers it, and
-its usage limits apply instead of a bill.
+its usage limits apply instead of a bill. Each reply counts only its own usage. Before
+2026-11-18 a long Claude Code CLI conversation could show a figure several times too high,
+because each reply also re-counted the earlier ones. Those older records are not corrected.
+
+**Claude Code CLI keeps its cache when Lucius loads a tool.** Lucius starts a chat with its
+most-used tools and loads others when it needs them. With the Claude Code CLI, the new tool is
+introduced inside the conversation, so the CLI keeps its running process and prompt cache. In
+testing, a reply that loaded a tool wrote about 2,000 tokens to cache instead of 40,000, which
+saves roughly $0.15 at list price and a few seconds of wait. This is on by default. If Lucius
+ever stops seeing a tool it just loaded, turn off **Settings → Developer → Experimental →
+claude_cli_stable_tool_prompt**; each tool load then restarts the CLI with the full tool list,
+as before.
 
 To cut costs: turn off **Follow-up suggestions** in **Settings → Chat** (that stops a
 model call per reply), route background tasks to a cheaper model, and use **Low** effort for

@@ -15,8 +15,25 @@ vi.mock('@tanstack/react-router', async (load) => ({
   useNavigate: () => navigate,
 }))
 
+const restApi = vi.hoisted(() => ({ notes: '' }))
+vi.mock('./restApi', async (load) => {
+  const real = await load<typeof import('./restApi')>()
+  return {
+    ...real,
+    cachedRestApi: () => undefined,
+    getRestApi: async () => ({ notes: restApi.notes }),
+  }
+})
+
+vi.mock('./ConnectorAccountsList', () => ({
+  ConnectorAccountsList: ({ provider }: { provider: string }) => (
+    <div data-testid="accounts-list">{provider}</div>
+  ),
+}))
+
 afterEach(() => {
   cleanup()
+  restApi.notes = ''
   navigate.mockReset()
 })
 
@@ -311,7 +328,42 @@ describe('a caller that already said "set this up" lands ON the form', () => {
   })
 })
 
+describe('instructions for Lucius', () => {
+  it('shows a REST API’s instructions folded, like an MCP server’s', async () => {
+    restApi.notes = 'Call list_accounts first.\nAmounts are in cents.'
+    renderDetail(
+      entry({ id: 'rest:acme_bank', kind: 'rest', name: 'Acme Bank', families: ['API'] }),
+    )
+    const fold = await screen.findByText('Instructions for Lucius')
+    expect(fold.closest('details')?.textContent).toContain('Amounts are in cents.')
+  })
+
+  it('shows nothing for a REST API with no instructions', async () => {
+    const { container } = renderDetail(
+      entry({ id: 'rest:acme_bank', kind: 'rest', name: 'Acme Bank', families: ['API'] }),
+    )
+    await Promise.resolve()
+    expect(container.querySelector('.cn-fold')).toBeNull()
+  })
+
+  it('keeps an MCP server’s handshake instructions under their own title', () => {
+    renderDetail(entry({ mcp: true, instructions: 'Use search first.' }))
+    expect(screen.getByText('The server’s instructions for AI')).toBeTruthy()
+  })
+})
+
 describe('the kebab', () => {
+  it('offers no View details for a REST API the owner added: it has no directory page', () => {
+    // It opened a plain Browse & add, since the directory lists only the entry that adds one.
+    const { container } = renderDetail(
+      entry({ id: 'rest:acme_bank', kind: 'rest', name: 'Acme Bank', families: ['API'] }),
+    )
+    openKebab(container)
+    const items = [...container.querySelectorAll('.rd-kebab-item')].map((b) => b.textContent)
+    expect(items).not.toContain('View details')
+    expect(items).toContain('Remove connector')
+  })
+
   it('offers View details • Refresh tools list • Remove connector for a native connector', () => {
     const { container } = renderDetail(entry())
     const items = Array.from(openKebab(container).querySelectorAll('.rd-kebab-item')).map(
@@ -585,5 +637,27 @@ describe('on a phone a running connector keeps Pause in the ⋮; only a fix reac
     expect(buttons[0]!.className).toContain('secondary')
     fireEvent.click(buttons[1]!)
     expect(onSetEnabled).toHaveBeenCalledWith(true)
+  })
+})
+
+// Reported 2026-11-12: a GoCardless bank linked fine, then nothing said how its accounts reach
+// the book — the link rows lived only behind Edit configuration.
+describe('ConnectorDetail synced accounts', () => {
+  it('lists a connected bank connector’s accounts on its page', () => {
+    renderDetail(entry({ id: 'gocardless', name: 'GoCardless' }))
+    expect(screen.getByTestId('accounts-list').textContent).toBe('gocardless')
+  })
+
+  it('shows none while the connector is paused or not set up', () => {
+    renderDetail(entry({ id: 'gocardless', name: 'GoCardless', enabled: false }))
+    expect(screen.queryByTestId('accounts-list')).toBeNull()
+    cleanup()
+    renderDetail(entry({ id: 'gocardless', name: 'GoCardless', configured: false }))
+    expect(screen.queryByTestId('accounts-list')).toBeNull()
+  })
+
+  it('shows none for a connector with no accounts to link', () => {
+    renderDetail(entry({ id: 'tavily', name: 'Tavily' }))
+    expect(screen.queryByTestId('accounts-list')).toBeNull()
   })
 })

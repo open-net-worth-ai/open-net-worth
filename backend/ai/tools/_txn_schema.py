@@ -208,6 +208,14 @@ _FIELDS: dict[str, dict[str, Any]] = {
             "the leg account ids for a transfer."
         ),
     },
+    "override_payee_default": {
+        "type": "boolean",
+        "description": (
+            "A payee's pinned default category replaces your `category` unless this is true. "
+            "Set it ONLY when a standing user instruction decides the category; never for a "
+            "guess."
+        ),
+    },
     "account_id": {
         "type": "string",
         "description": (
@@ -310,6 +318,14 @@ _FIELDS: dict[str, dict[str, Any]] = {
             "auto-resolving one from the description. Expense/income only."
         ),
     },
+    "payee": {
+        "type": "string",
+        "description": (
+            "The merchant/person's clean name when the description is raw bank text — a fetched "
+            "row's `payee`, passed straight through. Matches an existing payee by name (then by "
+            "the description) and names a new one only if neither matches. Expense/income only."
+        ),
+    },
 }
 
 
@@ -365,6 +381,7 @@ def create_item_properties() -> dict[str, dict[str, Any]]:
         "original_amount",
         "original_currency",
         "category",
+        "override_payee_default",
         "account_id",
         "to_account_id",
         "from_account_id",
@@ -374,6 +391,7 @@ def create_item_properties() -> dict[str, dict[str, Any]]:
         "splits",
         "external_refs",
         "payee_id",
+        "payee",
     )
 
 
@@ -533,6 +551,8 @@ def filter_properties() -> dict[str, dict[str, Any]]:
             "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
             "description": (
                 "Filter by category label or id; pass a LIST to match any of several. "
+                "'Uncategorized' matches transactions with no category (combine it with "
+                "others in a list). "
                 "Passing a kind name here ('expense', 'income', …) filters by "
                 "transaction_types instead."
             ),

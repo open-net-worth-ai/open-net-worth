@@ -6,7 +6,7 @@ order: 171
 audience: [user]
 status: stable
 related: [features/imports-and-sync, connectors/bank-brokerage, operations/backup-and-restore, concepts/envelopes-and-budgeting]
-keywords: [actual, actual budget, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
+keywords: [actual, actual budget, categories, starter categories, merge categories, tags, hashtags, proxy, proxy headers, reverse proxy, import, migrate, migration, move, review, verify, sync, two-way, conflict, reset sync, tracking, carryover, hold, to budget, starting balances, income categories]
 ---
 
 # Import from Actual Budget
@@ -26,11 +26,11 @@ to Actual.
 
 ## Connect your server
 
-Open **Automations → Data sync → Actual** and click **Connect Actual…**. It's the same panel as
+Open **Automations → Data Sync → Actual** and click **Connect Actual…**. It's the same panel as
 **Connectors → Actual Budget**, and it opens right over the page.
 
 - **Server address** is the address you open Actual at. Plain http to another computer still works,
-  but it isn't encrypted: anyone on that network could read your password or token and your budget,
+  but it isn't encrypted: anyone on that network could read your password, token or proxy headers and your budget,
   and change what this app reads and writes. The form warns you under the field, so use https if you
   can. A certificate this computer doesn't trust stops the connection, and there's no switch to skip
   that check.
@@ -42,11 +42,22 @@ Open **Automations → Data sync → Actual** and click **Connect Actual…**. I
   The budget you pick here is the one the import starts from.
 - **Encryption password** is only for a budget with end-to-end encryption on in Actual. An encrypted
   budget says `(encrypted)` in the list, and **Save** waits until it has its password.
+- **Proxy headers** are only for a server behind a sign-in proxy, such as Pangolin, Authelia or
+  Cloudflare Access, that accepts a header in place of its login page. Write one per line, as
+  `Name: value`, up to ten. They go with every request to your server, and nowhere else: the app
+  never follows a redirect, and a new server address drops them, as it does a saved password. Headers
+  the app sets itself, such as `Host` or Actual's own sign-in header, are refused. The form shows
+  only the names of saved headers; **Remove** deletes them when you save.
 
-Passwords and tokens never come back from the server. A saved one shows as dots, and leaving the
-field blank keeps it.
+Passwords, tokens and header values never come back from the server. A saved one shows as dots, and
+leaving the field blank keeps it.
 
-On a hosted instance the form says Actual isn't available, and **Data sync** doesn't list it.
+**Behind a sign-in proxy?** If the proxy answers instead of Actual, with a redirect or its own login
+page, the connector says so. Either add the header your proxy accepts under **Proxy headers**, or let
+these paths through to Actual without the proxy's login: `/account`, `/info`, `/sync`, `/data` and
+`/data-file-index.txt`. The sync doesn't use `/api`.
+
+On a hosted instance the form says Actual isn't available, and **Data Sync** doesn't list it.
 
 **Pausing the connector stops all contact with your server.** No scheduled run starts, a run under way
 stops at its next batch, and **Sync now**, the review, the import, a re-check and the budget list all
@@ -94,7 +105,8 @@ starts from your book's base currency. A budget that states a currency keeps it,
 doesn't appear.
 
 The notes above the tabs show what would stop the import first, then the first three things worth
-knowing, or the first one on a phone. **Show more notes** opens the rest.
+knowing, or the first one on a phone. The starter categories it removes come first among those, so
+you always see them. **Show more notes** opens the rest.
 
 ## What comes across, and how
 
@@ -110,6 +122,13 @@ knowing, or the first one on a phone. **Show more notes** opens the rest.
   named "Credit Card Payments (Actual)". The name itself is kept for this app's own group. Actual
   has no card payment categories, and a card payment there is a plain transfer.
 - **Future-dated transactions** come across with their dates.
+- **What Actual held** is kept with each transaction. Open one and its drawer's **Source** section
+  shows Actual's own row, with a split's lines under it. Each sync refreshes it, and transactions
+  imported before this was kept get theirs on the next sync.
+- **Tags** in a note, written `#groceries`, become the transaction's tags here. The note itself is
+  kept as it is. When a note changes in Actual, its new tags are added and the ones you added here
+  stay. A tag you remove here comes back only if the note changes again in Actual. Transactions
+  imported before tags were read get theirs on the next sync.
 - **A budget in tracking mode** brings its accounts, categories and transactions but no Assigned
   amounts, because its figures aren't envelopes. Its cash starts in Ready to Assign. On an empty
   book the budget method is still set to zero-based, and you can change it afterwards.
@@ -154,7 +173,7 @@ the same comparison again whenever you like, against Actual's figures at that mo
 The sync runs on a schedule, every 15 or 30 minutes, hourly, every 6 hours, daily or only when you
 ask. It covers transactions, each month's Assigned, categories and groups. No AI model is involved.
 
-Once it's set up, **Automations → Data sync → Actual** has the switch and **Sync now** at the top,
+Once it's set up, **Automations → Data Sync → Actual** has the switch and **Sync now** at the top,
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
 **Schedule**, the budget, how it decides, and a history of its runs. The history leaves out previews
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
@@ -184,6 +203,14 @@ device whose clock runs more than ten minutes behind can lose the same way.
   transfer's accounts or category, or turning a row into a transfer or back, stays in the review list.
 - A category you clear in Actual stays cleared here: no rule or payee default fills it back in,
   until you edit that row here.
+- A Starting Balance changed in Actual comes across, unless the direction is **To Actual**: your
+  opening balance moves by the same amount, so a change you made to it here stays. Its date follows
+  Actual's when it still matched it. A Starting Balance changed here isn't sent to Actual.
+- A payee you clear here is cleared in Actual too.
+- Actual has no category on an off-budget row, or on a transfer between two budget accounts. A
+  category you give one here stays here and isn't sent; Actual's blank doesn't clear it.
+- Actual stores whole cents. An amount finer than that, such as 12.345, goes as the nearest cent
+  (12.35) and stays as you wrote it here.
 - A change in only the letter case of a payee in Actual doesn't come across on its own. It arrives
   with the next other change to that row in Actual.
 - Income rows keep their category both ways. A new income category here goes into Actual's income
@@ -204,11 +231,27 @@ changes mode while the sync is on, the sync follows it. Going to tracking stops 
 to envelopes compares every category afresh: any difference goes to the review list and no figure
 moves.
 
+**The categories this app came with.** A new book starts with a few
+[starter categories](../concepts/categories.md), such as Groceries, Dining out and Rent/Mortgage.
+The import removes the ones you never used, so your Actual categories don't sit beside a second,
+half-matching set. The review lists them in its notes, which may be under **Show more notes**. A
+starter you renamed, funded or put a transaction on is always kept. To keep another, pick it for
+one of Actual's categories in the **Categories** tab: Actual's "Food" can go to Groceries, and the
+two are paired from then on.
+
+**Simplifying your categories.** Each Actual category pairs with one category here, so the review
+can't fold several into one. Do that after the import, here: in **Manage categories**, delete the
+category you're folding away and pick the one to keep under **Reassign activity to**. With the sync
+on, both ways or To Actual, Actual follows: its transactions move to the category you kept, which
+is created in Actual if it's new there, and the folded one is hidden in Actual, never deleted.
+Renaming a category or moving it to another group here reaches Actual too. See
+[Categories and payees](categories-payees.md#manage-categories).
+
 **An income category you later put in an envelope** keeps syncing, but what it receives stays in
 that envelope and doesn't raise Ready to Assign. **Worth checking** warns you, and its Assigned stays
 here.
 
-**What stays local.** Actual's rules, schedules, tags, goals, account groups, dashboards and bank
+**What stays local.** Actual's rules, schedules, tag colours, goals, account groups, dashboards and bank
 sync are never touched. Card payment envelopes are this book's own: Actual has none, so their
 Assigned is never sent or taken. That's one reason Ready to Assign won't match To Budget.
 
@@ -288,3 +331,9 @@ within about an hour of a later run if a crash stops that, so your decrypted bud
 disk. It's tested against a real Actual server for the sync cases on this page, including end-to-end
 encrypted and tracking budgets. It hasn't been tested on Windows,
 with OpenID-only servers, or on large real budgets.
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Actual Budget Alternative: Open Net Worth vs Actual Budget](https://opennetworth.ai/blog/open-net-worth-vs-actual-budget/): Actual Budget and Open Net Worth side by side, and how to move over

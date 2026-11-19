@@ -1,3 +1,4 @@
+import { LuciusMark } from '../../../ui/LuciusMark'
 import { useEffect, useState } from 'react'
 import type {
   GrantCreate,
@@ -295,7 +296,7 @@ export function AddGrantModal({ onClose, onDone }: Props) {
         {/* ── Grant text paste-box ── */}
         <div className="equity-add-paste">
           <div className="lx-mark lx-mark--sm equity-add-paste__icon" aria-hidden>
-            ✦
+            <LuciusMark size="1em" aria-hidden="true" />
           </div>
           <p className="equity-add-paste__heading">Paste grant letter or describe it</p>
           <textarea

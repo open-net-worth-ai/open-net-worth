@@ -373,7 +373,20 @@ def _finish_popped_flow(
     store.set_oauth(server_id, oauth_block)
     store.record_oauth_status(server_id, "ok", None)
     oauth_pending.record_status(state, "ok", None)
+    _end_pooled_session(server_id)
     return {"ok": True, "server_id": server_id}
+
+
+def _end_pooled_session(server_id: str) -> None:
+    """A finished sign-in may be a DIFFERENT account: end the server's pooled session so the
+    next call opens one as the new account (an hourly token refresh deliberately keeps it —
+    ADR 2026-11-13-a-remote-mcp-server-keeps-one-session). Never fails the sign-in."""
+    from backend.mcp.client_manager import get_manager  # local: client_manager imports us
+
+    try:
+        get_manager().reconcile_pooled_connection(server_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("mcp '%s': could not end the pooled session after sign-in", server_id)
 
 
 def _is_stale(ob: McpOAuth, *, now: float) -> bool:

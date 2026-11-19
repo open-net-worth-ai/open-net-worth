@@ -26,6 +26,7 @@ flags = override
 # never ships, so the remove_by lint (which checks ``FLAGS``) does not apply to it.
 EXAMPLE_FLAG = Flag(
     name="example_flag",
+    title="Example flag",
     description="Test-only example: shows the mechanism end to end. Never shipped.",
     default=False,
     owner="tests",

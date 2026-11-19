@@ -14,6 +14,8 @@ Data-only repository; the worker that uses these lives in ``connectors/voice``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
 
 CONNECTOR_ID = "voice"
@@ -31,7 +33,12 @@ CONFIG_DEFAULTS: dict = {
     "tts_model": "inworld/inworld-tts-2-flash",
     "tts_voice": "",
     "language": "en",
+    "noise_filter": "standard",
 }
+
+# Which Krisp filter cleans the caller's audio (``connectors/voice/noise.py``): none, background
+# noise only, or other people's voices too.
+NOISE_FILTERS = frozenset({"off", "standard", "isolation"})
 
 # LiveKit retired these on 2026-10-20 and names Gemma as their replacement. A setting saved before
 # then reads as the default, so it is a model LiveKit still lists and a choice the screen can show.
@@ -83,6 +90,21 @@ class VoiceConfigStore:
     def __init__(self) -> None:
         self._store = ConnectorStore()
 
+    def isolation_refusal(self) -> dict:
+        """LiveKit's latest refusal of voice isolation (``connectors/voice/isolation.py``)."""
+        row = self._store.get(CONNECTOR_ID)
+        return dict((row["state"] if row else {}).get(_ISOLATION_REFUSAL) or {})
+
+    def update_isolation_refusal(self, change: Callable[[dict | None], dict | None]) -> None:
+        def apply(state: dict) -> dict:
+            refusal = change(state.get(_ISOLATION_REFUSAL))
+            rest = {k: v for k, v in state.items() if k != _ISOLATION_REFUSAL}
+            return {**rest, _ISOLATION_REFUSAL: refusal} if refusal else rest
+
+        with serialized_unit_of_work() as conn:
+            self._store.ensure(CONNECTOR_ID, CONNECTOR_ID, _NAME, conn=conn)
+            self._store.update_state(CONNECTOR_ID, apply, conn=conn)
+
     def get(self) -> dict:
         """Full config (secrets included — db/connectors callers only)."""
         return _merged(self._store.get(CONNECTOR_ID), self._store.secrets(CONNECTOR_ID))
@@ -112,6 +134,9 @@ class VoiceConfigStore:
                 self._store.get(CONNECTOR_ID, conn=conn),
                 self._store.secrets(CONNECTOR_ID, conn=conn),
             )
+
+
+_ISOLATION_REFUSAL = "isolation_refusal"
 
 
 def is_ready(config: dict) -> bool:

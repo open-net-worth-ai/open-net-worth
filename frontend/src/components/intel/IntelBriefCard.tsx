@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useHoldingsNarration, useIntelDigest } from '../../hooks/useIntelDigest'
 import { MaskedText, Skeleton } from '../ui'
-import { Sparkles } from '../../ui/icons'
+import { LuciusMark } from '../../ui/icons'
 import { IntelCardHead } from './IntelCardHead'
 import { OpinionLine } from './OpinionLine'
 import { holdingsBrief } from './holdingsBrief'
@@ -42,7 +42,7 @@ export function IntelBriefCard({ onChatSuggest, children, verbosity = 3 }: Props
   return (
     <section className="intel-brief-card">
       <IntelCardHead
-        icon={<Sparkles size={13} />}
+        icon={<LuciusMark size={13} />}
         title="Holdings brief"
         ask={{
           label: 'Ask Lucius about this brief',

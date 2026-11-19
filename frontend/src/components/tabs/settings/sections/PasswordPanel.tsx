@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { tooManyAttemptsMessage } from '../../../../api/rateLimit'
+import { PasswordField } from '../../../ui/PasswordField'
 import { Btn, Field, Panel } from '../ds'
 
 export interface PasswordState {
@@ -126,11 +127,20 @@ export function PasswordPanel({
       sub="Signs you in to this instance — it is the only account, and it is stored on your own server"
     >
       <div className="rd-formgrid">
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          defaultValue="opennetworth"
+          readOnly
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+        />
         {needsCurrent && (
           <Field label="Current password">
-            <input
+            <PasswordField
               className="rd-input"
-              type="password"
               autoComplete="current-password"
               value={oldPw}
               onChange={(e) => setOldPw(e.target.value)}
@@ -158,18 +168,16 @@ export function PasswordPanel({
                 </>
               }
             >
-              <input
+              <PasswordField
                 className="rd-input"
-                type="password"
                 autoComplete="new-password"
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
               />
             </Field>
             <Field label="Confirm password">
-              <input
+              <PasswordField
                 className="rd-input"
-                type="password"
                 autoComplete="new-password"
                 value={confirmPw}
                 onChange={(e) => setConfirmPw(e.target.value)}

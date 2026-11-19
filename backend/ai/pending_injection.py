@@ -134,6 +134,23 @@ def nack(claimed: QueueClaim) -> bool:
     return True
 
 
+def withdraw(session_id: str, client_id: str) -> bool:
+    """Take back one message no turn has claimed yet. ``False`` once a turn has it (claimed or
+    delivered): it is then that turn's. A voice call adds to its running turn, and a turn can end
+    just before the words arrive; they then start the next turn instead, never sit here."""
+    queued = _queues.get(session_id)
+    if not queued:
+        return False
+    kept = [m for m in queued if m.client_id != client_id]
+    if len(kept) == len(queued):
+        return False
+    if kept:
+        _queues[session_id] = kept
+    else:
+        _queues.pop(session_id, None)
+    return True
+
+
 def has_pending(session_id: str) -> bool:
     return bool(_queues.get(session_id))
 
@@ -153,4 +170,5 @@ __all__ = [
     "enqueue",
     "has_pending",
     "nack",
+    "withdraw",
 ]

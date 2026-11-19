@@ -9,7 +9,9 @@ Thin router over ``db.EnableBankingConfigStore`` + ``services.aggregation.enable
   * ``POST /api/enable-banking/link``          — start the consent flow for a bank → returns
     the bank-auth ``url`` the user opens.
   * ``POST /api/enable-banking/complete``      — exchange the post-consent auth code for a
-    session (the per-bank consent handle, persisted).
+    session: one more linked bank (or a renewal of one already listed).
+  * ``POST /api/enable-banking/banks/{key}/remove`` — unlink one bank (revoked at Enable
+    Banking first). ``key`` is the bank's public handle from the status, never its session.
 
 Auth is the app-wide ``require_auth`` dependency (this is under ``/api``). The private_key /
 session are SECRETS — accepted (write-only) but NEVER returned (the status echoes only
@@ -27,9 +29,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from backend.core.errors import OpenNetWorthError, to_http_status
+from backend.core.errors import OpenNetWorthError, RedirectNotRegisteredError, to_http_status
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
 from backend.services.aggregation import enable_banking as enable_banking_service
+from backend.services.aggregation import enable_banking_app
 
 router = APIRouter()
 
@@ -50,6 +53,8 @@ class EnableBankingLinkRequest(BaseModel):
 
 class EnableBankingCompleteRequest(BaseModel):
     code: str  # the post-consent authorization code returned to the redirect URI
+    # The `state` the bank returned with the code (automatic return); blank for a pasted code.
+    state: Optional[str] = None
 
 
 @router.get("/api/enable-banking/status")
@@ -75,8 +80,9 @@ async def enable_banking_institutions(country: str):
 @router.put("/api/enable-banking/config")
 def update_enable_banking_config(body: EnableBankingConfigUpdate):
     """Configure the connector — credentials, enable/disable. A blank ``private_key`` keeps
-    the saved one (write-only). Returns the public status."""
-    store = EnableBankingConfigStore()
+    the saved one (write-only). Another application ID while banks are linked is checked with
+    Enable Banking first (refused → 422, nothing saved), then each old consent is revoked and
+    every bank flagged to renew. Returns the public status."""
     changes: dict = {}
     if body.application_id is not None:
         changes["application_id"] = body.application_id
@@ -85,8 +91,11 @@ def update_enable_banking_config(body: EnableBankingConfigUpdate):
     if body.enabled is not None:
         changes["enabled"] = bool(body.enabled)
 
-    store.update(changes)
-    return store.public()
+    try:
+        enable_banking_app.save_credentials(changes)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    return EnableBankingConfigStore().public()
 
 
 @router.post("/api/enable-banking/link")
@@ -101,6 +110,14 @@ async def enable_banking_link(body: EnableBankingLinkRequest):
             body.country or "",
             body.redirect or "",
         )
+    except RedirectNotRegisteredError as exc:
+        # The form shows the address to add (with Copy) instead of only a sentence.
+        detail = {
+            "code": exc.code,
+            "message": exc.message,
+            "redirect_url": exc.context.get("redirect_url", ""),
+        }
+        raise HTTPException(to_http_status(exc), detail) from exc
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     return result
@@ -112,8 +129,19 @@ async def enable_banking_complete(body: EnableBankingCompleteRequest):
     handle, persisted). Requires credentials. Bad code / auth → 422. Blocking httpx off the
     loop."""
     try:
-        await asyncio.to_thread(enable_banking_service.create_session, body.code)
+        await asyncio.to_thread(enable_banking_service.create_session, body.code, body.state or "")
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     # Don't leak the session id / raw accounts to the client — return the public status.
     return EnableBankingConfigStore().public()
+
+
+@router.post("/api/enable-banking/banks/{key}/remove")
+async def enable_banking_remove_bank(key: str):
+    """Unlink one bank: its consent is revoked at Enable Banking, then forgotten here. Its
+    imported transactions and linked accounts stay. Unknown bank → 422."""
+    try:
+        result = await asyncio.to_thread(enable_banking_service.remove_bank, key)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    return {**result, "status": EnableBankingConfigStore().public()}

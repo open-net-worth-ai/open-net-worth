@@ -177,7 +177,7 @@ export function fSigned(n: number): string {
 }
 // From a million up, Outlook's tiles and Cash Flow's figures ARE the chart axis's formatter
 // (fBaseCompact), so they share its unit, decimal separator and suffix in every number format:
-// "₫24.95B" beside a "₫47.09B" tick, "24,95 Mrd. ₫" beside "47,09 Mrd. ₫". A figure that rounds
+// "₫24.95B" beside a "₫47.09B" tick, "24,95B ₫" beside "47,09B ₫" (the suffix is fixed, never "Mrd."). A figure that rounds
 // up to a million at its own precision reads as that million, never "1000k" / "1000.00K".
 function compactFrom(a: number, roundsToMillion: number): string | null {
   return a >= roundsToMillion ? fBaseCompact(Math.max(a, 1e6)) : null

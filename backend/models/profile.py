@@ -20,7 +20,7 @@ Scaffold only (RFC P1-A3). Monetary fields are denominated in ``base_currency``.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
@@ -104,6 +104,9 @@ class Profile(ONBaseModel):
     # above the call it followed. Purely presentational — the transcript records the rounds
     # separately either way, so this only chooses how they are drawn.
     chat_thinking_grouped: bool = False
+    # How much detail Lucius puts in an answer: brief | normal | detailed (None = normal). Read
+    # per turn by ``assistant._resolve_style``; normal adds no style line.
+    chat_response_detail: Optional[Literal["brief", "normal", "detailed"]] = None
     # Whether a device with no choice of its own sends the screen with each message. Default ON.
     screen_awareness_default: bool = True
     # Feature intros already shown (UI state, never model-facing).
@@ -149,6 +152,7 @@ class ProfileUpdate(ONBaseModel):
     chat_cost_visible: Optional[bool] = None
     chat_multi_turn_enabled: Optional[bool] = None
     chat_thinking_grouped: Optional[bool] = None
+    chat_response_detail: Optional[Literal["brief", "normal", "detailed"]] = None
     screen_awareness_default: Optional[bool] = None
     seen_intros: Optional[List[str]] = None
 

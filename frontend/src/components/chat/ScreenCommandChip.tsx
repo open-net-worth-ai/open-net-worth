@@ -4,6 +4,7 @@
 // target screen registers) and navigates, so the chip works even after a reload with no
 // SSE in sight. Routes resolve from this STATIC map keyed by the catalog's symbolic
 // route — never a model-supplied URL.
+import { LuciusMark } from '../../ui/LuciusMark'
 import { useNavigate } from '@tanstack/react-router'
 import { dispatchScreenCommand } from '../../lucius/bus'
 import type { ScreenCommandInvocation } from '../../lucius/bus'
@@ -43,7 +44,7 @@ export function ScreenCommandChip({
   const chip = (
     <button type="button" className="screen-cmd-chip" onClick={() => open()}>
       <span className="screen-cmd-chip-glyph" aria-hidden="true">
-        ✦
+        <LuciusMark size="1em" aria-hidden="true" />
       </span>
       {target.label}
       <span className="screen-cmd-chip-arrow" aria-hidden="true">

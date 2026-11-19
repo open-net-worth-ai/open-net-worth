@@ -44,6 +44,7 @@ MENTION_FORBIDDEN_STORES: frozenset[str] = frozenset(
         "LunchFlowConfigStore",
         "MarketDataConfigStore",
         "McpClientStore",
+        "RestConfigStore",
         "SearchConfigStore",
         "TelegramConfigStore",
         "VoiceConfigStore",

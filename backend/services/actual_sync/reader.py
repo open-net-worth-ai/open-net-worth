@@ -11,7 +11,7 @@ import re
 from typing import Callable
 
 from backend.services import ledger as ledger_service
-from backend.services.actual_sync import client
+from backend.services.actual_sync import client, raw_rows
 from backend.services.budget_app import current
 from backend.services.ynab_migration import source
 
@@ -37,7 +37,8 @@ class ActualReader:
         currency, its mode, the splits that don't add up, money held, and what to warn of."""
         progress("reading the budget", 0, 1)
         with client.open_copy(store, plan_id) as copy:
-            plan, currency, notices = copy.plan(), copy.currency, copy.notices
+            rows, plan = copy.read()
+            currency, notices = copy.currency, copy.notices
         progress("reading the budget", 1, 1)
         return {
             "accounts": [_with_default_type(a) for a in plan["accounts"]],
@@ -49,6 +50,7 @@ class ActualReader:
             "split_gaps": plan["split_gaps"],
             "held": plan["held"],
             "notices": list(notices),
+            "raw_rows": raw_rows.from_rows(rows, currency),
         }
 
     def currency_of(self, store, plan_id: str) -> str | None:

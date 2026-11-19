@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Sparkles, X, RefreshCw, ArrowRight } from '../../ui/icons'
+import { LuciusMark, X, RefreshCw, ArrowRight } from '../../ui/icons'
 import { Button } from '../ui'
 import { Spark } from '../../lucius/identity'
 import { getCurrencySymbol } from '../../utils/format'
@@ -39,7 +39,7 @@ export function LuciusDraftLink({
   return (
     <button type="button" className="intel-lx-draft" disabled={thinking} onClick={run}>
       <span className={thinking ? 'lx-pulse' : ''}>
-        <Sparkles size={11} />
+        <LuciusMark size={11} />
       </span>
       {thinking ? 'Drafting…' : label}
     </button>
@@ -80,7 +80,7 @@ export function LuciusAlertSuggest({
     return (
       <div className="lx-surface intel-lx-idle">
         <span className="lx-mark">
-          <Sparkles size={13} />
+          <LuciusMark size={13} />
         </span>
         <div className="intel-lx-idle-body">
           <div className="intel-lx-idle-title">Not sure what to set?</div>
@@ -105,7 +105,7 @@ export function LuciusAlertSuggest({
       <div className="lx-surface">
         <div className="lx-thinking">
           <span className="lx-pulse">
-            <Sparkles size={13} />
+            <LuciusMark size={13} />
           </span>
           Reading {asset.symbol}'s price, your position, and target mix…
         </div>
@@ -116,7 +116,7 @@ export function LuciusAlertSuggest({
     <div className="lx-surface intel-lx-shown">
       <div className="intel-lx-shown-head">
         <span className="lx-mark lx-mark--sm">
-          <Sparkles size={12} />
+          <LuciusMark size={12} />
         </span>
         <span className="intel-lx-shown-title">
           {items.length
@@ -241,7 +241,7 @@ export function LuciusReviewPanel({
       {thinking || !result ? (
         <div className="lx-thinking">
           <span className="lx-pulse">
-            <Sparkles size={13} />
+            <LuciusMark size={13} />
           </span>
           Reviewing {listName} — coverage, concentration, and instructions…
         </div>
@@ -249,7 +249,7 @@ export function LuciusReviewPanel({
         <>
           <div className="intel-lx-review-head">
             <span className="lx-mark">
-              <Sparkles size={13} />
+              <LuciusMark size={13} />
             </span>
             <div className="intel-lx-review-headbody">
               <div className="intel-lx-review-eyebrow">Lucius review</div>

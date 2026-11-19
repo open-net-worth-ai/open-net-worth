@@ -18,6 +18,7 @@ import {
   type PayeeOption,
 } from './pickers'
 import { Button } from '../../ui/Button'
+import { TagField } from './TagField'
 import { localIso } from '../../../utils/format'
 
 // ── AddData: what onAdd receives ──────────────────────────────────────────
@@ -27,6 +28,7 @@ export interface AddData {
   payee: string // display name; orchestrator resolves to payeeId
   description: string // bank/matching string — the ONLY freeform field read by dedup/rules/payees
   memo: string // personal annotation — display-only
+  tags: string[]
   category: string
   account: string // from-account id (income → to-account)
   amount: string // raw decimal string
@@ -61,6 +63,7 @@ interface FormState {
   payee: string
   description: string
   memo: string
+  tags: string[]
   category: string
   account: string
   amount: string
@@ -88,6 +91,7 @@ export function AddRow({
     payee: '',
     description: '',
     memo: '',
+    tags: [],
     category: '',
     account: keep ? keep.account : defAcct(),
     amount: '',
@@ -133,6 +137,7 @@ export function AddRow({
       payee: f.payee.trim(),
       description: f.description.trim(),
       memo: f.memo.trim(),
+      tags: f.tags,
       category: f.category,
       account: f.account,
       amount: f.amount,
@@ -274,6 +279,18 @@ export function AddRow({
               value={f.memo}
               onChange={(e) => set('memo', e.target.value)}
               onKeyDown={keyAdvance}
+            />
+          </span>
+        )}
+        {has('tags') && (
+          <span className="acct-addrow-cell">
+            <TagField
+              compact
+              addField
+              value={f.tags}
+              onChange={(tags) => set('tags', tags)}
+              placeholder="Tags"
+              onAdvance={(dir, el) => advance(dir, el)}
             />
           </span>
         )}

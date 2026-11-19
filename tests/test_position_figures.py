@@ -697,6 +697,15 @@ def test_a_funded_opening_lot_is_a_purchase_at_cost_in_returns(isolated):
 
     inst = _instrument("FUND")
     PriceHistoryStore().record("FUND", 80.0, day="2026-09-10", source="manual")
+    TransactionStore().upsert(
+        {
+            "id": "txn-cash-out",
+            "date": "2026-09-10",
+            "kind": "investment",
+            "source": "manual",
+            "description": "Share purchase",
+        }
+    )
     LotStore().create(
         {
             "position_id": "pos-y",

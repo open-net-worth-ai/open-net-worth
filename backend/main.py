@@ -44,9 +44,9 @@ ensure_default_trust_store()
 # we do it once in lifespan rather than at module level.
 _log = logging.getLogger("backend")
 
-# Held open for the process lifetime by the ONE worker that owns the scheduler (see lifespan) —
-# module-level so the fd (and thus the advisory lock) is never garbage-collected.
-_SCHEDULER_LOCK_HANDLE = None
+# Held for the process lifetime (see lifespan) — module-level so the lock's fd is never
+# garbage-collected while this worker owns the scheduler.
+_SCHEDULER_OWNERSHIP = None
 
 
 def _raise_fd_limit(target: int = 4096) -> None:
@@ -99,6 +99,7 @@ from backend.api.assets_api import router as assets_router
 from backend.api.auth import router as auth_router
 from backend.api.automations import router as automations_router
 from backend.api.backup import router as backup_router
+from backend.api.bank_sync_api import router as bank_sync_router
 from backend.api.briefing import router as briefing_router
 from backend.api.budgets import router as budgets_router
 from backend.api.builder import router as builder_router
@@ -109,6 +110,7 @@ from backend.api.chat import router as chat_router
 from backend.api.chat_pairing_api import router as chat_pairing_router
 from backend.api.chat_suggestions import router as chat_suggestions_router
 from backend.api.checkpoints import router as checkpoints_router
+from backend.api.client_diagnostics import router as client_diagnostics_router
 from backend.api.commitments_api import router as commitments_router
 from backend.api.config import router as config_router
 from backend.api.connector_secrets import router as connector_secrets_router
@@ -130,6 +132,7 @@ from backend.api.favicon import router as favicon_router
 from backend.api.feature_flags import router as feature_flags_router
 from backend.api.fire import router as fire_router
 from backend.api.fixed_income import router as fixed_income_router
+from backend.api.followed_portfolios import router as followed_portfolios_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
 from backend.api.gocardless_api import router as gocardless_router
 from backend.api.ibkr_api import router as ibkr_router
@@ -159,6 +162,8 @@ from backend.api.matches import router as matches_router
 from backend.api.mcp_client_api import router as mcp_client_router
 from backend.api.mcp_connect_api import router as mcp_connect_router
 from backend.api.mcp_oauth_api import router as mcp_oauth_router
+from backend.api.mcp_oauth_server import router as mcp_oauth_server_router
+from backend.api.mcp_oauth_settings import router as mcp_oauth_settings_router
 from backend.api.memory import router as memory_router
 from backend.api.mentionables import router as mentionables_router
 from backend.api.mentions_resolve import router as mentions_resolve_router
@@ -170,6 +175,8 @@ from backend.api.networth_history import router as networth_history_router
 from backend.api.news_sources import router as news_sources_router
 from backend.api.notification_log import router as notification_log_router
 from backend.api.options import router as options_router
+from backend.api.paper_trading import qa_router as paper_trading_qa_router
+from backend.api.paper_trading import router as paper_trading_router
 from backend.api.payees import router as payees_router
 from backend.api.plaid_api import router as plaid_router
 from backend.api.plan_outlook import router as plan_outlook_router
@@ -188,6 +195,7 @@ from backend.api.rebalance import router as rebalance_router
 from backend.api.receipts import router as receipts_router
 from backend.api.recurring import router as recurring_router
 from backend.api.reports import router as reports_router
+from backend.api.rest_connector_api import router as rest_connector_router
 from backend.api.returns import router as returns_router
 from backend.api.screen_read_api import router as screen_read_router
 from backend.api.search_config_api import router as search_config_router
@@ -201,6 +209,7 @@ from backend.api.terminal import router as terminal_router
 from backend.api.tool_permissions import router as tool_permissions_router
 from backend.api.upload import router as upload_router
 from backend.api.vault import router as vault_router
+from backend.api.visuals import router as visuals_router
 from backend.api.voice import router as voice_router
 from backend.api.watchlist import router as watchlist_router
 from backend.api.ynab_api import router as ynab_router
@@ -237,6 +246,7 @@ async def _headless_turn_runner(
     lean_prompt=False,
     enforce_offer=False,
     effort="medium",
+    max_tool_calls=None,
 ) -> str:
     """The headless-turn runner registered on the ``core.headless_turn`` seam (below, in
     ``lifespan``) so a service can run one Lucius turn WITHOUT ``services`` importing ``ai``
@@ -268,6 +278,9 @@ async def _headless_turn_runner(
     lean_prompt = use the short system prompt instead of the full conversational one — right
     for a zero-tool completion that only has to return text.
 
+    max_tool_calls = with ``enforce_offer``, how many tool calls the turn may make (None → the
+    default, ``_skill_scope.ENFORCED_OFFER_MAX_CALLS``).
+
     enforce_offer = make ``allowed_tools`` a real ceiling for this turn. Without it an offer is
     advisory: a call outside it still dispatches, and nobody is here to tap a card.
     """
@@ -292,7 +305,7 @@ async def _headless_turn_runner(
     if allowed_tools is not None:
         _skill_scope.set_offer_scope(allowed_tools)
     if enforce_offer:
-        _skill_scope.enforce_offer()
+        _skill_scope.enforce_offer(max_tool_calls)
     run_model = model or ModelConfigStore().resolved()["model"]
     short_id = str(uuid.uuid4())[:8]
     session_id = f"headless-{short_id}"
@@ -702,20 +715,14 @@ async def lifespan(app: FastAPI):
 
     _log_auth_first_run_notice()
 
-    # Scheduler in ONE worker only. Under uvicorn --workers every worker runs this lifespan, but
-    # the periodic jobs (price checks, RSS polls, AI news screens, digests) must fire ONCE — not
-    # per worker, or N workers means N× the background load and AI cost. The first worker to grab
-    # an advisory lock owns the scheduler; the rest skip it. Single-worker: that one worker always
-    # wins, so behaviour is unchanged.
-    global _SCHEDULER_LOCK_HANDLE
-    try:
-        from backend.core.file_lock import lock_exclusive
-        from backend.core.paths import DATA_DIR
+    # Scheduler in ONE worker only — the holder of scheduler.lock (backend/scheduler_owner.py).
+    # A worker that loses the race keeps retrying, so a restart that overlaps the old process's
+    # shutdown still ends up with a scheduler once the old one lets go.
+    from backend.core.paths import DATA_DIR
+    from backend.scheduler_owner import SchedulerOwnership
 
-        _SCHEDULER_LOCK_HANDLE = open(DATA_DIR / "scheduler.lock", "a+", encoding="utf-8")
-        lock_exclusive(_SCHEDULER_LOCK_HANDLE)
+    def _start_periodic_jobs() -> None:
         start()
-        _log.info("scheduler: started (this worker owns the scheduler lock)")
         # Memory is written when a conversation goes idle and tidied once a day. Like the
         # scheduler this must run in ONE worker, or every worker would extract the same chat.
         # Skipped under ONW_QA_MODE — an isolated QA run must not spend model calls.
@@ -727,11 +734,10 @@ async def lifespan(app: FastAPI):
             app.state.memory_sweep_task = asyncio.create_task(
                 memory_sweep_loop(), name="memory-sweep"
             )
-    except (OSError, BlockingIOError):
-        if _SCHEDULER_LOCK_HANDLE is not None:
-            _SCHEDULER_LOCK_HANDLE.close()
-            _SCHEDULER_LOCK_HANDLE = None
-        _log.info("scheduler: another worker owns it — periodic jobs skipped in this worker")
+
+    global _SCHEDULER_OWNERSHIP
+    _SCHEDULER_OWNERSHIP = SchedulerOwnership(DATA_DIR / "scheduler.lock", _start_periodic_jobs)
+    _SCHEDULER_OWNERSHIP.claim()
     # Register the always-on in-app notification channel up front. It registers as a side
     # effect of importing services.notify (the bell-icon feed); without this it would only
     # appear after the first notify() call, so /api/notify-channels (the "Send to" picker)
@@ -862,6 +868,11 @@ async def lifespan(app: FastAPI):
 
     _mcp_client_manager = register_on_seam()
 
+    # Each REST connector's own tools, so its Tool permissions list them before the first turn.
+    from backend.ai.tools.rest_api import sync_quietly as _sync_rest_tools
+
+    _sync_rest_tools()
+
     def _run_mcp_boot_connect() -> None:
         try:
             _mcp_client_manager.connect_enabled()
@@ -892,6 +903,8 @@ async def lifespan(app: FastAPI):
 
     yield
     mark_closing()
+    if _SCHEDULER_OWNERSHIP is not None:
+        await _SCHEDULER_OWNERSHIP.stop_retrying()
     # Cancel every in-flight server-owned turn (concurrent-conversations RFC Phase 3) BEFORE
     # tearing down the Automation adapters — a graceful shutdown journals "cancelled" for
     # each one, so recover_interrupted_turns() has nothing stale to correct on the next boot.
@@ -920,9 +933,9 @@ async def lifespan(app: FastAPI):
     from backend.core.instance_lock import release as _release_instance
 
     stop()
-    if _SCHEDULER_LOCK_HANDLE is not None:
-        _SCHEDULER_LOCK_HANDLE.close()
-        _SCHEDULER_LOCK_HANDLE = None
+    if _SCHEDULER_OWNERSHIP is not None:
+        await _SCHEDULER_OWNERSHIP.release()
+        _SCHEDULER_OWNERSHIP = None
     # Bounded wait on the boot-connect task: cancelling it wouldn't actually interrupt a
     # blocking spawn already running in its worker thread (asyncio.to_thread cancellation is
     # cooperative-only), so this just gives it a short window to finish naturally before
@@ -1175,6 +1188,8 @@ app.include_router(options_router)
 app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
 app.include_router(investment_theses_router)
+app.include_router(followed_portfolios_router)
+app.include_router(paper_trading_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)
@@ -1193,13 +1208,16 @@ app.include_router(enable_banking_router)
 app.include_router(gocardless_router)
 app.include_router(alpaca_router)
 app.include_router(artifacts_router)
+app.include_router(visuals_router)
 app.include_router(vault_router)
 app.include_router(assets_router)
 app.include_router(automations_router)
 app.include_router(ibkr_router)
 app.include_router(yodlee_router)
 app.include_router(lunch_money_router)
+app.include_router(rest_connector_router)
 app.include_router(ynab_router)
+app.include_router(bank_sync_router)
 app.include_router(actual_budget_router)
 app.include_router(import_runs_router)
 app.include_router(account_linking_router)
@@ -1226,6 +1244,7 @@ app.include_router(matches_router)
 app.include_router(market_data_router)
 if _settings.onw_qa_mode:
     app.include_router(market_data_qa_router)
+    app.include_router(paper_trading_qa_router)
 app.include_router(memory_router)
 app.include_router(equity_router)
 app.include_router(income_router)
@@ -1241,6 +1260,8 @@ app.include_router(investments_xray_router)
 app.include_router(mcp_router)
 app.include_router(mcp_client_router)
 app.include_router(mcp_oauth_router)
+app.include_router(mcp_oauth_server_router)
+app.include_router(mcp_oauth_settings_router)
 app.include_router(config_router)
 app.include_router(feature_flags_router)
 app.include_router(sql_query_router)
@@ -1259,6 +1280,7 @@ app.include_router(connector_secrets_router)
 app.include_router(connectors_router)
 app.include_router(demo_router)
 app.include_router(logs_router)
+app.include_router(client_diagnostics_router)
 app.include_router(problem_reports_router)
 app.include_router(product_docs_router)
 app.include_router(terminal_router)
@@ -1450,7 +1472,14 @@ def _with_cache_policy(response, path: str):
         # never a version-mismatched pair to replay. The cost is one small local HTML fetch
         # per navigation; the hashed CSS/JS it points at stay cached for a year below.
         response.headers["Cache-Control"] = "no-store"
-    elif "_astro/" in path or "/assets/" in path or path.startswith("assets/"):
+    elif (
+        "_astro/" in path
+        or "/assets/" in path
+        or path.startswith(("assets/", "portfolio-photos/", "portfolio-logos/"))
+    ):
+        # Famous Portfolios' portraits and logos carry a content hash in their names
+        # (`<name>-<hash>.webp`), so a new picture is a new file: with no header the
+        # browser re-asked for every card's picture on each visit (owner, 2026-11-13).
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     elif path.startswith("connector-logos/"):
         # Brand marks keep their names when replaced, so not immutable — but left with no
@@ -1497,4 +1526,6 @@ if __name__ == "__main__":
     # `uvicorn backend.main:app ...` CLI usage is unaffected.
     import uvicorn
 
-    uvicorn.run(app, host=_settings.host, port=_settings.port)
+    from backend.core.config import SERVER_EVENT_LOOP
+
+    uvicorn.run(app, host=_settings.host, port=_settings.port, loop=SERVER_EVENT_LOOP)

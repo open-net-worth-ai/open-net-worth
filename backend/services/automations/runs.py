@@ -273,6 +273,8 @@ def request_for_run(
         permission_mode=automation.get("permission_mode") or "manual",
         always_allowed=always_allowed,
         blocked=[str(tool) for tool in automation.get("blocked") or []],
+        simulation_only=bool(automation.get("simulation_only")),
+        paper_portfolio_id=automation.get("paper_portfolio_id") or None,
         configured_trigger=configured_trigger(automation),
         last_completed_run=last_completed_run(automation["id"], run),
         run_before_last=run_before_last(automation["id"], run),

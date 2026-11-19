@@ -7,11 +7,6 @@ import type { FeatureFlag } from '../../../hooks/useFlag'
 import { Badge, Btn, Empty, Panel, Toggle, row, useSectionBusy } from './ds'
 import type { SectionProps } from './ds'
 
-function title(name: string): string {
-  const words = name.replace(/_/g, ' ')
-  return words.charAt(0).toUpperCase() + words.slice(1)
-}
-
 const onOff = (v: boolean) => (v ? 'on' : 'off')
 
 function stateNote(flag: FeatureFlag, locked: boolean): string {
@@ -43,8 +38,8 @@ export function ExperimentalPanel({ toast }: SectionProps) {
       void refresh()
       toast(
         enabled === null
-          ? `${title(flag.name)} reset to its default`
-          : `${title(flag.name)} turned ${onOff(enabled)}`,
+          ? `${flag.title} reset to its default`
+          : `${flag.title} turned ${onOff(enabled)}`,
       )
     } catch {
       toast('Could not reach the server. Try again.')
@@ -78,7 +73,7 @@ export function ExperimentalPanel({ toast }: SectionProps) {
           <div key={flag.name} data-flag={flag.name}>
             {row(
               <>
-                {title(flag.name)}{' '}
+                {flag.title}{' '}
                 {flag.kind === 'kill_switch' ? <Badge tone="warn">Kill switch</Badge> : null}{' '}
                 {flag.stored !== null && !locked ? <Badge tone="accent">Changed</Badge> : null}
               </>,
@@ -97,7 +92,7 @@ export function ExperimentalPanel({ toast }: SectionProps) {
                   on={flag.enabled}
                   disabled={locked || flag.source === 'env' || flag.source === 'test'}
                   onChange={(v) => void save(flag, v)}
-                  label={title(flag.name)}
+                  label={flag.title}
                 />
               </>,
             )}

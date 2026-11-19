@@ -62,6 +62,7 @@ _VALUES = {
     "budget_currency": "USD",
     "cash": 10.5,
     "buying_power": 20.5,
+    "proxy_headers": "X-Acme-Proxy: secret-proxy_headers",
 }
 
 
@@ -118,7 +119,9 @@ def test_fields_land_where_the_migration_places_them(cls):
     assert row["name"] == cls.LABEL
     assert row["enabled"] is True
     assert row["config"] == {k: values[k] for k in cls.CONFIG_KEYS}
-    assert row["state"] == {k: values[k] for k in cls.STATE_KEYS}
+    # A read-only state key (written by the store's own methods, never update()) is skipped,
+    # as read-only secrets are below.
+    assert row["state"] == {k: values[k] for k in cls.STATE_KEYS if k in values}
     secrets = ConnectorStore().secrets(cls.KIND)
     assert secrets == {k: values[k] for k in cls.SECRET_KEYS if k in values}
 

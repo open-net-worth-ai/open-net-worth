@@ -108,6 +108,13 @@ from dotenv import load_dotenv
 
 from backend.core.errors import ConfigurationError
 
+# The server's event loop, for every launch path (``python -m backend.main``, ``onw start``, the
+# Makefile). Never uvloop: on Linux it starts each child process with a bare ``fork()`` and then
+# runs Python's after-fork hooks in the copy of a busy multi-threaded server, and on a Docker host
+# that child segfaulted in libc's ``pthread_join`` before Claude Code ever ran, every spawn until a
+# restart (issue #131). The standard loop's subprocesses go through CPython's own spawn path.
+SERVER_EVENT_LOOP = "asyncio"
+
 # Load .env from the project root regardless of where the process is launched.
 # main.py also calls load_dotenv(), but settings may be read before main runs
 # (e.g. tests, scripts, or any module that imports backend.paths first), so we
@@ -469,6 +476,12 @@ class Settings:
     # A shell in the browser (api/terminal.py) is on in gateway mode and OFF everywhere else,
     # unless a self-hoster who understands what a shell on this machine means turns it on.
     terminal_enabled: bool = field(default_factory=lambda: _env_bool("ONW_TERMINAL_ENABLED", False))
+
+    # ── Public address for hosted AI apps (ONW_PUBLIC_URL) ──────────────────────
+    # The https origin claude.ai / ChatGPT reach this instance at. The ONLY source of every URL
+    # the OAuth server publishes (flag mcp_oauth) — never the request's Host. Settings > MCP
+    # can store one too; this env value wins when set (services.mcp_oauth.public_url).
+    public_url: str = field(default_factory=lambda: os.environ.get("ONW_PUBLIC_URL", "").strip())
 
     # ── Turn lifetime (concurrent-conversations RFC Phase 3) ────────────────────
     # Wall-clock bound on one server-owned turn (backend.ai.turns). Not a spend cap — an

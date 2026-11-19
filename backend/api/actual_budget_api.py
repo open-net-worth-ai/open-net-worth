@@ -49,6 +49,10 @@ class ActualBudgetConfigUpdate(BaseModel):
     password: Optional[str] = None
     token: Optional[str] = None
     encryption_password: Optional[str] = None
+    # "Name: value" lines for a sign-in proxy in front of the server.
+    proxy_headers: Optional[str] = None
+    # Removes saved proxy headers (a blank field keeps them). New ones in the same request win.
+    clear_proxy_headers: bool = False
     # The budget's cloud file id. Blank clears the pick; omitted leaves it.
     budget_id: Optional[str] = None
     enabled: Optional[bool] = None
@@ -79,12 +83,14 @@ async def update_actual_budget_config(body: ActualBudgetConfigUpdate):
     otherwise. The sign-in is saved FIRST, so a budget pick in the same request is checked against
     it. Returns the public status."""
     store = ActualBudgetConfigStore()
-    changes = body.model_dump(exclude={"enabled", "budget_id"})
+    changes = body.model_dump(exclude={"enabled", "budget_id", "clear_proxy_headers"})
     if body.enabled is not None:
         changes["enabled"] = body.enabled
     try:
         was_configured = store.is_configured()
         store.update(changes)
+        if body.clear_proxy_headers and not (body.proxy_headers or "").strip():
+            store.clear_proxy_headers()
         if body.enabled is None and not was_configured and store.is_configured():
             store.update({"enabled": True})
         if body.budget_id is not None:

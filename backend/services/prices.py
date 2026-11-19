@@ -124,6 +124,31 @@ def _fetch_name(symbol: str) -> tuple[str, str, str]:
         return symbol, "", ""
 
 
+def company_names(symbols: list[str], *, fetch_missing: bool = False) -> dict[str, str]:
+    """``{symbol: display name}`` from the name cache the rest of the app reads ("Bank of
+    America Corporation", not a filing's "BANK OF AMER CORP"). With ``fetch_missing``, the
+    uncached ones are looked up first (in parallel) and the cache saved."""
+    wanted = [s for s in dict.fromkeys(symbols) if s]
+    missing = [s for s in wanted if s not in _NAMES_CACHE]
+    if fetch_missing and missing:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(missing), 14)) as ex:
+            list(ex.map(_fetch_name, missing))
+        save_names_cache(_NAMES_CACHE)
+    return {s: display_name(_NAMES_CACHE[s]) for s in wanted if _NAMES_CACHE.get(s)}
+
+
+def company_sectors(symbols: list[str], *, fetch_missing: bool = False) -> dict[str, str]:
+    """``{symbol: sector}`` ("Technology", "Financial Services") from the sector cache the
+    Investments allocation reads. With ``fetch_missing``, the uncached ones are looked up first."""
+    wanted = [s for s in dict.fromkeys(symbols) if s]
+    missing = [s for s in wanted if not _SECTOR_CACHE.get(s)]
+    if fetch_missing and missing:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(missing), 14)) as ex:
+            list(ex.map(_fetch_sector, missing))
+        save_sectors_cache(_SECTOR_CACHE)
+    return {s: _SECTOR_CACHE[s] for s in wanted if _SECTOR_CACHE.get(s)}
+
+
 def _fetch_sector(symbol: str) -> str:
     if _SECTOR_CACHE.get(symbol):
         return _SECTOR_CACHE[symbol]
@@ -1074,6 +1099,77 @@ def _fetch_chart(symbol: str, now_epoch: float | None = None) -> dict | None:
         _log.info("prices: chart unavailable (%s)", type(exc).__name__)
     _chart_cache[symbol] = (now, payload)
     return payload
+
+
+_ACTIONS_TTL = 12 * 3600.0
+_actions_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+
+
+def _split_ratio(ev: dict) -> float | None:
+    try:
+        num, den = float(ev.get("numerator") or 0), float(ev.get("denominator") or 0)
+    except (TypeError, ValueError):
+        return None
+    return num / den if num > 0 and den > 0 else None
+
+
+def _parse_actions(payload: dict | None) -> dict:
+    out: dict = {"dividends": [], "splits": [], "closes": []}
+    result = ((payload or {}).get("chart") or {}).get("result") or []
+    if not result:
+        return out
+    r = result[0]
+    events = r.get("events") or {}
+    for ev in (events.get("dividends") or {}).values():
+        day = _epoch_to_iso(ev.get("date"))
+        amount = _finite_positive(ev.get("amount"))
+        if day and amount:
+            out["dividends"].append({"date": day[:10], "amount": amount})
+    for ev in (events.get("splits") or {}).values():
+        day, ratio = _epoch_to_iso(ev.get("date")), _split_ratio(ev)
+        if day and ratio:
+            out["splits"].append(
+                {"date": day[:10], "ratio": ratio, "label": str(ev.get("splitRatio") or "")}
+            )
+    stamps = r.get("timestamp") or []
+    closes = ((((r.get("indicators") or {}).get("quote") or [{}])[0]) or {}).get("close") or []
+    for ts, close in zip(stamps, closes):
+        day, px = _epoch_to_iso(ts), _finite_positive(close)
+        if day and px:
+            out["closes"].append({"date": day[:10], "close": px})
+    for key in ("dividends", "splits"):
+        out[key].sort(key=lambda e: e["date"])
+    return out
+
+
+def fetch_corporate_actions(symbol: str, range_: str = "3mo") -> dict:
+    """``{dividends: [{date, amount}], splits: [{date, ratio, label}], closes: [{date, close}]}``
+    from Yahoo's v8 chart with ``events=div,splits`` — the same host and session every other
+    Yahoo read here uses. Dates are ex-dates (Yahoo gives no pay date). Cached 12 h per
+    (symbol, range); empty lists on any failure and in a QA process, never a guess."""
+    empty: dict = {"dividends": [], "splits": [], "closes": []}
+    if not symbol or get_settings().onw_qa_mode:
+        return empty
+    key = (symbol, range_)
+    hit = _actions_cache.get(key)
+    if hit and time.monotonic() - hit[0] < _ACTIONS_TTL:
+        return hit[1]
+    try:
+        from yfinance import data as _ydata
+
+        url = (
+            "https://query1.finance.yahoo.com/v8/finance/chart/"
+            + urllib.parse.quote(symbol)
+            + "?interval=1d&range="
+            + urllib.parse.quote(range_)
+            + "&events=div%2Csplits"
+        )
+        parsed = _parse_actions(_response_json(_ydata.YfData().get(url, timeout=10)))
+    except Exception as exc:
+        _log.info("prices: corporate actions unavailable (%s)", type(exc).__name__)
+        return empty
+    _actions_cache[key] = (time.monotonic(), parsed)
+    return parsed
 
 
 def _chart_next_open(symbol: str) -> str | None:
@@ -2320,6 +2416,15 @@ def _snapshot_from_quote(q: dict) -> dict | None:
         "session_date": _local_day(q.get("regularMarketTime"), q.get("exchangeTimezoneName")),
         "trailing_pe": _finite_positive(q.get("trailingPE")),
         "forward_pe": _finite_positive(q.get("forwardPE")),
+        # The book's top, when Yahoo has it, and when the regular price was set: paper trading
+        # fills a market order at the ask/bid and refuses a quote that is not fresh.
+        "bid": _finite_positive(q.get("bid")),
+        "ask": _finite_positive(q.get("ask")),
+        "quote_time": _epoch_to_iso_utc(q.get("regularMarketTime")),
+        # The pre/post-market print with its own time (phantom copies of the close dropped):
+        # a paper order allowed outside the regular session fills against it.
+        "extended": _extended_hours_from_quote(q, str(q.get("marketState") or "").upper()),
+        "quote_type": q.get("quoteType") or None,
     }
     return {k: v for k, v in raw.items() if v is not None}
 

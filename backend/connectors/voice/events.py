@@ -22,8 +22,9 @@ def speakable(text: str) -> str:
 
 @dataclass
 class DeskEvent:
-    kind: str  # "text" | "tool" | "tool_done" | "approval" | "error" | "end"
+    kind: str  # "text" | "tool" | "tool_done" | "approval" | "card_open" | "error" | "end"
     text: str = ""
     ref: str = ""
     noun: str = ""
+    readable: bool = True  # a card: it says enough to be approved out loud
     changes: bool = False  # a tool that can change the owner's data, or one we can't vouch for

@@ -53,6 +53,13 @@ class PostCallWatch:
         self.last_call_at = time.monotonic()
         self._reset_tally()
 
+    def call_held(self) -> None:
+        """A call the scanner holds (an empty XML call that may be a first stab) starts the clock
+        too, once: a reply that goes on without ever releasing it would otherwise run to the
+        ceiling (UAT 2026-11-14). A parsed call later restarts it as usual."""
+        if self.last_call_at is None:
+            self.last_call_at = time.monotonic()
+
     def saw(self, event: dict) -> None:
         kind = event.get("type") or "?"
         inner = event.get("event") or {}

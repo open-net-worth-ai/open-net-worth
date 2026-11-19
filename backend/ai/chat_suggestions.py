@@ -209,7 +209,9 @@ def _spoken_on_a_call(history: list) -> bool:
             continue
         content = message.get("content")
         blocks = content if isinstance(content, list) else []
-        texts = [b.get("text", "") for b in blocks if isinstance(b, dict)]
+        texts = [b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("text")]
+        if isinstance(content, list) and not texts:
+            continue  # a tool's result, not something they said
         return any(
             f"{HARNESS_NOTE_OPEN}{opening}" in text
             for text in texts

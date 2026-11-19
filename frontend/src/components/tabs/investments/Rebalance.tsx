@@ -3,6 +3,8 @@
 
 import { fBase } from '../../../utils/format'
 import { MaskedText } from '../../ui/MaskedText'
+import type { UntrackedExcluded } from '../../../types/aggregates'
+import { UntrackedNote } from './UntrackedHoldings'
 
 interface AllocRow {
   cls: string
@@ -20,6 +22,8 @@ interface Props {
   // Drift (pp) at/above which a class is flagged — the server's ONE constant
   // (rebalance.DRIFT_FLAG_PP), never a number of our own (MATH-37).
   thresholdPp: number
+  /** Brokerage total accounts' holdings not entered — out of the trades, said under them. */
+  untracked?: UntrackedExcluded | null
 }
 
 function Card({
@@ -42,8 +46,9 @@ function Card({
   )
 }
 
-export function Rebalance({ alloc, thresholdPp }: Props) {
+export function Rebalance({ alloc, thresholdPp, untracked }: Props) {
   const hasTargets = alloc.some((a) => a.tgt > 0)
+  const untrackedNote = untracked ? <UntrackedNote u={untracked} action="rebalance" /> : null
 
   if (!hasTargets) {
     return (
@@ -51,6 +56,7 @@ export function Rebalance({ alloc, thresholdPp }: Props) {
         <div style={{ fontSize: 12.5, color: 'var(--faint)' }}>
           Set allocation targets in the panel above to see rebalancing suggestions.
         </div>
+        {untrackedNote}
       </Card>
     )
   }
@@ -103,6 +109,7 @@ export function Rebalance({ alloc, thresholdPp }: Props) {
           </div>
         </div>
       )}
+      {untrackedNote}
     </Card>
   )
 }

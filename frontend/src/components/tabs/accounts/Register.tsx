@@ -42,6 +42,8 @@ export interface RegCol {
   accountOnly?: boolean
   min?: number
   sortable?: boolean
+  /** Off until the user turns it on in Display → Columns. */
+  defaultHidden?: boolean
 }
 
 export const REG_COLS: RegCol[] = [
@@ -53,6 +55,7 @@ export const REG_COLS: RegCol[] = [
   { key: 'category', w: 130, label: 'Category', min: 104, sortable: true },
   { key: 'description', w: 120, label: 'Description', min: 104, sortable: true },
   { key: 'memo', w: 120, label: 'Memo', min: 90, sortable: true },
+  { key: 'tags', w: 130, label: 'Tags', min: 90, sortable: true, defaultHidden: true },
   { key: 'source', w: 80, label: 'Source', min: 80, sortable: true, cls: 'acct-h-c acct-h-src' },
   { key: 'amount', w: 116, label: 'Amount', cls: 'r', min: 96, sortable: true },
 ]
@@ -264,6 +267,9 @@ export function Register({
         return (t.description || '').toLowerCase()
       case 'memo':
         return (t.memo || '').toLowerCase()
+      case 'tags':
+        // Untagged rows sort last ascending, so a sort brings the tagged ones together.
+        return t.tags?.length ? t.tags.join(',') : '\uffff'
       case 'payee': {
         const name = t.payeeId ? (payeeNames[t.payeeId] ?? '') : (t.description ?? '')
         return name.toLowerCase()

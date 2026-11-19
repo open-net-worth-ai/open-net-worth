@@ -129,7 +129,7 @@ LOTS = [
         "fx_rate": 1.35,
         "base_currency": "SGD",
         "kind": "buy",
-        "txn_id": "txn_abc",
+        "txn_id": None,
         "note": "",
         "created_at": "2025-01-15T00:00:00Z",
         "updated_at": "2025-01-15T00:00:00Z",

@@ -3,7 +3,7 @@
 // the DOM and class names are the prototype's, unchanged.
 import { useRef, useState } from 'react'
 import { Button, Money, Switch, TextField } from '../../ui'
-import { Check, ChevronDown, ChevronRight, RefreshCw, Sparkles, X } from '../../../ui/icons'
+import { Check, ChevronDown, ChevronRight, RefreshCw, LuciusMark, X } from '../../../ui/icons'
 import {
   AFTER_SHORT,
   NEAR,
@@ -46,7 +46,7 @@ export function SuggestionSet({
     return (
       <div className="pa-sugg">
         <span className="pa-sugg-ic">
-          <Sparkles size={15} strokeWidth={1.7} />
+          <LuciusMark size={15} strokeWidth={1.7} />
         </span>
         <span className="pa-sugg-b">
           <span className="pa-sugg-t">Not sure what to set?</span>
@@ -65,7 +65,7 @@ export function SuggestionSet({
     <div className="pa-sg">
       <div className="pa-sg-head">
         <span className="pa-sugg-ic">
-          <Sparkles size={15} strokeWidth={1.7} />
+          <LuciusMark size={15} strokeWidth={1.7} />
         </span>
         <span className="pa-sg-t">
           Lucius suggests {sugg.length} alert{sugg.length === 1 ? '' : 's'}

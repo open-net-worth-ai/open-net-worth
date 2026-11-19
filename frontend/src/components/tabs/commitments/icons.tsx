@@ -2,6 +2,7 @@
 // (24px viewBox, 1.6-2.4px stroke, round caps — matches the app's icon style).
 import type { ReactElement } from 'react'
 import type { CommitmentKind } from '../../../types/commitments'
+import { LuciusMark } from '../../../ui/LuciusMark'
 
 const P = {
   viewBox: '0 0 24 24',
@@ -210,23 +211,9 @@ export const DotsIcon = () => (
   </svg>
 )
 
-/** The AI-identity "spark" mark — matches the design handoff's Spark (used on every Lucius
- *  touchpoint), sized like the app's own Lucius glyphs. */
+/** The Lucius mark (the diamond's octagon), sized like the app's own Lucius glyphs. */
 export const Spark = ({ size = 14 }: { size?: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={2}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M9.94 14.06A2 2 0 0 0 8.5 12.6l-5.4-1.4a.4.4 0 0 1 0-.78l5.4-1.4A2 2 0 0 0 9.94 7.6l1.4-5.4a.4.4 0 0 1 .78 0l1.4 5.4A2 2 0 0 0 14.96 9l5.4 1.4a.4.4 0 0 1 0 .78l-5.4 1.4a2 2 0 0 0-1.44 1.44l-1.4 5.4a.4.4 0 0 1-.78 0z" />
-    <path d="M19 4v3M20.5 5.5h-3M18 17v2M19 18h-2" />
-  </svg>
+  <LuciusMark size={size} aria-hidden="true" />
 )
 
 export const KIND_ICON: Record<CommitmentKind, () => ReactElement> = {

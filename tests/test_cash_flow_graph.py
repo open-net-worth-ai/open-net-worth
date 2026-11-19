@@ -193,7 +193,9 @@ def test_default_month_is_the_last_full_month():
 
 
 def test_endpoint_rejects_a_malformed_month_and_serves_a_valid_one(monkeypatch):
-    monkeypatch.setattr(cash_flow_graph, "month_summary", lambda ym: SAVED_MONTH)
+    monkeypatch.setattr(
+        cash_flow_graph, "month_summary", lambda ym, tags=None, categories=None: SAVED_MONTH
+    )
     client = TestClient(app)
     assert client.get("/api/cashflow/flow?month=2026-13").status_code == 400
     body = client.get("/api/cashflow/flow?month=2026-09").json()

@@ -17,6 +17,7 @@ import threading
 import pytest
 from sqlalchemy import event
 
+from backend.db.account_store import AccountStore
 from backend.db.engine import get_engine
 from backend.db.instrument_store import InstrumentStore
 from backend.db.position_store import PositionStore
@@ -99,7 +100,12 @@ def _book() -> dict:
     ocbc = _open("OCBC", "cash", 8_000.0, institution="OCBC")
     _open("Term deposit", "fixed_deposit", 50_000.0, apy=3.5, institution="OCBC")
     ibkr = _open("IBKR", "investment", 3_000.0, institution="Interactive Brokers")
-    _open("CPF", "retirement", 80_000.0)
+    cpf = _open("CPF", "retirement", 80_000.0)
+    # Live holdings: their balances are settlement and retirement cash, whichever way the flag
+    # is set (a Brokerage total account's is untracked_holdings —
+    # tests/test_untracked_holdings_band.py).
+    for account in (ibkr, cpf):
+        AccountStore().update_by_id(account["id"], {"value_source": "holdings"})
     _open("Loan to Sam", "receivable", 1_200.0)
     mortgage = _open("Lark Mortgage", "loan", -600_000.0, apr=3.1, payoff_date="2044-01-01")
     car_loan = _open("Car loan", "loan", -38_000.0)

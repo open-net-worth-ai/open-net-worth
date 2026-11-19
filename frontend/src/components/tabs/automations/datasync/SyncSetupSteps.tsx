@@ -123,7 +123,7 @@ export function SetupSteps({
   )
 }
 
-function Step({
+export function Step({
   n,
   reached,
   title,

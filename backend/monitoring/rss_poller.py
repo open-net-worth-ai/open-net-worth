@@ -47,6 +47,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
+from backend.core import paper_follow
 from backend.core.fx import base_currency, to_base
 from backend.db.pending_analysis_store import PendingAnalysisStore
 from backend.monitoring.collect import gather_rss
@@ -215,6 +216,35 @@ async def _process_holding_slow(row: dict, topics: list[dict] | None = None) -> 
         await gather_rss(feeds, max_age=_SLOW_CACHE_TTL, read_back=False)
 
 
+async def _poll_paper_tickers(already: set[str]) -> int:
+    """Tickers held only on paper get a watched ticker's news cadence (slow tier), by name only
+    (``core.paper_follow``). Their stories are stored under ``asset:{id}`` ONLY — never the
+    ``scan:intel`` pool — so the asset page and a paper review read them, while Intel's scan,
+    analyst and alerts never act on a stock held only on paper (the significance screen already
+    reads watchlist subjects only)."""
+    count = 0
+    for row in paper_follow.followed():
+        iid = (row.get("instrument_id") or "").strip()
+        if not iid or iid in already:
+            continue
+        try:
+            feeds = [
+                {**f, "subjects": [s for s in f.get("subjects") or [] if s.startswith("asset:")]}
+                for f in resolve_holding_feeds(row)
+            ]
+            feeds = [f for f in feeds if f["subjects"]]
+            if feeds:
+                await gather_rss(feeds, max_age=_SLOW_CACHE_TTL, read_back=False)
+            count += 1
+        except Exception as exc:
+            logger.warning(
+                "rss_poller: paper ticker %s failed: %s",
+                row.get("price_source_id", "?"),
+                type(exc).__name__,
+            )
+    return count
+
+
 async def run_rss_poll(tier: str) -> int:
     """Run one RSS poll tick for the given tier ('fast', 'slow', or 'hot').
 
@@ -329,6 +359,7 @@ async def run_rss_poll(tier: str) -> int:
                     type(exc).__name__,
                 )
 
+        count += await _poll_paper_tickers(held_ids | set(ticker_assets.values()))
         return count
 
     logger.warning("rss_poller: unknown tier %r", tier)

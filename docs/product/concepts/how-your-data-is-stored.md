@@ -88,3 +88,9 @@ single database lives on that server, and you sign in with your Private Cloud ac
 - [Where your files live](../reference/file-layout.md)
 - [Backup and restore](../operations/backup-and-restore.md)
 - [Security and privacy](../operations/security-and-privacy.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Private AI financial assistant: where your data goes](https://opennetworth.ai/blog/where-your-financial-data-goes/): where your data goes with cloud apps, AI chats and a self-hosted agent

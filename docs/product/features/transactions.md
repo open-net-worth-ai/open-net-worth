@@ -6,7 +6,7 @@ order: 30
 audience: [user]
 status: stable
 related: [concepts/the-ledger, concepts/categories, features/accounts, features/categories-payees, features/budgeting]
-keywords: [transactions, ledger, register, split, transfer, reconcile, needs review, receipts, cleared, approve, hide, hidden]
+keywords: [transactions, ledger, register, split, transfer, make transfer, reconcile, needs review, receipts, cleared, approve, hide, hidden]
 ---
 
 # Transactions and the ledger
@@ -28,8 +28,8 @@ or just by telling Lucius: *"I paid $42.80 for dinner at Nando's on my Visa yest
    - **Payee** — start typing a name. To record a **transfer**, pick **To/From** *another
      account* from the list instead of a payee.
    - **Category** — optional. Leave it blank and it shows as *Uncategorized*.
-   - **Description** / **Memo** — optional (which of these show depends on the register's
-     columns).
+   - **Description** / **Memo** / **Tags** — optional (which of these show depends on the
+     register's columns).
    - **Amount** — click the **−**/**+** button beside it to switch between money out (outflow)
      and money in (inflow).
 4. Press **Save**, or **Save and add another** to keep entering.
@@ -44,11 +44,25 @@ or just by telling Lucius: *"I paid $42.80 for dinner at Nando's on my Visa yest
    amount **Remaining**.
    A saved split shows its biggest category and a count (**Rent +5**) in the register — tap it
    to list the lines — and every line, with its amount, in the drawer's **Category** row.
-4. To remove it, click **Delete**.
+4. To remove it, click **Delete**. If something depends on the transaction, such as a lot, a sale
+   or a paid installment, the confirmation says what will change. That record stays and you can
+   still edit it.
 
 The drawer always lists **Memo** and **Tags**, showing a dash when they are empty; add either with
-**Edit transaction**. It also shows the transaction's **Activity** (every change made to it, and by
+**Edit transaction**. The **Tags** field works like the category picker: it lists the tags you have
+already used, most used first; type to narrow the list, click a tag or press Enter to add it, or
+type a new name and pick **Create** to make it. Tags are lowercase with hyphens, so *Japan Trip*
+becomes `japan-trip`. Remove a tag with its **×**, or press Backspace in an empty field.
+
+## Show tags in the register
+
+The register has a **Tags** column that starts hidden. Open **Display** above the register and
+tick **Tags** to show it; the choice is remembered. With it on, double-click a row's Tags cell to
+edit its tags in place with the same picker, and the add-transaction row gets a Tags field too.
+Click the column header to sort by tag. It also shows the transaction's **Activity** (every change made to it, and by
 whom — including a **Reverted** entry when a chat Restore put it back) and its **Receipts** — see [Attach a receipt](importing.md#attach-a-receipt).
+A transaction that came from an email, a bank connection, YNAB or Actual Budget also has a **Source**
+section. **Show raw fields** lists exactly what that source held, and a button there unlinks it.
 
 To change many at once, tick the rows' checkboxes. A bar appears for setting the category,
 marking them cleared, uncleared or reviewed, deleting them, and (under **More**) hiding them,
@@ -65,8 +79,8 @@ balance, your net worth, the budget and reports, and Lucius still sees it.
 To see hidden transactions again, open **Display** above the register and tick **Show hidden
 transactions**. They look like any other row; open one and its drawer offers **Unhide**. **Show
 hidden transactions** turns itself off when you leave the Accounts tab, so a transaction you hid
-never stays out of sight because of a setting you forgot about. **Reset** in the same menu brings
-back every column and turns it off.
+never stays out of sight because of a setting you forgot about. **Reset** in the same menu puts
+the columns back to their defaults (Tags hidden, every other column shown) and turns it off.
 
 To list only the hidden ones — the way to find them on a phone, where there is no **Display**
 menu — type `status:hidden` in the search box, or pick **Hidden** from its status suggestions.
@@ -87,7 +101,9 @@ The Starting Balance transaction is always cleared.
 
 ## Find transactions
 
-Type in the search box above the register to search payee, memo and category. Click into the
+Type in the search box above the register to search payee, description, memo, category and
+tags, then press Enter or pick a suggestion; the list closes and the register filters. To match
+only a tag, pick its `#tag` suggestion or type `#japan-trip`. Click into the
 empty box for one-click filters — **Uncategorized**, **Uncleared** and **Needs review** — or type
 them: `uncategorized`, `status:uncleared`, `status:review`, `status:hidden`. Cleared and Uncleared are one choice:
 picking one replaces the other.
@@ -100,7 +116,13 @@ holding area.
 
 1. In Accounts, click **N to review** to list them, or **Start review** to go through them one
    card at a time.
-2. On each card, correct the account, amount, date, payee or category if needed.
+2. On each card, pick the category. To see or fix more, tap the card (or its **Details**
+   button): it opens in place with **Payee**, **Date**, **Memo** and **Tags**, plus the bank's
+   own text. For tags, tap one of yours from the list, or type to find or create one. Everything
+   you change on the card is saved together when you approve it.
+   **All details** opens the full transaction for the rarer edits — splits, receipts, the
+   original charge — already filled in with what you picked on the card. If you close it with
+   edits you haven't saved, it asks before discarding them.
 3. Click **Approve** to save it and clear the flag, **Skip** to leave it for later, or **Reject**
    to delete it (you confirm first). On a touch screen, swipe right to approve, left to skip.
 
@@ -125,12 +147,18 @@ can add, edit or re-flag a transaction, but can never clear the flag.
   the other follows. Both accounts must exist (one may be archived). In **All accounts** it shows
   as one row with no **+** or **−**, because the money stays yours; inside one of its accounts it
   shows **−** where the money left and **+** where it arrived.
+- **Two rows that are one transfer** — a card payment your bank showed as spending in checking
+  and a payment on the card, say — become one: select both and choose **More** › **Make
+  Transfer**. They must be in two different accounts, one money out and one money in, for the
+  same amount (two currencies are checked at the exchange rate). Both rows' bank ids are kept,
+  so a later import or bank sync of either side adds nothing.
 - An **Invest** transaction is a buy (cash out, **−**) or a sell (cash in, **+**). While editing,
   click the sign beside the amount to switch. Its payee is the broker or platform (for example
   IBKR) — set automatically when the trade is recorded against an account with an institution,
   and editable in the drawer like any other payee. A buy or sale recorded against a holding
   writes what it traded as the description — for example **Sold 60 KSTL @ 150.00 USD · fees
-  1.25 USD** — and leaves the memo free for your own note.
+  1.25 USD** — and leaves the memo free for your own note. Correcting the trade later updates
+  that description to match; a description you or a broker's email wrote is kept as it is.
 - A **balance adjustment** (created when you reconcile) never has a category and is left out of
   spending reports.
 - The **Starting Balance** can't be deleted, uncleared, freely edited or merged — change the

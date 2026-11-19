@@ -52,9 +52,6 @@ export interface CashflowData {
   monthly_expenses_avg: number
   baseline_source: 'transactions' | 'profile' | 'mixed'
   income_runway_months: number | null
-  /** Open credit cards with no purchases in the burn's window: neither the runway nor the
-   *  projection can see their spending. */
-  cards_missing_spending?: string[]
   simulation_active: boolean
   income_override: number | null
   expense_override: number | null

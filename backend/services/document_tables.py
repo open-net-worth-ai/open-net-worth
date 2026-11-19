@@ -17,6 +17,7 @@ from datetime import date, datetime, time
 from backend.core.errors import NotFoundError, ValidationError
 from backend.services import vault
 from backend.services.document_preview import original_bytes
+from backend.services.xlsx_open import load_values_workbook
 
 MAX_ROWS = 200  # one page
 MAX_OFFSET = 1_000_000
@@ -92,9 +93,8 @@ def _csv_page(content: bytes, fmt: str, offset: int) -> _Page:
 
 
 def _xlsx_page(content: bytes, sheet: str | None, offset: int) -> _Page:
-    import openpyxl
 
-    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    wb = load_values_workbook(content)
     try:
         names = list(wb.sheetnames)
         name = sheet if sheet in names else names[0]

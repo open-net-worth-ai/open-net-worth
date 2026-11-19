@@ -31,7 +31,7 @@ from backend.db.account_store import AccountStore
 from backend.db.instrument_store import InstrumentStore
 from backend.db.position_store import FIGURE_FIELDS, PositionStore, vesting_state_of
 from backend.db.price_history_store import PriceHistoryStore
-from backend.services import fixed_income
+from backend.services import fixed_income, transaction_links
 from backend.services import prices as prices_service
 
 _log = logging.getLogger(__name__)
@@ -296,6 +296,16 @@ def update_position(
     clean = _validated_position_update(position_id, changes, _grant_managed_ok=_grant_managed_ok)
     if "account_id" not in clean:
         return PositionStore().touch(position_id, clean)
+    from backend.services import account_value
+
+    # A Brokerage total account on either side keeps its total (ADR 2026-11-10); a
+    # pass-through while `allow_brokerage_total_valuation` is off.
+    return account_value.around_position_move(
+        position_id, clean["account_id"], lambda: _move_position(position_id, clean)
+    )
+
+
+def _move_position(position_id: str, clean: dict) -> dict | None:
     from backend.db.engine import locked_unit_of_work
     from backend.db.tables import lots as lots_tbl
     from backend.db.tables import positions as positions_tbl
@@ -340,7 +350,9 @@ def remove_position(position_id: str) -> bool:
     from backend.db.tables import txn_audit as txn_audit_tbl
     from backend.services import lots as lots_service
 
-    with locked_unit_of_work(lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl, grants_tbl) as conn:
+    with locked_unit_of_work(
+        lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl, grants_tbl, *transaction_links.LOCK_TABLES
+    ) as conn:
         store = PositionStore()
         if store.find_by_id(position_id, conn=conn) is None:
             return False
@@ -357,12 +369,11 @@ def remove_position(position_id: str) -> bool:
                 )
             if remaining >= original > 0:
                 unsold.append(lot)
-        txn_ids = [lot["txn_id"] for lot in unsold if lot.get("txn_id")]
-        if txn_ids:
-            from backend.services import ledger as ledger_service
-
-            ledger_service.bulk_delete_transactions(txn_ids, conn=conn, reject_identities=False)
         for lot in unsold:
+            # One lot at a time: a row two of these lots share shrinks for the first and goes
+            # with the second, and a transfer the user made of one stays.
+            if lot.get("txn_id"):
+                lots_service.release_lot_cash(lot, lot["txn_id"], conn=conn)
             result = lots_service._delete_lot_core(lot["id"], conn=conn)
             if result.get("error"):
                 raise ValidationError(f"could not remove lot {lot['id']}: {result['error']}")
@@ -520,12 +531,18 @@ def apply_position_change(change: dict) -> dict:
     if ctype == "add":
         return _apply_add(change)
     if ctype == "remove":
+        from backend.services import account_value
+
         try:
-            removed = remove_position(change["position_id"])
+            # A Brokerage total account keeps its total (ADR 2026-11-10); a pass-through
+            # while `allow_brokerage_total_valuation` is off.
+            removed, extra = account_value.around_position_remove(
+                change["position_id"], lambda: remove_position(change["position_id"])
+            )
         except ValidationError as exc:
             return {"error": exc.message or str(exc)}
         return (
-            {"ok": True, "position_id": change["position_id"]}
+            {"ok": True, "position_id": change["position_id"], **extra}
             if removed
             else {"error": "position not found"}
         )
@@ -691,6 +708,9 @@ def _book_add_lot(
     if lot_res.get("error"):
         return {"error": lot_res["error"]}
     out = {"lot_id": lot_res.get("lot_id")}
+    # A Brokerage total account's carve-out (ADR 2026-11-10) — what it booked, or why the total
+    # is now off — reaches the caller, Lucius included (UAT TRADE-11, LUC-10).
+    out.update({k: v for k, v in lot_res.items() if k.startswith("value_carve_out")})
     if dated:
         out["note"] = "buy lot already recorded for this trade — do NOT call acquire_lots for it"
     else:

@@ -53,8 +53,17 @@ def test_linking_a_second_bank_keeps_the_first(store):
     assert store.is_configured()
 
 
-def _exchange_as(monkeypatch, *, new_item: str, remove_fails: bool = False):
+_CHECKING = [{"mask": "0000", "subtype": "checking"}]
+
+
+def _exchange_as(
+    monkeypatch, *, new_item: str, remove_fails: bool = False, accounts: dict | None = None
+):
+    """``accounts``: access token → the accounts ``/accounts/get`` lists (``None``: it fails,
+    as for an expired sign-in). By default every login holds the same checking account, so a
+    link at the same bank is the same login."""
     calls: list[str] = []
+    listed = accounts or {}
 
     def fake_post(url, json=None, timeout=None):
         path = url.split(".plaid.com", 1)[1]
@@ -63,6 +72,11 @@ def _exchange_as(monkeypatch, *, new_item: str, remove_fails: bool = False):
             return _Resp({"access_token": f"access-{new_item}", "item_id": new_item})
         if path == "/item/remove" and remove_fails:
             return _Resp({"error_code": "INTERNAL_SERVER_ERROR"}, 500)
+        if path == "/accounts/get":
+            found = listed.get((json or {}).get("access_token"), _CHECKING)
+            if found is None:
+                return _Resp({"error_code": "ITEM_LOGIN_REQUIRED"}, 400)
+            return _Resp({"accounts": found})
         return _Resp({})
 
     monkeypatch.setattr(svc.httpx, "post", fake_post)
@@ -85,6 +99,38 @@ def test_a_relink_that_cannot_revoke_the_old_link_keeps_it_rather_than_lose_its_
     _exchange_as(monkeypatch, new_item="i9", remove_fails=True)
     svc.exchange_public_token("pub", institution={"institution_id": "ins_1", "name": "Wells Fargo"})
     assert [i["item_id"] for i in store.items()] == ["i1", "i9"]
+
+
+def test_a_second_login_at_the_same_bank_is_kept_not_revoked(store, monkeypatch):
+    """A joint or business sign-in at the same bank holds other accounts: revoking the first
+    Item cut off every account it held, and Plaid can't undo it (review 2026-11-15)."""
+    store.add_item(_item("i1", "ins_1", "Wells Fargo"))
+    calls = _exchange_as(
+        monkeypatch,
+        new_item="i9",
+        accounts={"access-i9": [{"mask": "7777", "subtype": "checking"}]},
+    )
+    svc.exchange_public_token("pub", institution={"institution_id": "ins_1", "name": "Wells Fargo"})
+    assert [i["item_id"] for i in store.items()] == ["i1", "i9"]
+    assert "/item/remove" not in calls
+
+
+def test_an_old_login_that_cannot_be_compared_is_kept(store, monkeypatch):
+    # An expired sign-in can't list its accounts, and it predates the recorded ones.
+    store.add_item(_item("i1", "ins_1", "Wells Fargo"))
+    calls = _exchange_as(monkeypatch, new_item="i9", accounts={"access-i1": None})
+    svc.exchange_public_token("pub", institution={"institution_id": "ins_1", "name": "Wells Fargo"})
+    assert [i["item_id"] for i in store.items()] == ["i1", "i9"]
+    assert "/item/remove" not in calls
+
+
+def test_an_expired_login_is_recognised_by_its_recorded_accounts(store, monkeypatch):
+    store.add_item({**_item("i1", "ins_1", "Wells Fargo"), "accounts": _CHECKING})
+    calls = _exchange_as(monkeypatch, new_item="i9", accounts={"access-i1": None})
+    svc.exchange_public_token("pub", institution={"institution_id": "ins_1", "name": "Wells Fargo"})
+    assert [i["item_id"] for i in store.items()] == ["i9"]
+    assert "/item/remove" in calls
+    assert store.items()[0]["accounts"] == _CHECKING  # the new login records its own
 
 
 def test_a_store_from_before_multi_bank_reads_as_one_bank_and_folds_in(store):
@@ -127,6 +173,7 @@ def test_completing_a_link_adds_the_bank_with_its_name(store, monkeypatch):
     replies = {
         "/link/token/get": {"link_sessions": [session]},
         "/item/public_token/exchange": {"access_token": "access-i2", "item_id": "i2"},
+        "/item/get": {"item": {"institution_id": "ins_2", "institution_name": "Chase"}},
     }
     monkeypatch.setattr(
         svc.httpx, "post", lambda url, **k: _Resp(replies[url.split(".plaid.com", 1)[1]])
@@ -314,6 +361,8 @@ def test_a_new_bank_link_still_asks_for_transactions_and_is_not_update_mode(stor
     )
     svc.create_link_token("")
     assert calls[0][1]["products"] == ["transactions"] and "access_token" not in calls[0][1]
+    # Plaid pulls 90 days unless asked at link time, and an Item can never reach back later.
+    assert calls[0][1]["transactions"] == {"days_requested": 730}
     assert store.pending_link_bank() is None
 
 
@@ -332,12 +381,17 @@ def test_finishing_update_mode_exchanges_nothing_and_keeps_the_same_item(store, 
         svc.httpx,
         "post",
         _recorder(
-            {"/link/token/get": {"link_sessions": [{"finished_at": "2026-10-29T00:00:00Z"}]}}, calls
+            {
+                "/link/token/get": {"link_sessions": [{"finished_at": "2026-10-29T00:00:00Z"}]},
+                "/item/get": {"item": {}},
+            },
+            calls,
         ),
     )
     out = svc.complete_hosted_link()
     assert out["status"] == "linked" and out["mode"] == "update"
-    assert [p for p, _ in calls] == ["/link/token/get"]  # no public-token exchange
+    # no public-token exchange; /item/get only refreshes the consent end
+    assert [p for p, _ in calls] == ["/link/token/get", "/item/get"]
     assert [i["item_id"] for i in store.items()] == ["i1"]  # same Item, same token
     assert store.public()["banks"][0]["needs_reconnect"] is False
     assert store.pending_link_bank() is None and store.link_token() == ""
@@ -360,7 +414,9 @@ def test_an_expired_sign_in_marks_only_that_bank_for_reconnect_and_says_so(store
     window = svc.fetch_window(store, "2026-10-01", "2026-10-29", None)
     banks = {b["institution_name"]: b["needs_reconnect"] for b in store.public()["banks"]}
     assert banks == {"Wells Fargo": True, "Chase": False}
-    assert window.warnings == ["Wells Fargo: its sign-in expired — reconnect it on the Plaid page"]
+    assert window.warnings == [
+        "Wells Fargo: the bank needs you to sign in again — Reconnect it on the Plaid page"
+    ]
 
     monkeypatch.setattr(svc.httpx, "post", _per_bank())  # the bank answers again
     svc.fetch_window(store, "2026-10-01", "2026-10-29", None)

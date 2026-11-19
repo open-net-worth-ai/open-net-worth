@@ -736,6 +736,7 @@
   "claude-fable-5-1": {"input_cost_per_token":1e-05,"output_cost_per_token":5e-05,"cache_read_input_token_cost":2.5e-07,"litellm_provider":"anthropic","supports_function_calling":true,"max_input_tokens":1000000},
   "claude-haiku-4-5": {"input_cost_per_token":1e-06,"output_cost_per_token":5e-06,"cache_read_input_token_cost":1e-07,"litellm_provider":"anthropic","supports_function_calling":true,"max_input_tokens":200000},
   "claude-haiku-4-5-20251001": {"input_cost_per_token":1e-06,"output_cost_per_token":5e-06,"cache_read_input_token_cost":1e-07,"litellm_provider":"anthropic","supports_function_calling":true,"max_input_tokens":200000},
+  "claude-haiku-5-5": {"input_cost_per_token":1e-07,"output_cost_per_token":5e-07,"cache_read_input_token_cost":1e-08,"litellm_provider":"anthropic","supports_function_calling":true,"max_input_tokens":1000000},
   "claude-mythos-5": {"input_cost_per_token":1e-05,"output_cost_per_token":5e-05,"cache_read_input_token_cost":1e-06,"litellm_provider":"anthropic","supports_function_calling":true,"max_input_tokens":1000000},
   "claude-mythos-5-1": {"input_cost_per_token":1e-05,"output_cost_per_token":5e-05,"cache_read_input_token_cost":2.5e-07,"litellm_provider":"anthropic","supports_function_calling":true,"max_input_tokens":1000000},
   "claude-mythos-preview": {"input_cost_per_token":1e-05,"output_cost_per_token":5e-05,"cache_read_input_token_cost":1e-06,"litellm_provider":"anthropic","supports_function_calling":true,"max_input_tokens":1000000},

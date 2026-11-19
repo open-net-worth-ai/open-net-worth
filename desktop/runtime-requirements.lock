@@ -1116,19 +1116,24 @@ justext==3.0.2 \
     --hash=sha256:13496a450c44c4cd5b5a75a5efcd9996066d2a189794ea99a49949685a0beb05 \
     --hash=sha256:62b1c562b15c3c6265e121cc070874243a443bfd53060e869393f09d6b6cc9a7
     # via trafilatura
-livekit==1.1.21 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
-    --hash=sha256:0f4bafc5d51cf686dbe308762fa4431e89503ee8348539924438c305a8019a54 \
-    --hash=sha256:148553a7d6515cf0c373f591f962de221253fe305d0a84857f2955f520a54340 \
-    --hash=sha256:4a2b036ba93a8d640b3770d62de1a9ee315824c9d2a0d7fbe1d1f26ecfa9ec6e \
-    --hash=sha256:76c29bc95b771fb37a8f32371163eb6f48404cb880ad27bcadfbf2a5801514aa \
-    --hash=sha256:b08c79ceaa5724a8a3d115c66f448fdc33a31c4cda883110d742209ec98a777c \
-    --hash=sha256:c6c1783a99954147e46995087cbbfb77844049c0d53c33b761e0dfa7ff47256c
-    # via livekit-agents
-livekit-agents==1.8.10 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
-    --hash=sha256:2c410119e82249fb1f06380b9589e1c32a1bcfbf675d8aabd2a88940df33f0e6 \
-    --hash=sha256:5ab720269160ad2ffe9055b8f8f558b5d74918ce4b8fbc85f121d64d13c08ae4
+livekit==1.2.0 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
+    --hash=sha256:08774b3ffe04491515e7ae3bf920051a0a1d40bf7e2f74a499cf9ef444c42e1f \
+    --hash=sha256:1dee2aa01f01951c0798b713d40331dd958e5166196d2d8d1b85e6ce900b0a23 \
+    --hash=sha256:34a44cd884badb596c01d3ba99ba2d67de3d84d253bc62a1c07b4739f6b68c32 \
+    --hash=sha256:9eae2fbf857e0af2516eb03f5285eb5edf0ea0b1aa238268291ccb1a7e11d4d4 \
+    --hash=sha256:a7ac564de20c54d532ff59ebb92d0018d088c96dc36a81d0e02be8b9efa7584c \
+    --hash=sha256:d6279a25ca7b25667908dc43fbc69374f84fa63b7fc857639483a7a3a3850070
+    # via
+    #   livekit-agents
+    #   livekit-plugins-krisp
+    #   livekit-plugins-krisp-internal
+    #   livekit-plugins-noise-cancellation
+livekit-agents==1.8.11 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
+    --hash=sha256:addb4005d8c65d64054ee0d0893c808c8dfb193bac915f1999f0897956ee2d12 \
+    --hash=sha256:ea1141d174ec780e01db66b8ce9a5106d2092b7b54dbefab37d695431f947e7c
     # via
     #   -r requirements.txt
+    #   livekit-plugins-krisp
     #   livekit-plugins-silero
 livekit-api==1.2.2 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
     --hash=sha256:64f82ed90aaef2dc982dbc7f9dcda6f5dc958928ce77ef2b582459d8e2c87b6b \
@@ -1190,13 +1195,32 @@ livekit-local-inference==0.2.7 ; (platform_machine == 'arm64' and 'Darwin Kernel
     --hash=sha256:fa4cb2d495c80be6121642dba4def3a88b22a68d52c1b0affccd66c563de6622 \
     --hash=sha256:fedd281fd23b215fe36ce248445a3b0a4f0e1118c6ff7d0e0ad6a882281ecc1e
     # via livekit-agents
-livekit-plugins-silero==1.8.10 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
-    --hash=sha256:4c31f05c62cc03416d1c3971069268249be3c941beadfc2e0c332c62e8512d86 \
-    --hash=sha256:4e35df7a4edbafa5154b9f730f3593db7cf42a93cf663eb937fb720fc4a38e39
+livekit-plugins-krisp==0.4.11 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
+    --hash=sha256:352f4dcf253b1e77fa550381601375cf5047eb3f68724dfaba7fed4118fbbb93 \
+    --hash=sha256:8f8d2891f745e7b217f24095b5932b17258913c87021a1978296c6b162956b0e
+    # via -r requirements.txt
+livekit-plugins-krisp-internal==0.2.3 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
+    --hash=sha256:22240e40403a348a794e88e76c74e4fdab3c497703aa3bd9bf78c9543890503a \
+    --hash=sha256:5c170d4cc0a177c0e1aaec0310f90c48b6b5383b0d3cceff2228129d670b5734 \
+    --hash=sha256:7094f1de7750275ef89080a7cb87b45d6fe9ce484047f5926ae3d5c38fb46b1b \
+    --hash=sha256:aeb59768486b2a31cb572d23559fdd6b672bf56661187d4e347dba5e97eb2a69 \
+    --hash=sha256:b9c22dcb4b1b270b565ebd5a8703987956e6c26705637d31c60edf43a8a3560a \
+    --hash=sha256:da558b85f35b5b0896f071a2c94360cce16ffdc0dc9595efdb873200c5983105
+    # via livekit-plugins-krisp
+livekit-plugins-noise-cancellation==0.3.3 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
+    --hash=sha256:107b506a762875c090d9c04c0631742add52b9ba61cefb035f541e48e5a0b754 \
+    --hash=sha256:57d175a38ff726638e66a9aa50a2a9712773667a3da556fbdd46bc20ff85fbdc \
+    --hash=sha256:668556be7c8a781facf1d0e04008408598aea454f899053588a714f7de9155b0 \
+    --hash=sha256:6ddd6f7fb255db0b02309e50e6a193d0ae57dd5624e1045b3e00e9dddec71d33 \
+    --hash=sha256:a0bb59c7d5061e487a9c4d90f25d8ca3e0cc228d9b598fe0f1af1b25c1f5a38b
+    # via -r requirements.txt
+livekit-plugins-silero==1.8.11 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
+    --hash=sha256:172356c5c1de23a4981c7c80c02efddf52619d5cb47e6f077729046abcb2d140 \
+    --hash=sha256:b76d256724584f937d940ab7ed42b29bf88eaaeabf10c4edfee7b2685d1457ae
     # via livekit-agents
-livekit-protocol==1.1.29 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
-    --hash=sha256:0721b54cb2745fa536fc2b1ae4fc74d7dab3ce0bdfb0dd579f89cc799928fe2b \
-    --hash=sha256:879c63bff6a0ece5dcc94ba1a9cc4e79ce43897d676369d797d30e1f7444ddd9
+livekit-protocol==1.1.31 ; (platform_machine == 'arm64' and 'Darwin Kernel Version 20.' not in platform_version and 'Darwin Kernel Version 21.' not in platform_version and 'Darwin Kernel Version 22.' not in platform_version and sys_platform == 'darwin') or (platform_machine in 'x86_64 aarch64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') \
+    --hash=sha256:97fb2453b1050e21ec29e3933ef78df23349dcdc1b642857025d4784fd12547b \
+    --hash=sha256:b37c262515c541008c43227a9424151bbf3b93dbae7fb6b9c8e8521c76f5cc29
     # via
     #   livekit-agents
     #   livekit-api
@@ -1728,6 +1752,8 @@ numpy==2.5.3 \
     # via
     #   livekit
     #   livekit-agents
+    #   livekit-plugins-krisp
+    #   livekit-plugins-krisp-internal
     #   livekit-plugins-silero
     #   onnxruntime
     #   pandas

@@ -2,11 +2,12 @@ import type { ProposedChange } from '../../../types/chat'
 import {
   budgetOpLabel,
   budgetOperationHeaderLabel,
-  humanizeType,
   isBudgetChange,
   isBudgetOperationGrant,
   isDestructive,
   isTxnChange,
+  permissionSubject,
+  permissionTitle,
   stagedTitle,
   txnHeaderLabel,
 } from './cardTypes'
@@ -57,12 +58,10 @@ export function CardHeaderV2({ change }: { change: ProposedChange }) {
       {!HANDLED_TYPES_V2.includes(change.type) &&
         !isBudgetOperationGrant(change) &&
         !isCodeRunGrant(change) &&
-        (stagedTitle(change) ??
-          humanizeType(
-            change.type === 'tool_permission' && change.grant_tool
-              ? change.grant_tool
-              : change.type,
-          ))}
+        (stagedTitle(change) ?? permissionTitle(change))}
+      {permissionSubject(change) && (
+        <span className="change-preview-label">{permissionSubject(change)}</span>
+      )}
       {(d.symbol || d.name) && !isBudgetChange(change) && change.type !== 'external_mcp_call' && (
         <span className="change-preview-label">
           {d.symbol || d.name}

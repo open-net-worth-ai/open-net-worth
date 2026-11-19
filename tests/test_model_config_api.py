@@ -1483,3 +1483,94 @@ def test_blank_codex_model_reports_the_clis_real_default(cfg_env, tmp_path):
 
 def test_explicit_model_is_its_own_effective_model(cfg_env):
     assert _client().get("/api/model-config").json()["effective_model"] == "test-model"
+
+
+def test_two_custom_endpoints_survive_over_http(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    client = _client()
+    for key, url, label in (
+        ("custom", "https://one.example/v1", "Work gateway"),
+        ("custom_ab12cd34", "https://two.example/v1", "Home server"),
+    ):
+        r = client.put(
+            f"/api/model-config/providers/{key}",
+            json={"base_url": url, "api_key": "sk-" + key, "label": label, "enabled": True},
+        )
+        assert r.status_code == 200, r.text
+
+    got = client.get("/api/model-config/providers").json()["configured_providers"]
+    assert got["custom"]["base_url"] == "https://one.example/v1"
+    assert got["custom"]["label"] == "Work gateway"
+    assert got["custom_ab12cd34"]["base_url"] == "https://two.example/v1"
+    assert got["custom_ab12cd34"]["label"] == "Home server"
+    assert "sk-custom" not in str(got)
+
+    assert client.put("/api/model-config/providers/custom_BAD!", json={}).status_code == 404
+    assert client.delete("/api/model-config/providers/custom").status_code == 200
+    after = client.get("/api/model-config/providers").json()["configured_providers"]
+    assert "custom" not in after and "custom_ab12cd34" in after
+
+
+def test_a_custom_endpoint_default_is_protected_not_its_sibling(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    client = _client()
+    for key, url in (
+        ("custom", "https://one.example/v1"),
+        ("custom_ab12cd34", "https://two.example/v1"),
+    ):
+        client.put(
+            f"/api/model-config/providers/{key}",
+            json={"base_url": url, "api_key": "sk-" + key, "enabled": True},
+        )
+    assert (
+        client.put("/api/model-config", json={"default_model": "custom_ab12cd34:m1"}).status_code
+        == 200
+    )
+
+    # The active default is refused on every path; its sibling `custom` is free to change.
+    assert (
+        client.put(
+            "/api/model-config/providers/custom_ab12cd34", json={"enabled": False}
+        ).status_code
+        == 409
+    )
+    assert client.delete("/api/model-config/providers/custom_ab12cd34").status_code == 409
+    assert client.delete("/api/model-config/providers/custom_ab12cd34/key").status_code == 409
+    assert (
+        client.put("/api/model-config/providers/custom", json={"enabled": False}).status_code == 200
+    )
+    assert client.delete("/api/model-config/providers/custom").status_code == 200
+
+
+def test_removing_or_disabling_a_provider_with_no_default_is_not_a_500(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    # Raw reset: no default model picked, the state of a fresh instance.
+    store_mod.ModelConfigStore().save({})
+    client = _client()
+    client.put(
+        "/api/model-config/providers/custom",
+        json={"base_url": "https://one.example/v1", "api_key": "sk-x", "enabled": True},
+    )
+    assert (
+        client.put("/api/model-config/providers/custom", json={"enabled": False}).status_code == 200
+    )
+    assert client.delete("/api/model-config/providers/custom/key").status_code == 200
+    assert client.delete("/api/model-config/providers/custom").status_code == 200
+
+
+def test_models_union_names_every_configured_provider(cfg_env):
+    cfg_env.setattr(models_api, "_validate_credentials", lambda *a, **k: ("valid", ["m1"], ""))
+    cfg_env.setattr(models_api, "_fetch_models_for_provider", lambda key, store: ([], "fallback"))
+    client = _client()
+    client.put(
+        "/api/model-config/providers/custom_ab12cd34",
+        json={
+            "base_url": "https://two.example/v1",
+            "api_key": "sk-x",
+            "label": "Home server",
+            "enabled": True,
+        },
+    )
+    body = client.get("/api/models?all=1").json()
+    # Present even though that endpoint returned no models — the picker's chip needs the name.
+    assert body["provider_labels"]["custom_ab12cd34"] == "Home server"

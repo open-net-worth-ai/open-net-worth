@@ -479,7 +479,7 @@ describe('existingTxnLine — transfer treatment', () => {
 
   it('replaces account+category tokens with the legs line', () => {
     expect(existingTxnLine(ex, accounts, {}, 'SGD', { anchorAccountId: 'rvb' })).toBe(
-      '— 06-01 • Transfer • Compass SGD → Riverside Bank • added by you • S$99.51',
+      '— 06/01 • Transfer • Compass SGD → Riverside Bank • added by you • S$99.51',
     )
   })
 
@@ -488,7 +488,7 @@ describe('existingTxnLine — transfer treatment', () => {
       existingTxnLine({ ...ex, account_id: 'rvb' }, accounts, {}, 'SGD', {
         anchorAccountId: 'rvb',
       }),
-    ).toBe('— 06-01 • Riverside Bank • Transfer • added by you • S$99.51')
+    ).toBe('— 06/01 • Riverside Bank • Transfer • added by you • S$99.51')
   })
 
   it('non-transfer output is byte-identical, with or without the new context arg', () => {
@@ -501,7 +501,7 @@ describe('existingTxnLine — transfer treatment', () => {
       currency: 'SGD',
     }
     const line = existingTxnLine(plain, accounts, {}, 'SGD')
-    expect(line).toBe('— 06-09 • Riverside Bank • Uncategorized • via agent • -S$11.00')
+    expect(line).toBe('— 06/09 • Riverside Bank • Uncategorized • via agent • -S$11.00')
     expect(existingTxnLine(plain, accounts, {}, 'SGD', { anchorAccountId: 'rvb' })).toBe(line)
   })
 })

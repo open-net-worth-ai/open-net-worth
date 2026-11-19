@@ -21,6 +21,7 @@ from backend.ai import pending_injection, run_plan, skill_runtime
 from backend.ai.memory_citations import CitationStripper, note_cited_facts, split_citations
 from backend.ai.models.base import AIProvider
 from backend.ai.permissions import engine as _permission_engine
+from backend.ai.spoken_lines import UNHEARD_KEY, lines_around
 from backend.ai.tool_text import (
     UNPARSED_CALL_NOTICE,
     LiveLineFilter,
@@ -31,7 +32,12 @@ from backend.ai.tool_text import (
 )
 from backend.ai.tools import TOOL_SCHEMAS, _skill_scope, call_log, execute_tool
 from backend.ai.tools.display import describe_tool_call
-from backend.ai.tools.registry import external_args_error, mutated_domains, validation_error
+from backend.ai.tools.registry import (
+    external_args_error,
+    is_rest_send,
+    mutated_domains,
+    validation_error,
+)
 from backend.ai.turn_completion import MAX_COMPLETION_NUDGES, completion_nudge
 from backend.core import mcp_external
 from backend.core.chat_context_markers import is_model_context_block
@@ -219,6 +225,9 @@ _GATE_NEVER_AUTO_EXECUTE = frozenset(
         # so a guess is not a near-miss, it is a different instruction.
         "add_run_tasks",
         "update_run_task",
+        # Self-staged: it shows its own card, and wherever no card can be shown it writes a skill
+        # and its script file. Never run it on arguments the model guessed.
+        "save_code_as_skill",
     }
 )
 
@@ -260,7 +269,9 @@ def _discovery_gate_verdict(
     if mcp_external.is_external(name):
         return _external_gate_verdict(name, args)
     problem = validation_error(name, args)
-    if mutated_domains(name) or name in _GATE_NEVER_AUTO_EXECUTE:
+    # A REST connector's send tool is named at runtime, so it cannot be in the set: a guessed
+    # path or body is a different request, sent for real.
+    if mutated_domains(name) or name in _GATE_NEVER_AUTO_EXECUTE or is_rest_send(name):
         # Validated anyway (cheap) so the telemetry can answer "how many bounces would the
         # write-conservatism have saved?" — the number that would justify revisiting it.
         return False, "bounced_write", problem, problem is None
@@ -1496,6 +1507,37 @@ def _maybe_append_artifact_block(owner_blocks: Optional[list], result_text: str)
         owner_blocks.append({"type": "artifact", "artifact": _artifact_event_payload(parsed)})
 
 
+def _visual_from_result(result_text: str, args: Optional[dict] = None) -> Optional[dict]:
+    """The resolved spec inside a ``show_visual`` result, or None for a refused call. A
+    drawing's markup is not in the result (the model would pay for its own code twice) — it
+    comes back from the call's own arguments."""
+    try:
+        parsed = json.loads(result_text)
+    except Exception:
+        return None
+    if not (isinstance(parsed, dict) and parsed.get("shown")):
+        return None
+    spec = parsed.get("visual")
+    if not isinstance(spec, dict):
+        return None
+    code = (args or {}).get("code")
+    if "code" not in spec and isinstance(code, str) and code.strip():
+        spec = {**spec, "code": code.strip()}
+    return spec
+
+
+def _maybe_append_visual_block(
+    owner_blocks: Optional[list], result_text: str, args: Optional[dict] = None
+) -> None:
+    """Re-derive an inline visual on reload from its persisted ``show_visual`` call — the
+    same spec the live ``visual`` event carried, so a reload draws the identical picture."""
+    if owner_blocks is None:
+        return
+    spec = _visual_from_result(result_text, args)
+    if spec is not None:
+        owner_blocks.append({"type": "visual", "visual": spec})
+
+
 def _fill_search_block_results(block: dict, result_text: str) -> None:
     """Fill a rehydrated 'search' block's results from its persisted tool_result.
 
@@ -1608,6 +1650,10 @@ def _post_execute_events(
                 )
         except Exception:
             pass
+    elif tool_name == "show_visual":
+        _vis = _visual_from_result(text_result, args)
+        if _vis is not None:
+            events.append({"type": "visual", "tool_use_id": tool_use_id, "visual": _vis})
     elif tool_name == "web_search":
         try:
             raw = json.loads(text_result)
@@ -2198,7 +2244,11 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
             )
         pending_receipt = None
 
+    lines_after: list[dict] = []  # what a voice call said after the entry before this one
     for i, entry in enumerate(history):
+        messages.extend(lines_after)
+        lines_before, lines_after = lines_around(session_id, i, entry)
+        messages.extend(lines_before)
         if isinstance(entry.get(skill_runtime.DEACTIVATION_MARKER), dict):
             continue
         if entry.get("_onw_skill"):
@@ -2271,6 +2321,12 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                             if block.get("name") == "create_artifact":
                                 _maybe_append_artifact_block(
                                     tool_block_owner.get(b.get("tool_use_id")), block["result"]
+                                )
+                            if block.get("name") == "show_visual":
+                                _maybe_append_visual_block(
+                                    tool_block_owner.get(b.get("tool_use_id")),
+                                    block["result"],
+                                    block.get("input"),
                                 )
                             if block.get("name") == "run_screen_command":
                                 _maybe_append_screen_command_block(
@@ -2356,8 +2412,14 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                 continues_turn = False
             else:
                 # Pure tool_results — the same tool loop continues, so the assistant
-                # entry that follows belongs on THIS turn's bubble, not a new one.
-                continues_turn = True
+                # entry that follows belongs on THIS turn's bubble, not a new one. A turn opening
+                # with nothing to draw isn't that: a voice call's request re-sent with more words
+                # keeps them on its first message, and taking it for tool results pulled the answer
+                # up into the PREVIOUS answer's bubble, above its own question (owner, 2026-11-08).
+                continues_turn = any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in (content if isinstance(content, list) else [])
+                )
 
         elif role == "assistant":
             # Live, one turn can drive many tool_use rounds, but they all land on the
@@ -2491,12 +2553,15 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                     msg["usage"] = usage_by_idx[i]
                 messages.append(msg)
                 last_assistant = msg
+            if entry.get(UNHEARD_KEY):
+                last_assistant["unheard"] = True
             # Only the tool_results entry right before carries a turn on: a SECOND assistant
             # entry in a row is a new line (a voice call's greeting or check-in after an
             # answer). Left set, every one after a tool round piled into that round's bubble
             # — a later call's greeting showed inside an earlier answer (owner, 2026-11-03).
             continues_turn = False
 
+    messages.extend(lines_after)
     _land_pending_skills()
     _land_receipt()
 
@@ -3679,10 +3744,36 @@ def _resolve_style(new_messages: list) -> str:
     to answer). The ONE remaining response-style nudge is the smalltalk greeting
     guard: a pure smalltalk turn (deterministic — ai/smalltalk.py) still gets
     SMALLTALK_STYLE so a bare "hello" can't earn an essay (the live incident this
-    guard was built for). Every other turn returns "" — no style line."""
+    guard was built for). Otherwise the person's own Response detail setting adds its
+    line (brief / detailed); "normal" or no choice returns "" — no style line."""
     from backend.ai.smalltalk import SMALLTALK_STYLE, is_smalltalk_turn
 
-    return SMALLTALK_STYLE if is_smalltalk_turn(new_messages) else ""
+    if is_smalltalk_turn(new_messages):
+        return SMALLTALK_STYLE
+    return _DETAIL_STYLES.get(_response_detail(), "")
+
+
+# The person's own Settings choice (profile ``chat_response_detail``). "normal" — and no
+# choice at all — adds no line: the prompt's ANSWER LENGTH rules already are the default.
+_DETAIL_STYLES = {
+    "brief": (
+        "The person asked for BRIEF answers: the answer and its key figure in one or two "
+        "sentences, at most three one-line bullets, no headings. Expand only if asked."
+    ),
+    "detailed": (
+        "The person asked for DETAILED answers: after the answer, walk through the reasoning, "
+        "the figures behind it and the assumptions — still led by the answer itself."
+    ),
+}
+
+
+def _response_detail() -> str:
+    try:
+        from backend.services.profile import read_profile
+
+        return (read_profile() or {}).get("chat_response_detail") or "normal"
+    except Exception:  # a profile read must never fail a turn — fall back to the default
+        return "normal"
 
 
 async def run(
@@ -3836,6 +3927,12 @@ async def _run_turn(
 
     # For logging and cost-tracking use the bare model id.
     _, history = get_or_create_session(session_id)
+    # show_visual copies its figures out of this conversation's tool results — bind the LIVE
+    # list so results from earlier rounds of this same turn are visible to it. Never reset:
+    # the next turn rebinds before any tool runs.
+    from backend.ai import visual_sources
+
+    visual_sources.bind(history)
     # Seed the extra-tool-groups and extra-tool-names ContextVars from persisted session
     # meta so the CORE-based offer reflects tools the user already loaded in prior turns
     # (Lane D — both paths are sticky per-session).
@@ -4323,7 +4420,11 @@ async def _run_turn(
         # always empty anyway — read once per turn as a redundant backstop.
         from backend.services.profile import read_profile as _read_profile_for_injection
 
-        _multi_turn_enabled = bool(
+        # A voice call's turn always takes what the owner adds while it runs: on a call they
+        # can't wait for a quiet moment to type, and a follow-up queued behind the turn got an
+        # answer that asked for what they'd just said (owner's call, 2026-11-09). Only the call
+        # enqueues for its own turns (``voice.desk.join_turn``).
+        _multi_turn_enabled = surface == "chat:voice" or bool(
             _read_profile_for_injection().get("chat_multi_turn_enabled", False)
         )
 
@@ -4500,6 +4601,11 @@ async def _run_turn(
 
                 elif event["type"] == "tool_use":
                     pending_tool_uses.append(event)
+
+                elif event["type"] == "visual_draft":
+                    # A drawing still being written, shown live and never stored: the
+                    # finished show_visual call replaces it (models/visual_draft.py).
+                    yield event
 
                 elif event["type"] == "usage":
                     turn_input_tokens += event["input_tokens"]
@@ -4858,13 +4964,22 @@ async def _run_turn(
                                         # stage keys its PendingPlanStore entry on the SAME id
                                         # this tool_use will be resolved against.
                                         set_tool_use_id(tu["id"])
-                                        (
-                                            text_result,
-                                            proposed,
-                                            _mcp_image_ids,
-                                        ) = await _permission_engine().dispatch_external(
-                                            _ext, tool_name, tu["input"]
-                                        )
+                                        from backend.ai import simulation_guard
+
+                                        _sim = simulation_guard.refusal(tool_name)
+                                        if _sim is not None:
+                                            # A paper-only Automation never reaches an
+                                            # external MCP tool, whatever the engine.
+                                            text_result, proposed = _sim
+                                            _mcp_image_ids = []
+                                        else:
+                                            (
+                                                text_result,
+                                                proposed,
+                                                _mcp_image_ids,
+                                            ) = await _permission_engine().dispatch_external(
+                                                _ext, tool_name, tu["input"]
+                                            )
                                 else:
                                     text_result, proposed = await execute_tool(
                                         tool_name, tu["input"], tool_use_id=tu["id"]

@@ -202,6 +202,8 @@ class Writer:
             row.acct = self._account(op["account_id"]).id
         if op.get("payee_name"):
             row.payee_id = self._payee(op["payee_name"])
+        elif "payee_id" in op and op["payee_id"] is None:
+            row.payee_id = None
         self._update_category(row, op)
         if "subtransactions" in op:
             self._write_lines(row, op["subtransactions"])

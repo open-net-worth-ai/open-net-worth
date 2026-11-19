@@ -172,3 +172,82 @@ def test_txn_summary_surfaces_warnings():
         }
     )
     assert "⚠ dated before tracking start" in summary
+
+
+# ── a tool_permission card (owner, 2026-11-15: it read "preview: kind=field_diff, data=…") ──
+
+
+def _permission(tool, args, preview=None, reason=None):
+    display = {"tool": tool, "arguments": args}
+    if preview is not None:
+        display["preview"] = preview
+    return {
+        "type": "tool_permission",
+        "grant_tool": tool,
+        "display": display,
+        "reason": reason or f"{tool} needs your approval before it runs.",
+    }
+
+
+def test_a_permission_card_draws_its_preview_as_rows_old_to_new():
+    args = {"transaction_ids": ["txn_0a0a0a0a0a01"]}
+    preview = {
+        "kind": "field_diff",
+        "data": {
+            "items": [
+                {
+                    "id": "txn_0a0a0a0a0a01",
+                    "name": "2026-03-02 · ACME Mart · -USD 4.20",
+                    "changes": {"review": {"old": "Needs review", "new": "Approved"}},
+                }
+            ],
+            "already_reviewed_or_missing": 0,
+        },
+        "raw_arguments": args,
+    }
+    text = format_change_summary(_permission("approve_transactions", args, preview))
+    assert text == (
+        "Approve transactions\n• 2026-03-02 · ACME Mart · -USD 4.20: Needs review → Approved"
+    )
+    for leak in ("kind=", "field_diff", "raw_arguments", "data=", "needs your approval"):
+        assert leak not in text
+
+
+def test_a_permission_card_lists_each_field_when_a_row_changes_several():
+    preview = {
+        "kind": "field_diff",
+        "data": {
+            "items": [
+                {
+                    "id": "a1",
+                    "name": "Weekly review",
+                    "changes": {
+                        "status": {"old": "paused", "new": "active"},
+                        "max_runs": {"old": None, "new": 5},
+                    },
+                }
+            ],
+            "already_reviewed_or_missing": 2,
+        },
+    }
+    text = format_change_summary(_permission("update_automations", {}, preview))
+    assert "• Weekly review\n  status: paused → active\n  max runs: – → 5" in text
+    assert "(2 already reviewed or not found — left as they are)" in text
+
+
+def test_a_permission_card_with_no_preview_lists_its_arguments_once():
+    text = format_change_summary(
+        _permission("set_envelope_target", {"envelope_id": "env_1", "amount": 200})
+    )
+    assert text == "Set envelope target\n• envelope id: env_1\n• amount: 200"
+
+
+def test_a_preview_of_another_kind_reads_like_arguments_without_the_raw_copy():
+    preview = {"kind": "named_args", "data": {"envelope_name": "Food"}, "raw_arguments": {"x": 1}}
+    text = format_change_summary(_permission("assign_to_envelope", {"x": 1}, preview))
+    assert "• envelope name: Food" in text and "raw" not in text
+
+
+def test_a_permission_card_keeps_a_reason_that_says_something():
+    text = format_change_summary(_permission("x_tool", {}, reason="It sends an email."))
+    assert text.endswith("Reason: It sends an email.")

@@ -33,7 +33,8 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
    and the default date on new entries. The browser's zone is detected the first time; a zone
    you pick yourself is never overwritten.
 3. Under **Number & date format**, choose a **Date format** (31/12/2026, 12/31/2026 or
-   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser.
+   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser. Large figures in tight spaces are
+   shortened with K, M, B or T (₫2.01B) in every number format; only the separators change.
 
 **Switch to dark mode**
 1. Open **Settings → Appearance**.
@@ -63,12 +64,12 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
 | **Duplicate Detection** | How imported transactions are matched against what is already in your ledger: **Auto-merge policy**, the **AI judge** and its **Judgment model**, **Max AI checks per run**, and **Remembered decisions** — pairs you already ruled on, which are never re-flagged unless you forget the decision. |
 | **Intelligence** | Every Intel setting: monitoring cadence, where each kind of alert is sent, Lucius's explained alerts and reads, how much the briefs say, and crash thresholds. See [Intel settings](intel.md#settings). |
 | **Appearance** | **Theme** — the color scheme and the scrolling price ticker in the status bar, per device. Market prices (gold, coins, FX, large stocks) join the ticker once you hold a market position or follow a watchlist; **Always show market prices** shows them regardless. **Appearance** — the app name, accent color and logo for this whole instance (everyone using it sees them). Changes save as you make them. |
-| **Desktop** | Only in the desktop app: keep running when the window closes, start at login, desktop notifications, and **Statement folders** — folders the app watches so new statements appear for review. See [Desktop app](../operations/desktop.md). |
+| **Desktop** | Only in the desktop app: keep running when the window closes, start at login, **Keep computer awake** so Automations run on time, desktop notifications, and **Statement folders** — folders the app watches so new statements appear for review. See [Desktop app](../operations/desktop.md). |
 | **Phone shortcuts** | Log a spend from your phone the moment you pay. **iPhone**: show a QR to open the setup page on your phone, or open it on the iPhone itself to get the steps and an **Install shortcut** button; the **Setup code** field (**Reveal**, **Copy**) holds the address + API token it asks for. **Android**: the capture address and your API token for Tasker or MacroDroid. See [Log a spend from your phone](phone-shortcuts.md). |
 | **MCP** | Copy-paste configurations that let Claude Desktop, Cursor, VS Code, ChatGPT and other AI apps use your book. See [Use your book from other AI apps](../operations/connect-ai-apps.md). |
 | **Currency & format** | **Base currency**, **Number & date format**, and **Time zone** (see the tasks above). Date fields in forms use your date format too. |
 | **Security** | Your **Password**, the **API token** that other apps (Claude Desktop, the CLI, phone shortcuts) use to sign in, and **Auth behaviour** — how long you stay signed in, and whether this computer may skip the password. See [Security & privacy](../operations/security-and-privacy.md). |
-| **Data** | **Backup & restore** (export a full .zip), **Automatic backups** (daily, and how many days to keep), **Restore from a backup**, **Uploaded files** from chat, and resetting the instance. See [Backup & restore](../operations/backup-and-restore.md). |
+| **Data** | **Backup & restore** (export a full .zip), **Automatic backups** (daily, and how many days to keep), **Restore from a backup**, **Uploaded files** from chat (photos show a thumbnail; tap one to preview it before deleting), and resetting the instance. See [Backup & restore](../operations/backup-and-restore.md). |
 | **Terminal** | A shell on the machine the app runs on. Shown only where it is allowed; off by default when you host the app yourself. See [Terminal](../operations/terminal.md). |
 | **Help** | The **Help center** (these pages, available offline), **Ask Lucius**, and **Send feedback**. |
 | **Developer** | **Experimental** first (see below), then **Application logs**, **Code execution** (let Lucius run short Python on this server), **SQL access** (Lucius's read-only queries and their log), **Extensions** and **Bundled script skills**. See [Logs](../operations/logs.md). |
@@ -76,7 +77,7 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
 
 ## Experimental features
 
-Settings → Developer → **Experimental**, at the top of Developer, lists features that are still being tried out. Each has
+Settings → Developer → **Experimental**, at the top of Developer, lists features that are still being tried out, newest first. Each has
 a switch, a short description, and whether it is at its **default** or **changed** by you; **Reset**
 puts a changed one back to its default. Turning a feature off always brings back exactly how the
 app worked before. Each one is temporary: once it is finished it becomes part of the app (or is
@@ -85,7 +86,13 @@ removed) and disappears from this list. When the list is empty there is nothing 
 Right now the list holds **Permissions v2**, a new way of deciding when Lucius asks you before
 using a tool; see [Permissions v2](../lucius/permissions-v2.md). It also holds **Voice calls**: talk to Lucius out loud
 from the chat; see [Voice calls](../connectors/voice-calls.md). **Actual Budget** is here too, off
-by default: see [Import from Actual Budget](actual-budget-import.md).
+by default: see [Import from Actual Budget](actual-budget-import.md). And **Investment accounts valued by
+Brokerage total or Live holdings**: a typed or synced total that holdings are carved out of; see
+[Accounts](accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).
+These are on by default and can be turned off here: Permissions v2, [Web search reads its
+results](../connectors/web-search-reads-results.md), [Lucius decides which Intel news reaches
+you](intel.md#let-lucius-decide-what-reaches-your-phone-experimental), Lucius looking into each
+[price alert](intel.md), and [Bank sync without AI](bank-data-sync.md).
 
 A switch is read-only when the server sets it from its environment (the row names the variable),
 and on the public demo, which runs the defaults unless its server was started with one switched on

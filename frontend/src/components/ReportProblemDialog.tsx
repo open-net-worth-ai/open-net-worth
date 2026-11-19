@@ -8,6 +8,8 @@ import {
 } from '../state/reportProblem'
 import {
   COMMUNITY_URL,
+  DISCORD_CHANNEL,
+  discordText,
   emailHref,
   REPORT_LIMITS,
   reportText,
@@ -21,6 +23,8 @@ import { Modal } from './ui/Modal'
 import { Loading } from './ui'
 import { Stack } from './ui/Stack'
 import { openExternal } from '../platform/desktop'
+import { DiscordMark } from '../ui/DiscordMark'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { Text } from './ui/Text'
 import { TextArea } from './ui/TextArea'
 import { TextField } from './ui/TextField'
@@ -60,6 +64,9 @@ function ReportProblemDialog({
   const [includeLogs, setIncludeLogs] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  // Set once Post on Discord was clicked: whether the message reached the clipboard, and the
+  // message itself, shown only when it did not.
+  const [discord, setDiscord] = useState<{ copied: boolean; text: string } | null>(null)
   const [reference, setReference] = useState<string | null>(null)
   const statusRef = useRef<HTMLDivElement>(null)
 
@@ -110,7 +117,11 @@ function ReportProblemDialog({
     [base, description, email, screen, error, logs, includeLogs],
   )
 
+  const isMobile = useIsMobile()
+  // A phone pastes by long-press, so it gets no shortcut to press.
+  const pasteKey = isMobile ? null : /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘V' : 'Ctrl+V'
   const busy = phase !== 'editing'
+  const logsSent = Boolean(report?.logs)
   const ready = Boolean(report?.description) && !busy
 
   async function send() {
@@ -136,6 +147,21 @@ function ReportProblemDialog({
     } catch {
       setNote('Your browser blocked copying. Open the exact data below and copy it from there.')
     }
+  }
+
+  // Discord has no link that fills in a message, so the message goes on the clipboard for the
+  // user to paste in the channel the invite opens.
+  async function postOnDiscord() {
+    if (!report || !ready) return
+    const text = discordText(report)
+    let copied = true
+    try {
+      await window.navigator.clipboard.writeText(text)
+    } catch {
+      copied = false
+    }
+    setDiscord({ copied, text })
+    void openExternal(COMMUNITY_URL)
   }
 
   async function mail() {
@@ -189,9 +215,13 @@ function ReportProblemDialog({
       size="lg"
       footer={
         <>
-          <Button size="sm" variant="ghost" onClick={onClose} disabled={phase === 'sending'}>
-            Cancel
-          </Button>
+          {/* On a phone the dialog is a bottom sheet the ✕, a tap outside or a drag closes, so
+              Cancel only crowds the two real actions. */}
+          {!isMobile && (
+            <Button size="sm" variant="ghost" onClick={onClose} disabled={phase === 'sending'}>
+              Cancel
+            </Button>
+          )}
           {/* The fallbacks appear only once sending can't work (it failed, or the server is
               down); before that, Send is the one action. */}
           {(failure || offline) && report && (
@@ -207,12 +237,22 @@ function ReportProblemDialog({
           {report && !offline && (
             <Button
               size="sm"
-              variant="primary"
               loading={phase === 'sending'}
               disabled={!ready}
               onClick={() => void send()}
             >
               Send report
+            </Button>
+          )}
+          {report && (
+            <Button
+              size="sm"
+              variant="primary"
+              iconLeft={<DiscordMark size={15} />}
+              onClick={() => void postOnDiscord()}
+              disabled={!ready}
+            >
+              Post on Discord
             </Button>
           )}
         </>
@@ -252,9 +292,9 @@ function ReportProblemDialog({
             />
           </FormField>
           <FormField
-            label="Email (optional)"
+            label="Email"
             htmlFor="report-email"
-            help="We’ll only use it to tell you when the fix is out."
+            help="We need it only to tell you when the fix is out — never for marketing, and it’s never shared."
           >
             <TextField
               id="report-email"
@@ -279,56 +319,63 @@ function ReportProblemDialog({
               />
             </FormField>
           )}
-          <dl className="report-problem__meta" aria-label="Sent with the report">
-            <dt>Version</dt>
-            <dd>{report.app_version}</dd>
-            <dt>Platform</dt>
-            <dd>{report.platform}</dd>
-            <dt>Mode</dt>
-            <dd>{report.mode}</dd>
-            {screen && (
+          {/* Everything beyond what the user writes folds into one line that names it, so the
+              dialog reads as two fields; opening it shows (and edits) exactly what is sent. */}
+          <details className="report-problem__included">
+            <summary>Also sent: app details{logsSent ? ' and recent logs (masked)' : ''}</summary>
+            <Stack gap="--space-4" className="report-problem__included-body">
+              <dl className="report-problem__meta" aria-label="Sent with the report">
+                <dt>Version</dt>
+                <dd>{report.app_version}</dd>
+                <dt>Platform</dt>
+                <dd>{report.platform}</dd>
+                <dt>Mode</dt>
+                <dd>{report.mode}</dd>
+                {screen && (
+                  <>
+                    <dt>Screen</dt>
+                    <dd>{screen}</dd>
+                  </>
+                )}
+              </dl>
+              <Checkbox
+                id="report-include-logs"
+                label="Include recent logs"
+                description={base?.logs ? 'Amounts, names and keys are masked.' : 'No logs yet.'}
+                checked={includeLogs}
+                disabled={!base?.logs}
+                onChange={(event) => setIncludeLogs(event.target.checked)}
+              />
+              <TextArea
+                aria-label="Recent logs"
+                rows={8}
+                className="report-problem__mono"
+                maxLength={REPORT_LIMITS.logs}
+                spellCheck={false}
+                value={logs}
+                disabled={!includeLogs}
+                onChange={(event) => setLogs(event.target.value)}
+              />
+              <details className="report-problem__exact">
+                <summary>Show exactly what is sent</summary>
+                <pre>{JSON.stringify(report, null, 2)}</pre>
+              </details>
+            </Stack>
+          </details>
+          {/* Says what Post on Discord does before the click, and what to do next after it, beside
+              the button itself. Discord has no link that fills in a message. */}
+          <div className="report-problem__discord" role="status" aria-live="polite">
+            {!discord &&
+              `Post on Discord copies your message for you to paste in ${DISCORD_CHANNEL}.`}
+            {discord?.copied &&
+              `Copied — ${pasteKey ? `press ${pasteKey}` : 'paste it'} in ${DISCORD_CHANNEL}${pasteKey ? ' to paste it' : ''}.`}
+            {discord && !discord.copied && (
               <>
-                <dt>Screen</dt>
-                <dd>{screen}</dd>
+                Copy this and paste it in {DISCORD_CHANNEL}:
+                <pre className="report-problem__discord-text">{discord.text}</pre>
               </>
             )}
-          </dl>
-          <Checkbox
-            id="report-include-logs"
-            label="Include recent logs"
-            description={base?.logs ? 'Amounts, names and keys are masked.' : 'No logs yet.'}
-            checked={includeLogs}
-            disabled={!base?.logs}
-            onChange={(event) => setIncludeLogs(event.target.checked)}
-          />
-          <TextArea
-            aria-label="Recent logs"
-            rows={8}
-            className="report-problem__mono"
-            maxLength={REPORT_LIMITS.logs}
-            spellCheck={false}
-            value={logs}
-            disabled={!includeLogs}
-            onChange={(event) => setLogs(event.target.value)}
-          />
-          <details className="report-problem__exact">
-            <summary>Show exactly what is sent</summary>
-            <pre>{JSON.stringify(report, null, 2)}</pre>
-          </details>
-          <p className="report-problem__community">
-            Prefer to chat?{' '}
-            <a
-              href={COMMUNITY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => {
-                event.preventDefault()
-                void openExternal(COMMUNITY_URL)
-              }}
-            >
-              Join us on Discord
-            </a>
-          </p>
+          </div>
         </Stack>
       )}
     </Modal>

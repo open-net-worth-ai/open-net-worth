@@ -26,6 +26,8 @@ from typing import Any, Awaitable, Callable, Optional, Protocol, Tuple
 
 import jsonschema
 
+from backend.core import rest_tools
+
 logger = logging.getLogger(__name__)
 
 Handler = Callable[[dict], Awaitable[Tuple[str, Optional[dict]]]]
@@ -51,6 +53,7 @@ class Tool:
     precheck: Optional[Precheck] = None
     external_effect: bool = False
     unavailable: Optional[Callable[[], Optional[str]]] = None
+    destructive: bool = False
 
 
 _REGISTRY: dict[str, Tool] = {}
@@ -79,6 +82,7 @@ def tool(
     precheck: Optional[Precheck] = None,
     external_effect: bool = False,
     unavailable: Optional[Callable[[], Optional[str]]] = None,
+    destructive: bool = False,
 ) -> Callable[[Handler], Handler]:
     """Register an async tool handler under ``name``. Raises on duplicate name.
 
@@ -143,6 +147,11 @@ def tool(
     hard-refused at dispatch, below, before its handler ever runs — on top of, not instead of,
     the ``effective_level`` permission check every tool gets.
 
+    ``destructive`` marks a write that permanently removes something the owner cannot get back
+    (deleting a whole paper portfolio and its history). It only matters inside a domain that is
+    otherwise seeded Always allow (``ai._confirm_gate_v2.SIMULATION_DOMAINS``): there it keeps the
+    tool seeded Ask. The old gate never reads it.
+
     ``precheck`` runs the handler's own cheap refusals (a semantic check the type-only schema
     validation below cannot express — an Automation trigger's shape) on the raw arguments and
     RAISES on a call the handler would refuse. ``ai.tools._confirm_gate.stage_generic`` calls
@@ -175,11 +184,32 @@ def tool(
             precheck,
             external_effect,
             unavailable,
+            destructive,
         )
         _validator_for.cache_clear()  # a name queried before registration cached a None
         return fn
 
     return deco
+
+
+def is_rest_send(name: str) -> bool:
+    """True for a REST connector tool that is not a plain read: an endpoint declared with
+    POST / PUT / PATCH / DELETE. These tools are named at runtime,
+    so the reviewed NAME lists that mark "acts outside this install" (the old gate's
+    ``EXTERNAL_EFFECT_TOOLS``, the discovery gate's never-auto-execute set, the inbound MCP
+    annotations) cannot list them and ask this instead. The answer is the tool's own
+    ``external_effect`` declaration, set from the endpoint's method when it is registered."""
+    return rest_tools.is_rest_tool(name) and has_external_effect(name)
+
+
+def unregister_tool(name: str) -> bool:
+    """Drop a tool registered at RUNTIME — a REST connector's own, when the connector is
+    removed or renamed (``ai.tools.rest_api.sync_rest_tools``). The tools a module declares at
+    import are never unregistered. Returns whether it was there."""
+    removed = _REGISTRY.pop(name, None) is not None
+    if removed:
+        _validator_for.cache_clear()
+    return removed
 
 
 def tool_preview_adapter(name: str) -> Optional[PreviewAdapter]:
@@ -480,10 +510,21 @@ def written_domains(name: str) -> tuple[str, ...]:
     return t.mutates if t is not None else ()
 
 
+def is_registered(name: str) -> bool:
+    """Whether ``name`` is a tool of this registry (an external MCP tool is not)."""
+    return name in _REGISTRY
+
+
 def may_change_something(name: str) -> bool:
     """Whether running ``name`` can change data or send something out. A tool this registry
     doesn't know (an external MCP server's) counts: nothing vouches that it only reads."""
     return name not in _REGISTRY or bool(written_domains(name)) or has_external_effect(name)
+
+
+def is_destructive(name: str) -> bool:
+    """Whether ``name`` declares ``destructive=`` — ``False`` for an unknown tool."""
+    t = _REGISTRY.get(name)
+    return bool(t and t.destructive)
 
 
 def has_external_effect(name: str) -> bool:
@@ -960,6 +1001,13 @@ async def _dispatch_call(
     set_tool_use_id(tool_use_id)
     input_data = gate.clean_input(input_data, tool_use_id)
     entry = _REGISTRY.get(name)
+    if entry is None and rest_tools.is_rest_tool(name):
+        # A REST connector's tools are registered when the connector exists; one added in
+        # another worker since this one last looked is registered here, on first use.
+        from backend.ai.tools.rest_api import sync_quietly
+
+        sync_quietly()
+        entry = _REGISTRY.get(name)
     if entry is None:
         unknown = json.dumps({"error": f"unknown tool: {name}"})
         # Domains are hardcoded () on both early-return paths: the handler never ran, so
@@ -967,6 +1015,13 @@ async def _dispatch_call(
         # PREVIOUS dispatch's narrowing, which ``_active_call`` still holds by design.
         _record_call(name, invoked, input_data, unknown, started, ())
         return unknown, None
+    from backend.ai import simulation_guard
+
+    simulated = simulation_guard.refusal(name)
+    if simulated is not None:
+        # A paper-only Automation: refused before any permission engine, judge or card.
+        _record_call(name, invoked, input_data, simulated[0], started, ())
+        return simulated
     refusal, input_data = _refusal_before_gate(name, entry, input_data, gate)
     if refusal is not None:
         _record_call(name, invoked, input_data, refusal, started, ())
@@ -1029,6 +1084,7 @@ async def _dispatch_call(
     )
     if text is not None:  # a self-staged ``(None, change)`` wrote nothing yet
         _broadcast_write(mutated_domains(name))
+        simulation_guard.note_outbound(name, input_data)
     return text, proposed
 
 
@@ -1040,6 +1096,14 @@ _DEMO_REFUSED_TOOLS = frozenset(
     {
         # Its request reaches every open app, and on the demo those are other visitors'.
         "read_screen",
+        # Paper trading writes: every visitor shares one book, so the demo reads paper only.
+        "create_paper_portfolio",
+        "update_paper_portfolios",
+        "delete_paper_portfolios",
+        "place_paper_orders",
+        "cancel_paper_orders",
+        "record_paper_marks",
+        "record_autopilot_memo",
         "list_checkpoints",
         "restore_checkpoint",
         "get_recent_logs",
@@ -1082,7 +1146,10 @@ _DEMO_REFUSED_TOOLS = frozenset(
 def _demo_refusal(name: str) -> Optional[Tuple[Optional[str], Optional[dict]]]:
     from backend.core.config import get_settings
 
-    if name not in _DEMO_REFUSED_TOOLS or not get_settings().demo_mode:
+    # A REST connector's tools are named at runtime, so they cannot be listed above: every
+    # one is an outbound request with a key the instance holds.
+    refused = name in _DEMO_REFUSED_TOOLS or rest_tools.is_rest_tool(name)
+    if not refused or not get_settings().demo_mode:
         return None
     text = json.dumps(
         {

@@ -219,6 +219,17 @@ def test_route_q_filter_is_all_time(route):
     assert {t["id"] for t in rows} == {"a", "b"}
 
 
+def test_route_any_field_search_matches_a_tag(route):
+    # "Find X in any field" covers tags — the register shows them, so a word a row visibly
+    # carries as a tag must find it (owner report 2026-11-19). A scoped search does not.
+    out = route.get_transactions(q="reimburs")
+    rows = out["transactions"] if isinstance(out, dict) else out
+    assert {t["id"] for t in rows} == {"a", "d"}
+    out = route.get_transactions(q="reimburs", q_field="payee")
+    rows = out["transactions"] if isinstance(out, dict) else out
+    assert rows == []
+
+
 def test_route_tag_filter(route):
     out = route.get_transactions(tag="reimbursable")
     rows = out["transactions"] if isinstance(out, dict) else out

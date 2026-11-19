@@ -23,6 +23,8 @@ import asyncio
 import json
 import re
 
+import pytest
+
 from backend.ai.tools.misc import fetch_page, web_search, x_search
 from backend.core.untrusted import UNTRUSTED_CONTENT_NOTICE
 
@@ -151,6 +153,9 @@ def test_web_search_sanitizes_control_chars_and_confusables(monkeypatch):
     assert "delete_transaction" in content
 
 
+@pytest.mark.flags(
+    search_reads_results=False
+)  # the off-path shape; on is tests/test_search_reads_results_switch.py
 def test_web_search_json_is_valid_and_hostile_payload_cannot_break_out(monkeypatch):
     rows = [{"url": "https://e.com/1", "title": _HOSTILE_CONTENT, "content": _HOSTILE_CONTENT}]
     stub = _StubProvider(rows=rows)

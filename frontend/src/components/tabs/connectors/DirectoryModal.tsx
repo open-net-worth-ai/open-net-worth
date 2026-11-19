@@ -8,6 +8,7 @@
 // each view supplies its own body and the footer is composed HERE — never inside a step.
 
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { ActionMenu } from '../../ui/ActionMenu'
 import { BackTitle, Btn, Modal } from './primitives'
 import { DirectoryBrowser } from './DirectoryBrowser'
 import { Icons } from './icons'
@@ -17,6 +18,7 @@ import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
 import { type DirectoryRow, type DirectoryFamilyFilter, type DirectorySort } from './catalog'
 import { resolveDirectory } from './directoryRows'
 import { toEntry } from './adapter'
+import { REST_LAUNCHER_ID } from './restApi'
 import type { ConnectorCategory, FocusConnectorOptions } from './model'
 import type { Connector } from './types'
 
@@ -180,6 +182,9 @@ export function DirectoryModal({
   if (!open) return null
 
   const customEntry = entries.find((e) => e.generic)
+  const restEntry = entries.find((e) => e.id === REST_LAUNCHER_ID)
+  const mcpAdd = customEntry && directoryFamily !== 'apis' ? () => add(customEntry) : undefined
+  const restAdd = restEntry && directoryFamily !== 'mcp' ? () => add(restEntry) : undefined
 
   const live = preview
     ? connectors.find((c) => c.id === (preview.installedId ?? preview.id))
@@ -207,10 +212,34 @@ export function DirectoryModal({
     <Btn onClick={() => setPreview(null)}>Back</Btn>
   ) : (
     <>
-      {/* Always in reach, whatever the list is scrolled to (owner, 2026-10-31). */}
-      {customEntry ? (
-        <Btn variant="primary" onClick={() => add(customEntry)}>
-          <Icons.plus /> Add custom server
+      {/* Always in reach, whatever the list is scrolled to (owner, 2026-10-31). ONE add button
+          beside Close, at every width: two filled a phone's bar edge to edge and read as two
+          competing calls to action on a desktop, and a page of its own for a two-way choice
+          was mostly empty (owner, 2026-11-11). The MCP and APIs tabs name the one thing they
+          add; anywhere else it is "Add your own", a menu of the two. */}
+      {mcpAdd && restAdd ? (
+        <ActionMenu
+          className="cn-foot-menu"
+          triggerClassName="rd-btn primary"
+          placement="above"
+          label="Add your own"
+          trigger={
+            <>
+              <Icons.plus /> Add your own
+            </>
+          }
+          items={[
+            { label: 'MCP server', onSelect: mcpAdd },
+            { label: 'REST API', onSelect: restAdd },
+          ]}
+        />
+      ) : mcpAdd ? (
+        <Btn variant="primary" onClick={mcpAdd}>
+          <Icons.plus /> Add MCP server
+        </Btn>
+      ) : restAdd ? (
+        <Btn variant="primary" onClick={restAdd}>
+          <Icons.plus /> Add REST API
         </Btn>
       ) : null}
       <Btn onClick={close}>Close</Btn>

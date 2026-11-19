@@ -51,6 +51,9 @@ ACCOUNT_BAND: dict[str, str] = {
     "credit": "credit",
     "loan": "loan",
 }
+# A Brokerage total account's ledger balance under `allow_brokerage_total_valuation`: invested at the
+# brokerage, holdings not entered — never settlement cash (`services/account_value.py`).
+UNTRACKED_HOLDINGS_BAND = "untracked_holdings"
 
 
 def _check(type_: str) -> str:

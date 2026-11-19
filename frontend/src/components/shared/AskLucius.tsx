@@ -12,7 +12,9 @@
 // reachable in tab order, activated on Enter/Space. stopPropagation so a click inside a clickable
 // row (drill-down, select) doesn't also toggle the row.
 
+import type { ReactNode } from 'react'
 import type { MentionType } from '../../types/mentions'
+import { LuciusMark } from '../../ui/LuciusMark'
 import { useLuciusMention } from '../../state/chatComposer'
 import { chipMetaFromDom } from '../../lucius/chipMeta'
 
@@ -23,7 +25,7 @@ interface LuciusAskButtonProps {
   refId: string
   label: string
   className: string
-  glyph?: string // defaults to the ✦ (U+2726) used everywhere today
+  glyph?: ReactNode // defaults to Lucius's mark
 }
 
 export function LuciusAskButton({
@@ -31,7 +33,7 @@ export function LuciusAskButton({
   refId,
   label,
   className,
-  glyph = '✦',
+  glyph = <LuciusMark size="1em" aria-hidden="true" />,
 }: LuciusAskButtonProps) {
   const mention = useLuciusMention()
   const aria = `Ask Lucius about ${label}`

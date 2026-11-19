@@ -27,6 +27,7 @@ the only place a flag is defined:
 FLAGS: tuple[Flag, ...] = (
     Flag(
         name="new_rollover",                       # snake_case; ONW_FLAG_NEW_ROLLOVER in env
+        title="New budget rollover",               # its label in Settings; case acronyms (MCP)
         description="Carries overspending into next month the new way.",  # shown to the owner
         default=False,
         owner="owner",

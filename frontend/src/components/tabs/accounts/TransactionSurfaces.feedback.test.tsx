@@ -144,6 +144,34 @@ describe('transaction surfaces — no toast bar', () => {
     expect(sent('DELETE')).toBe(true)
     expect(toast()).toBeNull()
   })
+
+  it('the confirm dialog says what deleting a linked row will change', async () => {
+    setupMocks((url) =>
+      url === '/api/transactions/delete-preview'
+        ? okJson({
+            links: [{ label: '10 shares bought 2026-01-05', effect: 'The lot keeps its shares.' }],
+          })
+        : undefined,
+    )
+    await openDrawer()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Delete transaction' })
+    await within(confirm).findByText(/10 shares bought 2026-01-05: The lot keeps its shares\./)
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(sent('DELETE')).toBe(true))
+  })
+
+  it('a failed preview still lets you delete, with the plain dialog', async () => {
+    setupMocks((url) =>
+      url === '/api/transactions/delete-preview' ? refused(500, 'nope') : undefined,
+    )
+    await openDrawer()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Delete transaction' })
+    expect(within(confirm).getByText(/will be removed\.$/)).toBeTruthy()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(sent('DELETE')).toBe(true))
+  })
 })
 
 describe('transaction surfaces — a failure is said in the drawer', () => {

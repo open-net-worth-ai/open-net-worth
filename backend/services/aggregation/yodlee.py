@@ -268,6 +268,8 @@ def _account_to_common(yodlee_account: dict) -> dict:
     )
     return {
         "provider_account_id": str(yodlee_account.get("id") or ""),
+        # The balance sync must not read the base it falls back to as a reported currency.
+        "currency_inferred": not isinstance(currency, str),
         "name": str(name),
         "mask": None,
         "currency": resolved_currency,
@@ -328,7 +330,7 @@ def _txn_description(yodlee_txn: dict) -> str:
             if isinstance(yodlee_txn.get("description"), dict)
             else yodlee_txn.get("description")
         )
-    return (str(info).strip() if info else "") or "Yodlee"
+    return str(info).strip() if info else ""
 
 
 def _txn_currency(yodlee_txn: dict, account_currency: str) -> str:

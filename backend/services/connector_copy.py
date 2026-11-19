@@ -373,6 +373,7 @@ SHORT: dict[str, str] = {
     "telegram": "Chat with Lucius and get alerts on Telegram.",
     "voice": "Talk to Lucius out loud from the chat.",
     "webhook": "Send notifications to any URL.",
+    "rest": "Let Lucius call any HTTP API you point it at.",
     "simplefin": "Bank and card accounts from the US and Canada, via a setup token.",
     "plaid": "Bank and card accounts from the US and Canada.",
     "lunch_money": "Transactions already aggregated in your Lunch Money account.",
@@ -447,6 +448,12 @@ LONG: dict[str, str] = {
         "Alerts and digests are posted as JSON to the address you give — a Slack or Discord "
         "incoming webhook, or your own endpoint. Add a signing secret and it rides along as a "
         "request header, so the receiver can check the call came from you."
+    ),
+    "rest": (
+        "Give it an API's address and key, and say what can be called — import an OpenAPI "
+        "document or add the endpoints by hand. Each API you add is a connector of its own, and "
+        "each endpoint a tool Lucius can call. Requests only ever go to the address you saved, "
+        "and your key is added by the app and never shown to Lucius."
     ),
     "simplefin": (
         "SimpleFIN is a paid bridge (about $15 a year) some self-hosters use for banks Plaid "

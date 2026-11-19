@@ -12,6 +12,7 @@
 // (the edits already landed). This is the SAME live-preview-with-discard
 // model Customize mode uses for the whole layout — just scoped to one item.
 
+import { LuciusMark } from '../../../ui/LuciusMark'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, ReactElement, ReactNode } from 'react'
@@ -494,79 +495,83 @@ export function WidgetFullscreen({
   // widget def gets for free, never a hand-built per-widget control) + the
   // list row-cap, in that order (mirrors the handoff). ──────────────────────
   const data: Ctrl[] = []
-  ;(def.settings || []).forEach((st) => {
-    const cur = cfg[st.key] !== undefined ? cfg[st.key] : st.default
-    if (st.type === 'segment' && st.options) {
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <div className="ov-fs-ctl" key={st.key}>
-            <span className="ov-fs-ctl-l">{st.label}</span>
-            <div className="ov-fs-seg">
-              {st.options.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  className={'ov-fs-chip' + (cur === o ? ' on' : '')}
-                  onClick={() => onPatch({ config: { ...cfg, [st.key]: o } })}
-                >
-                  {o}
-                </button>
-              ))}
+  // An inline setting (a Reports widget's period, categories, tags) is set from the widget's own
+  // header filter, so it isn't repeated here.
+  ;(def.settings || [])
+    .filter((st) => !st.inline)
+    .forEach((st) => {
+      const cur = cfg[st.key] !== undefined ? cfg[st.key] : st.default
+      if (st.type === 'segment' && st.options) {
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <div className="ov-fs-ctl" key={st.key}>
+              <span className="ov-fs-ctl-l">{st.label}</span>
+              <div className="ov-fs-seg">
+                {st.options.map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    className={'ov-fs-chip' + (cur === o ? ' on' : '')}
+                    onClick={() => onPatch({ config: { ...cfg, [st.key]: o } })}
+                  >
+                    {o}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ),
-      })
-    } else if (st.type === 'categories' || st.type === 'categoryIds') {
-      const Row = st.type === 'categoryIds' ? LedgerCategorySettingRow : CategorySettingRow
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <Row
-            key={st.key}
-            schema={st}
-            value={(cur as string[]) || []}
-            onPatch={(next: string[]) => onPatch({ config: { ...cfg, [st.key]: next } })}
-          />
-        ),
-      })
-    } else if (st.type === 'pairs') {
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <div className="ov-fs-ctl ov-fs-ctl-wide" key={st.key}>
-            <span className="ov-fs-ctl-l">{st.label}</span>
-            <PairsEditor
-              value={cur}
-              onChange={(v) => onPatch({ config: { ...cfg, [st.key]: v } })}
+          ),
+        })
+      } else if (st.type === 'categories' || st.type === 'categoryIds') {
+        const Row = st.type === 'categoryIds' ? LedgerCategorySettingRow : CategorySettingRow
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <Row
+              key={st.key}
+              schema={st}
+              value={(cur as string[]) || []}
+              onPatch={(next: string[]) => onPatch({ config: { ...cfg, [st.key]: next } })}
             />
-          </div>
-        ),
-      })
-    } else if (st.type === 'url') {
-      appearance.push({
-        group: 'Appearance',
-        key: st.key,
-        node: (
-          <div className="ov-fs-ctl" key={st.key}>
-            <span className="ov-fs-ctl-l">{st.label}</span>
-            <input
-              className="ov-fs-input"
-              defaultValue={typeof cur === 'string' ? cur : ''}
-              placeholder="https://…"
-              onBlur={(e) => onPatch({ config: { ...cfg, [st.key]: e.target.value.trim() } })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur()
-              }}
-            />
-          </div>
-        ),
-      })
-    }
-  })
+          ),
+        })
+      } else if (st.type === 'pairs') {
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <div className="ov-fs-ctl ov-fs-ctl-wide" key={st.key}>
+              <span className="ov-fs-ctl-l">{st.label}</span>
+              <PairsEditor
+                value={cur}
+                onChange={(v) => onPatch({ config: { ...cfg, [st.key]: v } })}
+              />
+            </div>
+          ),
+        })
+      } else if (st.type === 'url') {
+        appearance.push({
+          group: 'Appearance',
+          key: st.key,
+          node: (
+            <div className="ov-fs-ctl" key={st.key}>
+              <span className="ov-fs-ctl-l">{st.label}</span>
+              <input
+                className="ov-fs-input"
+                defaultValue={typeof cur === 'string' ? cur : ''}
+                placeholder="https://…"
+                onBlur={(e) => onPatch({ config: { ...cfg, [st.key]: e.target.value.trim() } })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                }}
+              />
+            </div>
+          ),
+        })
+      }
+    })
   if (def.rows) {
     const shown = rowCap(instance, def)
     appearance.push({
@@ -644,7 +649,7 @@ export function WidgetFullscreen({
               onAskLucius?.(p)
             }}
           >
-            ✦ Regenerate
+            <LuciusMark size="1em" aria-hidden="true" /> Regenerate
           </button>
         </div>
       ),

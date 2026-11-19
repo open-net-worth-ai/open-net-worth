@@ -236,8 +236,7 @@ class CreateGrantInput(ToolInput):
         default=None,
         description=(
             "When true AND account_name is given without account_id, create a new account with "
-            "that name. Only set after the user has explicitly confirmed a new account should "
-            "be created. Default false — resolve against existing accounts instead."
+            "that name. Only set when the user has said a new account should be created. Default false — resolve against existing accounts instead."
         ),
     )
     locked_position_id: Optional[str] = Field(
@@ -401,8 +400,7 @@ class UpdateGrantInput(ToolInput):
         default=None,
         description=(
             "When true AND account_name is given without account_id, create a new account with "
-            "that name. Only set after the user has explicitly confirmed a new account should "
-            "be created. Default false — resolve against existing accounts instead."
+            "that name. Only set when the user has said a new account should be created. Default false — resolve against existing accounts instead."
         ),
     )
 
@@ -693,11 +691,7 @@ class ApplyVestInput(ToolInput):
         "A vest writes a FMV-basis lot on the liquid position (or parks the units as pending "
         "when the grant needs a separate release) and decrements the locked position. It "
         "writes NO ledger transaction — shares are delivered, not cash; the tax facts live on "
-        "the vest event. On an interactive turn this raises a confirm card (no write yet); the user's "
-        "approval then runs it server-side with exactly the values the card showed. Never call "
-        "it again to confirm and never restate the values — there is nothing for you to pass "
-        "back. An unattended/automated caller vests immediately, no card — pass idempotency_key "
-        "so a retry is a safe no-op."
+        "the vest event. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. Pass idempotency_key so a retry is a safe no-op."
     ),
     input_schema=schema_of(ApplyVestInput, tool_name="record_vest"),
     mutates=("portfolio", "ledger"),
@@ -824,11 +818,7 @@ class ApplyVestUndoInput(ToolInput):
         "locked-position re-increment, FMV lot deletion (REFUSED if the lot was partially sold "
         "— dispose/adjust manually first) or pending-units drain, and tranche flip back to "
         "unvested; a vest recorded before 2026-09-22 also gets its legacy income txn "
-        "soft-deleted. On an interactive turn this raises a "
-        "confirm card (no write yet); the user's approval then runs it server-side with exactly "
-        "the values the card showed. Never call it again to confirm and never restate the "
-        "values — there is nothing for you to pass back. An unattended/automated caller undoes "
-        "immediately, no card."
+        "soft-deleted. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values."
     ),
     input_schema=schema_of(ApplyVestUndoInput, tool_name="undo_vest"),
     mutates=("portfolio", "ledger"),
@@ -996,7 +986,7 @@ class Apply8bImportInput(ToolInput):
         description=(
             "An already-extracted preview result to commit directly (e.g. an unattended flow "
             "with its own pre-extracted payload). The normal interactive flow never passes this "
-            "by hand — the approval re-runs the tool on the stored extraction."
+            "by hand — an answered card re-runs the tool on the stored extraction."
         ),
         json_schema_extra=_bare_object_schema,
     )
@@ -1010,12 +1000,7 @@ class Apply8bImportInput(ToolInput):
         "instrument_id (from resolve_instruments) to pin the instrument for all rows — "
         "recommended when the company name in the PDF might not match the system instrument "
         "symbol exactly. NEVER auto-create an instrument; call resolve_instruments first if the "
-        "company is not yet in the system. On an interactive turn this raises a confirm card "
-        "(no write yet — extracts the rows via LLM and shows the proposed grants + vest events "
-        "for review); the user's approval then runs it server-side with exactly the values the "
-        "card showed. Never call it again to confirm and never restate the values — there is "
-        "nothing for you to pass back. An unattended/automated caller extracts and commits "
-        "immediately, no card. Creates proposed grants then applies each vest event through "
+        "company is not yet in the system. It extracts the rows via LLM first. If the call asks the user first, they see the proposed grants + vest events and their answer runs it server-side with exactly those values — never call it again and never restate the values. Creates proposed grants then applies each vest event through "
         "apply_equity_change. Idempotent: re-applying the same payload (same idempotency_key "
         "per vest row) is a safe no-op — the existing vest_event_ids are returned without "
         "duplicate writes."

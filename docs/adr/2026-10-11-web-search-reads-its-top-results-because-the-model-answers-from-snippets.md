@@ -7,7 +7,7 @@ deciders: Repo owner, Claude
 
 # Web search reads its top results, because the model answers from snippets 82% of the time
 
-**Behind the `search_reads_results` feature flag (default off, declared 2026-10-31, `remove_by`
+**Behind the `search_reads_results` feature flag (default off, declared 2026-10-31; default on since 2026-11-15, `remove_by`
 2027-01-31).** Off, every search tool returns exactly what it returned before. Everything below
 describes the flag ON. The rules a flag follows are in
 [`2026-10-25-feature-flags-off-means-the-old-code`](2026-10-25-feature-flags-off-means-the-old-code.md);

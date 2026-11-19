@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react'
+import { LuciusMark } from '../../ui/icons'
 import { useChatComposerOptional } from '../../state/chatComposer'
 
 // "Build with Lucius" — hands Lucius a detailed brief, with the stock attached as a mention when
@@ -25,7 +25,7 @@ export function BuildWithLucius({
   }
   return (
     <button type="button" className="asd-thesis-lucius" onClick={start}>
-      <Sparkles size={13} aria-hidden="true" />
+      <LuciusMark size={13} aria-hidden="true" />
       Build with Lucius
     </button>
   )

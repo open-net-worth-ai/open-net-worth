@@ -4,8 +4,10 @@
  *
  * Mirrors the width-persistence pattern in Register.tsx (localStorage `acctColW_v1`):
  * here `acctColVis_v1` stores the HIDDEN set (an array of column keys), so a column
- * added later defaults VISIBLE (absence = shown). cb/clr/amount are structural and can
- * never be hidden — they never enter the set. The picker renders adjacent to the
+ * added later defaults VISIBLE (absence = shown). A column marked `defaultHidden` (Tags)
+ * is the opposite: hidden unless its key is in `acctColShow_v1`, the set the user turned
+ * on. The `hidden` this module hands out is the effective set, so the Register only ever
+ * reads one. cb/clr/amount are structural and can never be hidden — they never enter either set. The picker renders adjacent to the
  * date-range + Add-transaction controls (see SearchFilter.tsx `Filters`).
  */
 
@@ -15,6 +17,7 @@ import { AdvCheck } from './pickers'
 import { SlidersHorizontal } from '../../../ui/icons'
 
 export const REG_VIS_KEY = 'acctColVis_v1'
+export const REG_SHOW_KEY = 'acctColShow_v1'
 
 // Always-visible, never offered in the picker (structural: the select box, the cleared
 // toggle, and the amount are the register's spine).
@@ -26,24 +29,43 @@ export function toggleableCols(showAccount: boolean): RegCol[] {
   return REG_COLS.filter((c) => !FIXED_COL_KEYS.has(c.key) && (!c.accountOnly || showAccount))
 }
 
-export function loadHiddenCols(): Set<string> {
+const DEFAULT_HIDDEN = new Set(REG_COLS.filter((c) => c.defaultHidden).map((c) => c.key))
+
+function loadKeySet(storageKey: string, allowed: (k: string) => boolean): Set<string> {
   try {
-    const arr = JSON.parse(localStorage.getItem(REG_VIS_KEY) || '[]')
-    // Defensive: ignore non-strings and any fixed key that shouldn't be persisted as hidden.
-    return new Set(
-      Array.isArray(arr) ? arr.filter((k) => typeof k === 'string' && !FIXED_COL_KEYS.has(k)) : [],
-    )
+    const arr = JSON.parse(localStorage.getItem(storageKey) || '[]')
+    // Defensive: ignore non-strings and any key that doesn't belong in this set.
+    return new Set(Array.isArray(arr) ? arr.filter((k) => typeof k === 'string' && allowed(k)) : [])
   } catch {
     return new Set()
   }
 }
 
-function saveHiddenCols(hidden: Set<string>) {
+function saveKeySet(storageKey: string, keys: Set<string>) {
   try {
-    localStorage.setItem(REG_VIS_KEY, JSON.stringify([...hidden]))
+    localStorage.setItem(storageKey, JSON.stringify([...keys]))
   } catch {
     /* localStorage unavailable (private mode / quota) — visibility just isn't persisted. */
   }
+}
+
+/** The effective hidden set: the columns the user hid, plus every default-hidden column they
+ *  have not turned on. */
+export function loadHiddenCols(): Set<string> {
+  const hidden = loadKeySet(REG_VIS_KEY, (k) => !FIXED_COL_KEYS.has(k) && !DEFAULT_HIDDEN.has(k))
+  const shown = loadKeySet(REG_SHOW_KEY, (k) => DEFAULT_HIDDEN.has(k))
+  for (const k of DEFAULT_HIDDEN) if (!shown.has(k)) hidden.add(k)
+  return hidden
+}
+
+function saveHiddenCols(hidden: Set<string>) {
+  saveKeySet(REG_VIS_KEY, new Set([...hidden].filter((k) => !DEFAULT_HIDDEN.has(k))))
+  saveKeySet(REG_SHOW_KEY, new Set([...DEFAULT_HIDDEN].filter((k) => !hidden.has(k))))
+}
+
+/** True when `hidden` is exactly the out-of-the-box set (counting only `keys` on offer). */
+export function isDefaultHidden(hidden: Set<string>, keys: string[]): boolean {
+  return keys.every((k) => hidden.has(k) === DEFAULT_HIDDEN.has(k))
 }
 
 export interface ColumnVisibility {
@@ -66,9 +88,8 @@ export function useColumnVisibility(): ColumnVisibility {
       return next
     })
   const reset = () =>
-    setHidden((prev) => {
-      if (prev.size === 0) return prev
-      const next = new Set<string>()
+    setHidden(() => {
+      const next = new Set(DEFAULT_HIDDEN)
       saveHiddenCols(next)
       return next
     })
@@ -113,11 +134,14 @@ export function ColumnsPicker({
     }
   })
   const cols = toggleableCols(showAccount)
-  // "Hidden" only counts columns currently on offer — a key persisted from the all-accounts
-  // view (e.g. a hidden `account`) shouldn't light up the button while a single account is open.
-  const hiddenCount = cols.filter((c) => hidden.has(c.key)).length
-  const isDefault = hiddenCount === 0 && !showHidden
-  // Back to defaults: every column, hidden rows left out. Not "Show all" — beside "Show hidden
+  // Only columns currently on offer count — a key persisted from the all-accounts view (e.g. a
+  // hidden `account`) shouldn't light up the button while a single account is open.
+  const isDefault =
+    isDefaultHidden(
+      hidden,
+      cols.map((c) => c.key),
+    ) && !showHidden
+  // Back to defaults: the default columns, hidden rows left out. Not "Show all" — beside "Show hidden
   // transactions" that read as if it would list the hidden rows too.
   const reset = () => {
     onReset()

@@ -28,7 +28,7 @@ _CARD_ROWS = 20
 _TITLE_MAX = 60
 
 
-def _row_title(txn_id: str, row: dict) -> str:
+def row_title(txn_id: str, row: dict) -> str:
     """One line a person can recognise a row by: date · payee (or the raw bank string) · amount."""
     snap = svc.booked_row_snapshot(txn_id) or {}
     labelled = labels.label_txn(row, labels.label_maps(payees=True))
@@ -66,7 +66,7 @@ class _ApprovePreview:
                 items.append(
                     {
                         "id": txn_id,
-                        "name": _row_title(txn_id, row),
+                        "name": row_title(txn_id, row),
                         "changes": {"review": {"old": "Needs review", "new": "Approved"}},
                     }
                 )
@@ -125,7 +125,7 @@ class ApproveTransactionsInput(ToolInput):
         "get_transactions needs_review=true. Correct any wrong field FIRST with "
         "update_transactions, then approve: "
         "approval means the user has seen the row as it now stands.\n\n"
-        "Asks the user to confirm on an interactive turn, listing the rows. An Automation run "
+        "If the call asks the user first, the card lists the rows. An Automation run "
         "can NEVER approve — it is refused and nothing changes; leave its rows flagged for the "
         "owner. Rows already reviewed, deleted or unknown are reported back, not errors.\n\n"
         "To REJECT a flagged row use delete_transactions — it also stops that same source event "

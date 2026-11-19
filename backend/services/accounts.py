@@ -34,7 +34,10 @@ _MAX_LISTED_CANDIDATES = 6
 
 # Fields the SERVER owns on an account row. A caller-settable opening pointer would hand one
 # account another account's Starting Balance row — i.e. another account's balance.
-SERVER_OWNED_ACCOUNT_FIELDS = frozenset({"opening_txn_id", "payment_envelope_id"})
+SERVER_OWNED_ACCOUNT_FIELDS = frozenset(
+    # value_sync: what a linked connector last reported (services.account_value_sync owns it).
+    {"opening_txn_id", "payment_envelope_id", "value_sync"}
+)
 
 # Fields the seven-type taxonomy retired (ADR 2026-09-07-seven-account-types-one-axis):
 # `type` alone now derives kind and net-worth band, and `locked`/`on_budget`/`group` never
@@ -193,10 +196,12 @@ def create_account(data: dict, *, side_effects: dict | None = None) -> dict:
         raw_ids = data["external_ids"]
         normalized = _normalize_external_ids(raw_ids)
         assert_external_ids_unique(None, normalized)
+        assert_one_link_per_source({"name": data.get("name")}, normalized)
         data.update(_link_fill(data, raw_ids))
         data["external_ids"] = normalized
 
     ensure_fx_rate(data.get("currency"), opening)
+    data = _with_value_source(data)
     with locked_unit_of_work(
         accounts_table, institutions_table, transactions_table, txn_audit_table
     ) as conn:
@@ -302,6 +307,32 @@ def assert_external_ids_unique(account_id: str | None, ids: list[dict]) -> None:
                 )
 
 
+def assert_one_link_per_source(account: dict | None, ids: list[dict]) -> None:
+    """Refuse a write that gives one account a SECOND account from the same connector (owner,
+    2026-11-14: "it doesn't make sense to have 2 accounts link to the same book account").
+    Two bank accounts feeding one account mix their transactions and balances, the bank
+    balance check can't hold, and the sync reads each account's history only once — the
+    second account's was never read. Only an ADDED link is refused: an account that already
+    holds two (written before this rule) can still be saved, and unlinked down to one."""
+    before: dict[str, int] = {}
+    for e in (account or {}).get("external_ids") or []:
+        if isinstance(e, dict) and e.get("source"):
+            before[e["source"]] = before.get(e["source"], 0) + 1
+    after: dict[str, list[dict]] = {}
+    for e in ids:
+        if isinstance(e, dict) and e.get("source") and e.get("ref"):
+            after.setdefault(e["source"], []).append(e)
+    for source, entries in after.items():
+        if len(entries) > 1 and len(entries) > before.get(source, 0):
+            name = (account or {}).get("name") or "This account"
+            masks = [f"•••{e['mask']}" for e in entries if e.get("mask")]
+            held = f" ({', '.join(masks)})" if masks else ""
+            raise ValidationError(
+                f"{name} can be linked to only one {provider_label(source)} account{held}. "
+                "Unlink the other first, or add this one as its own account."
+            )
+
+
 def _link_fill(account: dict, raw_ids: list) -> dict:
     """last_four/institution fill from a newly linked entry's ``mask``/``institution`` — an
     EMPTY field only, existing non-empty values are never overwritten (RFC §D "Link-time
@@ -349,20 +380,58 @@ def update_account(
         raw_ids = changes["external_ids"]
         normalized = _normalize_external_ids(raw_ids)
         assert_external_ids_unique(account_id, normalized)
+        assert_one_link_per_source(existing, normalized)
         changes.update(_link_fill(existing, raw_ids))
         changes["external_ids"] = normalized
-    with locked_unit_of_work(accounts_table, institutions_table) as conn:
+    new_source = changes.pop("value_source", None)
+    keep_as_cash = changes.pop("keep_untracked_as_cash", None)
+    plan = None
+    if new_source is not None:
+        from backend.services import account_value
+
+        # Refused up front (wrong type, flag off, bad value, an unanswered cash-or-holdings
+        # question) so a refused switch writes nothing.
+        plan = account_value.plan_switch(existing, new_source, keep_as_cash)
+    tables = (accounts_table, institutions_table)
+    if plan is not None:
+        tables += (transactions_table, txn_audit_table)
+    # ONE transaction: the edit, a source switch and its adjustment commit or roll back
+    # together (ADR 2026-11-10; security review + UAT SB-13).
+    with locked_unit_of_work(*tables) as conn:
         changes = _resolve_institution_patch(changes, conn=conn)
         result = ledger_service.accounts.update_by_id(account_id, changes, conn=conn)
+        if result is not None and plan is not None:
+            switch = account_value.write_switch(existing, plan, conn=conn)
+            if side_effects is not None:
+                side_effects["value_switch"] = switch
     if result is None:
         return None
     return ledger_service.accounts.find_by_id(account_id) or result
 
 
+def _with_value_source(data: dict) -> dict:
+    """A new investment/retirement account starts as Brokerage total: the balance typed at
+    creation is the account's total (ADR 2026-11-10). A caller may choose otherwise. Unchanged
+    while the `allow_brokerage_total_valuation` flag is off — then a `value_source` is refused."""
+    from backend.services import account_value
+
+    chosen = data.get("value_source")
+    if not account_value.applies(data):
+        if chosen:
+            raise ValidationError("Only investment and retirement accounts have a value source.")
+        return data
+    if not account_value.enabled():
+        if chosen:
+            raise ValidationError("Choosing how an account is valued isn't turned on.")
+        return data
+    return {**data, "value_source": account_value.validate_source(chosen or account_value.TOTAL)}
+
+
 def provider_label(source: str | None) -> str:
     """The connector's display name for ``source`` — an ``external_ids``/connector-snapshot
     provider key (e.g. ``"plaid"``) — read from ``services.aggregation.providers.PROVIDERS``
-    (L2 owns that table; this only ever reads its ``.label``). Falls back to the raw source
+    (L2 owns that table; this only ever reads its ``.label``), else the connector catalog (a
+    budget app's source: ``"actual_budget"``). Falls back to the raw source
     string for an unknown/blank key so a drawer/list never renders empty."""
     if not source:
         return ""
@@ -372,6 +441,10 @@ def provider_label(source: str | None) -> str:
         provider = PROVIDERS.get(source)
         if provider is not None:
             return provider.label
+        from backend.services.connector_catalog import CATALOG
+
+        if source in CATALOG:
+            return CATALOG[source].label
     except Exception:
         logger.warning("provider_label: lookup failed for %r", source, exc_info=True)
     return source

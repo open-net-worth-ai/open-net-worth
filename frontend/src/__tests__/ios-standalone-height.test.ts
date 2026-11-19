@@ -22,3 +22,12 @@ it('sizes the installed iOS full-screen Settings pane from its fixed overlay', (
     /:root\[data-onw-display-mode='standalone'\] \.ui-modal-card--workspace\.onw-settings\s*\{\s*height: 100%;\s*max-height: 100%;/,
   )
 })
+
+// On a phone Settings is a bottom sheet with a gap under the status bar. Applied there, the
+// 100% rule made the white card reach the top edge, and the installed app's status bar took
+// its white instead of the scrim's dim (2026-11-09).
+it('keeps the installed-app full-height Settings rule off phones', () => {
+  expect(src('components/tabs/settings/settings.css')).toMatch(
+    /@media \(min-width: 640px\) and \(max-width: 1023\.98px\) \{\s*:root\[data-onw-display-mode='standalone'\] \.ui-modal-card--workspace\.onw-settings\s*\{/,
+  )
+})

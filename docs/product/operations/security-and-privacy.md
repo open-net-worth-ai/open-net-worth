@@ -87,7 +87,7 @@ These happen **only because you set them up**:
 | What | Sends |
 |---|---|
 | Your AI provider | Your conversation with Lucius and the data he looks up for it, using your own key or subscription — see [Models and cost](../lucius/models-and-cost.md). Nothing goes through a server run by this project. |
-| Connectors | [Email](../connectors/email-ingestion.md) (read-only), [Telegram](../connectors/telegram.md), a [web search provider](../connectors/web-search.md), a [bank or brokerage sync](../connectors/bank-brokerage.md), [external MCP servers](../connectors/external-mcp.md). Each page says what it sends. None is on by default. |
+| Connectors | [Email](../connectors/email-ingestion.md) (read-only), [Telegram](../connectors/telegram.md), a [web search provider](../connectors/web-search.md), a [bank or brokerage sync](../connectors/bank-brokerage.md), [external MCP servers](../connectors/external-mcp.md), a [REST API](../connectors/rest-api.md) you point it at. Each page says what it sends. None is on by default. |
 | A problem report | Only when you open **Report a problem** and press **Send report** — see below. |
 
 ### Problem reports
@@ -132,3 +132,9 @@ withdrawal rate. Press <kbd>H</kbd> again to show them.
 - [Backup and restore](backup-and-restore.md) — how downloaded backups strip credentials
 - [Permissions](../lucius/permissions.md) — what Lucius may do
 - [Use your book from other AI apps](connect-ai-apps.md) — what an app with your API token can do
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Private AI financial assistant: where your data goes](https://opennetworth.ai/blog/where-your-financial-data-goes/): where your data goes with cloud apps, AI chats and a self-hosted agent

@@ -227,7 +227,7 @@ describe('ImportModal — the picker is the server’s `alternatives`, verbatim 
     const list = screen.getByRole('listbox', { name: 'Match with a different ledger entry' })
     const opts = within(list).getAllByRole('option')
     expect(opts.length).toBe(1)
-    expect(opts[0]!.textContent).toContain('06-18 • Anthropic B • -S$32.41 (same amount)')
+    expect(opts[0]!.textContent).toContain('06/18 • Anthropic B • -S$32.41 (same amount)')
     expect(opts[0]!.getAttribute('aria-selected')).toBe('false')
     expect((opts[0] as HTMLButtonElement).disabled).toBe(false)
   })

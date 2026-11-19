@@ -87,3 +87,9 @@ interface works on a phone browser).
 1. [Install it](installation.md).
 2. [Your first run](first-run.md) — three setup screens, then Lucius sets up your accounts with you.
 3. Curious how your money is stored? [How your data is stored](../concepts/how-your-data-is-stored.md).
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Open Source Net Worth Trackers Compared: What the AI Can Do](https://opennetworth.ai/blog/open-source-net-worth-tracker/): open-source net worth trackers compared

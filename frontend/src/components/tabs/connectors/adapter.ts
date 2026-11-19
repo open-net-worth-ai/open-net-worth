@@ -34,6 +34,8 @@ const ERROR_STATUSES = new Set(['error', 'connect_error', 'auth_error', 'failed'
  *  belongs to (spec §1). Webhook is a Channel here; only the directory never offers it (§8). */
 const UNLISTED_FAMILIES: Record<string, ConnectorFamily[]> = {
   webhook: ['Channel'],
+  // One per API the user added (`rest:<slug>`); the catalog only has the entry that adds one.
+  rest: ['API'],
   yodlee: ['Data source'],
 }
 
@@ -43,6 +45,7 @@ const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   telegram: { icon: 'chat', hue: 'var(--accent)' },
   voice: { icon: 'voice', hue: 'var(--cta)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
+  rest: { icon: 'link2', hue: 'var(--accent)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
   actual_budget: { icon: 'accounts', hue: 'var(--accent)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },
@@ -77,6 +80,7 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
   voice: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   webhook: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   email: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
+  rest: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   simplefin: { name: 'SimpleFIN', url: 'https://www.simplefin.org/' },
   plaid: { name: 'Plaid Inc.', url: 'https://plaid.com/docs/link/' },
   lunch_money: { name: 'Lunch Money', url: 'https://lunchmoney.app' },
@@ -145,6 +149,13 @@ function kindOf(c: Connector): string {
 }
 
 /** The connector's public settings and state; its shape differs per kind. */
+/** A bank connector with a bank waiting for the user: Plaid's `reconnect_needed` list, or the
+ *  count Enable Banking and GoCardless send (`banks_need_sign_in`). */
+function aBankNeedsSignIn(cfg: Record<string, unknown>): boolean {
+  const plaid = cfg.reconnect_needed
+  return (Array.isArray(plaid) && plaid.length > 0) || Number(cfg.banks_need_sign_in ?? 0) > 0
+}
+
 function configOf(c: Connector): Record<string, unknown> {
   return c.config ?? {}
 }
@@ -207,7 +218,9 @@ export function statusOf(c: Connector): {
   const cfg = configOf(c)
   const lastStatus = str(cfg, 'last_status')
   // A bank that wants its sign-in renewed: the keys are fine, nothing syncs until Reconnect.
-  if (lastStatus === 'reconnect_needed') {
+  // Read from each bank too: another bank's good read overwrites `last_status`, which left the
+  // list saying "Connected" while one bank waited for a sign-in (UAT 2026-11-14).
+  if (lastStatus === 'reconnect_needed' || aBankNeedsSignIn(cfg)) {
     return { statusText: 'Sign-in needed', tone: 'warn', attention: true }
   }
   if (ERROR_STATUSES.has(c.status) || ERROR_STATUSES.has(lastStatus)) {
@@ -278,6 +291,43 @@ function mcpIconUrl(c: Connector): string | undefined {
   return `/api/mcp-clients/${encodeURIComponent(c.id.slice(MCP_PREFIX.length))}/icon?v=${version}`
 }
 
+/** The tints a connector the owner added themselves can take (a REST API, a custom MCP server).
+ *  Every one is a theme token, so it follows light and dark, and each is a colour of its own:
+ *  no grey (it read as switched off), no error red, and no two tokens that share a value. */
+const TILE_TINTS = [
+  'var(--accent)',
+  'var(--act-teal)',
+  'var(--bond)',
+  'var(--good)',
+  'var(--warn)',
+  'var(--apt)',
+  'var(--recv)',
+  'var(--crypto)',
+  'var(--violet)',
+  'var(--overfunded)',
+]
+
+/** One tint per connector the owner added, chosen from its ID: with several REST APIs, or
+ *  several custom MCP servers, they all drew the same glyph in the same colour and could only
+ *  be told apart by reading (owner, 2026-11-11). From the ID, not the name, so a rename does
+ *  not recolour it. */
+export function tileTint(connectorId: string): string {
+  // FNV-1a: a short id differs from the next by a letter or two, and a plain running sum put
+  // most of them on the same few colours.
+  let hash = 0x811c9dc5
+  for (const ch of connectorId) {
+    hash ^= ch.codePointAt(0)!
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return TILE_TINTS[hash % TILE_TINTS.length]!
+}
+
+/** The character such a connector's tile shows: the first letter or digit of its name, in
+ *  capitals. */
+export function tileInitial(name: string): string {
+  return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? '?').toUpperCase()
+}
+
 /** Fold one wire connector into the shape every screen renders. */
 export function toEntry(c: Connector): ConnectorDetailEntry {
   const kind = kindOf(c)
@@ -296,13 +346,19 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
   // each has its own real publisher, so the specific id wins when it has its own entry —
   // same lookup order `connector_catalog.copy_for` uses backend-side for description/tools.
   const developer = DEVELOPERS[c.id] ?? DEVELOPERS[kind]
+  // A connector that is the owner's own and has no mark of ours: a REST API they added
+  // (`rest:<id>`, not the entry that adds one), or an MCP server the catalog does not know.
+  // It gets a tint and an initial of its own in place of the kind's shared glyph.
+  const ownTile = (kind === 'rest' && c.id.includes(':')) || (mcp && !provenance)
 
   return {
     id: c.id,
     name: displayName(c),
     kind,
     icon: look.icon,
-    hue: look.hue,
+    hue: ownTile ? tileTint(c.id) : look.hue,
+    // Drawn only when no mark loads: a custom server that declares its own icon still shows it.
+    letter: ownTile ? tileInitial(displayName(c)) : undefined,
     // A native connector's id IS its catalog id, so it resolves directly. An MCP server's is
     // whatever the user named it, so it never resolves directly and inherits from the catalog
     // entry its ENDPOINT matches instead — the same join, and the same reason, as provenance:
@@ -351,6 +407,14 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     url: endpointOf(c),
     tools,
     toolGroups: buildToolGroups(c.tools ?? []),
+    // A REST tool is named after its endpoint's id; what it actually calls is in its
+    // description (`GET /accounts — Accounts`), which is worth a line of its own.
+    toolSubs:
+      kind === 'rest'
+        ? Object.fromEntries(
+            (c.tools ?? []).filter((t) => t.description).map((t) => [t.name, t.description]),
+          )
+        : undefined,
     prompts: PROMPTS[kind] ?? [],
     perms: permsOf(c),
   }

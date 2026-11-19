@@ -24,9 +24,16 @@ import {
   fetchCachedQuery,
   getCachedQueryData,
   getCachedQueryUpdatedAt,
+  invalidateQueryCache,
   setCachedQueryData,
 } from '../state/queryCache'
-import { PORTFOLIO_KEY, PORTFOLIO_LAST_KNOWN_KEY, fetchJson } from './serverState'
+import {
+  NET_WORTH_KEY,
+  NETWORTH_STATS_KEY,
+  PORTFOLIO_KEY,
+  PORTFOLIO_LAST_KNOWN_KEY,
+  fetchJson,
+} from './serverState'
 
 const NUMERIC = new Set([
   'quantity',
@@ -170,6 +177,8 @@ export function usePortfolio(): PortfolioState {
   const [loadFailed, setLoadFailed] = useState(false)
   // False only for the very first load; see the `force` note in `load` below.
   const hasLoadedOnceRef = useRef(false)
+  // The total of the last response applied, to tell when a live refresh actually moved prices.
+  const appliedTotalRef = useRef<number | null>(null)
 
   /** Publish one response to every consumer and persist it as the next cold start's seed. */
   const apply = useCallback((data: PortfolioRowsResponse) => {
@@ -202,6 +211,7 @@ export function usePortfolio(): PortfolioState {
           try {
             const lastKnown = await fetchJson<PortfolioRowsResponse>(PORTFOLIO_LAST_KNOWN_KEY)
             apply(lastKnown)
+            appliedTotalRef.current = lastKnown.portfolio_total
             // Write-through so the OTHER readers of this resource (the Accounts tab's holdings
             // map, commitment funding values) paint from last-known prices too instead of each
             // waiting on the live call. Same freshness class as what the backend has on disk.
@@ -219,7 +229,19 @@ export function usePortfolio(): PortfolioState {
           () => fetchJson<PortfolioRowsResponse>(PORTFOLIO_KEY),
           { force: true },
         )
+        const movedPrices =
+          data.is_live &&
+          appliedTotalRef.current != null &&
+          data.portfolio_total !== appliedTotalRef.current
         apply(data)
+        appliedTotalRef.current = data.portfolio_total
+        // New live prices change net worth too, but a price write sends no data_changed event,
+        // so a net worth read made before they landed would stay on screen beside holdings valued
+        // after: the headline and its "this month" change then sat on two price sets. Refresh
+        // both net worth reads, and only when the prices actually moved.
+        if (movedPrices) {
+          invalidateQueryCache((key) => key === NET_WORTH_KEY || key === NETWORTH_STATS_KEY)
+        }
 
         // One-shot: backfill GICS sectors for the concentration risk lens, then refresh so the
         // newly-classified rows flow in. Skipped once every equity already carries a sector.

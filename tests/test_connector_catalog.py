@@ -24,6 +24,7 @@ def test_catalog_lists_every_kind_the_migration_creates():
         "yodlee",
         "alpaca",
         "ibkr",
+        "rest",
         "yahoo_finance",
         "coingecko",
         "web_search",
@@ -37,7 +38,7 @@ def test_only_the_price_sources_cannot_be_paused():
 
 
 def test_only_search_and_mcp_have_many_instances():
-    assert {k for k, v in CATALOG.items() if v.multi} == {"web_search", "mcp"}
+    assert {k for k, v in CATALOG.items() if v.multi} == {"web_search", "mcp", "rest"}
 
 
 def test_notify_channels():
@@ -55,7 +56,7 @@ def test_notify_channels():
         ("webhook", {"url", "secret"}, set()),
         ("plaid", {"secret"}, {"access_token", "item_id", "link_token", "items"}),
         ("lunch_flow", {"client_secret"}, {"access_token", "refresh_token"}),
-        ("enable_banking", {"private_key"}, {"session_id"}),
+        ("enable_banking", {"private_key"}, {"session_id", "sessions"}),
         ("gocardless", {"secret_key"}, {"access_token", "requisitions"}),
         ("yodlee", {"secret", "password"}, {"cobrand_session_token", "user_session_token"}),
         ("simplefin", set(), {"access_url"}),
@@ -145,6 +146,7 @@ def _row(kind: str, config: dict | None = None, **row) -> dict:
         ("ibkr", {}, {"flex_token"}, False),
         ("enable_banking", {"application_id": "a"}, {"private_key", "session_id"}, True),
         ("enable_banking", {"application_id": "a"}, {"private_key"}, False),
+        ("enable_banking", {"application_id": "a"}, {"private_key", "sessions"}, True),
         ("alpaca", {}, {"api_key_id", "secret_key"}, True),
         ("alpaca", {}, {"api_key_id"}, False),
         ("webhook", {}, {"url"}, True),

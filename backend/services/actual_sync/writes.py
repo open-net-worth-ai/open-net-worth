@@ -20,7 +20,8 @@ from contextlib import contextmanager
 from typing import Callable, Iterator
 
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
-from backend.services.actual_sync import apply_rows, client, shape, shape_delta
+from backend.services import budget_app_snapshots
+from backend.services.actual_sync import apply_rows, client, raw_rows, shape, shape_delta
 from backend.services.actual_sync.shape_values import text
 from backend.services.budget_app import current
 from backend.services.ynab_migration import source
@@ -75,7 +76,8 @@ class ActualClient:
         """The whole plan, or what differs from the stored mirror, in YNAB's flat export shape."""
         self._ready()
         self.budget.spend()
-        plan = self.copy.plan()
+        rows, plan = self.copy.read()
+        budget_app_snapshots.stash(raw_rows.from_rows(rows, self.copy.currency))
         if self._seen is None:
             self._note_read(plan)
         if knowledge is None:

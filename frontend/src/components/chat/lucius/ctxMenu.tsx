@@ -13,6 +13,7 @@
 //   navigation, and when the row it was opened from leaves the DOM (state-driven screen
 //   change with no pointer event to catch).
 
+import { LuciusMark } from '../../../ui/LuciusMark'
 import { useLayoutEffect, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { MentionRef } from '../../../types/mentions'
@@ -144,7 +145,9 @@ export function CtxMenu({
           onClose()
         }}
       >
-        <span className="lx-ctxmenu-ic">✦</span>
+        <span className="lx-ctxmenu-ic">
+          <LuciusMark size="1em" aria-hidden="true" />
+        </span>
         Ask Lucius about this
       </button>
     </div>,

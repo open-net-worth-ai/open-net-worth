@@ -6,7 +6,9 @@ import { useCallback, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import type { Attachment } from '../../../types/chat'
 
-export const ATTACH_ACCEPT = 'image/*,.pdf,.csv,.txt,.xlsx,.docx'
+// Exactly what the server reads (backend/services/attachment_parse.py SUPPORTED_UPLOADS).
+export const ATTACH_ACCEPT =
+  'image/*,.pdf,.csv,.txt,.xlsx,.xls,.ofx,.qfx,.qbo,.qif,.mt940,.sta,.camt,.xml'
 
 export interface AttachmentItem {
   id: string
@@ -26,9 +28,26 @@ export interface AttachmentItem {
   uploadKind?: 'image' | 'text'
   /** True if the upload failed; the chip stays so the reader can see which one. */
   failed?: boolean
+  /** The server's reason for refusing it (e.g. a password-protected file), when it gave one. */
+  failReason?: string
 }
 
-type UploadReply = { ref_id?: string; kind?: 'image' | 'text'; summary?: string }
+type UploadReply = {
+  ref_id?: string
+  kind?: 'image' | 'text'
+  summary?: string
+  detail?: unknown
+}
+
+/** Why the server refused a file, in words a person can act on. The server's own detail wins;
+ * a refusal from something in front of it (a proxy's 413 HTML page) has none. */
+function refusalReason(res: Response, data: UploadReply | null): string {
+  if (typeof data?.detail === 'string' && data.detail) return data.detail
+  if (res.status === 413) return 'It is over the 25 MB limit.'
+  if (res.status === 401 || res.status === 403)
+    return 'You were signed out. Sign in and add it again.'
+  return 'The server could not take it right now. Add it again to retry.'
+}
 
 /** Map staged items to the ref_id-bearing Attachment[] a send needs. */
 export function toSendAttachments(items: AttachmentItem[]): Attachment[] {
@@ -82,18 +101,26 @@ export function useComposerAttachments() {
         const form = new FormData()
         form.append('file', file)
         authFetch('/api/upload', { method: 'POST', body: form })
-          .then((res) => (res.ok ? (res.json() as Promise<UploadReply>) : null))
-          .then((data) =>
-            data?.ref_id
-              ? patch(att.id, {
-                  uploading: false,
-                  refId: data.ref_id,
-                  summary: data.summary,
-                  uploadKind: data.kind,
-                })
-              : patch(att.id, { uploading: false, failed: true }),
+          .then(async (res) => {
+            const data = (await res.json().catch(() => null)) as UploadReply | null
+            if (res.ok && data?.ref_id) {
+              patch(att.id, {
+                uploading: false,
+                refId: data.ref_id,
+                summary: data.summary,
+                uploadKind: data.kind,
+              })
+              return
+            }
+            patch(att.id, { uploading: false, failed: true, failReason: refusalReason(res, data) })
+          })
+          .catch(() =>
+            patch(att.id, {
+              uploading: false,
+              failed: true,
+              failReason: 'The connection dropped before it finished. Add it again to retry.',
+            }),
           )
-          .catch(() => patch(att.id, { uploading: false, failed: true }))
       })
     },
     [patch],

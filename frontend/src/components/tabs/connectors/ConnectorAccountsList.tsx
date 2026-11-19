@@ -10,12 +10,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { Stack, Text, EmptyState, ErrorState, Loading } from '../../ui'
 import { useAccounts, type AccountLike } from '../../../hooks/serverState'
+import { useDataVersion } from '../../../hooks/useDataVersion'
 import { fromApiAccount } from '../accounts/data'
 import AccountModal from '../accounts/AccountModal'
 import { ConnectorAccountRow } from './ConnectorAccountRow'
 import { ConnectorNextStep } from './ConnectorNextStep'
 import { FileUnderBankFix } from './FileUnderBankFix'
-import { bankInstitution, groupRows, prefillFor, type ProviderAccountRow } from './accountRows'
+import {
+  bankInstitution,
+  GONE_GROUP,
+  groupRows,
+  UNREAD_GROUP,
+  prefillFor,
+  type ProviderAccountRow,
+} from './accountRows'
 import type {
   Account,
   ApiAccount,
@@ -23,6 +31,8 @@ import type {
   AccountCreate,
   AccountUpdate,
 } from '../accounts/types'
+import { refreshBankSyncs } from '../automations/datasync/bankSync'
+import { useHasBankSync } from '../automations/datasync/bankAutomate'
 
 // `AccountLike`'s generic constraint needs its own explicit index signature (a plain
 // `ApiAccount` fails useAccounts<ApiAccount>() — "Index signature for type 'string' is missing"
@@ -71,6 +81,7 @@ export function ConnectorAccountsList({
   notConfiguredText?: { title: string; body: string }
 }) {
   const [data, setData] = useState<ConnectorAccountsResponse | null>(null)
+  const hasSync = useHasBankSync(provider)
   const [loadErr, setLoadErr] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<string | null>(null)
@@ -81,13 +92,19 @@ export function ConnectorAccountsList({
   const { data: appAccountsData, refresh: refreshAppAccounts } = useAccounts<AppAccountRow>()
   const appAccounts = appAccountsData ?? []
 
+  // Re-read whenever data changes anywhere (a sync, Lucius, another tab). The old list stays
+  // on screen until the new one arrives, so a re-read never flickers the Link dialog.
+  const dataVersion = useDataVersion('*')
   const load = useCallback(() => {
-    setLoadErr(false)
     authFetch(`/api/connectors/${provider}/accounts`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((body: ConnectorAccountsResponse) => setData(body))
+      .then((body: ConnectorAccountsResponse) => {
+        setLoadErr(false)
+        setData(body)
+      })
       .catch(() => setLoadErr(true))
-  }, [provider])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dataVersion is the re-read trigger
+  }, [provider, dataVersion])
 
   useEffect(load, [load])
 
@@ -109,6 +126,10 @@ export function ConnectorAccountsList({
       body: JSON.stringify({ external_ids: externalIds }),
     })
     if (!res.ok) throw new Error()
+    // The connector page's sync line reads which accounts are linked: show it the moment one
+    // is. Not inside the bank sync's own Link dialog (`embedded`): that page re-reads when the
+    // dialog closes, and re-read under it, it re-laid itself out and shut the dialog mid-use.
+    if (!embedded) refreshBankSyncs()
   }
 
   // Names of accounts created here, until the shared account list refreshes with them.
@@ -243,7 +264,12 @@ export function ConnectorAccountsList({
   useEffect(() => {
     onCountsRef.current?.({ linked: linkedCount, total, live })
   }, [linkedCount, total, live])
-  const pickAccounts = appAccounts.map((a) => fromApiAccount(a as unknown as ApiAccount))
+  // Link offers only accounts with no link from THIS connector yet: one account per bank
+  // account (owner, 2026-11-14 — two bank accounts in one book account mix their money, and
+  // the server refuses it). An account linked through another connector is still offered.
+  const pickAccounts = appAccounts
+    .filter((a) => !(a.external_ids ?? []).some((e) => e.source === provider))
+    .map((a) => fromApiAccount(a as unknown as ApiAccount))
 
   return (
     <Stack gap="--space-3">
@@ -261,8 +287,10 @@ export function ConnectorAccountsList({
       </div>
       {live && data.accounts.length > 0 && linkedCount < data.accounts.length && (
         <Text size="xs" tone="muted">
-          Add each account you want to track, or link it to one you already have. Nothing is
-          imported until Lucius fetches transactions.
+          Add each account you want to track, or link it to one you already have.{' '}
+          {hasSync
+            ? 'Nothing is imported until you set up sync below, or a Lucius Automation fetches it.'
+            : 'Nothing is imported until Lucius fetches transactions.'}
         </Text>
       )}
       {!data && !loadErr && <Loading label="Loading accounts…" />}
@@ -337,6 +365,17 @@ export function ConnectorAccountsList({
               aria-label={group.label || undefined}
             >
               {group.label && <h4 className="conn-acct-group-label">{group.label}</h4>}
+              {group.key === GONE_GROUP && (
+                <Text size="xs" tone="muted">
+                  Your bank stopped listing these. Unlink each, then link the bank's current
+                  account.
+                </Text>
+              )}
+              {group.key === UNREAD_GROUP && (
+                <Text size="xs" tone="muted">
+                  Their bank couldn't be read just now. They stay linked.
+                </Text>
+              )}
               {group.rows.map((row) => (
                 <ConnectorAccountRow
                   key={row.provider_account_id}

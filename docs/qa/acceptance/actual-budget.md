@@ -1,6 +1,6 @@
 # Actual Budget screens: acceptance criteria
 
-The connector form, the Data sync list and page, and the import review for Actual. YNAB's screens are
+The connector form, the Data Sync list and page, and the import review for Actual. YNAB's screens are
 the same components and must not change. Made-up data only: a throwaway Actual server, `ONW_ROOT`
 scratch with `ONW_QA_MODE=1`, ports 8090-8099.
 
@@ -34,14 +34,14 @@ scratch with `ONW_QA_MODE=1`, ports 8090-8099.
 ### ACTUAL-CONNECT-UNAVAILABLE
 - GIVEN the app runs behind the gateway
 - WHEN I open the connector's form
-- THEN it says Actual isn't available on a hosted instance, the footer shows **Done**, and Data sync doesn't list Actual
+- THEN it says Actual isn't available on a hosted instance, the footer shows **Done**, and Data Sync doesn't list Actual
 
-## Data sync list and page
+## Data Sync list and page
 
 ### ACTUAL-LIST-FLAGS
 - GIVEN only Actual's flag on, only YNAB's, both, or neither
 - WHEN I open Automations
-- THEN the Data sync tab and its cards or tiles follow, YNAB first; neither means no tab
+- THEN the Data Sync tab and its cards or tiles follow, YNAB first; neither means no tab
 
 ### ACTUAL-LIST-REFUSAL
 - GIVEN YNAB's sync is on and Actual's is off

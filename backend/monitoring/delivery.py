@@ -16,8 +16,9 @@ sender's own push runs — a failure here falls back to today's behaviour, never
 Candidate fields: ``source`` (analysis | price_alert | crash_watch | watch_alert), ``route_key``
 (the ``notify_routes`` kind), ``channels`` (only when the alert owns them — price alerts),
 ``story_id``, ``subject``, ``ticker``, ``label``, ``headline``, ``why``, ``impact``, ``actions``,
-``sources`` (server-built ``{url, title, domain}``), ``materiality``, ``user_set`` (a level the
-user set — price alerts, crash-watch), ``legacy_message`` (today's rendered text) and
+``news`` (a crash's cached headlines), ``search`` (what outlets a search turn found reported),
+``sources`` (server-built ``{url, title, domain, outlet}``), ``materiality``, ``user_set`` (an
+alert the user asked for — price alerts, crash-watch), ``legacy_message`` (today's rendered text) and
 ``created_at``.
 """
 
@@ -108,9 +109,18 @@ def analysis_candidate(
 
 
 def signal_candidate(
-    signal: dict, channels: list[str], *, crash_watch: bool, legacy_message: str
+    signal: dict,
+    channels: list[str],
+    *,
+    crash_watch: bool,
+    legacy_message: str,
+    news: str = "",
+    search: str = "",
+    sources: list[dict] | None = None,
 ) -> dict:
-    """A fired price alert or crash-watch story. Its channels belong to the alert itself."""
+    """A fired price alert or crash-watch story. Its channels belong to the alert itself. ``news``
+    is what Intel has on the asset right now (a crash carries it), ``search`` what outlets a search
+    turn found reported, and ``sources`` their links (the story's own when none are passed)."""
     label = (signal.get("label") or "").replace(" — price alert", "")
     iid = signal.get("instrument_id") or ""
     return {
@@ -125,7 +135,9 @@ def signal_candidate(
         "why": signal.get("current_summary") or "",
         "impact": signal.get("portfolio_impact") or "",
         "actions": list(signal.get("action_items") or []),
-        "sources": [],
+        "news": news,
+        "search": search,
+        "sources": list(sources if sources is not None else signal.get("sources") or []),
         "materiality": "",
         "user_set": True,
         "legacy_message": legacy_message,

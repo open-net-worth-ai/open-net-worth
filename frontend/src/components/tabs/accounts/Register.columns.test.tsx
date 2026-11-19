@@ -9,7 +9,13 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { render, cleanup, fireEvent, within } from '@testing-library/react'
 import { Register } from './Register'
-import { ColumnsPicker, useColumnVisibility, REG_VIS_KEY, toggleableCols } from './columns'
+import {
+  ColumnsPicker,
+  useColumnVisibility,
+  REG_SHOW_KEY,
+  REG_VIS_KEY,
+  toggleableCols,
+} from './columns'
 import type { Account, Txn } from './types'
 
 afterEach(cleanup)
@@ -180,7 +186,7 @@ describe('Register column-visibility picker', () => {
     const { container } = render(<Harness txns={[makeTxn()]} />)
     const dialog = openPicker(container)
     const labels = Array.from(dialog.querySelectorAll('.acct-advcheck')).map((b) => b.textContent)
-    expect(labels).toEqual(['Date', 'Payee', 'Category', 'Description', 'Memo', 'Source'])
+    expect(labels).toEqual(['Date', 'Payee', 'Category', 'Description', 'Memo', 'Tags', 'Source'])
     expect(labels).not.toContain('Amount')
     expect(labels).not.toContain('C') // the clr column's header label
   })
@@ -240,7 +246,15 @@ describe('AddRow tracks the visible column set', () => {
 describe('toggleableCols helper', () => {
   it('excludes the structural spine and gates account on the view', () => {
     const keys = (sa: boolean) => toggleableCols(sa).map((c) => c.key)
-    expect(keys(false)).toEqual(['date', 'payee', 'category', 'description', 'memo', 'source'])
+    expect(keys(false)).toEqual([
+      'date',
+      'payee',
+      'category',
+      'description',
+      'memo',
+      'tags',
+      'source',
+    ])
     expect(keys(true)).toEqual([
       'account',
       'date',
@@ -248,7 +262,51 @@ describe('toggleableCols helper', () => {
       'category',
       'description',
       'memo',
+      'tags',
       'source',
     ])
+  })
+})
+
+describe('Register Tags column', () => {
+  it('is off by default and offered unchecked in the picker', () => {
+    const { container } = render(<Harness txns={[makeTxn({ tags: ['japan-trip'] })]} />)
+    expect(within(head(container)).queryByText('Tags')).toBeNull()
+    expect(container.querySelector('.acct-td-tags')).toBeNull()
+    const dialog = openPicker(container)
+    const tags = within(dialog).getByText('Tags').closest('.acct-advcheck') as HTMLElement
+    expect(tags.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('turned on, shows each row’s tags as chips and stays on across a remount', () => {
+    const rows = [
+      makeTxn({ id: 't1', tags: ['japan-trip', 'reimbursable'] }),
+      makeTxn({ id: 't2' }),
+    ]
+    const first = render(<Harness txns={rows} />)
+    fireEvent.click(within(openPicker(first.container)).getByText('Tags'))
+    const cells = first.container.querySelectorAll('.acct-td-tags')
+    expect(cells.length).toBe(2)
+    expect(
+      Array.from(cells[0].querySelectorAll('.acct-detail-tag')).map((c) => c.textContent),
+    ).toEqual(['japan-trip', 'reimbursable'])
+    expect(cells[1].textContent).toBe('—')
+    expect(JSON.parse(localStorage.getItem(REG_SHOW_KEY) || '[]')).toEqual(['tags'])
+    expect(JSON.parse(localStorage.getItem(REG_VIS_KEY) || '[]')).not.toContain('tags')
+    first.unmount()
+
+    const { container } = render(<Harness txns={rows} />)
+    expect(within(head(container)).getByText('Tags')).toBeTruthy()
+  })
+
+  it('Reset turns it back off', () => {
+    const { container } = render(<Harness txns={[makeTxn()]} />)
+    const cols0 = headCols(container)
+    const dialog = openPicker(container)
+    fireEvent.click(within(dialog).getByText('Tags'))
+    expect(headCols(container)).toBe(cols0 + 1)
+    fireEvent.click(within(dialog).getByText('Reset'))
+    expect(headCols(container)).toBe(cols0)
+    expect(localStorage.getItem(REG_SHOW_KEY)).toBe('[]')
   })
 })

@@ -5,8 +5,9 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Sparkles, Plus, X, Check, ChevronLeft, ChevronRight, Settings } from '../../../ui/icons'
+import { LuciusMark, Plus, X, Check, ChevronLeft, ChevronRight, Settings } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
+import { fDate } from '../../../utils/format'
 import type { Account, Category } from './types'
 import { TYPE_LABELS, TYPE_ORDER } from './categories'
 
@@ -155,11 +156,11 @@ export function SourceIcon({
   if (source === 'ai')
     return variant === 'mono' ? (
       <span className="acct-src-ic" title="Added by Lucius">
-        <Sparkles size={13} aria-hidden="true" />
+        <LuciusMark size={13} aria-hidden="true" />
       </span>
     ) : (
       <span className="acct-src-ic lucius" title="Added by Lucius">
-        ✦
+        <LuciusMark size="1em" aria-hidden="true" />
       </span>
     )
   if (source === 'bank')
@@ -705,6 +706,9 @@ export interface AddAccountSelectProps {
   advance: (dir: number, fromEl?: HTMLElement | null) => void
   autoFocus?: boolean
   autoOpen?: boolean
+  /** A short note after an account's name (a connector it is already linked to); accounts with
+   *  one list after those without, within their type. */
+  note?: (a: Account) => string | null
 }
 
 export function AddAccountSelect({
@@ -714,6 +718,7 @@ export function AddAccountSelect({
   advance,
   autoFocus,
   autoOpen,
+  note,
 }: AddAccountSelectProps) {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(0)
@@ -726,7 +731,9 @@ export function AddAccountSelect({
   const grouped = TYPE_ORDER.map((g) => ({
     key: g,
     label: TYPE_LABELS[g],
-    items: accounts.filter((a) => a.type === g && (!ql || a.name.toLowerCase().includes(ql))),
+    items: accounts
+      .filter((a) => a.type === g && (!ql || a.name.toLowerCase().includes(ql)))
+      .sort((a, b) => Number(!!note?.(a)) - Number(!!note?.(b))),
   })).filter((g) => g.items.length)
   const flat = grouped.flatMap((g) => g.items)
   useEffect(() => {
@@ -875,6 +882,7 @@ export function AddAccountSelect({
                       {a.id === value ? <Check size={12} aria-hidden="true" /> : null}
                     </span>
                     <span className="acct-acctsel-nm">{a.name}</span>
+                    {note?.(a) && <span className="acct-acctsel-note">{note(a)}</span>}
                   </button>
                 )
               })}
@@ -1003,12 +1011,7 @@ export function AddDateField({ value, onChange, advance, autoFocus }: AddDateFie
       }
     }
   }
-  const label = value
-    ? (() => {
-        const [y, m, d] = value.split('-')
-        return m + '/' + d + '/' + y
-      })()
-    : 'Date'
+  const label = value ? fDate(value, 'numeric', 'always') : 'Date'
   const fx = useAnchoredFixed(open, ref as React.RefObject<HTMLElement>, 244)
   return (
     <div className="acct-datef" ref={ref}>

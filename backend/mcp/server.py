@@ -33,6 +33,7 @@ Bearer check is the inner ring MCP-specific requirement.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request, Response
@@ -42,6 +43,7 @@ from backend.core.config import get_settings
 from backend.core.security import verify_api_token
 from backend.db.auth_store import AuthStore
 from backend.mcp.adapter import (
+    ALL_SCOPES,
     McpResourceNotFound,
     call_tool,
     mcp_resource_descriptors,
@@ -91,22 +93,65 @@ def _bearer_token(request: Request) -> Optional[str]:
     return None
 
 
-def _require_mcp_bearer(request: Request) -> Optional[JSONResponse]:
-    """Enforce a valid Bearer token for MCP. Returns a 401 response, or ``None`` to allow.
+@dataclass(frozen=True)
+class McpCaller:
+    """Who is calling ``/mcp``: the surface stamped on checkpoints/audit rows, and its scopes."""
 
-    MCP-specific gate: cookies / loopback-trust never grant MCP — only the API
-    token does (RFC §5). The ``AUTH_DISABLED`` dev hatch is honored for parity.
+    surface: str
+    scopes: tuple[str, ...]
+
+
+_OPERATOR = McpCaller(MCP_SURFACE, ALL_SCOPES)
+
+
+def _oauth_caller(presented: str) -> Optional[McpCaller]:
+    """A live OAuth access token (flag ``mcp_oauth``, and only while the server is available)."""
+    from backend.services.mcp_oauth import grants
+    from backend.services.mcp_oauth import settings as oauth_settings
+
+    if not oauth_settings.is_available():
+        return None
+    found = grants.caller_for_access_token(presented, oauth_settings.resource_url())
+    if found is None:
+        return None
+    return McpCaller(f"oauth:{found.grant_id}", found.scopes)
+
+
+def _challenge() -> str:
+    """The 401 challenge. While the OAuth server is available it points hosted apps at the
+    protected-resource metadata (RFC 9728); otherwise it is exactly what it always was."""
+    from backend.services.mcp_oauth import metadata
+    from backend.services.mcp_oauth import settings as oauth_settings
+
+    try:
+        if oauth_settings.is_available():
+            return metadata.www_authenticate()
+    except Exception:  # noqa: BLE001 — an unreadable setting falls back to the old challenge
+        pass
+    return "Bearer"
+
+
+def _require_mcp_bearer(request: Request) -> tuple[Optional[McpCaller], Optional[JSONResponse]]:
+    """Enforce a valid Bearer token for MCP → ``(caller, None)`` or ``(None, 401 response)``.
+
+    MCP-specific gate: cookies / loopback-trust never grant MCP — only the API token does
+    (RFC §5), or, with the ``mcp_oauth`` server available, a live OAuth access token for this
+    resource. The ``AUTH_DISABLED`` dev hatch is honored for parity.
     """
     settings = get_settings()
     if not settings.auth_enabled:  # AUTH_DISABLED=true → dev escape hatch (parity)
-        return None
+        return _OPERATOR, None
     presented = _bearer_token(request)
-    if presented is not None and verify_api_token(presented, AuthStore().api_token()):
-        return None
-    return JSONResponse(
+    if presented is not None:
+        if verify_api_token(presented, AuthStore().api_token()):
+            return _OPERATOR, None
+        caller = _oauth_caller(presented)
+        if caller is not None:
+            return caller, None
+    return None, JSONResponse(
         status_code=401,
         content={"detail": "authentication required"},
-        headers={"WWW-Authenticate": "Bearer"},
+        headers={"WWW-Authenticate": _challenge()},
     )
 
 
@@ -162,18 +207,22 @@ def _call_result(text: str, proposed: Optional[dict]) -> dict:
     }
 
 
-async def _handle_tools_call(name: str, arguments: dict, req_id: Any) -> dict:
+async def _handle_tools_call(
+    name: str, arguments: dict, req_id: Any, caller: McpCaller = _OPERATOR
+) -> dict:
     """Dispatch a ``tools/call`` to its tool.
 
     A Bearer-authenticated caller is the operator, so there is no second permission layer
     behind the auth gate — the tool runs. ``call_tool`` wraps a mutating call in a checkpoint
     (undoable) and audits it; a ``propose_*`` tool's diff is surfaced to the client.
     """
-    text, proposed = await call_tool(name, arguments, surface=MCP_SURFACE)
+    text, proposed = await call_tool(name, arguments, surface=caller.surface, scopes=caller.scopes)
     return _rpc_result(req_id, _call_result(text, proposed))
 
 
-async def _handle_method(method: str, params: dict, req_id: Any) -> dict:
+async def _handle_method(
+    method: str, params: dict, req_id: Any, caller: McpCaller = _OPERATOR
+) -> dict:
     """Route one well-formed JSON-RPC request to its MCP handler → an RPC envelope."""
     if method == "initialize":
         return _rpc_result(
@@ -194,7 +243,7 @@ async def _handle_method(method: str, params: dict, req_id: Any) -> dict:
         return _rpc_result(req_id, {})
 
     if method == "tools/list":
-        return _rpc_result(req_id, {"tools": mcp_tool_descriptors()})
+        return _rpc_result(req_id, {"tools": mcp_tool_descriptors(caller.scopes)})
 
     if method == "tools/call":
         name = params.get("name")
@@ -203,7 +252,7 @@ async def _handle_method(method: str, params: dict, req_id: Any) -> dict:
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
             return _rpc_error(req_id, INVALID_PARAMS, "arguments must be an object")
-        return await _handle_tools_call(name, arguments, req_id)
+        return await _handle_tools_call(name, arguments, req_id, caller)
 
     if method == "resources/list":
         return _rpc_result(req_id, {"resources": mcp_resource_descriptors()})
@@ -237,8 +286,8 @@ def _transport_error(code: int, message: str) -> JSONResponse:
 @router.post("/mcp")
 async def mcp_endpoint(request: Request):
     """The single MCP JSON-RPC entrypoint (Streamable HTTP, request/response JSON)."""
-    denied = _require_mcp_bearer(request)
-    if denied is not None:
+    caller, denied = _require_mcp_bearer(request)
+    if denied is not None or caller is None:
         return denied
 
     try:
@@ -276,28 +325,46 @@ async def mcp_endpoint(request: Request):
     if is_notification:
         # Dispatch best-effort (e.g. notifications/initialized is a no-op for us), reply 202.
         try:
-            await _handle_method(method, params, req_id)
+            await _handle_method(method, params, req_id, caller)
         except Exception:  # noqa: BLE001 — a notification never gets an error body
             pass
         return Response(status_code=202)
 
     try:
-        envelope = await _handle_method(method, params, req_id)
+        envelope = await _handle_method(method, params, req_id, caller)
     except Exception as exc:  # noqa: BLE001 — never leak a 500 to an MCP client
         return JSONResponse(content=_rpc_error(req_id, INTERNAL_ERROR, str(exc)))
     return JSONResponse(content=envelope)
 
 
-@router.get("/mcp")
-async def mcp_get_stream() -> Response:
+def _oauth_gate(request: Request) -> Optional[JSONResponse]:
+    """GET/DELETE /mcp skip the app gate while the OAuth server is available (``_deps``), so they
+    answer only an authenticated caller then. Otherwise the app gate already ran, as before."""
+    from backend.services.mcp_oauth.settings import is_available
+
+    if not is_available():
+        return None
+    return _require_mcp_bearer(request)[1]
+
+
+@router.api_route("/mcp", methods=["GET", "HEAD"])
+async def mcp_get_stream(request: Request) -> Response:
     """The optional server→client SSE stream (Streamable HTTP). We don't offer one, so per
     spec return 405 Method Not Allowed (clients fall back to request/response cleanly). An
-    explicit handler is needed so GET /mcp doesn't fall through to the SPA static mount (404)."""
+    explicit handler is needed so GET /mcp doesn't fall through to the SPA static mount (404).
+    HEAD is listed too: a FastAPI GET route doesn't answer it, so ``curl -I /mcp`` fell through
+    to the SPA and got its HTML (200) instead of the 401 challenge a setup check looks for."""
+    denied = _oauth_gate(request)
+    if denied is not None:
+        return denied
     return Response(status_code=405, headers={"Allow": "POST"})
 
 
 @router.delete("/mcp")
-async def mcp_delete_session() -> Response:
+async def mcp_delete_session(request: Request) -> Response:
     """Session termination (Streamable HTTP). We hold no per-session state, so accept it as a
     no-op (200) rather than 404 via the static mount."""
+    denied = _oauth_gate(request)
+    if denied is not None:
+        return denied
     return Response(status_code=200)

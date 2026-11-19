@@ -71,6 +71,14 @@ in**, same cost). Activity shows a move as one **Transfer** row, not a sale.
    reinvested** to add a new lot instead of cash.
 4. Click **Record**.
 
+To correct or delete one, open the holding's **Position** tab and click the payment under
+**Dividends**. You can change its date, type, gross amount, tax withheld, note and the account it
+was paid into. Its cash transaction is corrected to match and keeps its category and cleared
+status. **Don't add to an account** removes that transaction; the form says so before you save.
+**Delete** removes the payment and its cash transaction. A cash transaction you turned into a
+transfer in the ledger stays either way. A reinvested dividend has no cash: deleting it leaves
+its shares as a lot, which you correct or remove under **Acquisition lots**.
+
 ## The summary at the top
 
 | Figure | What it is |
@@ -144,6 +152,15 @@ The app records the trade and takes no view on how it's taxed.
   received yet isn't included.
 - **To receive a dividend you must own the shares before the ex-dividend date.**
 - **Unvested equity never appears here** — see [Equity compensation](equity-compensation.md).
+- **A Brokerage total account's holdings you haven't entered aren't in the shares.** With the
+  experimental **Brokerage total** valuation on, the rest of such an account's total is
+  **Untracked holdings**: invested, but in no asset class. Allocation shows it as a **Not broken
+  down** slice of everything invested, under the class bars. The class shares, concentration,
+  today's move and **Rebalancing** are worked out over the holdings you've entered, because an
+  unknown slice would make every class look underweight; each says how much it left out ("…
+  isn't broken into holdings — add holdings to rebalance it"). With no holdings entered at all,
+  Holdings says **No holdings entered yet** and names the amount. See
+  [Accounts](accounts.md#investment-and-retirement-accounts-brokerage-total-or-live-holdings).
 - **Bought shares already managed by lots or a grant?** Correct the lot (from the asset's
   **Position** tab) or the grant, not the holding's total.
 
@@ -155,3 +172,9 @@ The app records the trade and takes no view on how it's taxed.
 - [Net worth](../concepts/net-worth.md)
 - [Base currency & FX](../concepts/base-currency-and-fx.md)
 - [Positions, lots & cost basis](../concepts/positions-lots-and-cost-basis.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Ghostfolio Alternative: Open Net Worth vs Ghostfolio](https://opennetworth.ai/blog/ghostfolio-alternative/): portfolio trackers compared with Open Net Worth's holdings

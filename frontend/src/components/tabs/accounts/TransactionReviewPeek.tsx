@@ -1,4 +1,4 @@
-import { Info, Pencil, Wallet } from '../../../ui/icons'
+import { ChevronDown, Wallet } from '../../../ui/icons'
 import { sourceLine, type ReviewDraft } from './transactionReview'
 import { SourceIcon } from './pickers'
 import { ReviewChoices, ReviewSummary } from './ReviewSummary'
@@ -40,25 +40,17 @@ export function TransactionReviewPeek({
             <Wallet size={16} aria-hidden="true" />
             {account?.name ?? 'Unknown account'}
           </b>
-          {/* The SAME classes ui/Button composes for the front card's actions (ui-btn + ghost +
-              sm), so the two heads are pixel-identical. Spans, so there is never a second
-              button. */}
-          <span className="acct-review-head-actions">
-            <span className="ui-btn ui-btn--ghost ui-btn--sm acct-review-edit-all">
-              <Info size={14} aria-hidden="true" />
-              Details
-            </span>
-            <span className="ui-btn ui-btn--ghost ui-btn--sm acct-review-edit-all">
-              <Pencil size={14} aria-hidden="true" />
-              Edit
-            </span>
-          </span>
           <span className="acct-review-source">
             <SourceIcon source={txn.source} variant="mono" />
             <span className="acct-review-source-text">{sourceLine(txn)}</span>
           </span>
         </div>
         <ReviewSummary txn={txn} accounts={accounts} draft={draft} />
+        {/* The front card's closed "Details" pill, as decoration — a span, never a button. */}
+        <span className="acct-review-expand">
+          <ChevronDown size={14} aria-hidden="true" />
+          Details
+        </span>
       </div>
       <ReviewChoices
         txn={txn}

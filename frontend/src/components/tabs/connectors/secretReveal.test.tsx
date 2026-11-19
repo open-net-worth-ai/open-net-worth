@@ -90,7 +90,8 @@ async function renderForm() {
   return (await screen.findByLabelText(/^Bot token/)) as HTMLInputElement
 }
 
-const footerSave = () => screen.getByRole('button', { name: /^Sav/ }) as HTMLButtonElement
+const footerSave = () =>
+  screen.getByRole('button', { name: /^Sav(e|ing\W*)$/ }) as HTMLButtonElement
 
 describe('the eye reveals the SAVED value, not just what you typed', () => {
   it('starts masked with nothing in the box, and fetches nothing until asked', async () => {
@@ -164,13 +165,13 @@ describe('a revealed value that is not edited must not rewrite the secret', () =
     // Save with the revealed value still on screen, exactly as a user would after looking.
     // `bot_token` is keep-on-blank at the store, and the form's own rule is "only send it if
     // the user typed one" — a revealed value is not a typed one.
-    fireEvent.change(screen.getByLabelText('Allowed chat IDs'), { target: { value: '123, 456' } })
+    fireEvent.change(screen.getByLabelText('Who can chat'), { target: { value: 'pairing' } })
     fireEvent.click(screen.getByLabelText('Hide secret'))
     await waitFor(() => expect(field.value).toBe(''))
 
     await saveAndAssert((body) => {
       expect(body.bot_token).toBeUndefined()
-      expect(body.allowed_chat_ids).toBe('123, 456')
+      expect(body.access_policy).toBe('pairing')
     })
   })
 

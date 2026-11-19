@@ -3,11 +3,12 @@ import {
   HANDLED_TYPES,
   budgetOpLabel,
   budgetOperationHeaderLabel,
-  humanizeType,
   isBudgetChange,
   isBudgetOperationGrant,
   isDestructive,
   isTxnChange,
+  permissionSubject,
+  permissionTitle,
   stagedTitle,
   txnHeaderLabel,
 } from './cardTypes'
@@ -56,12 +57,10 @@ export function CardHeader({ change }: { change: ProposedChange }) {
       {isTxnChange(change) && txnHeaderLabel(change)}
       {!HANDLED_TYPES.includes(change.type) &&
         !isBudgetOperationGrant(change) &&
-        (stagedTitle(change) ??
-          humanizeType(
-            change.type === 'tool_permission' && change.grant_tool
-              ? change.grant_tool
-              : change.type,
-          ))}
+        (stagedTitle(change) ?? permissionTitle(change))}
+      {permissionSubject(change) && (
+        <span className="change-preview-label">{permissionSubject(change)}</span>
+      )}
       {(d.symbol || d.name) && !isBudgetChange(change) && change.type !== 'external_mcp_call' && (
         <span className="change-preview-label">
           {d.symbol || d.name}

@@ -172,6 +172,12 @@ In every mode:
   (**N to review** in Accounts), and only you can approve them — even in **Skip all approvals**.
   It can still edit or re-flag those rows.
 
+**A Paper only Automation** (one tied to a paper portfolio, or one you asked Lucius to make paper
+only) can only read your book, trade paper and save artifacts, in every mode. Every other write,
+every connector tool (a broker's order tool included), web search, page fetches, and memory or
+skill changes are refused. This is fixed when the Automation is created. See
+[Paper Trading](../features/paper-trading.md).
+
 **An Automation never borrows your chat permissions.** In **Manually approve**, even a tool you've
 set to **Always allow** elsewhere pauses — unless it's on this Automation's own **Always
 allowed** list. Tapping **Always allow** on a card during a run adds the tool to that list. To
@@ -201,7 +207,7 @@ Deleting an Automation also deletes its run history. It can't be undone.
 ## Data syncs
 
 The switch at the top of **Automations** has two sides. **Lucius** holds the jobs you give Lucius
-(everything on this page). **Data sync** holds syncs that keep this book and another app in step
+(everything on this page). **Data Sync** holds syncs that keep this book and another app in step
 by fixed rules instead: no prompt, model or permission mode, no AI involved, nothing to pay. Each
 opens to its own page with its settings and history, and the switch shows how many items wait for
 your review.
@@ -216,6 +222,12 @@ There are two: [YNAB](../features/imports-and-sync.md) and
 book in step: from the app, to the app, or both ways. A book syncs with one of them at a time. The
 **Sync YNAB** template under Lucius is the one-way version: Lucius fetches new YNAB transactions and
 books them here, and doesn't copy categories or Assigned.
+
+With **Bank sync without AI** on (the default; its switch is under **Experimental**), your GoCardless, Enable Banking,
+Plaid and SimpleFIN connectors appear here too: each books its bank's transactions by fixed rules, keeps a
+run history, and holds what the bank changes afterwards for your review. A bank can have a Lucius
+Automation as well; nothing stops the two from both running. See
+[Bank sync without AI](../features/bank-data-sync.md).
 
 ## Logging transactions from your email
 
@@ -276,7 +288,10 @@ An unattended run can do anything a conversation you're watching can. What prote
 Check both before pointing an **Auto** or **Skip** Automation at anything that changes your
 money.
 
-Open Net Worth has to be running (and the computer awake) for a scheduled run to happen.
+Open Net Worth has to be running (and the computer awake) for a scheduled run to happen. In the
+[desktop app](../operations/desktop.md#keep-it-running-in-the-background), or with a server you run yourself on
+macOS or Windows, the **Keep awake** switch at the top of **Automations** stops idle sleep while it
+runs. A server on Linux or in Docker doesn't offer it — use the machine's own power settings there.
 
 ## Troubleshooting
 

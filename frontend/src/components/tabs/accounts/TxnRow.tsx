@@ -23,12 +23,28 @@ import {
 } from './pickers'
 import { SourceIcon, IconCheck } from './pickers'
 import { SplitChip } from './SplitView'
+import { TagField } from './TagField'
+import { Tooltip } from '../../ui/Tooltip'
 import { Check, Circle } from '../../../ui/icons'
+
+// The click that ends an inline edit (by landing outside the cell) only ends it: without this it
+// also reached a row's onClick and opened that transaction's drawer (owner report 2026-11-19).
+// Module-level because the click usually lands on ANOTHER row. Cleared right after that click is
+// dispatched, so it can never eat a later one.
+let swallowRowClick = false
+function swallowNextRowClick() {
+  swallowRowClick = true
+  document.addEventListener('click', () => setTimeout(() => (swallowRowClick = false)), {
+    once: true,
+    capture: true,
+  })
+}
 
 export interface RowPatch {
   date?: string
   description?: string
   memo?: string
+  tags?: string[]
   category?: string | null
   payee?: string // payee display NAME — orchestrator resolves to payeeId
   cleared?: boolean
@@ -39,6 +55,30 @@ export interface RowPatch {
   fromCurrency?: string | null
   toAmount?: number | null
   toCurrency?: string | null
+}
+
+/** The register's inline Tags editor: edits a local copy, commits once focus leaves it. */
+function InlineTags({
+  initial,
+  onDone,
+  onCancel,
+}: {
+  initial: string[]
+  onDone: (tags: string[]) => void
+  onCancel: () => void
+}) {
+  const [tags, setTags] = useState(initial)
+  return (
+    <TagField
+      compact
+      autoFocus
+      value={tags}
+      onChange={setTags}
+      placeholder="Tag…"
+      onLeave={onDone}
+      onCancel={onCancel}
+    />
+  )
 }
 
 export function categoryPill(
@@ -151,6 +191,7 @@ export function TxnRow({
     }
   }
   const scheduleOpen = () => {
+    if (swallowRowClick) return
     cancelOpen()
     openTimer.current = setTimeout(() => {
       openTimer.current = null
@@ -167,8 +208,18 @@ export function TxnRow({
         close()
       }
     }
+    // Focus is in the editor, so its cell is the one being edited; a press anywhere else ends it.
+    const onDown = (e: PointerEvent) => {
+      const cell = (document.activeElement as HTMLElement | null)?.closest('[data-edit]')
+      if (cell && cell.contains(e.target as Node)) return
+      swallowNextRowClick()
+    }
     document.addEventListener('keydown', onEsc, true)
-    return () => document.removeEventListener('keydown', onEsc, true)
+    document.addEventListener('pointerdown', onDown, true)
+    return () => {
+      document.removeEventListener('keydown', onEsc, true)
+      document.removeEventListener('pointerdown', onDown, true)
+    }
   }, [edit])
   const editCell = (field: string) => (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -467,6 +518,35 @@ export function TxnRow({
             )}
           </span>
         )}
+        {has('tags') &&
+          (edit === 'tags' ? (
+            <span className="acct-td-tags" data-edit="">
+              <InlineTags
+                initial={t.tags ?? []}
+                onDone={(tags) => {
+                  const before = (t.tags ?? []).join(',')
+                  if (tags.join(',') === before) close()
+                  else commit({ tags })
+                }}
+                onCancel={close}
+              />
+            </span>
+          ) : (
+            // The cell clips its chips; hovering a clipped one shows every tag in the app's tip.
+            <Tooltip label={(t.tags ?? []).join(', ')} onlyWhenClipped>
+              <span className="acct-td-tags" data-edit="" onDoubleClick={editCell('tags')}>
+                {t.tags?.length ? (
+                  t.tags.map((tg) => (
+                    <span key={tg} className="acct-detail-tag">
+                      {tg}
+                    </span>
+                  ))
+                ) : (
+                  <span className="acct-payee-sub">—</span>
+                )}
+              </span>
+            </Tooltip>
+          ))}
         {has('source') && (
           <span className="acct-src">
             {t.needsReview ? (

@@ -16,7 +16,10 @@ import { WatchPulseCard } from '../intel/WatchPulseCard'
 import { IntelFeedPanel } from '../intel/IntelFeedPanel'
 import { TopicsStrip } from '../intel/TopicsStrip'
 import { TickerDesk } from '../intel/TickerDesk'
-import { listIdOf, tabOfList, tabOfStory } from '../intel/intelTabs'
+import { FOLLOWING_TAB, PAPER_TAB, listIdOf, tabOfList, tabOfStory } from '../intel/intelTabs'
+import { PaperTab } from '../intel/paper/PaperTab'
+import { FollowingTab } from '../intel/following/FollowingTab'
+import { useFlag } from '../../hooks/useFlag'
 import { useWatchPulse } from '../../hooks/useWatchPulse'
 import { PULSE_SORT_KEYS } from '../../hooks/usePulseSort'
 import { takeIntelStoryFocus } from '../../hooks/useIntelStoryIndex'
@@ -37,6 +40,21 @@ import { usePortfolioTickerMaps } from '../intel/usePortfolioTickerMaps'
 import { useSignalActions } from '../intel/useSignalActions'
 import { useStoryFocus } from '../intel/useStoryFocus'
 import { useWatchlistRemoval } from '../intel/useWatchlistRemoval'
+
+/** Copy Trading sits right after My holdings, before the owner's own watchlists (owner,
+ *  2026-11-12); with no My holdings tab it leads. */
+function withFollowing<T extends { key: string }>(tabs: T[]): (T | typeof FOLLOWING_TAB)[] {
+  const at = tabs.findIndex((t) => t.key === 'holdings') + 1
+  return [...tabs.slice(0, at), FOLLOWING_TAB, ...tabs.slice(at)]
+}
+
+/** Paper Trading (flag `paper_trading`) sits right after Copy Trading, or after My holdings
+ *  when Copy Trading is off. */
+function withPaper<T extends { key: string }>(tabs: T[]): (T | typeof PAPER_TAB)[] {
+  const ct = tabs.findIndex((t) => t.key === 'copy-trading')
+  const at = ct >= 0 ? ct + 1 : tabs.findIndex((t) => t.key === 'holdings') + 1
+  return [...tabs.slice(0, at), PAPER_TAB, ...tabs.slice(at)]
+}
 
 const HOLDINGS_MESSAGE =
   'Help me add my investments so Intel can follow them. Ask which brokers I use; I can send a ' +
@@ -147,6 +165,20 @@ function IntelFeed({
   )
 
   const tabListId = listIdOf(tab)
+  // Following is behind a flag: a visit that remembered it while the flag was on must not
+  // strand on a tab that is no longer offered.
+  const followingFlag = useFlag('followed_portfolios')
+  const followingOn = followingFlag === true
+  const setTab = nav.setTab
+  useEffect(() => {
+    if (tab === 'copy-trading' && followingFlag === false) setTab('holdings')
+  }, [tab, followingFlag, setTab])
+  // Paper Trading likewise: behind `paper_trading`, never stranded when the flag goes off.
+  const paperFlag = useFlag('paper_trading')
+  const paperOn = paperFlag === true
+  useEffect(() => {
+    if (tab === 'paper-trading' && paperFlag === false) setTab('holdings')
+  }, [tab, paperFlag, setTab])
   // The sidebar card shows the tab's list: My holdings on Holdings, the list on a list tab (none
   // on Topics & macro — topics are in no list; its lead card lists and adds them).
   const activeListId = tabListId ?? watchlists.find((w) => w.is_auto_sync)?.id ?? 'default'
@@ -258,9 +290,14 @@ function IntelFeed({
           onScan={() => !scan.scanning && scan.askToScan()}
         />
 
-        {/* My holdings · your ticker watchlists · Topics & macro. */}
+        {/* My holdings · Copy Trading · Topics & macro · your ticker watchlists. */}
         <div className="intel-tabs-row">
-          <PageTabs ariaLabel="Intelligence view" value={tab} onChange={nav.setTab} tabs={tabs} />
+          <PageTabs
+            ariaLabel="Intelligence view"
+            value={tab}
+            onChange={nav.setTab}
+            tabs={((t) => (paperOn ? withPaper(t) : t))(followingOn ? withFollowing(tabs) : tabs)}
+          />
           <button
             type="button"
             className="intel-tabs-new"
@@ -273,126 +310,144 @@ function IntelFeed({
         </div>
 
         {/* Topics & macro is one column: topics are in no list, so there's no list pane. */}
-        <div className={`intel-layout${tab === 'macro' ? ' intel-layout--solo' : ''}`}>
-          <div className="intel-feed">
-            <div role="tabpanel" aria-labelledby={`ui-page-tab-${tab}`} className="intel-tab-lead">
-              {tab === 'holdings' ? (
-                // One card: the brief's read of the day on top, then everything you own —
-                // portfolio-wide stories, then each holding's price, flags and stories.
-                <IntelBriefCard
-                  onChatSuggest={onChatSuggest}
-                  verbosity={verbosityOf(cfg ?? null, 'holdings')}
-                >
-                  <TickerDesk
-                    {...deskProps}
-                    rows={heldPulse.data?.rows ?? []}
-                    benchSymbol={heldPulse.data?.benchmark?.symbol}
-                    loading={heldPulse.loading && !heldPulse.data}
-                    unpriced={heldSummary ? heldSummary.tracked - heldSummary.priced : 0}
-                    noun={{ one: 'holding', many: 'holdings' }}
-                    sortKey={PULSE_SORT_KEYS.holdings}
-                    empty={
-                      <EmptyState
-                        icon={<Radar size={28} strokeWidth={1.5} aria-hidden="true" />}
-                        title="No priced holdings yet"
-                        body="News, risk flags and price moves on what you own land here."
-                        action={
-                          <Cluster gap="--space-3" justify="center">
-                            <LuciusCta
-                              label="Add with Lucius"
-                              message={HOLDINGS_MESSAGE}
-                              onAskLucius={onChatSuggest}
-                            />
-                          </Cluster>
-                        }
-                      />
-                    }
-                    feed={feedByTab.holdings}
-                    archive={archiveByTab.holdings}
-                  />
-                </IntelBriefCard>
-              ) : tabListId && activeList ? (
-                // One card per list: each ticker on it (owned ones marked) with its price, trend
-                // and flags, and the news scan's stories on it folded in.
-                <WatchPulseCard
-                  verbosity={verbosityOf(cfg ?? null, 'watchlist')}
-                  key={tab}
-                  scope={{
-                    id: activeList.id,
-                    name: activeList.name,
-                    tickerCount: tabTickers?.size ?? 0,
-                  }}
-                  ownedRows={ownedRows}
-                  ownedLoading={heldPulse.loading && !heldPulse.data}
-                  onAddToWatchlist={openManage}
-                  onChatSuggest={onChatSuggest}
-                  renderBody={(rows, unpriced) => (
+        {tab === 'copy-trading' && followingOn && (
+          <div role="tabpanel" aria-labelledby="ui-page-tab-following" className="fol-shell">
+            <FollowingTab onAskLucius={onChatSuggest} />
+          </div>
+        )}
+        {/* A flag switched off while this tab was remembered shows nothing here: the effect
+            above is already sending the visit back to My holdings. */}
+        {tab === 'paper-trading' && paperOn && (
+          <div role="tabpanel" className="fol-shell">
+            <PaperTab onAskLucius={onChatSuggest} />
+          </div>
+        )}
+        {tab !== 'copy-trading' && tab !== 'paper-trading' && (
+          <div className={`intel-layout${tab === 'macro' ? ' intel-layout--solo' : ''}`}>
+            <div className="intel-feed">
+              <div
+                role="tabpanel"
+                aria-labelledby={`ui-page-tab-${tab}`}
+                className="intel-tab-lead"
+              >
+                {tab === 'holdings' ? (
+                  // One card: the brief's read of the day on top, then everything you own —
+                  // portfolio-wide stories, then each holding's price, flags and stories.
+                  <IntelBriefCard
+                    onChatSuggest={onChatSuggest}
+                    verbosity={verbosityOf(cfg ?? null, 'holdings')}
+                  >
                     <TickerDesk
                       {...deskProps}
-                      rows={rows}
-                      benchSymbol={pulse?.benchmark?.symbol}
-                      loading={false}
-                      unpriced={unpriced}
-                      noun={{ one: 'ticker', many: 'tickers' }}
-                      sortKey={PULSE_SORT_KEYS.lists}
-                      markOwned
-                      empty={<div className="intel-feed-empty">Nothing on this list yet.</div>}
-                      feed={feedByTab[tab] ?? []}
-                      archive={archiveByTab[tab] ?? []}
+                      rows={heldPulse.data?.rows ?? []}
+                      benchSymbol={heldPulse.data?.benchmark?.symbol}
+                      loading={heldPulse.loading && !heldPulse.data}
+                      unpriced={heldSummary ? heldSummary.tracked - heldSummary.priced : 0}
+                      noun={{ one: 'holding', many: 'holdings' }}
+                      sortKey={PULSE_SORT_KEYS.holdings}
+                      empty={
+                        <EmptyState
+                          icon={<Radar size={28} strokeWidth={1.5} aria-hidden="true" />}
+                          title="No priced holdings yet"
+                          body="News, risk flags and price moves on what you own land here."
+                          action={
+                            <Cluster gap="--space-3" justify="center">
+                              <LuciusCta
+                                label="Add with Lucius"
+                                message={HOLDINGS_MESSAGE}
+                                onAskLucius={onChatSuggest}
+                              />
+                            </Cluster>
+                          }
+                        />
+                      }
+                      feed={feedByTab.holdings}
+                      archive={archiveByTab.holdings}
                     />
-                  )}
-                />
-              ) : (
-                <>
-                  <TopicsStrip
-                    topics={items.filter((i) => i.type === 'topic' || i.type === 'company')}
-                    onEditTopic={setEditTopic}
-                    onAddTopic={addTopic}
+                  </IntelBriefCard>
+                ) : tabListId && activeList ? (
+                  // One card per list: each ticker on it (owned ones marked) with its price, trend
+                  // and flags, and the news scan's stories on it folded in.
+                  <WatchPulseCard
+                    verbosity={verbosityOf(cfg ?? null, 'watchlist')}
+                    key={tab}
+                    scope={{
+                      id: activeList.id,
+                      name: activeList.name,
+                      tickerCount: tabTickers?.size ?? 0,
+                    }}
+                    ownedRows={ownedRows}
+                    ownedLoading={heldPulse.loading && !heldPulse.data}
+                    onAddToWatchlist={openManage}
+                    onChatSuggest={onChatSuggest}
+                    renderBody={(rows, unpriced) => (
+                      <TickerDesk
+                        {...deskProps}
+                        rows={rows}
+                        benchSymbol={pulse?.benchmark?.symbol}
+                        loading={false}
+                        unpriced={unpriced}
+                        noun={{ one: 'ticker', many: 'tickers' }}
+                        sortKey={PULSE_SORT_KEYS.lists}
+                        markOwned
+                        empty={<div className="intel-feed-empty">Nothing on this list yet.</div>}
+                        feed={feedByTab[tab] ?? []}
+                        archive={archiveByTab[tab] ?? []}
+                      />
+                    )}
                   />
-                  {feedByTab.macro.length + archiveByTab.macro.length === 0 ? (
-                    <MacroColdStart
-                      scanning={scan.scanning}
-                      onScan={scan.askToScan}
-                      onAskLucius={onChatSuggest}
+                ) : (
+                  <>
+                    <TopicsStrip
+                      topics={items.filter((i) => i.type === 'topic' || i.type === 'company')}
+                      onEditTopic={setEditTopic}
+                      onAddTopic={addTopic}
                     />
-                  ) : (
-                    <IntelFeedPanel
-                      {...storyProps}
-                      feed={feedByTab.macro}
-                      archive={archiveByTab.macro}
-                      filter={nav.filter}
-                      onFilter={nav.setFilter}
-                      emptyText="No macro or topic stories right now."
-                    />
-                  )}
-                </>
-              )}
+                    {feedByTab.macro.length + archiveByTab.macro.length === 0 ? (
+                      <MacroColdStart
+                        scanning={scan.scanning}
+                        onScan={scan.askToScan}
+                        onAskLucius={onChatSuggest}
+                      />
+                    ) : (
+                      <IntelFeedPanel
+                        {...storyProps}
+                        feed={feedByTab.macro}
+                        archive={archiveByTab.macro}
+                        filter={nav.filter}
+                        onFilter={nav.setFilter}
+                        emptyText="No macro or topic stories right now."
+                      />
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* sidebar cockpit: the tab's list of tickers */}
-          {tab !== 'macro' && (
-            <div className="intel-side">
-              <WatchlistsSection
-                key={activeListId}
-                watchlists={watchlists}
-                items={items}
-                alerts={alerts}
-                activeListId={activeListId}
-                tickerMeta={tickerMeta}
-                tickerCcy={tickerCcy}
-                ownedTickers={ownedTickers}
-                dayPctByTicker={dayPctByTicker}
-                storyTickers={storyTickers}
-                onEditAlerts={(item, from) => setEditAsset({ item, from })}
-                onManageAll={openManage}
-                onRefresh={loadWatchlist}
-                loading={watchlist === null && !data.watchlistError}
-                error={data.watchlistError}
-              />
-            </div>
-          )}
-        </div>
+            {/* sidebar cockpit: the tab's list of tickers */}
+            {tab !== 'macro' && (
+              <div className="intel-side">
+                <WatchlistsSection
+                  key={activeListId}
+                  watchlists={watchlists}
+                  items={items}
+                  alerts={alerts}
+                  activeListId={activeListId}
+                  tickerMeta={tickerMeta}
+                  tickerCcy={tickerCcy}
+                  ownedTickers={ownedTickers}
+                  dayPctByTicker={dayPctByTicker}
+                  storyTickers={storyTickers}
+                  onEditAlerts={(item, from) => setEditAsset({ item, from })}
+                  onManageAll={openManage}
+                  onRefresh={loadWatchlist}
+                  loading={watchlist === null && !data.watchlistError}
+                  error={data.watchlistError}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </Stack>
 
       {/* modals */}

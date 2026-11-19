@@ -384,7 +384,7 @@ export function Commitments({ fx, onAskLucius, selectedId, onSelect }: Props) {
         ['Remaining', fBase(remainingBase(open, fx))],
       ]
       const ni = nextInstallment(open)
-      if (ni) facts.push(['Next installment', `${fBase(ni.amount)} due ${ni.due_date}`])
+      if (ni) facts.push(['Next installment', `${fBase(ni.amount)} due ${fmtDate(ni.due_date)}`])
       return facts
     }
     if (!coverage || !derived) return []
@@ -471,7 +471,9 @@ export function Commitments({ fx, onAskLucius, selectedId, onSelect }: Props) {
     if (dismissedUnmarked.includes(s.txn_id)) continue
     if (!commitments.some((c) => c.id === s.commitment_id)) continue
     needs.push({
-      key: `u-${s.txn_id}`,
+      // One row per installment: a key from the payment alone repeated when two installments
+      // were offered one payment, and React then left stale rows behind (UAT, 2026-11-10).
+      key: `u-${s.commitment_id}-${s.installment_id}`,
       kind: 'confirm',
       tone: 'pay',
       cid: s.commitment_id,

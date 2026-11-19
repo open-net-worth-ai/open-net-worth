@@ -9,6 +9,7 @@
 // connector — never a brand mark (spec §10).
 
 import type { JSX, SVGProps } from 'react'
+import { Link2 } from '../../../ui/icons'
 
 const STROKE = {
   stroke: 'currentColor',
@@ -39,6 +40,7 @@ export type IconKey =
   | 'hand'
   | 'investments'
   | 'link'
+  | 'link2'
   | 'mail'
   | 'plus'
   | 'search'
@@ -155,6 +157,9 @@ export const Icons: Record<IconKey, IconComponent> = {
       <path d="M14 17.3l-1 1a3.6 3.6 0 0 1-5.1-5.1l1.4-1.4" />
     </Svg>
   ),
+  // The REST API's mark: the same link glyph as its "Connect any REST API" row in Browse & add
+  // (lucide Link2), so the entry and the row that adds one look alike (owner, 2026-11-11).
+  link2: () => <Link2 aria-hidden />,
   chat: () => (
     <Svg>
       <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4.2 3.2A.6.6 0 0 1 4 18.7V6a1 1 0 0 1 1-1z" />

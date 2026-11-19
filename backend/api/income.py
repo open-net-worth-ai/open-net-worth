@@ -15,7 +15,8 @@ Routes:
     GET    /api/income/forecast        — annualized forward-income estimate
     GET    /api/positions/{id}/income  — income summary scoped to one position
     POST   /api/income                 — record a dividend (cash or DRP)
-    DELETE /api/income/{id}            — delete an income event
+    PATCH  /api/income/{id}            — correct one (its cash row is edited in place)
+    DELETE /api/income/{id}            — delete an income event (?remove_cash=true: its cash too)
 
 See .claude/rfcs/phase2/inv2-dividends-income.md.
 """
@@ -27,7 +28,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from backend.core.errors import OpenNetWorthError, to_http_status
-from backend.models.income_event import IncomeEventCreate
+from backend.models.income_event import IncomeEventCreate, IncomeEventUpdate
 from backend.services import dividend_calendar as dividend_calendar_service
 from backend.services import income as income_service
 
@@ -107,11 +108,27 @@ def record_income(body: IncomeEventCreate):
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
-@router.delete("/api/income/{event_id}")
-def delete_income(event_id: str):
-    """Delete an income event (the booked cash txn / DRP lot stay; undo via ledger/lots)."""
+@router.patch("/api/income/{event_id}")
+def amend_income(event_id: str, body: IncomeEventUpdate):
+    """Correct a recorded income event; its cash row is edited in place (the Dividends table's
+    Edit). Only the fields sent change; ``account_id: null`` takes the cash off it."""
+    change = {"type": "amend", "event_id": event_id, **body.model_dump(exclude_unset=True)}
+    if "income_kind" in change and hasattr(change["income_kind"], "value"):
+        change["income_kind"] = change["income_kind"].value
     try:
-        return income_service.apply_income_change({"type": "delete", "event_id": event_id})
+        return income_service.apply_income_change(change)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
+@router.delete("/api/income/{event_id}")
+def delete_income(event_id: str, remove_cash: bool = False):
+    """Delete an income event. Its cash txn / DRP lot stay, unless ``remove_cash`` (the
+    Dividends table's Delete): then the cash row that is still its own goes too."""
+    try:
+        return income_service.apply_income_change(
+            {"type": "delete", "event_id": event_id, "remove_cash": remove_cash}
+        )
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 

@@ -3,6 +3,8 @@
 // The opening balance is a real "Starting Balance" ledger row. Quick create records it today;
 // later corrections happen by editing that transaction in the register.
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from '@tanstack/react-router'
+import { LinkBankAccountDialog } from './LinkBankAccountDialog'
 import { AccIcon, InstitutionPicker, CurrencyPicker } from './ds'
 import type { InstitutionOption } from './ds'
 import { InstitutionManager } from './InstitutionManager'
@@ -15,15 +17,32 @@ import {
   DateField,
   NumberField,
   Stack,
-  Cluster,
   Text,
+  RadioGroup,
 } from '../../ui'
+import { fCur } from './format'
 import { authFetch } from '../../../api/client'
-import { getBaseCurrency } from '../../../utils/format'
-import type { Account, AccountCreate, AccountUpdate, AccountPrefill, ExternalId } from './types'
-import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, TYPE_ICON, LIABILITY_TYPES } from './categories'
+import { fDate, getBaseCurrency } from '../../../utils/format'
+import { useFlag } from '../../../hooks/useFlag'
+import { isWaiting } from './valuation'
+import type {
+  Account,
+  AccountCreate,
+  AccountUpdate,
+  AccountPrefill,
+  ExternalId,
+  ValueSource,
+} from './types'
+import {
+  ACCOUNT_TYPES,
+  TYPE_LABELS,
+  TYPE_MEANING,
+  TYPE_ICON,
+  TYPE_COLOR,
+  LIABILITY_TYPES,
+} from './categories'
 import type { AccountType } from './categories'
-import { ChevronRight } from '../../../ui/icons'
+import { ChevronRight, Link2 } from '../../../ui/icons'
 
 export interface AccountModalProps {
   open: boolean
@@ -136,10 +155,22 @@ export default function AccountModal({
   // Unlink click can update it in place without waiting on the parent's full save/close cycle
   // (`onSave` here would close the whole modal and toast "Saved …", which Unlink must not).
   const [externalIds, setExternalIds] = useState<ExternalId[]>([])
+  const [linkingBank, setLinkingBank] = useState(false)
+  // Optional: the modal also renders outside the router (tests).
+  const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
   const [unlinkingIdx, setUnlinkingIdx] = useState<number | null>(null)
+  const [confirmUnlink, setConfirmUnlink] = useState<number | null>(null)
   const [unlinkErr, setUnlinkErr] = useState<string | null>(null)
   const [scrollbarActive, setScrollbarActive] = useState(false)
   const scrollbarIdleTimer = useRef<number | null>(null)
+  // How an investment/retirement account is valued (ADR 2026-11-10) — edit mode only; a new
+  // account starts as Brokerage total, which the server decides.
+  const valuation = mode === 'edit' ? (account?.valuation ?? null) : null
+  const valueFlag = useFlag('allow_brokerage_total_valuation') === true
+  const [valueSource, setValueSource] = useState<ValueSource>('total')
+  const [switchPreview, setSwitchPreview] = useState<SwitchPreview | null>(null)
+  const [keepAsCash, setKeepAsCash] = useState<boolean | null>(null)
+  const money = (n: number) => fCur(n, form.currency, { cents: true })
   const institutionOptions: InstitutionOption[] = institutions.map((institution) =>
     typeof institution === 'string'
       ? { id: institution.toLowerCase(), name: institution, accountCount: 0 }
@@ -165,22 +196,35 @@ export default function AccountModal({
     }, 700)
   }
 
+  // Which opening the form was filled for (mode + account). The form fills when the dialog
+  // opens, or opens on another account — never because a caller re-rendered: every write
+  // refreshes open screens, and a rebuilt `prefill` or re-read `account` wiped a name being
+  // typed (2026-11-13).
+  const filledFor = useRef<string | null>(null)
+
   useEffect(() => {
+    const opening = open ? `${mode}:${account?.id ?? ''}` : null
+    if (opening !== null && opening === filledFor.current) return
+    filledFor.current = opening
     if (scrollbarIdleTimer.current !== null) {
       window.clearTimeout(scrollbarIdleTimer.current)
       scrollbarIdleTimer.current = null
     }
     // A newly opened modal is a new editing session; discard transient state from the last one.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setScrollbarActive(false)
     if (!open) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNameTouched(false)
     setSaving(false)
     setSaveErr('')
     setUnlinkErr(null)
+    setConfirmUnlink(null)
     if (mode === 'edit' && account) {
       setStep('details')
       setExternalIds(account.externalIds ?? [])
+      if (account.valuation) setValueSource(account.valuation.source)
+      setSwitchPreview(null)
+      setKeepAsCash(null)
       const type = (ACCOUNT_TYPES as readonly string[]).includes(account.type)
         ? (account.type as AccountType)
         : 'cash'
@@ -269,6 +313,11 @@ export default function AccountModal({
       setSaveErr('Enter a valid current balance.')
       return
     }
+    const switching = mode === 'edit' && !!valuation && valueSource !== valuation.source
+    if (switching && switchPreview?.needs_choice && keepAsCash === null) {
+      setSaveErr('Say whether the money already in this account is cash or holdings.')
+      return
+    }
     setSaving(true)
     setSaveErr('')
     if (mode === 'add') {
@@ -282,8 +331,8 @@ export default function AccountModal({
       }
       try {
         await onSave(payload)
-      } catch {
-        setSaveErr('We couldn’t add this account. Check the details and try again.')
+      } catch (err) {
+        setSaveErr(serverReason(err) ?? 'We couldn’t add this account. Try again.')
       } finally {
         setSaving(false)
       }
@@ -318,10 +367,16 @@ export default function AccountModal({
         initial_balance_date: _initialBalanceDate,
         ...rest
       }: AccountCreate = payload
+      const update: AccountUpdate = { ...(rest as AccountUpdate) }
+      if (valuation && valueSource !== valuation.source) {
+        update.value_source = valueSource
+        if (switchPreview?.needs_choice && keepAsCash !== null)
+          update.keep_untracked_as_cash = keepAsCash
+      }
       try {
-        await onSave(rest as AccountUpdate, account.id)
-      } catch {
-        setSaveErr('We couldn’t save these details. Try again.')
+        await onSave(update, account.id)
+      } catch (err) {
+        setSaveErr(serverReason(err) ?? 'We couldn’t save these details. Try again.')
       } finally {
         setSaving(false)
       }
@@ -332,6 +387,8 @@ export default function AccountModal({
   const isLoan = form.type === 'loan'
   const isYield = form.type === 'cash' || form.type === 'fixed_deposit'
   const isAsset = !LIABILITY_TYPES.has(form.type)
+  // An investment account's typed balance is its total, holdings included (ADR 2026-11-10).
+  const isInvestment = valueFlag && (form.type === 'investment' || form.type === 'retirement')
   const apyProjection = (() => {
     const bal = parseFloat(form.initial.replace(/[^0-9.-]/g, '')),
       rate = parseFloat(form.apy)
@@ -462,10 +519,20 @@ export default function AccountModal({
                 <CurrencyPicker value={form.currency} onChange={(c) => set('currency', c)} />
               </FormField>
               <FormField
-                label={isAsset ? 'Current balance' : 'Amount currently owed'}
+                label={
+                  isInvestment
+                    ? 'Total value'
+                    : isAsset
+                      ? 'Current balance'
+                      : 'Amount currently owed'
+                }
                 htmlFor="f-balance"
                 required
-                help="We’ll record this as today’s Starting Balance transaction. You can edit it later."
+                help={
+                  isInvestment
+                    ? 'Holdings and cash together, as your brokerage shows it. You can add holdings later.'
+                    : 'We’ll record this as today’s Starting Balance transaction. You can edit it later.'
+                }
               >
                 <div className="acct-balance-inline">
                   <NumberField
@@ -556,7 +623,14 @@ export default function AccountModal({
               <div className="acct-layout">
                 <div className="acct-identity-header">
                   <div className="acct-avatar-row">
-                    <div className="acct-avatar">
+                    <div
+                      className="acct-avatar"
+                      style={{
+                        color: TYPE_COLOR[form.type],
+                        background: `color-mix(in srgb, ${TYPE_COLOR[form.type]} 12%, var(--surface))`,
+                        borderColor: `color-mix(in srgb, ${TYPE_COLOR[form.type]} 30%, var(--line))`,
+                      }}
+                    >
                       <AccIcon name={ICON[form.type]} size={24} />
                     </div>
                     <div
@@ -783,37 +857,112 @@ export default function AccountModal({
                     </section>
                   )}
 
-                  {mode === 'edit' && (externalIds.length > 0 || unlinkErr) && (
+                  {mode === 'edit' && account && (
                     <section>
                       <div className="acct-section-label">Linked to</div>
                       <Stack gap="--space-2">
                         {externalIds.map((entry, i) => (
-                          <Cluster
-                            key={`${entry.source}:${entry.ref}`}
-                            justify="between"
-                            align="center"
-                          >
-                            <Text size="xs" tone="faint">
-                              {entry.providerLabel} · {entry.name}
-                              {entry.mask ? ` ••${entry.mask}` : ''}
-                            </Text>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              loading={unlinkingIdx === i}
-                              onClick={() => void unlink(i)}
-                            >
-                              Unlink
-                            </Button>
-                          </Cluster>
+                          <div key={`${entry.source}:${entry.ref}`} className="acct-link-row">
+                            <Link2 size={16} strokeWidth={1.75} aria-hidden="true" />
+                            <div className="acct-link-main">
+                              <div className="acct-link-name">
+                                {entry.name}
+                                {entry.mask ? ` ••${entry.mask}` : ''}
+                              </div>
+                              <div className="acct-link-sub">
+                                {confirmUnlink === i
+                                  ? `Unlink from ${entry.providerLabel}? ${
+                                      valuation?.source === 'total'
+                                        ? 'The balance stops updating and keeps its current value.'
+                                        : 'Nothing booked so far is removed.'
+                                    }`
+                                  : `Through ${entry.providerLabel}${
+                                      entry.linkedAt
+                                        ? ` · linked ${fDate(new Date(entry.linkedAt))}`
+                                        : ''
+                                    }`}
+                              </div>
+                            </div>
+                            {confirmUnlink === i ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setConfirmUnlink(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  loading={unlinkingIdx === i}
+                                  onClick={() => {
+                                    setConfirmUnlink(null)
+                                    void unlink(i)
+                                  }}
+                                >
+                                  Unlink
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setConfirmUnlink(i)}
+                              >
+                                Unlink
+                              </Button>
+                            )}
+                          </div>
                         ))}
                         {unlinkErr && (
                           <Text size="xs" tone="bad">
                             {unlinkErr}
                           </Text>
                         )}
+                        <div>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setLinkingBank(true)}
+                          >
+                            {externalIds.length
+                              ? 'Link another bank account'
+                              : 'Link a bank account'}
+                          </Button>
+                        </div>
                       </Stack>
+                      {linkingBank && (
+                        <LinkBankAccountDialog
+                          account={{ ...account, externalIds }}
+                          onClose={() => setLinkingBank(false)}
+                          onLinked={(link) => setExternalIds((ids) => [...ids, link])}
+                          onConnectBank={() => {
+                            setLinkingBank(false)
+                            if (router) void router.navigate({ to: '/connectors' as never })
+                            else window.location.assign('/connectors')
+                          }}
+                        />
+                      )}
                     </section>
+                  )}
+                  {valuation && account && (
+                    <ValueSourceSection
+                      account={account}
+                      valuation={valuation}
+                      value={valueSource}
+                      preview={switchPreview}
+                      keepAsCash={keepAsCash}
+                      onKeepAsCash={setKeepAsCash}
+                      money={money}
+                      onChange={(next) => {
+                        setValueSource(next)
+                        setSwitchPreview(null)
+                        setKeepAsCash(null)
+                        if (next !== valuation.source)
+                          void fetchSwitchPreview(account.id, next).then(setSwitchPreview)
+                      }}
+                    />
                   )}
                   {mode === 'edit' && (
                     <div className="acct-opening-compact">
@@ -826,7 +975,9 @@ export default function AccountModal({
                         {!isAsset && (account?.initialBalance ?? 0) !== 0 ? ' owed' : ''}
                       </span>
                       <span className="acct-opening-meta">
-                        {form.asOf ? `as of ${form.asOf}` : 'tracked from the first transaction'}
+                        {form.asOf
+                          ? `as of ${fDate(form.asOf, 'short', 'always')}`
+                          : 'tracked from the first transaction'}
                       </span>
                       {onEditOpening && (
                         <button type="button" className="acct-opening-link" onClick={onEditOpening}>
@@ -868,4 +1019,144 @@ export default function AccountModal({
       )}
     </>
   )
+}
+
+interface SwitchPreview {
+  holdings: number
+  untracked: number
+  total: number
+  /** The balance is big enough that only the owner can say whether it is cash. */
+  needs_choice?: boolean
+  /** What clearing it would book — until the owner says it is cash. */
+  adjustment: number
+  value_after: number
+}
+
+/** What switching the value source would do — the server's figures, nothing written. */
+async function fetchSwitchPreview(id: string, to: ValueSource): Promise<SwitchPreview | null> {
+  try {
+    const res = await authFetch(`/api/accounts/${id}/value-switch?to=${to}`)
+    return res.ok ? ((await res.json()) as SwitchPreview) : null
+  } catch {
+    return null
+  }
+}
+
+interface ValueSourceSectionProps {
+  account: Account
+  valuation: NonNullable<Account['valuation']>
+  value: ValueSource
+  preview: SwitchPreview | null
+  keepAsCash: boolean | null
+  onKeepAsCash: (next: boolean) => void
+  money: (n: number) => string
+  onChange: (next: ValueSource) => void
+}
+
+/** "Value this account by": Brokerage total or Live holdings (ADR 2026-11-10). */
+function ValueSourceSection({
+  account,
+  valuation,
+  value,
+  preview,
+  keepAsCash,
+  onKeepAsCash,
+  money,
+  onChange,
+}: ValueSourceSectionProps) {
+  const syncing = !!valuation.sync && valuation.linkStatus === 'connected'
+  const waiting = isWaiting(valuation)
+  const siblings = valuation.siblings
+  return (
+    <section>
+      <div className="acct-section-label">Value this account by</div>
+      <Stack gap="--space-2">
+        <RadioGroup
+          name={`acct-src-${account.id}`}
+          ariaLabel="Value this account by"
+          value={value}
+          onChange={(next) => onChange(next as ValueSource)}
+          disabled={waiting}
+          options={[
+            {
+              value: 'total',
+              label: 'Brokerage total',
+              description: syncing
+                ? `The total your brokerage shows, synced via ${valuation.provider}. Holdings you add are part of it.`
+                : 'The total on your brokerage statement. Holdings you add are part of it.',
+            },
+            {
+              value: 'holdings',
+              label: 'Live holdings',
+              description:
+                'Each holding at live market prices, plus cash. Needs every holding added.',
+            },
+          ]}
+        />
+        {valuation.sync && siblings.length > 0 && value === 'total' && (
+          <Text size="xs" tone="bad">
+            Counted twice: this total already includes{' '}
+            {siblings.length === 1 ? siblings[0] : `${siblings.length} of your other accounts`}.
+          </Text>
+        )}
+        {waiting && (
+          <Text size="xs" tone="faint">
+            You can choose once the first total arrives.
+          </Text>
+        )}
+        {value !== valuation.source && preview && !preview.needs_choice && (
+          <Text size="xs" tone="faint">
+            {value === 'total'
+              ? `The value stays ${money(preview.total)}. Your holdings become a breakdown of that total${
+                  syncing ? `, and ${valuation.provider}’s next total replaces it` : ''
+                }.`
+              : preview.untracked !== 0
+                ? `The ${money(preview.untracked)} that’s untracked will count as cash in this account.`
+                : `The value stays ${money(preview.total)}.`}
+          </Text>
+        )}
+        {value === 'holdings' && value !== valuation.source && preview?.needs_choice && (
+          <Stack gap="--space-1">
+            <Text size="xs">
+              {`This account has ${money(preview.untracked)} that isn’t in a holding. What is it?`}
+            </Text>
+            <RadioGroup
+              name={`acct-keep-${account.id}`}
+              ariaLabel="What the money already in this account is"
+              value={keepAsCash === null ? '' : keepAsCash ? 'cash' : 'clear'}
+              onChange={(next) => onKeepAsCash(next === 'cash')}
+              options={[
+                {
+                  value: 'cash',
+                  label: 'Cash',
+                  description: `It stays as this account’s cash. The value stays ${money(preview.total)}.`,
+                },
+                {
+                  value: 'clear',
+                  label: 'Holdings I haven’t added yet',
+                  description: `It’s removed, so the account is worth ${money(preview.value_after)}: only the holdings you’ve added. Add the rest afterwards.`,
+                },
+              ]}
+            />
+          </Stack>
+        )}
+      </Stack>
+    </section>
+  )
+}
+
+/** The server's own reason for refusing a save — callers throw the response body, whose
+ *  `detail` says what was wrong (an exchange rate it can't get, a name already taken). A
+ *  generic "check the details" hid it while the details were fine. */
+function serverReason(err: unknown): string | null {
+  const text = err instanceof Error ? err.message : ''
+  try {
+    const detail = (JSON.parse(text) as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail.trim()
+    const message = (detail as { message?: unknown } | null)?.message
+    if (typeof message === 'string' && message.trim()) return message.trim()
+  } catch {
+    // not a JSON body
+  }
+  return null
 }

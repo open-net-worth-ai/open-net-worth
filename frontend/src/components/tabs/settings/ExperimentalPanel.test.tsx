@@ -18,6 +18,7 @@ const toast = vi.fn()
 function flag(over: Partial<FeatureFlag> = {}): FeatureFlag {
   return {
     name: 'new_budget_rollover',
+    title: 'New budget rollover',
     description: 'Carries overspending into next month the new way.',
     kind: 'release',
     default: false,
@@ -55,13 +56,29 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it('renders one row per declared flag with its description and default state', async () => {
-  serve([flag(), flag({ name: 'safe_mode', kind: 'kill_switch', default: true, enabled: true })])
+  serve([
+    flag(),
+    flag({
+      name: 'safe_mode',
+      title: 'Safe mode',
+      kind: 'kill_switch',
+      default: true,
+      enabled: true,
+    }),
+  ])
   render(<ExperimentalPanel toast={toast} />)
   expect(await screen.findByText('New budget rollover')).toBeTruthy()
   expect(screen.getAllByText(/Carries overspending/)).toHaveLength(2)
   expect(screen.getByText(/Default \(off\)\./)).toBeTruthy()
   expect(screen.getByText('Kill switch')).toBeTruthy()
   expect(screen.queryByText('Reset')).toBeNull()
+})
+
+it('shows the declared title, not a label made from the code name', async () => {
+  serve([flag({ name: 'mcp_oauth', title: 'MCP OAuth sign-in' })])
+  render(<ExperimentalPanel toast={toast} />)
+  expect(await screen.findByText('MCP OAuth sign-in')).toBeTruthy()
+  expect(screen.queryByText('Mcp oauth')).toBeNull()
 })
 
 it('a toggle PUTs the new value', async () => {

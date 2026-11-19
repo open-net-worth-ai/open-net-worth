@@ -25,6 +25,7 @@ from backend.core.fx import base_currency
 from backend.core.user_time import user_today
 from backend.services import portfolio_rows as portfolio_rows_service
 from backend.services import profile as profile_service
+from backend.services import untracked_holdings
 from backend.services.classification import FUND_SUBCLASSES
 from backend.services.rebalance import DRIFT_FLAG_PP
 
@@ -393,7 +394,7 @@ def investments_book(
     concentration = _concentration(merged, grand, guideline)
     sections = _sections(rows, grand, targets)
 
-    return {
+    out = {
         "base_currency": base,
         "is_live": projection["is_live"],
         "grand": grand,
@@ -435,3 +436,17 @@ def investments_book(
             for s in sections
         ],
     }
+    excluded = untracked_holdings.untracked_excluded(projection["rows"])
+    if excluded is not None:
+        # A Brokerage total account's untracked part: invested, but in no known class, so it is
+        # NOT in `grand` — the denominator of every weight, section, concentration and today's
+        # move above. It is the allocation's "Not broken down" slice, its share taken of
+        # everything invested (ADR 2026-11-10, amendment 2). Absent while the flag is off.
+        invested = grand + excluded["total"]
+        out["untracked_excluded"] = {
+            **excluded,
+            "pct_of_invested": (
+                round((excluded["total"] / invested) * 100, 4) if invested > 0 else 0.0
+            ),
+        }
+    return out

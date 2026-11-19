@@ -1,3 +1,5 @@
+import { LuciusMark } from '../../ui/LuciusMark'
+
 // "ready" means the genuinely time-sensitive content (key_issues/portfolio_impact — "Lucius's
 // take") has landed — AssetDetailView hides the refreshing banner there instead of waiting for
 // the whole backend refresh (including background company-profile polish) to finish, so this
@@ -15,13 +17,13 @@ export type RefreshStage = 'searching' | 'analysing' | 'ready' | 'retrying'
 // still happening instead of the badge silently reverting to a generic fallback.
 // eslint-disable-next-line react-refresh/only-export-components -- shared label lookup, not a component
 export const STAGE_LABELS: Record<RefreshStage, string> = {
-  searching: 'Searching the web for news ✦',
-  analysing: 'Analysing key developments ✦',
-  ready: 'Wrapping up ✦',
-  retrying: 'Retrying — this one needs another pass ✦',
+  searching: 'Searching the web for news',
+  analysing: 'Analysing key developments',
+  ready: 'Wrapping up',
+  retrying: 'Retrying — this one needs another pass',
 }
 
-const DEFAULT_LABEL = 'Refreshing ✦'
+const DEFAULT_LABEL = 'Refreshing'
 
 interface Props {
   /** The asset detail response's `refresh_stage` — undefined/null before the first poll
@@ -37,7 +39,7 @@ export function ResearchingStatus({ stage }: Props) {
   return (
     // key={stage} re-mounts the span on each real transition so the fade-in animation replays.
     <span key={stage ?? 'unknown'} className="asd-research-status" role="status" aria-live="polite">
-      {label}
+      {label} <LuciusMark size="1em" aria-hidden="true" />
     </span>
   )
 }

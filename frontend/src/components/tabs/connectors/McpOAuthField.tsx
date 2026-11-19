@@ -51,7 +51,7 @@ export function McpOAuthField({ flow }: { flow: McpAddFlow }): JSX.Element | nul
         // popup closes and sign-in succeeds or fails to complete.
         <div style={ROW} role="status">
           <span className="cn-spinner" />
-          <span style={{ fontSize: 13 }}>Waiting for sign-in…</span>
+          <span style={{ fontSize: 'var(--text-base)' }}>Waiting for sign-in…</span>
           {/* Distinct wording from the modal's own Cancel/Discard (spec: "a Cancel that drops
               the staged flow") — this one abandons the sign-in, not the whole add flow. */}
           <Btn size="xs" onClick={oauth.cancel}>
@@ -71,7 +71,7 @@ export function McpOAuthField({ flow }: { flow: McpAddFlow }): JSX.Element | nul
           <span style={{ color: 'var(--good)', display: 'inline-flex' }}>
             <Icons.check />
           </span>
-          <span style={{ fontSize: 13 }}>
+          <span style={{ fontSize: 'var(--text-base)' }}>
             Signed in
             {oauth.summary?.issuer_host ? ` — ${oauth.summary.issuer_host}` : ''}
             {oauth.summary?.scope ? ` • ${oauth.summary.scope}` : ''}

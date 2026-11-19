@@ -53,7 +53,7 @@ uv pip compile requirements.txt --universal --python-version 3.12 --generate-has
 ```
 
 The desktop build uses `frontend/public/logo-mark.svg` for its transparent splash/recovery
-mark and the menu-bar images; the Dock icon is `resources/app-icon.svg` (mark centred) with its BETA badge under it.
+mark and the menu-bar images; the Dock icon is `resources/app-icon.svg` (the official logo tile, no badge).
 It uses the frontend's theme palette and bundled fonts;
 macOS icons include Retina sizes. Local unsigned preview packages are ad-hoc signed after
 packaging and signature-verified; public releases still require Developer ID signing and

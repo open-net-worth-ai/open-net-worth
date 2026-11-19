@@ -163,6 +163,8 @@ _EXCLUDED_TABLES = frozenset(
         "actual_sync_mirror",
         "actual_sync_baselines",
         "actual_sync_conflicts",
+        "bank_sync_settings",  # bank data sync settings + review list — a turn rollback must never re-open a decided review or flip a sync mode (ADR 2026-11-13)
+        "bank_sync_reviews",
         "txn_audit",  # transaction provenance/audit trail — a forensic record of how the data got here; a data restore must NOT erase it (mirrors TXN_AUDIT_JSON above; transaction-provenance RFC)
         "corrections",  # category-correction signal log (P2-SP2) — a runtime/behavioral signal, not user-authored data; a /rewind must not resurrect stale correction history. Replaces the file-level CORRECTIONS_JSON exclusion in _EXCLUDED_PATHS above (kept there too, for the legacy file) now that CorrectionStore is DB-backed (plan 4a task 2)
         "asset_brief",  # per-instrument synthesized brief — derived search/LLM cache, like price_history/intel_signals; a turn rollback must not delete/resurrect a refreshed brief (same rationale as ASSET_BRIEF_JSON above). Replaces the file-level ASSET_BRIEF_JSON exclusion in _EXCLUDED_PATHS above (kept there too, for the legacy file) now that AssetBriefStore is DB-backed (plan 4b task 3)
@@ -205,6 +207,10 @@ _EXCLUDED_TABLES = frozenset(
         # receipts got a strictly more conservative treatment than everything else for a
         # risk row-level tracking already contains. Now undoable via /rewind like every
         # other Lucius write choke.
+        "mcp_oauth_clients",  # inbound MCP OAuth (flag mcp_oauth) — credentials; a /rewind must never un-revoke an app or un-spend a code
+        "mcp_oauth_pending",
+        "mcp_oauth_grants",
+        "mcp_oauth_tokens",
         "news_deliveries",  # Intel delivery decider ledger (flag intel_delivery_decider) — runtime scheduler state; a /rewind that turned a told item back into an unsent one would re-send it (store fires no write hook either)
         "pending_pushes",  # zero-delivery push retry queue (INT6) — runtime scheduler state (drain/fill cycle), never snapshotted (mirrors the retired PENDING_PUSHES_JSON exclusion above)
         # PLAN 4E TASK 2 — the checkpoint index itself. checkpointed=False at the store

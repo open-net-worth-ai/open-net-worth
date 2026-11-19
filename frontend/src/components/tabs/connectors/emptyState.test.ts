@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { emptyStateFor, familyTitle } from './emptyState'
 import { FAMILY_SECTIONS, type FamilyTab, type StatusFilter } from './model'
 
-const TABS: FamilyTab[] = ['all', 'channels', 'data', 'web', 'mcp']
+const TABS: FamilyTab[] = ['all', 'channels', 'data', 'web', 'mcp', 'apis']
 const FILTERS: StatusFilter[] = ['all', 'connected', 'attention']
 
 describe('bug 1 — an all-filtered-out family never renders a bare page', () => {
@@ -24,7 +24,7 @@ describe('bug 1 — an all-filtered-out family never renders a bare page', () =>
 
   it('explains a family emptied by the status filter rather than showing nothing', () => {
     const copy = emptyStateFor({ query: '', tab: 'mcp', statusFilter: 'attention' })
-    expect(copy.title).toBe('Nothing needs attention in MCP')
+    expect(copy.title).toBe('Nothing needs attention in MCP servers')
     expect(copy.body).toMatch(/working/i)
   })
 
@@ -49,7 +49,7 @@ describe('bug 2 — copy is built from the human-readable title, never the raw s
 
   it('reads "MCP", not "mcp"', () => {
     expect(emptyStateFor({ query: '', tab: 'mcp', statusFilter: 'all' }).title).toBe(
-      'Nothing in MCP yet',
+      'Nothing in MCP servers yet',
     )
   })
 

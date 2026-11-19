@@ -281,13 +281,12 @@ class ApplyBudgetOperationInput(ToolInput):
 @tool(
     "apply_budget_operation",
     description=(
-        "Run one of a budget method's own operations, after the user confirms: (engine_id, "
+        "Run one of a budget method's own operations: (engine_id, "
         "operation, params). Operations are per-engine; call list_budget_engines first "
         "to discover valid ids (its engines[].operations is authoritative). An unknown "
         "engine_id or operation errors, naming the real ones. zero_based operations route "
         "through the budget's own write choke (checkpoint-covered, undoable) — for "
-        "zero_based prefer assign_budget/move_money/etc., which give a richer confirm "
-        "preview; use this tool directly for 50/30/20 (configure to start it, "
+        "zero_based prefer assign_budget/move_money/etc., which give a richer preview; use this tool directly for 50/30/20 (configure to start it, "
         "set_group_targets/set_group_excluded/set_envelope_excluded/set_cap/set_caps/"
         "copy_targets_to_caps/set_income_categories to adjust it), or any future engine. "
         "set_home_budget_engine refuses switching to 50/30/20 before configure has run — "

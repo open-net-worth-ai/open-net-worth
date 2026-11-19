@@ -42,6 +42,7 @@ async function fetchConnectors(): Promise<Connector[]> {
  *  them an envelope in their own colour. Same connector, two identities (owner, 2026-08-23). */
 export interface OwnerLook {
   logo?: string
+  name?: string
   icon?: IconKey
   hue?: string
 }
@@ -59,6 +60,7 @@ function loadOwnerLooks(): void {
       const next: Record<string, OwnerLook> = {}
       for (const entry of toEntries(connectors)) {
         next[entry.id] = {
+          ...(entry.name ? { name: entry.name } : {}),
           ...(entry.logo ? { logo: entry.logo } : {}),
           ...(entry.icon ? { icon: entry.icon as IconKey } : {}),
           ...(entry.hue ? { hue: entry.hue } : {}),

@@ -75,7 +75,7 @@ export const TAB_LABELS: Record<TabId, string> = {
   assets: 'Assets',
   commitments: 'Commitments',
   plan: 'Plan',
-  intel: 'Intel',
+  intel: 'Intelligence',
   skills: 'Skills',
   automations: 'Automations',
   build: 'Build',
@@ -85,10 +85,7 @@ export const TAB_LABELS: Record<TabId, string> = {
   help: 'Help',
 }
 
-export const TAB_DISPLAY_NAMES: Record<TabId, string> = {
-  ...TAB_LABELS,
-  intel: 'Intelligence',
-}
+export const TAB_DISPLAY_NAMES: Record<TabId, string> = { ...TAB_LABELS }
 
 // List pages that read as a centred column (`.app-layout--narrow`), like a settings page —
 // not the data tabs, whose tables and charts are built to use the width.

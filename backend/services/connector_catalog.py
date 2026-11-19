@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable, Optional
 
+from backend.core import rest_tools
 from backend.core.errors import NotFoundError
 from backend.db.search_config_store import PROVIDER_CATALOG as SEARCH_PROVIDERS
 from backend.models.connector import ConnectorTool
@@ -108,6 +109,10 @@ class ConnectorKind:
     public_config: Optional[Callable[[Row, Have, dict], dict]] = None
     # The error text of a failing connector when it is not simply ``state.last_error``.
     error: Optional[Callable[[Row, dict], Optional[str]]] = None
+    # The tools of ONE instance, for a kind whose tools are per connector and so cannot be a
+    # static bundle in ``connector_copy`` (a REST API's own). Receives the row and the list
+    # build's shared context.
+    tools: Optional[Callable[[Row, dict], list[ConnectorTool]]] = None
     # Full removal for a kind that needs more than deleting the row (remote revoke, a row that
     # must survive as a disabled default). Receives the connector id.
     remove: Optional[Callable[[str], None]] = None
@@ -310,6 +315,34 @@ def _mcp_config(row: Row, have: Have, ctx: dict) -> dict:
     return {k: v for k, v in public.items() if k not in skip}
 
 
+def _rest_tools(row: Row, ctx: dict) -> list[ConnectorTool]:
+    """One REST API's tools: one per endpoint the owner declared (a GET is a read, anything
+    else a write). Mirrors what ``ai.tools.rest_api`` registers.
+    The launcher instance has none: it is not an API."""
+    slug = rest_tools.slug_of(row["id"])
+    if slug is None:
+        return []
+    if "rest_secrets" not in ctx:
+        from backend.db.connector_store import ConnectorStore
+
+        ctx["rest_secrets"] = ConnectorStore().secrets_by_kind(rest_tools.KIND)
+    endpoints = (ctx["rest_secrets"].get(row["id"]) or {}).get("endpoints")
+    return [
+        ConnectorTool(
+            name=rest_tools.tool_name(slug, str(e["tool"])),
+            description=" — ".join(
+                p
+                for p in (f"{e.get('method')} {e.get('path')}", str(e.get("description") or ""))
+                if p
+            ),
+            source="native",
+            read_only=e.get("method") == "GET",
+        )
+        for e in (endpoints if isinstance(endpoints, list) else [])
+        if isinstance(e, dict) and rest_tools.is_endpoint_id(str(e.get("tool") or ""))
+    ]
+
+
 def _price_source_error(health_of: Callable[[dict], dict]) -> Callable:
     def error(row: Row, ctx: dict) -> Optional[str]:
         return _market_error(health_of(ctx))
@@ -387,6 +420,30 @@ def discover_mcp_tools_if_unlisted(server_id: str) -> None:
     get_manager().test_connect(server_id)
 
 
+def _enable_banking_configured(row: Row, have: Have) -> bool:
+    """Credentials plus at least one bank — the multi-bank list, or the legacy single session."""
+    return bool(
+        "private_key" in have
+        and ("sessions" in have or "session_id" in have)
+        and _text(row["config"].get("application_id"))
+    )
+
+
+def _remove_enable_banking(connector_id: str) -> None:
+    """Revoke every bank's consent at Enable Banking BEFORE clearing the local row
+    (revoke-before-delete, like GoCardless and Plaid). Best effort: the local credentials are
+    erased either way."""
+    from backend.db.enable_banking_config_store import EnableBankingConfigStore
+    from backend.services.aggregation.enable_banking import remove_all_banks
+
+    store = EnableBankingConfigStore()
+    try:
+        remove_all_banks(store)
+    except Exception:
+        logger.warning("enable_banking: revoking linked banks on Remove failed", exc_info=True)
+    store.reset()
+
+
 def _gocardless_configured(row: Row, have: Have) -> bool:
     """Credentials plus at least one bank, linked or not: an unfinished or expired link stays a
     list row that reads as an error (``_gocardless_error``), never drops back into the
@@ -442,6 +499,27 @@ def _remove_web_search(connector_id: str) -> None:
 # ── the kinds ────────────────────────────────────────────────────────────────────────────
 
 _FEED_STATE = ("last_synced_at", "last_status", "last_error")
+
+
+def _banks_config(private: tuple[str, ...], ended: Callable[[dict], bool]):
+    """A bank connector's public config: the default merge without ``private`` state, plus
+    ``banks_need_sign_in`` — how many of its banks wait for the user — so the Connectors list
+    flags it. That count is all it says about the (private) banks."""
+
+    def build(row: Row, have: Have, ctx: dict) -> dict:
+        merged = {**row["state"], **row["config"]}
+        out = {k: v for k, v in merged.items() if k not in private}
+        banks = merged.get("banks") or {}
+        values = banks.values() if isinstance(banks, dict) else banks
+        out["banks_need_sign_in"] = sum(1 for b in values if isinstance(b, dict) and ended(b))
+        return out
+
+    return build
+
+
+# GoCardless requisition statuses that mean a bank's access is over (expired, refused,
+# suspended); an unfinished link is not.
+_GC_ENDED = frozenset({"EX", "RJ", "SU"})
 
 
 def _kind(kind: str, label: str, configured: Callable, **options) -> ConnectorKind:
@@ -503,6 +581,7 @@ _KINDS: tuple[ConnectorKind, ...] = (
             "stt_model",
             "tts_model",
             "tts_voice",
+            "noise_filter",
         ),
     ),
     _kind(
@@ -545,20 +624,31 @@ _KINDS: tuple[ConnectorKind, ...] = (
     _kind(
         # Import and two-way sync of an Actual Budget server (flag ``actual_budget_sync``). The
         # address is a secret too: it can carry credentials, and an endpoint is one. No Lucius
-        # tools - the connector is driven from the Data sync tab.
+        # tools - the connector is driven from the Data Sync tab.
         "actual_budget",
         "Actual Budget",
         _actual_budget_configured,
-        secret_fields=_secrets("server_url", "password", "token", "encryption_password"),
+        secret_fields=_secrets(
+            "server_url", "password", "token", "encryption_password", "proxy_headers"
+        ),
         config_keys=("budget_id",),
         moved_state=("budget_name", "budget_currency"),
     ),
     _kind(
         "enable_banking",
         "Enable Banking",
-        _needs(secrets=("private_key", "session_id"), config=("application_id",)),
-        secret_fields=_secrets("private_key", minted=("session_id",)),
+        _enable_banking_configured,
+        secret_fields=_secrets("private_key", minted=("session_id", "sessions")),
         config_keys=("application_id", "aspsp", "country"),
+        private_state=("banks", "pending_links", "account_identities"),
+        public_config=_banks_config(
+            ("banks", "pending_links", "account_identities"),
+            lambda b: bool(b.get("access_ended")),
+        ),
+        # The moved sessions are still consented at Enable Banking; without each bank's name the
+        # receiver would list unnamed banks.
+        moved_state=("banks", "account_identities"),
+        remove=_remove_enable_banking,
     ),
     _kind(
         "gocardless",
@@ -567,6 +657,9 @@ _KINDS: tuple[ConnectorKind, ...] = (
         secret_fields=_secrets("secret_key", minted=("access_token", "requisitions")),
         config_keys=("secret_id",),
         private_state=("accounts_meta", "banks"),
+        public_config=_banks_config(
+            ("accounts_meta", "banks"), lambda b: str(b.get("status") or "") in _GC_ENDED
+        ),
         # The moved requisitions are still linked at GoCardless; without each bank's name and
         # status the receiver would show unnamed, unlinked banks until someone checked them.
         moved_state=("banks", "accounts_meta"),
@@ -643,6 +736,20 @@ _KINDS: tuple[ConnectorKind, ...] = (
         remove=_remove_web_search,
     ),
     _kind(
+        # Any HTTP API the owner points it at: each one is its own connector (``rest:<slug>``),
+        # created by the owner like an MCP server. Everything an API holds is a secret — a base
+        # URL is a credential, and a pasted endpoint path or note may carry one. The built-in
+        # ``rest`` instance holds nothing; it is the card Browse & add opens to add one. ADR
+        # ``2026-11-10-generic-rest-connector-is-pinned-to-the-owners-host``.
+        rest_tools.KIND,
+        "REST API",
+        _needs(secrets=("base_url",)),
+        secret_fields=_secrets(minted=("base_url", "auth", "headers", "endpoints", "notes")),
+        multi=True,
+        open_ended=True,
+        tools=_rest_tools,
+    ),
+    _kind(
         "mcp",
         "MCP server",
         _mcp_configured,
@@ -675,6 +782,8 @@ def kind_of(connector_id: str) -> Optional[ConnectorKind]:
         return CATALOG["mcp"]
     if connector_id.startswith(WEB_SEARCH_PREFIX):
         return CATALOG["web_search"]
+    if connector_id == rest_tools.LAUNCHER_ID or rest_tools.slug_of(connector_id):
+        return CATALOG[rest_tools.KIND]
     kind = CATALOG.get(connector_id)
     return kind if kind is not None and not kind.multi else None
 
@@ -696,6 +805,9 @@ def builtins() -> tuple[Builtin, ...]:
                         config={"provider": p["id"], "default": False},
                     )
                 )
+        elif kind.kind == rest_tools.KIND:
+            # The "add a REST API" card. It never holds anything, so it never reads as set up.
+            out.append(Builtin(rest_tools.LAUNCHER_ID, kind.label))
         elif not kind.multi:
             out.append(
                 Builtin(

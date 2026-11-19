@@ -85,6 +85,12 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 140px;
   }
+  /* A bubble turning from its estimate into its real height moves what's below it. Safari's engine
+     doesn't hold your place through that, whatever it says it supports, and the chat moved under
+     your finger as you scrolled up (owner, 2026-11-08; see utils/pwa.ts isWebKit). */
+  :root[data-onw-engine='webkit'] .msg-bubble:nth-last-child(n + 9) {
+    content-visibility: visible;
+  }
   .msg-user {
     align-items: flex-end;
   }
@@ -2041,6 +2047,11 @@
       visibility: visible;
     }
   }
+  .msg-unheard {
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
   .msg-time {
     font-size: 10.5px;
     color: var(--faint, var(--muted));
@@ -2130,10 +2141,13 @@
   }
   .msg-restore-popover {
     /* Portaled to <body> and placed by anchoredPopover.ts — below the trigger, or above it
-       when the window has no room below. It must paint over the composer and the docked
-       Lucius panel (--z-overlay), the same reason .kebab-menu--portal sits at --z-modal. */
+       when the window has no room below. It must paint over the composer, the docked Lucius
+       panel (--z-overlay) AND the floating one: .lx-dock sits at calc(var(--z-toast) + 10), so
+       at --z-modal Restore in the floating chat opened its popover underneath the panel and
+       looked like it did nothing (hand UAT, 2026-11-11). The same level as .mp-pop, which
+       outranks the dock it renders inside for the same reason. */
     position: fixed;
-    z-index: var(--z-modal);
+    z-index: calc(var(--z-toast) + 20);
     width: 260px;
     padding: 10px;
     border-radius: 8px;
@@ -2713,6 +2727,307 @@
   }
   .screen-ctx__attach--on {
     background: color-mix(in srgb, var(--lucius) 20%, transparent);
+  }
+
+  /* ── Inline visual (show_visual): tiles, charts, bars, timeline in the chat column ───── */
+  /* Flat on the page (no card), so the space around it is what sets it apart from the reply. */
+  .msg-visual-wrap {
+    width: 100%;
+    min-width: 0;
+    margin: 16px 0 20px;
+  }
+  .ivis {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    position: relative;
+  }
+  /* The ⋯ copy/download menu (visual/VisualMenu.tsx): top right, shown on hover or focus, always
+     on touch screens. Out of the flex flow so it never pushes the title or chart. */
+  .ivis-menu {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .ivis:hover .ivis-menu,
+  .ivis:focus-within .ivis-menu,
+  .ivis-menu:has(.ivis-menu-note) {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .ivis-menu {
+      opacity: 1;
+    }
+  }
+  .ivis-menu-note {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  /* A drawing still being written (visual/InlineVisual.tsx): a soft band sweeps across it. */
+  .ivis-drawing {
+    position: relative;
+    min-width: 0;
+    max-width: 680px;
+  }
+  .ivis-shimmer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  .ivis-shimmer.is-on {
+    opacity: 1;
+  }
+  .ivis-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 25%,
+      color-mix(in srgb, var(--ink) 11%, transparent) 50%,
+      transparent 75%
+    );
+    transform: translateX(-100%);
+  }
+  .ivis-shimmer.is-on::after {
+    animation: ivis-sweep 1.6s ease-in-out infinite;
+  }
+  @keyframes ivis-sweep {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ivis-shimmer.is-on::after {
+      animation: none;
+      transform: none;
+      background: color-mix(in srgb, var(--ink) 4%, transparent);
+    }
+  }
+  /* A step under the reply's 14px text, as a chart title sits under the prose around it. */
+  .ivis-title {
+    margin: 0;
+    /* Clear of the ⋯ menu in the top-right corner, which a phone always shows. */
+    padding-right: 32px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .ivis-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+  }
+  .ivis-tile {
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-2);
+  }
+  .ivis-tile-label {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .ivis-tile-value {
+    margin-top: 2px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .ivis-tile-compare {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .ivis-tile-delta {
+    font-weight: 500;
+  }
+  .ivis-tile-delta--good {
+    color: var(--good);
+  }
+  .ivis-tile-delta--bad {
+    color: var(--bad);
+  }
+  .ivis-tile-delta--flat {
+    color: var(--ink);
+  }
+  .ivis-chart {
+    position: relative;
+    height: 200px;
+    min-width: 0;
+  }
+  .ivis-rows,
+  .ivis-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .ivis-row {
+    display: grid;
+    grid-template-columns: minmax(60px, 30%) 1fr auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .ivis-row-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+  .ivis-row-value {
+    text-align: right;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .ivis-row-of {
+    color: var(--muted);
+  }
+  .ivis-div-track {
+    position: relative;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--bg-2);
+  }
+  .ivis-div-track::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    left: 50%;
+    width: 1px;
+    background: var(--line-strong);
+  }
+  .ivis-div-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 3px;
+  }
+  .ivis-div-bar.pos {
+    background: var(--pos);
+  }
+  .ivis-div-bar.neg {
+    background: var(--neg);
+  }
+  .ivis-stack-bar {
+    display: flex;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: var(--bg-2);
+  }
+  .ivis-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .ivis-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .ivis-legend-item i {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .ivis-legend-value {
+    color: var(--ink);
+  }
+  .ivis-prog {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+  }
+  .ivis-prog-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ivis-prog-track {
+    display: block;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: var(--bg-2);
+  }
+  .ivis-prog-fill {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--primary);
+  }
+  .ivis-prog-fill.over {
+    background: var(--warn);
+  }
+  .ivis-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+  }
+  .ivis-timeline li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: baseline;
+    padding-left: 10px;
+    border-left: 2px solid var(--line-strong);
+  }
+  .ivis-tl-date {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .ivis-tl-label {
+    min-width: 0;
+    color: var(--ink);
+  }
+  .ivis-tl-value {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .ivis-caption {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  /* Lucius's own drawing (show_visual `code`): a sandboxed frame that grows to its content
+     (visual/VisualDrawing.tsx, visual/drawingFrame.ts). No cap, no clip, no mask — the owner
+     kept only the limits Claude's own drawing tool has (2026-11-18). */
+  /* At most 680px wide — the column the guide tells Lucius to draw for — so a 680-wide SVG
+     renders 1:1 and 13px text stays 13px. Stretched to a wider bubble it scaled up (~14.5px
+     at 760px). Narrower screens still shrink it to fit. */
+  .ivis-frame {
+    display: block;
+    width: 100%;
+    max-width: 680px;
+    height: 160px;
+    border: 0;
+    background: transparent;
   }
 } /* end @layer legacy */
 

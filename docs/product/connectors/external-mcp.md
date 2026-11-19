@@ -43,14 +43,19 @@ one that needs an API key or runs on this machine, **Set up** opens its form in 
 its details already filled in. **Lucius never adds a connector, never sees or types your keys, and
 nothing is saved until you finish the sign-in or click Connect yourself.** After you finish he
 re-checks that it is connected rather than assuming it worked. For a connector you already have,
-the card opens its settings instead. Unattended runs (an Automation, for instance) can't open
+the card shows its state: **Reconnect** (or **Authenticate**) while it needs attention, going
+straight on to the sign-in when that is what expired, and **Open** once it works. When a
+connector you have stops working, Lucius offers its card himself rather than sending you to find
+it in Connectors. Unattended runs (an Automation, for instance) can't open
 anything; Lucius just tells you what to set up.
 
 The directory is a curated list, not everything you can connect. Ask about an app that isn't in
 it and Lucius looks for the vendor's own MCP server on the web first. He calls one official only
 when it's on the vendor's own site or official GitHub, and gives you the link and address. Then
-he offers the **Add custom server** form, or another way in (a statement import, email, or
-recording it by hand) if there's no official server.
+he offers the **Add MCP server** form. If there's no official server but the app has an API you
+can get a key for, he points you to its documentation and offers the
+[**Add REST API**](rest-api.md) form instead. Failing both, he suggests another way in (a
+statement import, email, or recording it by hand).
 
 ## Add a server from the directory
 
@@ -62,7 +67,7 @@ Avalara AvaTax, Twelve Data, SEC EDGAR and FRED. Monarch works the same way but 
 
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
 **Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
-category in the row of small tags under the **All · Channels · Data sources · Web · MCP** tabs, or click
+category in the row of small tags under the **All · Channels · Data sources · Web · MCP servers · REST APIs** tabs, or click
 a tag on any card, to see only that kind; click it again to clear it. Each tab and tag shows how many
 connectors it holds. On a phone the
 category tags sit behind the filter icon beside search, which lights up while one is picked. A server you've
@@ -126,8 +131,9 @@ marked **from your connection**. A long list shows its first nine tools; **Show 
 
 ## Add any other server
 
-1. **Connectors → Browse & add → Add custom server** — in the row pinned at the top of the list
-   ("Don't see yours?") or beside **Close** at the bottom. A search that finds nothing offers it too.
+1. **Connectors → Browse & add → Add MCP server** — in the row pinned at the top of the list
+   ("Don't see yours?"). **Add your own**, beside **Close** at the bottom, offers it too, and so
+   does a search that finds nothing.
 2. If the server's README has a JSON config block (the `"mcpServers": { … }` kind), click **Paste
    from a config snippet** and paste it — the fields below fill themselves in. Otherwise:
 3. Pick a **Transport**:
@@ -186,6 +192,12 @@ Ask Lucius to use it, for example after adding Playwright:
 The first time he uses each tool, you'll get a card to approve it. The server's page under
 **Connectors** lists its tools and their levels under **Tool permissions**.
 
+The app keeps **one connection to each server for as long as it runs**, hosted or local, and
+every conversation shares it. What a server remembers between calls (a page Playwright has open,
+a broker you signed in to) is still there on the next call. If a hosted server forgets the
+connection, for example because it restarted, the app reconnects and repeats the request on its
+own. Editing or removing the server, or quitting the app, closes the connection.
+
 ## Managing a server
 
 Open the server under **Connectors**:
@@ -211,7 +223,10 @@ Open the server under **Connectors**:
 - **Reconnect** — appears when a connection stops working. If the sign-in expired, the status is an
   amber **Authentication issue** and it opens the sign-in window. If the server stopped answering, the
   status is a red **Error** and it tries the connection again: a network problem never makes you
-  link the account again. A dot on **Connectors** in the navigation tells you a connector needs one
+  link the account again. While a sign-in is waiting, the page shows **Open sign-in again** and
+  **Cancel**: if you closed the sign-in window or browser tab without finishing, start a fresh one
+  or drop it. (The desktop app signs in through your browser, so it can't tell the tab was closed.)
+  A dot on **Connectors** in the navigation tells you a connector needs one
   of these (amber if every problem is an expired sign-in), the **Attention** filter lists which
   ones, and the reason is written on its row and at the top of its page. Lucius is told too: each turn it sees which connectors have a problem, so it can say
   why a tool is missing.
@@ -283,6 +298,10 @@ Connect again.
 **Was connected — sign-in expired** — click **Reconnect** (or **Edit configuration**) and sign in
 again.
 
+**Shows Connected, but every tool call fails with "missing Mcp-Session-Id header"** — fixed:
+versions before this one didn't send a hosted server the session it opened at startup. Update
+the app.
+
 **It hangs on a first connect** — a local command may still be downloading. If the output box has
 been quiet for a long time, click **‹ Back** at the top, check the command, and try again.
 
@@ -291,3 +310,10 @@ been quiet for a long time, click **‹ Back** at the top, check the command, an
 - [Permissions](../lucius/permissions.md) — Needs approval, Always allow and Blocked
 - [Confirm cards](../lucius/confirm-cards.md) — what approving a call does
 - [Web search](web-search.md) — built-in search, no MCP server needed
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Personal Finance MCP Server: Use Your Ledger from Claude](https://opennetworth.ai/blog/personal-finance-mcp-server/): using your ledger from Claude and other MCP clients
+- [Open Source Monarch Money Alternative: Your Own AI Agent](https://opennetworth.ai/blog/open-net-worth-vs-monarch-money/): how this compares with Monarch's AI and MCP setup

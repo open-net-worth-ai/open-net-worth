@@ -481,7 +481,7 @@ class ImportTransactionsInput(ToolInput):
         description=(
             "false (default) = PREVIEW only, writes nothing, returns statement_id. "
             "true = book it — pass the statement_id the preview returned so the cached "
-            "parse is reused instead of re-parsed. Only after the user confirms."
+            "parse is reused instead of re-parsed. Only once the user has reviewed the preview."
         ),
     )
     decisions: List[Dict[str, Any]] = Field(

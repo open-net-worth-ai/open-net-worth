@@ -55,11 +55,22 @@ export function Login({ onAuthenticated }: { onAuthenticated: () => void }) {
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand">{brand.app_name.toUpperCase()}</div>
         <p className="login-sub">Enter your password to access this instance.</p>
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          defaultValue="opennetworth"
+          readOnly
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+        />
         <label className="form-label" htmlFor="login-password">
           Password
         </label>
         <PasswordField
           id="login-password"
+          name="password"
           value={password}
           autoFocus
           autoComplete="current-password"

@@ -49,6 +49,18 @@ from backend.db.payload_store import NamespacedSettingsStore
 from backend.db.tables import secret_config
 
 
+def _revoke_connected_apps(reason: str) -> None:
+    """Every app connected through the MCP OAuth server was approved with the OLD password, so a
+    change, reset or removal revokes them all — first, so a failure here fails the password write
+    rather than leaving a grant the owner meant to cut off (ADR
+    2026-11-16-hosted-ai-apps-connect-to-mcp-through-the-apps-own-oauth-server)."""
+    from datetime import datetime, timezone
+
+    from backend.db.mcp_oauth_store import McpOAuthStore
+
+    McpOAuthStore().revoke_all_if_present(reason, datetime.now(timezone.utc).isoformat())
+
+
 class AuthStore(NamespacedSettingsStore):
     def __init__(self, engine: Optional[object] = None):
         super().__init__("auth", table=secret_config, engine=engine)
@@ -130,6 +142,7 @@ class AuthStore(NamespacedSettingsStore):
 
     def set_password_hash(self, password_hash: str) -> dict:
         """Persist a new password hash, preserving the signing key + api token."""
+        _revoke_connected_apps("password_changed")
         data = self.get()
         data["password_hash"] = password_hash
         self._write(data)
@@ -143,6 +156,7 @@ class AuthStore(NamespacedSettingsStore):
         writes this row from a process that shares no in-process lock with a running server.
         """
         self.get()  # materialise any missing secret first, so the row below is complete
+        _revoke_connected_apps("password_reset" if password_hash else "password_removed")
         with self._use_serialized_namespace_conn(None) as conn:
             data = super().get(conn=conn)
             data["password_hash"] = password_hash

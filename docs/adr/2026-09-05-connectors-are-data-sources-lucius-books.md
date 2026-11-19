@@ -1,6 +1,6 @@
 ---
 title: Bank and broker connectors are data sources; Lucius books, the scheduler forgets
-status: Accepted
+status: Accepted (amended by 2026-11-13-a-bank-connector-can-book-its-rows-without-ai)
 date: 2026-09-05
 deciders: repo owner (decision) + orchestrating Claude agent (design)
 ---

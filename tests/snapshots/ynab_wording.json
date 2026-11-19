@@ -247,7 +247,7 @@
   "Sync turned on: both ways.",
   "Sync turned on: from YNAB.",
   "Sync turned on: to YNAB.",
-  "The sync was not turned on: ACME refused. Turn it on from Data sync."
+  "The sync was not turned on: ACME refused. Turn it on from Data Sync."
  ],
  "unsupported": [
   "a adjustment transaction has no YNAB equivalent",

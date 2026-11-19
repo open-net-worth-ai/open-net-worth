@@ -240,7 +240,12 @@ def detect_unmarked_payments(
     day_window: int = 7,
 ) -> list[dict]:
     """Ledger transactions that look like an installment payment (base amount within
-    `amount_tol`, date within `day_window` of due_date) but aren't linked via paid_txn_id."""
+    `amount_tol`, date within `day_window` of due_date) but aren't linked via paid_txn_id.
+
+    Each payment is offered to ONE installment and each installment gets ONE payment: the
+    closest pairs win (fewest days apart, then nearest amount). Two installments of the same
+    amount due close together used to both be offered the same payment, so confirming both
+    linked one payment to two installments (found in hand UAT, 2026-11-10)."""
     base = (base or svc.base_currency()).upper()
     if rates is None:
         from backend.services.fx_cache import load_fx_cache
@@ -260,7 +265,7 @@ def detect_unmarked_payments(
         except (TypeError, ValueError):
             return None
 
-    suggestions: list[dict] = []
+    candidates: list[tuple[int, float, int, dict]] = []
     for c in CommitmentsStore().query_commitments(status="active"):
         if c.get("kind") not in _PROJECTED_KINDS:
             continue
@@ -289,19 +294,34 @@ def detect_unmarked_payments(
                 td = parse(t.get("date"))
                 if td is None or abs((td - due).days) > day_window:
                     continue
-                suggestions.append(
-                    {
-                        "commitment_id": c["id"],
-                        "commitment_name": c["name"],
-                        "installment_id": inst["id"],
-                        "installment_label": inst.get("label", ""),
-                        "txn_id": t.get("id"),
-                        "txn_date": t.get("date"),
-                        "amount_base": round(paid, 2),
-                    }
-                )
-                break  # one match per installment
-    return suggestions
+                suggestion = {
+                    "commitment_id": c["id"],
+                    "commitment_name": c["name"],
+                    "installment_id": inst["id"],
+                    "installment_label": inst.get("label", ""),
+                    "txn_id": t.get("id"),
+                    "txn_date": t.get("date"),
+                    "amount_base": round(paid, 2),
+                }
+                gap = (abs((td - due).days), abs(paid - target), len(candidates))
+                candidates.append((*gap, suggestion))
+    return _one_payment_per_installment(candidates)
+
+
+def _one_payment_per_installment(candidates: list[tuple[int, float, int, dict]]) -> list[dict]:
+    """Pair closest first; a payment or an installment already paired is skipped. Returned in
+    the order the installments were found, so the list doesn't reshuffle."""
+    taken_txns: set = set()
+    taken_installments: set = set()
+    chosen: list[tuple[int, dict]] = []
+    for _days, _amount, order, s in sorted(candidates, key=lambda c: c[:3]):
+        inst_key = (s["commitment_id"], s["installment_id"])
+        if s["txn_id"] in taken_txns or inst_key in taken_installments:
+            continue
+        taken_txns.add(s["txn_id"])
+        taken_installments.add(inst_key)
+        chosen.append((order, s))
+    return [s for _order, s in sorted(chosen, key=lambda c: c[0])]
 
 
 # ── Loan amortization (Phase 3: loan-as-commitment) ─────────────────────────────

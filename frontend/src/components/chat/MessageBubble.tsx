@@ -17,6 +17,7 @@ import type {
 import { useChatCostVisible, useChatThinkingGrouped } from '../../hooks/useChatSuggestionsEnabled'
 import { Button, Modal } from '../ui'
 import { ArtifactCard } from './ArtifactCard'
+import { InlineVisual } from './visual/InlineVisual'
 import { WriteReceiptChip } from './WriteReceiptChip'
 import { useAnchoredPopover } from './anchoredPopover'
 import { ScreenCommandChip } from './ScreenCommandChip'
@@ -529,6 +530,13 @@ function renderGroupedBlock(
       </div>
     )
   }
+  if (block.type === 'visual') {
+    return (
+      <div key={i} className="msg-visual-wrap">
+        <InlineVisual visual={block.visual} draft={block.draft} />
+      </div>
+    )
+  }
   if (block.type === 'receipt') {
     return (
       <div key={i} className="msg-receipt-wrap">
@@ -966,6 +974,9 @@ export function MessageBubble({
 
   return (
     <div className={`msg-bubble ${isUser ? 'msg-user' : 'msg-assistant'}`}>
+      {!isUser && m.unheard && (
+        <div className="msg-unheard">Not read aloud, as you started talking first</div>
+      )}
       {/* The "still working" indicator is NOT here any more — it lives above the composer
           (TurnActivity), where it cannot scroll away mid-turn and sits next to Stop. */}
       {/* One merged block above the turn, in two cases: the reader asked for it (Settings →

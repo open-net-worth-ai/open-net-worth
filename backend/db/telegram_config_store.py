@@ -226,6 +226,19 @@ class TelegramConfigStore:
             self._store.patch_config(CONNECTOR_ID, {"allowed_chat_ids": current + [sid]}, conn=conn)
             return True
 
+    def set_bot_username(self, username: str | None) -> None:
+        """Remember the bot's @username (app-written ``state``, not a credential) so the setup
+        form can link to the bot. ``None`` forgets it — a new token whose owner Telegram could
+        not confirm must not keep showing the OLD bot's name."""
+        clean = str(username or "").strip().lstrip("@") or None
+        with serialized_unit_of_work() as conn:
+            self._store.ensure(CONNECTOR_ID, CONNECTOR_ID, _NAME, conn=conn)
+            self._store.merge_state(CONNECTOR_ID, {"bot_username": clean}, conn=conn)
+
+    def bot_username(self) -> str:
+        row = self._store.get(CONNECTOR_ID)
+        return str(((row or {}).get("state") or {}).get("bot_username") or "")
+
     def is_configured(self) -> bool:
         """Whether a bot token is set (the one field the connector needs to start)."""
         return bool(self.bot_token())
@@ -250,4 +263,5 @@ class TelegramConfigStore:
             "allowed_chat_ids": cfg["allowed_chat_ids"],
             "access_policy": normalize_access_policy(cfg.get("access_policy"), POLICY_ALLOWLIST),
             "has_bot_token": has_token,
+            "bot_username": self.bot_username() if has_token else "",
         }

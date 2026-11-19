@@ -1,3 +1,5 @@
+import { fDate } from '../../../utils/format'
+
 // The voices offered for a call, with what each costs. Mirrors the backend's
 // connectors/voice/tts_models.py for which languages each speaks.
 // Prices: LiveKit Inference on the Build and Ship plans, per million characters (livekit.com/pricing/
@@ -147,14 +149,34 @@ export function speakerChoice(model: string, voiceId: string, typing: boolean): 
 }
 
 export function voiceLibrary(model: string) {
-  return VOICE_LIBRARIES[model.split('/')[0]]
+  return VOICE_LIBRARIES[model.split('/')[0] ?? '']
 }
 
 // Measured on one LiveKit project, November 2026: 77 call minutes spoke 511 characters a minute,
 // and hearing plus the front voice cost $0.005 a minute. A call that talks more costs more.
 const CHARS_PER_CALL_MINUTE = 511
-const OTHER_COST_PER_MINUTE = 0.005
+// LiveKit's free Build plan, per month (livekit.com/pricing, read 2026-11-08). Each allowance is a
+// hard cap. Its WebRTC minutes last far longer than the credit, so they never decide the estimate.
 const BUILD_PLAN_CREDIT = 2.5
+const BUILD_PLAN_ISOLATION_MINUTES = 100
+// LiveKit Inference on Build, per minute (livekit.com/pricing/inference, read 2026-11-08). Automatic
+// hears with Nova-3 (stt_hints.py).
+const NOVA_3_COST_PER_MINUTE = 0.0048
+const HEARING_COST_PER_MINUTE: Record<string, number> = {
+  auto: NOVA_3_COST_PER_MINUTE,
+  'deepgram/nova-3': NOVA_3_COST_PER_MINUTE,
+  'assemblyai/universal-streaming': 0.0025,
+  'assemblyai/universal-streaming-multilingual': 0.0025,
+}
+// The measurement doesn't say which hearing model that project used. Assuming the cheapest leaves
+// the most for the front voice, the cautious split: $0.0025 a minute. The others scale with their
+// input price, which is most of a short reply's cost.
+const GEMMA_COST_PER_MINUTE = 0.0025
+const FRONT_COST_PER_MINUTE: Record<string, number> = {
+  'google/gemma-4-31b-it': GEMMA_COST_PER_MINUTE,
+  'openai/gpt-4.1-mini': GEMMA_COST_PER_MINUTE,
+  'openai/gpt-4.1-nano': 0.000625,
+}
 
 export function voiceSpeaks(model: string, language: string): boolean {
   const speaks = VOICE_MODELS.find((m) => m.value === model)?.speaks
@@ -172,18 +194,95 @@ export function voiceOptions(language: string, current: string) {
     : [...options, { value: current, label: current }]
 }
 
-/** What a call on this voice comes to, in the words a person budgets with. */
-export function voiceCostLine(model: string): string | undefined {
+function voiceCostPerMinute(model: string): number | undefined {
   const voice = VOICE_MODELS.find((m) => m.value === model)
-  if (!voice) return undefined
+  return voice && (voice.pricePerMillion * CHARS_PER_CALL_MINUTE) / 1_000_000
+}
+
+function cents(dollars: number): string {
+  return `${(dollars * 100).toFixed(1)}¢`
+}
+
+/** What Lucius's voice comes to, in the words a person budgets with. */
+export function voiceCostLine(model: string): string | undefined {
+  const perMinute = voiceCostPerMinute(model)
+  if (perMinute === undefined) return undefined
+  return `Lucius's voice is about ${cents(perMinute)} a call minute. Longer answers cost more.`
+}
+
+export const DEFAULT_NOISE_FILTER = 'standard'
+
+export const NOISE_FILTER_OPTIONS = [
+  { value: 'off', label: 'Off' },
+  { value: DEFAULT_NOISE_FILTER, label: 'Standard (default)' },
+  { value: 'isolation', label: 'Voice isolation' },
+]
+
+const NOISE_FILTER_HELP: Record<string, string> = {
+  off: "Only your browser's own noise suppression.",
+  standard: 'Krisp removes fans, traffic and music, and keeps every voice it hears. No extra cost.',
+  isolation:
+    `Krisp also removes other people talking near you. LiveKit's free plan includes ` +
+    `${BUILD_PLAN_ISOLATION_MINUTES} minutes a month; after that, new calls use Standard.`,
+}
+
+export function noiseFilterHelp(choice: string): string | undefined {
+  return NOISE_FILTER_HELP[choice]
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Says so when LiveKit refused voice isolation and new calls are on Standard for now. */
+export function isolationStandInLine(until: string, now: number = Date.now()): string {
+  const retry = Date.parse(until)
+  if (!until || Number.isNaN(retry)) return ''
+  const when =
+    retry - now < DAY_MS ? 'within the hour' : `on ${fDate(until.slice(0, 10), 'short', 'always')}`
+  return `LiveKit refused voice isolation, so new calls use Standard for now. It tries again ${when}.`
+}
+
+/** Both Krisp filters need LiveKit Cloud. No address yet reads as Cloud, what the form suggests. */
+export function onLiveKitCloud(url: string): boolean {
+  try {
+    const host = new URL(url.trim()).hostname.toLowerCase()
+    return host === 'livekit.cloud' || host.endsWith('.livekit.cloud')
+  } catch {
+    return true
+  }
+}
+
+interface CallChoices {
+  stt_model: string
+  tts_model: string
+  front_model: string
+  noise_filter: string
+}
+
+/** Roughly how long LiveKit's free plan lasts on these settings, in the words a person budgets
+ *  with, and what runs out first. None for a voice we have no price for. */
+export function freeMinutesEstimate(
+  choices: CallChoices,
+): { headline: string; detail: string } | undefined {
+  const voice = voiceCostPerMinute(choices.tts_model)
+  if (voice === undefined) return undefined
   const perMinute =
-    OTHER_COST_PER_MINUTE + (voice.pricePerMillion * CHARS_PER_CALL_MINUTE) / 1_000_000
+    voice +
+    (HEARING_COST_PER_MINUTE[choices.stt_model] ?? NOVA_3_COST_PER_MINUTE) +
+    (FRONT_COST_PER_MINUTE[choices.front_model] ?? GEMMA_COST_PER_MINUTE)
   const minutes = Math.round(BUILD_PLAN_CREDIT / perMinute / 10) * 10
-  return (
-    `About ${(perMinute * 100).toFixed(1)}¢ a call minute with hearing and the front voice, or ` +
-    `about ${minutes} minutes on LiveKit's free $${BUILD_PLAN_CREDIT.toFixed(2)} credit. ` +
-    `Longer answers cost more, and LiveKit sets the prices.`
-  )
+  // New calls step down to Standard when voice isolation runs out, so it never ends the free calls.
+  const isolation =
+    choices.noise_filter === 'isolation' && minutes > BUILD_PLAN_ISOLATION_MINUTES
+      ? ` About the first ${BUILD_PLAN_ISOLATION_MINUTES} use voice isolation, then Standard.`
+      : ''
+  return {
+    headline: `Estimated free minutes: about ${minutes} a month`,
+    detail:
+      `On LiveKit's free plan, with these settings: its $${BUILD_PLAN_CREDIT.toFixed(2)} monthly ` +
+      `credit, at about ${cents(perMinute)} a call minute.${isolation} A call that talks more ` +
+      `uses it faster, and LiveKit sets the prices. Lucius's own model isn't counted: your AI ` +
+      `provider bills that.`,
+  }
 }
 
 /** A voice id belongs to one provider: carried to another, the call would have no voice. */

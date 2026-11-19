@@ -152,7 +152,7 @@ describe('MobileTabBar', () => {
       'Assets',
       'Plan',
       'Commitments',
-      'Intel',
+      'Intelligence',
       'Automations',
       'Skills',
       'Connectors',

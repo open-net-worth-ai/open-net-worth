@@ -35,6 +35,7 @@ from backend.cli.release_check import (
     latest_release,
     wheel_matches,
 )
+from backend.cli.status import log_file
 from backend.core.child_env import scrubbed_environ
 from backend.core.version import APP_VERSION
 
@@ -47,6 +48,7 @@ IDLE_POLL_SECONDS = 15.0
 DRAIN_SECONDS = 120.0
 _TOOL_DIR_TIMEOUT_SECONDS = 30
 _UPGRADES_DIR = "open-net-worth-upgrades"
+_RESTART_DIR = "restart-helper"
 _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
@@ -166,6 +168,22 @@ def _windows_restart(service: bool) -> tuple[list[str], bool]:
     return command, not os.environ.get(DETACHED_ENV)
 
 
+def restart_this_process(service: bool) -> int:
+    """Once the server has stopped: come back the way it was running, and return the exit code."""
+    if _ON_WINDOWS:
+        # Windows has no re-exec, and a task won't start while this one is still running.
+        restart, new_console = _windows_restart(service)
+        job = {"restart_only": True, "previous_version": APP_VERSION, "version": APP_VERSION}
+        spawn_windows_helper(job, log_file().parent / _RESTART_DIR, restart, new_console)
+        return 0
+    if service:
+        return RESTART_EXIT_CODE
+    # The same process stays, so this also holds for a service installed without --auto-upgrade,
+    # which has no --service flag: its supervisor never sees it leave.
+    os.execv(sys.executable, [sys.executable, "-P", "-m", "backend.cli", *_restart_args()])
+    return 0  # unreachable: execv does not return
+
+
 class AutoUpgrader(threading.Thread):
     """Checks for a new release while the server runs and asks it to exit once one is installed."""
 
@@ -278,12 +296,7 @@ class AutoUpgrader(threading.Thread):
         """What the process does once the server has stopped. Re-executes in a terminal."""
         if not (self.installed and self.exit_requested):
             return 0
-        if self.service:
-            return RESTART_EXIT_CODE
-        # The same process stays, so this also holds for a service installed without --auto-upgrade,
-        # which has no --service flag: its supervisor never sees it leave.
-        os.execv(sys.executable, [sys.executable, "-P", "-m", "backend.cli", *_restart_args()])
-        return 0  # unreachable: execv does not return
+        return restart_this_process(self.service)
 
 
 def check() -> int:

@@ -28,11 +28,13 @@ import logging
 import re
 from typing import Iterator, List
 
+from backend.core import rest_tools
 from backend.core.channels import unregister_channel
 from backend.core.errors import NotFoundError, ValidationError
 from backend.core.mcp_external import is_read_only
 from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
 from backend.db.engine import get_engine
+from backend.db.pairing_store import PairingStore
 from backend.models.connector import ConnectorTool, ConnectorView
 from backend.models.mcp_client import MCP_CONNECTOR_PREFIX
 from backend.services import tool_permissions, tool_permissions_v2
@@ -189,8 +191,10 @@ def default_levels(connector_id: str) -> tuple[str, dict[str, str]]:
 
 
 def _tools(
-    kind: ConnectorKind, row: Row, level, native: list[ConnectorTool]
+    kind: ConnectorKind, row: Row, level, native: list[ConnectorTool], ctx: dict
 ) -> list[ConnectorTool]:
+    if kind.tools is not None:
+        native = kind.tools(row, ctx)
     if kind.kind != "mcp":
         # ``model_copy``, never mutation: the native bundle holds ONE shared instance per tool
         # and several connectors list the same one, so writing a level onto it would leak this
@@ -262,7 +266,7 @@ def _view(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict, level) -> C
         secrets_public={f"has_{name}": name in have for name in kind.surfaced_fields},
         short_description=short,
         long_description=long,
-        tools=_tools(kind, row, level, native),
+        tools=_tools(kind, row, level, native, ctx),
     )
 
 
@@ -385,6 +389,11 @@ def set_connector_enabled(connector_id: str, enabled: bool) -> ConnectorView:
             f"connector '{connector_id}' is always on and cannot be paused or resumed",
             connector_id=connector_id,
         )
+    if connector_id == rest_tools.LAUNCHER_ID:
+        raise ValidationError(
+            "Add a REST API first: each one you add is its own connector to pause or resume.",
+            connector_id=connector_id,
+        )
     kind = kind_of(connector_id)
     builtin = next((b for b in builtins() if b.id == connector_id), None)
     store = ConnectorStore()
@@ -429,6 +438,9 @@ def remove_connector(connector_id: str) -> None:
     else:
         ConnectorStore().delete(connector_id)
     tool_permissions.clear_connector_permissions(connector_id)
+    # A chat connector's pending pairing requests go with it: re-adding the bot showed the old
+    # bot's "Pending approvals", one tap from letting that sender in (owner, 2026-11-16).
+    PairingStore().clear(connector_id)
     _reconcile_notify_channel(kind)
 
 
@@ -480,12 +492,18 @@ def display_name_for(connector_id: str) -> str:
     known = display_name(connector_id)
     if known:
         return known
-    if connector_id.startswith(MCP_CONNECTOR_PREFIX):
+    prefix = next(
+        (
+            p
+            for p in (MCP_CONNECTOR_PREFIX, rest_tools.CONNECTOR_PREFIX)
+            if connector_id.startswith(p)
+        ),
+        None,
+    )
+    if prefix is not None:
         try:
             row = ConnectorStore().get(connector_id)
         except Exception:
             row = None
-        return (
-            str(row["name"]) if row and row["name"] else connector_id[len(MCP_CONNECTOR_PREFIX) :]
-        )
+        return str(row["name"]) if row and row["name"] else connector_id[len(prefix) :]
     return connector_id.replace("_", " ").replace(":", " • ")

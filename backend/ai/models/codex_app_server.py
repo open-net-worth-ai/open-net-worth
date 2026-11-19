@@ -50,6 +50,7 @@ from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError
 from backend.core.report_redact import redact_text
 
+from . import cli_exit
 from .cli_tool_protocol import write_image_files  # noqa: F401 — LiveTurn calls it via this module
 from .codex_home import has_login, isolated_home
 
@@ -304,9 +305,11 @@ class AppServerClient:
                     timeout=_INITIALIZE_TIMEOUT_SECONDS,
                 )
             except (asyncio.TimeoutError, ExternalServiceError) as exc:
+                exit_note = await _exit_summary(self._proc)
                 await self._reap()
                 raise ExternalServiceError(
                     f"Codex app-server did not complete its handshake: {exc}"
+                    + exit_note
                     + await self._stderr_summary()
                 ) from exc
             self._notify("initialized")
@@ -582,6 +585,24 @@ class AppServerClient:
         finally:
             await events.aclose()
             live.close()
+
+
+def describe_exit(returncode: Optional[int]) -> str:
+    """How a Codex child ended — see :func:`cli_exit.describe_exit`."""
+    return cli_exit.describe_exit(returncode, label="Codex")
+
+
+async def _exit_summary(proc: Optional[asyncio.subprocess.Process]) -> str:
+    """``. Codex <how it ended>`` for a child that failed its start, or "" with no child."""
+    if proc is None:
+        return ""
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=_STDERR_SETTLE_SECONDS)
+    except asyncio.TimeoutError:
+        pass
+    note = describe_exit(proc.returncode)
+    log.warning("codex_app_server: failed start — Codex %s", note)
+    return f". Codex {note}"
 
 
 def _turn_id(response) -> str:

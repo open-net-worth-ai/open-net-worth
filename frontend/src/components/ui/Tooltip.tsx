@@ -13,6 +13,9 @@ interface TooltipProps {
   shortcut?: readonly string[]
   /** Below the control (title-bar buttons) or to its right (sidebar rail icons). */
   side?: 'bottom' | 'right'
+  /** Show only while the control's text is cut off (its content overflows) — for a truncated
+   *  cell whose full text the tip reveals. */
+  onlyWhenClipped?: boolean
   children: ReactElement
 }
 
@@ -20,7 +23,13 @@ interface TooltipProps {
 // and on keyboard focus. Positioned against the viewport (position: fixed), so a clipping
 // ancestor such as the sidebar can't cut it off, and nudged back inside the window. The anchor is
 // `display: contents`, so wrapping a control never changes its layout.
-export function Tooltip({ label, shortcut, side = 'bottom', children }: TooltipProps) {
+export function Tooltip({
+  label,
+  shortcut,
+  side = 'bottom',
+  onlyWhenClipped,
+  children,
+}: TooltipProps) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const anchor = useRef<HTMLSpanElement>(null)
@@ -34,6 +43,8 @@ export function Tooltip({ label, shortcut, side = 'bottom', children }: TooltipP
   }
   const show = (immediate: boolean) => {
     clear()
+    const target = anchor.current?.firstElementChild
+    if (onlyWhenClipped && (!target || target.scrollWidth <= target.clientWidth)) return
     if (immediate || Date.now() - lastHiddenAt < WARM_WINDOW_MS) setOpen(true)
     else timer.current = setTimeout(() => setOpen(true), SHOW_DELAY_MS)
   }

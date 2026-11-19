@@ -16,6 +16,10 @@ from backend.core.automation_runner import (
 )
 from backend.services.tool_permissions import CORE_CONNECTOR_ID, set_tool_permission
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_automation_approvals_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 
 def _bind(mode: str, *always_allowed: str):
     return bind_automation_approval(
@@ -181,7 +185,7 @@ def automation_dispatch(tmp_path, monkeypatch):
 
     async def fake_notify(message: str, *, channels=None, title=None):
         calls.append((message, channels))
-        return ["in_app"]
+        return {"in_app": {"sent": 1}}
 
     monkeypatch.setattr("backend.paths.PENDING_PLANS_JSON", tmp_path / "pending_plans.json")
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "automation")

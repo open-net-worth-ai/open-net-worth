@@ -6,7 +6,7 @@ order: 20
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/mentions, lucius/permissions, lucius/models-and-cost]
-keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone]
+keywords: [chat, prompting, visual, visuals, chart, graph, timeline, response detail, brief, detailed, short answers, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone, upload, file types, supported files, excel, xlsx, xls, csv, ofx, qif, word, docx]
 ---
 
 # How to talk to Lucius
@@ -83,19 +83,74 @@ Globe key twice on a Mac, or Win+H on Windows.
 
 Click the paperclip (**Attach file or image**) or drop a file anywhere on the Lucius panel (or
 into the message box of the floating dock): a statement (PDF, CSV, Excel), a receipt photo, a
-screenshot of your banking app, a Word document. Then say
+screenshot of your banking app. Then say
 what to do — *"import this"*, *"log these purchases"*, *"what's my deductible?"*. Files you send
 are stored so the conversation can refer back to them (they're listed in **Settings → Data →
-Uploaded files**). To keep one with your other papers, ask Lucius to save it to
+Uploaded files**, where a photo shows a thumbnail. Tap it to see the full image and delete it
+there). To keep one with your other papers, ask Lucius to save it to
 [Documents](documents.md).
 
+### File types Lucius can read
+
+| Kind | Types |
+|---|---|
+| Pictures | PNG, JPG, HEIC and other images |
+| Documents | PDF, TXT |
+| Spreadsheets | CSV, Excel (.xlsx, .xls) |
+| Bank statement files | OFX, QFX, QBO, QIF, MT940, CAMT |
+
+Word documents (.docx) can't be read yet: save one as PDF first. A password-protected PDF needs
+its password removed; a password-protected Excel file can be sent with the password in your
+message. Each file can be up to 25 MB.
+
+### If a file won't upload
+
 If you press **Send** while a file is still uploading, the message goes the moment the upload
-finishes. If a file can't be uploaded, the message stays in the box and a note under the file
-tells you which one, so nothing is sent without it by accident.
+finishes. If a file can't be uploaded, the message stays in the box and a note tells you which
+file and why: a type Lucius can't read (with the list above), a password-protected file, a file
+over 25 MB, or a dropped connection. Nothing is sent without it by accident.
+
+## Charts and figures in a reply
+
+When an answer has a shape, Lucius draws it right in his reply instead of describing it: a bar
+chart for *"where did my money go this month?"*, a line for *"how is my net worth trending?"*,
+headline figures side by side for *"what if I saved $1,000 more a month?"*, a timeline for *"show
+my vesting schedule"*. He doesn't draw a single figure, a yes or no, or advice, and the text
+around a picture gives the takeaway rather than repeating its numbers.
+
+When none of those shapes fits — what moved your net worth from January to now, how your income
+splits into spending and saving, a trend with the day you changed jobs marked — Lucius draws the
+picture himself. These drawings are his own work, like a sentence he writes: the figures in them
+come from what he read, but he wrote them in, so check one that matters against the screen it
+came from. A drawing can be interactive (hover a point to see its value) and can use charting
+libraries from the internet. It runs in its own walled-off frame, so it can't act as you in the
+app. With Claude models you watch it being drawn: shapes appear as Lucius writes them, and
+anything interactive switches on once the drawing is complete. Other models show it whole when
+it's done.
+
+In the standard charts every number comes straight from your data — Lucius points at what he
+read and the app copies the figures in, so he can't mistype one. A few things are written under
+the picture for you:
+
+- **What-if — …** names each assumption he changed and its value in your saved plan, so a what-if
+  is never mistaken for your plan. To try other numbers yourself, open it in **Plan › Outlook**
+  from the chip under the reply.
+- **Projection — not booked** marks a cash-flow forecast.
+- **Largest 6 of 35** means he kept the biggest rows and left the smallest out.
+
+To keep a chart, point at it and open the **⋯** menu in its top-right corner: **Copy as image**
+puts a PNG on your clipboard, ready to paste; **Download as SVG** and **Download as PNG** save it
+as a file named after the chart.
+
+Hiding amounts hides them in the standard charts. Lucius's own drawings are not masked — they
+show their figures even when amounts are hidden. On
+[Telegram](../connectors/telegram.md) a standard chart's figures arrive as a few lines of text,
+and a drawing as a note to open the chat in the app. To turn them off, see **Settings → Developer → Experimental**
+(*Inline visuals*).
 
 ## Ask for a file when you want to keep it
 
-Charts and reports appear right in the chat. When you'd rather have a file, say which kind:
+A chart in a reply lives in the conversation. When you'd rather have a file, say which kind:
 
 - *"Make that a PDF"* → a printable, paginated document.
 - *"Give me September's transactions as a spreadsheet"* → an Excel file (.xlsx) with dates,
@@ -115,8 +170,10 @@ interactive page — tap a bar or slide along a line to read the exact figure.
 
 ## Short answers by default
 
-Lucius keeps replies short and won't recite your whole portfolio, budget or memory unless you ask.
-Want everything? Say so: *"give me a full breakdown of…"*.
+Lucius leads with the answer and stops when it's answered: a figure gets a sentence or two, an
+analysis a short list. He won't recite your whole portfolio, budget or memory unless you ask.
+Want everything? Say so: *"give me a full breakdown of…"*, or change **Response detail** in
+**Settings → Chat**.
 
 ## He can see what you're looking at
 
@@ -130,6 +187,9 @@ included. See [Mentioning things in chat](mentions.md#screen-awareness--lucius-s
 While Lucius works, his thinking shows as he writes it; once the reply is done it folds into a
 short preview you can open. Each step he takes shows as its own row, named after what it does
 (*"Get net worth"*, *"Delete envelope"*), and you can open a row for its details.
+
+A code block in a reply, such as a terminal command, has a **Copy** button in its corner: it shows
+when you point at the block (always, on a touch screen) and copies the block's text exactly.
 
 If a reply goes quiet, a small **Still working…** line with the time so far shows up after about
 ten seconds, so you can tell Lucius is alive and not stuck.
@@ -152,10 +212,16 @@ something, the retry adds your message again so Lucius still knows what was done
 - **Show cost per turn** — the tokens, price and model under each reply.
 - **Group reasoning into one block** — show Lucius's thinking as one block above the answer,
   instead of step by step.
+- **Response detail** — **Brief** (the answer and its key figure), **Normal** (the default) or
+  **Detailed** (the reasoning and the figures behind it too).
 - **Multi-turn chat** — let you send another message while Lucius is still answering; it's
   woven into the same reply. Off, **Send** waits until he's done.
 
 ## The conversation list
+
+A new conversation joins the list when you send its first message. That includes the one a fresh
+install opens with and the one that replaces your last conversation when you delete it, so neither
+leaves an empty **New conversation** behind.
 
 Each conversation in the history list (and in the **Automation runs** group) shows where it
 stands:

@@ -147,6 +147,8 @@ export {
   // ── Income tab: upcoming-payment date confidence ──
   CalendarCheck,
   CalendarClock,
+  // ── Copy Trading: the activity period picker ──
+  CalendarDays,
   // ── Vault (Lucius tab) ──
   FolderLock,
   FolderMinus,
@@ -156,6 +158,9 @@ export {
   ArrowLeft,
   Image as ImageIcon,
 } from 'lucide-react'
+
+// Lucius's own mark (the diamond's octagon) — use this, not Sparkles, for anything Lucius does.
+export { LuciusMark } from './LuciusMark'
 
 // Shared sizing for the sidebar nav icons. (.sidebar-icon svg in index.css also
 // boxes them to 20×20; strokeWidth 1.5 matches the app's thin-line house style.)

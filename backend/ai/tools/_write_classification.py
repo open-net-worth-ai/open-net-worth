@@ -92,7 +92,20 @@ READ_ONLY_TOOLS = frozenset(
         "get_actions",
         "get_alert_channels",
         "get_alerts",
+        # Reads the stored follows (a `search` calls the public filing sources, writes nothing).
+        "get_followed_portfolios",
         "get_investment_theses",
+        # Paper trading reads: derived from the paper event ledger, priced with
+        # record_history=False; they write nothing. preview_paper_orders runs the same planner
+        # as a placement with no write — at most it registers a shared, ownerless instrument row
+        # for a ticker the app had not seen (reference data, as a watchlist search does).
+        "get_paper_activity",
+        # Reads each paper holding's own news feeds (fixed Google News / Yahoo addresses built
+        # by code, never the model) and stores nothing.
+        "get_paper_news",
+        "get_paper_portfolios",
+        "get_paper_results",
+        "preview_paper_orders",
         # Composes services.asset_detail.read_asset_detail (called with
         # record_price_history=False, persist_exchange=False — see that function's own
         # docstring for the two write side effects those flags exist to opt out of) +
@@ -220,6 +233,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_screen_detail",
         "read_screen",
         "show_guide",  # lights up a control in the open app; writes nothing
+        "show_visual",  # copies figures out of earlier tool results into the reply; writes nothing
         "get_spending_breakdown",
         "get_spending_summary",
         "get_statement",
@@ -273,7 +287,6 @@ READ_ONLY_TOOLS = frozenset(
         # Validates/normalizes against read-only reference options; it never reaches the
         # Automation mutation choke or any store write.
         "preview_automation",
-        "save_code_as_skill",
         # Federates providers_for_country() + per-bank list_institutions() (Enable Banking
         # only — GoCardless, restored 2026-11-02, is deliberately NOT federated: its bank list
         # caches a token, and new signups are closed) — pure reads. Enable Banking's
@@ -324,4 +337,9 @@ NO_DOMAIN_WRITE_TOOLS: dict[str, str] = {
     "run_code": "sandboxed subprocess, no store access; staging is an in-memory dict",
     # Documented in CLAUDE.md as ZERO store writes — ephemeral UI state pushed over SSE.
     "run_screen_command": "ephemeral UI state only, no store writes",
+    # NOT a read (security review of the mcp_oauth branch, 2026-11-16): it stages its own card,
+    # and wherever no card can be shown — an approval's redemption, or an inbound MCP caller —
+    # it writes a skill and its script file (``_apply_code_skill``). Listed here, not given
+    # ``mutates=("skills",)``, so the chat path's own card stays the only card.
+    "save_code_as_skill": "self-staged; once applied writes a skill + script file",
 }

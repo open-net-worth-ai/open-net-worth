@@ -40,10 +40,13 @@ import {
   txnIsInflow,
   selectionTotal,
 } from './data'
+import { previewDeleteEffects } from './transactionApi'
+import { transferPair } from './makeTransfer'
+import { mergeTransactions } from '../../../api/matches'
 import { buildTxnView } from './txnView'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
 import type { Account, Txn, Category, TransactionUpdate, ApiAccount, ApiTxn } from './types'
-import { sym, toBase, fBase } from './format'
+import { sym, toBase, fBase, fCur } from './format'
 import { tokensToFilterPatch, combineDateRange, addFilterToken } from './tokenFilters'
 
 import { Sidebar } from './Sidebar'
@@ -221,6 +224,13 @@ export function AccountsTab({
     dateOn?: string
     /** Dashboard Top merchants deep-link: one payee, by name. */
     payee?: string
+    /** With `month`: the LAST month of a range (`YYYY-MM`) — a report period's span. */
+    monthTo?: string
+    /** Transactions carrying any of these tags — a report narrowed to tags. */
+    tag?: string[]
+    /** A bank sync run's report: exactly what one write batch booked, across accounts. */
+    batch?: string
+    batchLabel?: string
   } | null
   onRegisterFilterApplied?: () => void
   refresh?: () => void
@@ -932,10 +942,23 @@ export function AccountsTab({
       !registerFilter?.month &&
       !registerFilter?.uncategorized &&
       !registerFilter?.dateOn &&
-      !registerFilter?.payee
+      !registerFilter?.payee &&
+      !registerFilter?.tag?.length &&
+      !registerFilter?.batch
     )
       return
-    const { category: cat, month, uncategorized, kind, dateOn, payee } = registerFilter
+    const {
+      category: cat,
+      month,
+      uncategorized,
+      kind,
+      dateOn,
+      payee,
+      monthTo,
+      tag,
+      batch,
+      batchLabel,
+    } = registerFilter
     selectAccount(null) // a Plan deep-link is an all-accounts view
     setFilter((f) => {
       const next = { ...f }
@@ -969,19 +992,31 @@ export function AccountsTab({
       }
       if (month) {
         const [y, m] = month.split('-').map(Number)
+        const [ty, tm] = (monthTo || month).split('-').map(Number)
         if (y && m) {
           next.preset = 'custom'
           next.cfM = m
           next.cfY = y
-          next.ctM = m
-          next.ctY = y
+          next.ctM = tm || m
+          next.ctY = ty || y
         }
+      }
+      if (tag?.length) {
+        next.tokens = [
+          ...next.tokens.filter((t) => t.field !== 'tag'),
+          ...tag.map((t) => ({ field: 'tag' as const, value: t, label: '#' + t })),
+        ]
       }
       if (payee) {
         next.tokens = [
           ...next.tokens.filter((t) => t.field !== 'payee'),
           { field: 'payee', value: payee, label: 'Payee: ' + payee },
         ]
+      }
+      if (batch) {
+        // Exactly that batch, whenever it was dated: no other token, no date range.
+        next.preset = 'all'
+        next.tokens = [{ field: 'importBatch', value: batch, label: batchLabel || 'One import' }]
       }
       if (dateOn) {
         const label = 'On ' + fDate(dateOn, 'short', 'always')
@@ -1140,6 +1175,7 @@ export function AccountsTab({
             kind: 'transfer',
             description: descInput || 'Transfer',
             memo,
+            tags: data.tags,
             category: data.category || null,
             from_account_id: fromId,
             from_amount: amt,
@@ -1156,6 +1192,7 @@ export function AccountsTab({
             kind: 'income',
             description,
             memo,
+            tags: data.tags,
             to_account_id: data.account,
             to_amount: amt,
             to_currency: ccy,
@@ -1171,6 +1208,7 @@ export function AccountsTab({
             kind: 'investment',
             description,
             memo,
+            tags: data.tags,
             from_account_id: data.account,
             from_amount: amt,
             from_currency: ccy,
@@ -1185,6 +1223,7 @@ export function AccountsTab({
             kind: 'expense',
             description,
             memo,
+            tags: data.tags,
             from_account_id: data.account,
             from_amount: amt,
             from_currency: ccy,
@@ -1215,6 +1254,7 @@ export function AccountsTab({
     if (patch.date != null) u.date = patch.date
     if (patch.description != null) u.description = patch.description
     if (patch.memo != null) u.memo = patch.memo
+    if (patch.tags !== undefined) u.tags = patch.tags
     if (patch.category !== undefined) u.category = patch.category
     if (patch.cleared != null) u.cleared = patch.cleared
     if (patch.kind != null) u.kind = patch.kind
@@ -1272,6 +1312,27 @@ export function AccountsTab({
         setReconcileBurst((n) => n + 1)
       })
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
+  }
+
+  // A Brokerage total account reconciles its TOTAL; the server sets the untracked part to the
+  // total less the tracked holdings (ADR 2026-11-10). `expected_balance` guards a stale screen.
+  const onReconcileTotal = (account: Account, total: number) => {
+    void L.reconcile(account.id, { real_total: total, expected_balance: account.balance })
+      .then((r) => {
+        showToast(
+          r.adjustment
+            ? reconcileToastMessage(r.adjustment, r.balance, account.currency)
+            : `Total confirmed at ${fCur(total, account.currency, { cents: true })}`,
+        )
+        setReconcileBurst((n) => n + 1)
+      })
+      .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
+  }
+
+  const onConfirmHeldTotal = (account: Account, accept: boolean) => {
+    void L.confirmHeldTotal(account.id, accept)
+      .then(() => showToast(accept ? 'Total updated' : 'Kept the current value'))
+      .catch((e) => showToast(e instanceof Error ? e.message : 'Could not save that'))
   }
 
   const archive = (a: Account) =>
@@ -1389,6 +1450,18 @@ export function AccountsTab({
     hide: selList.filter((t) => !t.hidden).length,
     unhide: selList.filter((t) => t.hidden).length,
   }
+  // Two rows that are one movement between your accounts become ONE transfer (the merge keeps
+  // both bank ids, so a later sync re-reading either side books nothing new).
+  const pair = transferPair(selList)
+  const bulkMakeTransfer = () => {
+    if (!('pay' in pair)) return
+    void mergeTransactions(pair.pay.id, pair.receive.id, true, 'Make transfer')
+      .then(() => {
+        afterBulk('Made one transfer')
+        void L.refresh()
+      })
+      .catch((e) => showToast(e instanceof Error ? e.message : 'Could not make a transfer'))
+  }
   const bulkCategory = (cat: string) =>
     runBulk(ids(), { category: cat }, (n) => 'Re-categorised ' + n)
   // Mobile's bulk bar hands categorization to Lucius instead of a flyout (see BulkBar) — one
@@ -1482,10 +1555,12 @@ export function AccountsTab({
   const bulkExport = () => {
     exportCsv(selList)
   }
-  const bulkDelete = () =>
+  const bulkDelete = () => {
+    const title = 'Delete transactions'
+    const body = `${selectedIds.size} transaction(s) will be deleted from the register.`
     setConfirm({
-      title: 'Delete transactions',
-      body: `${selectedIds.size} transaction(s) will be deleted from the register.`,
+      title,
+      body,
       confirmLabel: 'Delete ' + selectedIds.size,
       danger: true,
       onConfirm: () => {
@@ -1496,6 +1571,11 @@ export function AccountsTab({
         setConfirm(null)
       },
     })
+    void previewDeleteEffects(ids()).then((effects) => {
+      if (effects.length === 0) return
+      setConfirm((c) => (c?.title === title ? { ...c, body: [body, ...effects].join(' ') } : c))
+    })
+  }
   const dupCreate = (t: Txn) => ({
     date: t.date,
     kind: t.kind,
@@ -2137,6 +2217,8 @@ export function AccountsTab({
                       exportCsv(filtered)
                     }}
                     onReconcile={onReconcile}
+                    onReconcileTotal={onReconcileTotal}
+                    onConfirmHeldTotal={onConfirmHeldTotal}
                     onReview={addReviewToken}
                     onStartReview={() => surfaces.openReview('all', selectedAccount.id)}
                   />
@@ -2258,6 +2340,8 @@ export function AccountsTab({
             onDuplicate={() => void bulkDuplicate()}
             onMemo={bulkMemo}
             onMove={bulkMove}
+            onMakeTransfer={bulkMakeTransfer}
+            makeTransferWhy={'why' in pair ? pair.why : undefined}
             onExport={bulkExport}
             onDelete={bulkDelete}
           />

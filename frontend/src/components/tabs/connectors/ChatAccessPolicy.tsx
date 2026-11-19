@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { authFetch } from '../../../api/client'
 import { Stack, Cluster, Text, Button, FormField, Select } from '../../ui'
 
@@ -20,12 +20,7 @@ const POLICY_OPTIONS = [
   { value: 'allowlist', label: 'Allowlist — only the IDs you list' },
 ]
 
-const POLICY_HELP: Record<AccessPolicy, string> = {
-  pairing: 'Save, then message your bot and approve the request that appears below.',
-  allowlist: 'Only the senders listed below can reach Lucius.',
-  open: 'Anyone who can reach the bot can talk to Lucius and read your finances. Only use this while testing.',
-  disabled: 'Every incoming message is ignored. The bot stays connected but never answers.',
-}
+// No help line under the picker: each option's label already says what it does.
 
 export function AccessPolicyField({
   idPrefix,
@@ -37,7 +32,7 @@ export function AccessPolicyField({
   onChange: (v: AccessPolicy) => void
 }) {
   return (
-    <FormField label="Who can chat" htmlFor={`${idPrefix}-policy`} help={POLICY_HELP[value]}>
+    <FormField label="Who can chat" htmlFor={`${idPrefix}-policy`}>
       <Select
         id={`${idPrefix}-policy`}
         value={value}
@@ -48,7 +43,7 @@ export function AccessPolicyField({
   )
 }
 
-interface PendingRow {
+export interface PendingRow {
   connector: string
   sender_id: string
   code: string
@@ -63,15 +58,18 @@ const POLL_MS = 4000
 // closing and reopening — plus an immediate refresh after Approve/Reject. `active` gates the
 // poll entirely: only "pairing" mode ever produces pending rows, so polling under any other
 // policy (e.g. Allowlist) would just be a wasted request every few seconds forever.
-// `onApproved` lets the parent reload its config (the allowlist changed).
+// `onApproved` lets the parent reload its config (the allowlist changed) and say who got in;
+// `welcomed` is whether the bot told them so. `empty` is what to show while nobody is waiting.
 export function PendingApprovals({
   connector,
   active,
   onApproved,
+  empty = null,
 }: {
   connector: string
   active: boolean
-  onApproved?: () => void
+  onApproved?: (row: PendingRow, welcomed: boolean) => void
+  empty?: ReactNode
 }) {
   const [rows, setRows] = useState<PendingRow[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -93,7 +91,8 @@ export function PendingApprovals({
     return () => clearInterval(id)
   }, [active, load])
 
-  async function act(senderId: string, action: 'approve' | 'reject') {
+  async function act(row: PendingRow, action: 'approve' | 'reject') {
+    const senderId = row.sender_id
     setBusy(senderId)
     try {
       const r = await authFetch(`/api/chat-pairing/${action}`, {
@@ -102,8 +101,9 @@ export function PendingApprovals({
         body: JSON.stringify({ connector, sender_id: senderId }),
       })
       if (r.ok) {
+        const d = (await r.json().catch(() => ({}))) as { welcomed?: boolean }
         load()
-        if (action === 'approve') onApproved?.()
+        if (action === 'approve') onApproved?.(row, Boolean(d.welcomed))
       }
     } catch {
       /* best-effort — leave the row, the operator can retry */
@@ -112,7 +112,7 @@ export function PendingApprovals({
     }
   }
 
-  if (rows.length === 0) return null
+  if (rows.length === 0) return <>{active ? empty : null}</>
 
   return (
     <div
@@ -128,14 +128,13 @@ export function PendingApprovals({
           Pending approvals ({rows.length})
         </Text>
         <Text size="xs" tone="faint">
-          These senders messaged the bot but aren&apos;t approved yet. Approve one and their next
-          message reaches Lucius; reject to clear the request.
+          Check the code matches the one the bot sent.
         </Text>
         <Stack gap="--space-2">
           {rows.map((row) => (
             <Cluster key={row.sender_id} gap="--space-3" align="center" justify="between">
               <Text size="sm">
-                <code>{row.sender_label || row.sender_id}</code> • code <code>{row.code}</code>
+                {row.sender_label || <code>{row.sender_id}</code>} • code <code>{row.code}</code>
               </Text>
               <Cluster gap="--space-2" align="center">
                 <Button
@@ -143,7 +142,7 @@ export function PendingApprovals({
                   variant="primary"
                   style={{ padding: '4px 10px' }}
                   loading={busy === row.sender_id}
-                  onClick={() => act(row.sender_id, 'approve')}
+                  onClick={() => act(row, 'approve')}
                 >
                   Approve
                 </Button>
@@ -152,7 +151,7 @@ export function PendingApprovals({
                   variant="danger"
                   style={{ padding: '4px 10px' }}
                   disabled={busy === row.sender_id}
-                  onClick={() => act(row.sender_id, 'reject')}
+                  onClick={() => act(row, 'reject')}
                 >
                   Reject
                 </Button>

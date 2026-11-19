@@ -26,6 +26,10 @@ from backend.ai.tools import _confirm_gate as gate
 from backend.ai.tools import registry
 from backend.services import tool_permissions as perms
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_native_permission_enforcement_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 # A native, connector-tagged tool: `@tool(connector="plaid")` in ai/tools/connectors.py.
 # Deliberately a READ tool — the ladder has no tiering by tool type, so a read is gated by
 # a stored level exactly like a write, and using one keeps these tests off the write path

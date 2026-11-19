@@ -4,13 +4,10 @@
 import type { ReactNode } from 'react'
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { LuciusMark } from '../../../ui/LuciusMark'
 
 export function Spark({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
-    </svg>
-  )
+  return <LuciusMark size={size} aria-hidden="true" />
 }
 
 export function Chevron({

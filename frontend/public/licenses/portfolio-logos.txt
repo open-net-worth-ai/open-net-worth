@@ -1,0 +1,24 @@
+Logos shown on Famous Portfolios cards (Open Net Worth)
+
+Third Point LLC logo
+  Source: https://commons.wikimedia.org/wiki/File:Third_Point_LLC_Logo.svg
+  Author: Third Point LLC
+  License: Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)
+           https://creativecommons.org/licenses/by-sa/4.0/
+  Changes: trimmed, resized and centred on a white square.
+
+Viking Global Investors logo
+  Source: https://commons.wikimedia.org/wiki/File:Viking_Global_Investors_logo.png
+  Author: Viking Global Investors LP
+  License: Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)
+           https://creativecommons.org/licenses/by-sa/4.0/
+  Changes: trimmed, resized and centred on a white square.
+
+NVIDIA logo
+  Source: https://commons.wikimedia.org/wiki/File:NVIDIA_logo.svg
+  License: Apache License 2.0
+           https://www.apache.org/licenses/LICENSE-2.0
+  Changes: rendered to an image, trimmed, resized and centred on a white square.
+
+These logos are trademarks of their owners, used only to identify each firm's portfolio.
+Every other logo on the cards is public domain or the firm's own, and needs no credit.

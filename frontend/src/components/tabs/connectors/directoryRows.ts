@@ -188,7 +188,7 @@ export function setupTargetFor(
   id: string,
   catalog: CatalogEntry[] = CATALOG,
 ): SetupTarget {
-  // `custom` is the Add custom server form — any MCP server the directory doesn't list.
+  // `custom` is the Add MCP server form — any MCP server the directory doesn't list.
   if (id === 'custom') {
     const generic = catalog.find((e) => e.generic)
     return generic ? { kind: 'add', id: generic.id } : { kind: 'unknown' }

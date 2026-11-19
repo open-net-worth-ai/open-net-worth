@@ -97,6 +97,7 @@ ATTRIBUTE_LIST_PARAMS: dict[str, str] = {
     "get_watchlist.values": "read FILTER, not an entity target",
     "connector_sync.providers": "one sync sweep across providers",
     "add_transaction_refs.refs": "one transaction, many provenance pairs",
+    "show_visual.blocks": "one visual in one reply, made of up to three blocks",
     # NOTE — seven entries were DELETED here by the 2026-07-19d naming-close lane, and the
     # deletion is the point. They exempted apply_lot_acquire.acquisitions,
     # apply_lot_dispose.disposals, apply_lot_delete.deletions,
@@ -327,7 +328,10 @@ def inventory() -> list[dict[str, Any]]:
 # rather than picking one arbitrarily. `assign_budget`'s own `assignments` param is already
 # correctly plural, so the batch shape is not hidden — only the tool's own verb-object name
 # reads as a domain (budget/money), matching its sibling.
-UNCOUNTABLE_OBJECTS = {"money", "cash", "history", "config", "data", "budget"}
+# "activity" is the same mass noun as "history": `get_paper_activity` filters ONE portfolio's
+# activity by a list of event `kinds`, it does not act on several activities (the name is final,
+# PRD/RFC 2026-11-15 paper trading §9).
+UNCOUNTABLE_OBJECTS = {"money", "cash", "history", "config", "data", "budget", "activity"}
 
 # Floor for the --lint vacuous-pass guard (see main()). Set far below the real registry
 # size so adding or removing tools never touches it — it catches "the registry is empty",

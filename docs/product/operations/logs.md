@@ -21,7 +21,7 @@ passwords, keys or tokens.
 |---|---|
 | **Desktop app** | **Help → Troubleshooting → Open Logs Folder**. That's the `logs` folder inside your book folder (by default `~/.open-net-worth/logs`). |
 | **Server** (`onw start`, source checkout) | `~/.open-net-worth/logs/app.log` (or `<ONW_ROOT>/logs/app.log` if you set `ONW_ROOT`). The same lines also print in the terminal running the app. |
-| **Boot service** (`onw autostart install`) | `~/.open-net-worth/logs/app.log`; on Linux also `journalctl --user -u open-net-worth`. |
+| **Boot service** (`onw autostart on`) | `~/.open-net-worth/logs/app.log`; on Linux also `journalctl --user -u open-net-worth`. |
 | **Docker** | `docker compose logs app` for what the container printed; the file is `/home/onw/.open-net-worth/logs/app.log` in the `open-net-worth-data` volume (`docker compose exec app tail -n 200 /home/onw/.open-net-worth/logs/app.log`). |
 
 When the app is a desktop window onto a server, **Open Logs Folder** shows the desktop app's own

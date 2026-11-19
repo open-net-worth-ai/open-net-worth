@@ -78,9 +78,9 @@ def _catalog_names() -> str:
 # ── the flag itself ──────────────────────────────────────────────────────────────
 
 
-def test_the_flag_is_declared_off_by_default_and_expires():
+def test_the_flag_is_declared_on_by_default_and_expires():
     flag = feature_flags.get("search_reads_results")
-    assert flag.default is False
+    assert flag.default is True
     assert flag.kind == "release" and flag.owner == "owner"
     assert flag.remove_by.isoformat() == "2027-01-31"
 

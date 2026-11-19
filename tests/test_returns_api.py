@@ -34,8 +34,9 @@ def client(monkeypatch):
 
     captured = {}
 
-    def fake_portfolio_returns_with_benchmark(period="1Y", benchmark=None, today=None):
+    def fake_portfolio_returns_with_benchmark(period="1Y", benchmark=None, today=None, band=None):
         captured["period"] = period
+        captured["band"] = band
         return {
             "period": period,
             "start": "2025-06-05",
@@ -240,8 +241,8 @@ def bench_client(tmp_path, monkeypatch, db_isolated):
 
     real_with_benchmark = returns_service.portfolio_returns_with_benchmark
 
-    def pinned_with_benchmark(period="1Y", benchmark=None, today=None):
-        return real_with_benchmark(period, benchmark=benchmark, today=date(2026, 6, 5))
+    def pinned_with_benchmark(period="1Y", benchmark=None, today=None, band=None):
+        return real_with_benchmark(period, benchmark=benchmark, today=date(2026, 6, 5), band=band)
 
     monkeypatch.setattr(returns_service, "portfolio_returns_with_benchmark", pinned_with_benchmark)
     InstrumentStore().bulk_insert(

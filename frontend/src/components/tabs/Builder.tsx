@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   getBuilderRun,
   getBuilderStatus,
@@ -11,7 +12,7 @@ import {
   type BuilderStatus,
 } from '../../api/builder'
 import { useBrand } from '../../brand-context'
-import { FileCode, ShieldCheck, Sparkles, Wrench } from '../../ui/icons'
+import { FileCode, ShieldCheck, LuciusMark, Wrench } from '../../ui/icons'
 import {
   Badge,
   Button,
@@ -82,8 +83,8 @@ function runTone(status: BuilderRun['status']): 'pos' | 'neg' | 'warn' | 'neutra
   return 'neutral'
 }
 
-function eventGlyph(kind: BuilderEvent['kind']): string {
-  if (kind === 'assistant') return '✦'
+function eventGlyph(kind: BuilderEvent['kind']): ReactNode {
+  if (kind === 'assistant') return <LuciusMark size="1em" aria-hidden="true" />
   if (kind === 'tool') return '›'
   if (kind === 'output') return '•'
   if (kind === 'error') return '!'
@@ -254,7 +255,7 @@ export function Builder({ pollIntervalMs = 1000 }: { pollIntervalMs?: number }) 
 
         <div className="builder-thesis">
           <div className="builder-thesis__mark" aria-hidden="true">
-            <Sparkles size={20} strokeWidth={1.5} />
+            <LuciusMark size={20} strokeWidth={1.5} />
           </div>
           <div className="builder-thesis__copy">
             <Text as="h2" size="2xl" weight={600}>

@@ -74,7 +74,29 @@ _EXEMPT: set = {
     ),  # Lunch Flow's own hosted bank-link redirect — same reasoning as the MCP OAuth callback
     # above (ADR 2026-08-16-mcp-oauth-callback-is-auth-exempt-state-is-the-credential.md): the
     # single-use `state` staged by lunch_flow_pending.stage() is the credential, not a session.
+    # The inbound MCP OAuth server (flag mcp_oauth). Discovery is public by design; authorize,
+    # token and revoke are called by an app or a signed-out browser, and each carries its own
+    # credential (PKCE + code, refresh token, client secret). The consent page's sign-in takes the
+    # password (sign-in's rate limit) and sets a short cookie for that one request, which approve
+    # checks itself; the icon is the asking app's own favicon. Every one 404s while the server is
+    # off.
+    ("GET", "/.well-known/oauth-protected-resource"),
+    ("GET", "/.well-known/oauth-protected-resource/mcp"),
+    ("GET", "/.well-known/oauth-authorization-server"),
+    ("GET", "/oauth/authorize"),
+    ("POST", "/oauth/token"),
+    ("POST", "/oauth/revoke"),
+    ("GET", "/api/oauth/consent"),
+    ("POST", "/api/oauth/consent"),
+    ("POST", "/api/oauth/consent/sign-in"),
+    ("GET", "/api/oauth/consent/icon"),
 }
+
+# ``/mcp`` has its own gate (``mcp/server._require_mcp_bearer``). While the MCP OAuth server is
+# available it must see every request, because an OAuth access token is a Bearer this gate
+# doesn't know (step 3 would refuse it) and a hosted app needs the 401 that names the
+# protected-resource metadata. OAuth tokens are recognised there and nowhere else.
+_MCP_PATH = "/mcp"
 
 # The in-process Starlette TestClient reports host "testclient" — it is local by
 # definition (no socket leaves the box), so it counts as loopback. A real remote
@@ -150,6 +172,15 @@ def _bearer_token(request: HTTPConnection) -> Optional[str]:
     return None
 
 
+def _mcp_oauth_available() -> bool:
+    from backend.services.mcp_oauth.settings import is_available
+
+    try:
+        return is_available()
+    except Exception:  # noqa: BLE001 — an unreadable setting keeps today's gate
+        return False
+
+
 def require_auth(request: HTTPConnection) -> None:
     """Gate every request. Returns ``None`` to allow; raises ``HTTPException(401)`` to deny."""
     if getattr(request.state, "desktop_authenticated", False):
@@ -160,6 +191,8 @@ def require_auth(request: HTTPConnection) -> None:
         return
     # Exempt paths (login screen / probes must reach these unauthenticated).
     if (getattr(request, "method", ""), request.url.path) in _EXEMPT:
+        return
+    if request.url.path == _MCP_PATH and _mcp_oauth_available():
         return
 
     store = AuthStore()

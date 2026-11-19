@@ -1,7 +1,7 @@
 """The Actual Budget connector: its flag, config store, catalog entry and REST surface.
 
-The server address is a credential (it can carry userinfo), so all four of server address,
-password, token and encryption password live in ``connector_secrets``; the store's ``public()``
+The server address is a credential (it can carry userinfo), so it, the password, token,
+encryption password and proxy headers all live in ``connector_secrets``; the store's ``public()``
 reports only that they are set. Every number and name here is made up.
 """
 
@@ -28,7 +28,11 @@ SECRETS = {
     "password": "PASSWORD-SENTINEL",
     "token": "TOKEN-SENTINEL",
     "encryption_password": "ENCRYPTION-SENTINEL",
+    "proxy_headers": "X-Acme-Proxy: PROXY-SENTINEL",
 }
+
+# Off by default, so these turn it on to reach what they test.
+pytestmark = pytest.mark.flags(actual_budget_sync=True)
 
 
 @pytest.fixture
@@ -58,9 +62,9 @@ def _no_secret_in(payload: object) -> None:
 # ── the flag ─────────────────────────────────────────────────────────────────
 
 
-def test_the_flag_ships_on_and_dated():
+def test_the_flag_ships_off_and_dated():
     flag = feature_flags.get("actual_budget_sync")
-    assert flag.default is True and flag.kind == "release"
+    assert flag.default is False and flag.kind == "release"
     assert flag.added == date(2026, 11, 5) and flag.remove_by == date(2027, 3, 1)
     assert actual_flag.ACTUAL_FLAG == "actual_budget_sync"
 
@@ -89,6 +93,7 @@ def test_defaults(store):
         "password": "",
         "token": "",
         "encryption_password": "",
+        "proxy_headers": "",
     }
 
 
@@ -99,9 +104,11 @@ def test_public_reports_presence_and_a_bare_host_only(store):
     assert pub["has_encryption_password"] is pub["has_server_url"] is True
     assert pub["server_host"] == "actual.acme.test:5006"
     assert pub["available"] is True and pub["enabled"] is True
-    for secret in ("server_url", "password", "token", "encryption_password"):
+    assert pub["has_proxy_headers"] is True and pub["proxy_header_names"] == ["X-Acme-Proxy"]
+    for secret in ("server_url", "password", "token", "encryption_password", "proxy_headers"):
         assert secret not in pub
     _no_secret_in(pub)
+    assert "PROXY-SENTINEL" not in repr(pub)
 
 
 def test_credentials_are_for_server_side_use(store):
@@ -111,7 +118,15 @@ def test_credentials_are_for_server_side_use(store):
 
 def test_a_blank_secret_leaves_the_saved_one(store):
     store.update(SECRETS)
-    store.update({"password": "", "token": "   ", "encryption_password": "", "server_url": ""})
+    store.update(
+        {
+            "password": "",
+            "token": "   ",
+            "encryption_password": "",
+            "server_url": "",
+            "proxy_headers": "",
+        }
+    )
     assert store.credentials() == SECRETS
 
 
@@ -178,7 +193,7 @@ def test_behind_the_gateway_it_is_unavailable_and_refuses_config(store, behind_g
 # ── the catalog kind ─────────────────────────────────────────────────────────
 
 
-def test_the_catalog_kind_keeps_all_four_in_connector_secrets():
+def test_the_catalog_kind_keeps_every_secret_in_connector_secrets():
     kind = CATALOG["actual_budget"]
     assert {f.name for f in kind.secret_fields} == set(SECRETS)
     assert all(f.revealable for f in kind.secret_fields)

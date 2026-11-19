@@ -25,13 +25,15 @@ Imports are downward only (db + core) — no api/ai import (Contract 3).
 
 from __future__ import annotations
 
+import functools
+import logging
 import math
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy import Connection
 
-from backend.core.errors import InsufficientLots, InvalidLotSelection
+from backend.core.errors import InsufficientLots, InvalidLotSelection  # noqa: F401 — re-exported
 from backend.core.fx import base_currency, to_base
 from backend.core.trade_text import trade_text
 from backend.core.user_time import user_today
@@ -46,196 +48,24 @@ from backend.db.tables import positions as positions_tbl
 from backend.db.tables import realized_events as realized_tbl
 from backend.db.tables import transactions as txns_tbl
 from backend.db.tables import txn_audit as txn_audit_tbl
-from backend.services import position_figures
+from backend.services import lot_math as _lot_math
+from backend.services import position_figures, transaction_links
+from backend.services.lot_math import (  # noqa: F401 — re-exported: callers are untouched
+    _QTY_EPS,
+    DEFAULT_TERM_THRESHOLD_DAYS,
+    _per_leg_gain_base,
+    classify_term,
+    effective_unit_cost,
+    line_realized_gain,
+    select_lots_fifo,
+    select_lots_specific,
+)
 
-# Lots may be split/consumed at floating-point granularity; treat sub-dust as zero so a
-# fully-consumed lot closes cleanly instead of leaving 1e-12 behind.
-_QTY_EPS = 1e-9
-
-# Default holding-period threshold (days). Long ≥ threshold, short below. Jurisdiction
-# rules (SG = no CGT, US 1yr, AU 12mo + discount) are out of scope (P4-TX1) — the
-# boundary is this single configurable threshold + a per-line `term` string (D7).
-DEFAULT_TERM_THRESHOLD_DAYS = 365
+logger = logging.getLogger(__name__)
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-# ── Selection ──────────────────────────────────────────────────────────────────
-
-
-def select_lots_fifo(open_lots: list[dict], qty: float) -> list[tuple[dict, float]]:
-    """Take `qty` units off the FIFO queue. `open_lots` MUST already be FIFO-ordered
-    (LotStore.open_lots_for_position returns them so). Returns [(lot, take_qty), ...].
-
-    Raises InsufficientLots if the open lots don't hold enough units (AC-13) — and does
-    so BEFORE returning any partial plan, so the caller never half-consumes.
-    """
-    remaining = float(qty)
-    if remaining <= 0:
-        raise InvalidLotSelection("disposal quantity must be positive", qty=qty)
-    available = sum(float(lot.get("remaining_qty") or 0) for lot in open_lots)
-    if remaining - available > _QTY_EPS:
-        raise InsufficientLots(
-            "not enough open lot quantity to cover the disposal",
-            requested=qty,
-            available=available,
-        )
-    plan: list[tuple[dict, float]] = []
-    for lot in open_lots:
-        if remaining <= _QTY_EPS:
-            break
-        lot_remaining = float(lot.get("remaining_qty") or 0)
-        if lot_remaining <= 0:
-            continue
-        take = min(lot_remaining, remaining)
-        plan.append((lot, take))
-        remaining -= take
-    return plan
-
-
-def select_lots_specific(open_lots: list[dict], selection: list[dict]) -> list[tuple[dict, float]]:
-    """Specific-ID selection: the caller names lot ids + qty per lot. Validates each lot
-    is in the position's open lots and take ≤ that lot's remaining_qty — raising
-    InvalidLotSelection BEFORE returning any plan (atomicity, AC-7). Returns
-    [(lot, take_qty), ...] in the caller's order.
-
-    `selection` is a list of {"lot_id": str, "qty": float}.
-    """
-    by_id = {lot.get("id"): lot for lot in open_lots}
-    plan: list[tuple[dict, float]] = []
-    # Accumulate per-lot asks first so two lines naming the same lot are summed and
-    # validated against ONE remaining_qty (can't sneak past by splitting the ask).
-    asks: dict[str, float] = {}
-    order: list[str] = []
-    for sel in selection:
-        lot_id = sel.get("lot_id")
-        take = float(sel.get("qty") or 0)
-        if take <= 0:
-            raise InvalidLotSelection("lot selection qty must be positive", lot_id=lot_id)
-        if lot_id not in by_id:
-            raise InvalidLotSelection("lot not found among the position's open lots", lot_id=lot_id)
-        if lot_id not in asks:
-            order.append(lot_id)
-        asks[lot_id] = asks.get(lot_id, 0.0) + take
-    for lot_id in order:
-        lot = by_id[lot_id]
-        take = asks[lot_id]
-        lot_remaining = float(lot.get("remaining_qty") or 0)
-        if take - lot_remaining > _QTY_EPS:
-            raise InvalidLotSelection(
-                "requested qty exceeds the lot's remaining quantity",
-                lot_id=lot_id,
-                requested=take,
-                remaining=lot_remaining,
-            )
-        plan.append((lot, take))
-    return plan
-
-
-# ── Gain math (the testable core) ───────────────────────────────────────────────
-
-
-def effective_unit_cost(lot: dict) -> Optional[float]:
-    """Cost per unit including amortized acquisition fees: unit_cost + fees/original_qty.
-    Returns None when the lot's unit_cost is unknown (None) — never a fabricated 0 (D8)."""
-    unit_cost = lot.get("unit_cost")
-    if unit_cost is None:
-        return None
-    fees = float(lot.get("fees", 0) or 0)
-    original_qty = float(lot.get("original_qty") or 0)
-    if original_qty and fees:
-        return float(unit_cost) + fees / original_qty
-    return float(unit_cost)
-
-
-def classify_term(
-    acquired_at: str | None,
-    disposed_at: str | None,
-    threshold_days: int = DEFAULT_TERM_THRESHOLD_DAYS,
-) -> str:
-    """ "long" if held ≥ threshold days, "short" if below, "unknown" if either date is
-    missing/unparseable (no fabricated holding period). Dates are ISO 'YYYY-MM-DD'."""
-    if not acquired_at or not disposed_at:
-        return "unknown"
-    try:
-        held = (date.fromisoformat(disposed_at[:10]) - date.fromisoformat(acquired_at[:10])).days
-    except (ValueError, TypeError):
-        return "unknown"
-    return "long" if held >= threshold_days else "short"
-
-
-def line_realized_gain(
-    take_qty: float,
-    proceeds_per_unit: float,
-    lot: dict,
-    proceeds_ccy: str,
-    rates: dict | None,
-    disposed_at: str = "",
-    disposal_fee_per_unit: float = 0.0,
-    threshold_days: int = DEFAULT_TERM_THRESHOLD_DAYS,
-) -> dict:
-    """Per-consumed-lot realized-gain line, denominated in the PROCEEDS currency.
-
-    The lot's basis (in its own cost_currency) is converted INTO the proceeds currency
-    via core.fx before subtracting — currencies are never mixed in a subtraction (AC-11).
-    Unknown cost (effective_unit_cost is None) ⇒ realized_gain=None, not 0 (AC-12).
-    `disposal_fee_per_unit` reduces proceeds (already in proceeds_ccy).
-    Returns a Consumption-shaped dict.
-    """
-    eff_cost = effective_unit_cost(lot)
-    cost_ccy = lot.get("cost_currency") or proceeds_ccy
-    net_proceeds_per_unit = float(proceeds_per_unit) - float(disposal_fee_per_unit)
-    if eff_cost is None:
-        gain = None
-    else:
-        # Convert the FULL lot basis (eff_cost × take_qty) into the proceeds currency ONCE,
-        # then subtract from the total net proceeds — rounding only at this line boundary.
-        # Converting the per-unit cost first would round to 2dp (inside to_base) BEFORE the
-        # ×qty multiply, magnifying the cent-rounding by quantity and breaking the module's
-        # "intermediate per-unit costs stay exact floats" invariant (bites cross-currency
-        # disposals and any non-2dp unit cost, e.g. crypto / a migrated weighted-avg basis).
-        total_cost_in_proceeds = to_base(
-            eff_cost * float(take_qty), cost_ccy, proceeds_ccy, rates=rates
-        )
-        gain = round(net_proceeds_per_unit * float(take_qty) - total_cost_in_proceeds, 2)
-    return {
-        "lot_id": lot.get("id"),
-        "qty": float(take_qty),
-        "unit_cost": eff_cost,
-        "cost_currency": (cost_ccy or "").upper() or None,
-        "acquired_at": lot.get("acquired_at") or "",
-        "term": classify_term(lot.get("acquired_at"), disposed_at, threshold_days),
-        "realized_gain": gain,
-        # Audit copy of the consumed lot's historical-rate stamp (ADR 2026-07-15) so the
-        # event stays re-derivable even if the lot is later deleted. None on legacy lots.
-        "fx_rate_acquire": lot.get("fx_rate"),
-    }
-
-
-def _per_leg_gain_base(
-    plan: list,
-    net_proceeds_per_unit: float,
-    qty: float,
-    proceeds_ccy: str,
-    base: str,
-    rates: dict | None,
-) -> Optional[float]:
-    """Tax-standard base gain: total net proceeds at the DISPOSAL-date rate minus each
-    consumed lot's basis at its own ACQUISITION-date rate (the lot's historical-rate
-    stamp). None unless EVERY consumed lot has a known cost AND a trusted stamp
-    (fx_rate present, base_currency == the current base) — a partial per-leg number
-    would silently mix methodologies."""
-    cost_base = 0.0
-    for lot, take in plan:
-        eff = effective_unit_cost(lot)
-        fx = lot.get("fx_rate")
-        if eff is None or not fx or (lot.get("base_currency") or "").upper() != base:
-            return None
-        cost_base += eff * float(take) * float(fx)
-    proceeds_base = to_base(net_proceeds_per_unit * qty, proceeds_ccy, base, rates=rates)
-    return round(proceeds_base - cost_base, 2)
 
 
 def compute_disposal(
@@ -246,167 +76,27 @@ def compute_disposal(
     base: str | None = None,
     threshold_days: int = DEFAULT_TERM_THRESHOLD_DAYS,
 ) -> dict:
-    """PURE: validate + compute a disposal DRAFT (no writes). Picks the lot-selection
-    method, selects lots, computes per-line gains, aggregates, and converts the
-    aggregate gain to the base currency via core.fx (D4). Raises InvalidLotSelection /
-    InsufficientLots before producing any plan (AC-7, AC-13) so apply only mutates after
-    a clean draft.
-
-    `disposal` keys: quantity, proceeds_per_unit, proceeds_currency, disposal_fees,
-    disposed_at, method ("fifo"|"specific_id"), lot_selection [{lot_id, qty}],
-    is_taxable, transfer_to_account_id (an already-RESOLVED id — see
-    resolve_transfer_destination). Returns a RealizedEvent-shaped draft dict (no
-    id/created_at).
-    """
-    base = (base or base_currency()).upper()
-    qty = float(disposal.get("quantity") or 0)
-    if qty <= 0:
-        raise InvalidLotSelection("disposal quantity must be positive", qty=qty)
-
-    method = disposal.get("method") or "fifo"
-    proceeds_ccy = (
-        disposal.get("proceeds_currency") or position.get("cost_currency") or base
-    ).upper()
-    proceeds_per_unit = float(disposal.get("proceeds_per_unit") or 0)
-    disposal_fees = float(disposal.get("disposal_fees", 0) or 0)
-    disposed_at = disposal.get("disposed_at") or user_today().isoformat()
-    # is_taxable defaults True; a transfer-out / gift passes False (carries basis out).
-    is_taxable = bool(disposal.get("is_taxable", True))
-
-    # Money guard (P2-INV1c): a TAXABLE disposal with zero net proceeds would book the full
-    # cost basis as a fabricated loss with no value received — almost always a forgotten sale
-    # price or a transfer the user meant to flag. The intentional zero-proceeds path is a
-    # transfer-out/gift (is_taxable=False, which carries basis out and realizes nothing). So we
-    # refuse a taxable, zero-net-proceeds sale here (before any write) rather than silently
-    # book a large fake loss; a real $0 disposal (worthless/written-off) is recorded as a
-    # transfer-out. Net of fees so e.g. proceeds=fee nets to 0 and is caught too.
-    net_proceeds_per_unit = proceeds_per_unit - (disposal_fees / qty if qty else 0.0)
-    if is_taxable and net_proceeds_per_unit <= 0:
-        raise InvalidLotSelection(
-            "a taxable sale needs a positive proceeds/unit (booking a $0 sale would record the "
-            "full cost basis as a fabricated loss); to write off / transfer out the holding with "
-            "no value received, mark it a transfer-out (is_taxable=false)",
-            proceeds_per_unit=proceeds_per_unit,
-            disposal_fees=disposal_fees,
-        )
-
-    # A destination turns the non-taxable disposal into a move between the user's own
-    # accounts (Activity shows "→ IBKR"). It is only coherent on a pure share movement — a
-    # sale, a price, or a cash deposit alongside it means the caller mixed two operations.
-    transfer_to = disposal.get("transfer_to_account_id") or None
-    if transfer_to and (
-        is_taxable or proceeds_per_unit != 0 or disposal.get("proceeds_account_id")
-    ):
-        raise InvalidLotSelection(
-            "a transfer moves shares, not money — transfer_to_account_id needs "
-            "is_taxable=false, proceeds_per_unit=0 and no proceeds_account_id",
-            transfer_to_account_id=transfer_to,
-        )
-
-    if method == "specific_id":
-        selection = disposal.get("lot_selection") or []
-        if not selection:
-            raise InvalidLotSelection("specific_id disposal requires a lot_selection")
-        plan = select_lots_specific(open_lots, selection)
-        # The selected qty must equal the disposal qty — no silent under/over fill.
-        selected_qty = sum(take for _, take in plan)
-        if abs(selected_qty - qty) > _QTY_EPS:
-            raise InvalidLotSelection(
-                "lot_selection quantities must sum to the disposal quantity",
-                selected=selected_qty,
-                requested=qty,
-            )
-    elif method == "fifo":
-        plan = select_lots_fifo(open_lots, qty)
-    else:
-        raise InvalidLotSelection("unknown lot-selection method", method=method)
-
-    fee_per_unit = disposal_fees / qty if qty else 0.0
-    consumptions = [
-        line_realized_gain(
-            take,
-            proceeds_per_unit,
-            lot,
-            proceeds_ccy,
-            rates,
-            disposed_at=disposed_at,
-            disposal_fee_per_unit=fee_per_unit,
-            threshold_days=threshold_days,
-        )
-        for lot, take in plan
-    ]
-
-    # Aggregate. If ANY consumed lot has unknown cost, the whole disposal's realized gain
-    # is unknown (None) — we don't book a partial/fabricated number (D8, AC-12).
-    cost_basis_known = all(c["realized_gain"] is not None for c in consumptions)
-    if not is_taxable:
-        # Transfer-out / gift: carries basis out, realizes nothing (AC-15).
-        realized_gain: Optional[float] = None
-        realized_gain_base: Optional[float] = None
-        fx_rate: Optional[float] = None
-    elif cost_basis_known:
-        realized_gain = round(sum(c["realized_gain"] for c in consumptions), 2)
-        # Per-leg base gain (ADR 2026-07-15, the tax-standard decomposition): proceeds at
-        # the disposal-date rate MINUS each consumed lot's basis at its own
-        # acquisition-date rate (the acquire stamp). Captures the FX gain on the basis
-        # that a single-rate conversion misses. Falls back to converting the native gain
-        # at the disposal rate when any consumed lot lacks a trusted stamp.
-        per_leg = _per_leg_gain_base(plan, net_proceeds_per_unit, qty, proceeds_ccy, base, rates)
-        realized_gain_base = (
-            per_leg
-            if per_leg is not None
-            else to_base(realized_gain, proceeds_ccy, base, rates=rates)
-        )
-        fx_rate = _fx_rate_only(proceeds_ccy, base, rates)
-    else:
-        realized_gain = None
-        realized_gain_base = None
-        fx_rate = _fx_rate_only(proceeds_ccy, base, rates)
-
-    return {
-        "position_id": position.get("id", ""),
-        "instrument_id": position.get("instrument_id", ""),
-        "account_id": position.get("account_id", ""),
-        "disposed_at": disposed_at,
-        "quantity": qty,
-        "proceeds_per_unit": proceeds_per_unit,
-        "proceeds_currency": proceeds_ccy,
-        "disposal_fees": disposal_fees,
-        "method": method,
-        "is_taxable": is_taxable,
-        "transfer_to_account_id": transfer_to,
-        "cost_basis_known": cost_basis_known,
-        "consumptions": consumptions,
-        "realized_gain": realized_gain,
-        "realized_gain_base": realized_gain_base,
-        "base_currency": base,
-        "fx_rate": fx_rate,
-    }
+    """PURE disposal draft — ``lot_math.compute_disposal`` with this module's base currency,
+    clock and rate loader (each looked up at call time, so a test that patches one here still
+    steers it)."""
+    return _lot_math.compute_disposal(
+        position,
+        open_lots,
+        disposal,
+        rates=rates,
+        base=base or base_currency(),
+        threshold_days=threshold_days,
+        today=lambda: user_today(),
+        load_rates=lambda: _load_rates(),
+    )
 
 
 def _rate_between(currency: str, base: str, rates: dict | None) -> Optional[float]:
-    """Exact currency→base multiplier from the rates table. Deliberately NOT via
-    to_base(1.0, …) — to_base rounds AMOUNTS to 2dp, which is far too coarse for a
-    per-unit rate (JPY→USD ≈ 0.0074 would collapse to 0.01). None when a leg is
-    missing from the table."""
-    cur = (currency or "").upper()
-    b = (base or "").upper()
-    if cur == b:
-        return 1.0
-    if rates is None:
-        rates = _load_rates()
-    cur_rate = rates.get(cur)
-    base_rate = rates.get(b)
-    if not cur_rate or not base_rate:
-        return None
-    return cur_rate / base_rate
+    return _lot_math._rate_between(currency, base, rates, lambda: _load_rates())
 
 
 def _fx_rate_only(currency: str, base: str, rates: dict | None) -> Optional[float]:
-    """The proceeds→base FX rate to snapshot on an event when the gain is 0 or unknown
-    (so we still record the rate in effect). None if the rate can't be resolved."""
-    rate = _rate_between(currency, base, rates)
-    return round(rate, 6) if rate else None
+    return _lot_math._fx_rate_only(currency, base, rates, lambda: _load_rates())
 
 
 # ── Write choke point (checkpoint-covered, approve-tier) ─────────────────────────
@@ -418,6 +108,21 @@ def _fx_rate_only(currency: str, base: str, rates: dict | None) -> Optional[floa
 _CASH_REF_TYPES = frozenset({"acquire", "dispose", "amend", "dispose_amend"})
 
 
+def _keeps_brokerage_total(choke: Callable[[dict], dict]) -> Callable[[dict], dict]:
+    """A Brokerage total account keeps its total when a lot write moves no money (ADR
+    2026-11-10) — wrapped around the choke rather than inside it, so its dispatch stays the one
+    ``domain_introspect`` reads. A pass-through while ``allow_brokerage_total_valuation`` is off."""
+
+    @functools.wraps(choke)
+    def wrapper(change: dict) -> dict:
+        from backend.services import account_value
+
+        return account_value.around_lot_change(change, choke)
+
+    return wrapper
+
+
+@_keeps_brokerage_total
 def apply_lot_change(change: dict) -> dict:
     """The single write entrypoint for lot mutations (D5). `change["type"]` ∈
     {"acquire", "dispose", "delete", "dispose_undo", "amend", "dispose_amend"}. Shared by the AI apply tools and the REST routes so
@@ -528,16 +233,40 @@ def _delete_lot(lot_id: str) -> dict:
     tracing every write path): the delete + resync is a genuine 2-table write
     (lots + positions), composed the same way as every other choke in this module."""
     lot = LotStore().find_by_id(lot_id)
-    txn_id = (lot or {}).get("txn_id")
+    txn_id = _live_cash_row((lot or {}).get("txn_id"))
     tables = [lots_tbl, positions_tbl]
     if txn_id:
-        tables.extend((txns_tbl, txn_audit_tbl))
+        tables.extend((txns_tbl, txn_audit_tbl, *transaction_links.LOCK_TABLES))
     with locked_unit_of_work(*tables) as conn:
-        if txn_id:
-            from backend.services import ledger as ledger_service
-
-            ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+        # The refusal of a partly sold lot comes back as a result, not an error, so it would
+        # commit a cash release made before it: check first, then let go of the cash.
+        if txn_id and lot and not _has_sales(lot):
+            release_lot_cash(lot, txn_id, conn=conn)
         return _delete_lot_core(lot_id, conn=conn)
+
+
+def _has_sales(lot: dict) -> bool:
+    """The test ``_delete_lot_core`` refuses on: some of the lot has been sold."""
+    original = float(lot.get("original_qty") or 0)
+    return original > 0 and float(lot.get("remaining_qty") or 0) < original
+
+
+def release_lot_cash(lot: dict, txn_id: str, *, conn: Connection) -> None:
+    """A lot going away lets go of its purchase cash (see ``_release_cash_row``)."""
+    _release_cash_row(
+        txn_id,
+        leg="from",
+        before=_acquisition_gross(
+            {
+                "quantity": lot.get("original_qty"),
+                "unit_cost": lot.get("unit_cost"),
+                "fees": lot.get("fees"),
+            }
+        ),
+        currency=(lot.get("cost_currency") or "").upper(),
+        shared=_shares_cash_row(LotStore(), txn_id, lot["id"], conn=conn),
+        conn=conn,
+    )
 
 
 def find_realized_event(event_id: str) -> Optional[dict]:
@@ -580,24 +309,35 @@ def _undo_dispose(change: dict) -> dict:
     pos_id = ev.get("position_id", "")
     txn_id = ev.get("txn_id")
     with locked_unit_of_work(
-        lots_tbl, positions_tbl, realized_tbl, txns_tbl, txn_audit_tbl
+        lots_tbl,
+        positions_tbl,
+        realized_tbl,
+        txns_tbl,
+        txn_audit_tbl,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
         _restore_disposal(ev, conn=conn)
         agg = position_figures.rederive(pos_id, conn=conn) if pos_id else {}
     return {"ok": True, "event_id": event_id, "position_id": pos_id, "txn_id": txn_id, **agg}
 
 
-def _restore_disposal(ev: dict, *, conn: Connection) -> None:
+def _restore_disposal(ev: dict, *, conn: Connection, keep_cash: bool = False) -> None:
     """Undo a disposal's writes on an already-open unit of work: restore consumed qty,
-    reverse the proceeds cash leg, delete the event. Caller validated lots exist."""
+    reverse the proceeds cash leg (unless a sale edit is keeping it), delete the event. Caller
+    validated lots exist."""
     lots = LotStore()
     consumptions = ev.get("consumptions") or []
     lots.bulk_restore([(c["lot_id"], float(c.get("qty") or 0)) for c in consumptions], conn=conn)
-    txn_id = ev.get("txn_id")
-    if txn_id:
-        from backend.services import ledger as ledger_service
-
-        ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+    txn_id = _live_cash_row(ev.get("txn_id"))
+    if txn_id and not keep_cash:
+        _release_cash_row(
+            txn_id,
+            leg="to",
+            before=_net_proceeds(ev),
+            currency=(ev.get("proceeds_currency") or "").upper(),
+            shared=_shares_cash_row(RealizedEventStore(), txn_id, ev["id"], conn=conn),
+            conn=conn,
+        )
     RealizedEventStore().delete(ev["id"], conn=conn)
 
 
@@ -913,6 +653,7 @@ def _apply_acquire(change: dict) -> dict:
         "idempotency_key": idempotency_key,
         "note": change.get("note", ""),
     }
+    _refuse_dead_cash_link(change.get("txn_id"))
     will_fund = _will_fund_acquire(change)
     payee_id = (
         _resolve_deposit_payee_if_needed({"proceeds_account_id": change.get("funding_account_id")})
@@ -1230,13 +971,300 @@ def _lot_is_partial(lot: dict) -> bool:
     return original > 0 and remaining + _QTY_EPS < original
 
 
+def funding_account_of(lot: dict) -> Optional[str]:
+    """The account a lot's live purchase row takes its cash from, or None."""
+    return _funding_account_from_txn(lot.get("txn_id"))
+
+
 def _funding_account_from_txn(txn_id: str | None) -> Optional[str]:
     if not txn_id:
         return None
     from backend.db.transaction_store import TransactionStore
 
-    txn = TransactionStore().find_by_id(txn_id) or {}
-    return txn.get("from_account_id")
+    txn = TransactionStore().find_by_id(txn_id)
+    return None if transaction_links.is_gone(txn) else txn.get("from_account_id")
+
+
+# What a cash leg is called before its trade is known; always the app's own words.
+_PLACEHOLDER_TEXT = ("", "Share purchase", "Sale proceeds")
+
+
+def _edit_cash_row(
+    row_id: str,
+    *,
+    leg: str,
+    account_id: str,
+    before: Optional[float],
+    after: float,
+    currency: str,
+    day: Optional[str],
+    traded: dict,
+    generated: Optional[str],
+    payee_id: Optional[str],
+    shared: bool,
+    conn: Connection,
+) -> str:
+    """Correct a record's cash on the row it already has, so the row keeps its category, cleared
+    and reconciled state, source and refs, and a re-delivered email is still recognised. A base
+    value only moves when the amount does, and then at the row's own exchange rate, not today's.
+    A row other records share moves by the difference and keeps its description.
+
+    ``generated`` is the description the app wrote for the record as it was. The new trade text
+    replaces only that: words the user or a broker's email put there stay (UAT DS-LOT-FEE).
+
+    A row that no longer has this leg, or was merged into a transfer, isn't this cash any more:
+    it's left alone and the correction still saves, because a correction must never fail on it."""
+    from backend.services import ledger as ledger_service
+
+    row = ledger_service.transactions.find_by_id(row_id, conn=conn) or {}
+    if row.get("kind") == "transfer" or not row.get(f"{leg}_account_id"):
+        logger.info("lots: left cash row %s alone, it no longer has a %s leg", row_id, leg)
+        return row_id
+    same_account = row[f"{leg}_account_id"] == account_id
+    stored = float(row.get(f"{leg}_amount") or 0)
+    row_currency = (row.get(f"{leg}_currency") or "").upper()
+    other_units = same_account and bool(row_currency) and row_currency != currency
+    amount = after
+    if before and (shared or other_units):
+        if not other_units:
+            rate = 1.0
+        elif shared:
+            rate = _rate_between(currency, row_currency, _load_rates()) or 0.0
+        else:
+            rate = stored / before
+        amount = round(stored + (after - before) * rate, 2)
+    final_currency = row_currency if other_units else currency
+    if (row.get("description") or "") not in {generated or "", *_PLACEHOLDER_TEXT}:
+        traded = {k: v for k, v in traded.items() if k != "description"}
+    changes: dict = {
+        f"{leg}_account_id": account_id,
+        f"{leg}_amount": amount,
+        f"{leg}_currency": final_currency,
+        **({"date": day} if day else {}),
+        **({} if shared else traded),
+        **({"payee_id": payee_id} if payee_id and not same_account else {}),
+    }
+    amount_moved = abs(amount - stored) >= 0.005
+    rate_applies = row_currency == final_currency and row.get("base_currency") == (
+        base_currency().upper()
+    )
+    if amount_moved and row.get("fx_rate") and rate_applies:
+        changes["base_amount"] = round(amount * float(row["fx_rate"]), 2)
+    ledger_service.update_transaction(row_id, changes, labels_as_given=True, conn=conn)
+    return row_id
+
+
+def _release_cash_row(
+    row_id: str,
+    *,
+    leg: str,
+    before: Optional[float],
+    currency: str,
+    shared: bool,
+    conn: Connection,
+) -> None:
+    """A record that stops moving cash lets go of its row. Only a row that is still this record's
+    own cash is deleted: one the user turned into a transfer is a real movement and stays, and one
+    another record shares shrinks by this record's part, so the other keeps its cash."""
+    from backend.services import ledger as ledger_service
+
+    row = ledger_service.transactions.find_by_id(row_id, conn=conn) or {}
+    if not row or row.get("deleted"):
+        return
+    if row.get("kind") == "transfer" or not row.get(f"{leg}_account_id"):
+        logger.info("lots: kept cash row %s, it is no longer this record's own cash", row_id)
+        return
+    if shared:
+        if not before:
+            return
+        _edit_cash_row(
+            row_id,
+            leg=leg,
+            account_id=row[f"{leg}_account_id"],
+            before=before,
+            after=0.0,
+            currency=currency,
+            day=None,
+            traded={},
+            generated=None,
+            payee_id=None,
+            shared=True,
+            conn=conn,
+        )
+        return
+    ledger_service.bulk_delete_transactions([row_id], conn=conn, reject_identities=False)
+
+
+def _figures_changed(old: dict, new: dict, keys: tuple[str, ...]) -> bool:
+    return any(float(old.get(k) or 0) != float(new.get(k) or 0) for k in keys)
+
+
+def _shares_cash_row(store: Any, txn_id: str, own_id: str, *, conn: Connection) -> bool:
+    return any(x.get("txn_id") == txn_id and x["id"] != own_id for x in store.all(conn=conn))
+
+
+def _sync_purchase_cash(
+    lot: dict, patched: dict, fund_change: dict, payee_id: Optional[str], *, conn: Connection
+) -> Optional[str]:
+    """Bring a corrected lot's purchase cash in line and return the row that now holds it: the row
+    it already had, a new one if it had none and an account was chosen, or none at all."""
+
+    txn_id = lot.get("txn_id")
+    if not _will_fund_acquire(fund_change):
+        if txn_id:
+            _release_cash_row(
+                txn_id,
+                leg="from",
+                before=_acquisition_gross(
+                    {
+                        "quantity": lot.get("original_qty"),
+                        "unit_cost": lot.get("unit_cost"),
+                        "fees": lot.get("fees"),
+                    }
+                ),
+                currency=(lot.get("cost_currency") or "").upper(),
+                shared=_shares_cash_row(LotStore(), txn_id, lot["id"], conn=conn),
+                conn=conn,
+            )
+        return None
+    if not txn_id:
+        return _book_funding_debit(fund_change, patched, payee_id, conn=conn)
+    currency = (fund_change.get("cost_currency") or patched.get("cost_currency") or "").upper()
+    # The description says what was traded, so it only changes when that does: a date or an
+    # account correction leaves one the user wrote alone.
+    figures_changed = _figures_changed(lot, patched, ("original_qty", "unit_cost", "fees"))
+    return _edit_cash_row(
+        txn_id,
+        leg="from",
+        account_id=fund_change["funding_account_id"],
+        before=_acquisition_gross(
+            {
+                "quantity": lot.get("original_qty"),
+                "unit_cost": lot.get("unit_cost"),
+                "fees": lot.get("fees"),
+            }
+        ),
+        after=_acquisition_gross(fund_change),
+        currency=currency,
+        day=fund_change.get("acquired_at"),
+        traded=_traded(
+            patched.get("instrument_id"),
+            patched.get("original_qty"),
+            verb="Bought",
+            price=fund_change.get("unit_cost"),
+            currency=currency,
+            fees=fund_change.get("fees"),
+        )
+        if figures_changed
+        else {},
+        generated=_traded(
+            lot.get("instrument_id"),
+            lot.get("original_qty"),
+            verb="Bought",
+            price=lot.get("unit_cost"),
+            currency=(lot.get("cost_currency") or currency).upper(),
+            fees=lot.get("fees"),
+        ).get("description"),
+        payee_id=payee_id,
+        shared=_shares_cash_row(LotStore(), txn_id, lot["id"], conn=conn),
+        conn=conn,
+    )
+
+
+def _sync_proceeds_cash(
+    ev: dict,
+    draft: dict,
+    change: dict,
+    payee_id: Optional[str],
+    txn_id: Optional[str],
+    *,
+    conn: Connection,
+) -> Optional[str]:
+    """The sale-edit twin of ``_sync_purchase_cash``. The old event is already gone when this runs,
+    so sharing is read from the other sales still on the row."""
+
+    if not txn_id:
+        return _book_deposit_proceeds(draft, change, payee_id, conn=conn)
+    net = _net_proceeds(draft)
+    if not change.get("proceeds_account_id") or net <= 0:
+        _release_cash_row(
+            txn_id,
+            leg="to",
+            before=_net_proceeds(ev),
+            currency=(ev.get("proceeds_currency") or "").upper(),
+            shared=_shares_cash_row(RealizedEventStore(), txn_id, ev["id"], conn=conn),
+            conn=conn,
+        )
+        return None
+    currency = (draft.get("proceeds_currency") or "").upper()
+    figures_changed = _figures_changed(
+        ev, draft, ("quantity", "proceeds_per_unit", "disposal_fees")
+    )
+    return _edit_cash_row(
+        txn_id,
+        leg="to",
+        account_id=change["proceeds_account_id"],
+        before=_net_proceeds(ev),
+        after=net,
+        currency=currency,
+        day=draft.get("disposed_at"),
+        traded=_traded(
+            draft.get("instrument_id"),
+            draft.get("quantity"),
+            verb="Sold",
+            price=draft.get("proceeds_per_unit"),
+            currency=currency,
+            fees=draft.get("disposal_fees"),
+        )
+        if figures_changed
+        else {},
+        generated=_traded(
+            ev.get("instrument_id"),
+            ev.get("quantity"),
+            verb="Sold",
+            price=ev.get("proceeds_per_unit"),
+            currency=(ev.get("proceeds_currency") or currency).upper(),
+            fees=ev.get("disposal_fees"),
+        ).get("description"),
+        payee_id=payee_id,
+        shared=_shares_cash_row(RealizedEventStore(), txn_id, ev["id"], conn=conn),
+        conn=conn,
+    )
+
+
+def _refuse_dead_cash_link(txn_id: Optional[str]) -> None:
+    if not txn_id:
+        return
+    from backend.core.errors import ValidationError
+    from backend.db.transaction_store import TransactionStore
+
+    if transaction_links.is_gone(TransactionStore().find_by_id(txn_id)):
+        raise ValidationError(f"{txn_id!r} is not a transaction in the ledger.")
+
+
+def _live_cash_row(txn_id: Optional[str]) -> Optional[str]:
+    """``txn_id`` if that row is still in the ledger. A record can outlive its cash row, and
+    reversing a row that's already gone would only write a second delete to its audit trail."""
+    if not txn_id:
+        return None
+    from backend.db.transaction_store import TransactionStore
+
+    return None if transaction_links.is_gone(TransactionStore().find_by_id(txn_id)) else txn_id
+
+
+_GONE_CASH_NOTE = (
+    "This record's linked cash row had already been deleted, so no cash row was changed or added. "
+    "The dead link was cleared."
+)
+
+
+def _drop_gone_cash_link(lot: dict) -> tuple[dict, bool]:
+    """The lot as an amend must see it: a link to a deleted or merged row is no link, or the
+    amend re-books a purchase the ledger already holds (or no longer wants). An import rollback
+    keeps its link on purpose, and older data predates the delete clearing it, so this stays."""
+    if not lot.get("txn_id") or _live_cash_row(lot["txn_id"]):
+        return lot, False
+    return {**lot, "txn_id": None}, True
 
 
 def _apply_amend(change: dict) -> dict:
@@ -1331,13 +1359,15 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
     )
     if plan.get("error"):
         return {"error": plan["error"]}
+    lot, link_gone = _drop_gone_cash_link(lot)
+    lot_updates = {**plan["lot_updates"], **({"txn_id": None} if link_gone else {})}
     funding = (
         change["funding_account_id"]
         if "funding_account_id" in change
         else _funding_account_from_txn(lot.get("txn_id"))
     )
-    # A linked purchase is rewritten when its figures change; a sold lot with none gets one
-    # when the user now picks "Deduct from" (the open-lot path does the same).
+    # A linked purchase follows when its figures change; a sold lot with none gets one when the
+    # user now picks "Deduct from" (the open-lot path does the same).
     rewrite_cash = _cash_changed(lot, change) and bool(lot.get("txn_id") or funding)
     # PRE-transaction, like the open path: resolving may create the payee on its own
     # connection, which would wait on this unit of work's write lock (review, 2026-10-13).
@@ -1345,9 +1375,14 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
         _resolve_deposit_payee_if_needed({"proceeds_account_id": funding}) if rewrite_cash else None
     )
     with locked_unit_of_work(
-        lots_tbl, positions_tbl, realized_tbl, txns_tbl, txn_audit_tbl
+        lots_tbl,
+        positions_tbl,
+        realized_tbl,
+        txns_tbl,
+        txn_audit_tbl,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
-        patched = LotStore().touch(lot["id"], plan["lot_updates"], conn=conn) or lot
+        patched = LotStore().touch(lot["id"], lot_updates, conn=conn) or lot
         for event_id, patch in plan["event_updates"].items():
             RealizedEventStore().update_by_id(event_id, patch, conn=conn)
         if rewrite_cash:
@@ -1358,6 +1393,7 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
         "lot_id": lot["id"],
         "position_id": lot.get("position_id"),
         "sales_updated": plan["sales"],
+        **({"cash_note": _GONE_CASH_NOTE} if link_gone and not rewrite_cash else {}),
         **agg,
     }
 
@@ -1371,9 +1407,7 @@ def _rewrite_funding_debit(
     *,
     conn: Connection,
 ) -> None:
-    """Re-book a corrected lot's purchase cash so it matches the lot's new figures."""
-    from backend.services import ledger as ledger_service
-
+    """Bring a corrected sold lot's purchase cash in line with its new figures."""
     fund_change = {
         **change,
         "quantity": patched.get("original_qty"),
@@ -1384,18 +1418,13 @@ def _rewrite_funding_debit(
         "funding_account_id": funding,
         "source": change.get("source", "manual"),
     }
-    if lot.get("txn_id"):
-        ledger_service.bulk_delete_transactions([lot["txn_id"]], conn=conn, reject_identities=False)
-        LotStore().touch(lot["id"], {"txn_id": None}, conn=conn)
-    if not _will_fund_acquire(fund_change):
-        return
-    cash_leg_id = _book_funding_debit(fund_change, patched, payee_id, conn=conn)
-    if cash_leg_id:
-        LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn)
+    cash_leg_id = _sync_purchase_cash(lot, patched, fund_change, payee_id, conn=conn)
+    LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn)
 
 
 def _amend_open_lot(lot: dict, change: dict) -> dict:
-    updates: dict = {}
+    lot, link_gone = _drop_gone_cash_link(lot)
+    updates: dict = {"txn_id": None} if link_gone else {}
     if "quantity" in change:
         qty = float(change.get("quantity") or 0)
         if not math.isfinite(qty) or qty <= 0:
@@ -1435,25 +1464,18 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
             "position_id": lot.get("position_id"),
             "funding_account_id": funding,
             "cash_leg_id": lot.get("txn_id"),
+            **({"cash_note": _GONE_CASH_NOTE} if link_gone else {}),
             **agg,
         }
     will_fund = _will_fund_acquire(fund_change)
     payee_id = (
         _resolve_deposit_payee_if_needed({"proceeds_account_id": funding}) if will_fund else None
     )
-    tables = [lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl]
+    tables = [lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl, *transaction_links.LOCK_TABLES]
     with locked_unit_of_work(*tables) as conn:
-        if lot.get("txn_id"):
-            from backend.services import ledger as ledger_service
-
-            ledger_service.bulk_delete_transactions(
-                [lot["txn_id"]], conn=conn, reject_identities=False
-            )
-            updates["txn_id"] = None
         patched = LotStore().touch(lot["id"], updates, conn=conn) or lot
-        cash_leg_id = _book_funding_debit(fund_change, patched, payee_id, conn=conn)
-        if cash_leg_id:
-            patched = LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn) or patched
+        cash_leg_id = _sync_purchase_cash(lot, patched, fund_change, payee_id, conn=conn)
+        LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn)
         agg = position_figures.rederive(lot.get("position_id", ""), conn=conn)
     return {
         "ok": True,
@@ -1461,6 +1483,7 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
         "position_id": lot.get("position_id"),
         "funding_account_id": funding if will_fund else None,
         "cash_leg_id": cash_leg_id if will_fund else None,
+        **({"cash_note": _GONE_CASH_NOTE} if link_gone and not cash_leg_id else {}),
         **agg,
     }
 
@@ -1490,6 +1513,12 @@ def _apply_dispose_amend(change: dict) -> dict:
     }
     new_change["position_id"] = pos["id"]
     new_change["source"] = change.get("source", "manual")
+    live_cash = _live_cash_row(ev.get("txn_id"))
+    link_gone = bool(ev.get("txn_id")) and not live_cash
+    # The edit form resends the account it showed. With the cash row gone, that isn't a request
+    # to book the cash again; picking a different account is.
+    if link_gone and new_change.get("proceeds_account_id") == ev.get("proceeds_account_id"):
+        new_change["proceeds_account_id"] = None
     if not new_change.get("allow_duplicate"):
         dup = _find_duplicate_disposal(pos, new_change, exclude_event_id=event_id)
         if dup:
@@ -1511,9 +1540,14 @@ def _apply_dispose_amend(change: dict) -> dict:
     payee_id = _resolve_deposit_payee_if_needed(new_change)
     rates = _load_rates()
     with locked_unit_of_work(
-        lots_tbl, positions_tbl, realized_tbl, txns_tbl, txn_audit_tbl
+        lots_tbl,
+        positions_tbl,
+        realized_tbl,
+        txns_tbl,
+        txn_audit_tbl,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
-        _restore_disposal(ev, conn=conn)
+        _restore_disposal(ev, conn=conn, keep_cash=True)
         open_lots = lots.open_lots_for_position(pos["id"], conn=conn)
         draft = compute_disposal(pos, open_lots, new_change, rates=rates)
         lots.bulk_consume([(c["lot_id"], c["qty"]) for c in draft["consumptions"]], conn=conn)
@@ -1526,7 +1560,7 @@ def _apply_dispose_amend(change: dict) -> dict:
             },
             conn=conn,
         )
-        cash_leg_id = _book_deposit_proceeds(draft, new_change, payee_id, conn=conn)
+        cash_leg_id = _sync_proceeds_cash(ev, draft, new_change, payee_id, live_cash, conn=conn)
         if cash_leg_id:
             event = (
                 RealizedEventStore().update_by_id(event["id"], {"txn_id": cash_leg_id}, conn=conn)
@@ -1535,6 +1569,7 @@ def _apply_dispose_amend(change: dict) -> dict:
         agg = position_figures.rederive(pos["id"], conn=conn)
     return {
         "ok": True,
+        **({"cash_note": _GONE_CASH_NOTE} if link_gone and not cash_leg_id else {}),
         "event_id": event["id"],
         "position_id": pos["id"],
         "realized_gain": draft["realized_gain"],

@@ -9,8 +9,9 @@ import re
 
 from backend.core.errors import ExternalServiceError
 from backend.db.ynab_config_store import YnabConfigStore
+from backend.services import budget_app_snapshots
 from backend.services.budget_app import current
-from backend.services.ynab_migration import source
+from backend.services.ynab_migration import raw_rows, source
 
 PLAN_MAX_BYTES = 96 * 1024 * 1024
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -67,7 +68,9 @@ class YnabClient:
     def read_plan(self, knowledge: int | None) -> dict:
         """The whole plan, or only what changed since ``knowledge``: ONE request either way."""
         params = {"last_knowledge_of_server": knowledge} if knowledge is not None else None
-        return self._call("GET", "", params, max_bytes=PLAN_MAX_BYTES)
+        data = self._call("GET", "", params, max_bytes=PLAN_MAX_BYTES)
+        budget_app_snapshots.stash(raw_rows.from_plan(data.get("plan") or data.get("budget") or {}))
+        return data
 
     def save_transactions(self, method: str, rows: list[dict]) -> list[dict]:
         """POST (create) or PATCH (update by id) a batch; returns the saved transactions."""

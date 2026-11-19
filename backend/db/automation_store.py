@@ -109,6 +109,9 @@ def _make_automation(data: dict) -> dict:
         "updated_at": data.get("updated_at") or now,
         "provenance": _copy_dict(data.get("provenance")),
         "stats": _copy_dict(data.get("stats")),
+        # A paper-trading Automation: dispatch refuses every non-paper write (ai.simulation_guard).
+        "simulation_only": bool(data.get("simulation_only")),
+        "paper_portfolio_id": data.get("paper_portfolio_id") or None,
     }
 
 

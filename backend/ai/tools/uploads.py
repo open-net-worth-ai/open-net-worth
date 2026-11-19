@@ -72,8 +72,7 @@ async def get_uploads(input_data: dict):
 @tool(
     "delete_upload",
     description=(
-        "Permanently delete ONE stored upload by ref id (see get_uploads). "
-        "Confirm with the user unless explicitly asked. A file kept in the user's Documents "
+        "Permanently delete ONE stored upload by ref id (see get_uploads). A file kept in the user's Documents "
         "is refused — only the user removes those, in Documents."
     ),
     input_schema=schema_of(DeleteUploadInput, tool_name="delete_upload"),

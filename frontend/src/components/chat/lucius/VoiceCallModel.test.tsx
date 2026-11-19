@@ -76,7 +76,7 @@ describe('VoiceCallModel', () => {
     picker.onChange('acme:fast')
     expect(chat.setConversationModel).toHaveBeenCalledWith('s1', 'acme:fast')
     await waitFor(() => expect(authFetch).toHaveBeenCalledOnce())
-    const [url, init] = authFetch.mock.calls[0]
+    const [url, init] = authFetch.mock.calls[0]!
     expect(url).toBe('/api/sessions/s1')
     expect(init.method).toBe('PATCH')
     expect(JSON.parse(init.body)).toEqual({ model: 'acme:fast' })

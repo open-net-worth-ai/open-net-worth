@@ -37,7 +37,7 @@ describe('afterImportProjection', () => {
     expect(p.records).toHaveLength(1)
     const r = p.records[0]!
     expect(r.tag).toBe('kept')
-    expect(r.date).toEqual({ value: '06-19' })
+    expect(r.date).toEqual({ value: '06/19' })
     expect(r.amount).toEqual({ value: '-S$18.20' })
     expect(r.category).toBe('Subscriptions')
     expect(r.badges).toEqual(['yours stays as-is'])
@@ -51,7 +51,7 @@ describe('afterImportProjection', () => {
     expect(p.records[0]!.title).toBe('Anthropic Claude API')
     expect(p.records[1]!.tag).toBe('new')
     expect(p.records[1]!.title).toBe('ANTHROPIC')
-    expect(p.records[1]!.date).toEqual({ value: '06-18' })
+    expect(p.records[1]!.date).toEqual({ value: '06/18' })
     expect(p.records[1]!.category).toBe('Uncategorized')
   })
 
@@ -68,7 +68,7 @@ describe('afterImportProjection', () => {
     expect(r.tag).toBe('updated')
     expect(r.title).toBe('Anthropic Claude API') // label never changes
     expect(r.category).toBe('Subscriptions') // label never changes
-    expect(r.date).toEqual({ value: '06-18', old: '06-19' })
+    expect(r.date).toEqual({ value: '06/18', old: '06/19' })
     expect(r.amount).toEqual({ value: '-S$18.80', old: '-S$18.20' })
     expect(r.badges).toEqual(['cleared ✓', 'reference attached'])
   })
@@ -82,7 +82,7 @@ describe('afterImportProjection', () => {
       flagType: 'near_duplicate',
       catMap,
     }).records[0]!
-    expect(r.date).toEqual({ value: '06-18' })
+    expect(r.date).toEqual({ value: '06/18' })
     expect(r.amount).toEqual({ value: '-S$18.80' })
   })
 
@@ -103,7 +103,7 @@ describe('afterImportProjection', () => {
     })
     const r = p.records[0]!
     expect(r.tag).toBe('kept')
-    expect(r.date).toEqual({ value: '06-13' })
+    expect(r.date).toEqual({ value: '06/13' })
     expect(r.badges).toEqual(['linked ✓'])
   })
 
@@ -131,7 +131,7 @@ describe('afterImportProjection', () => {
     // in for both (a same-currency fee-bearing pair needs this exactly like a cross-currency
     // one does — owner: "if it's cross currency transfer, you need to show two amounts").
     expect(r.amount).toEqual({ value: 'S$18.80 → S$200.00' })
-    expect(r.date).toEqual({ value: '06-18', old: '06-04' })
+    expect(r.date).toEqual({ value: '06/18', old: '06/04' })
     expect(r.badges).toEqual(['becomes a transfer', 'cleared ✓'])
     // An internal transfer between the owner's own accounts is never a spending category —
     // the old single-leg category (assigned back when this looked like real income) doesn't
@@ -169,7 +169,7 @@ describe('afterImportProjection', () => {
     const r = afterImportProjection({ action: 'merge', draft, existing: income, catMap })
       .records[0]!
     expect(r.tag).toBe('kept')
-    expect(r.date).toEqual({ value: '06-04' })
+    expect(r.date).toEqual({ value: '06/04' })
     expect(r.badges).toEqual(['cleared ✓', 'reference linked'])
   })
 

@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Trading — UI design (v2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* App tokens (frontend/src/index.tokens.generated.css, dark) + ONE new accent, --paper,
+   used in exactly two places: the Paper chip and the primary paper action.
+   Owner rules: no paper texture; no borders except table rows. Grouping is by fill + space. */
+:root{
+  --bg:#0e1014; --panel:#171a21; --bg-2:#15181f; --raise:#1c2029; --line:#1f242d;
+  --ink:#f3f5f9; --muted:#9aa3b2; --faint:#7d8696;
+  --good:#34b08a; --bad:#e2554f; --lucius:#7C6CF5; --primary:#3b86dd;
+  --crypto:#9a7fd0; --apt:#bd7a1a;
+  --paper:#d8c79a; --paper-ink:#1b1810;
+  --hover:color-mix(in srgb,var(--ink) 6%,transparent);
+  --fill:color-mix(in srgb,var(--ink) 5%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#090a0d;color:var(--ink);font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif;font-size:14px;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;line-height:1.45}
+h1,h2,h3,p{margin:0}
+button{font:inherit;color:inherit;cursor:pointer;border:0}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.sr{position:absolute;left:-9999px}
+
+/* document chrome (not product) */
+.doc{max-width:1320px;margin:0 auto;padding:56px 32px 8px}
+.doc h1{font-size:40px;font-weight:700;letter-spacing:-.02em}
+.doc p{color:var(--muted);max-width:72ch;margin-top:12px;font-size:15px}
+.rules{margin:18px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;max-width:1150px}
+.rules li{background:var(--bg-2);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted)}
+.rules b{display:block;color:var(--ink);font-weight:600;margin-bottom:2px}
+.frame{max-width:1320px;margin:52px auto 0;padding:0 32px}
+.frame > h2{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.frame > .why{color:var(--muted);font-size:14px;max-width:80ch;margin:6px 0 16px}
+.board{border-radius:16px;overflow:hidden;background:var(--bg)}
+.row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+footer.doc-end{max-width:1320px;margin:56px auto 80px;padding:0 32px;color:var(--faint);font-size:13px}
+
+/* THE marker */
+.paper-chip{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;background:color-mix(in srgb,var(--paper) 16%,transparent);color:var(--paper);font-size:11.5px;font-weight:600;white-space:nowrap;vertical-align:middle;letter-spacing:.01em}
+
+/* buttons: filled, never outlined */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:0 14px;border-radius:8px;background:var(--fill);font-weight:600;font-size:13px;white-space:nowrap}
+.btn:hover{background:color-mix(in srgb,var(--ink) 10%,transparent)}
+.btn-paper{background:var(--paper);color:var(--paper-ink)}
+.btn-paper:hover{background:color-mix(in srgb,var(--paper) 88%,#fff)}
+.btn-ghost{background:none;color:var(--muted)}
+.btn-lg{min-height:44px;font-size:14px;width:100%}
+.icon-btn{width:36px;padding:0}
+
+/* shell */
+.app{display:grid;grid-template-columns:56px 1fr;min-height:600px}
+.rail{background:var(--bg-2);display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0}
+.rail span{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--faint)}
+.rail span.on{background:var(--hover);color:var(--ink)}
+.rail svg{width:16px;height:16px}
+.main{padding:22px 28px 28px;min-width:0}
+.page-h{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.page-h h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.tabs{display:flex;gap:2px;margin-top:14px;overflow-x:auto}
+.tabs button{background:none;padding:8px 12px;color:var(--muted);font-weight:500;font-size:13px;border-radius:8px;white-space:nowrap}
+.tabs button.on{color:var(--ink);background:var(--fill)}
+.tabs .count{color:var(--faint);margin-left:6px}
+.muted{color:var(--muted)} .faint{color:var(--faint)} .good{color:var(--good)} .bad{color:var(--bad)} .small{font-size:12px}
+
+/* list */
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0 14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.pcard{background:var(--panel);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px;text-align:left}
+.pcard:hover{background:var(--raise)}
+.pcard .top{display:flex;align-items:center;gap:8px}
+.pcard h3{font-size:15px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.src i{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.src.lucius i{background:var(--lucius)}
+.pcard .val{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-top:4px}
+.pcard svg{width:100%;height:40px}
+.pcard .foot{display:flex;justify-content:space-between;color:var(--faint);font-size:12px}
+
+.empty{background:var(--panel);border-radius:16px;padding:32px 28px}
+.empty h3{font-size:18px;font-weight:700;margin-top:12px}
+.empty p{color:var(--muted);margin-top:6px;max-width:58ch}
+.empty .ways{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+
+/* portfolio page */
+.crumb{font-size:13px;color:var(--muted);background:none;padding:0}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:10px}
+.ph h1{font-size:24px;font-weight:700;letter-spacing:-.015em;display:flex;align-items:center;gap:10px}
+.ph .sub{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted)}
+.chip-l{color:#b9b0ff}
+.actions{display:flex;gap:8px}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+.summary > div{background:var(--panel);border-radius:12px;padding:14px 16px}
+.summary .k{font-size:12px;color:var(--muted)}
+.summary .v{font-size:20px;font-weight:700;margin-top:2px;letter-spacing:-.01em}
+.summary .s{font-size:12px;color:var(--muted);margin-top:2px}
+.summary .s b{color:var(--ink);font-weight:600}
+.chartbox{margin-top:10px;background:var(--panel);border-radius:12px;padding:14px 16px 12px}
+.chartbox .h{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.lg{display:flex;gap:16px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.lg span{display:inline-flex;align-items:center;gap:6px}
+.lg i{width:14px;height:2px;display:inline-block;border-radius:2px}
+.seg{display:inline-flex;background:var(--bg);border-radius:8px;padding:2px}
+.seg button{background:none;padding:4px 10px;border-radius:6px;font-size:12px;color:var(--muted)}
+.seg button.on{background:var(--fill);color:var(--ink)}
+.chart{width:100%;height:190px;display:block;margin-top:8px}
+.split{display:grid;grid-template-columns:1fr 290px;gap:24px;margin-top:8px}
+/* tables: the one place rules are allowed */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-weight:500;color:var(--faint);text-align:right;padding:8px 10px;font-size:12px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left;padding-left:0}
+td{padding:10px;border-bottom:1px solid var(--line);text-align:right}
+tr.group td{color:var(--muted);font-size:12px;font-weight:600;padding-top:18px;border-bottom:0;text-align:left}
+.asset{display:flex;align-items:center;gap:10px}
+.dot{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff;flex:none}
+.asset b{font-weight:600}
+.asset .sub{display:block;font-size:12px;color:var(--muted);font-weight:400}
+.basis{font-size:11px;color:var(--faint);display:block}
+.rowbtn{background:var(--fill);border-radius:6px;font-size:12px;padding:4px 10px;font-weight:600}
+.side h3{font-size:13px;font-weight:600;margin:12px 0 8px}
+.order{background:var(--panel);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+.order .l{display:flex;justify-content:space-between;gap:8px}
+.order .why{color:var(--muted);font-size:12px;margin-top:4px}
+.order .state{font-size:12px;margin-top:6px;color:var(--muted)}
+
+/* ticket */
+.ticket{width:400px;background:var(--panel);border-radius:16px;flex:none;box-shadow:0 24px 60px -18px rgba(0,0,0,.75)}
+.ticket .th{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 4px}
+.ticket .th h3{font-size:16px;font-weight:600;display:flex;gap:8px;align-items:center}
+.ticket .tb{padding:12px 18px 18px;display:flex;flex-direction:column;gap:14px}
+.segfull{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--bg);border-radius:9px;padding:3px;gap:3px}
+.segfull button{background:none;padding:7px 4px;border-radius:7px;font-weight:600;font-size:13px;color:var(--muted)}
+.segfull button.on{background:var(--raise);color:var(--ink)}
+.segfull.side button.on.buy{background:color-mix(in srgb,var(--good) 20%,transparent);color:#7fd8b8}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.input{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;padding:0 12px;border-radius:8px;background:var(--bg)}
+.input input{all:unset;flex:1;min-width:0;font-weight:500}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sym{gap:10px}
+.sym .px{margin-left:auto;text-align:right;font-size:12px;color:var(--muted)}
+.sym .px b{display:block;color:var(--ink);font-size:14px}
+.thesis{font-size:12px;color:#8fdcc0;margin-top:6px}
+.preview{background:var(--bg-2);border-radius:10px;padding:12px;display:grid;grid-template-columns:1fr auto;row-gap:6px;font-size:13px}
+.preview .k{color:var(--muted)}
+.preview .tot{font-weight:700;font-size:14px;padding-top:4px}
+.next{font-size:12px;color:var(--muted)}
+textarea{all:unset;display:block;width:100%;box-sizing:border-box;min-height:48px;padding:10px 12px;border-radius:8px;background:var(--bg);font-size:13px;color:var(--muted)}
+.chain table td,.chain table th{padding:7px 10px}
+.chain tr.on td{background:var(--fill)}
+.chain tr.on td:first-child{box-shadow:inset 2px 0 0 var(--ink);padding-left:10px}
+.chain td:first-child,.chain th:first-child{padding-left:10px}
+.selectish{display:flex;justify-content:space-between;align-items:center}
+
+/* asset page */
+.asset-page{padding:22px 28px}
+.ah{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ah .name{font-size:22px;font-weight:700}
+.ah .price{font-size:22px;font-weight:600}
+.pos{margin-top:18px;background:var(--panel);border-radius:12px;padding:14px 16px 6px}
+.pos h3{font-size:13px;font-weight:600;margin-bottom:4px}
+
+/* entry points */
+.ep{background:var(--bg);border-radius:12px;padding:16px;flex:1 1 300px;min-width:280px}
+.ep .cap{font-size:12px;color:var(--faint);margin-bottom:10px}
+.bubble{background:var(--raise);border-radius:12px;padding:10px 12px;font-size:13px;margin:0 0 10px 40px}
+.toolcard{border-radius:12px;padding:12px 14px;background:var(--panel)}
+.toolcard .l1{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px}
+.toast{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:500;background:var(--ink);color:var(--bg)}
+.toast .paper-chip{background:color-mix(in srgb,var(--paper) 55%,#fff);color:var(--paper-ink)}
+
+/* phone (device chrome) */
+.phone{width:390px;height:844px;border-radius:40px;overflow:hidden;position:relative;background:var(--bg);flex:none;box-shadow:0 0 0 8px #1a1d24}
+.phone .scr{padding:54px 16px 90px}
+.phone .tabbar{position:absolute;left:0;right:0;bottom:0;height:78px;background:var(--bg-2);display:flex;justify-content:space-around;padding-top:12px;color:var(--faint);font-size:10px}
+.phone .tabbar span.on{color:var(--ink)}
+.sheet{position:absolute;left:0;right:0;bottom:0;border-radius:22px 22px 0 0;background:var(--panel);padding:10px 16px 28px;box-shadow:0 -20px 50px rgba(0,0,0,.6)}
+.grab{width:36px;height:4px;border-radius:4px;background:var(--raise);margin:0 auto 12px}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.mgrid > div{background:var(--panel);border-radius:10px;padding:10px 12px}
+.mrow{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px}
+
+@media (max-width:900px){.split{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}.ticket{width:100%}}
+</style>
+</head>
+<body>
+
+<header class="doc">
+  <h1>Paper Trading, v2</h1>
+  <p>Paper Trading is a feature of the platform, not a mode the app switches into. A paper portfolio is a thing you own, like a watchlist or a followed portfolio. It carries one small <span class="paper-chip">Paper</span> chip wherever it shows up, and everything else is the app's ordinary clean UI. All figures are made up.</p>
+  <ul class="rules">
+    <li><b>The portfolio is marked, not the app</b>No toggle, no mode, no banner, no paper texture.</li>
+    <li><b>"Paper" is in the words</b>Paper value, Paper order, Place paper buy, Paper buy filled.</li>
+    <li><b>The same screens as Investments</b>Summary, chart and holdings are the real components.</li>
+    <li><b>No borders except tables</b>Groups are made with fills and space.</li>
+    <li><b>Short copy</b>A number and a short label. Comparisons live in the chart legend; detail lives one click away.</li>
+    <li><b>One accent, two places</b>The chip and the main paper action button.</li>
+  </ul>
+</header>
+
+<!-- 1 -->
+<section class="frame" aria-labelledby="f1">
+  <h2 id="f1">Intelligence → Paper Trading</h2>
+  <p class="why">A tab beside Copy Trading, with cards like Copy Trading's. A first visit shows the empty state on the right; there is no warning dialog.</p>
+  <div class="row">
+    <div class="board" style="flex:2 1 760px">
+      <div class="app">
+        <nav class="rail" aria-label="App"><span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H2z"/></svg></span><span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/></svg></span><span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 13 6 8l3 3 5-7"/></svg></span><span class="on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2"/></svg></span></nav>
+        <main class="main">
+          <div class="page-h"><h1>Intelligence</h1><button class="btn">Scan now</button></div>
+          <div class="tabs" role="tablist"><button role="tab">My holdings</button><button role="tab">Topics &amp; macro</button><button role="tab">Copy Trading</button><button role="tab" class="on" aria-selected="true">Paper Trading</button><button role="tab">AI infrastructure</button></div>
+          <div class="toolbar"><span class="muted small">Never in your net worth</span><button class="btn btn-paper">New paper portfolio</button></div>
+          <div class="cards">
+            <button class="pcard"><div class="top"><h3>Buy-zone strategy</h3><span class="paper-chip">Paper</span></div><span class="src lucius"><i></i>Run by Lucius</span><div class="val">107,412.30 USD</div><div class="small"><span class="good">+7.41%</span> <span class="muted">vs VT +3.08%</span></div>
+              <svg viewBox="0 0 260 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,34 26,33 52,28 78,30 104,24 130,22 156,25 182,16 208,13 234,10 260,6" fill="none" stroke="var(--good)" stroke-width="1.8"/></svg><div class="foot"><span>Day 23</span><span>2 open orders</span></div></button>
+            <button class="pcard"><div class="top"><h3>Berkshire Hathaway</h3><span class="paper-chip">Paper</span></div><span class="src"><i></i>Copies 13F filings</span><div class="val">51,860.04 USD</div><div class="small"><span class="good">+3.72%</span> <span class="muted">vs VT +4.90%</span></div>
+              <svg viewBox="0 0 260 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,28 26,29 52,25 78,26 104,22 130,24 156,20 182,21 208,18 234,19 260,16" fill="none" stroke="var(--good)" stroke-width="1.8"/></svg><div class="foot"><span>Day 61</span><span>No open orders</span></div></button>
+            <button class="pcard"><div class="top"><h3>Covered calls on my book</h3><span class="paper-chip">Paper</span></div><span class="src"><i></i>From your holdings</span><div class="val">243,118.92 USD</div><div class="small"><span class="bad">−0.62%</span> <span class="muted">vs VT +0.40%</span></div>
+              <svg viewBox="0 0 260 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,20 26,18 52,22 78,21 104,24 130,23 156,25 182,22 208,24 234,23 260,22" fill="none" stroke="var(--bad)" stroke-width="1.8"/></svg><div class="foot"><span>Day 9</span><span>3 short calls</span></div></button>
+          </div>
+          <button class="btn btn-ghost" style="margin-top:12px;padding:0">Archived runs (2)</button>
+        </main>
+      </div>
+    </div>
+    <div class="empty" style="flex:1 1 360px">
+      <span class="paper-chip">Paper</span>
+      <h3>Try an idea before you put money in</h3>
+      <p>Trade with pretend money at real prices. Never in your net worth.</p>
+      <div class="ways"><button class="btn btn-paper">New paper portfolio</button><button class="btn">Paper-copy a portfolio you follow</button></div>
+
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="frame" aria-labelledby="f2">
+  <h2 id="f2">A paper portfolio, built from the Investments screens</h2>
+  <p class="why">The paper page differs from Investments in only these ways: the chip, “Paper” in the labels, one line under the title, and a line for your real investments on the chart. Only the holdings table has rules.</p>
+  <div class="board">
+    <div class="app">
+      <nav class="rail" aria-label="App"><span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H2z"/></svg></span><span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/></svg></span><span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 13 6 8l3 3 5-7"/></svg></span><span class="on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2"/></svg></span></nav>
+      <main class="main">
+        <button class="crumb">‹ Paper Trading</button>
+        <div class="ph">
+          <div>
+            <h1>Buy-zone strategy <span class="paper-chip">Paper</span></h1>
+            <div class="sub"><span>Not in your net worth</span><span class="chip-l">Run by Lucius</span><span>Day 23</span></div>
+          </div>
+          <div class="actions"><button class="btn">Do this for real</button><button class="btn btn-paper">Paper trade</button><button class="btn icon-btn" aria-label="More"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4" fill="currentColor"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="13" cy="8" r="1.4" fill="currentColor"/></svg></button></div>
+        </div>
+        <div class="summary">
+          <div><div class="k">Paper value</div><div class="v">107,412.30</div></div>
+          <div><div class="k">Today</div><div class="v good">+0.57%</div></div>
+          <div><div class="k">Return</div><div class="v good">+7.41%</div><div class="s">VT +3.08%</div></div>
+          <div><div class="k">Paper cash</div><div class="v">18,204.11</div></div>
+        </div>
+        <div class="chartbox">
+          <div class="h"><div class="lg"><span><i style="background:var(--ink);height:2.5px"></i>This portfolio +7.41%</span><span><i style="background:var(--primary)"></i>Your investments +4.02%</span><span><i style="background:var(--faint)"></i>VT +3.08%</span></div><div class="seg"><button>1W</button><button>1M</button><button class="on">Since start</button></div></div>
+          <svg class="chart" viewBox="0 0 760 190" preserveAspectRatio="none" role="img" aria-label="Paper +7.4%, your investments +4.0%, VT +3.1% since 23 Oct">
+            <polyline points="0,135 40,136 80,132 120,134 160,128 200,127 240,131 280,123 320,121 360,124 400,118 440,115 480,118 520,113 560,111 600,114 640,109 680,107 720,107 760,105" fill="none" stroke="var(--faint)" stroke-width="1.5"/>
+            <polyline points="0,135 40,134 80,129 120,132 160,124 200,121 240,126 280,117 320,114 360,117 400,110 440,107 480,110 520,104 560,101 600,105 640,99 680,97 720,95 760,94" fill="none" stroke="var(--primary)" stroke-width="1.5"/>
+            <polyline points="0,135 40,133 80,125 120,129 160,115 200,111 240,119 280,105 320,99 360,103 400,91 440,85 480,89 520,77 560,73 600,79 640,67 680,63 720,59 760,55" fill="none" stroke="var(--ink)" stroke-width="2.2"/>
+            <circle cx="280" cy="105" r="3.5" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.8"/><circle cx="520" cy="77" r="3.5" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.8"/>
+          </svg>
+        </div>
+        <div class="tabs" role="tablist"><button role="tab" class="on">Holdings</button><button role="tab">Orders<span class="count">2</span></button><button role="tab">Activity</button><button role="tab">Compare</button></div>
+        <div class="split">
+          <table>
+            <thead><tr><th>Asset</th><th>Quantity</th><th>Price</th><th>Value</th><th>Return</th><th>Weight</th><th><span class="sr">Action</span></th></tr></thead>
+            <tbody>
+              <tr class="group"><td colspan="7">Stocks and ETFs</td></tr>
+              <tr><td><div class="asset"><span class="dot" style="background:#3a7d44">NV</span><b>NVDA<span class="sub">NVIDIA</span></b></div></td><td>120</td><td>187.42</td><td>22,490.40</td><td class="good">+9.8%</td><td>20.9%</td><td><button class="rowbtn">Trade</button></td></tr>
+              <tr><td><div class="asset"><span class="dot" style="background:#2b5ea7">VT</span><b>VT<span class="sub">Vanguard Total World</span></b></div></td><td>140</td><td>131.06</td><td>18,348.40</td><td class="good">+2.9%</td><td>17.1%</td><td><button class="rowbtn">Trade</button></td></tr>
+              <tr class="group"><td colspan="7">Crypto and metals</td></tr>
+              <tr><td><div class="asset"><span class="dot" style="background:var(--crypto)">₿</span><b>BTC<span class="sub">Bitcoin</span></b></div></td><td>0.142</td><td>88,410.00</td><td>12,554.22</td><td class="good">+12.6%</td><td>11.7%</td><td><button class="rowbtn">Trade</button></td></tr>
+              <tr><td><div class="asset"><span class="dot" style="background:var(--apt)">Au</span><b>Gold<span class="sub">Physical</span></b></div></td><td>80 g</td><td>131.80</td><td>10,544.00</td><td class="bad">−1.4%</td><td>9.8%</td><td><button class="rowbtn">Trade</button></td></tr>
+              <tr class="group"><td colspan="7">Options</td></tr>
+              <tr><td><div class="asset"><span class="dot" style="background:#555c6b">C</span><b>NVDA Jan 2027 210 call<span class="sub">62 days left</span></b></div></td><td>−1</td><td>6.15<span class="basis">modelled</span></td><td>−615.00</td><td class="good">+18.2%</td><td>—</td><td><button class="rowbtn">Trade</button></td></tr>
+              <tr class="group"><td colspan="7">Private</td></tr>
+              <tr><td><div class="asset"><span class="dot" style="background:#6b5fb8">AR</span><b>Acme Robotics, Series B<span class="sub">Private</span></b></div></td><td>400</td><td>8.50<span class="basis">your price</span></td><td>3,400.00</td><td class="faint">0.0%</td><td>3.2%</td><td><button class="rowbtn">Trade</button></td></tr>
+            </tbody>
+          </table>
+          <aside class="side">
+            <h3>Open paper orders</h3>
+            <div class="order"><div class="l"><b>Buy 30 AMD</b><span class="muted">Limit 142.00</span></div><div class="state">Waiting for 142.00</div></div>
+            <div class="order"><div class="l"><b>Buy 45 SAP.DE</b><span class="muted">Market</span></div><div class="state">Fills at Monday's open</div></div>
+            <h3>Latest fill</h3>
+            <div class="order"><div class="l"><b>Sold 40 INTC at 23.31</b><span class="good">+412.80</span></div><div class="state">Fri 15:41</div></div>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="frame" aria-labelledby="f3">
+  <h2 id="f3">Paper order ticket</h2>
+  <p class="why">A short vertical form with full-width controls. Only the chip in the title and the button wording say “paper”. The fields change with the asset.</p>
+  <div class="row">
+    <div class="ticket" role="dialog" aria-label="Paper order, NVDA">
+      <div class="th"><h3>Paper order <span class="paper-chip">Paper</span></h3><span class="muted small">Buy-zone strategy ▾</span></div>
+      <div class="tb">
+        <div class="segfull side" role="group" aria-label="Side"><button class="on buy">Buy</button><button>Sell</button></div>
+        <div class="field"><label>Asset</label><div class="input sym"><span class="dot" style="background:#3a7d44">NV</span><b>NVDA</b><span class="px"><b>187.42</b>Closed</span></div><div class="thesis">✓ In your buy zone</div></div>
+        <div class="field"><label>Order type</label><div class="segfull"><button class="on">Market</button><button>Limit</button><button>Stop</button></div></div>
+        <div class="two">
+          <div class="field"><label for="q">Shares</label><div class="input"><input id="q" value="20"></div></div>
+          <div class="field"><label>Good for</label><div class="input selectish"><span>Today</span><span class="faint">▾</span></div></div>
+        </div>
+        <div class="field"><label for="w">Why (optional)</label><textarea id="w">Adding on the pullback; thesis intact.</textarea></div>
+        <div class="preview">
+          <span class="k">Expected fill</span><span>187.51</span>
+          <span class="k">Commission</span><span>0.00</span>
+          <span class="k tot">Total</span><span class="tot">3,750.20 USD</span>
+          <span class="k">Paper cash after</span><span>14,453.91</span>
+        </div>
+        <button class="btn btn-paper btn-lg">Place paper buy</button>
+        <div class="next">Market closed. Fills at Monday's open.</div>
+      </div>
+    </div>
+    <div class="ticket" role="dialog" aria-label="Paper order, NVDA option">
+      <div class="th"><h3>Paper order <span class="paper-chip">Paper</span></h3><span class="muted small">Covered calls ▾</span></div>
+      <div class="tb">
+        <div class="field"><label>Asset</label><div class="input sym"><span class="dot" style="background:#3a7d44">NV</span><b>NVDA options</b><span class="px"><b>187.42</b>120 shares held</span></div></div>
+        <div class="two">
+          <div class="field"><label>Action</label><div class="segfull"><button>Buy</button><button class="on">Sell</button></div></div>
+          <div class="field"><label>Type</label><div class="segfull"><button class="on">Call</button><button>Put</button></div></div>
+        </div>
+        <div class="field"><label>Expiry</label><div class="input selectish"><span>16 Jan 2027, 62 days</span><span class="faint">▾</span></div></div>
+        <div class="field"><label>Strike</label>
+          <div class="chain"><table><thead><tr><th>Strike</th><th>Bid</th><th>Ask</th><th>From price</th></tr></thead><tbody>
+            <tr><td>200</td><td>8.05</td><td>8.30</td><td>+6.7%</td></tr>
+            <tr class="on"><td>210</td><td>5.55</td><td>5.80</td><td>+12.0%</td></tr>
+            <tr><td>220</td><td>3.70</td><td>3.95</td><td>+17.4%</td></tr></tbody></table></div></div>
+        <div class="field"><label for="c">Contracts</label><div class="input"><input id="c" value="1"><span class="faint small">covered</span></div></div>
+        <div class="preview"><span class="k">Premium received</span><span class="good">+555.00</span><span class="k">Commission</span><span>0.65</span><span class="k tot">Paper cash after</span><span class="tot">18,758.46 USD</span></div>
+        <button class="btn btn-paper btn-lg">Sell paper call</button>
+        <div class="next">Above 210 at expiry, your 100 shares are sold at 210.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="frame" aria-labelledby="f4">
+  <h2 id="f4">Across the platform</h2>
+  <p class="why">Paper appears where you're already looking, always on its own labelled line and never added into a real figure. On the asset page, your paper positions are listed under your real one in the Position table.</p>
+  <div class="board">
+    <div class="asset-page">
+      <div class="ah"><span class="dot" style="background:#3a7d44;width:36px;height:36px;font-size:12px">NV</span><span class="name">NVIDIA</span><span class="muted">NVDA, Nasdaq</span><span class="price" style="margin-left:12px">187.42</span><span class="good">+1.24%</span>
+        <span style="margin-left:auto;display:flex;gap:8px"><button class="btn">Add holding</button><button class="btn">Paper trade</button></span></div>
+      <div class="pos">
+        <h3>Position</h3>
+        <table>
+          <thead><tr><th>Where</th><th>Quantity</th><th>Value</th><th>Return</th></tr></thead>
+          <tbody>
+            <tr><td><b>Brokerage</b></td><td>60</td><td>11,245.20</td><td class="good">+31.0%</td></tr>
+            <tr><td><b>Buy-zone strategy</b> <span class="paper-chip">Paper</span> </td><td>120</td><td>22,490.40</td><td class="good">+9.8%</td></tr>
+            <tr><td><b>Covered calls on my book</b> <span class="paper-chip">Paper</span> </td><td>100</td><td>18,742.00</td><td class="good">+2.1%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:16px">
+    <div class="ep"><div class="cap">Copy Trading portfolio page</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">Berkshire Hathaway</b><span style="margin-left:auto;display:flex;gap:8px"><button class="btn">Auto-copy</button><button class="btn">Paper-copy</button></span></div></div>
+    <div class="ep"><div class="cap">Lucius</div>
+      <div class="bubble">Paper-buy 20 NVDA in my buy-zone portfolio</div>
+      <div class="toolcard"><div class="l1">Paper buy filled <span class="paper-chip">Paper</span></div><div class="small muted" style="margin-top:4px">20 NVDA at 187.51, Buy-zone strategy</div></div></div>
+    <div class="ep"><div class="cap">Toasts: the same toast, plus the chip</div><div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span class="toast"><span class="paper-chip">Paper</span>Paper buy filled: 20 NVDA at 187.51</span><span class="toast">Holding added: 20 NVDA in Brokerage</span></div></div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="frame" aria-labelledby="f5">
+  <h2 id="f5">On a phone</h2>
+  <p class="why">One column, with the summary as a 2×2 grid of tiles. The ticket is a bottom sheet.</p>
+  <div class="row">
+    <div class="phone"><div class="scr">
+      <button class="crumb">‹ Paper Trading</button>
+      <h1 style="font-size:20px;margin-top:8px;display:flex;gap:8px;align-items:center">Buy-zone strategy <span class="paper-chip">Paper</span></h1>
+      <div class="muted small" style="margin-top:4px">Not in your net worth</div>
+      <div class="mgrid"><div><div class="small muted">Paper value</div><b>107,412</b></div><div><div class="small muted">Return</div><b class="good">+7.41%</b></div></div>
+      <svg viewBox="0 0 360 100" style="width:100%;height:100px;margin-top:12px" aria-hidden="true"><polyline points="0,74 36,73 72,70 108,71 144,66 180,65 216,67 252,62 288,60 324,58 360,57" fill="none" stroke="var(--primary)" stroke-width="1.4"/><polyline points="0,74 36,72 72,64 108,68 144,56 180,52 216,58 252,44 288,38 324,32 360,26" fill="none" stroke="var(--ink)" stroke-width="2.2"/></svg>
+      <div class="tabs"><button class="on">Holdings</button><button>Orders 2</button><button>Activity</button><button>Compare</button></div>
+      <div class="mrow"><span class="asset"><span class="dot" style="background:#3a7d44">NV</span><b>NVDA<span class="sub">120 shares</span></b></span><span style="text-align:right">22,490<br><span class="good small">+9.8%</span></span></div>
+      <div class="mrow"><span class="asset"><span class="dot" style="background:#2b5ea7">VT</span><b>VT<span class="sub">140 shares</span></b></span><span style="text-align:right">18,348<br><span class="good small">+2.9%</span></span></div>
+      <button class="btn btn-paper btn-lg" style="margin-top:14px">Paper trade</button>
+    </div><div class="tabbar"><span>Home</span><span>Money</span><span class="on">Intel</span><span>Lucius</span><span>More</span></div></div>
+
+    <div class="phone"><div class="scr" style="opacity:.3"><h1 style="font-size:20px">Gold and T-bills</h1></div><div class="scrim"></div>
+      <div class="sheet" role="dialog" aria-label="Paper order, gold"><div class="grab"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="font-size:16px;display:flex;gap:8px;align-items:center">Paper order <span class="paper-chip">Paper</span></b><span class="muted small">Gold and T-bills ▾</span></div>
+        <div class="segfull side" style="margin-bottom:12px"><button class="on buy">Buy</button><button>Sell</button></div>
+        <div class="field" style="margin-bottom:12px"><label>Asset</label><div class="input sym"><span class="dot" style="background:var(--apt)">Au</span><b>Gold, physical</b><span class="px"><b>127.96 / g</b>spot, live</span></div></div>
+        <div class="two" style="margin-bottom:12px"><div class="field"><label for="g">Quantity</label><div class="input"><input id="g" value="50"></div></div><div class="field"><label>Unit</label><div class="segfull"><button class="on">g</button><button>oz</button><button>tael</button></div></div></div>
+        <div class="preview" style="margin-bottom:12px"><span class="k">Spot</span><span>6,398.00</span><span class="k">Dealer premium 3%</span><span>191.94</span><span class="k tot">Total</span><span class="tot">6,589.94 SGD</span></div>
+        <button class="btn btn-paper btn-lg">Place paper buy</button>
+        <div class="next" style="margin-top:10px">Fills now</div>
+      </div></div>
+  </div>
+</section>
+
+<footer class="doc-end">v2. No paper texture, and no borders outside tables. New tokens: <code>--paper</code>, <code>--paper-ink</code>; new class: <code>.paper-chip</code>. All figures are made up.</footer>
+</body>
+</html>

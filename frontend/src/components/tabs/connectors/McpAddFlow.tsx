@@ -917,7 +917,7 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
             className="rd-help"
             role="alert"
             style={{
-              fontSize: 13,
+              fontSize: 'var(--text-base)',
               color: 'var(--bad)',
               display: 'flex',
               alignItems: 'flex-start',

@@ -5,6 +5,9 @@ import { authFetch } from '../../api/client'
 import { ACCOUNTS_KEY, fetchJson, notifyPortfolioChanged } from '../../hooks/serverState'
 import { fetchCachedQuery } from '../../state/queryCache'
 import { DateField, Modal } from '../ui'
+import { FormError } from './FormError'
+import { amountInAccount, type LotCashRow } from './cashHints'
+import { readCachedFxRates } from '../../utils/fxCache'
 
 /** Enough of a holding to open the sale form from Investments or the quote page. */
 export type DisposalTarget = Pick<ComputedRow, 'position_id' | 'symbol' | 'label' | 'currency'> &
@@ -49,6 +52,7 @@ interface AccountLite {
   id: string
   name: string
   kind: string
+  currency?: string
 }
 
 // Record a sale / disposal of a holding. Lot selection is FIFO (default) or specific-ID
@@ -103,6 +107,9 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
   // recorded sale is intentionally just a cost-basis event, with a clear note that net worth
   // won't move). A chosen account books a transfer of the net proceeds via the money path.
   const [proceedsAccountId, setProceedsAccountId] = useState(() => event?.proceeds_account_id || '')
+  const [accountTouched, setAccountTouched] = useState(false)
+  const [cashRow, setCashRow] = useState<LotCashRow | null>(null)
+  const [fx] = useState(readCachedFxRates)
   // Where the shares went on a transfer between the user's own accounts. '' = not one of
   // their accounts (a gift / write-off). A label on the disposal, not a second leg — the
   // receiving lots are still acquired on the other side.
@@ -154,12 +161,15 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
   }, [])
 
   useEffect(() => {
-    if (!event?.txn_id || event.proceeds_account_id) return
+    if (!event?.txn_id) return
+    const hasAccount = !!event.proceeds_account_id
     let alive = true
     authFetch(`/api/transactions/${event.txn_id}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((txn: { to_account_id?: string | null }) => {
-        if (alive && txn.to_account_id) setProceedsAccountId(txn.to_account_id)
+      .then((txn: LotCashRow) => {
+        if (!alive) return
+        setCashRow(txn)
+        if (!hasAccount && txn.to_account_id) setProceedsAccountId(txn.to_account_id)
       })
       .catch(() => {})
     return () => {
@@ -184,6 +194,9 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
   // destination account is chosen; shown beside the picker so the user sees the
   // amount before confirming. Transfer-outs have no proceeds.
   const netProceeds = isTaxable ? Math.max(qtyNum * proceedsNum - feesNum, 0) : 0
+  const savedNet = event
+    ? Math.max(event.quantity * event.proceeds_per_unit - (event.disposal_fees || 0), 0)
+    : null
   const specificMismatch =
     method === 'specific_id' && qtyNum > 0 && Math.abs(pickedQty - qtyNum) > 1e-9
   const overSell = qtyNum > totalOpen + 1e-9
@@ -483,7 +496,10 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
                   Deposit proceeds to
                   <select
                     value={proceedsAccountId}
-                    onChange={(e) => setProceedsAccountId(e.target.value)}
+                    onChange={(e) => {
+                      setProceedsAccountId(e.target.value)
+                      setAccountTouched(true)
+                    }}
                   >
                     <option value="">Don't add to an account</option>
                     {accounts.map((a) => (
@@ -492,13 +508,40 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
                       </option>
                     ))}
                   </select>
-                  {proceedsAccountId ? (
+                  {cashRow?.kind === 'transfer' ? (
+                    // Corrections and "Don't add" leave a transfer the user made of the deposit
+                    // alone (services/lots._release_cash_row).
+                    <span className="disposal-deposit-hint muted">
+                      This sale's cash is a transfer in your ledger. Saving the sale leaves that
+                      transfer as it is.
+                    </span>
+                  ) : proceedsAccountId ? (
                     netProceeds > 0 && (
                       <span className="disposal-deposit-hint muted">
-                        {fAmountNative(netProceeds, proceedsCcy)} will be added to{' '}
-                        {accountName(proceedsAccountId)}.
+                        {amountInAccount({
+                          account: accounts.find((a) => a.id === proceedsAccountId),
+                          accountId: proceedsAccountId,
+                          amount: netProceeds,
+                          ccy: proceedsCcy,
+                          leg: cashRow
+                            ? {
+                                accountId: cashRow.to_account_id,
+                                amount: cashRow.to_amount,
+                                currency: cashRow.to_currency,
+                              }
+                            : null,
+                          savedAmount: savedNet,
+                          fx,
+                        })}{' '}
+                        will be added to {accountName(proceedsAccountId)}.
                       </span>
                     )
+                  ) : event?.txn_id && accountTouched ? (
+                    // Saving deletes the deposit this sale has, and frees what it funded (UAT DS-SALE-NOACCT).
+                    <span className="disposal-warn">
+                      Saving removes this sale's deposit transaction from the ledger. Anything it
+                      funded, such as a commitment, goes back to planned.
+                    </span>
                   ) : (
                     <span className="disposal-deposit-hint muted">
                       The sale is recorded but the cash is not added anywhere, so your net worth
@@ -557,7 +600,7 @@ export function DisposalForm({ row, event, onDone, onClose }: Props) {
                   for a gift / transfer with no value received, tick "transfer-out" below.
                 </div>
               )}
-              {error && <div className="disposal-error">{error}</div>}
+              <FormError message={error} />
             </>
           )}
         </>

@@ -37,7 +37,10 @@ from backend.services.attachment_ingress import persist_inbound_file  # noqa: E4
 # (connectors/processor.py and friends), and for backend.services.attachment_parse's
 # parse_upload — kept importable from here too since several call sites still say
 # `from backend.api.upload import parse_upload`.
-from backend.services.attachment_parse import parse_upload  # noqa: E402, F401
+from backend.services.attachment_parse import (
+    UnsupportedFileError,  # noqa: E402
+    parse_upload,  # noqa: E402, F401
+)
 from backend.services.attachments import (  # noqa: E402, F401
     get_attachment as get_upload,
 )
@@ -76,7 +79,7 @@ async def upload_file(file: UploadFile):
             source_channel="chat:web",
         )
     except ValueError as exc:
-        raise HTTPException(415 if "Unsupported" in str(exc) else 422, str(exc))
+        raise HTTPException(415 if isinstance(exc, UnsupportedFileError) else 422, str(exc))
 
     return {
         "ref_id": result["attachment_id"],

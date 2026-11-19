@@ -23,7 +23,7 @@ Each of these has already cost a real run:
 ## Per-run loop
 
 1. Fetch mail for the window — every page.
-2. Read the account list and the category list. Do it every run: both are user-edited, and a label that matched last month can silently stop matching.
+2. Call `activate_skill` with `book-transactions` for its Categories and Payee hygiene rules, then read the account list and the category list. Do it every run: both are user-edited, and a label that matched last month can silently stop matching.
 3. Log each actionable email. Bank, card and wallet alerts: as below. A brokerage or crypto trade confirmation: read `references/trades.md` before logging it — trades have their own date, account and payee rules.
 4. Resolve every payee the writes invented (Payee hygiene).
 5. Notify — once at the end listing every item, or once per item. A silent run is 0 logged and 0 proposed and nothing deferred; only then skip the notify. If ever unsure whether to notify, notify.
@@ -35,11 +35,11 @@ Work from whatever bank, card and wallet mail actually arrives — there is no f
 
 - **account** — the card, wallet or bank account the money moved on, matched against this run's account list.
 - **amount** — always positive; direction carries the sign (debit = money out, credit = money in).
-- **currency** — as the source states it. A card charged in a foreign currency is logged in that currency, never the bank's converted amount; FX conversion is the system's job.
+- **currency** — as the source states it. A card charged in a foreign currency is logged in that currency, never the bank's converted amount; FX conversion is the system's job. When the alert also states what the account was actually charged, pass that as `settled_amount` (the `book-transactions` skill's foreign-purchase rule).
 - **date** — the transaction's own date, in the profile's timezone.
 - **description** — the raw bank/card string, verbatim, including any reference or trace code. Dedup, spend rules and payee matching all read this field, so a tidied-up version breaks all three.
 - **memo** — empty unless the email says something the row doesn't already show: the items ordered, what a transfer was for. Never a retelling of the alert — not the bank or alert name, the time, card or account numbers, the counterparty's bank, the payee again, or how it was paid; the linked email keeps all of that. (There is no `note` field on a transaction.)
-- **category** — a real label from this run's category list, or unset. Unset is normal; a wrong-but-plausible label is worse, and refusing to log because you're unsure is worst. If a write is rejected for an unknown category, re-read the list, pick the closest real label or leave it unset, and retry at once — that error must not end the turn.
+- **category** — chosen by the Categories rules of the `book-transactions` skill: the payee's default, else one of the user's that fits, else a new general one. If a write is rejected for an unknown category, re-read the list and retry at once — that error must not end the turn.
 - **idempotency reference** — on every row (Gotchas).
 
 **Companion-email enrichment.** A card alert is often thin — a merchant code, or just a counterparty and an amount. Before finalising, check the other emails in the same fetch for a receipt describing the same real event (same amount, same or adjacent timestamp). Use it to pick the payee and category; put what's worth keeping into memo, and leave description as the raw string.
@@ -48,15 +48,7 @@ Work from whatever bank, card and wallet mail actually arrives — there is no f
 
 ## Payee hygiene
 
-When nothing in the payee book matches a row, the write invents a payee from the raw description — reference number and all — with no default category, so the row shows a junk payee and books Uncategorized. The invented name embeds that row's own reference, so it can never match again: left alone, the same merchant invents a fresh junk payee on every future run.
-
-Every created row comes back with its payee's name beside the id, and an invented one is flagged `payee_minted`. Work exactly the flagged rows — an unflagged row already matched something real. For each:
-
-1. Work out the real merchant or person from the description. Strip purpose prefixes, order and auth references, and location noise that is not part of the brand; those stay in description and never belong in the payee.
-2. Search the payee book for that clean name and link the row to it.
-3. If no such payee exists, create it (creating payees works unattended).
-4. Make it durable, or the next run redoes this: give the payee a default category so the next such row is categorised, and teach it this bank wording. A raw-substring rule is matched before normalisation, which makes it the only mechanism that works on reference-laden strings — key it on the stable merchant part, never the reference number, which is unique per transaction. An alias is enough when the bank string is short and stable.
-5. Retire the invented payee once nothing points at it.
+Resolve every row the writes flagged `payee_minted` by the Payee hygiene steps of the `book-transactions` skill: the clean merchant name, linked or created, made durable with a default category and a rule on the stable merchant wording, and the invented payee retired.
 
 ## Closing checklist — before ending every turn
 

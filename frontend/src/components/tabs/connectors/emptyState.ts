@@ -23,6 +23,7 @@ export const FAMILY_BLURB: Record<FamilyKey, string> = {
   data: 'Data sources bring balances, transactions, and positions in.',
   web: 'Web providers give Lucius live search and page reads.',
   mcp: 'MCP servers are third-party tools you point Lucius at.',
+  apis: 'REST APIs are services you connect yourself, by address and key, for Lucius to call.',
 }
 
 /** The family's human-readable title, or null on the All tab. NEVER the raw key. */
@@ -91,6 +92,6 @@ export function emptyStateFor({ query, tab, statusFilter }: EmptyStateInput): Em
   return {
     ...action,
     title: 'No connectors',
-    body: 'Browse the directory to connect a channel, a data source, a web provider, or an MCP server.',
+    body: 'Browse the directory to connect a channel, a data source, a web provider, an MCP server, or an API.',
   }
 }

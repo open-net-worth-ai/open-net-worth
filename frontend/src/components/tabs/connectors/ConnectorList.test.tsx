@@ -71,7 +71,7 @@ function sectionTitles(container: HTMLElement): string[] {
 describe('four family sections', () => {
   it('renders one section per non-empty family, in order, with a count badge', () => {
     const { container } = renderList(ALL)
-    expect(sectionTitles(container)).toEqual(['Channels', 'Data sources', 'Web', 'MCP'])
+    expect(sectionTitles(container)).toEqual(['Channels', 'Data sources', 'Web', 'MCP servers'])
     expect(
       Array.from(container.querySelectorAll('.cn-colhead .rd-badge')).map((b) => b.textContent),
     ).toEqual(['1', '1', '1', '1'])
@@ -204,7 +204,7 @@ describe('bug 1 — an all-filtered-out family never renders a blank section', (
     const empty = container.querySelector('.rd-empty')
     expect(empty).toBeTruthy()
     expect(empty!.querySelector('.rd-empty-title')?.textContent).toBe(
-      'Nothing needs attention in MCP',
+      'Nothing needs attention in MCP servers',
     )
     expect(empty!.querySelector('.rd-empty-body')?.textContent?.length).toBeGreaterThan(0)
   })
@@ -221,10 +221,10 @@ describe('bug 1 — an all-filtered-out family never renders a blank section', (
 })
 
 describe('bug 2 — empty copy uses the human-readable title, not the raw key', () => {
-  it('reads "Nothing in MCP yet", never "No mcp connectors"', () => {
+  it('reads "Nothing in MCP servers yet", never "No mcp connectors"', () => {
     const { container } = renderList([TELEGRAM], { ...NONE, tab: 'mcp' })
     const title = container.querySelector('.rd-empty-title')?.textContent ?? ''
-    expect(title).toBe('Nothing in MCP yet')
+    expect(title).toBe('Nothing in MCP servers yet')
     expect(title).not.toContain('mcp')
   })
 

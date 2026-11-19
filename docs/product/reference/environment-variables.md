@@ -26,7 +26,7 @@ described below.
   repository folder and uncomment the lines you need. The file is read at startup. Restart the
   app after a change.
 - **`onw start` (installed with `uv tool`):** set the variable in your shell, e.g.
-  `PORT=8081 onw start`. If you use `onw autostart install`, the boot service carries over
+  `PORT=8081 onw start`. If you use `onw autostart on`, the boot service carries over
   `HOST`, `PORT`, `ONW_ROOT`, `DATA_DIR`, `CACHE_DIR` and `LOGS_DIR` from the shell you ran it
   in — run it again after changing them. It also carries where uv keeps your install
   (`UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`, `UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`, `XDG_DATA_HOME`), so

@@ -25,8 +25,14 @@ def _point(ym, income=(), expense=()):
 def _window(monkeypatch, points):
     monkeypatch.setattr(reports_rollup, "user_today", lambda: _dt.date(2026, 10, 14))
     by_ym = {p["ym"]: p for p in points}
-    monkeypatch.setattr(reports_rollup, "month_summary", lambda ym: by_ym.get(ym) or _point(ym))
-    monkeypatch.setattr(reports_rollup, "_merchants", lambda ym, limit: [])
+    monkeypatch.setattr(
+        reports_rollup,
+        "month_summary",
+        lambda ym, tags=None, categories=None: by_ym.get(ym) or _point(ym),
+    )
+    monkeypatch.setattr(
+        reports_rollup, "_merchants", lambda yms, limit, tags=None, categories=None: []
+    )
     monkeypatch.setattr(reports_rollup, "base_currency", lambda: "USD")
     return reports_rollup.reports_aggregates(months=len(points))
 
@@ -173,7 +179,7 @@ def test_merchant_share_is_of_the_whole_month_not_the_top_n(monkeypatch):
     monkeypatch.setattr(
         reports_rollup.ledger_service, "txn_base_amount", lambda t, base, rates: t["base_amount"]
     )
-    rows = reports_rollup._merchants("2026-10", 2)
+    rows = reports_rollup._merchants(["2026-10"], 2)
     assert [(r["label"], r["pct"]) for r in rows] == [("A", 50.0), ("B", 30.0)]
 
 
@@ -181,8 +187,16 @@ def _window_with_merchants(monkeypatch, points):
     asked = []
     monkeypatch.setattr(reports_rollup, "user_today", lambda: _dt.date(2026, 10, 14))
     by_ym = {p["ym"]: p for p in points}
-    monkeypatch.setattr(reports_rollup, "month_summary", lambda ym: by_ym.get(ym) or _point(ym))
-    monkeypatch.setattr(reports_rollup, "_merchants", lambda ym, limit: asked.append(ym) or [])
+    monkeypatch.setattr(
+        reports_rollup,
+        "month_summary",
+        lambda ym, tags=None, categories=None: by_ym.get(ym) or _point(ym),
+    )
+    monkeypatch.setattr(
+        reports_rollup,
+        "_merchants",
+        lambda yms, limit, tags=None, categories=None: asked.extend(yms) or [],
+    )
     monkeypatch.setattr(reports_rollup, "base_currency", lambda: "USD")
     return reports_rollup.reports_aggregates(months=len(points)), asked
 

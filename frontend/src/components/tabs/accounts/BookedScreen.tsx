@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { fDate } from '../../../utils/format'
 import { Ic, Spark, I_CHECK, I_WARN } from './importIcons'
 
 export interface BookedResult {
@@ -119,7 +120,11 @@ export function BookedScreen(p: BookedScreenProps) {
           <WarnLine>
             {plural(p.refusedDuplicates.length, 'row')} not imported — already in your ledger:{' '}
             {p.refusedDuplicates
-              .map((d) => `${d.date ?? ''} ${d.description ?? ''}`.trim() || '(unnamed row)')
+              .map(
+                (d) =>
+                  `${d.date ? fDate(d.date, 'short', 'always') : ''} ${d.description ?? ''}`.trim() ||
+                  '(unnamed row)',
+              )
               .join('; ')}
           </WarnLine>
         )}

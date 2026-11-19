@@ -17,7 +17,7 @@ import {
   FolderMinus,
   Landmark,
   Pencil,
-  Sparkles,
+  LuciusMark,
   StickyNote,
   Tags,
   Trash2,
@@ -84,7 +84,7 @@ export function ActionBar({
             onAsked?.()
           }}
         >
-          {asked ? <Check {...ICON} /> : <Sparkles {...ICON} />}
+          {asked ? <Check {...ICON} /> : <LuciusMark {...ICON} />}
           <span>{asked ? 'Added' : 'Ask Lucius'}</span>
         </button>
       )}

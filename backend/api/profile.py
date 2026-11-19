@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -98,6 +98,8 @@ DEFAULT_PROFILE = {
     "chat_multi_turn_enabled": False,
     # Draw reasoning as one merged block instead of a block per round. Default OFF (split).
     "chat_thinking_grouped": False,
+    # How much detail Lucius puts in an answer (brief | normal | detailed). None = normal.
+    "chat_response_detail": None,
     # A device with no choice of its own sends the screen with each message. Default ON.
     "screen_awareness_default": True,
     "seen_intros": [],
@@ -126,6 +128,7 @@ from backend.services.profile import (  # noqa: E402 — re-export for callers t
     handle_base_currency_change,
     normalize_target_allocation,
     read_profile,
+    refuse_base_currency_change_on_demo,
     set_timezone,
     write_profile,
 )
@@ -191,6 +194,8 @@ class ProfileBody(BaseModel):
     chat_multi_turn_enabled: Optional[bool] = None
     # Human-only UI preference — merge reasoning into one block instead of per round.
     chat_thinking_grouped: Optional[bool] = None
+    # brief | normal | detailed — how much detail Lucius puts in an answer.
+    chat_response_detail: Optional[Literal["brief", "normal", "detailed"]] = None
     # Human-only UI preference — a device's Screen awareness until it makes its own choice.
     screen_awareness_default: Optional[bool] = None
     # Statement-import review band's pre-selected action — "skip" (default) or "merge".
@@ -386,6 +391,12 @@ def put_profile(body: ProfileBody):
         }
     old_base = current.get("base_currency")
     new_base = updates.get("base_currency")
+    try:
+        refuse_base_currency_change_on_demo(old_base, new_base)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=403, detail={"code": "demo_locked", "message": exc.message}
+        ) from exc
     current.update(updates)
     # Clears the stale FX cache + flags non-converting manual amounts for review.
     handle_base_currency_change(current, old_base, new_base)

@@ -29,7 +29,6 @@ from backend.db import read_cache
 from backend.models.account import ON_BUDGET_TYPES, SPENDABLE_TYPES
 from backend.services import ledger as svc
 from backend.services.budgets import is_spending_expense
-from backend.services.card_coverage import cards_without_activity
 from backend.services.fx_cache import load_fx_cache
 
 logger = logging.getLogger(__name__)
@@ -331,14 +330,12 @@ def runway_from_projection(projection: dict) -> dict:
     different burn (the flag used to average ALL spending including one-offs, the screen the
     classified baseline: "about 1.9 months" beside 2.1). The burn is the projection's
     ``monthly_expenses_avg``: named streams plus the variable residual, growth-compounded by
-    ``expense_growth_pct``. ``cards_missing_spending`` names the cards whose spending the burn
-    cannot see yet."""
+    ``expense_growth_pct``."""
     return {
         "cash": float(projection.get("liquid_balance_base") or 0.0),
         "burn": float(projection.get("monthly_expenses_avg") or 0.0),
         "months": projection.get("income_runway_months"),
         "expense_growth_pct": float(projection.get("expense_growth_pct") or 0.0),
-        "cards_missing_spending": projection.get("cards_missing_spending") or [],
     }
 
 
@@ -831,10 +828,6 @@ def build_projection(
     low_balance_threshold = float(
         profile.get("cashflow_low_balance_threshold") or LOW_BALANCE_THRESHOLD_DEFAULT
     )
-    window_y, window_m = _sub_months(today.year, today.month, ROLLING_MONTHS)
-    cards_missing_spending = cards_without_activity(
-        _month_range(window_y, window_m)[0], today.isoformat(), all_txns
-    )
 
     # --- Past actuals (real per-month flow + real month-end cash balance) ---
     _perf_t5 = _time.perf_counter()
@@ -985,7 +978,4 @@ def build_projection(
         "expense_growth_pct": expense_growth_pct,
         "income_growth_pct": income_growth_pct,
         "history_months": len(history),
-        # Cards with no purchases in the window the burn is averaged over — their spending is
-        # not in `monthly_expenses_avg`, so the runway is flattered until it is imported.
-        "cards_missing_spending": cards_missing_spending,
     }

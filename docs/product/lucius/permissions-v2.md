@@ -11,8 +11,8 @@ keywords: [permissions v2, experimental, approval mode, always allow, ask, block
 
 # Permissions v2 (experimental)
 
-> **This page describes an experimental model.** It is off by default. Turn it on in **Settings →
-> Developer → Experimental → Permissions v2**, and off again the same way. While it is off, Open Net
+> **This page describes an experimental model.** It is on by default. Turn it off in **Settings →
+> Developer → Experimental → Permissions v2**, and on again the same way. While it is off, Open Net
 > Worth works as [How Lucius's permissions work](permissions.md), [Confirm cards](confirm-cards.md)
 > and [Automations](automations.md) describe, and those pages are the ones to read. What switching
 > it off does to what you set while it was on is in [Turning it off and on
@@ -46,6 +46,10 @@ a setting the day it appears:
   editing a skill, creating an artifact and marking notifications read change only Lucius's
   workspace, not your book, so they don't stop for a card. Set any of them to **Ask** if you want to
   see each one. This is a deliberate choice: skill and memory writes start at Always allow.
+- **Paper trading runs (Always allow).** Creating a paper portfolio and placing, cancelling or
+  pricing paper orders is pretend money that never reaches your book or a broker, so it doesn't
+  stop for a card. Deleting a paper portfolio and its history still asks. See
+  [Paper Trading](../features/paper-trading.md).
 - **Changing your book, or sending something out, asks (Ask).** Logging or editing a transaction,
   moving budget money, creating an account, turning a connector on or off, and sending an email, a
   Telegram message or a webhook.
@@ -110,14 +114,17 @@ can't tell you apart. An approved group always gets cards, and so do Slack, Disc
 
 **If you tap Deny,** the rest of that reply keeps asking, even in **auto**.
 
+**A card shows what the call changes,** the way the app's card does: one line per transaction,
+for example `2026-03-02 · ACME Mart · -USD 4.20: Needs review → Approved`, not the raw call.
+
 **A forwarded message isn't your request.** Lucius and the automatic check both treat it as something
 you're showing them, so say what you'd like done with it.
 
 ## How Automatically approve decides
 
 Before a call to a tool set to **Ask**, a small model reads the tool's name and description,
-what it is about to do (its parameters) and **what you typed** in the conversation, and answers
-one question: does this need you? It lets through a call that is plainly what you asked for,
+what it is about to do (its parameters, with each transaction it names shown by date, payee and
+amount) and **the conversation**, and answers one question: does this need you? It lets through a call that is plainly what you asked for,
 touches only what you named, sends nothing outside the app that you didn't ask to send, and is
 cheap to undo. It stops — and you get the ordinary confirm card, exactly as in **Manually approve** —
 for anything that goes further: a bulk delete or rewrite, something sent to a third party, a settings, credentials or
@@ -134,9 +141,16 @@ unsure, it stops.
   the change asks you, with the ordinary card — for a group of calls, a card for each of them when
   the whole answer is unusable, and for just the one call the answer skipped or garbled. It never
   approves by default.
-- **It only reads what you typed** — not the results of earlier tool calls, web pages, or the
-  data attached to your message (mentions, the screen, news) — so text from outside can't vouch
-  for a change.
+- **Your words decide; Lucius's give them meaning.** The judge reads your last few messages and
+  Lucius's replies around them, so a "yes" to Lucius's *"Approve the ACME Mart one?"* lets that
+  approval run without a card. Your yes covers only what Lucius proposed just before it: if the call
+  touches more (five transactions instead of one), does something else (deletes instead of
+  approves), or rests on something Lucius said afterwards, you get the card. Lucius saying you
+  want something never counts.
+- **It never reads outside text** — not the results of earlier tool calls, web pages, or the data
+  attached to your message (mentions, the screen, news) — so text from outside can't vouch for a
+  change. In an Automation it reads only the instructions you saved, never the email or webhook
+  that started the run.
 - **Which model judges.** The **Auto-approval judge** under **Settings → AI**; unset, it uses the
   model this conversation is running on — a Claude Code or Codex model included. Each judgement
   (a group of calls counts as one) waits at most 10 seconds; if the model is slower, you get the

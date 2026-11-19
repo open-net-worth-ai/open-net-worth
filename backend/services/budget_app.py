@@ -79,6 +79,8 @@ class Capabilities:
     # Its connector holds a budget too: the one to import next. A sync moved to a budget points
     # the connector at it, or the page would warn about the budget the person just chose.
     connector_follows_sync: bool = False
+    # It has no tag field and keeps tags in the note as #name: they become the row's tags here.
+    memo_tags: bool = False
 
 
 @dataclass(frozen=True)
@@ -306,6 +308,6 @@ def refuse_beside_others(before: str, then: str) -> None:
     """``before`` and ``then``: what the person is doing, for the two sentences."""
     if other := other_sync_on():
         raise ConflictError(
-            f"The {other.name} sync is on. Turn it off in Data sync before {before}."
+            f"The {other.name} sync is on. Turn it off in Data Sync before {before}."
         )
     refuse_while_others_run(then)

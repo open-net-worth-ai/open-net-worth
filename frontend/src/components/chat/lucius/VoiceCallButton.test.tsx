@@ -71,14 +71,12 @@ describe('VoiceCallButton', () => {
       expect(authFetch).not.toHaveBeenCalled()
     })
 
-    it('keeps Send while calls are not set up', async () => {
+    it('holds Call before calls are set up, and it offers the setup', async () => {
       restore = overrideFlagsForTests({ voice_calls: true })
       respond(UNSET)
       render(<Slot />)
-      await waitFor(() => expect(authFetch).toHaveBeenCalled())
-      await act(async () => {})
-      expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
-      expect(screen.queryByRole('button', { name: 'Set up voice calls' })).toBeNull()
+      expect(await screen.findByRole('button', { name: 'Set up voice calls' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
     })
 
     it('holds Send until it knows, then Call once calls are ready', async () => {

@@ -645,8 +645,7 @@ class SendEmailInput(ToolInput):
     description=(
         "SEND block — compose and send a plaintext email via the Email connector's SMTP "
         "configuration. Use to reply to someone, send a summary/report, or notify a person by "
-        "email. This SENDS an outbound message, so confirm the recipient + content with the "
-        "user before sending. Requires the Email connector's SMTP credentials to be configured "
+        "email. This SENDS an outbound message. Requires the Email connector's SMTP credentials to be configured "
         "(Connectors → Email → send)."
     ),
     input_schema=schema_of(SendEmailInput, tool_name="email_send_message"),

@@ -8,11 +8,13 @@ Invocation contract (verified against ``claude`` 2.1.216 — see
 ``.claude/rfcs/2026-07-22-claude-code-cli-provider.md`` §3)::
 
     claude -p --input-format stream-json --output-format stream-json --verbose
-           --include-partial-messages --model <model> --system-prompt <text>
+           --include-partial-messages --model <model> --system-prompt-file <path>
            --tools "" --strict-mcp-config --setting-sources ""
            --no-session-persistence [--effort <level>] [--max-budget-usd <n>]
 
-with ONE NDJSON user message on stdin.
+with ONE NDJSON user message on stdin. ``_argv`` still builds ``--system-prompt <text>`` (the
+live-session key); ``claude_cli_argv`` moves the text into a file at launch, because the tool
+manifest is far past Windows' 32,767-character command line (WinError 206).
 
 Four of those flags are load-bearing and must not be dropped:
 
@@ -51,17 +53,23 @@ from typing import AsyncGenerator, List, Optional
 from backend.ai.image_payloads import decode_image_payloads
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError, ProviderTimeoutError
+from backend.services.feature_flags import enabled
 
 from . import claude_live_session, cli_sign_in
 from .base import AIProvider, log_text_cap
+from .claude_cli_argv import with_system_prompt_file
 from .cli_call_grace import PostCallWatch, grace_seconds
+from .cli_live_session import CLOSED_PIPE_ERRORS
 from .cli_tool_protocol import (
     ToolCallScanner,
     flatten_messages_with_images,
     looks_like_an_unfenced_tool_call,
+    render_tool_addendum,
     render_tool_manifest,
+    tool_digests,
 )
 from .telemetry import record_structured_output_error
+from .visual_draft import VisualDraft
 
 log = logging.getLogger(__name__)
 
@@ -392,7 +400,7 @@ class ClaudeCliProvider(AIProvider):
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                *argv,
+                *with_system_prompt_file(argv, workdir),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -417,9 +425,14 @@ class ClaudeCliProvider(AIProvider):
                 ensure_ascii=False,
             )
             assert proc.stdin is not None
-            proc.stdin.write((payload + "\n").encode("utf-8"))
-            await proc.stdin.drain()
-            proc.stdin.close()
+            try:
+                proc.stdin.write((payload + "\n").encode("utf-8"))
+                await proc.stdin.drain()
+                proc.stdin.close()
+            except CLOSED_PIPE_ERRORS as err:
+                # The CLI went away before reading its prompt: _events reports its exit
+                # status and stderr, which say why, rather than this write's error.
+                log.warning("claude_cli: the CLI closed its input at start: %r", err)
             return proc, workdir
         except BaseException:
             try:
@@ -475,6 +488,9 @@ class ClaudeCliProvider(AIProvider):
                         log.debug("claude_cli: skipping non-JSON stdout line: %.200s", line)
                 rc = await proc.wait()
                 if rc != 0:
+                    # stderr reaches EOF just after the exit: read it out first, or a CLI
+                    # that dies at start reports "(no stderr)" instead of what it said.
+                    await asyncio.wait({err_task}, timeout=1.0)
                     detail = b"".join(errs).decode("utf-8", "replace").strip()[:500]
                     raise ExternalServiceError(
                         f"Claude Code CLI exited with status {rc}: {detail or '(no stderr)'}"
@@ -507,8 +523,19 @@ class ClaudeCliProvider(AIProvider):
         # MAX_THINKING_TOKENS rides in the ENV, not argv, so two otherwise-identical
         # invocations can differ in it. Discriminate the session key or a thinking-off turn
         # could be served by a session spawned with thinking on.
-        key_argv = argv + (["__thinking_off__"] if no_thinking else [])
+        thinking_key = ["__thinking_off__"] if no_thinking else []
+        key_argv = argv + thinking_key
         use_sessions = claude_live_session.sessions_enabled()
+        # THE seam for `claude_cli_stable_tool_prompt`: key the live session on the system
+        # prompt WITHOUT the tool manifest, so a tool loaded mid-conversation keeps the
+        # process (and its prompt cache) and rides the next message instead.
+        stable_tools = use_sessions and _stable_tool_prompt()
+        digests = tool_digests(tools or []) if stable_tools else {}
+        accepts = (lambda s: s.can_serve_tools(digests)) if stable_tools else None
+        if stable_tools:
+            key_argv = (
+                self._argv(model, (system or "") + _STABLE_TOOLS_KEY, effort=effort) + thinking_key
+            )
 
         attempts = _truncation_retries() + 1
         # A stalled attempt (the CLI went silent) earns ONE extra, silent attempt on a fresh
@@ -538,6 +565,7 @@ class ClaudeCliProvider(AIProvider):
             while True:
                 attempt += 1
                 scanner = ToolCallScanner()
+                visual = VisualDraft()
                 t0 = time.monotonic()
                 ttft_ms = None
                 usage_event = None
@@ -579,7 +607,12 @@ class ClaudeCliProvider(AIProvider):
                             _child_env(self.api_key, no_thinking=no_thinking),
                             turn_messages,
                             key_argv=key_argv,
+                            accepts=accepts,
                         )
+                        if stable_tools:
+                            pending = _announce_new_tools(
+                                session, reused, tools or [], digests, pending
+                            )
                         try:
                             await session.send(pending, images=pending_images)
                             break
@@ -648,9 +681,17 @@ class ClaudeCliProvider(AIProvider):
                                             }
                                             emitted_call_count += 1
                                             watch.call_parsed()
+                                        if scanner.held:
+                                            watch.call_held()
                                         if visible:
                                             emitted_anything = True
                                             yield {"type": "text_delta", "text": visible}
+                                    # A drawing being written shows as it grows (visual_draft.py).
+                                    if not scanner.mid_block:
+                                        visual.reset()
+                                    elif draft := visual.update(scanner.block_text):
+                                        emitted_anything = True
+                                        yield draft
                             elif inner.get("type") == "message_delta":
                                 stop_reason = (inner.get("delta") or {}).get(
                                     "stop_reason"
@@ -660,6 +701,8 @@ class ClaudeCliProvider(AIProvider):
                                     peak_prompt_tokens, _message_start_prompt(inner)
                                 )
                         elif etype == "result":
+                            if session is not None:
+                                ev = session.own_round_cost(ev)
                             fallback_text = ev.get("result") or ""
                             if ev.get("is_error"):
                                 cli_error = _result_error(ev)
@@ -689,12 +732,19 @@ class ClaudeCliProvider(AIProvider):
                 if watch.cut:
                     # No result event will come, so this round's usage is unknown; the CLI
                     # session was retired above (mid-reply, it cannot take the next send).
-                    log.warning(
-                        "claude_cli: round wrote its tool call(s) but no result event "
-                        "followed within %.0fs — running them (%s)",
-                        watch.grace,
-                        watch.summary(),
-                    )
+                    if scanner.looping:
+                        log.warning(
+                            "claude_cli: round repeated one tool call (a loop) — cut at "
+                            "once, running its call(s) (%s)",
+                            watch.summary(),
+                        )
+                    else:
+                        log.warning(
+                            "claude_cli: round wrote its tool call(s) but no result event "
+                            "followed within %.0fs — running them (%s)",
+                            watch.grace,
+                            watch.summary(),
+                        )
                     usage_event = _usage_event(
                         {}, model, ttft_ms, t0, api_key_source, peak_prompt_tokens
                     )
@@ -1274,6 +1324,40 @@ def _json_schema_of(response_format: dict | None) -> dict | None:
     return None
 
 
+# Stands in for the tool manifest in a stable-tools session's KEY (never sent to the CLI): the
+# spawn argv still carries the full manifest, the key does not.
+_STABLE_TOOLS_KEY = "\n\n__tools_announced_in_conversation__"
+
+
+def _stable_tool_prompt() -> bool:
+    try:
+        return enabled("claude_cli_stable_tool_prompt")
+    except Exception as exc:  # an unreadable flag is the old path, never a failed turn
+        log.warning("claude_cli: could not read claude_cli_stable_tool_prompt (%s)", exc)
+        return False
+
+
+def _announce_new_tools(session, reused: bool, tools: list[dict], digests: dict, pending: str):
+    """``pending`` with the schemas of tools this process has not been shown yet in front.
+
+    A fresh process got every tool in its system prompt; a kept one already passed
+    ``can_serve_tools``, so ``digests`` only ADDS to what it holds.
+    """
+    shown = session.tools_shown if reused else None
+    session.tools_shown = dict(digests)
+    if shown is None:
+        return pending
+    new = [t for t in tools if (t.get("name") or "") in digests and t.get("name") not in shown]
+    addendum = render_tool_addendum(new)
+    if addendum:
+        log.info(
+            "claude_cli: %d tool(s) loaded mid-conversation sent on the live session: %s",
+            len(new),
+            ", ".join(t["name"] for t in new),
+        )
+    return f"{addendum}\n\n{pending}" if addendum else pending
+
+
 def cost_basis_for(api_key_source: str) -> str:
     """Classify what the CLI's reported dollar figure MEANS for this session.
 
@@ -1297,7 +1381,9 @@ async def _until_call_grace(
     try:
         while True:
             wait = watch.remaining(scanner.mid_block)
-            if wait is not None and wait <= 0:
+            # A reply repeating one call (ToolCallScanner.looping) has nothing more to say:
+            # end the round now rather than after the grace — or, held, the 300 s ceiling.
+            if scanner.looping or (wait is not None and wait <= 0):
                 watch.cut = True
                 return
             pending = source.__anext__()

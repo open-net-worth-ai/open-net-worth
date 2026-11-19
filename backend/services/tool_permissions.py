@@ -443,6 +443,19 @@ def revoke_allowed_tools(connector_id: str) -> int:
     return dropped
 
 
+def revoke_allowed_tool(connector_id: str, tool_name: str) -> bool:
+    """``revoke_allowed_tools`` for ONE tool: forget its ``always_allow``, and only that.
+
+    For a connector whose tools can change one at a time under a name that stays the same — a
+    REST endpoint keeps its tool name when its method or path is edited, so a grant made for
+    ``GET /accounts`` would otherwise carry on for the ``DELETE`` it became. A ``blocked`` or
+    ``needs_approval`` row is left alone, for the reason given above: an edit never weakens a
+    refusal. Returns whether a grant was withdrawn."""
+    if stored_tool_level(connector_id, tool_name) != "always_allow":
+        return False
+    return clear_tool_permission(connector_id, tool_name)
+
+
 def derive_group_level(levels: Sequence[Optional[str]]) -> str:
     """The DISPLAYED level for a group of tools — the one aggregate, computed never stored.
 

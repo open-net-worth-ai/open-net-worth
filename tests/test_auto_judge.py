@@ -456,9 +456,55 @@ def test_a_timeout_asks(judge_env, monkeypatch):
         await asyncio.sleep(1)
         return _reply("allow", "too late")
 
-    judge_env(slow)
+    calls = judge_env(slow)
     v = _run(auto_judge.judge_call("get_transactions", {}))
     assert v.verdict == "ask"
+    assert len(calls) == auto_judge.JUDGE_ATTEMPTS
+
+
+def _sequence(*items):
+    it = iter(items)
+
+    async def answer():
+        item = next(it)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    return answer
+
+
+def test_a_timeout_is_tried_once_more_and_the_second_answer_counts(judge_env):
+    calls = judge_env(_sequence(asyncio.TimeoutError(), _reply("allow", "ok")))
+    v = _run(auto_judge.judge_call("get_transactions", {}))
+    assert (v.verdict, len(calls)) == ("allow", 2)
+    assert auto_judge._breaker.failures == 0
+
+
+def test_an_empty_reply_is_tried_once_more_and_the_second_answer_counts(judge_env):
+    calls = judge_env(_sequence("  ", _reply("allow", "ok")))
+    v = _run(auto_judge.judge_call("get_transactions", {}))
+    assert (v.verdict, len(calls)) == ("allow", 2)
+
+
+def test_two_empty_replies_ask_and_are_one_breaker_failure(judge_env):
+    calls = judge_env(_sequence("", ""))
+    v = _run(auto_judge.judge_call("get_transactions", {}))
+    assert (v.verdict, v.reason, len(calls)) == ("ask", "unusable reply", 2)
+    assert auto_judge._breaker.failures == 1
+
+
+@pytest.mark.parametrize("bad", ["I think this is fine.", '{"verdict": "maybe"}'])
+def test_a_reply_with_content_is_never_retried(judge_env, bad):
+    calls = judge_env(bad)
+    assert _run(auto_judge.judge_call("get_transactions", {})).verdict == "ask"
+    assert len(calls) == 1
+
+
+def test_a_provider_error_is_not_retried(judge_env):
+    calls = judge_env(RuntimeError("provider down"))
+    assert _run(auto_judge.judge_call("get_transactions", {})).verdict == "ask"
+    assert len(calls) == 1
 
 
 def test_a_cli_model_is_called_and_its_answer_is_used(judge_env, monkeypatch):

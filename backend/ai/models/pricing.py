@@ -44,8 +44,19 @@ log = logging.getLogger(__name__)
 # matched first and the legacy-priced "claude-opus-4" row only catches genuinely
 # unversioned ids (claude-opus-4-0, claude-opus-4-1, ...).
 _ANTHROPIC_PRICING: list[tuple[str, float, float]] = [
-    # ── Fable 5 ──────────────────────────────────────────────────────────────
+    # ── Fable 5 / 5.1, Mythos 5 / 5.1 ────────────────────────────────────────
     ("claude-fable-5", 10.00, 50.00),
+    ("claude-mythos-5", 10.00, 50.00),
+    # ── Opus 5 / Sonnet 5 / Haiku 5 — 5-5 before the bare 5 (ordering rule) ────
+    # Without these rows every current model fell through to _ANTHROPIC_DEFAULT ($3/$15):
+    # Haiku 5.5 was shown at 30x its price (2026-11-11).
+    ("claude-opus-5-5", 4.00, 20.00),
+    ("claude-opus-5", 5.00, 25.00),
+    ("claude-sonnet-5-5", 2.00, 10.00),
+    ("claude-sonnet-5", 2.00, 10.00),
+    # Haiku 5.5 doubles past 100K input tokens ($0.50/$2.50); this table is flat, so a
+    # long prompt is under-priced — the rate for the common case.
+    ("claude-haiku-5-5", 0.10, 0.50),
     # ── Opus 4 — versioned (cheaper) rows BEFORE the legacy catch-all ────────
     ("claude-opus-4-8", 5.00, 25.00),
     ("claude-opus-4-7", 5.00, 25.00),

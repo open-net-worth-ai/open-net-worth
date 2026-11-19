@@ -16,8 +16,10 @@ export interface TransactionSurfaces {
   /** The drawer for a row the caller knows only by id (a receipt chip, a deep link): the
    *  drawer opens AT ONCE, its sections loading by that id, and fills in when the row
    *  arrives — a tap that showed nothing for a whole round trip read as a hang on a phone
-   *  (owner, 2026-09-22). `hint` is the caller's label for the row, its title meanwhile. */
-  openTransactionById: (id: string, hint?: string) => void
+   *  (owner, 2026-09-22). `hint` is the caller's label for the row, its title meanwhile.
+   *  `overModal`: opened from inside a dialog (a sync's run report), so the drawer joins the
+   *  dialog tier and lands OVER it, as it does from the review cards. */
+  openTransactionById: (id: string, hint?: string, opts?: { overModal?: boolean }) => void
   reviewOpen: boolean
 }
 

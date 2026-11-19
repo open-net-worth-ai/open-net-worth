@@ -2,6 +2,7 @@
 // Mounted as the root route component inside <RouterProvider>.
 // Reads auth/logout/authChanged from router context via useRouteContext.
 
+import { LuciusMark } from './ui/LuciusMark'
 import { useGatewayIdentity } from './hooks/useGatewayIdentity'
 import {
   Fragment,
@@ -46,7 +47,7 @@ import {
   EyeOff,
   NAV_ICON_PROPS,
 } from './ui/icons'
-import { Spark } from './lucius/identity'
+import { LuciusLogo } from './ui/LuciusLogo'
 import { PortfolioProvider, usePortfolioContext } from './state/portfolio'
 import { TickerStrip } from './components/TickerStrip'
 import { Tooltip } from './components/ui/Tooltip'
@@ -253,7 +254,7 @@ const MIN_CONTENT_W = 1200 // min content width before collapsing; tuned so a
 // while the same laptop keeps the nav expanded when the panel is closed (1312 ≥ 1200).
 
 const TAB_ICONS: Record<TabId, ReactElement> = {
-  lucius: <Spark size={20} />,
+  lucius: <LuciusLogo size={20} />,
   dashboard: <LayoutGrid {...ICON_PROPS} />,
   inbox: <InboxIcon {...ICON_PROPS} />,
   investments: <TrendingUp {...ICON_PROPS} />,
@@ -734,7 +735,30 @@ function RouterShellInner() {
     dateOn?: string
     /** Dashboard Top merchants deep-link: one payee by name (the register's `payee` token). */
     payee?: string
+    /** With `month`: the LAST month of a range (`YYYY-MM`) — a report period's span. */
+    monthTo?: string
+    /** Transactions carrying any of these tags — a report narrowed to tags. */
+    tag?: string[]
+    /** A bank sync run's report: everything one write batch booked (the `importBatch` token). */
+    batch?: string
+    /** What the register's filter chip calls that batch ("Enable Banking sync · Nov 14"). */
+    batchLabel?: string
   } | null>(null)
+  // ?batch=<id> (one-shot): becomes the register's batch filter, then leaves the URL.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const batchParam = (location.search as any)?.batch
+  useEffect(() => {
+    if (typeof batchParam !== 'string' || !batchParam) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const label = (location.search as any)?.batchLabel
+    setCashFilter({ batch: batchParam, batchLabel: typeof label === 'string' ? label : undefined })
+    navigate({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      search: ((prev: any) => ({ ...prev, batch: undefined, batchLabel: undefined })) as any,
+      replace: true,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchParam])
   // Plan → Accounts deep-link: open the transaction detail drawer for one row.
   const [cashOpenTxn, setCashOpenTxn] = useState<Record<string, unknown> | null>(null)
 
@@ -1491,7 +1515,8 @@ function RouterShellInner() {
                           }}
                           title="Lucius — ⌘/"
                         >
-                          Lucius ✦<kbd className="cmdk-btn-kbd">⌘/</kbd>
+                          Lucius <LuciusMark size="1em" aria-hidden="true" />
+                          <kbd className="cmdk-btn-kbd">⌘/</kbd>
                         </button>
                       )}
                     </div>

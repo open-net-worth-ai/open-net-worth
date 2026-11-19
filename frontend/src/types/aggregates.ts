@@ -66,8 +66,6 @@ export interface PortfolioAttention {
   /** Months of the user's average spending the cash covers; null while spending is unknown.
    *  The Cash Flow runway itself (same cash, same burn), not a separate division. */
   cash_months?: number | null
-  /** Open credit cards with no purchases in the burn's window: the runway cannot see them. */
-  cards_missing_spending?: string[]
   has_investments: boolean
 }
 
@@ -314,9 +312,33 @@ export interface StackedSeries {
   data: number[]
 }
 
+/** A report period (`backend/services/report_window.PERIODS`). */
+export type ReportPeriod = 'this_month' | 'last_month' | '3m' | '6m' | '12m' | 'ytd'
+
+/** A whole report period summed — what a widget with a Period setting shows. */
+export interface ReportPeriodBlock extends MonthPoint {
+  id: ReportPeriod
+  from: string
+  to: string
+  months: string[]
+  merchants: ReportsRollup['merchants']
+  savings: {
+    income: number
+    spent: number
+    saved: number
+    rate_pct: number
+    known: boolean
+  }
+}
+
 export interface ReportsRollup {
   base_currency: string
   months: string[]
+  /** The tags and categories (ids) every figure was narrowed to (empty: no filter). */
+  tags: string[]
+  categories: string[]
+  /** Present when a `period` was asked for. */
+  period?: ReportPeriodBlock
   points: MonthPoint[]
   current: MonthPoint
   expense_series: StackedSeries[]
@@ -349,8 +371,6 @@ export interface ReportsRollup {
     rate_pct: number
     known: boolean
     ym: string
-    /** Open credit cards with no purchases in `ym`: their spending is not in `spent`. */
-    cards_missing_spending: string[]
     /** The average over the last complete months (`reports_rollup.trailing_saving`) — the very
      *  figure the Outlook checks its saving lever against; `null` with under two active months. */
     trailing: {
@@ -444,8 +464,6 @@ export interface CashflowProjections {
     /** Liquid cash at +0, +1, +2 … months, floored at zero. */
     trajectory: number[]
     known: boolean
-    /** Open credit cards with no purchases in the burn's window. */
-    cards_missing_spending: string[]
   }
 }
 
@@ -497,6 +515,17 @@ export interface InvestedBookRow {
   merged_count: number
 }
 
+/** What a book of broken-down holdings leaves out: each Brokerage total account's untracked
+ *  part (backend/services/untracked_holdings.py). Invested, in no known class — so it is NOT in
+ *  `grand`, the weights, concentration or today's move. Present only with the
+ *  `allow_brokerage_total_valuation` flag on. */
+export interface UntrackedExcluded {
+  total: number
+  /** Its share of everything invested (`grand` + `total`) — the "Not broken down" slice. */
+  pct_of_invested: number
+  accounts: Array<{ account_id: string; name: string; type: string; value: number }>
+}
+
 export interface InvestedBook {
   base_currency: string
   is_live: boolean
@@ -539,6 +568,7 @@ export interface InvestedBook {
     trade_base: number
     subtotal: number
   }>
+  untracked_excluded?: UntrackedExcluded
 }
 
 /** GET /api/cashflow/flow — one month's money-flow (Sankey) graph. Every amount and share is
@@ -564,7 +594,12 @@ export interface CashFlowNode {
 }
 
 export interface CashFlowGraph {
+  /** The newest month in the graph; `months` lists them all when a period was asked for. */
   month: string
+  months: string[]
+  period: ReportPeriod | null
+  tags: string[]
+  categories: string[]
   base_currency: string
   income_total: number
   spend_total: number

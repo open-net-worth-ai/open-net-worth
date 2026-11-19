@@ -536,7 +536,8 @@ async def test_the_judge_does_not_read_a_forward_as_the_owners_request(tg, monke
 
     await handlers.handle_message(update, SimpleNamespace(bot=_Bot()))
 
-    assert intents and all("evil.example" not in " ".join(i) for i in intents)
+    said = [" ".join(getattr(m, "text", m) for m in i) for i in intents]
+    assert intents and all("evil.example" not in s for s in said)
 
 
 def test_memory_reads_a_forward_as_not_their_own_words():

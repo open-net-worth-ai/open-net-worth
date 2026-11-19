@@ -51,8 +51,8 @@ def _payload(engine, table: str, row_id: str) -> dict:
 def test_upgrade_drops_the_position_note_and_keeps_the_lot_note(before_revision):
     from alembic import command
 
-    from backend.db.lot_store import LotStore
     from backend.db.position_store import PositionStore
+    from backend.db.tables import DEFAULT_BOOK_ID
 
     engine, cfg = before_revision
     pos = PositionStore().create(
@@ -63,20 +63,24 @@ def test_upgrade_drops_the_position_note_and_keeps_the_lot_note(before_revision)
             sa.text("UPDATE positions SET payload = :p WHERE id = :id"),
             {"p": json.dumps({**pos, "note": "Speculative"}), "id": pos["id"]},
         )
-    lot = LotStore().create(
-        {
-            "position_id": pos["id"],
-            "instrument_id": "inst_x",
-            "account_id": "acc_x",
-            "acquired_at": "2026-10-16",
-            "original_qty": 8.0,
-            "remaining_qty": 8.0,
-            "unit_cost": 150.0,
-            "cost_currency": "USD",
-            "kind": "buy",
-            "note": "bought 8 @ 150",
-        }
-    )
+    lot = {
+        "id": "lot_note",
+        "position_id": pos["id"],
+        "instrument_id": "inst_x",
+        "account_id": "acc_x",
+        "acquired_at": "2026-10-16",
+        "original_qty": 8.0,
+        "remaining_qty": 8.0,
+        "unit_cost": 150.0,
+        "cost_currency": "USD",
+        "kind": "buy",
+        "note": "bought 8 @ 150",
+    }
+    with engine.begin() as c:  # this revision predates lots.txn_id, so not through LotStore
+        c.execute(
+            sa.text("INSERT INTO lots (book_id, seq, id, payload) VALUES (:b, 0, :id, :p)"),
+            {"b": DEFAULT_BOOK_ID, "id": lot["id"], "p": json.dumps(lot)},
+        )
 
     command.upgrade(cfg, _REVISION)
 

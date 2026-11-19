@@ -271,10 +271,24 @@ def _txn_data_from_ai(item: dict, default_date: str, *, derived_out: dict | None
     if category and kind in ("expense", "income"):
         from backend.services import payee_registry
 
-        _pid = (item.get("payee_id") or "").strip() or payee_registry.resolve_payee_id(
-            text, create=False
+        _pid = (
+            (item.get("payee_id") or "").strip()
+            or payee_registry.resolve_payee_id_by_name(
+                str(item.get("payee") or "").strip(), create=False
+            )
+            or payee_registry.resolve_payee_id(text, create=False)
         )
-        if _pid and payee_registry.default_category_for(_pid):
+        if (
+            _pid
+            and payee_registry.default_category_for(_pid)
+            and not item.get("override_payee_default")
+        ):
+            if derived_out is not None:
+                from backend.services.categories import resolve_category_ref
+
+                _pinned = payee_registry.default_category_for(_pid)
+                if resolve_category_ref(category) != resolve_category_ref(_pinned):
+                    derived_out["category_dropped"] = category
             category = None
     amount = _unsigned_amount(item["amount"], "amount")
     # No silent currency default: an omitted 'currency' once stored a USD card charge
@@ -422,4 +436,9 @@ def _txn_data_from_ai(item: dict, default_date: str, *, derived_out: dict | None
     payee_id = (item.get("payee_id") or "").strip()
     if payee_id and data["kind"] in ("expense", "income"):
         data["payee_id"] = payee_id
+    # A clean payee NAME beside raw bank text (a fetched row's `payee`): the create choke
+    # matches it by name, then the description, and names a new payee only as a last resort.
+    payee_name = str(item.get("payee") or "").strip()[:120]
+    if payee_name and not payee_id and data["kind"] in ("expense", "income"):
+        data["payee"] = payee_name
     return data

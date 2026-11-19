@@ -84,6 +84,7 @@ def test_create_link_token_returns_hosted_url(monkeypatch):
     assert "hosted_link" in captured["json"]
     assert captured["json"]["redirect_uri"] == "https://app/connectors"
     assert captured["json"]["client_id"] == "cid"
+    assert captured["json"]["country_codes"] == ["US", "CA"]
 
 
 def test_create_link_token_requires_creds():
@@ -245,8 +246,10 @@ class TestNormalizeHelpers:
             "mask": "0000",
             "currency": "USD",
             "balance": 150.25,
+            "available_to_spend": None,
             "account_type": None,
             "institution": None,
+            "persistent_id": None,
         }
 
     @pytest.mark.parametrize(
@@ -321,7 +324,7 @@ class TestNormalizeHelpers:
     def test_description_default(self):
         from backend.services.aggregation.plaid import _txn_description
 
-        assert _txn_description({}) == "Plaid"
+        assert _txn_description({}) == ""
 
     def test_date_parsed_from_string(self):
         from backend.services.aggregation.plaid import _txn_date
@@ -480,8 +483,10 @@ class TestFetchWindow:
                 "mask": None,
                 "currency": "USD",
                 "balance": 100.0,
+                "available_to_spend": None,
                 "account_type": None,
                 "institution": None,
+                "persistent_id": None,
             }
         ]
         assert len(window.rows) == 1

@@ -152,16 +152,16 @@ def test_status_distinguishes_not_installed_from_not_running(tmp_path, capsys):
     stopped = Recorder(fail={"systemctl --user is-active"})
 
     assert auto.status("Linux", tmp_path, stopped) == 1
-    assert "not installed" in capsys.readouterr().out
+    assert "off" in capsys.readouterr().out
 
     unit = auto.unit_path(tmp_path)
     unit.parent.mkdir(parents=True)
     unit.write_text("[Unit]")
     assert auto.status("Linux", tmp_path, stopped) == 1
-    assert "installed but not running" in capsys.readouterr().out
+    assert "on, but not running" in capsys.readouterr().out
 
     assert auto.status("Linux", tmp_path, Recorder()) == 0
-    assert "installed and running" in capsys.readouterr().out
+    assert "on and running" in capsys.readouterr().out
 
 
 def test_unsupported_platform_points_at_docker(tmp_path, capsys):

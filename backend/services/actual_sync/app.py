@@ -63,6 +63,7 @@ ACTUAL = BudgetApp(
         normalises_text=True,
         labels_as_given_on_pull=True,
         links_without_baseline=True,
+        memo_tags=True,
         budget_scoped_accounts=True,
         copies_keep_ids=True,
         connector_follows_sync=True,

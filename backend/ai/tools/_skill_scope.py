@@ -224,11 +224,13 @@ def set_offer_scope(tool_names) -> None:
     _offer_scope.set(frozenset(tool_names))
 
 
-def enforce_offer() -> None:
+def enforce_offer(max_calls: int | None = None) -> None:
     """Make this turn's offer a ceiling: the tool loop refuses every other name, and any call past
-    ``ENFORCED_OFFER_MAX_CALLS``."""
+    ``max_calls`` (default ``ENFORCED_OFFER_MAX_CALLS``). A caller whose turn reads no stranger's
+    text into a search — a paper autopilot review reads its own holdings — may give it more room;
+    the attempts that end the turn scale with it."""
     _offer_enforced.set(True)
-    _offer_calls.set([0])
+    _offer_calls.set([0, max_calls or ENFORCED_OFFER_MAX_CALLS])
 
 
 def offer_is_enforced() -> bool:
@@ -245,11 +247,13 @@ def offer_refuses(tool_name: str) -> bool:
     if calls is None:
         return True
     calls[0] += 1
-    if calls[0] > ENFORCED_OFFER_MAX_ATTEMPTS:
+    limit = calls[1] if len(calls) > 1 else ENFORCED_OFFER_MAX_CALLS
+    # Twice the budget, as the default (8 calls, 16 attempts) has always been.
+    if calls[0] > max(ENFORCED_OFFER_MAX_ATTEMPTS, 2 * limit):
         raise ToolCallLimitError("this turn kept calling tools after being refused")
     if tool_name not in (offer_tool_names() or frozenset()):
         return True
-    return calls[0] > ENFORCED_OFFER_MAX_CALLS
+    return calls[0] > limit
 
 
 def offer_tool_names() -> Optional[frozenset]:

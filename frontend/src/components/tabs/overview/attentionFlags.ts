@@ -8,7 +8,6 @@ import { fetchJson } from '../../../hooks/serverState'
 import { useInvestmentSignals } from '../../../hooks/useInvestmentSignals'
 import { useQueryCache } from '../../../state/queryCache'
 import type { SignalKind } from '../../../types/investmentSignals'
-import { cardCaveat } from '../../../utils/cardCaveat'
 import { fBase, fBaseWhole, fMonth, fPct } from '../../../utils/format'
 import { useAnalytics, useCommitments, useFundingCoverage } from './useWidgetData'
 
@@ -154,14 +153,10 @@ export function useAttentionFlags(): { flags: AttentionFlag[]; loading: boolean 
       sev: 'md',
       icon: 'cash',
       title: 'Thin cash buffer',
-      desc: [
+      desc:
         a.cash_months != null
           ? `${fBase(a.cash_total)} in cash covers about ${a.cash_months} months of your spending.`
           : `Only ${fBase(a.cash_total)} in liquid cash.`,
-        cardCaveat(a.cards_missing_spending),
-      ]
-        .filter(Boolean)
-        .join(' '),
     })
   }
   if (reviewCount > 0) {

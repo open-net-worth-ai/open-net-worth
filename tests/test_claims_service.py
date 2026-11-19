@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 import backend.services.claims as claims_svc
 
 # ── group_key_for ────────────────────────────────────────────────────────────────────────
@@ -132,6 +134,8 @@ _GROUNDED = {
 }
 
 
+# With the delivery decider on, Lucius judges repeats instead (tests/test_crash_alert_news.py).
+@pytest.mark.flags(intel_delivery_decider=False)
 def test_second_signals_push_is_suppressed_as_duplicate_of_an_already_pushed_claim(db_isolated):
     """Direct reproduction of the proven production incident, with synthetic data: an
     asset-type story ("Kestrel Dash SE") and a topic-type story ("Kestrel Dash M&A") both

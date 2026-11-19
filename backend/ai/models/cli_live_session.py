@@ -24,6 +24,7 @@ from typing import AsyncGenerator, Callable, Optional
 
 from backend.core.errors import ExternalServiceError, ProviderTimeoutError
 
+from .cli_exit import describe_exit
 from .cli_tool_protocol import _content_to_text, flatten_messages_with_images
 
 log = logging.getLogger(__name__)
@@ -32,6 +33,13 @@ STDOUT_LIMIT = 8 * 1024 * 1024
 DEFAULT_IDLE_SECONDS = 1800.0
 
 RenderFull = Callable[[list[dict]], "tuple[str, list[dict]]"]
+
+# A write to a child whose stdin is gone. Stdlib asyncio raises an OSError (BrokenPipe /
+# ConnectionReset); uvloop, which uvicorn[standard] runs the server on, raises RuntimeError
+# "unable to perform operation on <WriteUnixTransport closed=True …>; the handler is closed".
+# Both mean the child went away (issue #131: only OSError was caught, so on uvloop the raw
+# text reached the chat and the start retry never ran).
+CLOSED_PIPE_ERRORS = (OSError, RuntimeError)
 
 
 def env_flag(name: str) -> bool:
@@ -102,6 +110,12 @@ class LiveSession:
         self.timed_out = False
         # The child's last stderr lines, for a failure report.
         self.stderr_tail: list[str] = []
+        # For the failure report (issue #131: a Docker install whose CLI died silently, with
+        # nothing in its log to say how): when it started, how many turns it served, and the
+        # version it reported in its init event.
+        self.started_at = 0.0
+        self.turns = 0
+        self.cli_version = ""
 
     @property
     def alive(self) -> bool:
@@ -117,9 +131,13 @@ class LiveSession:
             return 0.0
         return env_seconds(cls.STALL_ENV, cls.STALL_DEFAULT, 10.0)
 
+    def launch_argv(self) -> list[str]:
+        """The argv handed to the OS; a transport may rewrite ``self.argv`` (its pool key)."""
+        return self.argv
+
     async def start(self) -> None:
         self.proc = await asyncio.create_subprocess_exec(
-            *self.argv,
+            *self.launch_argv(),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -128,7 +146,7 @@ class LiveSession:
             limit=STDOUT_LIMIT,
         )
         asyncio.ensure_future(_drain(self.proc.stderr, self.LOG_PREFIX, self.stderr_tail))
-        self.last_used = time.monotonic()
+        self.started_at = self.last_used = time.monotonic()
 
     def matches(self, fps: list[str]) -> bool:
         """True when ``fps`` still begins with everything this session has consumed."""
@@ -142,21 +160,62 @@ class LiveSession:
         """True for the event that ends one turn (the process stays up after it)."""
         raise NotImplementedError
 
+    async def _how_it_ended(self, proc: Optional[asyncio.subprocess.Process]) -> str:
+        """``was stopped by SIGKILL (…)`` once the child is gone; a silent death says nothing
+        else, so this is the one fact that names the cause."""
+        if proc is None:
+            return "was already closed"
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=1.0)
+        except asyncio.TimeoutError:
+            return "is still running but stopped reading its input"
+        except Exception:  # noqa: BLE001 — a diagnostic must never replace the real error
+            return "ended in a way that could not be read"
+        await asyncio.sleep(0.2)  # let the drain collect the exit message
+        return describe_exit(proc.returncode, label=self.LABEL)
+
+    def diagnostics(self, proc: Optional[asyncio.subprocess.Process] = None) -> str:
+        """One log line of what the session was doing — for a failure no one can reproduce."""
+        now = time.monotonic()
+        proc = proc or self.proc
+        return (
+            f"pid={getattr(proc, 'pid', None)} "
+            f"{'reused' if self.turns else 'fresh'} turns={self.turns} "
+            f"age={now - self.started_at:.0f}s idle={now - self.last_used:.0f}s "
+            f"cli={self.argv[0] if self.argv else '?'} version={self.cli_version or '?'}"
+        )
+
+    async def _stopped(
+        self, what: str, proc: Optional[asyncio.subprocess.Process] = None, extra: str = ""
+    ) -> ExternalServiceError:
+        ended = await self._how_it_ended(proc)
+        said = " | ".join(self.stderr_tail)[-300:]
+        log.warning(
+            "%s: %s — it %s; %s%s; stderr=%r",
+            self.LOG_PREFIX,
+            what,
+            ended,
+            self.diagnostics(proc),
+            extra,
+            said,
+        )
+        return ExternalServiceError(
+            f"{self.LABEL} {what}: it {ended}"
+            + (f". It said: {said}" if said else " and printed no reason")
+        )
+
     async def _write(self, payload: bytes) -> None:
         proc = self.proc
         if proc is None or proc.stdin is None or proc.returncode is not None:
-            await asyncio.sleep(0.2)  # let the drain collect the exit message
-            said = " | ".join(self.stderr_tail)[-300:]
-            raise ExternalServiceError(
-                f"{self.LABEL} stopped right after starting"
-                + (f": {said}" if said else " (it printed no reason)")
-            )
+            raise await self._stopped("stopped right after starting", proc)
         try:
             proc.stdin.write(payload)
             await proc.stdin.drain()
-        except OSError as err:
-            # The child exited between the liveness check and the write.
-            raise ExternalServiceError(f"{self.LABEL} session closed its input: {err}") from err
+        except CLOSED_PIPE_ERRORS as err:
+            # The child exited, or closed its input, between the liveness check and the write.
+            unsent = _unsent_bytes(proc)
+            extra = f" wrote={len(payload) - unsent}/{len(payload)}B error={err!r}"
+            raise await self._stopped("session closed its input", proc, extra) from err
 
     async def _timed_out(self, stalled: bool = False) -> ProviderTimeoutError:
         self.timed_out = True
@@ -200,9 +259,17 @@ class LiveSession:
                 # would — "it exited with status 3" is a far better report than "the turn
                 # was truncated", and it is the same failure.
                 rc = await proc.wait() if proc.returncode is None else proc.returncode
+                diag = self.diagnostics(proc)
                 await self.close()
                 if rc:
                     detail = " | ".join(self.stderr_tail)[-500:]
+                    log.warning(
+                        "%s: exited mid-turn — it %s; %s; stderr=%r",
+                        self.LOG_PREFIX,
+                        describe_exit(rc, label=self.LABEL),
+                        diag,
+                        detail,
+                    )
                     raise ExternalServiceError(
                         f"{self.LABEL} exited with status {rc}" + (f": {detail}" if detail else "")
                     )
@@ -210,8 +277,11 @@ class LiveSession:
             event = _parse_event(line, self.LOG_PREFIX)
             if event is None:
                 continue
+            if not self.cli_version and event.get("type") == "system":
+                self.cli_version = str(event.get("claude_code_version") or "")
             yield event
             if self.is_final(event):
+                self.turns += 1
                 self.last_used = time.monotonic()
                 return
 
@@ -258,9 +328,14 @@ class SessionPool:
                 self._pool.pop(key, None)
         return doomed
 
-    def find(self, argv: list[str], fps: list[str]) -> Optional[LiveSession]:
+    def find(
+        self,
+        argv: list[str],
+        fps: list[str],
+        accepts: Optional[Callable[[LiveSession], bool]] = None,
+    ) -> Optional[LiveSession]:
         for s in self._pool.get(self.key(argv), []):
-            if s.alive and not s._busy and s.matches(fps):
+            if s.alive and not s._busy and s.matches(fps) and (accepts is None or accepts(s)):
                 return s
         return None
 
@@ -324,6 +399,7 @@ async def acquire(
     key_argv: Optional[list[str]] = None,
     render_full: RenderFull = flatten_messages_with_images,
     fresh: bool = False,
+    accepts: Optional[Callable[[LiveSession], bool]] = None,
 ) -> "tuple[LiveSession, str, list[dict], bool]":
     """Get a session for this turn.
 
@@ -331,12 +407,23 @@ async def acquire(
     or any rewrite of the history the session had consumed — a fresh process is spawned
     and ``render_full``'s rendering of the FULL transcript is sent. ``fresh`` skips the
     lookup altogether — a retry after a failed reuse must not land on another idle session.
+    ``accepts`` is a further test a kept session must pass, beyond its key and transcript.
     """
     key_argv = key_argv or argv
     for dead in p.reap_idle():
+        if not dead.alive and dead.proc is not None:
+            # Died between turns, on its own: say how, or the next turn's failure is all
+            # anyone sees.
+            log.warning(
+                "%s: a kept session ended while idle — it %s; %s; stderr=%r",
+                dead.LOG_PREFIX,
+                describe_exit(dead.proc.returncode, label=dead.LABEL),
+                dead.diagnostics(),
+                " | ".join(dead.stderr_tail)[-300:],
+            )
         await dead.close()
 
-    session = None if fresh else p.find(key_argv, fingerprints(messages))
+    session = None if fresh else p.find(key_argv, fingerprints(messages), accepts)
     if session is not None:
         text, images = pending_turn(messages, len(session.consumed))
         if text.strip() and text.strip() != "Assistant:":
@@ -374,6 +461,13 @@ async def close_all(registry: "dict[int, SessionPool]") -> None:
         for s in p.all():
             await s.close()
     registry.clear()
+
+
+def _unsent_bytes(proc) -> int:
+    try:
+        return int(proc.stdin.transport.get_write_buffer_size())
+    except Exception:  # noqa: BLE001 — a closed transport may refuse even this
+        return 0
 
 
 def _parse_event(line: bytes, log_prefix: str) -> Optional[dict]:

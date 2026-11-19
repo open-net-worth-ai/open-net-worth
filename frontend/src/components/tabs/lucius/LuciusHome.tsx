@@ -23,6 +23,7 @@ import type { ArtifactRef } from '../../../types/chat'
 import { lazyChunk } from '../../../lazyChunk'
 import './lucius-home.css'
 
+import { MemorySheetFallback } from '../../chat/MemorySheetFallback'
 const MemorySheet = lazyChunk(() =>
   import('../../chat/MemorySheet').then((m) => ({ default: m.MemorySheet })),
 )
@@ -493,7 +494,7 @@ export function LuciusHome({
           </button>
         </div>
         {memory.open && (
-          <Suspense fallback={null}>
+          <Suspense fallback={<MemorySheetFallback />}>
             <MemorySheet onClose={memory.close} />
           </Suspense>
         )}

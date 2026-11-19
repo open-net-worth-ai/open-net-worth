@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useSheetDragToDismiss } from '../../hooks/useSheetDragToDismiss'
 import { X, ChevronLeft, ChevronRight, ChevronDown, Check } from '../../ui/icons'
-import type { ModelOption } from '../../api/models'
+import { providerLabelFor, type ModelOption } from '../../api/models'
 
 // The ONE model chooser. Every surface that lets a human pick a model uses it: the chat
 // side panel, the Lucius dock, Settings → Task models (×13), Settings → Preferred models,
@@ -68,7 +68,7 @@ export function resolveModelSelection(ref: string, models: ModelOption[]): Model
     providerKey: match?.provider_key ?? providerKey,
     // Fall back to the catalogue KEY when no entry matched: naming `openrouter` still beats
     // showing nothing for a model whose provider was since disabled or removed.
-    providerLabel: match?.provider_label ?? providerKey,
+    providerLabel: match?.provider_label ?? providerLabelFor(providerKey) ?? providerKey,
     model: match,
     isDefault: clean === '',
   }

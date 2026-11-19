@@ -51,12 +51,12 @@ check: lint type test build docs-lint
 ## Override the port with `make dev PORT=8081`.
 PORT ?= 8080
 dev:
-	$(PY) -m uvicorn backend.main:app --reload --reload-dir backend --port $(PORT)
+	$(PY) -m uvicorn backend.main:app --loop asyncio --reload --reload-dir backend --port $(PORT)
 
 ## serve: run the backend WITHOUT --reload, LAN-bound (0.0.0.0) — the exact command
 ##        the ai.opennetworth.backend launchd service runs. Foreground; Ctrl-C to stop.
 serve:
-	$(PY) -m uvicorn backend.main:app --host 0.0.0.0 --port $(PORT)
+	$(PY) -m uvicorn backend.main:app --loop asyncio --host 0.0.0.0 --port $(PORT)
 
 ## daemon-start: load the launchd services so the backend (:8080) and frontend (:5174)
 ##               run persistently, restart on crash, and start at login again.
@@ -249,11 +249,11 @@ start:
 ##            the non-Docker answer to Docker's `restart: unless-stopped`; Docker
 ##            already has that built in and needs no target here.
 autostart: setup
-	@$(VENV)/bin/onw autostart install
+	@$(VENV)/bin/onw autostart on
 
 ## autostart-stop: stop the boot service and stop it starting at boot again
 autostart-stop:
-	@$(VENV)/bin/onw autostart stop
+	@$(VENV)/bin/onw autostart off
 
 ## autostart-status: is the boot service currently installed/running
 autostart-status:
@@ -408,7 +408,7 @@ qa-e2e: $(if $(SPECS),$(if $(filter CMD-01,$(SPECS)),qa-e2e-crypto-market-data,)
 	  ONW_QA_NONCE="$$qa_nonce" \
 	  DATA_DIR="$$qa_data_dir" CACHE_DIR="$$qa_data_dir-cache" LOGS_DIR="$$qa_data_dir-logs" \
 	  AUTH_DISABLED=true ANTHROPIC_API_KEY="$(QA_KEY)" \
-	  $(PY) -m uvicorn backend.main:app --host 127.0.0.1 --port 8091 \
+	  $(PY) -m uvicorn backend.main:app --loop asyncio --host 127.0.0.1 --port 8091 \
 	  > $(QA_DIR)/artifacts/logs/backend.log 2>&1 & qa_pids="$$!"; \
 	echo "==> Starting frontend preview on port 8092 ..."; \
 	(cd frontend && VITE_API_URL=http://localhost:8091 npx vite preview \
@@ -520,7 +520,7 @@ qa-manual:
 	@ONW_DISABLE_TELEGRAM=1 ONW_QA_MODE=1 \
 	  DATA_DIR="$(QA_DATA_DIR)" CACHE_DIR="$(QA_DATA_DIR)-cache" LOGS_DIR="$(QA_DATA_DIR)-logs" \
 	  AUTH_DISABLED=true ANTHROPIC_API_KEY="$(QA_KEY)" \
-	  $(PY) -m uvicorn backend.main:app --host 127.0.0.1 --port 8091 \
+	  $(PY) -m uvicorn backend.main:app --loop asyncio --host 127.0.0.1 --port 8091 \
 	  > $(QA_DIR)/artifacts/logs/manual-backend.log 2>&1 & echo $$! > $(QA_DIR)/.qa_manual_pids
 	@cd frontend && VITE_API_URL=http://localhost:8091 npx vite preview \
 	  --host 127.0.0.1 --port 8092 \
@@ -594,7 +594,7 @@ try:
 	  -u DATA_DIR -u CACHE_DIR -u LOGS_DIR \
 	  ONW_DISABLE_TELEGRAM=1 \
 	  ONW_ROOT="$(TRY_ROOT)" PORT=$(TRY_PORT) \
-	  $(PY) -m uvicorn backend.main:app --host 127.0.0.1 --port $(TRY_PORT) \
+	  $(PY) -m uvicorn backend.main:app --loop asyncio --host 127.0.0.1 --port $(TRY_PORT) \
 	  > $(TRY_ROOT)/app.log 2>&1 < /dev/null & echo $$! > $(TRY_ROOT)/.try-server.pid; disown
 	@for i in $$(seq 1 40); do \
 	  pid=$$(cat $(TRY_ROOT)/.try-server.pid); \
@@ -639,7 +639,7 @@ qa-fresh:
 	@nohup env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u AI_PROVIDER -u AI_MODEL \
 	  ONW_QA_MODE=1 ONW_DISABLE_TELEGRAM=1 \
 	  ONW_ROOT="$(QA_FRESH_ROOT)" \
-	  $(PY) -m uvicorn backend.main:app --host 127.0.0.1 --port $(QA_FRESH_API) \
+	  $(PY) -m uvicorn backend.main:app --loop asyncio --host 127.0.0.1 --port $(QA_FRESH_API) \
 	    --reload --reload-dir backend \
 	  > $(QA_FRESH_ROOT)/backend.log 2>&1 < /dev/null &
 	@echo "==> Waiting for backend ..." && \

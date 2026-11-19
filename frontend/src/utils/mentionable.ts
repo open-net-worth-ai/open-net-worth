@@ -1,5 +1,5 @@
 import React from 'react'
-import { fShortDate } from './format'
+import { fDate, fShortDate } from './format'
 
 // Detect whether a string is a financial amount, balance, holding quantity, or share formula
 // that should be masked under privacy mode (body.hide-amounts).
@@ -103,6 +103,8 @@ export function renderMaskableSublabel(sublabel?: string | null): React.ReactNod
     }
     if (isMaskableAmountOrQuantity(part)) {
       nodes.push(React.createElement('span', { key: i, className: 'money' }, part))
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(part)) {
+      nodes.push(fDate(part, 'short', 'always'))
     } else {
       nodes.push(part)
     }

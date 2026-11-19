@@ -7,6 +7,7 @@ import { ReviewConfetti } from './ReviewConfetti'
 import { TransactionReviewCard } from './TransactionReviewCard'
 import { useReviewWaitingElsewhere } from './useReviewWaitingElsewhere'
 import { startingReviewDraft, validateReviewDraft, type ReviewDraft } from './transactionReview'
+import type { PayeeOption } from './pickers'
 import type { Account, ApiTxn, Category, Txn } from './types'
 
 export type { ReviewDraft } from './transactionReview'
@@ -48,8 +49,11 @@ export interface TransactionReviewModeProps {
   onReject: (txn: Txn) => Promise<void>
   /** Accepted but unused: the inline Ask Lucius surface is removed for now. */
   onAskLucius?: (txn: Txn, prompt: string) => Promise<void>
-  onViewAll: (txn: Txn) => void
-  onEditAll: (txn: Txn) => void
+  /** The full drawer for this row, carrying the card's unsaved picks (one way: closing the
+   *  drawer leaves the card's draft as it was). */
+  onAllDetails: (txn: Txn, draft: ReviewDraft) => void
+  /** The tapped-open card's payee picker. */
+  payeeOptions?: PayeeOption[]
   /** Reopens the review across every account — offered once an account's own runs out. */
   onReviewEverywhere?: () => void
   /** A row changed from OUTSIDE the cards — the drawer's Save, Mark as reviewed or Delete —
@@ -83,8 +87,8 @@ export function TransactionReviewMode({
   onClose,
   onApprove,
   onReject,
-  onViewAll,
-  onEditAll,
+  onAllDetails,
+  payeeOptions = NO_PAYEE_OPTIONS,
   onReviewEverywhere,
   rowChanged = null,
 }: TransactionReviewModeProps) {
@@ -485,8 +489,8 @@ export function TransactionReviewMode({
               onDraftChange={setDraft}
               onApprove={approve}
               onSkip={skip}
-              onViewAll={() => onViewAll(current)}
-              onEditAll={() => onEditAll(current)}
+              onAllDetails={() => onAllDetails(current, draft)}
+              payeeOptions={payeeOptions}
             />
           )}
         </div>
@@ -527,3 +531,5 @@ export function TransactionReviewMode({
     </>
   )
 }
+
+const NO_PAYEE_OPTIONS: PayeeOption[] = []

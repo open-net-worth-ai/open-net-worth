@@ -153,7 +153,7 @@ def test_install_windows_falls_back_to_a_run_value_when_the_task_is_refused(tmp_
     assert autostart.install("Windows", tmp_path, runner) == 0
 
     out = capsys.readouterr().out
-    assert "will not restart after a crash" in out
+    assert "won't restart after a crash" in out
 
 
 def test_stop_windows_removes_the_task_the_run_value_and_the_recorded_command(tmp_path):
@@ -175,4 +175,4 @@ def test_status_windows_reports_the_scheduled_task_state(tmp_path, capsys):
         return subprocess.CompletedProcess(cmd, 0, stdout, "")
 
     assert autostart.status("Windows", tmp_path, runner) == 0
-    assert "installed and running" in capsys.readouterr().out
+    assert "on and running" in capsys.readouterr().out

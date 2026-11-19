@@ -49,7 +49,9 @@ if anything, needs them. It takes seconds to read. Say only what is worth knowin
   an `already_told` item; it is there so you know what they have heard. An empty result, or a
   tool that is not there, is not worth a word.
 - **Cards and bills:** a card statement that posted yesterday or the day before, so they can
-  reconcile it, and any card bill or other payment due in the next 3 days that is not paid yet.
+  reconcile it, and any card bill not paid yet whose `in_reminder_window` is true: due within
+  a week, or earlier when they usually pay that card earlier, or overdue. Any other payment
+  counts within the next 7 days. Say when it is due ("in 5 days", "on Monday") and how much.
 - **Needs a look:** transactions waiting for their review or still uncategorized, and anything
   that looks off — a possible duplicate, an unusually large charge, a first-time payee — named,
   not just counted. Check each one against what you remember first: leave out what they've

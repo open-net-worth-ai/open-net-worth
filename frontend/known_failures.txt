@@ -4,7 +4,6 @@ src/components/chat/ChatPanel.convGroups.test.ts::<suite failed to run>
 src/components/chat/ChatPanel.homeGreeting.test.ts::<suite failed to run>
 src/components/intel/TickerDesk.test.tsx::TickerDesk leads with the news story even when the price signal is more urgent
 src/components/mobile/mobileClearance.contract.test.ts::mobile tab-bar clearance ../tabs/plan/budget.tsx opts in via .mb-anchored
-src/components/tabs/accounts/AccountHeader.connectRouting.test.tsx::AccountHeader "Connect to bank" routes to Connectors (CDS-UI-21) navigates to Connectors with no toast and never writes connected
 src/components/tabs/accounts/AccountModal.linkedTo.test.tsx::AccountModal "Linked to" list CDS-UI-14: shows the empty copy when there are no external_ids
 src/components/tabs/accounts/AccountModal.typePicker.css.test.ts::edit-account metadata uses one vertical column and opens the colour picker inward
 src/components/tabs/accounts/ImportModal.categoryHint.test.tsx::ImportModal — a shown category is booked without being touched sends no category edit — and no deviation at all — when the row is genuinely Unsorted

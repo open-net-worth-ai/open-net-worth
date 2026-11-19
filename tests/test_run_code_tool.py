@@ -33,6 +33,10 @@ from backend.db.app_config_store import (
 )
 from backend.db.pending_plan_store import PendingPlanStore
 
+# The OLD permission gate's behaviour; permissions_v2 defaults on, and the on path is the
+# test_run_code_tool_v2.py twin. Drop this pin with the flag.
+pytestmark = pytest.mark.flags(permissions_v2=False)
+
 _ECHO = (
     "import json, os\n"
     "data = json.load(open(os.environ['SKILL_INPUT']))\n"

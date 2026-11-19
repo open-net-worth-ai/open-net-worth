@@ -42,9 +42,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from backend.core.txn_sources import CONTENT_HASH_REF_PREFIX
 from backend.services.connector_catalog import CATALOG
 
 logger = logging.getLogger(__name__)
+
+#: What every content-derived ref starts with — a ref keyed on the row's content, not an id.
+DERIVED_PREFIX = CONTENT_HASH_REF_PREFIX
 
 
 def derived_ref(
@@ -53,9 +57,12 @@ def derived_ref(
     """The fallback ref for a provider row with NO stable id of its own (RFC §A step 3) —
     a content hash, never dropped. Shared so all nine provider ``fetch_window``
     implementations hash the same five fields the same way; two providers hashing
-    differently would be harmless (refs never cross providers) but pointless drift."""
+    differently would be harmless (refs never cross providers) but pointless drift.
+
+    ``description`` is a FROZEN ref text (each provider's ``_ref_text``), never the row's
+    display description: when that moved, every id-less row already booked came back new."""
     key = f"{provider_account_id}|{date}|{amount}|{currency}|{description}"
-    return "derived:" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    return DERIVED_PREFIX + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -67,8 +74,10 @@ class FetchWindow:
     activity in the window) — ``[{provider_account_id, name, mask, currency, balance}]``,
     already in the COMMON shape (each provider's own ``fetch_window`` normalizes as it
     fetches). ``rows`` is likewise already normalized: ``[{external_refs, provider_account_id,
-    date, amount, currency, description, memo, pending, supersedes_ref, raw}]`` — ``raw`` is
-    the ORIGINAL provider record (the exact dict the wire response carried for that row),
+    date, amount, currency, description, memo, pending, supersedes_ref, raw}]``, plus an
+    optional ``ref_aliases`` (the refs an earlier version keyed the row on, so a row booked
+    under one is still known as booked; not ``supersedes_ref``, which is pending → posted).
+    ``raw`` is the ORIGINAL provider record (the exact dict the wire response carried for that row),
     kept so ``connector_snapshots.stash_rows`` can persist real evidence a transaction drawer
     later shows, never a re-serialization of the normalized fields. ``complete`` is False
     only when the provider's own paging/response said there was more the call didn't return
@@ -120,6 +129,22 @@ class Provider:
     _fetch: tuple[str, str]
     _store: tuple[str, str]
     _classify: tuple[str, str]
+    # How far back an account's FIRST import reaches — the history the bank serves (GoCardless
+    # / PSD2: 90 days). 0 = a first import uses the ordinary lookback, as before.
+    history_days: int = 0
+    # Bank data sync (ADR 2026-11-13) — adapter config only, never per-provider booking code:
+    # whether the no-AI sync may book this provider's rows, how often it runs, and how many
+    # transaction reads per account a rolling 24 h allows (None = no app-side cap). PSD2 banks
+    # often allow 4 unattended reads a day; "Sync now" spends the same budget.
+    data_sync: bool = False
+    sync_interval_hours: int = 6
+    daily_reads: Optional[int] = None
+    # Whether the one undivided ``balance`` the provider reports is its SETTLED figure, for a
+    # provider that sends no separate booked balance. Plaid: its docs define ``available`` as
+    # ``current`` less pending outflows plus pending inflows, so ``current`` holds no pending.
+    # The sync then compares it with the CLEARED balance and sets a new account to it
+    # (``bank_data_sync.balances``).
+    balance_is_settled: bool = False
 
     @property
     def disabled(self) -> bool:
@@ -152,6 +177,21 @@ class Provider:
             self.store(), since, before, account, accounts_only=accounts_only, **extra
         )
 
+    def account_balances(self) -> dict:
+        """The provider's accounts with their balances, no transactions — ``{accounts,
+        complete}``. A provider module may offer a cheaper ``fetch_balances(store)`` (Plaid's
+        free ``/accounts/get``); otherwise this is the accounts-only ``fetch_window`` the link
+        picker already uses. Raises like ``fetch_window``."""
+        module = importlib.import_module(self._fetch[0])
+        reader = getattr(module, "fetch_balances", None)
+        if reader is not None:
+            return reader(self.store())
+        from backend.core.user_time import user_today
+
+        today = user_today().isoformat()
+        window = self.fetch_window(since=today, before=today, account=None, accounts_only=True)
+        return {"accounts": list(window.accounts), "complete": bool(window.complete)}
+
     def classify_error(self, exc: Exception) -> str:
         """This provider's own exception → status taxonomy (``auth_error`` |
         ``rate_limited`` | ``connect_error`` | ``error`` | a provider-specific status like
@@ -173,6 +213,13 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["simplefin"].label,
             note="US/CA banks + cards; linked by claiming a one-time setup token.",
             lookback_days=14,
+            history_days=90,
+            data_sync=True,
+            # The Bridge allows about 24 requests a day per connection and refreshes from the
+            # banks once a day: 12 h, and at most 6 reads an account a day. One run is one
+            # request per window slice for every account together (simplefin._feed).
+            sync_interval_hours=12,
+            daily_reads=6,
             _fetch=("backend.services.aggregation.simplefin", "fetch_window"),
             _classify=("backend.services.aggregation.simplefin", "classify_error"),
             _store=("backend.db", "SimpleFinConfigStore"),
@@ -182,6 +229,9 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["plaid"].label,
             note="US/CA banks; credentials + a linked Item; sandbox or production.",
             lookback_days=14,
+            history_days=730,
+            data_sync=True,
+            balance_is_settled=True,
             _fetch=("backend.services.aggregation.plaid", "fetch_window"),
             _classify=("backend.services.aggregation.plaid", "classify_error"),
             _store=("backend.db", "PlaidConfigStore"),
@@ -203,6 +253,7 @@ PROVIDERS: dict[str, Provider] = {
                 "plus a linked bank."
             ),
             lookback_days=14,
+            history_days=90,
             _fetch=("backend.services.aggregation.lunch_flow", "fetch_window"),
             _classify=("backend.services.aggregation.lunch_flow", "classify_error"),
             _store=("backend.db.lunch_flow_config_store", "LunchFlowConfigStore"),
@@ -221,6 +272,12 @@ PROVIDERS: dict[str, Provider] = {
             label=CATALOG["enable_banking"].label,
             note="EU PSD2; an application id + private key + a per-bank/country session.",
             lookback_days=14,
+            history_days=90,
+            data_sync=True,
+            # 12 h, not 6: every Enable Banking read also reads each account's details and
+            # balance, which PSD2 banks count against the same 4-a-day limit.
+            sync_interval_hours=12,
+            daily_reads=4,
             _fetch=("backend.services.aggregation.enable_banking", "fetch_window"),
             _classify=("backend.services.aggregation.enable_banking", "classify_error"),
             _store=("backend.db", "EnableBankingConfigStore"),
@@ -233,6 +290,10 @@ PROVIDERS: dict[str, Provider] = {
                 "account per day: on 'rate_limited', wait for the reset it names."
             ),
             lookback_days=14,
+            history_days=90,
+            data_sync=True,
+            sync_interval_hours=12,
+            daily_reads=4,
             _fetch=("backend.services.aggregation.gocardless", "fetch_window"),
             _classify=("backend.services.aggregation.gocardless", "classify_error"),
             _store=("backend.db", "GoCardlessConfigStore"),

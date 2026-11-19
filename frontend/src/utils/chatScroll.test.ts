@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { followsBottom, isNearBottom, newScrollIntent } from './chatScroll'
+import { followsBottom, isNearBottom, newScrollIntent, restorePlace } from './chatScroll'
 
 function makeEl(scrollTop: number, scrollHeight: number, clientHeight: number) {
   return { scrollTop, scrollHeight, clientHeight }
@@ -91,5 +91,34 @@ describe('followsBottom', () => {
 
   it('is not following when far from the bottom', () => {
     expect(followsBottom(makeEl(100, 1000, 100), newScrollIntent(), NOW)).toBe(false)
+  })
+})
+
+describe('restorePlace', () => {
+  function held(top: number, now: { top: number }) {
+    const node = { isConnected: true, getBoundingClientRect: () => ({ top: now.top }) }
+    return { node: node as unknown as Element, top, last: false }
+  }
+
+  it('moves the view by exactly how far the message was pushed down', () => {
+    const now = { top: 900 }
+    const el = { scrollTop: 100 } as HTMLElement
+    const place = held(300, now)
+    restorePlace(el, place)
+    expect(el.scrollTop).toBe(700)
+  })
+
+  it('leaves it alone when the browser already held the place itself', () => {
+    const el = { scrollTop: 100 } as HTMLElement
+    restorePlace(el, held(300, { top: 300 }))
+    expect(el.scrollTop).toBe(100)
+  })
+
+  it('does nothing once the message is gone', () => {
+    const el = { scrollTop: 100 } as HTMLElement
+    const place = held(300, { top: 900 })
+    ;(place.node as unknown as { isConnected: boolean }).isConnected = false
+    restorePlace(el, place)
+    expect(el.scrollTop).toBe(100)
   })
 })

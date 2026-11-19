@@ -179,10 +179,32 @@ export function startOAuthSignIn(
   }
 }
 
-/** Promise-wrapped convenience for a fire-and-forget caller with no live UI to drive
- *  (`ConnectorsTab.tsx`'s Reconnect) — same controller, no mid-flight cancel exposed. */
-export function signInWithOAuth(body: OAuthBeginBody): Promise<OAuthOutcome> {
-  return new Promise((resolve) => {
-    startOAuthSignIn(body, resolve)
+/** The outcome a `cancel()` resolves with — the caller's own action, so nothing to toast. */
+export const CANCELLED_REASON = 'cancelled'
+
+/** A sign-in the caller can abandon. The desktop app signs in through the system browser, so
+ *  closing that tab is invisible here and the poll would hold the caller for the flow's whole
+ *  10-minute TTL; `cancel()` resolves `outcome` at once (reason `cancelled`) and stops polling. */
+export function signInWithOAuthCancellable(body: OAuthBeginBody): {
+  outcome: Promise<OAuthOutcome>
+  cancel: () => void
+} {
+  let settle: (o: OAuthOutcome) => void = () => {}
+  const outcome = new Promise<OAuthOutcome>((resolve) => {
+    settle = resolve
   })
+  const handle = startOAuthSignIn(body, (o) => settle(o))
+  return {
+    outcome,
+    cancel: () => {
+      handle.cancel()
+      settle({
+        ok: false,
+        reason: CANCELLED_REASON,
+        error: null,
+        needsClientId: false,
+        redirectUris: [],
+      })
+    },
+  }
 }

@@ -15,10 +15,12 @@ import {
   plClass,
 } from '../../utils/format'
 import { authFetch } from '../../api/client'
+import { useDataVersion } from '../../hooks/useDataVersion'
 import { EntityRow } from '../../lucius/EntityRow'
 import { Button, Loading, Panel } from '../ui'
 import { AcquireLotForm } from './AcquireLotForm'
 import { DisposalForm } from './DisposalForm'
+import { DividendForm } from './DividendForm'
 import { WhichAccountModal, type WriteTarget } from './WhichAccountModal'
 import { Plus, ChevronDown, ChevronRight } from '../../ui/icons'
 
@@ -73,6 +75,9 @@ export function LotsPanel({
   const [dividendsBase, setDividendsBase] = useState('')
   const [dividendsError, setDividendsError] = useState(false)
   const [tick, setTick] = useState(0)
+  // A write from Lucius (an undone sale, a corrected lot) changes these tables too; they kept
+  // the old rows until a reload (UAT DS-SALE-UNDO).
+  const dataV = useDataVersion('*')
   const [adding, setAdding] = useState(false)
   const [editLot, setEditLot] = useState<Lot | null>(null)
   const [saleFor, setSaleFor] = useState<{
@@ -80,6 +85,7 @@ export function LotsPanel({
     event?: RealizedEvent
   } | null>(null)
   const [pickingSale, setPickingSale] = useState(false)
+  const [editDividend, setEditDividend] = useState<IncomeEvent | null>(null)
 
   function afterWrite() {
     setTick((n) => n + 1)
@@ -102,7 +108,7 @@ export function LotsPanel({
     return () => {
       alive = false
     }
-  }, [positionId, merged, tick])
+  }, [positionId, merged, tick, dataV])
 
   useEffect(() => {
     if (merged || !positionId) return
@@ -126,7 +132,7 @@ export function LotsPanel({
     return () => {
       alive = false
     }
-  }, [positionId, merged, tick])
+  }, [positionId, merged, tick, dataV])
 
   useEffect(() => {
     if (merged || !positionId) return
@@ -147,7 +153,7 @@ export function LotsPanel({
     return () => {
       alive = false
     }
-  }, [positionId, merged, tick])
+  }, [positionId, merged, tick, dataV])
 
   // Merged (multi-account) data wins over a fetch — merged is already loaded synchronously
   // from the asset-detail response, so there's nothing to fetch in that case at all.
@@ -255,8 +261,17 @@ export function LotsPanel({
           baseCurrency={dividendsBase}
           symbol={symbol}
           showAccount={showAccount}
+          onEditDividend={setEditDividend}
         />
       </Panel>
+      {editDividend && (
+        <DividendForm
+          event={editDividend}
+          symbol={symbol}
+          onDone={afterWrite}
+          onClose={() => setEditDividend(null)}
+        />
+      )}
       {adding && (
         <AcquireLotForm
           symbol={symbol}
@@ -613,6 +628,7 @@ function DividendsSection({
   baseCurrency,
   symbol,
   showAccount,
+  onEditDividend,
 }: {
   events: IncomeEvent[] | null
   error: boolean
@@ -620,6 +636,8 @@ function DividendsSection({
   symbol: string
   /** Multi-account holding — add an Account column so the cross-account mix stays legible. */
   showAccount: boolean
+  /** Opens the row's edit form (correct or delete it), like a lot or a sale row. */
+  onEditDividend: (event: IncomeEvent) => void
 }) {
   if (error)
     return <div className="lots-empty">Could not load dividend history for this holding.</div>
@@ -660,6 +678,8 @@ function DividendsSection({
                 sublabel={`${incomeKindLabel(ev.income_kind)} • ${fDate(ev.paid_at, 'short', 'always')}`}
                 item={ev}
                 toFields={(it) => ({ symbol, income_kind: it.income_kind, paid_at: it.paid_at })}
+                className="lots-row--clickable"
+                onClick={() => onEditDividend(ev)}
               >
                 <td>{ev.paid_at ? fDate(ev.paid_at, 'short', 'always') : '—'}</td>
                 <td className="not-money">{incomeKindLabel(ev.income_kind)}</td>

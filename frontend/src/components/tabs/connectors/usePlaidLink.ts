@@ -5,6 +5,7 @@
 // and exchanges it for an access token — until it reports `linked`.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
+import { openBankPageTab } from './bankPage'
 import { emitDataChanged } from '../../../lucius/bus'
 
 // How often, and for how long, to ask the server whether the Hosted Link session finished.
@@ -47,6 +48,8 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
   })
 
   async function start(opts?: { bank?: string; addAccounts?: boolean }) {
+    const tab = openBankPageTab()
+    let opened = false
     setStarting(true)
     setError(null)
     try {
@@ -64,7 +67,8 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
       }
       const data = (await r.json()) as { link: string }
       if (data.link) {
-        window.open(data.link, '_blank', 'noopener,noreferrer')
+        opened = tab.go(data.link)
+        if (!opened) window.open(data.link, '_blank', 'noopener,noreferrer')
         setJustLinked(false)
         setRenewed(null)
         setRenewedKind(opts?.addAccounts ? 'accounts' : 'reconnect')
@@ -72,6 +76,7 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
         setWaiting(true)
       }
     } finally {
+      if (!opened) tab.cancel()
       setStarting(false)
     }
   }

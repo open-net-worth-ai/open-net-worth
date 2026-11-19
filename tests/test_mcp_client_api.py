@@ -267,6 +267,8 @@ def _fake_transport(monkeypatch, *, tools, server_info=None, down=False) -> list
 
     def fake_urlopen(request, timeout=None):
         body = json.loads(request.data)
+        if "id" not in body:  # notifications/initialized — part of the handshake, not a request
+            return _Resp(b"")
         calls.append(body["method"])
         if down:
             raise OSError("connection refused")

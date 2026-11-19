@@ -94,6 +94,23 @@ export async function setTransactionHidden(id: string, hidden: boolean): Promise
   return txn
 }
 
+/** Sentences saying what deleting these rows would change on the records that point at them.
+ *  Only ever adds to a confirm dialog, so a failed read shows the plain dialog. */
+export async function previewDeleteEffects(ids: string[]): Promise<string[]> {
+  try {
+    const res = await authFetch('/api/transactions/delete-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    })
+    if (!res.ok) return []
+    const { links } = (await res.json()) as { links?: { label: string; effect: string }[] }
+    return (links ?? []).map((link) => `${link.label}: ${link.effect}`)
+  } catch {
+    return []
+  }
+}
+
 export async function deleteTransaction(id: string): Promise<void> {
   const res = await authFetch(`/api/transactions/${id}`, { method: 'DELETE' })
   if (!res.ok) throw await failed(res, 'Delete failed')

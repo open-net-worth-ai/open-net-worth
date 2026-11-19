@@ -23,6 +23,7 @@ from backend.core.errors import ValidationError
 from backend.db.lunch_flow_config_store import LunchFlowConfigStore
 from backend.services.aggregation import lunch_flow as svc
 from backend.services.aggregation import lunch_flow_oauth
+from backend.services.aggregation.providers import derived_ref
 
 _ACCOUNTS = [
     {
@@ -442,3 +443,19 @@ def test_disconnect_connection_raises_on_failure(monkeypatch):
     monkeypatch.setattr(svc.httpx, "delete", lambda *a, **k: _Resp(403, {"error": "app-pays only"}))
     with pytest.raises(ValidationError):
         svc.disconnect_connection(100)
+
+
+def test_merchant_is_the_payee_and_the_bank_wording_stays_the_description():
+    """Lunch Flow sends a merchant AND the bank's own text. The merchant used to replace the
+    text, losing what payee matching learns from; now each keeps its own field."""
+    row = svc._txn_to_row(dict(_TXNS_ACCOUNT_1[0]), "1", "USD")
+    assert (row["payee"], row["description"]) == ("Coffee Shop", "COFFEE SHOP PURCHASE")
+    plain = svc._txn_to_row(dict(_TXNS_ACCOUNT_1[1]), "1", "USD")
+    assert (plain["payee"], plain["description"]) == (None, "Payroll")
+
+
+def test_an_id_less_row_keeps_the_key_it_had_before_the_description_change():
+    txn = {k: v for k, v in _TXNS_ACCOUNT_1[0].items() if k != "id"}
+    row = svc._txn_to_row(txn, "1", "USD")
+    old_key = derived_ref("1", "2026-05-01", -42.5, "USD", "Coffee Shop")
+    assert row["external_refs"][0]["ref"] == old_key

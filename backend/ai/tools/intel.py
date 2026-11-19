@@ -588,8 +588,7 @@ class DismissIntelSignalsInput(ToolInput):
     "dismiss_intel_signals",
     description=(
         "Dismiss (delete) one or many story-arc intelligence signals from the Intelligence "
-        "tab by id. This is the × button on a story card. It is destructive and cannot be "
-        "undone, so confirm with the user which signal(s) they mean before calling. Get the "
+        "tab by id. This is the × button on a story card. It is destructive and cannot be undone, so be sure which signal(s) the user means. Get the "
         "id(s) from the Intelligence feed (the signals shown in the Intel tab).\n\n"
         "Pass signal_ids — one id, or a LIST to dismiss several in one call."
     ),

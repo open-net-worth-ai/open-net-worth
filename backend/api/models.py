@@ -51,13 +51,22 @@ from pydantic import BaseModel
 
 from backend.ai.models import cli_sign_in
 from backend.ai.models.cli_default_model import cli_default_model, cli_default_models
+from backend.ai.models.codex_cli_catalog import catalog_readable as _codex_catalog_readable
+from backend.ai.models.codex_cli_catalog import missing_catalog_message as _codex_missing_catalog
 from backend.ai.models.codex_cli_catalog import model_ids as _codex_model_ids
+from backend.ai.models.codex_cli_catalog import refresh as _codex_refresh_catalog
 from backend.core.config import get_settings
 from backend.core.errors import ConfigurationError, ProviderDisabledError
 from backend.core.io import atomic_write_text
-from backend.core.net_guard import UnsafeUrlError
+from backend.core.net_guard import UnresolvableHostError, UnsafeUrlError
 from backend.db import app_config_store
-from backend.db.model_config_store import PROVIDER_CATALOG, PROVIDER_HINTS, ModelConfigStore
+from backend.db.model_config_store import (
+    CLAUDE_CLI_ALIASES,
+    CURRENT_CLAUDE_MODELS,
+    PROVIDER_CATALOG,
+    PROVIDER_HINTS,
+    ModelConfigStore,
+)
 from backend.models.model_config import VALID_PROVIDERS, ModelConfigUpdate
 from backend.paths import MODELS_CACHE_JSON
 
@@ -69,13 +78,8 @@ router = APIRouter()
 # network / provider error). Kept tiny + current — NOT a hand-maintained catalog,
 # just a safe floor so the dropdown is never empty. The Anthropic ids are the
 # concern named in the spec (a stale hardcoded list showed a retired Opus).
-# Refreshed 2026-10-04 against LiteLLM's public price list (it still named Opus 4.8 / Sonnet 4.6).
-_ANTHROPIC_FALLBACK = [
-    "claude-fable-5-1",
-    "claude-opus-5-5",
-    "claude-sonnet-5-5",
-    "claude-haiku-4-5",
-]
+# The one hand-kept list: db/model_config_store.CURRENT_CLAUDE_MODELS.
+_ANTHROPIC_FALLBACK = list(CURRENT_CLAUDE_MODELS)
 # For an OpenAI-compatible provider we can't know the model set offline; the
 # configured model (if any) is added by the route so the picker still shows it.
 _OPENAI_FALLBACK: list[str] = []
@@ -83,15 +87,7 @@ _OPENAI_FALLBACK: list[str] = []
 # curated list. Aliases first (they track the CLI's own current model for each tier —
 # the right default for a self-hoster who does not want to chase model ids), then a few
 # pinned ids for someone who does.
-_CLAUDE_CLI_MODELS = [
-    "sonnet",
-    "opus",
-    "haiku",
-    "claude-opus-5-5",
-    "claude-sonnet-5-5",
-    "claude-haiku-4-5",
-    "claude-fable-5-1",
-]
+_CLAUDE_CLI_MODELS = [*CLAUDE_CLI_ALIASES, *CURRENT_CLAUDE_MODELS]
 _ANTIGRAVITY_CLI_MODELS: list[str] = [
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -130,6 +126,10 @@ _CLI_TRANSPORTS: dict = {
     "codex_cli": {
         "name": "Codex CLI",
         "models": _codex_model_ids,
+        # Asks the CLI to fetch its catalog first (only when stale, unless forced).
+        "refresh_catalog": _codex_refresh_catalog,
+        # None when the list is the CLI's own; the reason when it is our static floor.
+        "catalog_note": lambda: None if _codex_catalog_readable() else _codex_missing_catalog(),
         "min_version": None,
         "upgrade": "codex --upgrade",
         "install": (
@@ -163,18 +163,31 @@ _CACHE_TTL_SECONDS = 6 * 60 * 60
 # modality-name heuristic — a v3 cache still holds e.g. grok-imagine-image.
 # v5: cache file shape changed to a multi-key {providers: {key: {...}}} map (a v4
 # single-slot file would just miss and re-fetch).
-_CACHE_SCHEMA = 5
+# v6: a Codex CLI static floor is no longer cached as "live" — a v5 file may hold one.
+_CACHE_SCHEMA = 6
 
 _ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models"
 _ANTHROPIC_VERSION = "2023-06-01"
 _HTTP_TIMEOUT = 8.0
 # Shorter dedicated timeout for the on-save validation probe (the user is waiting).
-_VALIDATE_TIMEOUT = 6.0
+_VALIDATE_TIMEOUT = 15.0
 
 KeyStatus = Literal["valid", "invalid", "unreachable", "unchecked"]
 
 
-def _probe_cli(transport: str, cli_path: str) -> tuple[KeyStatus, list[str], str]:
+def _cli_catalog_note(transport: str) -> str | None:
+    """Why a CLI's model list is only our static floor, or None when it is the CLI's own.
+
+    A floor must never be reported or cached as "live": it was, for 6 hours at a time, and a
+    Codex picker sat on three stale ids with nothing saying the real list was unreadable.
+    """
+    note = (_CLI_TRANSPORTS.get(transport) or {}).get("catalog_note")
+    return note() if callable(note) else None
+
+
+def _probe_cli(
+    transport: str, cli_path: str, *, refresh_catalog: bool = False
+) -> tuple[KeyStatus, list[str], str]:
     """Validate a headless-CLI transport by locating and version-probing the binary.
 
     There is no key to validate here — the CLI authenticates with the user's own
@@ -219,6 +232,9 @@ def _probe_cli(transport: str, cli_path: str) -> tuple[KeyStatus, list[str], str
             f"{spec['name']} {version_text} is too old (need >= {wanted}); "
             f"run `{spec['upgrade']}`.",
         )
+    refresh = spec.get("refresh_catalog")
+    if callable(refresh):
+        refresh(resolved, force=refresh_catalog)
     return "valid", list(spec["models"]()), ""
 
 
@@ -363,7 +379,8 @@ def _validate_credentials(
 
     try:
         if transport in _CLI_TRANSPORTS:
-            return _probe_cli(transport, base_url)
+            # A check the owner asked for fetches the CLI's model list now, not after a chat.
+            return _probe_cli(transport, base_url, refresh_catalog=True)
         if transport == "anthropic":
             if not api_key:
                 return "unreachable", [], "No API key provided"
@@ -422,6 +439,14 @@ def _validate_credentials(
                 return "invalid", [], _explain_failure(label, probe.status_code, probe.text)
 
         return "valid", ids, ""
+    except UnresolvableHostError:
+        # A subclass of UnsafeUrlError, so it must come first: a name DNS can't answer is a
+        # typo or a network problem, and "not allowed" sent owners hunting for a policy.
+        return (
+            "unreachable",
+            [],
+            (f"Could not find {label}'s address. Check the URL and your network connection."),
+        )
     except UnsafeUrlError:
         return "unreachable", [], f"The address for {label} is not allowed."
     except httpx.TimeoutException:
@@ -567,6 +592,7 @@ class ProviderCredentialsUpdate(BaseModel):
     base_url: Optional[str] = None
     model: Optional[str] = None
     enabled: Optional[bool] = None
+    label: Optional[str] = None  # the owner's name for a custom endpoint; ignored elsewhere
 
 
 @router.put("/api/model-config/providers/{provider_key}")
@@ -594,7 +620,7 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
     The models cache is busted on any ``enabled`` change so the model picker
     reflects the new state without waiting 6 hours.
     """
-    from backend.db.model_config_store import _infer_provider_key, _provider_entry
+    from backend.db.model_config_store import _provider_entry
 
     entry = _provider_entry(provider_key)
     if entry is None:
@@ -605,13 +631,11 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
 
     # Guard: refuse to disable the active instance default.
     if changes.get("enabled") is False:
-        inst = store.resolved()
-        default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
-        if default_key == provider_key:
+        if store.default_provider_key() == provider_key:
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    f"Cannot disable {entry['label']!r} — it is the active default. "
+                    f"Cannot disable {store.display_label(provider_key)!r} — it is the active default. "
                     "Set another provider as default first."
                 ),
             )
@@ -650,7 +674,8 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
     store.update_provider(provider_key, {"key_status": status, "checked_at": checked_at})
 
     # Update the models cache on success so GET /api/models benefits immediately.
-    if status == "valid" and models:
+    note = _cli_catalog_note(transport) if status == "valid" else None
+    if status == "valid" and models and not note:
         cache_key = _cache_key(provider_key, base_url)
         _write_cache(cache_key, _annotate_ids(models, transport, base_url))
 
@@ -658,6 +683,8 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
     result: dict = {"configured_providers": public, "key_status": status, "checked_at": checked_at}
     if status == "valid":
         result["models"] = models
+        if note:
+            result["warning"] = note
     else:
         result["error"] = error
     return result
@@ -673,20 +700,18 @@ def delete_provider_key(provider_key: str):
     refused with 409 (it would break every chat turn) — set another default first.
     ``base_url``/``model``/``enabled=False`` survive; an empty entry is pruned.
     """
-    from backend.db.model_config_store import _infer_provider_key, _provider_entry
+    from backend.db.model_config_store import _provider_entry
 
     entry = _provider_entry(provider_key)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown provider key: {provider_key!r}")
 
     store = ModelConfigStore()
-    inst = store.resolved()
-    default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
-    if default_key == provider_key and entry.get("needs_api_key", True):
+    if store.default_provider_key() == provider_key and entry.get("needs_api_key", True):
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Cannot remove the API key for {entry['label']!r} — it is the active "
+                f"Cannot remove the API key for {store.display_label(provider_key)!r} — it is the active "
                 "default. Set another provider as default first."
             ),
         )
@@ -709,20 +734,18 @@ def delete_provider(provider_key: str):
     key deletion, and for the same reason: it would break every chat turn. Set another
     default first.
     """
-    from backend.db.model_config_store import _infer_provider_key, _provider_entry
+    from backend.db.model_config_store import _provider_entry
 
     entry = _provider_entry(provider_key)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown provider key: {provider_key!r}")
 
     store = ModelConfigStore()
-    inst = store.resolved()
-    default_key = _infer_provider_key(inst["provider"], inst.get("base_url") or "")
-    if default_key == provider_key:
+    if store.default_provider_key() == provider_key:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Cannot remove {entry['label']!r} — it is the active default. "
+                f"Cannot remove {store.display_label(provider_key)!r} — it is the active default. "
                 "Set another provider as default first."
             ),
         )
@@ -872,26 +895,20 @@ def validate_provider_credentials(provider_key: str):
     base_url = (creds.get("base_url") or entry["base_url"] or "").strip()
     transport: str = entry["transport"]
 
-    # Bust the cache so this is always a live round-trip.
-    cache_key_str = _cache_key(provider_key, base_url)
-    try:
-        if MODELS_CACHE_JSON.exists():
-            raw = json.loads(MODELS_CACHE_JSON.read_text(encoding="utf-8"))
-            if isinstance(raw, dict) and raw.get("key") == cache_key_str:
-                MODELS_CACHE_JSON.unlink(missing_ok=True)
-    except OSError:
-        pass
-
+    # _validate_credentials never reads the models cache, so this is always a live round-trip.
     status, models, error = _validate_credentials(provider_key, transport, base_url, api_key)
     checked_at = datetime.now(timezone.utc).isoformat()
     store.update_provider(provider_key, {"key_status": status, "checked_at": checked_at})
 
-    if status == "valid" and models:
-        _write_cache(cache_key_str, _annotate_ids(models, transport, base_url))
+    note = _cli_catalog_note(transport) if status == "valid" else None
+    if status == "valid" and models and not note:
+        _write_cache(_cache_key(provider_key, base_url), _annotate_ids(models, transport, base_url))
 
     result: dict = {"key_status": status, "checked_at": checked_at}
     if status == "valid":
         result["models"] = models
+        if note:
+            result["warning"] = note
     else:
         result["error"] = error
     if status == "valid":
@@ -1454,6 +1471,10 @@ def _fetch_models_for_provider(
             if status != "valid":
                 raise RuntimeError(_err or f"{_CLI_TRANSPORTS[transport]['name']} unavailable")
             models = _annotate_ids(ids, transport, base_url)
+            if _cli_catalog_note(transport):
+                # The binary runs but its own list is unreadable: offer the floor, honestly
+                # labelled, and never cache it — the next request re-reads the CLI's file.
+                return models, "fallback"
         elif transport == "anthropic":
             if not api_key:
                 raise RuntimeError("no Anthropic API key configured")
@@ -1543,7 +1564,17 @@ def get_models(all: bool = Query(default=False, alias="all")):  # noqa: A002
     pref_refs = _preferred_ref_set()
 
     def _resp(rows: list[dict], source: str) -> dict:
-        return {"models": _mark_preferred(rows, pref_refs), "source": source}
+        out = {"models": _mark_preferred(rows, pref_refs), "source": source}
+        if all:
+            # Key → owner's name for every configured provider, so a selection whose provider
+            # returned no models (an unreachable custom endpoint) still shows its name.
+            try:
+                out["provider_labels"] = {
+                    k: store.display_label(k) for k in store.configured_provider_keys()
+                }
+            except Exception:  # noqa: BLE001 — the picker must render whatever else is broken
+                pass
+        return out
 
     if not all:
         # Single-provider path — use the provider key for cache identity so this
@@ -1565,6 +1596,8 @@ def get_models(all: bool = Query(default=False, alias="all")):  # noqa: A002
                 if status != "valid":
                     raise RuntimeError(err or f"{_CLI_TRANSPORTS[provider]['name']} unavailable")
                 models = _annotate_ids(ids, provider, base_url)
+                if _cli_catalog_note(provider):
+                    return _resp([_model_row(m) for m in models], "fallback")
             elif provider == "anthropic":
                 api_key = _anthropic_key(resolved)
                 if not api_key:
@@ -1591,11 +1624,8 @@ def get_models(all: bool = Query(default=False, alias="all")):  # noqa: A002
             "fallback",
         )
 
-    from backend.db.model_config_store import _provider_entry
-
     def _fetch_one(key: str) -> tuple[str, str, list[dict], str]:
-        entry = _provider_entry(key)
-        label = entry["label"] if entry else key
+        label = store.display_label(key) or key
         models, src = _fetch_models_for_provider(key, store)
         return key, label, models, src
 

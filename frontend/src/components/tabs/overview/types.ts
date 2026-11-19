@@ -44,9 +44,13 @@ export interface VizOption {
 /** A per-def settings-schema entry — seeds `WidgetInstance.config` (`seedConfig`). */
 export interface WidgetSettingSchema {
   key: string
-  /** `categories` = budget envelope labels; `categoryIds` = any ledger category, by id. */
-  type: 'segment' | 'url' | 'pairs' | 'categories' | 'categoryIds'
+  /** `categories` = budget envelope labels; `categoryIds` = any ledger category, by id;
+   *  `tags` = transaction tags (none chosen = no filter). */
+  type: 'segment' | 'url' | 'pairs' | 'categories' | 'categoryIds' | 'tags'
   label: string
+  /** Set on the widget itself (a Reports widget's header filter), so the settings panel leaves
+   *  it out. */
+  inline?: boolean
   options?: string[]
   default: unknown
   /** `categoryIds` only: the category label to use when none of the stored ids exist in
@@ -199,4 +203,11 @@ export interface RegisterDeepLink {
   payee?: string
   /** `YYYY-MM` — the month a figure was taken from. */
   month?: string
+  /** With `month`: the last month of a range (`YYYY-MM`) — a report period's span. */
+  monthTo?: string
+  /** Transactions carrying any of these tags — a report narrowed to tags. */
+  tag?: string[]
+  /** Blank-category transactions; `kind` keeps Uncategorized spending apart from income. */
+  uncategorized?: boolean
+  kind?: string
 }

@@ -18,6 +18,7 @@ const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
 function flagRow(over: Partial<FeatureFlag> = {}): FeatureFlag {
   return {
     name: 'example_flag',
+    title: 'Example flag',
     description: 'Shows the new thing.',
     kind: 'release',
     default: false,

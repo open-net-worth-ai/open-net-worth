@@ -657,6 +657,8 @@ envelopes = book_payload_table("envelopes")
 income_events = book_payload_table("income_events")
 # Why you own / would buy an instrument (services.investment_theses) — one row per instrument.
 investment_theses = book_payload_table("investment_theses")
+# Public portfolios the user follows (services.followed_portfolios) — one row per follow.
+followed_portfolios = book_payload_table("followed_portfolios")
 recurring_streams = book_payload_table("recurring_streams")
 targets = book_payload_table("targets")
 corrections = book_payload_table("corrections")
@@ -681,6 +683,11 @@ actual_sync_state = book_payload_table("actual_sync_state")
 actual_sync_mirror = book_payload_table("actual_sync_mirror")
 actual_sync_baselines = book_payload_table("actual_sync_baselines")
 actual_sync_conflicts = book_payload_table("actual_sync_conflicts")
+
+# Bank data sync (ADR 2026-11-13-a-bank-connector-can-book-its-rows-without-ai): a connector's
+# sync settings (id = provider key) and its review list. No credentials; not checkpointed.
+bank_sync_settings = book_payload_table("bank_sync_settings")
+bank_sync_reviews = book_payload_table("bank_sync_reviews")
 
 # owned_assets / owned_asset_categories: the Assets tab domain (ADR 2026-09-06-assets-tab-
 # faithful-port) — things you own that are valued by a dated manual mark, not a ledger balance
@@ -769,7 +776,56 @@ profile = Table(
 # (cost_basis, unit_cost, strike, proceeds, realized_gain, fmv) — exact via JSON round-trip, no
 # promoted decimal-Text column this wave (see money_io._money_text's payload rule).
 positions = book_payload_table("positions")
-lots = book_payload_table("lots")
+# The one exception to the loose coupling above: a lot's purchase cash row is a real FK. SET NULL
+# only fires on a true removal; a soft delete is an UPDATE, so the delete chokes clear the link
+# themselves (ADR 2026-11-06-a-lots-cash-link-is-a-real-foreign-key).
+lots = book_payload_table(
+    "lots",
+    Column("txn_id", Text, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True),
+    Index("ix_lots_txn_id", "txn_id"),
+)
+# Paper trading (ADR 2026-11-15-paper-trading-is-a-simulated-book-never-an-order-path): a
+# separate SIMULATED book — pretend money, never part of net worth, never an order. The event
+# ledger is the truth (holdings, cash and P&L derive from it); orders, events and the daily value
+# snapshot promote the columns the fill engine queries every tick. Children cascade with their
+# portfolio. Written only by services.paper_trading.service.apply_paper_change.
+paper_portfolios = book_payload_table("paper_portfolios")
+paper_contracts = book_payload_table("paper_contracts")
+paper_orders = book_payload_table(
+    "paper_orders",
+    Column(
+        "portfolio_id",
+        Text,
+        ForeignKey("paper_portfolios.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("status", Text, nullable=False),
+    Index("ix_paper_orders_book_status", "book_id", "status"),
+    Index("ix_paper_orders_portfolio", "portfolio_id"),
+)
+paper_events = book_payload_table(
+    "paper_events",
+    Column(
+        "portfolio_id",
+        Text,
+        ForeignKey("paper_portfolios.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("idem_key", Text, nullable=True),
+    Index("ix_paper_events_portfolio", "portfolio_id"),
+    Index("ux_paper_events_portfolio_idem", "portfolio_id", "idem_key", unique=True),
+)
+paper_values = book_payload_table(
+    "paper_values",
+    Column(
+        "portfolio_id",
+        Text,
+        ForeignKey("paper_portfolios.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("date", Text, nullable=False),
+    Index("ux_paper_values_portfolio_date", "portfolio_id", "date", unique=True),
+)
 grants = book_payload_table("grants")
 vest_events = book_payload_table("vest_events")
 option_contracts = book_payload_table("option_contracts")
@@ -1577,4 +1633,77 @@ news_deliveries = Table(
     Index("ix_news_deliveries_seq", "seq", unique=True),
     Index("ix_news_deliveries_status", "status"),
     Index("ix_news_deliveries_story_id", "story_id"),
+)
+
+# ── Inbound MCP OAuth server (flag mcp_oauth, revision 202611161200) ─────────────────────
+# The app as its own authorization server for `<PUBLIC_URL>/mcp`. Every table here holds a
+# credential or a single-use credential step, so all four are SECRET (core.sensitive: SQL-denied
+# to Lucius, deleted from a sanitised backup, never restored) and checkpoint-EXCLUDED (a /rewind
+# must never bring a revoked token back). Secrets are stored only as SHA-256 hashes.
+mcp_oauth_clients = Table(
+    "mcp_oauth_clients",
+    metadata,
+    Column("client_id", Text, primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("secret_hash", Text, nullable=False),
+    Column("redirect_uris", JSON, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("revoked_at", Text, nullable=True),
+)
+
+mcp_oauth_pending = Table(
+    "mcp_oauth_pending",
+    metadata,
+    Column("id_hash", Text, primary_key=True),
+    Column("kind", Text, nullable=False),
+    Column("client_id", Text, nullable=False),
+    Column("client_name", Text, nullable=False),
+    Column("client_host", Text, nullable=False),
+    Column("redirect_uri", Text, nullable=False),
+    Column("code_challenge", Text, nullable=False),
+    Column("requested_scopes", Text, nullable=False),
+    Column("granted_scopes", Text, nullable=False, server_default=text("''")),
+    Column("resource", Text, nullable=False),
+    Column("state", Text, nullable=True),
+    Column("grant_id", Text, nullable=True),
+    Column("created_at", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("used_at", Text, nullable=True),
+    CheckConstraint("kind IN ('request','code')", name=conv("ck_mcp_oauth_pending_kind")),
+)
+
+mcp_oauth_grants = Table(
+    "mcp_oauth_grants",
+    metadata,
+    Column("grant_id", Text, primary_key=True),
+    Column("client_id", Text, nullable=False),
+    Column("client_name", Text, nullable=False),
+    Column("client_host", Text, nullable=False),
+    Column("redirect_uri", Text, nullable=False),
+    Column("scopes", Text, nullable=False),
+    Column("resource", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("last_used_at", Text, nullable=True),
+    Column("expires_at", Text, nullable=False),
+    Column("revoked_at", Text, nullable=True),
+    Column("revoke_reason", Text, nullable=True),
+)
+
+mcp_oauth_tokens = Table(
+    "mcp_oauth_tokens",
+    metadata,
+    Column("token_hash", Text, primary_key=True),
+    Column(
+        "grant_id",
+        Text,
+        ForeignKey("mcp_oauth_grants.grant_id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("kind", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("rotated_at", Text, nullable=True),
+    Column("replaced_by_hash", Text, nullable=True),
+    CheckConstraint("kind IN ('access','refresh')", name=conv("ck_mcp_oauth_tokens_kind")),
+    Index("ix_mcp_oauth_tokens_grant", "grant_id"),
 )

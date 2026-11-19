@@ -1,6 +1,7 @@
 // Instructions say WHAT Lucius does; the trigger section says WHEN — set here, never read out
 // of the instructions' words (ADR 2026-10-11). Each run is told its trigger and its last
 // completed run, so instructions stay right whatever cadence is picked later.
+import { LuciusMark } from '../../../ui/LuciusMark'
 import { useEffect, useState } from 'react'
 import type { Automation, AutomationDraft, AutomationTrigger } from '../../../api/automations'
 import { Button, Modal, ModelPicker } from '../../ui'
@@ -150,7 +151,9 @@ export function AutomationEditorModal({
       <div className="a3-editor-stack">
         {fromLucius && (
           <div className="a3-draft-note">
-            <span aria-hidden="true">✦</span>
+            <span aria-hidden="true">
+              <LuciusMark size="1em" aria-hidden="true" />
+            </span>
             <span>
               Drafted from what you typed. Nothing runs until you create it — change anything first.
             </span>

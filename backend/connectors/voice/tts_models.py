@@ -23,6 +23,18 @@ _SPOKEN_LANGUAGES = {
 }
 
 
+# What asks each provider for word timings, so his words on screen follow his voice rather than an
+# estimate of how fast he talks. AssemblyAI sends them unasked; the others LiveKit has no timings for.
+_WORD_TIMINGS = {
+    "cartesia": {"add_timestamps": True},
+    "inworld": {"timestamp_type": "WORD"},
+}
+
+
+def word_timing_options(model: str) -> dict:
+    return dict(_WORD_TIMINGS.get(model.split("/")[0], {}))
+
+
 def voice_for(model: str, saved_voice: str | None) -> str | None:
     """The voice to ask for: the owner's, else the model's, else LiveKit's choice (``None``)."""
     return saved_voice or _DEFAULT_VOICES.get(model)

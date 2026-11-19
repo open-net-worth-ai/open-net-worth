@@ -35,25 +35,25 @@ def accounts(monkeypatch):
 def test_a_telegram_send_message_records_the_channel_it_used():
     run_context.observe("telegram_send_message", {"message": "hi"})
 
-    assert run_context.collected()["connectors"] == ["Telegram"]
+    assert run_context.collected()["connectors"] == ["telegram"]
 
 
 def test_a_webhook_send_message_records_the_channel_it_used():
     run_context.observe("webhook_send_message", {"message": "hi"})
 
-    assert run_context.collected()["connectors"] == ["Webhook"]
+    assert run_context.collected()["connectors"] == ["webhook"]
 
 
 def test_reading_mail_records_the_email_connector():
     run_context.observe("email_search_messages", {})
 
-    assert run_context.collected()["connectors"] == ["Email"]
+    assert run_context.collected()["connectors"] == ["email"]
 
 
 def test_hydrating_mail_records_the_email_connector():
     run_context.observe("email_get_messages", {})
 
-    assert run_context.collected()["connectors"] == ["Email"]
+    assert run_context.collected()["connectors"] == ["email"]
 
 
 def test_a_provider_fetch_tool_records_its_connector_by_name_not_by_arg(monkeypatch):
@@ -66,7 +66,7 @@ def test_a_provider_fetch_tool_records_its_connector_by_name_not_by_arg(monkeypa
     )
     run_context.observe("plaid_fetch_transactions", {"since": "2026-01-01"})
 
-    assert run_context.collected()["connectors"] == ["Plaid"]
+    assert run_context.collected()["connectors"] == ["plaid"]
 
 
 def test_a_broker_fetch_tool_records_its_connector_too(monkeypatch):
@@ -76,7 +76,7 @@ def test_a_broker_fetch_tool_records_its_connector_too(monkeypatch):
     )
     run_context.observe("ibkr_fetch_activity", {})
 
-    assert run_context.collected()["connectors"] == ["Ibkr"]
+    assert run_context.collected()["connectors"] == ["ibkr"]
 
 
 def test_retired_connector_sync_no_longer_recorded():

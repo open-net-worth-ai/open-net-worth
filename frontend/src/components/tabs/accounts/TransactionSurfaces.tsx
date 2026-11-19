@@ -19,7 +19,13 @@ import { BackgroundStatementNotices } from './BackgroundStatementNotices'
 import { TransactionReviewMode, type ReviewScope } from './TransactionReviewMode'
 import { TransactionSurfacesContext, type TransactionSurfaces } from './transactionSurfacesContext'
 import { detailPatchToUpdate, fromApiAccount, fromApiTxn } from './data'
-import { reviewDraftToUpdate, validateReviewDraft, type ReviewDraft } from './transactionReview'
+import {
+  reviewDraftSeed,
+  reviewDraftToUpdate,
+  validateReviewDraft,
+  type ReviewDraft,
+} from './transactionReview'
+import type { EditSeed } from './TxnDetail'
 import {
   createCategory,
   deleteTransaction,
@@ -27,6 +33,7 @@ import {
   loadTransactionActivity,
   loadTransactionSourceEntries,
   loadTransactionStatementLinks,
+  previewDeleteEffects,
   resolveOrCreatePayeeId,
   setTransactionCleared,
   setTransactionHidden,
@@ -174,9 +181,12 @@ export function TransactionSurfacesProvider({
     txn: Txn | null
     mode: 'view' | 'edit'
     hint?: string
+    overModal?: boolean
     error?: string
+    /** The review card's unsaved picks, filled into the drawer's editor. */
+    seed?: EditSeed
   } | null>(null)
-  const [confirm, setConfirm] = useState<{ txn: Txn } | null>(null)
+  const [confirm, setConfirm] = useState<{ txn: Txn; effects?: string[] } | null>(null)
   const [catModal, setCatModal] = useState<{
     prefill: string
     kind: CatKind
@@ -228,8 +238,8 @@ export function TransactionSurfacesProvider({
     [],
   )
   const openTransactionById = useCallback(
-    (id: string, hint?: string) => {
-      setDetail({ id, txn: null, mode: 'view', hint })
+    (id: string, hint?: string, opts?: { overModal?: boolean }) => {
+      setDetail({ id, txn: null, mode: 'view', hint, overModal: opts?.overModal })
       void authFetch(`/api/transactions/${encodeURIComponent(id)}`)
         .then((res) => (res.ok ? (res.json() as Promise<ApiTxn>) : null))
         .then((row) => {
@@ -262,15 +272,10 @@ export function TransactionSurfacesProvider({
       ) {
         update.payee_id = null
       } else if (draft.payeeEdited) {
-        // The card only links an EXISTING payee; creating one is the editor's job.
-        const wanted = draft.payee.trim().toLowerCase()
-        const payeeId = wanted
-          ? (payees.find((p) => p.name.toLowerCase() === wanted)?.id ?? null)
-          : null
-        if (wanted && !payeeId) {
-          throw new Error('Choose an existing payee, or use Edit all details to create one.')
-        }
-        update.payee_id = payeeId
+        // The card's Payee row links an existing payee by name, or creates the one typed —
+        // the same resolution the drawer's save uses.
+        const wanted = draft.payee.trim()
+        update.payee_id = wanted ? await resolveOrCreatePayeeId(wanted, payees) : null
       }
       return updateTransaction(txn.id, update)
     },
@@ -311,8 +316,13 @@ export function TransactionSurfacesProvider({
         onReviewEverywhere={() => setReviewAccountId(null)}
         onApprove={approve}
         onReject={(txn) => deleteTransaction(txn.id)}
-        onViewAll={(txn) => openTransaction(txn, 'view')}
-        onEditAll={(txn) => openTransaction(txn, 'edit')}
+        // "All details": the drawer opens on the card's unsaved picks — straight into the editor
+        // when there are any, so nothing has to be chosen twice (Discord feedback, 2026-11-19).
+        onAllDetails={(txn, draft) => {
+          const seed = reviewDraftSeed(txn, draft)
+          setDetail({ id: txn.id, txn, mode: seed ? 'edit' : 'view', seed: seed ?? undefined })
+        }}
+        payeeOptions={payeeOptions}
         rowChanged={rowChange}
       />
       {detail && (
@@ -322,8 +332,9 @@ export function TransactionSurfacesProvider({
           txn={detail.txn ?? placeholderTxn(detail.id, detail.hint)}
           loading={!detail.txn}
           actionError={detail.error ?? null}
-          liftAboveModal={reviewScope !== null}
+          liftAboveModal={reviewScope !== null || !!detail.overModal}
           initialMode={detail.mode}
+          editSeed={detail.seed}
           accounts={accounts}
           categories={categories}
           payeeOptions={payeeOptions}
@@ -332,7 +343,12 @@ export function TransactionSurfacesProvider({
           rates={fx}
           onClose={() => setDetail(null)}
           onSave={saveDetail}
-          onDelete={(txn) => setConfirm({ txn })}
+          onDelete={(txn) => {
+            setConfirm({ txn })
+            void previewDeleteEffects([txn.id]).then((effects) =>
+              setConfirm((c) => (c?.txn.id === txn.id ? { ...c, effects } : c)),
+            )
+          }}
           onMarkReviewed={(txn) => {
             clearDetailFailure()
             void updateTransaction(txn.id, { needs_review: false })
@@ -380,7 +396,10 @@ export function TransactionSurfacesProvider({
         <ConfirmModal
           open
           title="Delete transaction"
-          body={`“${payeeNames[confirm.txn.payeeId ?? ''] || confirm.txn.description || 'This transaction'}” will be removed.`}
+          body={[
+            `“${payeeNames[confirm.txn.payeeId ?? ''] || confirm.txn.description || 'This transaction'}” will be removed.`,
+            ...(confirm.effects ?? []),
+          ].join(' ')}
           confirmLabel="Delete"
           danger
           onConfirm={() => {

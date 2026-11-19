@@ -20,6 +20,7 @@ from tests.actual_live.world import (
     account_here,
     balances_here,
     balances_there,
+    edit_here,
     live_rows,
     quiet,
     ready_to_assign,
@@ -92,6 +93,33 @@ def test_an_opening_stays_an_opening(world):
     view = budget.view()
     quiet()
     assert budget.view() == view
+
+
+def test_a_starting_balance_changed_there_comes_here(world):
+    budget = world.seed()
+    world.imported(budget)
+    quiet()
+    (opening,) = [
+        r
+        for r in budget.view()["rows"]
+        if r["account"] == "ACME Checking" and r["amount"] == 500000
+    ]
+    budget.steps(["call", "updateTransaction", opening["id"], {"amount": 650000}])
+    assert "pulled" in sync()["summary"]
+    assert ledger_service.opening_amount(account_here("ACME Checking")) == 6500.0
+    assert balances_here() == balances_there(budget.view())
+    quiet()
+
+
+def test_a_payee_cleared_here_is_cleared_there(world):
+    budget = world.seed()
+    world.imported(budget)
+    quiet()
+    edit_here(row_here(memo="plain")["id"], description="")
+    assert sync()["summary"].startswith("1 sent")
+    (cleared,) = [r for r in budget.view()["rows"] if r["notes"] == "plain"]
+    assert cleared["payee"] is None
+    quiet()
 
 
 def _available_agrees(budget, months: list[str]) -> None:

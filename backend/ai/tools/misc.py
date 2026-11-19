@@ -15,6 +15,7 @@ from backend.ai.search import get_search_provider
 from backend.ai.search.switch import search_results
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of, schema_of_no_required
+from backend.core import search_citations
 from backend.core.untrusted import sanitize_untrusted
 
 logger = logging.getLogger(__name__)
@@ -271,7 +272,9 @@ async def web_search(input_data: dict):
         logger.error("web_search failed: %s", exc)
         raise
     logger.info("web_search returned %d results", len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
+    cleaned = sanitize_search_results(results)
+    search_citations.record(cleaned)
+    return json.dumps(cleaned, ensure_ascii=False), None
 
 
 # A site scope that restricts a web search to X/Twitter. Run through whatever provider is
@@ -316,7 +319,9 @@ async def x_search(input_data: dict):
         logger.error("x_search failed: %s", exc)
         raise
     logger.info("x_search returned %d results", len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
+    cleaned = sanitize_search_results(results)
+    search_citations.record(cleaned)
+    return json.dumps(cleaned, ensure_ascii=False), None
 
 
 class FetchPageInput(ToolInput):

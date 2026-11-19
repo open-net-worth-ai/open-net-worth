@@ -42,7 +42,7 @@ def client(db_isolated, monkeypatch):
         },
     )
 
-    def _fake_create_session(code):
+    def _fake_create_session(code, state=""):
         # Mirror the real create_session's persistence side-effect (the route returns the
         # public status, which reads has_session from the store).
         from backend.db.enable_banking_config_store import EnableBankingConfigStore
@@ -103,6 +103,28 @@ def test_link_returns_consent_url(client):
     r = client.post("/api/enable-banking/link", json={"aspsp": "Bank A", "country": "DE"})
     assert r.status_code == 200
     assert r.json()["url"] == "https://bank.example/auth/abc"
+
+
+def test_link_names_the_address_to_add_when_enable_banking_refuses_it(client, monkeypatch):
+    """The form shows the address with a Copy button, so it comes back as data, not prose."""
+    from backend.core.errors import RedirectNotRegisteredError
+    from backend.services.aggregation import enable_banking as svc
+
+    url = "http://localhost:8080/connectors/callback/enable_banking"
+
+    def _refuse(aspsp, country, redirect):
+        raise RedirectNotRegisteredError("add it", redirect_url=redirect)
+
+    monkeypatch.setattr(svc, "start_authorization", _refuse)
+    r = client.post(
+        "/api/enable-banking/link", json={"aspsp": "Bank A", "country": "DE", "redirect": url}
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"] == {
+        "code": "redirect_not_registered",
+        "message": "add it",
+        "redirect_url": url,
+    }
 
 
 def test_complete_persists_session_and_returns_public(client):
@@ -169,3 +191,44 @@ def test_front_door_provider_map(client):
     body = r.json()
     assert "US" in body["map"]
     assert body["providers"][0]["provider"] == "plaid"
+
+
+def test_remove_bank_route_returns_the_new_status(client, monkeypatch):
+    from backend.services.aggregation import enable_banking as svc
+
+    monkeypatch.setattr(
+        svc, "remove_bank", lambda key: {"removed": True, "revoked": True, "banks_left": 0}
+    )
+    r = client.post("/api/enable-banking/banks/abc123/remove")
+    assert r.status_code == 200
+    assert r.json()["removed"] is True and "banks" in r.json()["status"]
+
+
+def test_remove_unknown_bank_is_422(client):
+    client.put("/api/enable-banking/config", json={"application_id": "app-1", "private_key": _PEM})
+    r = client.post("/api/enable-banking/banks/nope/remove")
+    assert r.status_code == 422
+
+
+def test_switching_to_an_app_enable_banking_refuses_is_422_and_saves_nothing(client, monkeypatch):
+    from backend.core.errors import ValidationError
+    from backend.db.enable_banking_config_store import EnableBankingConfigStore
+    from backend.services.aggregation import enable_banking_app
+
+    store = EnableBankingConfigStore()
+    store.update({"application_id": "OLD-APP", "private_key": _PEM})
+    store.add_bank(
+        "SESS-1", aspsp="ACME Bank", country="FI", valid_until=None, linked_at="x", account_ids=[]
+    )
+
+    def _refuse(application_id, private_key):
+        raise ValidationError("Enable Banking refused the new app: HTTP 403. Nothing was changed.")
+
+    monkeypatch.setattr(enable_banking_app, "_check_application", _refuse)
+    r = client.put(
+        "/api/enable-banking/config", json={"application_id": "TYPO", "private_key": _PEM}
+    )
+    assert r.status_code == 422
+    assert "Nothing was changed" in r.json()["detail"]
+    assert EnableBankingConfigStore().application_id() == "OLD-APP"
+    assert client.get("/api/enable-banking/status").json()["banks"][0]["access_ended"] is None

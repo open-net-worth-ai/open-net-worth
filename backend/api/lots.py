@@ -33,7 +33,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
-from backend.core.errors import OpenNetWorthError, to_http_status
+from backend.core.errors import DuplicateTransactionError, OpenNetWorthError, to_http_status
 from backend.models.lot import InstrumentLotCreate, LotAmend, LotCreate
 from backend.models.realized_event import DisposalCreate
 from backend.services import lots as lots_service
@@ -79,6 +79,36 @@ def _dispose_fields(body: DisposalCreate) -> dict:
     }
 
 
+def _refusal(exc: OpenNetWorthError) -> str:
+    """What the lot and sale screens show for a refusal. A duplicate's own message is written
+    for an agent (a retry flag, a tool to call), so a person gets the row it matched and the
+    two ways forward instead."""
+    if not isinstance(exc, DuplicateTransactionError):
+        return exc.message or str(exc)
+    found = exc.context.get("existing") or {}
+    amount = found.get("amount")
+    parts = [
+        f"“{found['description']}”" if found.get("description") else "a transaction",
+        f"on {found['date']}" if found.get("date") else "",
+        f"for {abs(float(amount)):,.2f}" if amount is not None else "",
+        f"in {found['account_name']}" if found.get("account_name") else "",
+    ]
+    return (
+        f"This is already in your ledger as {' '.join(p for p in parts if p)}, so nothing was "
+        "saved. Leave the account empty to save without moving cash, or delete or edit that "
+        "transaction first."
+    )
+
+
+def _apply(change: dict) -> dict:
+    """A choke's refusal (a duplicate purchase, an unknown account) is its status and reason,
+    never a 500: the lot screen shows the reason so the user can act on it."""
+    try:
+        return lots_service.apply_lot_change(change)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), _refusal(exc)) from exc
+
+
 def _raise_lot_write(result: dict) -> dict:
     if not result.get("error"):
         return result
@@ -106,9 +136,7 @@ def acquire_lot(position_id: str, body: LotCreate):
     """Record an acquisition (buy / transfer-in / grant) as a new lot, then resync the
     position's aggregate quantity + avg cost. Thin: shapes the change and hands it to the
     `apply_lot_change` choke point (checkpoint-covered) — no cost math here."""
-    return _raise_lot_write(
-        lots_service.apply_lot_change(_acquire_change(body, {"position_id": position_id}))
-    )
+    return _raise_lot_write(_apply(_acquire_change(body, {"position_id": position_id})))
 
 
 @router.post("/api/instruments/{instrument_id}/lots")
@@ -117,7 +145,7 @@ def acquire_instrument_lot(instrument_id: str, body: InstrumentLotCreate):
     account, then record the lot. Never POST /positions then POST /lots (that would
     seed an opening lot and double-book)."""
     return _raise_lot_write(
-        lots_service.apply_lot_change(
+        _apply(
             _acquire_change(body, {"instrument_id": instrument_id, "account_id": body.account_id})
         )
     )
@@ -131,15 +159,13 @@ def amend_lot(lot_id: str, body: LotAmend):
         payload["kind"] = _kind_value(payload["kind"])
     if "funding_account_id" in payload:
         payload["funding_account_id"] = payload["funding_account_id"] or None
-    return _raise_lot_write(
-        lots_service.apply_lot_change({"type": "amend", "lot_id": lot_id, **payload})
-    )
+    return _raise_lot_write(_apply({"type": "amend", "lot_id": lot_id, **payload}))
 
 
 @router.delete("/api/lots/{lot_id}")
 def delete_lot(lot_id: str):
     """Delete a fully-open lot. Partially consumed lots are refused (422)."""
-    return _raise_lot_write(lots_service.apply_lot_change({"type": "delete", "lot_id": lot_id}))
+    return _raise_lot_write(_apply({"type": "delete", "lot_id": lot_id}))
 
 
 @router.post("/api/positions/{position_id}/disposals")
@@ -150,10 +176,7 @@ def record_disposal(position_id: str, body: DisposalCreate):
     domain error (→ HTTP 422) BEFORE any write, so an oversell / bad lot id never mutates
     state. The realized-gain arithmetic lives entirely in the service."""
     change = {"type": "dispose", "position_id": position_id, **_dispose_fields(body)}
-    try:
-        result = lots_service.apply_lot_change(change)
-    except OpenNetWorthError as exc:  # InvalidLotSelection / InsufficientLots → 422
-        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    result = _apply(change)  # InvalidLotSelection / InsufficientLots → 422
     if result.get("error"):
         if result.get("existing_event_id"):
             raise HTTPException(409, result["error"])
@@ -165,11 +188,7 @@ def record_disposal(position_id: str, body: DisposalCreate):
 def amend_disposal(event_id: str, body: DisposalCreate):
     """Edit a sale: undo then rebook in one unit of work (`dispose_amend`)."""
     change = {"type": "dispose_amend", "event_id": event_id, **_dispose_fields(body)}
-    try:
-        result = lots_service.apply_lot_change(change)
-    except OpenNetWorthError as exc:
-        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
-    return _raise_lot_write(result)
+    return _raise_lot_write(_apply(change))
 
 
 @router.get("/api/realized-pnl")

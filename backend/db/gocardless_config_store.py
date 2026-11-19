@@ -46,7 +46,13 @@ DEFAULTS: dict = {
     # bank_key → {institution_id, institution_name, country, status, consent_expires_at,
     # linked_at, account_ids}. ``status`` is GoCardless's StatusEnum: CR, GC, UA, GA, SA, LN, EX…
     "banks": {},
-    "accounts_meta": {},  # GoCardless account id → {name, currency, mask, account_type}
+    # Account id HERE → {name, currency, mask, account_type, identity, read_at}. ``identity`` is a
+    # hash of bank + full IBAN (never the IBAN): how a renewal's new account ids are matched to
+    # the ones the book's links already use. ``read_at`` dates the ``/details/`` read.
+    "accounts_meta": {},
+    # Account id HERE → the bank's last live ``/balances/`` figure (+ ``at``), so listing the
+    # accounts never spends the bank's few daily balance reads.
+    "balance_cache": {},
     "last_synced_at": None,
     "last_status": "never_run",  # never_run | ok | auth_error | rate_limited | connect_error | error
     "last_error": None,
@@ -62,6 +68,8 @@ _BANK_FIELDS = (
     "consent_expires_at",
     "linked_at",
     "account_ids",
+    "api_account_ids",
+    "consent_dated",
 )
 
 
@@ -82,6 +90,7 @@ class GoCardlessConfigStore(AggregatorConfigStore):
         "access_expires_at",
         "banks",
         "accounts_meta",
+        "balance_cache",
         "last_synced_at",
         "last_status",
         "last_error",
@@ -89,7 +98,7 @@ class GoCardlessConfigStore(AggregatorConfigStore):
     )
 
     def _normalized(self, merged: dict) -> dict:
-        for key in ("accounts_meta", "banks"):
+        for key in ("accounts_meta", "balance_cache", "banks"):
             if not isinstance(merged.get(key), dict):
                 merged[key] = {}
         if not isinstance(merged.get("requisitions"), list):
@@ -106,6 +115,9 @@ class GoCardlessConfigStore(AggregatorConfigStore):
 
     def accounts_meta(self) -> dict:
         return dict(self.get().get("accounts_meta") or {})
+
+    def balance_cache(self) -> dict:
+        return dict(self.get().get("balance_cache") or {})
 
     def banks(self, *, conn=None) -> list[dict]:
         """Every linked bank, in link order: its requisition (secret) joined with its state."""
@@ -125,6 +137,8 @@ class GoCardlessConfigStore(AggregatorConfigStore):
                     "replaces": (entry.get("replaces") or None),
                     **{f: info.get(f) for f in _BANK_FIELDS},
                     "account_ids": list(info.get("account_ids") or []),
+                    "api_account_ids": dict(info.get("api_account_ids") or {}),
+                    "consent_dated": bool(info.get("consent_dated")),
                 }
             )
         return out
@@ -154,6 +168,22 @@ class GoCardlessConfigStore(AggregatorConfigStore):
             self._ensure(c)
             self._apply(c, {"access_token": access_token, "access_expires_at": expires_at})
 
+    def note_credentials(self, *, rejected_with: Optional[str]) -> None:
+        """What GoCardless last said of the saved keys, so the connector never reads
+        Connected over keys it refuses. A refusal is an ``auth_error`` (without touching
+        ``last_synced_at`` — nothing was fetched); a later accepted sign-in clears only that
+        error, never a fetch's own."""
+        cfg = self.get()
+        if rejected_with is not None:
+            self._record({"last_status": "auth_error", "last_error": rejected_with})
+        elif cfg.get("last_status") == "auth_error":
+            self._record(
+                {
+                    "last_status": "ok" if cfg.get("last_synced_at") else "never_run",
+                    "last_error": None,
+                }
+            )
+
     def clear_token(self) -> None:
         """Forget the cached bearer so the next call mints a fresh one."""
         self.save_token(None, None)
@@ -180,6 +210,8 @@ class GoCardlessConfigStore(AggregatorConfigStore):
             "consent_expires_at": consent_expires_at,
             "linked_at": None,
             "account_ids": [],
+            "api_account_ids": {},
+            "consent_dated": False,
         }
         with self._unit(None) as c:
             self._write(c, [*self.banks(conn=c), bank])
@@ -207,9 +239,17 @@ class GoCardlessConfigStore(AggregatorConfigStore):
                     b["replaces"] = None
             still = {a for b in kept for a in b["account_ids"]}
             meta = self.get(conn=c).get("accounts_meta") or {}
-            pruned = {a: m for a, m in meta.items() if a not in set(gone["account_ids"]) - still}
+            dropped = set(gone["account_ids"]) - still
+            pruned = {a: m for a, m in meta.items() if a not in dropped}
+            figures = self.get(conn=c).get("balance_cache") or {}
             self._write(c, kept)
-            self._record({"accounts_meta": pruned}, conn=c)
+            self._record(
+                {
+                    "accounts_meta": pruned,
+                    "balance_cache": {a: f for a, f in figures.items() if a not in dropped},
+                },
+                conn=c,
+            )
 
     def _write(self, conn, banks: list[dict]) -> None:
         self._ensure(conn)
@@ -229,6 +269,11 @@ class GoCardlessConfigStore(AggregatorConfigStore):
         with self._unit(None) as c:
             current = self.get(conn=c).get("accounts_meta") or {}
             self._record({"accounts_meta": {**current, account_id: meta}}, conn=c)
+
+    def cache_account_balance(self, account_id: str, figure: dict) -> None:
+        with self._unit(None) as c:
+            current = self.get(conn=c).get("balance_cache") or {}
+            self._record({"balance_cache": {**current, account_id: figure}}, conn=c)
 
     def record_status(self, status: str, *, error: Optional[str] = None) -> None:
         """A fetch's outcome — and it clears the previous run's caution (a fetch with

@@ -140,7 +140,7 @@ export function PublisherLine({
   return (
     <div>
       {name ? (
-        <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink)' }}>
+        <div style={{ fontSize: 'var(--text-base)', fontWeight: 400, color: 'var(--ink)' }}>
           Developed by{' '}
           {mcp ? (
             href ? (
@@ -154,7 +154,10 @@ export function PublisherLine({
         </div>
       ) : null}
       {sentence ? (
-        <div className="rd-help" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.55 }}>
+        <div
+          className="rd-help"
+          style={{ marginTop: 4, fontSize: 'var(--text-sm)', lineHeight: 1.55 }}
+        >
           {TRUST_SENTENCE[verification]}
         </div>
       ) : null}
@@ -244,7 +247,7 @@ export function VendorTrust({ developer, verification, url }: VendorTrustProps):
         </div>
       )}
       {url ? <code className="rd-code">{url}</code> : null}
-      <div className="rd-help" style={{ fontSize: 12 }}>
+      <div className="rd-help" style={{ fontSize: 'var(--text-sm)' }}>
         {NOTE[verification]}
       </div>
     </div>

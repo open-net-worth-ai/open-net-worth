@@ -576,7 +576,7 @@ def _cached_diff_parse(record: dict) -> tuple[list[dict] | None, dict, dict | No
         "1. User uploads the bank statement file and mentions the account.\n"
         "2. Call this tool with the file's ref_id and the account_id.\n"
         "3. Show the user the summary and the mismatch lists.\n"
-        "4. Ask for confirmation, then use add_transactions / delete_transactions to fix them.\n"
+        "4. Use add_transactions / delete_transactions to fix them.\n"
         "5. Call verify_statement_balance to confirm the closing balance matches."
     ),
     input_schema=schema_of(DiffStatementInput, tool_name="diff_statement"),
@@ -1136,6 +1136,20 @@ def _card_statement_warnings(
     return warnings
 
 
+def _reminder_fields(account_id: str, status: str, days_until_due: int | None) -> dict:
+    """When a bill is worth a reminder: a week out, or earlier if the owner usually pays earlier."""
+    from backend.core.user_time import user_today
+    from backend.services.card_pay_habit import load_payment_habit
+
+    habit = load_payment_habit(account_id, user_today())
+    due_soon = (
+        status != "paid"
+        and days_until_due is not None
+        and days_until_due <= habit["remind_days_before_due"]
+    )
+    return {"usual_payment": habit, "in_reminder_window": due_soon}
+
+
 def _card_statement_row(account: dict) -> dict:
     from backend.services.card_statements import statement_summary
 
@@ -1177,6 +1191,7 @@ def _card_statement_row(account: dict) -> dict:
         "matched_payments": matched,
         "remaining_amount": remaining,
         "due_source": summary.due_source,
+        **_reminder_fields(account_id, status, summary.days_until_due),
         "evidence_ids": evidence_ids,
         "warnings": _card_statement_warnings(
             status,
@@ -1202,28 +1217,28 @@ class GetCardStatementStatusInput(ToolInput):
 @tool(
     "get_card_statement_status",
     description=(
-        "Deterministic per-statement-cycle payment status for credit card accounts, computed "
-        "by services.card_statements.statement_summary — NEVER from the account's current "
-        "balance or a transaction that merely looks like a payment.\n\n"
-        "USE THIS for 'which card statements have I not paid', 'am I behind on my card "
-        "bill', 'is my <card> statement settled'. A balance can read near-zero mid-cycle "
-        "while last month's statement is still unpaid — do not eyeball get_transactions or "
-        "a balance for this; call this tool.\n\n"
-        "Pass account_id (name or id) for one card, or omit it for every `credit` "
-        "account. Each row reports the statement period, due date, statement amount, matched "
-        "payment(s), remaining amount owed, and one status:\n"
+        "Deterministic per-cycle payment status for credit cards "
+        "(services.card_statements.statement_summary) — NEVER inferred from the balance or a "
+        "transaction that looks like a payment.\n\n"
+        "USE THIS for 'which card statements are unpaid', 'am I behind on my card bill', 'is "
+        "my <card> statement settled'. A balance can read near-zero mid-cycle while last "
+        "month's statement is unpaid — don't eyeball get_transactions or a balance.\n\n"
+        "account_id (name or id) for one card; omit for every `credit` account. Each row: "
+        "statement period, due date, amount, matched payment(s), remaining owed, and a status:\n"
         "• paid — fully settled.\n"
-        "• partial — a payment was made but less than the statement amount.\n"
+        "• partial — paid less than the statement amount.\n"
         "• unpaid — no payment detected.\n"
         "• missing-cycle — a newer cycle closed with no statement uploaded; figures are a "
-        "ledger ESTIMATE, not printed-statement fact — say so, suggest uploading it.\n"
-        "• unreconciled — no cycle configured and none ever uploaded; status unknown.\n\n"
-        "overdue / days_until_due compare the due date to TODAY, not to a payment date — "
-        "overdue is always false once status is 'paid', so never describe a paid statement "
-        "as paid 'N days late'; compare matched_payments[].date to due_date yourself for "
-        "that.\n\n"
-        "evidence_ids names the statement/payment record(s) behind the status — cite those "
-        "ids rather than re-deriving the answer."
+        "ledger ESTIMATE, not printed fact — say so, suggest uploading it.\n"
+        "• unreconciled — no cycle configured, none uploaded; status unknown.\n\n"
+        "overdue / days_until_due compare the due date to TODAY; overdue is false once 'paid', "
+        "so never call a paid statement 'N days late' — compare matched_payments[].date to "
+        "due_date for that.\n\n"
+        "Cite evidence_ids (the statement/payment records behind the status) rather than "
+        "re-deriving it.\n\n"
+        "in_reminder_window is true for an unpaid bill due within a week (or within "
+        "usual_payment.remind_days_before_due, how early the owner usually pays, if longer) "
+        "or overdue. Remind on it; never re-derive it."
     ),
     input_schema=schema_of(GetCardStatementStatusInput, tool_name="get_card_statement_status"),
 )

@@ -205,7 +205,7 @@ class CreateCommitmentInput(ToolInput):
         "tracker, no cash planning needed), 'goal' (open-ended savings target, no schedule). "
         "currency is the native currency of the installments. You can pass installments and "
         "funding_plan inline, or add them afterwards with set_commitment_installments / "
-        "set_funding_plan. Confirm the details with the user before creating. NOT for a "
+        "set_funding_plan. NOT for a "
         "REMINDER: someone who asks to be reminded about a bill wants a notification, not a "
         "tracked obligation in their plan — that is create_automation with a schedule "
         "trigger."
@@ -444,8 +444,7 @@ class AddCommitmentInstallmentsInput(ToolInput):
         "Add installments to a commitment's EXISTING schedule — the rows already there (and "
         "their ids, which key due-reminder de-duplication and paid_txn_id ledger anchors) are "
         "untouched. Prefer this over set_commitment_installments when adding a fee or extra "
-        "payment to a schedule the user isn't otherwise changing. Confirm the details with "
-        "the user before calling."
+        "payment to a schedule the user isn't otherwise changing."
     ),
     input_schema=schema_of(AddCommitmentInstallmentsInput, tool_name="add_commitment_installments"),
     mutates=("commitments",),
@@ -485,8 +484,7 @@ class RemoveCommitmentInstallmentsInput(ToolInput):
         "untouched. All-or-nothing: an unknown id fails the call and removes nothing. A PAID "
         "installment (paid_txn_id set — it anchors the real ledger transaction that paid it) "
         "REFUSES removal; if the user truly means it, unlink first via "
-        "update_commitment_installments with changes={'paid_txn_id': null}, then remove. "
-        "Confirm with the user before calling."
+        "update_commitment_installments with changes={'paid_txn_id': null}, then remove."
     ),
     input_schema=schema_of(
         RemoveCommitmentInstallmentsInput, tool_name="remove_commitment_installments"
@@ -550,8 +548,7 @@ class SetFundingPlanInput(ToolInput):
         "(when the money lands). Prefer add_funding_sources / remove_funding_sources when the "
         "plan already has rows the user isn't changing — this tool REPLACES the whole plan, and "
         "any existing row resent without its id gets a NEW id, orphaning commitment actions "
-        "that reference it via funding_id. There is no manual UI for funding, so confirm the "
-        "details with the user before calling."
+        "that reference it via funding_id. There is no manual UI for funding."
     ),
     input_schema=schema_of(SetFundingPlanInput, tool_name="set_funding_plan"),
     mutates=("commitments",),
@@ -631,8 +628,7 @@ class AddFundingSourcesInput(ToolInput):
         "Add funding sources to a commitment's EXISTING plan — the rows already there (and "
         "their ids, which commitment actions reference via funding_id) are untouched. Prefer "
         "this over set_funding_plan whenever the plan has rows the user isn't changing. "
-        "Source types and their rules are documented on set_funding_plan. Confirm the details "
-        "with the user before calling."
+        "Source types and their rules are documented on set_funding_plan."
     ),
     input_schema=schema_of(AddFundingSourcesInput, tool_name="add_funding_sources"),
     mutates=("commitments",),
@@ -669,8 +665,7 @@ class RemoveFundingSourcesInput(ToolInput):
         "untouched. All-or-nothing: an unknown id fails the call and removes nothing. If a "
         "source's unlock action is merely 'not happening', prefer disabling it "
         "(update_funding_source, disabled=true) — that is reversible and keeps the action's "
-        "funding_id link intact; remove only sources entered in error. Confirm with the user "
-        "before calling."
+        "funding_id link intact; remove only sources entered in error."
     ),
     input_schema=schema_of(RemoveFundingSourcesInput, tool_name="remove_funding_sources"),
     mutates=("commitments",),
@@ -874,8 +869,7 @@ class AddCommitmentActionsInput(ToolInput):
         "their ids, which key due-reminder de-duplication) are untouched. Prefer this over "
         "set_commitment_actions when adding a task to a checklist the user isn't otherwise "
         "changing. Actions are NON-payment tasks (apply for a loan, sign a contract, a "
-        "sale window); payments belong in installments. Confirm the details with the user "
-        "before calling."
+        "sale window); payments belong in installments."
     ),
     input_schema=schema_of(AddCommitmentActionsInput, tool_name="add_commitment_actions"),
     mutates=("commitments",),
@@ -915,8 +909,7 @@ class RemoveCommitmentActionsInput(ToolInput):
         "— the reminder would keep firing about a row that no longer exists; first delete "
         "the Automation (delete_automations) and clear the link via update_commitment_actions "
         "with changes={'reminder_automation_id': null}, then remove. An action that is merely "
-        "'not happening' should be marked status='missed' (reversible), not removed. Confirm "
-        "with the user before calling."
+        "'not happening' should be marked status='missed' (reversible), not removed."
     ),
     input_schema=schema_of(RemoveCommitmentActionsInput, tool_name="remove_commitment_actions"),
     mutates=("commitments",),
@@ -1102,8 +1095,7 @@ def _commitment_changes_from(row: dict) -> dict:
         "re-link the funded position/liability account, mark the whole commitment "
         "completed/cancelled (status), or edit its note. Pass only the fields to change. This "
         "does NOT touch installments/funding/actions — use the dedicated set_* tools for those. "
-        "Call get_commitments first to get the id. Confirm a status change (completed/cancelled) "
-        "with the user first.\n\n"
+        "Call get_commitments first to get the id.\n\n"
         "MANY AT ONCE: pass `updates` — [{commitment_id, ...fields}] — to patch several "
         "DIFFERENT commitments in ONE call instead of one call each. Returns per-item results "
         "{index, ok, commitment} or {index, ok:false, error}."
@@ -1167,7 +1159,7 @@ class DeleteCommitmentInput(ToolInput):
 
 @tool(
     "delete_commitment",
-    description="Delete a financial commitment. Confirm with the user first — this removes its whole schedule and funding plan.",
+    description="Delete a financial commitment. This removes its whole schedule and funding plan.",
     input_schema=schema_of(DeleteCommitmentInput, tool_name="delete_commitment"),
     mutates=("commitments",),
 )

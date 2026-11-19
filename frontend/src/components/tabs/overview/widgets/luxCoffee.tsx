@@ -4,10 +4,10 @@
 // demo array — CLAUDE.md forbids fabricating numbers, so this ports the
 // SHAPE (weekly bars + an "avg $X/wk" meta figure) over a REAL query
 // instead: expense transactions from the last 6 weeks whose description/
-// payee/memo/category mentions "coffee" (GET /api/transactions with the
-// existing free-text `q`/`q_field` filter — services/ledger.py's own
-// cross-store payee/category join, no client-side fabrication), bucketed
-// into Monday-start weeks and summed in the portfolio base currency. A book
+// payee/memo/category mentions a coffee word (SEARCH_TERM below, via
+// GET /api/transactions/spend-by-week — services/spend_search.py over
+// ledger's cross-store payee/category join, no client-side fabrication),
+// bucketed into Monday-start weeks and summed in the base currency. A book
 // with no matching purchases renders an honest empty state (WidgetPlaceholder),
 // never a fake bar chart.
 //
@@ -26,7 +26,9 @@ import type { WidgetContentProps } from '../types'
 import { WidgetShell } from '../WidgetShell'
 import { WidgetPlaceholder } from '../WidgetPlaceholder'
 
-const SEARCH_TERM = 'coffee'
+// Any of these words in a transaction's description, payee, memo or category. "coffee" alone
+// missed most coffee shops: an "… Espresso" bar, a "Kopi …" stall, a café.
+const SEARCH_TERM = 'coffee|espresso|cafe|café|kopi|latte|cappuccino'
 const WEEK_COUNT = 6
 
 function weekLabel(iso: string): string {
@@ -58,9 +60,7 @@ export const LuxCoffee: ComponentType<WidgetContentProps> = ({ instance, def }) 
     return (
       <WidgetShell title={instance.title} base={def.title} lead={spark}>
         <WidgetPlaceholder
-          detail={
-            error || `No transactions matching "${SEARCH_TERM}" in the last ${WEEK_COUNT} weeks.`
-          }
+          detail={error || `No coffee purchases in the last ${WEEK_COUNT} weeks.`}
         />
       </WidgetShell>
     )

@@ -44,7 +44,7 @@ def log_file() -> Path:
 
 
 def _service_summary() -> str:
-    """What `onw autostart status` reports, on one line."""
+    """What `onw autostart status` reports, on one line, without its hint."""
     from backend.cli import autostart
 
     captured = io.StringIO()

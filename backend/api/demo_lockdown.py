@@ -89,6 +89,12 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/mcp-oauth(/.*)?$",
         r"^/api/mcp-clients/oauth(/.*)?$",
         r"^/mcp(/.*)?$",
+        # the inbound MCP OAuth server (flag mcp_oauth): a visitor must never connect a cloud
+        # app to the shared demo book, or read and change who is connected
+        r"^/oauth(/.*)?$",
+        r"^/\.well-known/oauth-.*$",
+        r"^/api/oauth(/.*)?$",
+        r"^/api/mcp/oauth(/.*)?$",
     ),
     *_rules(
         _WRITE, r"^/api/mcp-clients(/.*)?$", r"^/api/extensions(/.*)?$", r"^/api/skills(/.*)?$"
@@ -105,13 +111,15 @@ _LOCKED: tuple[_Rule, ...] = (
     *_rules(
         _WRITE,
         r"^/api/automations(/.*)?$",
+        # A paper portfolio's autopilot runs Lucius on a schedule: model spend, like an Automation.
+        r"^/api/paper/portfolios/[^/]+/autopilot(/.*)?$",
         r"^/api/memory(/.*)?$",
         r"^/api/channels(/.*)?$",
         r"^/api/chat-pairing(/.*)?$",
         r"^/api/cost/(budget|log)$",
         r"^/api/intel/(scan|sources)(/.*)?$",
         r"^/api/(alpaca|ibkr|plaid|enable-banking|gocardless|lunch-flow|lunch-money|simplefin|yodlee|ynab"
-        r"|telegram|email|market-data|integrations|account-linking)(/.*)?$",
+        r"|telegram|email|market-data|integrations|account-linking|bank-sync)(/.*)?$",
         # Voice calls: a visitor may START one (``_WRITABLE``), capped by ``services.demo_calls``;
         # the LiveKit project, its keys and the call settings stay the operator's.
         r"^/api/voice(?!/call$)(/.*)?$",
@@ -123,10 +131,14 @@ _LOCKED: tuple[_Rule, ...] = (
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
     # Actual reads a saved server on a GET too: a budget list signs in and answers with names.
     *_rules(_ANY, r"^/api/actual-budget(/.*)?$"),
+    # The REST connector's list shows each API's address (a credential), and reading an OpenAPI
+    # document is an outbound fetch.
+    *_rules(_ANY, r"^/api/rest-connector(/.*)?$"),
     # the host and other visitors
     *_rules(
         _ANY,
         r"^/api/logs$",
+        r"^/api/diagnostics/client$",
         r"^/api/qa(/.*)?$",
         r"^/api/setup-status/(data-location|inspect-path)$",
         r"^/api/checkpoints(/.*)?$",
@@ -148,6 +160,11 @@ _WRITABLE: tuple[re.Pattern[str], ...] = tuple(
         r"^/api/commitments(/.*)?$",
         r"^/api/dashboard/layout$",
         r"^/api/equity(/.*)?$",
+        # Copy Trading is open (owner decision 2026-11-16): searching, previewing and following
+        # call only SEC, the House Clerk and OpenFIGI — fixed hosts, paced under their fair-use
+        # limits — and a follow is a row in the demo's own book. Auto-copy stays shut: it is an
+        # Automation, and broker orders go through connectors, both locked above.
+        r"^/api/followed-portfolios(/.*)?$",
         r"^/api/investment-theses(/[^/]+)?$",
         r"^/api/(income|options|lots|positions|disposals|instruments|rebalance|recurring)(/.*)?$",
         r"^/api/intel/(assets|signals)(/.*)?$",

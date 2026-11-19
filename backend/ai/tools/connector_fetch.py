@@ -51,8 +51,9 @@ class FetchTransactionsInput(ToolInput):
         default=None,
         json_schema_extra=explicit_null("string"),
         description=(
-            "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback "
-            "window (wide enough to see a late-posted row or a bank-side correction)."
+            "ISO date (YYYY-MM-DD), inclusive. Omit to start the provider's lookback before the "
+            "newest row already booked from it — so a pause is caught up (up to 90 days) and a "
+            "late-posted row or bank-side correction is still seen."
         ),
     )
     before: Optional[str] = Field(
@@ -111,19 +112,20 @@ def _register_fetch_tool(
     already knows how to route to that provider's own wire protocol."""
     provider = PROVIDERS[provider_key]
     description = (
-        f"Fetch {provider.label} transactions for a date window (default: the provider's own "
-        f"{provider.lookback_days}-day lookback). Returns the window, the linked provider "
-        "accounts (with linked_account_id — the app account each is tied to, or null if "
-        "unlinked), the transaction drafts themselves (external_refs/date/amount/currency/"
-        "description/pending — amount is signed, positive = money in; category_hint, if any, "
-        "is the BANK's category: use it only to pick one of the user's existing categories, "
-        "never to make one), and any modified/"
-        "vanished changes detected since the last fetch. Rows are draft-shaped: pass "
-        "linked_account_id straight through as from_account_id/to_account_id when you call "
-        "add_transactions — never re-derive it. include_booked=true also returns rows already "
-        "booked (each with its booked_txn_id); leave it false to see only what's new. A "
-        "non-'ok' status is not a call failure — it's the connector's own state, read it "
-        "and tell the user. Never returns secrets. "
+        f"Fetch {provider.label} transactions for a date window (default: from "
+        f"{provider.lookback_days} days before the newest row already booked from it, so a "
+        "pause is caught up). Returns the window, the linked provider accounts (linked_account_id "
+        "= the app account each is tied to, or null), the transaction drafts (external_refs/"
+        "date/amount/currency/description/pending; amount is signed, positive = money in; "
+        "payee, if any, is the counterparty's name: pass it as payee, keep the description as "
+        "given; category_hint, if any, is the BANK's category: use it only to pick an existing "
+        "category, never to make one), and modified/vanished rows since the last fetch. To "
+        "book a row with add_transactions: account_id = its linked_account_id (never "
+        "re-derive it), amount unsigned, direction 'credit' if positive else 'debit' — "
+        "direction defaults to 'debit', so a positive row without it books as a spend. "
+        "include_booked=true also returns booked rows (with booked_txn_id). A non-'ok' status "
+        "is the connector's own state, not a call failure: tell the user. Never returns "
+        "secrets. "
         f"{provider.note}"
     )
 
@@ -175,9 +177,11 @@ def _register_list_accounts_tool(
     """Register one ``<provider>_list_accounts`` tool — the provider's accounts, no rows."""
     provider = PROVIDERS[provider_key]
     description = (
-        f"List the {provider.label} accounts (balance, suggested account_type, "
-        "linked_account_id or null) — no transactions. Link one via update_accounts "
-        f"external_ids source='{provider_key}', ref=provider_account_id."
+        f"List the {provider.label} accounts — no transactions. Balances, as the bank reports "
+        "them, use the book's names (null when the bank doesn't send one): cleared_balance "
+        "(settled only), balance (settled + pending), available_to_spend (overdraft/credit "
+        "included). Also suggested account_type and linked_account_id or null. Link one via "
+        f"update_accounts external_ids source='{provider_key}', ref=provider_account_id."
     )
 
     async def handler(input_data: dict):

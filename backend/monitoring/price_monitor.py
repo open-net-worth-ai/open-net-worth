@@ -30,7 +30,12 @@ from backend.core.timestamps import sort_key as _ts_sort_key
 from backend.db.alert_store import _resolve_instrument_id_by_ticker, alert_cache_key
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.monitoring import price_alert_run
-from backend.monitoring.analyst_prompt import render_news_context_block, sanitize_snippets
+from backend.monitoring.analyst_prompt import (
+    age_label,
+    render_news_context_block,
+    sanitize_snippets,
+    source_dicts,
+)
 from backend.services import alerts as alerts_service
 from backend.services import thesis_judgment
 from backend.services.fx_cache import load_fx_cache
@@ -284,32 +289,81 @@ async def _news_context_for_alert(ticker: str, iid: str) -> str:
     watched-but-not-held ticker may have no instrument at all (see feeds.resolve_holding_feeds).
     Graceful no-op: any failure, or genuinely no signal/evidence, returns "" and the prompt says
     no news is on hand (pinned by tests/test_price_monitor_news_context.py)."""
+    return (await _alert_news(ticker, iid))[0]
+
+
+async def _alert_news(ticker: str, iid: str) -> tuple[str, list[dict]]:
+    """``_news_context_for_alert``'s block and the source links of the headlines in it, so the
+    message can cite what it was told. Best-effort: ``("", [])``."""
     try:
         signal = _current_asset_signal(iid, ticker)
         signal_summary = (signal or {}).get("current_summary") or ""
-
-        subjects = [f"asset:{iid}"] if iid else []
-        subjects.append(_evidence_svc.ticker_subject(ticker))
-        # Off the event loop — the evidence file can be large (55MB rule, mirrors
-        # analyst._process_row's own read_evidence call).
-        evidence = await asyncio.to_thread(
-            _evidence_svc.read_evidence,
-            subjects=subjects,
-            fresh_only=True,
-            limit=8,
-        )
-        fresh = [
-            ev
-            for ev in evidence
-            if _evidence_svc.recency_hours(ev.get("published_at") or "")
-            <= _NEWS_CONTEXT_MAX_AGE_HOURS
-        ][:_NEWS_CONTEXT_HEADLINE_LIMIT]
+        fresh = await _fresh_evidence(ticker, iid)
         headlines = sanitize_snippets(fresh, max_items=_NEWS_CONTEXT_HEADLINE_LIMIT)
-
-        return render_news_context_block(signal_summary, headlines)
+        return render_news_context_block(signal_summary, headlines), _cited_sources(fresh)
     except Exception as exc:
         logger.debug("price_monitor: news context failed for %s: %s", ticker, type(exc).__name__)
-        return ""
+        return "", []
+
+
+async def _fresh_evidence(ticker: str, iid: str) -> list[dict]:
+    """The asset's newest cached news items from the last day. Reads the ticker's own tag beside
+    the instrument's, off the event loop (the evidence file can be large)."""
+    subjects = [f"asset:{iid}"] if iid else []
+    subjects.append(_evidence_svc.ticker_subject(ticker))
+    evidence = await asyncio.to_thread(
+        _evidence_svc.read_evidence,
+        subjects=subjects,
+        fresh_only=True,
+        limit=8,
+    )
+    return [
+        ev
+        for ev in evidence
+        if _evidence_svc.recency_hours(ev.get("published_at") or "") <= _NEWS_CONTEXT_MAX_AGE_HOURS
+    ][:_NEWS_CONTEXT_HEADLINE_LIMIT]
+
+
+async def _crash_news(ticker: str, iid: str) -> tuple[str, list[dict]]:
+    """What Intel already has on a crashed holding, for whoever writes the message: the newest
+    headlines as one line each (outlet and computed age beside it) and their server-built source
+    links. A crash alert built from the price alone told the person to "check for news" while the
+    resignation behind the drop sat in the cache (2026-11-12). Best-effort: ``("", [])``."""
+    try:
+        fresh = await _fresh_evidence(ticker, iid)
+        items = sanitize_snippets(fresh, max_items=_NEWS_CONTEXT_HEADLINE_LIMIT)
+        lines = [
+            f"{' '.join(str(ev.get('title') or '').split())} "
+            f"({' '.join(str(ev.get('source') or '').split())[:60]}, "
+            f"{age_label(ev.get('published_at'))})"
+            for ev in items
+            if (ev.get("title") or "").strip()
+        ]
+        return "; ".join(lines), _cited_sources(fresh)
+    except Exception as exc:
+        logger.debug("price_monitor: crash news failed for %s: %s", ticker, type(exc).__name__)
+        return "", []
+
+
+def _cited_sources(evidence: list[dict]) -> list[dict]:
+    """``source_dicts`` with each item's outlet ("Stock Titan", "Yahoo") beside it, so a link
+    reads as who published it, not as a redirect host like news.google.com."""
+    outlets = {ev.get("url"): " ".join(str(ev.get("source") or "").split())[:60] for ev in evidence}
+    return [
+        {**s, "outlet": outlets.get(s["url"]) or s.get("domain") or ""}
+        for s in source_dicts(evidence)
+    ]
+
+
+def _merged_sources(
+    first: list[dict] | None, second: list[dict] | None, limit: int = 4
+) -> list[dict]:
+    """Two source lists as one, first list first, each URL once."""
+    out: list[dict] = []
+    for item in [*(first or []), *(second or [])]:
+        if item.get("url") and all(o["url"] != item["url"] for o in out):
+            out.append(item)
+    return out[:limit]
 
 
 def _build_alert_prompt(
@@ -529,15 +583,17 @@ async def _investigated(
     if not findings:
         return signal
     data = await asyncio.wait_for(
-        narrate(news_context=news_context + price_alert_run.findings_block(findings)),
+        narrate(news_context=news_context + price_alert_run.findings_block(findings.text)),
         price_alert_run.NARRATION_TIMEOUT_SECONDS,
     )
     cleaned = price_alert_run.usable(data)
     if not cleaned:
         return signal
-    # Text a page may have shaped reaches a phone as Lucius's words, so it says where it came from.
-    cleaned = {**cleaned, "summary": f"From a web search, unverified: {cleaned['summary']}"}
-    changes = {**fields(cleaned), "updated_at": datetime.now(timezone.utc).isoformat()}
+    changes = {
+        **fields(cleaned),
+        "sources": _merged_sources(signal.get("sources"), findings.sources),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
     try:
         merge_fired_story(signal["id"], signal.get("created_at"), changes)
     except Exception as exc:
@@ -584,7 +640,21 @@ def _format_alert(signal: dict) -> str:
     if actions:
         lines.append("")
         lines += [f"• {a}" for a in actions]
+    links = source_links(signal.get("sources"))
+    if links:
+        lines += ["", f"Sources: {links}"]
     return "\n".join(lines)
+
+
+def source_links(sources: list[dict] | None, limit: int = 4) -> str:
+    """``[outlet](url)`` links, one space apart: the outlet a person knows, never a bare host."""
+    out = []
+    for item in (sources or [])[:limit]:
+        url = str(item.get("url") or "")
+        if url.lower().startswith(("http://", "https://")):
+            name = " ".join(str(item.get("outlet") or item.get("domain") or "source").split())
+            out.append(f"[{name.replace('[', '(').replace(']', ')')}]({url})")
+    return " ".join(out)
 
 
 async def _push_external_alert(signal: dict, channels: list[str]) -> None:
@@ -613,17 +683,72 @@ async def _push_external_alert(signal: dict, channels: list[str]) -> None:
         logger.warning("price_monitor: notify push failed: %s", exc)
 
 
-async def _deliver_alert(signal: dict, channels: list[str], *, crash_watch: bool = False) -> None:
+async def _deliver_alert(
+    signal: dict,
+    channels: list[str],
+    *,
+    crash_watch: bool = False,
+    news: str = "",
+    search: str = "",
+    sources: list[dict] | None = None,
+) -> None:
     """The call site for a fired alert's external push: ``delivery.route`` runs
     ``_push_external_alert`` unchanged with the ``intel_delivery_decider`` flag off, and hands
-    Lucius the candidate with it on (the alert's own channels stay with it)."""
+    Lucius the candidate with it on (the alert's own channels stay with it). ``news`` (Intel's
+    cached headlines), ``search`` (what outlets a search turn found reported) and ``sources``
+    reach only the candidate: what they say is Lucius's to word."""
     from backend.monitoring import delivery
 
     await delivery.route(
         lambda: delivery.signal_candidate(
-            signal, channels, crash_watch=crash_watch, legacy_message=_format_alert(signal)
+            signal,
+            channels,
+            crash_watch=crash_watch,
+            legacy_message=_format_alert(signal),
+            news=news,
+            search=search,
+            sources=sources,
         ),
         functools.partial(_push_external_alert, signal, channels),
+    )
+
+
+async def _deliver_crash(
+    signal: dict, channels: list[str], label: str, iid: str, current: float
+) -> None:
+    """A crash alert's push, with what Intel has on the holding and, with
+    ``price_alert_lucius_run`` on, what a bounded web search finds about the drop. The search runs
+    in the background like a price alert's: every way it can fail still sends the alert."""
+    ticker = signal.get("ticker") or ""
+    news, sources = await _crash_news(ticker, iid)
+    if not await asyncio.to_thread(price_alert_run.active):
+        await _deliver_alert(signal, channels, crash_watch=True, news=news, sources=sources)
+        return
+    prompt = price_alert_run.search_prompt(label, ticker, "<", current, "")
+    price_alert_run.spawn(_search_then_deliver_crash(signal, channels, news, sources, prompt))
+
+
+async def _search_then_deliver_crash(
+    signal: dict, channels: list[str], news: str, sources: list[dict], prompt: str
+) -> None:
+    async def findings() -> dict:
+        return {"found": await price_alert_run.search(prompt, model=_alert_model())}
+
+    found = None
+    try:
+        found = (await price_alert_run.until_shutdown(findings(), {"found": None}))["found"]
+    except asyncio.CancelledError:
+        await _deliver_alert(signal, channels, crash_watch=True, news=news, sources=sources)
+        raise
+    except Exception as exc:
+        logger.warning("price_monitor: crash search did not finish: %s", type(exc).__name__)
+    await _deliver_alert(
+        signal,
+        channels,
+        crash_watch=True,
+        news=news,
+        search=found.text if found else "",
+        sources=_merged_sources(sources, found.sources if found else []),
     )
 
 
@@ -815,15 +940,15 @@ async def _fire_alert_condition(
         position_ctx += (
             f"\n\n{thesis_judgment.prompt_block(thesis, label)}\n{thesis_judgment.THESIS_RULE}"
         )
-    # _news_context_for_alert already swallows its own failures (returns "" — see its
+    # _alert_news already swallows its own failures (returns ("", []) — see its
     # docstring), but the call is wrapped here too, defense-in-depth: the alert must still
     # fire+push even if a future change to that helper — or the news-context machinery it
     # delegates to — lets an exception through unguarded.
     try:
-        news_context = await _news_context_for_alert(ticker, instrument_id)
+        news_context, cached_sources = await _alert_news(ticker, instrument_id)
     except Exception as exc:
         logger.debug("price_monitor: news context failed for %s: %s", ticker, exc)
-        news_context = ""
+        news_context, cached_sources = "", []
     try:
         signal = await _ai_signal(
             signal_id=signal_id,
@@ -855,6 +980,8 @@ async def _fire_alert_condition(
             move_pct=move_pct,
         )
 
+    if cached_sources:
+        signal = {**signal, "sources": cached_sources}
     apply_story_change(signal)
     logger.info("price_monitor: alert fired — %s %s %s %g", ticker, op_str, currency, target)
     channels = list(condition.get("channels") or [])
@@ -1057,7 +1184,7 @@ async def _run_crash_lane(
         fired += 1
         logger.info("price_monitor: crash-watch fired — %s %.1f%%", ticker, mv)
         if alert_channels:
-            await _deliver_alert(signal, alert_channels, crash_watch=True)
+            await _deliver_crash(signal, alert_channels, row.get("label") or ticker, iid, current)
         if iid:
             try:
                 from backend.db.pending_analysis_store import PendingAnalysisStore

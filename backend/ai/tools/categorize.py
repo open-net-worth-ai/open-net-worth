@@ -60,7 +60,7 @@ class GetCategorySuggestionsInput(ToolInput):
         "the user's OWN history of that payee (corrections + already-categorized rows). "
         "Each row carries: transaction_id, payee_key, description, suggested_category, "
         "confidence (0-1), evidence_count, kind. Sorted highest-confidence first. "
-        "Pure READ — to apply, confirm with the user then call "
+        "Pure READ — to apply, call "
         "update_transactions(updates=[{transaction_id, category}, ...]) per group. "
         "Payees covered by an enabled rule are excluded. Prefer get_rule_suggestions for "
         "repeatedly-corrected payees. Returns [] on an empty book. Reports showing/total; "

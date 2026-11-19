@@ -132,6 +132,17 @@ class ImportRunStore:
         with self._eng().connect() as conn:
             return conn.execute(query.limit(1)).first() is not None
 
+    def finished(self, provider: str, kind: str, plan_id: str) -> bool:
+        """Whether a run of ``kind`` for ``plan_id`` ever finished (status ``done``)."""
+        query = select(import_runs.c.id).where(
+            import_runs.c.provider == provider,
+            import_runs.c.kind == kind,
+            import_runs.c.plan_id == plan_id,
+            import_runs.c.status == "done",
+        )
+        with self._eng().connect() as conn:
+            return conn.execute(query.limit(1)).first() is not None
+
     def running_ids(self) -> list[str]:
         with self._eng().connect() as conn:
             rows = conn.execute(select(import_runs.c.id).where(import_runs.c.status == "running"))

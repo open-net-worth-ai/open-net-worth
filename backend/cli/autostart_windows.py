@@ -90,7 +90,9 @@ def install(command: tuple[str, ...], env: dict[str, str], root: Path, runner: R
     created = runner(["schtasks", "/Create", "/TN", TASK_NAME, "/XML", str(task_xml), "/F"])
     if created.returncode == 0:
         runner(["schtasks", "/Run", "/TN", TASK_NAME])
-        print("==> Installed and started. It will also start at login and restart if it crashes.")
+        print(
+            "==> Autostart is on. It's running now, starts at every login, and restarts after a crash."
+        )
         return 0
     executable, arguments = launcher_command(python)
     fallback = runner(
@@ -110,8 +112,8 @@ def install(command: tuple[str, ...], env: dict[str, str], root: Path, runner: R
     if fallback.returncode != 0:
         print(f"could not register a startup entry: {created.stderr.strip()}", file=sys.stderr)
         return fallback.returncode
-    print("==> Installed. It starts at your next login.")
-    print("NOTE: Task Scheduler refused the task, so it will not restart after a crash.")
+    print("==> Autostart is on. It starts at your next login.")
+    print("NOTE: Task Scheduler refused the task, so it won't restart after a crash.")
     return 0
 
 
@@ -121,7 +123,7 @@ def stop(root: Path, runner: Runner) -> int:
     runner(["reg", "delete", RUN_KEY, "/v", TASK_NAME, "/f"])
     config_path(root).unlink(missing_ok=True)
     (root / TASK_XML_NAME).unlink(missing_ok=True)
-    print("==> Stopped and removed. It will no longer start at login.")
+    print("==> Autostart is off. It's stopped, and won't start by itself again.")
     return 0
 
 
@@ -136,12 +138,12 @@ def status(runner: Runner) -> int:
             ]
         )
         running = state.stdout.strip() == "Running"
-        print("installed and running" if running else "installed but not running")
+        print("on and running" if running else "on, but not running")
         return 0 if running else 1
     if runner(["reg", "query", RUN_KEY, "/v", TASK_NAME]).returncode == 0:
-        print("installed (starts at login; not supervised)")
+        print("on (starts at login, but won't restart after a crash)")
         return 0
-    print("not installed")
+    print("off")
     return 1
 
 
@@ -164,7 +166,7 @@ def run_service() -> int:
     server's, so Task Scheduler's restart-on-failure sees a crash."""
     root = Path.home() / ".open-net-worth"
     config = json.loads(config_path(root).read_text(encoding="utf-8"))
-    process = subprocess.Popen(  # noqa: S603 — the command is the interpreter `autostart install` recorded
+    process = subprocess.Popen(  # noqa: S603 — the command is the interpreter `autostart on` recorded
         config["command"],
         cwd=config["cwd"],
         env={**os.environ, **config["env"], RUN_BY_TASK_ENV: "1"},

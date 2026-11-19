@@ -24,6 +24,7 @@ NAME = EXAMPLE_FLAG.name
 def _flag(**over) -> ff.Flag:
     base = dict(
         name="some_flag",
+        title="Some flag",
         description="Does a thing.",
         default=False,
         owner="owner",
@@ -58,6 +59,7 @@ def demo(book):
         {"name": "Bad-Name"},
         {"name": "x"},
         {"kind": "experiment"},
+        {"title": "  "},
         {"description": "  "},
         {"owner": ""},
         {"remove_by": date(2026, 10, 1)},
@@ -215,3 +217,15 @@ def test_a_write_refreshes_every_open_screen(book, monkeypatch):
     svc.set_flag(NAME, True)
     svc.reset_flag(NAME)
     assert published == [["feature_flags"], ["feature_flags"]]
+
+
+def test_flags_list_newest_first_then_by_name(monkeypatch):
+    reg = ff.build_registry(
+        (
+            _flag(name="old_flag", added=date(2026, 9, 1)),
+            _flag(name="zed_flag", added=date(2026, 11, 1)),
+            _flag(name="abc_flag", added=date(2026, 11, 1)),
+        )
+    )
+    monkeypatch.setattr(ff, "REGISTRY", reg)
+    assert [f.name for f in ff.all_flags()] == ["abc_flag", "zed_flag", "old_flag"]

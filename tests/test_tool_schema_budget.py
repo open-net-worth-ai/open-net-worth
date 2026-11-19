@@ -279,7 +279,23 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # 2026-11-05: 477_000 -> 479_000. get_asset_technicals / get_asset_fundamentals
     # (ai/tools/asset_analysis.py) — the ticker Analysis tab's rows for Lucius. ~1.6K chars after
     # trimming; discoverable, not CORE, so the default offer is unchanged.
-    budget = 479_000
+    # 2026-11-10: 479_000 -> 480_000. Brokerage total / Live holdings (ADR 2026-11-10): list_accounts
+    # says a 'total' account's balance is its untracked part, not cash; update_accounts takes
+    # value_source; reconcile_accounts takes real_total; acquire_lots says not to ask for funding.
+    # ~1.1K chars after trimming (create_account's value_source dropped — update_accounts sets it).
+    # 2026-11-17: 480_000 -> 481_000. Copy Trading (get_/set_followed_portfolios, flag
+    # followed_portfolios) and align_account_start added ~3.4K chars; the 8 bank fetch tools'
+    # signed-row booking rule (+~3.5K, #125) and get_card_statement_status were re-worded to
+    # claw back ~2.7K first. Both new families are discoverable, not CORE.
+    # 2026-11-17: -> 483_700 (+2_700 on top of the 481_000 the Copy Trading / bank-fetch
+    # re-wording raise sets). show_visual (flag inline_visuals, ~2.6K chars after trimming):
+    # inline charts, figures and timelines whose numbers are references into earlier tool
+    # results (docs/design/inline-visuals.md). CORE, so it also counts in the offer below.
+    # 2026-11-15/18: 483_700 -> 498_300. Paper Trading's twelve tools (ADR 2026-11-15-paper-
+    # trading-is-a-simulated-book-never-an-order-path), their mandate fields and the autopilot's
+    # get_paper_news + record_autopilot_memo included: 14,597 chars measured. Not CORE, so the
+    # default offer is unchanged.
+    budget = 498_300
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

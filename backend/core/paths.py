@@ -108,6 +108,9 @@ GRANTS_JSON = (
 OPTION_CONTRACTS_JSON = (
     DATA_DIR / "option_contracts.json"
 )  # derivative overlay contracts — checkpoint-INCLUDED (portfolio truth, like lots/grants)
+FOLLOWED_PORTFOLIOS_JSON = (
+    DATA_DIR / "followed_portfolios.json"
+)  # public portfolios the user follows + their sleeves — checkpoint-INCLUDED (user intent)
 INVESTMENT_THESES_JSON = (
     DATA_DIR / "investment_theses.json"
 )  # why you own / would buy an instrument — checkpoint-INCLUDED (user intent)

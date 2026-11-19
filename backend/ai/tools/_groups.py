@@ -86,6 +86,10 @@ CORE_TOOL_NAMES: frozenset[str] = frozenset(
         # import_transactions below, rather than justified by historical call frequency.
         "activate_skill",
         "calculate",  # 19.5% of sessions
+        # Structural, like activate_skill: the model can only decide a reply is better drawn
+        # if it already holds the drawing tool — nothing in a question tells it to go find
+        # one. New tool (2026-11-17, flag inline_visuals), so there is no spread to measure.
+        "show_visual",
         # Ledger reads + hot writes
         "get_transactions",  # 34.1% — the #2 tool in the corpus
         "add_transactions",  # 20.1%
@@ -131,8 +135,17 @@ CORE_TOOL_NAMES: frozenset[str] = frozenset(
 # a find_tools round (15–20s of a new user's first minutes) on create_account, show_guide
 # or the skill's references before its first real step. Seeded into the session's loaded
 # set, so they stay offered once the book fills mid-conversation (assistant.run).
+# The connector three let the skill offer a named broker's card without a find_tools round:
+# a friend's moomoo went unmentioned through a whole onboarding (owner, 2026-11-13).
 ONBOARDING_TOOL_NAMES: frozenset[str] = frozenset(
-    {"create_account", "show_guide", "read_skill_file"}
+    {
+        "create_account",
+        "show_guide",
+        "read_skill_file",
+        "get_connector_status",
+        "search_connector_directory",
+        "run_screen_command",
+    }
 )
 
 # ---------------------------------------------------------------------------

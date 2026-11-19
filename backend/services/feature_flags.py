@@ -43,6 +43,7 @@ def _row(flag: registry.Flag, stored: dict[str, bool], demo: bool) -> dict:
     res = registry.resolve(flag.name, stored=None if demo else stored.get(flag.name), demo=demo)
     return {
         "name": flag.name,
+        "title": flag.title,
         "description": flag.description,
         "kind": flag.kind,
         "default": flag.default,

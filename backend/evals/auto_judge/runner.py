@@ -140,6 +140,7 @@ def prompt_for(case: Case) -> str:
         connector=registry.tool_connector(case.tool),
         owner_messages=case.owner,
         consequence=auto_judge.automation_consequence(case.tool, case.args),
+        rows=case.rows,
     )
 
 

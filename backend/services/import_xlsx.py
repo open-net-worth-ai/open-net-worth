@@ -17,7 +17,6 @@ Money/base figures are NEVER fabricated
 
 from __future__ import annotations
 
-import io
 import re
 import unicodedata
 
@@ -28,6 +27,7 @@ from backend.services.import_common import (
     build_commit,
     build_preview,
 )
+from backend.services.xlsx_open import load_values_workbook
 
 _XLSX_PREFIX = "xlsx"
 # The external_source namespace every XLSX-imported draft carries (== ``_XLSX_PREFIX``); the
@@ -176,7 +176,7 @@ def parse_xlsx(content: bytes, password: str | None = None) -> tuple[list[str], 
     if not content:
         raise XlsxImportError("The file is empty.")
     try:
-        import openpyxl  # imported lazily so a non-XLSX path never pays the cost
+        import openpyxl  # noqa: F401 — availability check; the load is xlsx_open's
     except ImportError:  # pragma: no cover - openpyxl is a declared dependency
         raise XlsxImportError("XLSX support requires the openpyxl package.")
 
@@ -190,7 +190,7 @@ def parse_xlsx(content: bytes, password: str | None = None) -> tuple[list[str], 
         raise XlsxImportError(str(exc))
 
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        wb = load_values_workbook(content)
     except Exception as exc:  # openpyxl raises a variety of types on a bad file
         raise XlsxImportError(f"Could not read the Excel file: {exc}")
 

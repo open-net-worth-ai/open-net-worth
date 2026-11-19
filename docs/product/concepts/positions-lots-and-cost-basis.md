@@ -60,6 +60,11 @@ you got it: Buy, Dividend reinvest, Transfer in, Grant, or Opening balance.
 step. Choose **Don't deduct from an account** and only the lot is recorded — your cash balance
 doesn't change, and the form tells you so.
 
+Buying in another currency than the account's? The form gives the amount in the account's own
+currency, with the trade's beside it, for example *About 271.35 SGD (201.00 USD at today's rate)
+will be deducted from Everyday Cash*. A new purchase is converted at today's rate. Correcting
+one keeps the rate it was first booked at, as long as it stays on the same account.
+
 The acquired date can't be in the future — a lot records shares you already hold. If you deduct
 the cost from an account and the purchase is dated before that account's starting balance, the
 form says its balance won't change: transactions before an account's starting balance are left
@@ -95,8 +100,24 @@ the **Not a sale** option.
   never disappears. The header counts both, for example *1 open · 5 closed*. A sold lot has no
   unrealized gain; its gain is under **Realized history**.
 - Click any lot to correct its date, quantity, cost, fees or kind — including a lot you've sold
-  from. If you deducted its cost from an account, that purchase is corrected to match; changing
-  only the note leaves it alone.
+  from. If you deducted its cost from an account, that transaction is corrected to match and keeps
+  its category, status, history and any description you wrote; changing only the note leaves it
+  alone.
+- Removing a lot, or switching its **Deduct from** to **Don't deduct from an account**, removes
+  its purchase transaction, and anything that transaction paid, such as an installment, goes back
+  to unpaid. The form says so before you save. A sale's **Don't add to an account** does the same
+  to its deposit and anything that deposit funded.
+- If you turned a lot's or a sale's cash into a transfer in the ledger, that transfer is yours:
+  correcting, removing or un-linking the lot or sale never changes or deletes it, and the form
+  says so instead of promising a deduction. The same goes for one transaction that two lots
+  share: removing one of them takes only its part off the transaction.
+- You can also ask Lucius to move a lot's purchase to another account ("that lot was paid from
+  Spare Cash"). It shows you the change before making it.
+- If you delete the cash transaction behind a lot, the lot stays and keeps its cost, but it no
+  longer has a linked purchase. Correcting that lot later doesn't change or add any cash. To book
+  the purchase again, pick an account under **Deduct from**.
+- A sale works the same way: delete its cash deposit and the sale and its gain stay on record.
+  Editing the sale doesn't add the cash back unless you choose a different account.
 - Correcting a sold lot keeps every sale exactly as recorded (which lots it used, how many,
   the price and the cash). Only that lot's lines on the sale follow: a new date updates their
   holding period, and a new cost or fees updates the sale's gain. A sold lot can't be made

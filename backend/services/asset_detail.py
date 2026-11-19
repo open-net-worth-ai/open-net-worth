@@ -175,6 +175,34 @@ def _live_news_for_instrument(
     return [cluster[0] for cluster in clusters]
 
 
+def stored_news(inst: dict) -> list[dict]:
+    """The asset page's own news for an instrument row: its stored stories through the same
+    relevance and quality filters (``_live_news_for_instrument``). One definition of "the news
+    for a ticker" — a paper autopilot review reads exactly this."""
+    symbol = inst.get("symbol") or ""
+    price_source_id = inst.get("price_source_id") or ""
+    inst_label = inst.get("name") or symbol or ""
+    # Only include `price_source_id` in `relevance_terms` when it's genuinely a DIFFERENT string
+    # from the ticker — i.e. actually name-shaped, not a redundant copy of the symbol.
+    relevance_terms = list(
+        dict.fromkeys(
+            t
+            for t in (
+                inst.get("name"),
+                price_source_id if price_source_id.casefold() != symbol.casefold() else None,
+            )
+            if t
+        )
+    )
+    relevance_tickers = [t for t in (symbol,) if t]
+    return _live_news_for_instrument(
+        inst.get("id") or "",
+        inst_label,
+        relevance_terms=relevance_terms,
+        relevance_tickers=relevance_tickers,
+    )
+
+
 def _cached_snapshot(inst: dict | None) -> dict:
     """The instrument's last batched-quote snapshot, cache-only (no network on a page read)."""
     from backend.services.prices import cached_quote_snapshot
@@ -1080,6 +1108,45 @@ def _dedupe_peers_by_ticker(peers: list[dict]) -> list[dict]:
     return out
 
 
+# Where a listing's exchange came from. Only the price provider's own quote for the EXACT ticker
+# the app prices is trusted; a label stored without this mark came from a name search, which can
+# return another company (bare "WBD" returned Webuild on Milan), and is checked again once.
+_EXCHANGE_SOURCE = "quote"
+
+
+def _listing_exchange(instrument_id: str, inst: dict, ident: dict, *, persist: bool) -> str | None:
+    """The exchange the instrument's own ticker trades on, or None when it cannot be confirmed.
+    Never a guess: a wrong exchange sends a reader (or Lucius, placing an order) to another
+    company's listing, so an unconfirmed one is shown as no exchange at all."""
+    if ident.get("exchange_source") == _EXCHANGE_SOURCE:
+        return ident.get("exchange") or None
+    ticker = inst.get("price_source_id")
+    if not ticker or (inst.get("asset_class") or "").lower() == "crypto":
+        return None
+    try:
+        from backend.services.prices import fetch_quote_snapshots
+
+        snap = fetch_quote_snapshots([ticker]).get(ticker)
+    except Exception:
+        logger.debug("asset_detail: no quote for %s's exchange", instrument_id, exc_info=True)
+        snap = None
+    if snap is None:  # the quote could not be read: no label now, checked again next time
+        return None
+    exchange = snap.get("exchange") or None
+    if persist:
+        fixed = {k: v for k, v in ident.items() if k != "exchange"}
+        fixed["exchange_source"] = _EXCHANGE_SOURCE
+        if exchange:
+            fixed["exchange"] = exchange
+        try:
+            InstrumentStore().touch(instrument_id, {"identifiers": fixed})
+        except Exception:
+            logger.debug(
+                "asset_detail: could not persist exchange for %s", instrument_id, exc_info=True
+            )
+    return exchange
+
+
 def read_asset_detail(
     instrument_id: str,
     *,
@@ -1150,42 +1217,7 @@ def read_asset_detail(
     has_ticker = bool(inst.get("price_source_id"))
 
     ident = inst.get("identifiers") or {}
-    # Resolve the exchange/market via Yahoo search (reliable: "ONWAI.DE" -> "XETRA"), falling
-    # back to any stored identifier. Resolved once, then persisted onto the instrument (below).
-    exchange = ident.get("exchange") or None
-    if (
-        not exchange
-        and inst.get("price_source_id")
-        and (inst.get("asset_class") or "").lower() != "crypto"
-    ):
-        try:
-            from backend.services.prices import search_symbol
-
-            for q in (inst.get("price_source_id"), inst.get("name")):
-                if not q:
-                    continue
-                info = search_symbol(q)
-                if info.get("exchange"):
-                    exchange = info["exchange"]
-                    break
-        except Exception:
-            exchange = None
-        # Persist the resolved exchange onto the instrument so this live Yahoo lookup is a
-        # one-time cost: search_symbol's cache is in-memory (wiped on restart) and a security's
-        # listing exchange never changes, so an un-persisted result was re-fetched live on every
-        # cold open — blocking the otherwise-cached detail read by seconds. Best-effort: a write
-        # failure must not break the read. Skipped entirely for a caller that opted into
-        # ``persist_exchange=False`` (this read must stay genuinely writeless) — the resolved
-        # value still rides this call's own `asset.exchange` below either way.
-        if exchange and persist_exchange:
-            try:
-                InstrumentStore().touch(
-                    instrument_id, {"identifiers": {**ident, "exchange": exchange}}
-                )
-            except Exception:
-                logger.debug(
-                    "asset_detail: could not persist exchange for %s", instrument_id, exc_info=True
-                )
+    exchange = _listing_exchange(instrument_id, inst, ident, persist=persist_exchange)
 
     asset_block = {
         "name": display_name(inst.get("name") or inst.get("symbol") or ""),
@@ -1236,26 +1268,7 @@ def read_asset_detail(
     # `read_asset_detail`'s own construction of it against a REAL instrument row). Only include
     # `price_source_id` in `relevance_terms` when it's genuinely a DIFFERENT string from the
     # ticker — i.e. actually name-shaped, not a redundant copy of the symbol.
-    symbol = inst.get("symbol") or ""
-    price_source_id = inst.get("price_source_id") or ""
-    inst_label = inst.get("name") or symbol or ""
-    relevance_terms = list(
-        dict.fromkeys(
-            t
-            for t in (
-                inst.get("name"),
-                price_source_id if price_source_id.casefold() != symbol.casefold() else None,
-            )
-            if t
-        )
-    )
-    relevance_tickers = [t for t in (symbol,) if t]
-    news = _live_news_for_instrument(
-        instrument_id,
-        inst_label,
-        relevance_terms=relevance_terms,
-        relevance_tickers=relevance_tickers,
-    )
+    news = stored_news(inst)
     key_issues = _coerce_sources(brief.get("key_issues") or [])
 
     raw_facts = brief.get("facts") or {}
