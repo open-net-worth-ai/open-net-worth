@@ -1,6 +1,8 @@
-# Spend advisor ("Can I afford this?" · "Not now" · "Use this card"): PRD
+# Spend advisor — "Ask Lucius first": PRD
 
-Date: 2026-11-18 · Status: draft for the owner's approval
+> **Lucius tells you before you spend, not after — so there is nothing to regret.**
+
+Date: 2026-11-18 (updated 2026-11-20) · Status: draft for the owner's approval
 
 ## Problem
 
@@ -11,8 +13,12 @@ a decision is before the purchase, and today nothing in the app speaks at that m
 That moment now has two shapes:
 
 - **The owner**, in a shop or on a checkout page, asking Lucius (chat, Telegram, voice).
-- **An agent buying for the owner** (agentic checkout: ChatGPT Instant Checkout / ACP, AP2), which
-  can ask before it pays, if anything is there to answer.
+- **The owner's own AI assistant buying for them** (ChatGPT, Claude, Meta Muse, …), which can ask
+  before it pays, if anything is there to answer.
+
+Open Net Worth does **not** build a shopping agent. The assistant the owner already uses finds,
+fills and pays; Open Net Worth is the advisor every one of them consults, because it alone holds
+the budget, bills, debts and cards.
 
 ## Goal
 
@@ -23,7 +29,21 @@ numbers:
 2. **Should it wait?** Only with a concrete reason and a date or alternative.
 3. **Which card?** The best-paying card the budget can actually carry.
 
-It informs; it never blocks, and Open Net Worth never initiates a payment.
+It informs; it never blocks, and Open Net Worth never initiates a payment. "Stop you" means
+**pause you at the right moment** — and, for an assistant, **hold the purchase until the owner says
+yes** above their own limit. The owner always has the final say.
+
+The other half of "no regret" is a **guilt-free yes**: "fits, Dining has room, use Card A" lets
+the owner buy without second-guessing.
+
+## Tone rules
+
+- **Never shame.** Talk about the money, never the person: "this leaves Dining short", never
+  "you spend too much on dining".
+- **Every "wait" has a way out**: a date, an alternative, or "buy anyway" — a pause, never a wall.
+- **Silent when it's fine.** Planned spending gets a quick "fits" or nothing; nagging every
+  purchase teaches people to stop asking.
+- **The owner decides.** "Buy anyway" is one tap, and Lucius never brings it up later.
 
 ## Users
 
@@ -86,35 +106,80 @@ US, where rewards apps don't reach.
 
 ### P1 — Can I afford this? + Not now (build first)
 
-One engine, `check_spend`, reached two ways: a Lucius tool, and the inbound MCP server under a
-**new scoped token** that can call `check_spend` and nothing else (today a Bearer holder on `/mcp`
-IS the operator, which an outside shopping agent must never be).
+**Two tools, explicit names** (a tool name is persisted data and, for these two, lives outside the
+app too — in the skill and instructions owners give their assistants; ADR
+`2026-08-25-tool-names-are-final`). The name must say what the tool is for on its own, since some
+assistants decide from names alone; the MCP `title` carries the friendly wording.
 
-Input: amount, currency, merchant (free text), optional category, optional account/card, optional
-date (default today in the owner's timezone, `core.user_time`).
+| Tool | MCP title | Writes |
+|---|---|---|
+| `get_spending_advice_before_payment` | "Ask Lucius before buying" | nothing (a small `check_id` record for matching) |
+| `record_spending_after_payment` | "Tell Lucius what you bought" | an uncleared transaction (P3) |
 
-Output, all read from existing authorities, no second computation:
+**Lucius already has a `can-i-afford-it` starter skill** (`backend/starter_skills/can-i-afford-it/`)
+for big buys and runway (cash on hand, cash-flow projection, commitments, goals). It lacks the
+envelope view, bills before payday, the card, recent purchases and rules, and as a skill it can't
+be called by an outside assistant and isn't deterministic. P1 therefore: (1) adds the tool, its
+logic in `services/`; (2) upgrades the skill to call the tool for everyday purchases, keeping its
+runway path for big ones — one skill, two depths, no duplicate.
 
-| Field | Authority |
+**Input**
+
+```json
+{ "amount": 84.00, "currency": "USD", "merchant": "ACME Store", "category": "Gifts",
+  "pay_with": "Card A", "date": "2026-11-20", "essential": false }
+```
+
+Amount + currency required. A missing category → the payee's usual one; ambiguous → candidates,
+never a guess. A missing `pay_with` → checked as cash, said so. `date` defaults to today
+(`core.user_time`). The owner's own "essential" marking overrides the caller's hint.
+
+**Checks, in order — every figure from an existing authority, no second computation**
+
+| # | Check | Authority |
+|---|---|---|
+| 1 | Resolve category and account | `resolve_category_ref`, payee default, account resolver |
+| 2 | Value in base currency; the card's FX fee | `txn_base_amount` logic, current rates |
+| 3 | Envelope available before/after; shortfall | budget engine (the Budget screen's figures) |
+| 4 | Cover options for a shortfall | `cover_overspending` |
+| 5 | Bills due before next income; cash after them | `commitments.due_summary`, `cashflow.runway_from_projection`, income schedule |
+| 6 | Card: payment funded? carries a balance at what APR? | card coverage / payment envelope, account `apr` |
+| 7 | Recent spending at this payee (14 days) | ledger |
+| 8 | Owner rules (from step 2 of the build) | rules |
+
+**Verdict — one of four, strictest wins**
+
+| Verdict | When |
 |---|---|
-| Category resolved (or candidates if ambiguous; never a guess) | `resolve_category_ref`, payee default |
-| Envelope available before/after; shortfall | budget engine |
-| Covering options for a shortfall (Ready to Assign, other envelopes) | `cover_overspending` |
-| Bills due before next income; cash after them | `commitments.due_summary`, `cashflow.runway_from_projection` |
-| Card: payment envelope funded or not; APR if it carries a balance | card coverage, account `apr` |
-| Recent purchases at this payee | ledger payee history |
-| Verdict: `fits` / `fits_with_cover` / `wait` / `over` + one-sentence reasons | rules below |
+| `fits` | Envelope covers it, no bill at risk, card fine |
+| `fits_with_cover` | Envelope short; Ready to Assign or other envelopes cover it; no bill at risk |
+| `wait` | A bill due before next income would be short after it — **always with a date** |
+| `over` | Even with every cover option, bills before income can't be paid |
 
-**"Wait" rules** — suggested only when one fires, and always with a date or an alternative:
+Flags beside the verdict: `card_warning` (carries a balance at its APR, or payment unfunded —
+names a better option), `needs_owner` (a rule says ask). **Essentials never get `wait`.** A goal's
+envelope is listed as a cover option, never a reason to wait — Lucius doesn't second-guess
+priorities.
 
-- Envelope short but refills (month rollover / scheduled income) within N days.
-- After the purchase, cash would not cover bills due before the next income.
-- The card's payment is already underfunded and it carries a balance (interest named).
-- Owner's opt-in cool-off rule: e.g. "anything over 200 in Fun: sleep on it" → offers a reminder.
-- Never: for an essential the owner marked so, or for anything already budgeted.
+**Output — minimal** (default for outside assistants):
 
-**Owner rules** (new, small): per category, `ok_below` amount and `cool_off_above` amount. Stored
-in Open Net Worth, read by every caller. This is the "intent mandate" idea without signing.
+```json
+{ "check_id": "chk_7f3a", "verdict": "fits", "reasons": ["Gifts has room for this."],
+  "card": { "use": "Card A", "warning": null }, "options": [],
+  "next_step": "After the user pays, call record_spending_after_payment with check_id chk_7f3a." }
+```
+
+**Output — full** (Lucius itself, or an assistant the owner opted in) adds `resolved`
+(category, account, base amount, FX fee), `envelope` (before/after), `cover` (sources with
+available), `bills_before_income` (next income date, bills due, cash after), card detail
+(`payment_funded`, `carries_balance`), `recent_at_payee`, `as_of`; `options` always include
+`buy_anyway`, and `wait` options a `wait_until` date.
+
+**Rules (step 2 of the build)** — decisions made once, in advance; they change the answer, never
+block. Per category: `ok_below` (silent fits), `ask_above` (`needs_owner`), `sleep_on_above`
+(wait + reminder offer), `essential` (never wait). Assistant-only: a monthly limit across all
+assistant spending and allowed categories. The budget comes first (a rule never makes something
+affordable); the strictest rule wins. Set in Budget settings or by telling Lucius.
 
 ### P2 — Use this card (the owner's own cards, their MCC, their terms)
 
@@ -238,13 +303,13 @@ a new URL).
   change or any other action.
 - Delivery: the existing notify channels plus the in-app alert surface; Open question 6.
 
-## Shopping-agent flow
+## Assistant flow (ChatGPT, Claude, Muse, …)
 
-How the owner shops through ChatGPT, Claude or another agent with Open Net Worth advising.
+How the owner shops through their own AI assistant with Open Net Worth advising — Open Net Worth builds no shopping agent.
 
 **One-time setup**
-1. In Open Net Worth: create a **shopping-agent token** (allowed: `check_spend`, and from P3
-   `record_agent_purchase`; nothing else), pick its **detail level**, and set spending rules
+1. In Open Net Worth: create a **assistant access key** (allowed: `get_spending_advice_before_payment`, and from P3
+   `record_spending_after_payment`; nothing else), pick its **detail level**, and set spending rules
    ("Groceries under 150: fine", "Fun over 200: ask me").
 2. Make the instance reachable by the agent:
    - a local agent (Claude Desktop) uses the existing stdio bridge;
@@ -252,20 +317,20 @@ How the owner shops through ChatGPT, Claude or another agent with Open Net Worth
      such as Cloudflare Tunnel / Tailscale Funnel, or a hosted instance) **and** their connector
      setup generally expects OAuth, while inbound MCP is Bearer-only today. Both are new work (S1).
 3. Add Open Net Worth as a connector in the agent, plus one standing instruction (custom
-   instructions / a project): "Before any purchase call `check_spend`; after paying call
-   `record_agent_purchase`." The product docs ship the exact text.
+   instructions / a project): "Before any purchase call `get_spending_advice_before_payment`; after paying call
+   `record_spending_after_payment`." The product docs ship the exact text.
 
 **A purchase**
 
 ```
 Owner → agent: "Get a birthday gift for my mom, around 80"
 Agent: finds options; owner picks one (84, online)
-Agent → ONW  check_spend(84, USD, merchant="ACME Store", category≈"Gifts", channel=online)
+Agent → ONW  get_spending_advice_before_payment(84, USD, merchant="ACME Store", category≈"Gifts", channel=online)
 ONW  → verdict: fits · card: "Card A" (3x online ≈ 250 pts, payment funded)
        reason: "Gifts has 120 left. No bills at risk."
 Agent → owner: "Fits your Gifts budget. Pay with Card A for ~250 points. Buy it?"
 Owner: "Yes" → agent pays from ITS OWN saved wallet with Card A
-Agent → ONW  record_agent_purchase(order_id, items, 84, "Card A", merchant)
+Agent → ONW  record_spending_after_payment(order_id, items, 84, "Card A", merchant)
 ONW: an UNCLEARED transaction in Gifts, receipt attached
 Days later: the bank-feed / statement row matches it — no duplicate
 ```
@@ -291,29 +356,101 @@ open agents (anything that speaks MCP); ask-before + record-after for everything
 
 ### S1 — Reachable by cloud agents (prerequisite for ChatGPT / claude.ai)
 
-OAuth for inbound MCP (scoped to the shopping-agent token's tools) and a documented way to expose
+OAuth for inbound MCP (scoped to the assistant access key's tools) and a documented way to expose
 the instance (tunnel or hosted). Security-critical: `/security-review` + ADR; gateway mode and the
 demo lockdown must refuse or scope it correctly.
 
 ### P3 — Record what an agent bought
 
-`record_agent_purchase` through `ledger_service.create_transaction`, as an **uncleared** row;
+`record_spending_after_payment` through `ledger_service.create_transaction`, as an **uncleared** row;
 identity `(emitter, external order id)` for dedup; the later bank-feed / statement row matches
 and clears it. The owner's approval card applies unless their rules allow it. Signed receipts
 delivered to the buyer (AP2/ACP mandates) are future work: nothing pushes them to a self-hoster
 today.
 
+## Making assistants call before and after
+
+No assistant can be forced; make calling the natural path and notice when it didn't happen.
+
+1. **The tools prompt themselves** (strongest): explicit names; descriptions written as orders
+   ("Call BEFORE confirming any purchase, booking or subscription, even if the user didn't mention
+   their budget"); every advice answer carries `next_step` naming the after-call and its
+   `check_id`, so the after-step is in front of the assistant at the moment it pays.
+2. **Instructions where each assistant reads them**: MCP server `instructions`; an MCP prompt
+   ("Shop with my budget"); a **skill** (`SKILL.md`) generated from Settings with the instance
+   address filled in and no secret; and 5-line paste-in text for assistants without skills.
+3. **Open Net Worth checks it happened**: advice with no after-call → the bank row that matches
+   (amount, merchant, date) is linked to the check anyway — the bank row is the truth, the
+   after-call a bonus; an after-call with no advice is flagged "bought without asking first";
+   a per-assistant scorecard in the activity log ("14 checks, 11 recorded, 2 seen at the bank
+   with no check"); order emails still cover anything missed.
+4. **"Test my agent"**: at setup, a one-line test purchase ("pretend to buy 'ONW test item' for
+   1.00"); Open Net Worth watches for both calls and shows ✅/❌ with the fix. A live regression
+   (like `make cli-smoke`) keeps checking Claude and Codex after their own updates.
+
+## Assistants and protocols
+
+The agentic-commerce protocols (Nov 2026) are layers between the assistant, the merchant and the
+payment network: **UCP** (Google + retailers) and **ACP** (OpenAI + Stripe; status contested) for
+checkout, **AP2** (now with the FIDO Alliance) for payment mandates, **x402** for machine payments,
+Visa Intelligent Commerce / Trusted Agent Protocol and Mastercard Agent Pay at the networks; **MCP**
+connects assistants to tools; **A2A** connects agents to agents. Open Net Worth sits on the
+**buyer's side** of all of them — advice before, a record after — so it works whichever one the
+merchant uses. The after-call takes one simple shape; the assistant fills it from whatever order
+record its protocol produced (a UCP/ACP order, an AP2 mandate, an x402 receipt), and that id is the
+dedup key.
+
+| Reach | Assistants | Needs |
+|---|---|---|
+| **MCP** | Claude (Desktop, claude.ai, Code), ChatGPT, Meta Muse Code, most others | local: stdio bridge; cloud: S1 |
+| **Plain web API + OpenAPI** (same two actions, same key) | Assistants that build connectors from an API — Meta Muse's consumer app may be one (its MCP support is unclear; verify with Meta's docs) | S1's public address |
+| **Neither** | Store chatbots, closed in-app checkouts | the owner asks Lucius before; the order email records it after |
+| **A2A** (later) | Enterprise agent platforms: Google Vertex / Gemini Enterprise, Microsoft Copilot Studio / Foundry, Amazon Bedrock AgentCore, Salesforce Agentforce — not ChatGPT or Claude today | S1 |
+
+### A2A adapter (later)
+
+A2A lets another agent hand Lucius a *task* rather than call a tool, which gives two things MCP
+can't: **the owner's approval happens in Open Net Worth** (task state `input-required` → the
+existing approval card on app/Telegram/voice → task completes), so an assistant that ignores
+instructions can't skip it; and **"wait" can become "OK now"** (the task stays open; on payday
+Lucius pushes the update). It fits existing seams: a new channel in `backend/connectors/`
+(auth first, `operator_trust` off, rate limit), a locked-down Lucius via `core/headless_turn`
+(`allowed_tools=[advice, record, ask owner]`, `enforce_offer=True` — the seam's documented use for
+untrusted text), approval cards, `ai/turns.py`, scheduled messages for pushed updates through the
+SSRF guard. New: the A2A endpoint + Agent Card (likely the official Python SDK — ADR), a task table
+(timestamped revision), outbound update delivery. Simple cases are answered by the engine with no
+model call; a locked-down turn runs only for a conversation or an owner approval.
+Security-critical: `/security-review` + ADR. Build when a client the owner uses supports it.
+
+## Build order — the first three (the demo)
+
+1. **"Can I afford this?" in Lucius** — the advice tool + the upgraded `can-i-afford-it` skill.
+   *Demo:* "Can I buy a 1,400 laptop?" → "Only by taking 1,100 from Ready to Assign, and rent
+   would be 200 short until payday on the 28th. Buy on the 28th?" (M)
+2. **"Your AI assistant asks Lucius first"** — assistant access key (two tools, minimal detail,
+   activity log), the `next_step` chain, `record_spending_after_payment` (uncleared), `ok_below` /
+   `ask_above`, "Test my agent"; in **Claude Desktop** (local — no OAuth or tunnel yet).
+   *Demo:* buy a gift → Lucius says fits → Claude buys → recorded; headphones for 349 → over the
+   ask-above-300 rule → asks the owner. (M)
+3. **"The right card, before you tap" (light)** — the owner's 2–3 cards, rules drafted by Lucius
+   from uploaded terms (quoted clauses, owner confirms), cap/FX-aware ranking, the budget first;
+   MCC = guess + correction. *Demo:* "Dinner abroad, which card?" → a reasoned pick that avoids
+   the card carrying a balance. (M–L)
+
+Then: **S1** (ChatGPT, claude.ai, Muse via the web API), bank-row matching for assistant
+purchases, terms finding/watching (P2b), backtests, the monthly review, A2A.
+
 ## Acceptance criteria
 
 P1
-- `check_spend` returns the same envelope / RTA / due / runway figures as the Budget, Commitments
+- `get_spending_advice_before_payment` returns the same envelope / RTA / due / runway figures as the Budget, Commitments
   and Cash Flow screens for the same date (one authority each; a test compares them).
 - An ambiguous or unknown category returns candidates, never coerces.
 - A purchase in a currency other than the card's or the base is valued at current rates and names
   the FX fee when the card has one.
 - "Wait" appears only when a listed rule fires, and every "wait" carries a reason and a date or
   alternative; an already-budgeted or essential purchase never gets one.
-- The shopping-agent token can call only its allowed tools; every other tool is refused; revoking
+- The assistant access key can call only its allowed tools; every other tool is refused; revoking
   it works without touching the operator token. Demo mode refuses issuing one.
 - At detail level `minimal` the answer carries no balance, bill or runway figure; `full` is opt-in.
 - No answer ever contains a card number; cards are named by nickname or last 4.
@@ -376,7 +513,7 @@ P3
 1. Timing against the Hardening Loop: Budgeting (②) is not yet ✅ trusted. Ship behind a feature
    flag now, or wait for sign-off?
 2. Where owner rules live: on the category, or a separate rules list?
-3. Is the scoped token general (a token with a tool allowlist) or `check_spend`-only? General is
+3. Is the scoped token general (a token with a tool allowlist) or `get_spending_advice_before_payment`-only? General is
    reusable but is a security-critical surface (`/security-review`, ADR).
 4. (Resolved 2026-11-18: feed MCCs are already stored in `connector_snapshots`; no storage
    change is needed.)
@@ -387,5 +524,5 @@ P3
 7. Watch cadence: weekly, or tighter in the weeks after a change notice?
 8. Is S1 worth its security surface now, or do cloud agents wait while Claude Desktop (local) and
    "ask Lucius" carry the first release?
-9. Rule outcome for an agent: may "inside a rule" let `record_agent_purchase` skip the owner's
+9. Rule outcome for an agent: may "inside a rule" let `record_spending_after_payment` skip the owner's
    approval card, or does every agent-reported write ask?
