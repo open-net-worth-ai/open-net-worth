@@ -129,14 +129,11 @@ e-wallet, a payment to your credit card — book it as a transfer so it doesn't 
   transfer: Checking → GrabPay**. If Lucius got one wrong, click **Not a transfer — book as an
   expense instead** (or *… as income instead*) on that row.
 - **On one row yourself:** click the row's pencil to open **Edit payee & category** and switch
-  **Type** to **Transfer**, then pick the other account (one in the same currency). A transfer
-  books no payee or category. Switch it back to **Expense** or **Income** to undo it; that also
-  overrides a transfer Lucius chose for the row.
+  **Type** to **Transfer**, then pick the other account — it can be in another currency, marked
+  like *Harbor (USD)*. A transfer books no payee or category. Switch it back to **Expense** or
+  **Income** to undo it; that also overrides a transfer Lucius chose for the row.
 - **In a chat with Lucius:** when you import through Lucius, tell him which row is a transfer and
   to which account. He books it as a transfer in the same import.
-
-You can also open a row's edit window (the pencil), set **Type** to **Transfer** and pick the other
-account.
 
 The amount on the statement stays on the statement account's side. If the other account is in a
 different currency, its side is converted at the latest exchange rate, and the row shows what it
