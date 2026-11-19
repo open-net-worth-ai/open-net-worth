@@ -546,7 +546,8 @@ def _save_cache(
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
     except Exception:
-        pass
+        # Still served this once, but every later load will pay for a fresh model call.
+        logger.warning("briefing cache write failed: %s", CACHE_FILE, exc_info=True)
     return data
 
 

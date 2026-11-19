@@ -1371,3 +1371,27 @@ def test_briefing_context_has_no_memory_section_when_there_is_nothing(isolated, 
 
     monkeypatch.setattr(prompts, "memory_block", lambda: "")
     assert "WHAT YOU REMEMBER" not in brf._build_context(0.0)
+
+
+def test_saved_note_is_reused_while_both_fingerprints_hold(tmp_path, monkeypatch):
+    """A note saved with the book's fingerprints is served again for the same book — a second
+    Dashboard load in the same part of the day must not pay for another model call."""
+    import backend.api.briefing as brf
+
+    monkeypatch.setattr(brf, "CACHE_FILE", tmp_path / "briefing_cache.json")
+    payload = {"note": "Evening note", "actions": [], "chat_suggestion": ""}
+    brf._save_cache(payload, "book-a", "activity-a")
+
+    reused = brf._load_cache("book-a", "activity-a")
+    assert reused is not None and reused["note"] == "Evening note"
+    assert brf._load_cache("book-b", "activity-a") is None
+
+
+def test_failed_cache_write_is_logged_not_swallowed(tmp_path, monkeypatch, caplog):
+    import backend.api.briefing as brf
+
+    monkeypatch.setattr(brf, "CACHE_FILE", tmp_path / "missing-dir" / "briefing_cache.json")
+    with caplog.at_level("WARNING", logger=brf.logger.name):
+        data = brf._save_cache({"note": "n", "actions": [], "chat_suggestion": ""})
+    assert data["note"] == "n"
+    assert "briefing cache write failed" in caplog.text
