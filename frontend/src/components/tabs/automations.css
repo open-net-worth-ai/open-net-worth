@@ -177,7 +177,9 @@
 .rd-kebab-pop {
   position: absolute;
   right: 0;
-  top: 30px;
+  /* Below the button, whatever its height: a fixed 30px landed the menu on top of any taller
+     trigger (the New button, the round + on a phone). */
+  top: calc(100% + 6px);
   z-index: var(--z-dropdown);
   min-width: 150px;
   background: var(--modal-bg);
