@@ -31,7 +31,9 @@ export interface BankSyncAccount {
    *  the book holds it: a card's debt negative). `differs`: they don't agree. */
   bank_balance?: number | null
   cleared_balance?: number | null
-  balance_state?: 'match' | 'differs' | null
+  /** `needs_limit`: a card whose bank sent only the credit left on it — never used as what is
+   *  owed; with the card's credit limit set, the balance owed is worked out from it. */
+  balance_state?: 'match' | 'differs' | 'needs_limit' | null
   /** The book account's own last digits. */
   last_four?: string
   /** How many of its transactions came from this bank, counted in the book. */
@@ -76,7 +78,13 @@ export interface BankSyncStatus {
   stage?: BankSyncStage
 }
 
-export type ReviewKind = 'modified' | 'vanished' | 'posted' | 'duplicate' | 'undone'
+export type ReviewKind =
+  | 'modified'
+  | 'vanished'
+  | 'posted'
+  | 'duplicate'
+  | 'undone'
+  | 'transfer_pair'
 
 export interface BankRowView {
   date?: string
@@ -109,6 +117,8 @@ export interface BankReview {
     undone?: boolean
     /** A card payment's other bank row: both are booked again together, as one transfer. */
     pair?: BankRowView
+    /** kind 'transfer_pair': the paying side, already in the book (`current` is the other). */
+    other?: BankRowView | null
     /** kind 'undone': every row of the sync you undid, held back as ONE decision. */
     rows?: BankUndoneRow[]
     /** kind 'undone': when that sync ran. */

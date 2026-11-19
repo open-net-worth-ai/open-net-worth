@@ -6,7 +6,7 @@ order: 172
 audience: [user]
 status: beta
 related: [connectors/bank-brokerage, lucius/automations, features/categories-payees, features/accounts]
-keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, simplefin, history, 90 days, starting balance, review, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc, undo, card payment]
+keywords: [bank sync, sync without ai, no ai, data sync, gocardless, enable banking, plaid, simplefin, history, 90 days, starting balance, review, credit limit, available credit, make transfer, changed transaction, withdrawn transaction, duplicate, read limit, rate limited, sync now, payee default, merchant category code, mcc, undo, card payment]
 ---
 
 # Bank sync without AI
@@ -126,12 +126,18 @@ can be booked by Lucius as well as by this sync, so running one per bank is simp
   charged.
 - **Files a credit-card payment as one transfer,** not as income on the card plus spending in
   checking (which would inflate both reports). When the card gets a payment and one of your
-  checking-type accounts has an outflow of the same amount within three days, and either one is
+  checking-type accounts has an outflow of the same amount within four days, and either one is
   worded like a payment, they become a single transfer, whichever the sync read first, and
   whether the other side came from another bank connector or you typed it (a row you typed is only used once you have cleared it). A match must be
   unique: if two rows could be the other side, nothing is paired. Merchant refunds, and
   anything you deleted before, are never paired. A payment whose other side isn't in your book
-  stays income on the card until it is; then the two pair. The run says how many it filed.
+  stays income on the card until it is; then the two pair. A side the bank first listed as
+  pending pairs once it settles. The run says how many it filed.
+- **Asks about a pair it can't be sure of.** When the two sides match in every way but neither
+  is worded like a payment or a transfer, the sync doesn't guess: they wait under **Needs your
+  review** as "These two look like one transfer", with **Make it one transfer** or **Keep them
+  separate**. A pair you keep separate isn't asked about again. You can also select any two such
+  rows in an account list and choose **More** › **Make Transfer**.
 - **Files money moved between two of your own cash accounts as one transfer,** such as checking
   to savings, by the same rules: the same amount out of one and into the other within three
   days, one side worded like a transfer ("transfer", "standing order", "savings"…), and no other
@@ -184,6 +190,12 @@ hours old: if it's behind, the row shows the difference rather than your balance
 changing. SimpleFIN sends one figure that may include pending payments, so it's compared with
 your working balance.
 
+Some banks send only a card's **available credit** (what you can still spend), not what you owe.
+That figure is never used as the card's balance. If the card's account has a **Credit limit**,
+what you owe is worked out as the limit minus the available credit (a £5,000 limit with
+£1,200 available is £3,800 owed). Without one, the card's balance is left as it is and its
+row says **Add the card's credit limit to check its balance**; set it in the account's settings.
+
 Banks report their balances in the same terms your accounts use, both on the connector's
 **Accounts** list and when Lucius lists a bank's accounts:
 
@@ -206,6 +218,7 @@ applies that on its own. It waits under **Needs your review**, on the sync's pag
 | The bank no longer lists it | **Delete it** or **Keep it** |
 | A pending transaction posted at a different amount | **Use the posted amount** or **Keep mine** |
 | It looks like a transaction already in your book | **Same transaction** (link them), **Book it separately**, or **Ignore it** |
+| Two of your rows look like one transfer between your accounts | **Make it one transfer** or **Keep them separate** |
 
 If you edited a transaction by hand, the review says so before you replace your edit. Nothing
 in the ledger changes until you choose.

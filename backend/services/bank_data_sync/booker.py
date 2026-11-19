@@ -50,6 +50,9 @@ class Booked:
     # book promoted to it (``promoted`` holds their before-images, for Undo).
     card_payments: int = 0
     promoted: list[dict] = field(default_factory=list)
+    # Rows already in the book this run merged into one transfer (a leg that settled, or a row
+    # booked with no counterpart, card_payments.pair_in_book): the absorbed ids, for Undo.
+    pair_merges: list[str] = field(default_factory=list)
     # Ids of the pending bookings this run took off the book, and the bank's own view of every
     # row it booked or folded into a booking, by ref: what Undo needs (undo.py).
     removed_ids: list[str] = field(default_factory=list)
@@ -278,6 +281,7 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     entries = pending.tracked(provider)
     pending_rows: dict[str, dict] = {}
     candidates: list[tuple[dict, dict]] = []
+    settled_ids: list[str] = []
     for row in rows:
         ref = _ref(row)
         if not ref:
@@ -291,7 +295,7 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
         else:
             if row.get("_relinked"):
                 continue  # the booking it already is carries its new ref (relink.carry)
-            settled = pending.settle(provider, ref, row, entries)
+            settled = pending.settle(provider, ref, row, entries, settled_ids)
             if settled == "settled":
                 out.settled += 1
                 continue
@@ -319,7 +323,7 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     out.booked_views = {r: views[r] for s in out.promoted for r in s["refs"] if r in views}
     candidates, out.claimed = typed_rows.claim_all(candidates)
     if not candidates:
-        return out
+        return _pair_left(provider, out, settled_ids, types, run_id)
     created, skipped = ledger_service.bulk_create_transactions(
         [d for _, d in candidates], batch_id=batch_id, dedup_by_external_ref=True
     )
@@ -340,6 +344,24 @@ def _book(provider: str, rows: list[dict], *, run_id: Optional[str], batch_id: s
     except Exception:  # noqa: BLE001
         logger.exception("bank_data_sync: %s skipped rows could not be sorted", provider)
         out.errors.append("Some rows the ledger refused couldn't be added to the review list.")
+    return _pair_left(provider, out, settled_ids, types, run_id)
+
+
+def _pair_left(
+    provider: str, out: Booked, settled_ids: list[str], types: dict, run_id: Optional[str]
+) -> Booked:
+    """What this run left single-leg in the book — pending legs that settled, rows booked with
+    no counterpart — pairs with the book now (``card_payments.pair_in_book``). A failure here
+    never un-books the run."""
+    ids = set(settled_ids) | {
+        t["id"] for t in out.created if t.get("kind") in ("income", "expense")
+    }
+    try:
+        out.pair_merges = card_payments.pair_in_book(provider, ids, types, run_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("bank_data_sync: %s rows left single could not be paired", provider)
+        return out
+    out.card_payments += len(out.pair_merges)
     return out
 
 

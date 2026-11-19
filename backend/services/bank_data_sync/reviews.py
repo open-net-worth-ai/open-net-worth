@@ -8,7 +8,10 @@ Kinds:
 * ``vanished`` — a booked row the bank no longer lists (two complete misses);
 * ``posted`` — a pending row booked earlier settled at a different amount;
 * ``duplicate`` — a new bank row the duplicate guard matched to a row already in the book;
-* ``undone`` — the rows of a sync you undid (``detail.rows``), ONE item per run (undo.py).
+* ``undone`` — the rows of a sync you undid (``detail.rows``), ONE item per run (undo.py);
+* ``transfer_pair`` — two booked rows that look like one transfer between your accounts but
+  aren't worded as one (``card_payments.pair_in_book``): ``txn_id`` the receiving side,
+  ``detail.pay_txn_id`` the paying side. Asked once — a dismissed pair is never asked again.
 
 The ledger changes only when the user accepts an item. A ``duplicate``, ``posted`` or ``undone``
 item, open or dismissed, also holds its refs back from booking, so a re-run neither re-asks nor
@@ -23,7 +26,7 @@ from typing import Optional
 from backend.core.untrusted import sanitize_untrusted
 from backend.db.bank_sync_store import BankSyncReviewStore
 
-KINDS = ("modified", "vanished", "posted", "duplicate", "undone")
+KINDS = ("modified", "vanished", "posted", "duplicate", "undone", "transfer_pair")
 HOLDING_KINDS = ("duplicate", "posted", "undone")
 
 
@@ -50,6 +53,14 @@ def _open_item(store: BankSyncReviewStore, provider: str, ref: str, kind: str) -
             if r.get("ref") == ref and r.get("kind") == kind
         ),
         None,
+    )
+
+
+def seen(provider: str, ref: str, kind: str) -> bool:
+    """Was ``(provider, ref, kind)`` ever an item, whatever became of it?"""
+    return any(
+        r.get("ref") == ref and r.get("kind") == kind
+        for r in BankSyncReviewStore().for_provider(provider, None)
     )
 
 
@@ -156,6 +167,10 @@ def open_items(provider: Optional[str] = None) -> list[dict]:
         if item.get("txn_id"):
             fresh = booked_row_snapshot(item["txn_id"], prefer_account_id=item.get("account_id"))
             item["detail"] = {**(item.get("detail") or {}), "current": _clean(fresh)}
+        other = (item.get("detail") or {}).get("pay_txn_id")
+        if other:
+            fresh = booked_row_snapshot(other)
+            item["detail"] = {**item["detail"], "other": _clean(fresh)}
     return items
 
 

@@ -448,3 +448,36 @@ data-sync provider, built on its protocol docs and on how Actual Budget and Sure
   no currency books in the base currency, as before. Its single `balance` is not taken as
   settled (`balance_is_settled` stays False).
 - A claimed setup token wakes a sync waiting for the user (`budget.access_renewed`).
+
+## Amendment 19 (2026-11-19, user report: card payments half-paired, a card shown at its available credit)
+
+A GoCardless user (a UK card, synced with its current account) saw some card payments pair and
+others book as spending plus income, and the card's balance shown as minus its available credit
+(1,200 left of a 5,000 limit, owing 3,800). Compared with Actual Budget (no automatic
+pairing; **Make transfer** on two selected rows; the same balance bug, fixed bank by bank —
+its issue 5892) and Sure (pairs after every sync within 4 days, a remembered "not a transfer",
+and an Enable Banking card's available credit never stored as its debt).
+
+- **A leg that was pending pairs when it settles.** Amendment 13 paired only drafts, and a
+  settled pending booking `continue`d past the pairing, so a payment either side of which was
+  ever pending never paired. Now each run pairs what it left single-leg in the book — legs that
+  settled, rows booked with no counterpart — with ONE live row on the other side
+  (`card_payments.pair_in_book`), merged by `ledger.merge_transactions(become_transfer=True)`
+  and split back by Undo (`pair_merges` → `unmerge_transactions`). A settled booking is in the
+  pool again (only a still-pending one is left out). The window is 4 days, not the ledger's 3:
+  a payment taken on a Friday lands on the card on Tuesday.
+- **A pair the wording doesn't prove is asked about.** Everything but the wording matches → a
+  `transfer_pair` review item ("Make it one transfer" / "Keep them separate"), asked once per
+  pair (`reviews.seen`); never paired silently, since a wrong pairing is invisible.
+- **Make transfer on two selected rows** (Accounts › More), through `POST /api/matches/merge`
+  with `become_transfer`. The merge choke's two "these are two real events" vetoes
+  (same batch; distinct ids from one emitter) no longer apply to `become_transfer`: a
+  transfer's two legs ARE two events, one debit and one credit on different accounts
+  (`_transfer_legs`), and the vetoes refused every pair one sync read brought in. A duplicate
+  merge keeps both vetoes.
+- **A card's available credit is never its balance.** With no booked or expected balance and
+  only an available one (`balance_kinds`), a `credit` account owes `credit_limit − available`
+  (in credit when available exceeds the limit); with no limit set there is no figure
+  (`balance_state: needs_limit`), the first import leaves the card alone, and "Use the bank's
+  balance" refuses with the reason (`balances.bank_figure`). A cash account's one figure is
+  unchanged. The bank's `creditLimitIncluded` flag is not relied on: its meaning varies by bank.
