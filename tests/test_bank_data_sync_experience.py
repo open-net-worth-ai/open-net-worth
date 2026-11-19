@@ -9,7 +9,8 @@ import pytest
 from backend.services.aggregation.providers import PROVIDERS
 from backend.services.bank_data_sync import budget
 
-pytestmark = pytest.mark.flags(bank_data_sync=True)
+# Its accounts hold foreign currencies: seed synthetic rates, never a live FX fetch.
+pytestmark = [pytest.mark.flags(bank_data_sync=True), pytest.mark.usefixtures("fx_rates")]
 GC = PROVIDERS["gocardless"]
 
 

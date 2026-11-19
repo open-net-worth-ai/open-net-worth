@@ -22,7 +22,8 @@ from tests.bank_sync_fakes import (
 )
 
 GC = PROVIDERS["gocardless"]
-pytestmark = pytest.mark.flags(bank_data_sync=True)
+# Its accounts hold foreign currencies: seed synthetic rates, never a live FX fetch.
+pytestmark = [pytest.mark.flags(bank_data_sync=True), pytest.mark.usefixtures("fx_rates")]
 
 
 @pytest.fixture
