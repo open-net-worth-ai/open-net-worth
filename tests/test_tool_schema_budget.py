@@ -295,7 +295,9 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # trading-is-a-simulated-book-never-an-order-path), their mandate fields and the autopilot's
     # get_paper_news + record_autopilot_memo included: 14,597 chars measured. Not CORE, so the
     # default offer is unchanged.
-    budget = 498_300
+    # 2026-11-20: 498_300 -> 498_700. get_spending_breakdown's group_by (month / payee, commit 279a5dc6)
+    # measured 498,590 on CI; it replaces raw SQL Lucius used to drop split lines. Not CORE.
+    budget = 498_700
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."
