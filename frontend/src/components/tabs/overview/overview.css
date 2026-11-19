@@ -2703,3 +2703,10 @@
 .ov-fs-card--fit > .panel {
   height: auto;
 }
+
+/* Lucius's floating button (bottom right of the window, ~24px in, up to ~180px wide) can sit
+   over the editor's footer when the editor reaches that corner: keep Discard / Save clear of
+   it, by only as much as the overlap, and only while the button shows. */
+body:has(.lx-dock.lx-collapsed) .ov-fs-foot {
+  padding-right: max(22px, calc(220px - (100vw - min(1180px, 100vw)) / 2));
+}
