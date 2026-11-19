@@ -2,9 +2,9 @@
 // `useQueryCache`, which revalidates on every tool write (`data_changed`), so a run that
 // Lucius starts or finishes reaches an open asset page without any local fetched state.
 import { authFetch } from '../api/client'
-import { getCachedQueryData, invalidateQueryCache, useQueryCache } from '../state/queryCache'
+import { invalidateQueryCache, useQueryCache } from '../state/queryCache'
 import type { QueryCacheResult } from '../state/queryCache'
-import { TA_ACTIVE_STATUSES } from '../types/tradingAgents'
+import { TA_ACTIVE_STATUSES } from '../types/tradingAgentsConstants'
 import type {
   TaAnalyst,
   TaConfig,
@@ -73,10 +73,9 @@ const postJson = (path: string, body?: unknown): Promise<unknown> =>
 /** The status card. It polls while the environment installs; every other change reaches it
  *  through the data event. */
 export function useTaStatus(): QueryCacheResult<TaStatus> {
-  const installing = getCachedQueryData<TaStatus>(TA_STATUS_KEY)?.install.status === 'installing'
   return useQueryCache(TA_STATUS_KEY, () => request<TaStatus>(TA_STATUS_KEY), {
     staleTime: 15_000,
-    refetchInterval: installing ? 3000 : undefined,
+    refetchInterval: (status) => (status?.install.status === 'installing' ? 3000 : undefined),
   })
 }
 
@@ -92,14 +91,16 @@ export function useTaRuns(
 /** One run in full. It polls only while the run is queued or running. */
 export function useTaRun(id: string | null): QueryCacheResult<TaRun> {
   const key = `${BASE}/runs/${id ?? ''}`
-  const known = getCachedQueryData<TaRun>(key)
-  const moving = known !== undefined && TA_ACTIVE_STATUSES.includes(known.status)
   return useQueryCache(key, () => request<TaRun>(key), {
     enabled: id !== null,
-    refetchInterval: moving ? 4000 : undefined,
+    refetchInterval: (run) => (run && TA_ACTIVE_STATUSES.includes(run.status) ? 4000 : undefined),
   })
 }
 
+// The estimate (a POST that reads run history) and the context preview are priced reads of the
+// book, not live views of a run: a run's progress and usage events must not refetch them, so they
+// opt out of the data-event sweep (`liveRefresh: false`). They still reload when stale, on mount
+// and after any TradingAgents write (`refreshAll`).
 export function useTaEstimate(
   ticker: string,
   analysts: TaAnalyst[],
@@ -110,7 +111,7 @@ export function useTaEstimate(
   return useQueryCache(
     key,
     () => postJson(`${BASE}/estimate`, { ticker, analysts: chosen }) as Promise<TaEstimate>,
-    { enabled: enabled && chosen.length > 0, staleTime: 60_000 },
+    { enabled: enabled && chosen.length > 0, staleTime: 60_000, liveRefresh: false },
   )
 }
 
@@ -120,7 +121,7 @@ export function useTaContextPreview(
   enabled: boolean,
 ): QueryCacheResult<TaContext> {
   const key = `${BASE}/context-preview?ticker=${encodeURIComponent(ticker)}&context_level=${level}`
-  return useQueryCache(key, () => request<TaContext>(key), { enabled })
+  return useQueryCache(key, () => request<TaContext>(key), { enabled, liveRefresh: false })
 }
 
 export function useTaConfig(): QueryCacheResult<TaConfig> {

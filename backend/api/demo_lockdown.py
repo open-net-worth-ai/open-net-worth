@@ -129,6 +129,8 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/watchlist/config$",
         r"^/api/matches/config$",
     ),
+    # TradingAgents' spend, caps and run list are the operator's, and read on a GET too.
+    *_rules(_ANY, r"^/api/cost/trading-agents$"),
     *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
     # Actual reads a saved server on a GET too: a budget list signs in and answers with names.

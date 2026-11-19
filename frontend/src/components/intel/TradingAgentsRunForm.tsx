@@ -6,7 +6,7 @@ import {
   useTaContextPreview,
   useTaEstimate,
 } from '../../hooks/useTradingAgents'
-import { TA_ANALYST_LABEL, TA_ANALYSTS, TA_CONTEXT_LABEL } from '../../types/tradingAgents'
+import { TA_ANALYST_LABEL, TA_ANALYSTS, TA_CONTEXT_LABEL } from '../../types/tradingAgentsConstants'
 import type { TaAnalyst, TaContextLevel, TaEstimate, TaStatus } from '../../types/tradingAgents'
 import { fCurrency } from '../../utils/format'
 import { runPlanLabel, runProviders } from '../../utils/tradingAgents'

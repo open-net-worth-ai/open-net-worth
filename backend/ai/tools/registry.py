@@ -1104,6 +1104,12 @@ _DEMO_REFUSED_TOOLS = frozenset(
         "cancel_paper_orders",
         "record_paper_marks",
         "record_autopilot_memo",
+        # A TradingAgents run spawns a subprocess of its own venv and spends model tokens, and
+        # the run list and its reports are shared across every visitor.
+        "start_trading_agents_analysis",
+        "get_trading_agents_run",
+        "list_trading_agents_runs",
+        "cancel_trading_agents_run",
         "list_checkpoints",
         "restore_checkpoint",
         "get_recent_logs",

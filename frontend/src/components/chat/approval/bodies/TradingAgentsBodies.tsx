@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { ToolPreview } from '../../../../types/chat'
-import { TA_ANALYST_LABEL } from '../../../../types/tradingAgents'
+import { TA_ANALYST_LABEL } from '../../../../types/tradingAgentsConstants'
 import type { TaAnalyst, TaDisclosure, TaPortfolio } from '../../../../types/tradingAgents'
 import { fCurrency, fQty, fUnitPrice } from '../../../../utils/format'
 import { pluralize } from '../../../../utils/pluralize'

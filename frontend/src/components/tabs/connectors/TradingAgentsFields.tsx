@@ -1,4 +1,4 @@
-import { TA_CLI_LABEL, TA_CLI_PROVIDERS } from '../../../types/tradingAgents'
+import { TA_CLI_LABEL, TA_CLI_PROVIDERS } from '../../../types/tradingAgentsConstants'
 import type { useModels } from '../../../hooks/useModels'
 import {
   Button,

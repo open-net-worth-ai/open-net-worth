@@ -1,4 +1,4 @@
-import { TA_STATUS_LABEL } from '../../../../types/tradingAgents'
+import { TA_STATUS_LABEL } from '../../../../types/tradingAgentsConstants'
 import type { TaCostSummary } from '../../../../types/tradingAgents'
 import { fDate } from '../../../../utils/format'
 import { TradingAgentsRating } from '../../../intel/TradingAgentsRating'

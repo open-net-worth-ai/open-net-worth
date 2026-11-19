@@ -1,4 +1,4 @@
-import { TA_SIGNAL_LABEL, TA_SIGNAL_ORDER } from '../../types/tradingAgents'
+import { TA_SIGNAL_LABEL, TA_SIGNAL_ORDER } from '../../types/tradingAgentsConstants'
 import type { TaSignal } from '../../types/tradingAgents'
 
 /** The rating pill: the word always printed, beside a five-cell scale showing where it sits

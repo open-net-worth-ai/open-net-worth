@@ -157,3 +157,11 @@ marked, and the figure then understates.
 TradingAgents is © its authors, licensed under Apache-2.0
 (github.com/TauricResearch/TradingAgents). It is downloaded when you click Install and is not
 part of Open Net Worth. See `NOTICE`.
+
+The installed TradingAgents code and every package it depends on run with your computer user's
+permissions. They can read everything Open Net Worth stores on this machine, including the
+database and your saved keys, and can use your network. TradingAgents also keeps local analysis
+logs inside your data folder; they are deleted when you remove the connector or the run. This is
+shown on the connector's setup page, under Install.
+
+On the public demo, TradingAgents' spend panel and Lucius's four TradingAgents tools are turned off.

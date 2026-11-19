@@ -20,6 +20,8 @@ interface QueryEntry<T> {
   gcTimer: ReturnType<typeof setTimeout> | null
   /** Bumped per request; only the newest request may publish. See revalidate. */
   generation: number
+  /** Set by `liveRefresh: false`: a `data_changed` event leaves this read alone. */
+  skipLiveRefresh: boolean
 }
 
 /**
@@ -139,6 +141,7 @@ function hydrateFromStorage(): void {
         fetcher: () => Promise.reject(new Error(`No fetcher registered for ${key}`)),
         gcTimer: null,
         generation: 0,
+        skipLiveRefresh: false,
       })
     }
   } catch {
@@ -251,6 +254,7 @@ function entryFor<T>(key: string, fetcher: () => Promise<T>): QueryEntry<T> {
       fetcher,
       gcTimer: null,
       generation: 0,
+      skipLiveRefresh: false,
     }
     entries.set(key, entry as QueryEntry<unknown>)
   }
@@ -357,7 +361,13 @@ export function useQueryCache<T>(
   options: {
     staleTime?: number
     version?: number
-    refetchInterval?: number
+    /** A number polls at that period; a function derives it from the read's OWN data (return
+     *  undefined to stop), so the interval never depends on another read's cache entry. */
+    refetchInterval?: number | ((data: T | undefined) => number | undefined)
+    /** False exempts this read from the `data_changed` revalidate-everything sweep, for a read
+     *  that costs a model-priced or metered call: it still refetches when stale, on `refresh()`
+     *  and on an explicit `invalidateQueryCache`. */
+    liveRefresh?: boolean
     /** False suspends fetching for this key — for a read whose inputs are not ready yet (e.g.
      *  FIRE, which is meaningless before net worth is known). Any already-cached data is still
      *  returned, so a disabled query renders last-known content rather than a spinner. */
@@ -365,6 +375,7 @@ export function useQueryCache<T>(
   } = {},
 ): QueryCacheResult<T> {
   const entry = entryFor(key, fetcher)
+  entry.skipLiveRefresh = options.liveRefresh === false
   const subscribe = useCallback(
     (listener: () => void) => {
       cancelGc(entry)
@@ -401,7 +412,9 @@ export function useQueryCache<T>(
   // without a navigation. Lives here rather than in each caller's own setInterval so that
   // concurrent subscribers to the same key collapse into one request: `revalidate` returns the
   // in-flight promise when a tick lands while a fetch is already running.
-  const refetchInterval = options.refetchInterval
+  const refetchOption = options.refetchInterval
+  const refetchInterval =
+    typeof refetchOption === 'function' ? refetchOption(snapshot.data) : refetchOption
   useEffect(() => {
     if (!refetchInterval) return
     const id = setInterval(() => void revalidate(key, entry.fetcher), refetchInterval)
@@ -442,10 +455,13 @@ export function invalidateQueryCache(matcher: string | ((key: string) => boolean
  * Every Lucius write (the `data_changed` SSE) revalidates EVERY cached read — mounted ones now,
  * the rest on their next mount. Deliberately not narrowed by domain: a key→domains map drifts
  * the moment a screen is added and fails STALE, while this fails as an extra GET per mounted
- * read per write turn. Writes are rare; stale money numbers are the bug.
+ * read per write turn. Writes are rare; stale money numbers are the bug. The one carve-out is a
+ * read that opts out with `liveRefresh: false` because each fetch is itself costly.
  */
 export function installLiveRefresh(): () => void {
-  return onDataChanged(() => invalidateQueryCache(() => true))
+  return onDataChanged(() =>
+    invalidateQueryCache((key) => entries.get(key)?.skipLiveRefresh !== true),
+  )
 }
 if (typeof window !== 'undefined') installLiveRefresh()
 
@@ -480,6 +496,7 @@ export function setCachedQueryData<T>(
       },
       gcTimer: null,
       generation: 0,
+      skipLiveRefresh: false,
     }
     entries.set(key, entry as QueryEntry<unknown>)
   }

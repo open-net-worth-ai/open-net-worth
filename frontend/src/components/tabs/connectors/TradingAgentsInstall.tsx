@@ -45,8 +45,17 @@ export function TradingAgentsInstall({ install }: { install: TaStatus['install']
     <Stack gap="--space-4">
       <Text size="sm" tone="faint">
         TradingAgents runs in its own isolated Python environment inside your Open Net Worth data
-        folder. It is installed once and does not touch the rest of the app.
+        folder. It is installed once and is not part of Open Net Worth.
       </Text>
+      <div className="ta-notice" role="note" aria-label="Third-party software">
+        <strong>Third-party software.</strong> TradingAgents (TauricResearch, Apache-2.0) is
+        downloaded when you click Install, pinned to one commit. The installed TradingAgents code
+        and every package it depends on run with your computer user&apos;s permissions. They can
+        read everything Open Net Worth stores on this machine, including the database and your saved
+        keys, and can use your network. TradingAgents holds no AI key of its own. It also keeps
+        local analysis logs inside your data folder, which are deleted when you remove the connector
+        or the run.
+      </div>
       <Cluster justify="between" gap="--space-4">
         <Cluster gap="--space-4">
           <Badge tone={state.tone}>{state.label}</Badge>

@@ -6,7 +6,7 @@
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { TA_NEVER_SENT } from '../../../types/tradingAgents'
+import { TA_NEVER_SENT } from '../../../types/tradingAgentsConstants'
 import type { TaConfig, TaStatus } from '../../../types/tradingAgents'
 import { makeStatus } from '../../intel/tradingAgentsFixtures'
 import { useConnectorSaveHost, type ConnectorSaveHost } from './formSave'
@@ -231,6 +231,18 @@ describe('the notice and the install are immediate writes', () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Install' }))
     await waitFor(() => expect(api.installTa).toHaveBeenCalledTimes(1))
+  })
+
+  it('says plainly that the installed code can read everything the app stores here', () => {
+    mount()
+    const note = screen.getByRole('note', { name: 'Third-party software' }).textContent ?? ''
+    expect(note).toContain("run with your computer user's permissions")
+    expect(note).toContain(
+      'read everything Open Net Worth stores on this machine, including the database and your saved keys',
+    )
+    expect(note).toContain(
+      'local analysis logs inside your data folder, which are deleted when you remove the connector or the run',
+    )
   })
 
   it('shows the installed commit shortened', () => {

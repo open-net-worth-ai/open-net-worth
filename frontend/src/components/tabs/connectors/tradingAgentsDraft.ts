@@ -2,7 +2,7 @@
 // local range checks (mirrored from services/trading_agents/settings.py, which still decides),
 // and the PATCH that carries only what changed. Numbers are strings while typed, so a blank
 // or half-typed field is never silently coerced.
-import { TA_LIMITS } from '../../../types/tradingAgents'
+import { TA_LIMITS } from '../../../types/tradingAgentsConstants'
 import type {
   TaAnalyst,
   TaConfig,

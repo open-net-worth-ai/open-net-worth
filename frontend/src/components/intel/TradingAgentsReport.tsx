@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { TA_FIELD_LABEL, TA_REPORT_SECTIONS } from '../../types/tradingAgents'
+import { TA_FIELD_LABEL, TA_REPORT_SECTIONS } from '../../types/tradingAgentsConstants'
 import type { TaReportField, TaRun } from '../../types/tradingAgents'
 import { fCompact, fCurrency, fDate, timeAgo } from '../../utils/format'
 import { modelRef, modelText, runProviders } from '../../utils/tradingAgents'

@@ -302,6 +302,18 @@ describe('running', () => {
     )
   })
 
+  it('shows the server message and re-enables Cancel when cancelling fails', async () => {
+    const running = makeRun({ status: 'running', signal: null, progress })
+    setup({ runs: [makeSummary({ status: 'running', signal: null })], run: running })
+    api.cancelTaRun.mockRejectedValue(new TaError('The run already finished.'))
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel analysis of ACME' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('The run already finished.')
+    expect(screen.getByRole('button', { name: 'Cancel analysis of ACME' }).textContent).toBe(
+      'Cancel',
+    )
+  })
+
   it('says it is queued behind the others, and shows no stage list', () => {
     const queued = makeRun({ status: 'queued', signal: null })
     setup({
@@ -419,6 +431,27 @@ describe('done', () => {
     const buttons = screen.getAllByRole('button', { name: 'Delete run' })
     fireEvent.click(buttons[buttons.length - 1]!)
     await waitFor(() => expect(api.deleteTaRun).toHaveBeenCalledWith('tar_000000000001'))
+  })
+
+  it('keeps the dialog open and shows the server message when the delete fails', async () => {
+    api.deleteTaRun.mockRejectedValue(new TaError('The run is locked.'))
+    setup({ runs: [makeSummary()], run: makeRun() })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete run' }))
+    const buttons = screen.getAllByRole('button', { name: 'Delete run' })
+    fireEvent.click(buttons[buttons.length - 1]!)
+    expect((await screen.findByRole('alert')).textContent).toBe('The run is locked.')
+    expect(screen.getByText('Delete this run?')).toBeTruthy()
+  })
+
+  it('closes the dialog once the delete succeeds', async () => {
+    api.deleteTaRun.mockResolvedValue(undefined)
+    setup({ runs: [makeSummary()], run: makeRun() })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete run' }))
+    const buttons = screen.getAllByRole('button', { name: 'Delete run' })
+    fireEvent.click(buttons[buttons.length - 1]!)
+    await waitFor(() => expect(screen.queryByText('Delete this run?')).toBeNull())
   })
 
   it('swaps to the form for a new run and back', () => {

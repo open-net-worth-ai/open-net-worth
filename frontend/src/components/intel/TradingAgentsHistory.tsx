@@ -1,4 +1,4 @@
-import { TA_STATUS_LABEL } from '../../types/tradingAgents'
+import { TA_STATUS_LABEL } from '../../types/tradingAgentsConstants'
 import type { TaRunSummary } from '../../types/tradingAgents'
 import { fCurrency, fDate } from '../../utils/format'
 import { Button, Text } from '../ui'

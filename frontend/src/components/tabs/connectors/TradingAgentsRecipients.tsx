@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { TA_NEVER_SENT } from '../../../types/tradingAgents'
+import { TA_NEVER_SENT } from '../../../types/tradingAgentsConstants'
 import { Grid, Text } from '../../ui'
 
 function Recipient({ who, children }: { who: string; children: ReactNode }) {

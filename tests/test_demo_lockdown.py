@@ -94,6 +94,8 @@ def _client() -> TestClient:
         ("POST", "/api/data/import"),
         ("POST", "/api/automations"),
         ("POST", "/api/automations/a1/run"),
+        ("GET", "/api/cost/trading-agents"),
+        ("POST", "/api/trading-agents/runs"),
         ("POST", "/api/extensions/install"),
         ("PUT", "/api/channels/telegram"),
         ("PUT", "/api/plaid/config"),
@@ -120,6 +122,7 @@ def test_locked_routes(method, path):
         ("PUT", "/api/planning/targets/env_1"),
         ("DELETE", "/api/chat/s1"),
         ("GET", "/api/automations"),
+        ("GET", "/api/cost/summary"),
     ],
 )
 def test_the_demo_itself_stays_usable(method, path):
@@ -203,3 +206,25 @@ def test_the_sandbox_stays_off_on_a_demo_even_if_switched_on(book, reader, flag)
     object.__setattr__(settings, "demo_mode", True)
     config._settings = settings
     assert reader() is False
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "start_trading_agents_analysis",
+        "get_trading_agents_run",
+        "list_trading_agents_runs",
+        "cancel_trading_agents_run",
+    ],
+)
+def test_lucius_cannot_run_or_read_trading_agents_on_a_demo(demo, name):
+    from backend.ai.tools.registry import _demo_refusal
+
+    refusal = _demo_refusal(name)
+    assert refusal is not None and "turned off in the public demo" in refusal[0]
+
+
+def test_trading_agents_tools_are_open_off_a_demo(book):
+    from backend.ai.tools.registry import _demo_refusal
+
+    assert _demo_refusal("start_trading_agents_analysis") is None

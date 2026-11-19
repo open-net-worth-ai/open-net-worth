@@ -1,6 +1,6 @@
 import { useFlag } from '../../../../hooks/useFlag'
 import { useTaCost, useTaStatus } from '../../../../hooks/useTradingAgents'
-import { TA_CLI_PROVIDERS } from '../../../../types/tradingAgents'
+import { TA_CLI_PROVIDERS } from '../../../../types/tradingAgentsConstants'
 import type { TaCostSummary } from '../../../../types/tradingAgents'
 import { fCurrency } from '../../../../utils/format'
 import { ErrorState, Loading, Meter } from '../../../ui'

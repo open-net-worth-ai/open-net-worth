@@ -5,6 +5,7 @@ import { emitDataChanged } from '../lucius/bus'
 import {
   clearQueryCache,
   getCachedQueryData,
+  invalidateQueryCache,
   setCachedQueryData,
   useQueryCache,
 } from './queryCache'
@@ -35,5 +36,45 @@ describe('query cache live refresh', () => {
     const view = renderHook(() => useQueryCache('/api/payees', fetcher, { staleTime: 60_000 }))
     expect(view.result.current.data).toBe('old')
     await waitFor(() => expect(view.result.current.data).toBe('fresh'))
+  })
+
+  it('leaves a liveRefresh:false read alone on a write, but an explicit invalidation still reloads it', async () => {
+    let n = 0
+    const fetcher = vi.fn(async () => `v${++n}`)
+    const view = renderHook(() =>
+      useQueryCache('/api/priced-read', fetcher, { staleTime: 60_000, liveRefresh: false }),
+    )
+    await waitFor(() => expect(view.result.current.data).toBe('v1'))
+
+    act(() => emitDataChanged(['anything']))
+    expect(fetcher).toHaveBeenCalledTimes(1)
+
+    act(() => invalidateQueryCache('/api/priced'))
+    await waitFor(() => expect(view.result.current.data).toBe('v2'))
+  })
+
+  it("derives refetchInterval from the read's own data", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let n = 0
+      const fetcher = vi.fn(async () => ({ moving: n++ < 1 }))
+      const view = renderHook(() =>
+        useQueryCache('/api/own-interval', fetcher, {
+          refetchInterval: (d: { moving: boolean } | undefined) => (d?.moving ? 1000 : undefined),
+        }),
+      )
+      await waitFor(() => expect(view.result.current.data).toEqual({ moving: true }))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1100)
+      })
+      await waitFor(() => expect(view.result.current.data).toEqual({ moving: false }))
+      const calls = fetcher.mock.calls.length
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000)
+      })
+      expect(fetcher).toHaveBeenCalledTimes(calls)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

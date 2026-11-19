@@ -7,7 +7,7 @@ import {
   TA_CLI_PROVIDERS,
   TA_STAGE_OF_NODE,
   TA_STAGES,
-} from '../types/tradingAgents'
+} from '../types/tradingAgentsConstants'
 import type { TaDisclosure, TaRun, TaStageId } from '../types/tradingAgents'
 
 export interface TaModelRef {
