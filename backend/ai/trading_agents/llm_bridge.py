@@ -41,6 +41,7 @@ from backend.ai.trading_agents.bridge_http import (
     QuietServer,
     error_response,
     is_loopback,
+    max_output_tokens,
     read_json,
     record_cost,
     run_provider,
@@ -50,23 +51,16 @@ from backend.ai.trading_agents.bridge_models import (
     ALIAS_DEEP,
     ALIAS_QUICK,
     ALIASES,
-    DEFAULT_MAX_OUTPUT_TOKENS,
     KIND_BUDGET,
     KIND_CALLS,
     PLAN_INCLUDED,
     BridgeModel,
     CallRecord,
     RunLimits,
+    resolve_bridge_models,
 )
 from backend.ai.trading_agents.openai_errors import classify_error
-from backend.core.errors import (
-    BudgetExceededError,
-    ConfigurationError,
-    ExternalServiceError,
-    ModelUnavailableError,
-    OpenNetWorthError,
-)
-from backend.services.trading_agents.settings import ResolvedModels
+from backend.core.errors import BudgetExceededError, ExternalServiceError, OpenNetWorthError
 
 log = logging.getLogger(__name__)
 
@@ -85,39 +79,6 @@ __all__ = [
 _START_TIMEOUT_SECONDS = 5.0
 _STOP_TIMEOUT_SECONDS = 5.0
 _INFLIGHT_WAIT_SECONDS = 60.0
-
-
-def resolve_bridge_models(models: ResolvedModels) -> dict[str, BridgeModel]:
-    """The two aliases' providers, built once for the run (a config change mid-run is not
-    picked up). A provider the owner turned off raises ``ModelUnavailableError`` — never a
-    reroute to the instance default."""
-    from backend.ai.assistant import resolve_model_context
-    from backend.db.model_config_store import provider_label_for
-
-    out: dict[str, BridgeModel] = {}
-    tiers = (
-        (ALIAS_DEEP, models.deep, models.deep_plan_included),
-        (ALIAS_QUICK, models.quick, models.quick_plan_included),
-    )
-    for alias, ref, plan_included in tiers:
-        try:
-            context = resolve_model_context(ref)
-        except ConfigurationError as exc:
-            raise ModelUnavailableError(exc.message or str(exc), model_ref=ref) from exc
-        if context.provider_key != ref.partition(":")[0]:
-            raise ModelUnavailableError(f"{ref!r} is not a usable AI model.", model_ref=ref)
-        label = provider_label_for(context.transport, context.base_url, context.provider_key)
-        out[alias] = BridgeModel(
-            alias,
-            ref,
-            context.model,
-            label,
-            context.transport,
-            context.provider,
-            base_url=context.base_url,
-            plan_included=plan_included,
-        )
-    return out
 
 
 class LlmBridge:
@@ -308,7 +269,7 @@ class LlmBridge:
                     "model_not_found",
                 )
             onw_request = shape.to_onw_request(body)
-            reserve = model.worst_case_usd(size, _max_output_tokens(body))
+            reserve = model.worst_case_usd(size, max_output_tokens(body))
             await self._admit(reserve, model.metered)
         except OpenNetWorthError as exc:
             status, payload = classify_error(exc)
@@ -427,14 +388,3 @@ class LlmBridge:
                 self._on_call(record)
             except Exception:  # noqa: BLE001 — the runner's bookkeeping never fails a call
                 log.exception("bridge_on_call_failed run=%s call=%s", self.run_id, record.call_id)
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────────────────
-
-
-def _max_output_tokens(body: dict) -> int:
-    for key in ("max_completion_tokens", "max_tokens"):
-        value = body.get(key)
-        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-            return value
-    return DEFAULT_MAX_OUTPUT_TOKENS

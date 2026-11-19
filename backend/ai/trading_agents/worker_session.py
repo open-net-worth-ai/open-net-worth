@@ -19,9 +19,9 @@ from typing import Any, Optional
 
 from backend.ai.trading_agents import llm_bridge
 from backend.ai.trading_agents.llm_bridge import LlmBridge, RunLimits
+from backend.ai.trading_agents.worker_env import reports_of, worker_env
 from backend.core import process_tree
-from backend.core.child_env import scrubbed_environ
-from backend.core.errors import ConflictError, OpenNetWorthError
+from backend.core.errors import ConflictError, NotInstalledError, OpenNetWorthError
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.services.trading_agents import budget, install, runs, settings
 from backend.services.trading_agents.roles import ROLE_BY_NODE, role_for
@@ -44,18 +44,6 @@ _MAX_LINE_BYTES = 2 * 1024 * 1024
 _MAX_PROGRESS_WRITES = 500
 _STDERR_TAIL_CHARS = 2000
 _ERROR_DETAIL_CHARS = 300
-_ENV_NO_PROXY = ("127.0.0.1", "localhost")
-# Where a library looks for per-user config and caches: every one of them is the run's own folder.
-_HOME_VARIABLES = (
-    "HOME",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "XDG_CONFIG_HOME",
-    "XDG_DATA_HOME",
-    "XDG_CACHE_HOME",
-    "XDG_STATE_HOME",
-)
 
 
 @dataclass(frozen=True)
@@ -70,47 +58,6 @@ class Job:
     cfg: settings.Settings
     models: settings.ResolvedModels
     cap_usd: float
-
-
-def worker_env(token: str, sec_user_agent: str, run_id: str) -> dict[str, str]:
-    """The worker's whole environment: the allowlisted base plus what a run needs. No LLM vendor
-    key, ever — ``OPENAI_COMPATIBLE_API_KEY`` carries the bridge's per-run token. The worker is
-    not sandboxed (it can still read what its own user can), but nothing it would look up by
-    habit points at the owner's real home: HOME and every XDG/AppData variable are the run's own
-    folder, and ``.env`` loading is switched off."""
-    folders = install.scratch(run_id)
-    env = scrubbed_environ()
-    env.update(dict.fromkeys(_HOME_VARIABLES, str(folders.home)))
-    for name in ("HOMEDRIVE", "HOMEPATH"):
-        env.pop(name, None)
-    env.update(
-        {
-            "PYTHON_DOTENV_DISABLED": "1",
-            "OPENAI_COMPATIBLE_API_KEY": token,
-            "TRADINGAGENTS_RESULTS_DIR": str(folders.results),
-            "TRADINGAGENTS_CACHE_DIR": str(folders.cache),
-            "TRADINGAGENTS_MEMORY_LOG_PATH": str(folders.memory_log),
-            "TRADINGAGENTS_NO_UPDATE_CHECK": "1",
-            "SEC_EDGAR_USER_AGENT": sec_user_agent,
-            **settings.data_vendor_env(),
-        }
-    )
-    # The bridge is on loopback: a configured proxy must never be asked to reach it.
-    for name in ("NO_PROXY", "no_proxy"):
-        if name == "NO_PROXY" or name in env:
-            hosts = [h for h in env.get(name, "").split(",") if h.strip()]
-            env[name] = ",".join([*hosts, *(h for h in _ENV_NO_PROXY if h not in hosts)])
-    return env
-
-
-def _reports(state: dict) -> dict:
-    """The flat report fields a run keeps, out of the worker's whitelisted final state."""
-    out = {k: state.get(k) for k in runs.REPORT_FIELDS if isinstance(state.get(k), str)}
-    for section in ("investment_debate_state", "risk_debate_state"):
-        nested = state.get(section)
-        if isinstance(nested, dict):
-            out.update({k: v for k, v in nested.items() if k in runs.REPORT_FIELDS})
-    return out
 
 
 class RunSession:
@@ -137,14 +84,11 @@ class RunSession:
     async def run(self) -> None:
         """Run to a terminal status. Never raises except ``CancelledError`` (the app is stopping)."""
         try:
-            runs.apply_run_change("start", run_id=self.job.run_id)
-        except ConflictError:
-            self.finished.set()  # cancelled while it waited
-            return
-        TradingAgentsConfigStore().merge_state(
-            {"last_run_at": datetime.now(timezone.utc).isoformat()}
-        )
-        try:
+            try:
+                runs.apply_run_change("start", run_id=self.job.run_id)
+            except ConflictError:
+                return  # cancelled while it waited
+            self._remember_last_run()
             await self._execute()
         except asyncio.CancelledError:
             self._kill()
@@ -158,7 +102,16 @@ class RunSession:
             self._conclude()
             await self._notify_finished()
         finally:
+            install.remove_run(self.job.run_id)  # its logs and memory hold the portfolio context
             self.finished.set()
+
+    def _remember_last_run(self) -> None:
+        try:
+            TradingAgentsConfigStore().merge_state(
+                {"last_run_at": datetime.now(timezone.utc).isoformat()}
+            )
+        except Exception:  # noqa: BLE001 — a note on the connector card never fails a run
+            log.warning("trading_agents_last_run_not_recorded run=%s", self.job.run_id)
 
     def stop(self, reason: str) -> None:
         """Stop the run for ``reason`` (the first reason wins): later bridge calls are refused and
@@ -170,12 +123,10 @@ class RunSession:
         self._kill()
 
     def _kill(self) -> None:
+        """Kill the worker's tree, off the event loop (on Windows that is a process of its own)."""
         proc = self._proc
         if proc is not None and proc.returncode is None:
-            try:
-                process_tree.kill_tree(proc.pid)
-            except OSError:
-                pass  # already gone
+            asyncio.get_running_loop().run_in_executor(None, _kill_tree, proc.pid)
 
     # ── the process ──────────────────────────────────────────────────────────────────────
 
@@ -236,16 +187,22 @@ class RunSession:
 
     async def _converse(self, bridge: LlmBridge) -> None:
         env = worker_env(bridge.token, self.job.cfg.sec_edgar_user_agent, self.job.run_id)
-        proc = await asyncio.create_subprocess_exec(
-            *self._command,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=install.scratch(self.job.run_id).results,
-            env=env,
-            limit=_MAX_LINE_BYTES,
-            **process_tree.spawn_kwargs(),
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *self._command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=install.scratch(self.job.run_id).results,
+                env=env,
+                limit=_MAX_LINE_BYTES,
+                **process_tree.spawn_kwargs(),
+            )
+        except FileNotFoundError as exc:
+            raise NotInstalledError(
+                "TradingAgents' environment is missing. Reinstall it from its connector page.",
+                status="not_installed",
+            ) from exc
         self._proc = proc
         drain = asyncio.create_task(self._drain_stderr(proc))
         try:
@@ -413,7 +370,7 @@ class RunSession:
                 run_id=self.job.run_id,
                 signal=signal,
                 decision_text=state.get("final_trade_decision"),
-                reports=_reports(state),
+                reports=reports_of(state),
             )
             self._signal = signal
         except OpenNetWorthError as exc:
@@ -434,6 +391,13 @@ class RunSession:
             )
         except Exception:  # noqa: BLE001
             log.warning("trading_agents_notify_failed run=%s", self.job.run_id)
+
+
+def _kill_tree(pid: int) -> None:
+    try:
+        process_tree.kill_tree(pid)
+    except OSError:
+        pass  # already gone
 
 
 def worker_command() -> list[str]:

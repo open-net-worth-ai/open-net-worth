@@ -1,8 +1,10 @@
 """The TradingAgents runner: the queue in front of the one run that may go at a time.
 
-``submit`` checks everything that can refuse a run (availability, the disclaimer, the queue, the
-budget), freezes its inputs — the model references and the exact portfolio context that will be
-shared — writes the row through ``apply_run_change("create")`` and queues it. One run goes at a
+``plan`` checks everything that can refuse a run (availability, the disclaimer, the queue, the
+budget) and freezes its inputs — the model references and the exact portfolio context that will be
+shared — without writing anything; the tool's approval card and ``submit`` both use it, so there
+is one refusal chain. ``submit`` writes the row through ``apply_run_change("create")`` and queues it.
+All of that is blocking work (the book, the price table, the database), so it runs in a thread. One run goes at a
 time; at most ``MAX_PENDING`` (the running one included) wait, the next is a ``TooManyRunsError``.
 The run itself is ``worker_session.RunSession``.
 
@@ -16,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 from backend.ai.models.pricing import list_price_rates
@@ -39,6 +42,7 @@ _CANCEL_WAIT_SECONDS = 15.0
 _SHUTDOWN_WAIT_SECONDS = 10.0
 
 _queue: deque[Job] = deque()
+_submitting = 0
 _session: Optional[RunSession] = None
 _pump: Optional[asyncio.Task] = None
 _worker_cmd: Optional[list[str]] = None
@@ -69,8 +73,11 @@ def set_budget_check_for_tests(check: Optional[Callable[..., budget.Estimate]]) 
 
 
 def pending_count() -> int:
-    """Runs waiting plus the one going."""
-    return len(_queue) + (1 if _session is not None else 0)
+    """Runs waiting plus the one going (and any being written into the queue)."""
+    return len(_queue) + (1 if _session is not None else 0) + _submitting
+
+
+install.set_busy_probe(pending_count)
 
 
 def _require_runnable() -> None:
@@ -81,6 +88,79 @@ def _require_runnable() -> None:
         )
 
 
+def _too_many() -> TooManyRunsError:
+    return TooManyRunsError(
+        f"{MAX_PENDING} TradingAgents runs are already waiting. Try again when one finishes."
+    )
+
+
+@dataclass(frozen=True)
+class Plan:
+    """A run as it would be started now: what was refused or allowed, and what it would cost
+    and share. Nothing is written."""
+
+    symbol: str
+    trade_date: str
+    analysts: list[str]
+    cfg: settings.Settings
+    models: settings.ResolvedModels
+    estimate: budget.Estimate
+    portfolio: Optional[dict]
+    disclosure: dict
+
+
+def plan(
+    ticker_symbol: str,
+    *,
+    trade_date: Optional[str] = None,
+    analysts: Optional[list[str]] = None,
+    context_level: Optional[str] = None,
+    seat_held: bool = False,
+) -> Plan:
+    """The one chain that can refuse a start, in order, raising the typed error:
+    ``FeatureDisabledError`` / ``NotInstalledError`` / ``ModelUnavailableError`` (availability, the
+    disclaimer, QA mode, a model with no price), ``TooManyRunsError`` (queue full),
+    ``BudgetExceededError`` (monthly cap). ``seat_held``: the caller already took its place in the
+    queue (``submit`` does, before it calls this). Blocking: call it in a thread."""
+    _require_runnable()
+    trading_agents.require_ready()
+    saved = settings.load()
+    if not saved.disclaimer_accepted_at:
+        raise FeatureDisabledError(
+            "Accept the TradingAgents research-only notice on its connector page before the "
+            "first run.",
+            status="disclaimer_required",
+        )
+    if not seat_held and pending_count() >= MAX_PENDING:
+        raise _too_many()
+    cfg = settings.with_context_level(saved, context_level)
+    chosen = settings.normalize_analysts(analysts if analysts is not None else list(cfg.analysts))
+    models = settings.resolve_models(cfg)
+    estimate = _budget_check(cfg=cfg, models=models, analysts=chosen)
+    symbol = ticker.normalize(ticker_symbol)
+    when = runs.normalize_trade_date(trade_date)
+    portfolio, disclosure = context.build(symbol, cfg.context_level)
+    return Plan(symbol, when, chosen, cfg, models, estimate, portfolio, disclosure)
+
+
+def _create_row(prepared: Plan, requested_by: str, session_id: Optional[str]) -> dict:
+    return runs.apply_run_change(
+        "create",
+        ticker=prepared.symbol,
+        instrument_id=(ticker.instrument(prepared.symbol) or {}).get("id"),
+        trade_date=prepared.trade_date,
+        requested_by=requested_by,
+        session_id=session_id,
+        analysts=prepared.analysts,
+        config_snapshot=budget.config_snapshot(prepared.cfg, prepared.models),
+        context_level=prepared.cfg.context_level,
+        portfolio=prepared.portfolio,
+        disclosure=prepared.disclosure,
+        estimate_usd=prepared.estimate.median_usd,
+        cap_usd=prepared.cfg.per_run_cap_usd,
+    )
+
+
 async def submit(
     ticker_symbol: str,
     *,
@@ -89,55 +169,41 @@ async def submit(
     context_level: Optional[str] = None,
     requested_by: str = "user",
     session_id: Optional[str] = None,
+    prepared: Optional[Plan] = None,
 ) -> str:
-    """Queue one analysis and return its run id. Raises the typed error for whatever refuses it:
-    ``FeatureDisabledError`` / ``NotInstalledError`` / ``ModelUnavailableError`` (availability, the
-    disclaimer, QA mode), ``TooManyRunsError`` (queue full), ``BudgetExceededError`` (monthly cap)."""
-    _require_runnable()
-    trading_agents.require_ready()
-    saved = settings.load()
-    if not saved.disclaimer_accepted_at:
-        raise FeatureDisabledError(
-            "Accept the TradingAgents research-only notice before the first run.",
-            status="disclaimer_required",
+    """Queue one analysis and return its run id; raises whatever ``plan`` raises. ``prepared`` is
+    a ``Plan`` the caller already made (the tool's, whose inputs then are the plan's, not the
+    other arguments). The seat in the queue is taken before any blocking work, so two submits
+    cannot both pass the full check."""
+    global _submitting
+    _submitting += 1
+    try:
+        if pending_count() > MAX_PENDING:
+            raise _too_many()
+        if prepared is None:
+            prepared = await asyncio.to_thread(
+                plan,
+                ticker_symbol,
+                trade_date=trade_date,
+                analysts=analysts,
+                context_level=context_level,
+                seat_held=True,
+            )
+        row = await asyncio.to_thread(_create_row, prepared, requested_by, session_id)
+        _queue.append(
+            Job(
+                run_id=row["id"],
+                ticker=prepared.symbol,
+                trade_date=str(row["trade_date"]),
+                analysts=prepared.analysts,
+                portfolio=prepared.portfolio,
+                cfg=prepared.cfg,
+                models=prepared.models,
+                cap_usd=prepared.cfg.per_run_cap_usd,
+            )
         )
-    if pending_count() >= MAX_PENDING:
-        raise TooManyRunsError(
-            f"{MAX_PENDING} TradingAgents runs are already waiting. Try again when one finishes."
-        )
-    cfg = settings.with_context_level(saved, context_level)
-    chosen = settings.normalize_analysts(analysts if analysts is not None else list(cfg.analysts))
-    models = settings.resolve_models(cfg)
-    estimate = _budget_check(cfg=cfg, models=models, analysts=chosen)
-    symbol = ticker.normalize(ticker_symbol)
-    portfolio, disclosure = context.build(symbol, cfg.context_level)
-    row = runs.apply_run_change(
-        "create",
-        ticker=symbol,
-        instrument_id=(ticker.instrument(symbol) or {}).get("id"),
-        trade_date=trade_date,
-        requested_by=requested_by,
-        session_id=session_id,
-        analysts=chosen,
-        config_snapshot=budget.config_snapshot(cfg, models),
-        context_level=cfg.context_level,
-        portfolio=portfolio,
-        disclosure=disclosure,
-        estimate_usd=estimate.median_usd,
-        cap_usd=cfg.per_run_cap_usd,
-    )
-    _queue.append(
-        Job(
-            run_id=row["id"],
-            ticker=symbol,
-            trade_date=str(row["trade_date"]),
-            analysts=chosen,
-            portfolio=portfolio,
-            cfg=cfg,
-            models=models,
-            cap_usd=cfg.per_run_cap_usd,
-        )
-    )
+    finally:
+        _submitting -= 1
     _ensure_pump()
     return row["id"]
 
@@ -155,7 +221,12 @@ async def _drain() -> None:
     global _session
     while _queue:
         job = _queue.popleft()
-        _session = RunSession(job, _worker_cmd or worker_session.worker_command())
+        try:
+            _session = RunSession(job, _worker_cmd or worker_session.worker_command())
+        except Exception:  # noqa: BLE001 — a job that cannot even start fails; the queue goes on
+            log.exception("trading_agents_runner_failed run=%s", job.run_id)
+            _fail_unstarted(job)
+            continue
         try:
             await _session.run()
         except asyncio.CancelledError:
@@ -164,6 +235,15 @@ async def _drain() -> None:
             log.exception("trading_agents_runner_failed run=%s", job.run_id)
         finally:
             _session = None
+
+
+def _fail_unstarted(job: Job) -> None:
+    try:
+        runs.apply_run_change(
+            "fail", run_id=job.run_id, status=runs.FAILED, error="The run could not be started."
+        )
+    except OpenNetWorthError:
+        log.warning("trading_agents_unstarted_not_recorded run=%s", job.run_id)
 
 
 # ── cancelling, recovering, stopping ─────────────────────────────────────────────────────
@@ -191,6 +271,7 @@ def recover() -> int:
     """Boot: a run a stopped app left ``queued`` or ``running`` can never continue — mark it
     ``interrupted`` (and an install that was cut off ``failed``). Returns how many runs."""
     install.recover_interrupted()
+    install.remove_all_runs()
     store = TradingAgentsRunStore()
     stale = store.list(statuses=[runs.QUEUED, runs.RUNNING], limit=1000)
     for row in stale:

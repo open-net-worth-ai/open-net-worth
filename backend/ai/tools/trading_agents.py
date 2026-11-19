@@ -12,25 +12,20 @@ from __future__ import annotations
 import asyncio
 import json
 import math
-from dataclasses import dataclass
 from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from backend.ai.models.pricing import list_price_rates
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of
 from backend.ai.trading_agents import runner
 from backend.core.chat_session import get_session_id
-from backend.core.errors import FeatureDisabledError, OpenNetWorthError, TooManyRunsError
+from backend.core.errors import OpenNetWorthError
 from backend.core.unattended import is_unattended
-from backend.core.untrusted import sanitize_untrusted
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
-from backend.services import thesis_judgment, trading_agents
-from backend.services.trading_agents import budget, context, runs, settings, ticker
+from backend.services import trading_agents
+from backend.services.trading_agents import budget, run_views, runs, ticker
 
-_TOOL_REPORT_CHARS = 6_000
-_PROGRESS_TAIL = 20
 _LIST_DEFAULT, _LIST_MAX = 10, 20
 # A rough pace for the ETA the start tool reports: seconds per model call, API vs a CLI subscription.
 _SECONDS_PER_CALL = {"api": 8, "cli": 20}
@@ -121,43 +116,13 @@ def _flag_unavailable() -> Optional[str]:
 # ── what a start would do ────────────────────────────────────────────────────────────────
 
 
-@dataclass(frozen=True)
-class _Plan:
-    symbol: str
-    trade_date: str
-    analysts: list[str]
-    cfg: settings.Settings
-    models: settings.ResolvedModels
-    estimate: budget.Estimate
-
-
-def _plan(args: dict) -> _Plan:
-    """Everything that can refuse a start, in the runner's order — raising the typed error — and
-    what the run would cost. Writes nothing."""
-    trading_agents.require_ready()
-    saved = settings.load()
-    if not saved.disclaimer_accepted_at:
-        raise FeatureDisabledError(
-            "Accept the TradingAgents research-only notice on its connector page before the "
-            "first run.",
-            status="disclaimer_required",
-        )
-    if runner.pending_count() >= runner.MAX_PENDING:
-        raise TooManyRunsError(
-            f"{runner.MAX_PENDING} TradingAgents runs are already waiting. Try again when one finishes."
-        )
-    cfg = settings.with_context_level(saved, args.get("context_level"))
-    analysts = settings.normalize_analysts(
-        args["analysts"] if args.get("analysts") is not None else list(cfg.analysts)
-    )
-    models = settings.resolve_models(cfg)
-    return _Plan(
-        symbol=ticker.normalize(args.get("ticker")),
-        trade_date=runs.normalize_trade_date(args.get("trade_date")),
-        analysts=analysts,
-        cfg=cfg,
-        models=models,
-        estimate=budget.check_can_start(cfg, models, analysts, list_price_rates),
+def _plan(args: dict) -> runner.Plan:
+    """What a start would do now, or the typed error that refuses it (the runner's one chain)."""
+    return runner.plan(
+        str(args.get("ticker") or ""),
+        trade_date=args.get("trade_date"),
+        analysts=args.get("analysts"),
+        context_level=args.get("context_level"),
     )
 
 
@@ -165,7 +130,7 @@ def _precheck(args: dict) -> None:
     _plan(args)
 
 
-def _eta_minutes(plan: _Plan) -> int:
+def _eta_minutes(plan: runner.Plan) -> int:
     pace = _SECONDS_PER_CALL["cli" if plan.models.uses_cli else "api"]
     return max(1, math.ceil(plan.estimate.calls * pace / 60))
 
@@ -177,12 +142,24 @@ def _cost_line(estimate: budget.Estimate) -> str:
     return line if estimate.priced else f"{line}, a model has no known price so this understates"
 
 
+def _frozen(plan: runner.Plan) -> dict:
+    """What the card commits to: every value a default or a setting decided, and the context."""
+    return {
+        "context_level": plan.cfg.context_level,
+        "analysts": plan.analysts,
+        "trade_date": plan.trade_date,
+        "deep_model": plan.models.deep,
+        "quick_model": plan.models.quick,
+        "portfolio": plan.portfolio,
+    }
+
+
 class _StartPreview:
     """The card for a start: what is run, what it costs, and the exact context that leaves."""
 
     def build(self, args: dict) -> dict:
         plan = _plan(args)
-        portfolio, disclosure = context.build(plan.symbol, plan.cfg.context_level)
+        portfolio, disclosure = plan.portfolio, plan.disclosure
         models = plan.models
         return {
             "kind": "trading_agents_run",
@@ -203,11 +180,27 @@ class _StartPreview:
                 else "nothing: ticker and date only",
                 "disclosure": disclosure,
                 "data_vendors": "Receive the ticker and date only, never your amounts.",
+                "frozen": _frozen(plan),
             },
             "raw_arguments": args,
         }
 
     def validate(self, preview: dict) -> Optional[str]:
+        """Refuse an approval whose card no longer says what would run: a setting, a model, the
+        date or the book changed after it was drawn."""
+        data = preview.get("data") if isinstance(preview, dict) else None
+        frozen = data.get("frozen") if isinstance(data, dict) else None
+        if not isinstance(frozen, dict):
+            return "This approval card is missing what it was drawn from. Ask for a fresh preview."
+        try:
+            now = _frozen(_plan(preview.get("raw_arguments") or {}))
+        except OpenNetWorthError as exc:
+            return exc.message or str(exc)
+        if now != frozen:
+            return (
+                "Your settings, models, the date or your portfolio changed since this card was "
+                "drawn, so it no longer shows what would run. Ask for a fresh preview."
+            )
         return None
 
 
@@ -240,11 +233,9 @@ async def start_trading_agents_analysis(input_data: dict):
         plan = await asyncio.to_thread(_plan, input_data)
         run_id = await runner.submit(
             plan.symbol,
-            trade_date=plan.trade_date,
-            analysts=plan.analysts,
-            context_level=plan.cfg.context_level,
             requested_by="automation" if is_unattended() else "lucius",
             session_id=get_session_id(),
+            prepared=plan,
         )
     except OpenNetWorthError as exc:
         return _failure(exc)
@@ -260,69 +251,6 @@ async def start_trading_agents_analysis(input_data: dict):
 
 
 # ── reading ──────────────────────────────────────────────────────────────────────────────
-
-
-def _capped(text: object) -> Optional[dict]:
-    """One stored report as a tool field: sanitized (it is generated from web data), at most
-    ``_TOOL_REPORT_CHARS`` long, and honest about what was left out."""
-    if not isinstance(text, str) or not text:
-        return None
-    clean = sanitize_untrusted(text, max_len=runs.MAX_REPORT_CHARS)
-    return {
-        "text": clean[:_TOOL_REPORT_CHARS],
-        "truncated": len(text) > _TOOL_REPORT_CHARS,
-        "full_chars": len(text),
-    }
-
-
-def _run_summary(row: dict) -> dict:
-    return {
-        "run_id": row["id"],
-        "ticker": row["ticker"],
-        "trade_date": str(row["trade_date"]),
-        "status": row["status"],
-        "signal": row["signal"],
-        "requested_by": row["requested_by"],
-        "estimate_usd": None if row["estimate_usd"] is None else float(row["estimate_usd"]),
-        "cost_usd": float(row["cost_usd"]),
-        "plan_included_calls": row["plan_included_calls"],
-        "created_at": str(row["created_at"]),
-        "finished_at": None if row["finished_at"] is None else str(row["finished_at"]),
-    }
-
-
-def _cost(row: dict) -> dict:
-    return {
-        "cost_usd": float(row["cost_usd"]),
-        "llm_calls": row["llm_calls"],
-        "plan_included_calls": row["plan_included_calls"],
-        "unpriced_calls": row["unpriced_calls"],
-        "input_tokens": row["input_tokens"],
-        "output_tokens": row["output_tokens"],
-        "cap_usd": float(row["cap_usd"]),
-        "by_role": row["cost_by_role"],
-    }
-
-
-def _run_view(row: dict) -> dict:
-    stored = row["reports"] or {}
-    reports = {name: _capped(text) for name, text in (stored.get("fields") or {}).items()}
-    judgment = thesis_judgment.compact(thesis_judgment.for_ticker(row["ticker"], None))
-    view = {
-        **_run_summary(row),
-        "analysts": row["analysts"],
-        "context_level": row["context_level"],
-        "context_sent": row["context_sent"],
-        "decision": _capped(row["decision_text"]),
-        "reports": {name: report for name, report in reports.items() if report},
-        "progress": row["progress"][-_PROGRESS_TAIL:],
-        "cost": _cost(row),
-        "error": row["error"],
-        "thesis_judgment": judgment,
-    }
-    if judgment is None:
-        view.pop("thesis_judgment")
-    return view
 
 
 @tool(
@@ -344,7 +272,7 @@ async def get_trading_agents_run(input_data: dict):
     row = await asyncio.to_thread(TradingAgentsRunStore().get, str(input_data["run_id"]))
     if row is None:
         return json.dumps({"error": f"No TradingAgents run {input_data['run_id']!r}."}), None
-    view = await asyncio.to_thread(_run_view, row)
+    view = await asyncio.to_thread(run_views.view, row)
     return json.dumps(view, ensure_ascii=False), None
 
 
@@ -355,7 +283,7 @@ def _listed(input_data: dict) -> dict:
     store = TradingAgentsRunStore()
     total = store.count(ticker=symbol, statuses=statuses)
     rows = store.list(ticker=symbol, statuses=statuses, limit=limit)
-    result: dict = {"total": total, "runs": [_run_summary(r) for r in rows]}
+    result: dict = {"total": total, "runs": [run_views.summary(r) for r in rows]}
     if total > len(rows):
         result["note"] = (
             f"Showing the newest {len(rows)} of {total}; narrow with `ticker` or `status`."

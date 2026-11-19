@@ -126,7 +126,7 @@ def test_only_the_runner_reads_the_data_vendor_keys_as_environment_values():
     }
     assert readers == {
         "services/trading_agents/settings.py",
-        "ai/trading_agents/worker_session.py",
+        "ai/trading_agents/worker_env.py",
     }
 
 

@@ -1,5 +1,5 @@
 """What the LLM bridge is made of: the two aliases' models, the limits it enforces, and the record
-it hands the runner for each call. No server and no I/O — ``llm_bridge`` is the server."""
+it hands the runner for each call. No server — ``llm_bridge`` is the server."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from typing import Optional
 from backend.ai.models.base import AIProvider
 from backend.ai.models.pricing import list_price_rates
 from backend.ai.trading_agents import openai_shape as shape
+from backend.core.errors import ConfigurationError, ModelUnavailableError
 from backend.core.local_endpoint import is_local_base_url
+from backend.services.trading_agents.settings import ResolvedModels
 
 SOURCE = "trading_agents"
 ALIAS_DEEP = "onw-deep"
@@ -109,3 +111,36 @@ class CallRecord:
     def metered_usd(self) -> float:
         """Spend that is real money: a plan-included call is quota use, not an invoice."""
         return 0.0 if self.cost_basis == PLAN_INCLUDED else float(self.cost_usd or 0.0)
+
+
+def resolve_bridge_models(models: ResolvedModels) -> dict[str, BridgeModel]:
+    """The two aliases' providers, built once for the run (a config change mid-run is not
+    picked up). A provider the owner turned off raises ``ModelUnavailableError`` — never a
+    reroute to the instance default."""
+    from backend.ai.assistant import resolve_model_context
+    from backend.db.model_config_store import provider_label_for
+
+    out: dict[str, BridgeModel] = {}
+    tiers = (
+        (ALIAS_DEEP, models.deep, models.deep_plan_included),
+        (ALIAS_QUICK, models.quick, models.quick_plan_included),
+    )
+    for alias, ref, plan_included in tiers:
+        try:
+            context = resolve_model_context(ref)
+        except ConfigurationError as exc:
+            raise ModelUnavailableError(exc.message or str(exc), model_ref=ref) from exc
+        if context.provider_key != ref.partition(":")[0]:
+            raise ModelUnavailableError(f"{ref!r} is not a usable AI model.", model_ref=ref)
+        label = provider_label_for(context.transport, context.base_url, context.provider_key)
+        out[alias] = BridgeModel(
+            alias,
+            ref,
+            context.model,
+            label,
+            context.transport,
+            context.provider,
+            base_url=context.base_url,
+            plan_included=plan_included,
+        )
+    return out

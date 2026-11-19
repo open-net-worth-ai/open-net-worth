@@ -159,3 +159,4 @@ def update_config(changes: dict) -> dict:
 def delete_run(run_id: str) -> None:
     trading_agents.require_flag()
     runs.apply_run_change("delete", run_id=run_id)
+    install.remove_run(run_id)

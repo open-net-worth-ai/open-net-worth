@@ -178,7 +178,9 @@ model exactly as it does for Lucius and background jobs, and makes every call th
   - ONW events → OpenAI response: `text_delta` ⇒ `message.content`; each `tool_use` ⇒
     `message.tool_calls[{id, type:"function", function:{name, arguments: json}}]`,
     `finish_reason="tool_calls"`; else `"stop"`. Response `id` = `onwcall_<12hex>`.
-    `usage` = prompt/completion tokens from the provider's usage event.
+    `usage` = prompt/completion tokens from the provider's usage event; the provider's usage event
+    may arrive AFTER its tool calls (Claude Code, Antigravity), so the stream is read to `done`
+    and `usage` is final only on that terminal event.
 - **Call:** `provider = get_provider(pk:model)`; consume `provider.stream_chat(messages, tools,
   system, model, effort)` until `done` or the first batch of `tool_use` events, then **close the
   stream without running any tool** (TradingAgents runs its own data tools inside its graph).
@@ -303,7 +305,9 @@ transaction id, retirement balance) appears anywhere in `context_sent`.
 
 ### 7.1 Paths
 Reuse the existing data-dir helper in `core/`:
-`<DATA_ROOT>/integrations/trading_agents/{venv,results,cache,memory}`. Honors `ONW_ROOT`.
+`<DATA_ROOT>/integrations/trading_agents/{venv,cache,runs/<run id>/{home,results,memory}}`; the
+shared `cache` is the only folder two runs share, and a run's folder is deleted when the run ends or
+its row is deleted. Honors `ONW_ROOT`.
 Windows: `venv\Scripts\python.exe`.
 
 ### 7.2 Install (`services/trading_agents/install.py`)
@@ -415,7 +419,7 @@ Thin router: validate → one service/runner call → shape. All behind `require
 | PUT | `/api/trading-agents/config` | any §3 setting + `alpha_vantage_api_key`, `fred_api_key` | the new config; `null` resets a setting / clears a key, blank keeps a key; `ValidationError` names `context.field` |
 | POST | `/api/trading-agents/install` | — | 202; progress via status + data events |
 | POST | `/api/trading-agents/disclaimer` | `{accepted:true}` | sets `disclaimer_accepted_at` |
-| POST | `/api/trading-agents/estimate` | `{ticker, analysts?}` | `{estimate_usd, low, high, basis:"history|static", plan_included:bool}` |
+| POST | `/api/trading-agents/estimate` | `{ticker, analysts?}` | `{estimate_usd, low_usd, high_usd, calls, basis:"history|static", sample_size, plan_included:bool, priced:bool, unpriced_models:[ref]}` |
 | GET | `/api/trading-agents/context-preview` | `ticker, context_level` | the exact dict that would be sent + `disclosure` |
 | POST | `/api/trading-agents/runs` | `{ticker, trade_date?, analysts?, context_level?}` | 202 `{run_id}` |
 | GET | `/api/trading-agents/runs` | `ticker?, status?, limit, offset` | page + total |
@@ -487,11 +491,17 @@ per-connector permission list).
   count and rounds. Fewer than 3 ⇒ static heuristic: `calls ≈ analysts×(max_tool_rounds+1) +
   2×debate_rounds + 1 + 1 + 3×risk_rounds + 1`, × assumed tokens (in 6 000 / out 800 quick,
   in 12 000 / out 1 500 deep) × pricing. Mark `basis:"static"`. CLI transports ⇒
-  `estimate_usd=0`, `plan_included=true`, and an estimated call count.
+  `estimate_usd=0`, `plan_included=true`, and an estimated call count — but only for a CLI with
+  NO stored API key (a keyed CLI is billed, so it is metered); an unknown transport is metered.
+  A metered model with no known price (no table price, none reported, not a local endpoint) is
+  refused by name at start: it cannot be held to a cap.
 - **Per-run cap / call cap:** enforced live in the runner (§7.4).
 - **Monthly cap:** month = `core.user_time` month. Refuse `create` when
-  `month_spend + estimate.median > monthly_cap_usd` (`BudgetExceededError`, message with numbers).
-  Plan-included runs are not blocked by the $ cap.
+  `month_committed + estimate.median > monthly_cap_usd` (`BudgetExceededError`, message with
+  numbers), where `month_committed` is finished runs' actual cost plus, for queued and running
+  runs, the larger of their cost so far and their estimate. A cap of 0 refuses every run that is
+  not entirely on subscriptions. What is left of the month when a run starts is also a live limit
+  in the bridge. Plan-included runs are not blocked by the $ cap.
 - Global `AppConfigStore` AI budget stays unenforced (out of scope; do not change).
 
 ## 11. Tests (focused; use `write-test` skill; synthetic data only, ticker ACME)

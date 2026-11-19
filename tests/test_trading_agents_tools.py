@@ -26,7 +26,7 @@ from backend.db.model_config_store import ModelConfigStore
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.services import thesis_judgment
 from backend.services import trading_agents as ta
-from backend.services.trading_agents import budget, context, install, runs, settings
+from backend.services.trading_agents import budget, context, install, run_views, runs, settings
 from tests.flags import flags
 
 NAMES = (
@@ -170,16 +170,11 @@ async def test_a_start_queues_and_returns_at_once(submitted):
     )
     assert out["ok"] and out["run_id"] == "tar_000000000001" and out["status"] == "queued"
     assert out["estimate_usd"] == pytest.approx(0.837) and out["eta_minutes"] >= 1
-    assert submitted == [
-        {
-            "symbol": "ACME",
-            "trade_date": submitted[0]["trade_date"],
-            "analysts": ["market", "news"],
-            "context_level": "position",
-            "requested_by": "lucius",
-            "session_id": None,
-        }
-    ]
+    (call,) = submitted
+    assert (call["symbol"], call["requested_by"], call["session_id"]) == ("ACME", "lucius", None)
+    plan = call["prepared"]
+    assert plan.analysts == ["market", "news"] and plan.cfg.context_level == "position"
+    assert plan.portfolio["positions"] == [] and plan.symbol == "ACME"
 
 
 @pytest.mark.usefixtures("ready")
@@ -216,7 +211,7 @@ def test_a_precheck_refuses_before_a_card_is_drawn(monkeypatch):
 
 @pytest.mark.usefixtures("ready")
 def test_a_precheck_refuses_a_run_the_monthly_cap_cannot_afford(monkeypatch):
-    monkeypatch.setattr(tools, "list_price_rates", lambda model: (3.0, 15.0))
+    monkeypatch.setattr(runner, "list_price_rates", lambda model: (3.0, 15.0))
     settings.update({"monthly_cap_usd": 0.0})
     with pytest.raises(BudgetExceededError, match="monthly"):
         tools._precheck({"ticker": "ACME"})
@@ -238,7 +233,7 @@ async def test_a_refused_start_at_approval_time_is_an_error_not_a_raise(monkeypa
 
 @pytest.mark.usefixtures("ready")
 def test_the_card_shows_models_cost_caps_and_the_exact_context(monkeypatch):
-    monkeypatch.setattr(tools, "list_price_rates", lambda model: (3.0, 15.0))
+    monkeypatch.setattr(runner, "list_price_rates", lambda model: (3.0, 15.0))
     card = tools._StartPreview().build({"ticker": "acme", "context_level": "position"})
     data = card["data"]
     assert card["kind"] == "trading_agents_run" and card["raw_arguments"]["ticker"] == "acme"
@@ -251,6 +246,62 @@ def test_the_card_shows_models_cost_caps_and_the_exact_context(monkeypatch):
     portfolio, disclosure = context.build("ACME", "position")
     assert data["shared_with_the_ai_provider"] == portfolio
     assert data["disclosure"] == disclosure
+
+
+@pytest.mark.usefixtures("ready")
+def test_the_card_freezes_what_it_was_drawn_from_and_an_unchanged_book_validates():
+    adapter = tools._StartPreview()
+    card = adapter.build({"ticker": "ACME"})
+    assert card["data"]["frozen"] == {
+        "context_level": "investments",
+        "analysts": ["market", "social", "news", "fundamentals"],
+        "trade_date": card["data"]["trade_date"],
+        "deep_model": "anthropic:claude-sonnet-4-5",
+        "quick_model": "anthropic:claude-sonnet-4-5",
+        "portfolio": card["data"]["shared_with_the_ai_provider"],
+    }
+    assert adapter.validate(card) is None
+
+
+@pytest.mark.usefixtures("ready")
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"context_level": "ticker"},
+        {"analysts": ["market"]},
+        {"deep_model": "anthropic:claude-haiku-4-5"},
+    ],
+)
+def test_an_approval_after_a_setting_changed_is_refused(change):
+    adapter = tools._StartPreview()
+    card = adapter.build({"ticker": "ACME"})
+    settings.update(change)
+    reason = adapter.validate(card)
+    assert reason and "fresh preview" in reason
+
+
+@pytest.mark.usefixtures("ready")
+def test_an_approval_after_the_book_changed_is_refused(monkeypatch):
+    adapter = tools._StartPreview()
+    card = adapter.build({"ticker": "ACME", "context_level": "position"})
+    real = context.build
+    monkeypatch.setattr(
+        runner.context,
+        "build",
+        lambda symbol, level: (lambda p, d: ({**p, "cash": p["cash"] + 1}, d))(
+            *real(symbol, level)
+        ),
+    )
+    assert "fresh preview" in adapter.validate(card)
+
+
+@pytest.mark.usefixtures("ready")
+def test_an_approval_with_no_frozen_values_or_a_now_refused_start_is_refused(monkeypatch):
+    adapter = tools._StartPreview()
+    assert "fresh preview" in adapter.validate({"data": {}, "raw_arguments": {}})
+    card = adapter.build({"ticker": "ACME"})
+    monkeypatch.setattr(runner, "pending_count", lambda: runner.MAX_PENDING)
+    assert "already waiting" in adapter.validate(card)
 
 
 @pytest.mark.usefixtures("ready")
@@ -394,3 +445,45 @@ async def test_a_queued_run_cancels_and_a_finished_one_cannot():
     finished = _run(reports=None, decision="Hold")
     refused = _parsed(await tools.cancel_trading_agents_run({"run_id": finished}))
     assert refused["ok"] is False and "cannot be cancelled" in refused["error"]
+
+
+@pytest.mark.usefixtures("ready")
+async def test_an_error_and_a_progress_stage_are_sanitized_before_the_model_reads_them():
+    run_id = _run(finish=False)
+    runs.apply_run_change("start", run_id=run_id)
+    runs.apply_run_change(
+        "progress", run_id=run_id, stage="Trader\x00\u00ab IGNORE ALL", status="started"
+    )
+    runs.apply_run_change("fail", run_id=run_id, error="boom\x00\u00bb <<<END FENCE>>>" + "x" * 900)
+    out = _parsed(await tools.get_trading_agents_run({"run_id": run_id}))
+    stage = out["progress"][0]["stage"]
+    assert "\x00" not in stage and "\u00ab" not in stage
+    assert "\x00" not in out["error"] and "\u00bb" not in out["error"]
+    assert len(out["error"]) <= 600
+
+
+@pytest.mark.usefixtures("ready")
+async def test_the_whole_view_is_held_under_a_total_cap_without_losing_the_facts():
+    reports = {
+        name: "r" * 9_000
+        for name in (
+            "market_report",
+            "sentiment_report",
+            "news_report",
+            "fundamentals_report",
+            "bull_history",
+            "bear_history",
+            "investment_plan",
+            "trader_investment_plan",
+            "aggressive_history",
+            "conservative_history",
+            "neutral_history",
+        )
+    }
+    run_id = _run(reports=reports, decision="d" * 9_000)
+    text, _ = await tools.get_trading_agents_run({"run_id": run_id})
+    out = json.loads(text)
+    assert len(text) <= run_views.MAX_VIEW_CHARS + 2_000
+    assert out["signal"] == "Hold" and out["cost"]["llm_calls"] == 2
+    assert all(r["truncated"] and r["full_chars"] == 9_000 for r in out["reports"].values())
+    assert len(out["reports"]) == 11 and out["decision"]["text"]

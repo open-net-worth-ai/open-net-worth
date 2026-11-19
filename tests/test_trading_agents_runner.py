@@ -7,15 +7,17 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from backend.ai.trading_agents import bridge_models, llm_bridge, runner, worker_session
+from backend.ai.trading_agents import bridge_models, llm_bridge, runner, worker_env, worker_session
 from backend.ai.trading_agents.llm_bridge import ALIAS_DEEP, ALIAS_QUICK, BridgeModel
-from backend.core import paths
+from backend.core import paths, process_tree
 from backend.core.errors import (
     BudgetExceededError,
     ConflictError,
@@ -27,6 +29,7 @@ from backend.db.cost_log_store import CostLogStore
 from backend.db.model_config_store import ModelConfigStore
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
+from backend.services import connector_catalog
 from backend.services.trading_agents import budget, install, runs, settings
 
 
@@ -264,7 +267,7 @@ def test_the_worker_env_holds_no_llm_vendor_key(monkeypatch):
         monkeypatch.setenv(name, "leak-" + name)
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
     TradingAgentsConfigStore().write(secrets={"fred_api_key": "fred-123"})
-    env = worker_session.worker_env("bridge-token", "ACME Research Bot", "tar_0123456789ab")
+    env = worker_env.worker_env("bridge-token", "ACME Research Bot", "tar_0123456789ab")
     assert not set(_VENDOR_KEYS) & set(env)
     assert not any("leak-" in v for v in env.values())
     secretish = {k for k in env if any(w in k.upper() for w in ("KEY", "TOKEN", "SECRET", "PASS"))}
@@ -282,9 +285,9 @@ def test_the_worker_env_points_every_home_at_the_runs_own_folder(monkeypatch):
     for name in ("HOME", "USERPROFILE", "APPDATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
         monkeypatch.setenv(name, "/real/owner/home")
     monkeypatch.setenv("HOMEDRIVE", "C:")
-    env = worker_session.worker_env("bridge-token", "ACME Research Bot", "tar_0123456789ab")
+    env = worker_env.worker_env("bridge-token", "ACME Research Bot", "tar_0123456789ab")
     home = str(install.run_dir("tar_0123456789ab") / "home")
-    for name in worker_session._HOME_VARIABLES:
+    for name in worker_env.HOME_VARIABLES:
         assert env[name] == home
     assert "HOMEDRIVE" not in env and "HOMEPATH" not in env
     assert "/real/owner/home" not in env.values()
@@ -485,6 +488,181 @@ async def test_queued_runs_start_in_order_after_the_first_finishes():
     await settle()
     assert run_of(first)["finished_at"] <= run_of(second)["started_at"]
     assert run_of(second)["status"] == "done"
+
+
+# ── lifecycle ────────────────────────────────────────────────────────────────────────────
+
+
+async def test_a_run_whose_start_cannot_be_written_ends_failed_not_stuck(runner_env):
+    real = runs.apply_run_change
+    calls = []
+
+    def flaky(op, **kw):
+        calls.append(op)
+        if op == "start":
+            raise RuntimeError("database is locked")
+        return real(op, **kw)
+
+    runner_env.monkeypatch.setattr(worker_session.runs, "apply_run_change", flaky)
+    run_id = await submit()
+    await settle()
+    assert run_of(run_id)["status"] == "failed" and calls[-2:] == ["start", "fail"]
+
+
+async def test_a_failed_last_run_note_never_fails_or_orphans_the_run(runner_env):
+    def boom(self, changes):
+        raise RuntimeError("connector store unavailable")
+
+    runner_env.monkeypatch.setattr(TradingAgentsConfigStore, "merge_state", boom)
+    run_id = await submit()
+    await settle()
+    assert run_of(run_id)["status"] == "done"
+
+
+async def test_a_job_whose_command_cannot_be_built_fails_and_the_queue_goes_on(runner_env):
+    command = runner._worker_cmd
+    runner.set_worker_cmd_for_tests(None)
+    attempts = []
+
+    def command_for_run():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("no interpreter")
+        return command
+
+    runner_env.monkeypatch.setattr(worker_session, "worker_command", command_for_run)
+    first, second = await submit(), await submit()
+    await settle()
+    assert run_of(first)["status"] == "failed" and "could not be started" in run_of(first)["error"]
+    assert run_of(second)["status"] == "done"
+
+
+async def test_a_missing_venv_python_is_a_not_installed_failure(runner_env):
+    runner.set_worker_cmd_for_tests(["/nonexistent/venv/bin/python", "worker.py"])
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    assert row["status"] == "failed" and "environment is missing" in row["error"]
+
+
+async def test_the_worker_tree_is_killed_off_the_event_loop(runner_env):
+    worker("hang", runner_env.tmp, pid_file=True)
+    threads = []
+    real = process_tree.kill_tree
+
+    def spy(pid):
+        threads.append(threading.current_thread())
+        real(pid)
+
+    runner_env.monkeypatch.setattr(process_tree, "kill_tree", spy)
+    run_id = await submit()
+    await until(lambda: run_of(run_id)["llm_calls"] >= 1)
+    await runner.cancel(run_id)
+    await settle()
+    assert threads and all(t is not threading.main_thread() for t in threads)
+
+
+async def test_a_runs_folder_is_gone_when_it_ends_and_its_memory_was_its_own(runner_env):
+    seen = {}
+    real = asyncio.create_subprocess_exec
+
+    async def spy(*args, **kwargs):
+        seen.update(kwargs["env"])
+        return await real(*args, **kwargs)
+
+    runner_env.monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+    run_id = await submit()
+    await settle()
+    assert run_id in seen["TRADINGAGENTS_MEMORY_LOG_PATH"]
+    assert run_id in seen["TRADINGAGENTS_RESULTS_DIR"] and run_id in seen["HOME"]
+    assert not install.run_dir(run_id).exists()
+
+
+async def test_a_run_that_fails_or_is_cancelled_also_removes_its_folder(runner_env):
+    worker("crash", runner_env.tmp)
+    crashed = await submit()
+    await settle()
+    assert run_of(crashed)["status"] == "failed" and not install.run_dir(crashed).exists()
+    worker("hang", runner_env.tmp)
+    hung = await submit()
+    await until(lambda: run_of(hung)["llm_calls"] >= 1)
+    await runner.cancel(hung)
+    await settle()
+    assert not install.run_dir(hung).exists()
+
+
+def test_deleting_a_run_removes_its_folder_and_boot_removes_every_one(runner_env):
+    def finished():
+        row = runs.apply_run_change(
+            "create",
+            ticker="ACME",
+            analysts=["market"],
+            config_snapshot={},
+            context_level="ticker",
+            cap_usd=1.0,
+        )
+        runs.apply_run_change("start", run_id=row["id"])
+        runs.apply_run_change("finish", run_id=row["id"], signal="Hold")
+        install.scratch(row["id"]).memory_log.write_text("ACME decision")
+        return row["id"]
+
+    from backend.services.trading_agents import queries
+
+    first, second = finished(), finished()
+    queries.delete_run(first)
+    assert not install.run_dir(first).exists() and install.run_dir(second).exists()
+    runner.recover()
+    assert not install.run_dir(second).exists()
+
+
+async def test_submit_does_not_block_the_event_loop_on_the_book(runner_env):
+    def slow_build(symbol, level):
+        time.sleep(0.4)
+        return None, {"level": level}
+
+    runner_env.monkeypatch.setattr(runner.context, "build", slow_build)
+    ticks = 0
+
+    async def heartbeat():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    beat = asyncio.create_task(heartbeat())
+    try:
+        await submit()
+    finally:
+        beat.cancel()
+    assert ticks >= 10
+    await settle()
+
+
+async def test_concurrent_submits_cannot_overfill_the_queue(runner_env):
+    worker("hang", runner_env.tmp)
+    results = await asyncio.gather(*[submit() for _ in range(6)], return_exceptions=True)
+    assert sum(isinstance(r, str) for r in results) == runner.MAX_PENDING
+    assert sum(isinstance(r, TooManyRunsError) for r in results) == 6 - runner.MAX_PENDING
+    assert TradingAgentsRunStore().count() == runner.MAX_PENDING
+    for run_id in [r for r in results if isinstance(r, str)]:
+        await runner.cancel(run_id)
+    await settle()
+
+
+async def test_the_environment_cannot_be_rebuilt_or_removed_under_a_pending_run(runner_env):
+    worker("hang", runner_env.tmp)
+    run_id = await submit()
+    with pytest.raises(ConflictError) as raised:
+        install.refuse_if_busy()
+    assert raised.value.context["status"] == "runs_pending"
+    with pytest.raises(ConflictError):
+        install.remove_environment()
+    with pytest.raises(ConflictError):
+        connector_catalog.kind_of("trading_agents").remove("trading_agents")
+    await runner.cancel(run_id)
+    await settle()
+    install.refuse_if_busy()
+    install.remove_environment()
 
 
 # ── refusals ─────────────────────────────────────────────────────────────────────────────
