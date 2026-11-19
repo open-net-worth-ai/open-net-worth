@@ -238,3 +238,28 @@ def test_the_endpoints_take_categories(book, monkeypatch):
     assert rollup["period"]["expense_total"] == pytest.approx(65.5)
     flow = client.get(f"/api/cashflow/flow?month=2026-09&category={book['hotels']}").json()
     assert flow["spend_total"] == pytest.approx(300.0)
+
+
+def test_this_months_savings_rate_counts_the_profiles_monthly_income(book, monkeypatch):
+    """Mid-month the salary often hasn't landed: income so far read near 0% saved. This month
+    is measured against the monthly income in the profile, as the budget plans with."""
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    monkeypatch.setattr(
+        reports_rollup.profile_service, "read_profile", lambda: {"monthly_net_income": 5000.0}
+    )
+    savings = reports_rollup.reports_aggregates(period="this_month")["period"]["savings"]
+    # October so far: S$80 in, S$60 spent; against the profile's S$5,000 a month.
+    assert savings["income"] == pytest.approx(5000.0)
+    assert savings["saved"] == pytest.approx(4940.0)
+    assert savings["expected_income"] is True
+
+    monkeypatch.setattr(
+        reports_rollup.profile_service, "read_profile", lambda: {"monthly_net_income": 50.0}
+    )
+    received = reports_rollup.reports_aggregates(period="this_month")["period"]["savings"]
+    assert received["income"] == pytest.approx(80.0)  # more already came in: the real figure
+    assert "expected_income" not in received
+    # Another period keeps what actually came in.
+    sep = reports_rollup.reports_aggregates(period="last_month")["period"]["savings"]
+    assert sep["income"] == pytest.approx(3000.0)

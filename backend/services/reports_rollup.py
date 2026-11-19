@@ -10,12 +10,17 @@ re-folding them from its own fetch.
 
 from __future__ import annotations
 
+import logging
+
 from backend.core.fx import base_currency
 from backend.core.user_time import user_today
 from backend.services import ledger as ledger_service
 from backend.services import planning as planning_service
+from backend.services import profile as profile_service
 from backend.services import report_window
 from backend.services.fx_cache import load_fx_cache
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MONTHS = 6
 # The trailing saving: the average over this many complete months (needing at least the minimum
@@ -517,5 +522,21 @@ def _period_block(period: str, points: list[dict], merchant_limit: int, tags, ca
         "to": yms[-1],
         **summary,
         "merchants": _merchants(yms, merchant_limit, tags, categories),
-        "savings": _savings(summary),
+        "savings": _this_month_savings(summary)
+        if period == "this_month" and not tags and not categories
+        else _savings(summary),
     }
+
+
+def _this_month_savings(summary: dict) -> dict:
+    """This month's savings rate against the monthly income in the profile, as the budget
+    plans with: mid-month the salary often hasn't landed, and income-so-far read near 0%.
+    Income already received wins once it is more than the profile's figure."""
+    try:
+        expected = float(profile_service.read_profile().get("monthly_net_income") or 0.0)
+    except Exception:
+        logger.warning("profile income unavailable for the savings rate", exc_info=True)
+        expected = 0.0
+    if expected <= summary["income_total"]:
+        return _savings(summary)
+    return {**_savings({**summary, "income_total": expected}), "expected_income": True}

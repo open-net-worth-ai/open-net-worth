@@ -235,8 +235,10 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
 - **Money flow** says under the diagram that it is **Net of refunds and reimbursements**: a
   refund reduces the category it came from. Plan → Cash Flow shows gross In and Out, so the same
   month reads larger there, and its footnote says so.
-- **Savings rate** is this month so far unless you pick another period, named in the card's
-  header ("Nov"). It is **Income − spending recorded in that period**, shown as one line under the gauge ("$3.2K of $5.8K saved"). Hover the
+- **Savings rate** is this month unless you pick another period, named in the card's header
+  ("Nov"). It is **Income − spending recorded in that period**; for this month the income is
+  the monthly income in your profile (as the budget plans with) until more than that has come
+  in, shown as one line under the gauge ("$3.2K of $5.8K saved"). Hover the
   gauge for the **3-month average** with its months (for example "3-month average (Jul to Sep):
   $3.17K a month, 55%"): the same figure the [Outlook](retirement-planning.md) checks your saving
   against. Both differ from the Budget screen's month-in-progress pace and from Cash Flow's
