@@ -19,7 +19,9 @@ function mcp(enabled: boolean, tools: Connector['tools']): Connector {
   }
 }
 
-const TOOL = { name: 'get_positions', description: '', source: 'mcp' } as Connector['tools'][number]
+const TOOL = { name: 'get_positions', description: '', source: 'mcp' } as NonNullable<
+  Connector['tools']
+>[number]
 
 describe('an MCP server that never connected', () => {
   it('says Finish setup when it is off with no tools', () => {

@@ -288,9 +288,9 @@ describe('Register Tags column', () => {
     const cells = first.container.querySelectorAll('.acct-td-tags')
     expect(cells.length).toBe(2)
     expect(
-      Array.from(cells[0].querySelectorAll('.acct-detail-tag')).map((c) => c.textContent),
+      Array.from(cells[0]!.querySelectorAll('.acct-detail-tag')).map((c) => c.textContent),
     ).toEqual(['japan-trip', 'reimbursable'])
-    expect(cells[1].textContent).toBe('—')
+    expect(cells[1]!.textContent).toBe('—')
     expect(JSON.parse(localStorage.getItem(REG_SHOW_KEY) || '[]')).toEqual(['tags'])
     expect(JSON.parse(localStorage.getItem(REG_VIS_KEY) || '[]')).not.toContain('tags')
     first.unmount()

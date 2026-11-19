@@ -32,6 +32,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+from backend.core.pinned_http import https_context
+
 QUESTIONS = Path(__file__).with_name("compare_with_claude_questions.json")
 CALL_TIMEOUT_S = 420
 
@@ -87,10 +89,12 @@ def ask_lucius(base: str, question: str, model: str) -> dict:
     req = urllib.request.Request(
         f"{base}/api/chat", data=body.encode(), headers={"Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=60, context=https_context()) as r:
         session = json.loads(r.read())["session_id"]
     text, tools, visuals = "", [], 0
-    with urllib.request.urlopen(f"{base}/api/sessions/{session}/live", timeout=CALL_TIMEOUT_S) as r:
+    with urllib.request.urlopen(
+        f"{base}/api/sessions/{session}/live", timeout=CALL_TIMEOUT_S, context=https_context()
+    ) as r:
         for raw in r:
             line = raw.decode().strip()
             if not line.startswith("data:"):

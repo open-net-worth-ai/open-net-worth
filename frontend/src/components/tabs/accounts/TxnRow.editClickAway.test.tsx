@@ -119,12 +119,12 @@ describe('ending an inline edit by clicking away', () => {
     const onOpenDetail = vi.fn()
     const onUpdate = vi.fn()
     const { view, rowEls } = renderRows(onOpenDetail, onUpdate)
-    fireEvent.doubleClick(rowEls[0].querySelector('.acct-td-memo') as HTMLElement)
+    fireEvent.doubleClick(rowEls[0]!.querySelector('.acct-td-memo') as HTMLElement)
     const input = view.container.querySelector('input.acct-editin') as HTMLInputElement
     expect(input).toBeTruthy()
     expect(document.activeElement).toBe(input)
 
-    clickAt(rowEls[1].querySelector('.acct-td-memo') as HTMLElement)
+    clickAt(rowEls[1]!.querySelector('.acct-td-memo') as HTMLElement)
     act(() => vi.advanceTimersByTime(500))
 
     expect(onUpdate).toHaveBeenCalledWith('t1', { description: 'DISP TEMP CREDIT' })
@@ -134,21 +134,21 @@ describe('ending an inline edit by clicking away', () => {
   it('the NEXT click on a row opens its drawer as usual', () => {
     const onOpenDetail = vi.fn()
     const { view, rowEls } = renderRows(onOpenDetail)
-    fireEvent.doubleClick(rowEls[0].querySelector('.acct-td-memo') as HTMLElement)
+    fireEvent.doubleClick(rowEls[0]!.querySelector('.acct-td-memo') as HTMLElement)
     expect(view.container.querySelector('input.acct-editin')).toBeTruthy()
-    clickAt(rowEls[1])
+    clickAt(rowEls[1]!)
     act(() => vi.advanceTimersByTime(500))
 
-    clickAt(rowEls[1])
+    clickAt(rowEls[1]!)
     act(() => vi.advanceTimersByTime(500))
     expect(onOpenDetail).toHaveBeenCalledTimes(1)
-    expect(onOpenDetail.mock.calls[0][0].id).toBe('t2')
+    expect(onOpenDetail.mock.calls[0]![0].id).toBe('t2')
   })
 
   it('a click inside the editor does not swallow anything', () => {
     const onOpenDetail = vi.fn()
     const { view, rowEls } = renderRows(onOpenDetail)
-    fireEvent.doubleClick(rowEls[0].querySelector('.acct-td-memo') as HTMLElement)
+    fireEvent.doubleClick(rowEls[0]!.querySelector('.acct-td-memo') as HTMLElement)
     const input = view.container.querySelector('input.acct-editin') as HTMLInputElement
     fireEvent.pointerDown(input)
     fireEvent.click(input)
@@ -156,7 +156,7 @@ describe('ending an inline edit by clicking away', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     act(() => vi.advanceTimersByTime(10))
 
-    clickAt(rowEls[1])
+    clickAt(rowEls[1]!)
     act(() => vi.advanceTimersByTime(500))
     expect(onOpenDetail).toHaveBeenCalledTimes(1)
   })

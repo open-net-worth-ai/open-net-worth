@@ -20,6 +20,9 @@ from tests.bank_sync_fakes import (
 )
 from tests.flags import flags
 
+# Its accounts hold foreign currencies: seed synthetic rates, never a live FX fetch.
+pytestmark = pytest.mark.usefixtures("fx_rates")
+
 
 @pytest.fixture
 def bank(db_isolated, monkeypatch):

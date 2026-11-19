@@ -131,7 +131,7 @@ describe('InlineVisual', () => {
         { type: 'hologram' },
         { type: 'stats' },
         chart('stack', { series: [] }),
-        FIXTURE.blocks[2]!,
+        FIXTURE.blocks?.[2],
       ],
     } as unknown as VisualSpec
     render(<InlineVisual visual={bad} />)

@@ -15,7 +15,7 @@ import type { Connector } from './types'
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 afterEach(cleanup)
 
-const IBKR_URL = MCP_INSTALL_PRESETS['mcp-ibkr'].url!
+const IBKR_URL = MCP_INSTALL_PRESETS['mcp-ibkr']!.url!
 
 function server(
   id: string,
@@ -85,7 +85,7 @@ describe('adding another account of a sign-in server', () => {
   })
 
   it('works for a server that takes a key, without the sign-out warning', () => {
-    const stripe = MCP_INSTALL_PRESETS['mcp-stripe'].url!
+    const stripe = MCP_INSTALL_PRESETS['mcp-stripe']!.url!
     openAnother([server('mcp-stripe-com', stripe, 'Stripe')], 'mcp:mcp-stripe-com')
     expect(screen.getByDisplayValue(stripe)).toBeTruthy()
     const note = screen.getByRole('note').textContent

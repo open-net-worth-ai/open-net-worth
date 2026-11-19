@@ -82,7 +82,7 @@ function renderMode(over: Partial<React.ComponentProps<typeof TransactionReviewM
     onClose: vi.fn(),
     onApprove: vi.fn(),
     onReject: vi.fn(),
-    onViewAll: vi.fn(),
+    onAllDetails: vi.fn(),
     onEditAll: vi.fn(),
     ...over,
   }
