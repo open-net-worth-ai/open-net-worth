@@ -437,12 +437,12 @@
   :root:is([data-theme='light'], [data-theme='warm']) [data-builtin-logo] {
     filter: invert(1);
   }
-  /* The diamond as a currentColor icon (ui/AppLogoMark.tsx): the logo file is the mask. */
-  .app-logo-mark {
+  /* Lucius's line-art logo as a currentColor icon (ui/LuciusLogo.tsx): the file is the mask. */
+  .lucius-logo {
     display: inline-block;
     flex: none;
     background-color: currentColor;
-    mask: url('/logo-mark.svg?v=facet-solid') center / contain no-repeat;
+    mask: url('/lucius-mark.svg') center / contain no-repeat;
   }
   .sidebar-brandrow {
     display: flex;
