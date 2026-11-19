@@ -155,6 +155,7 @@ class LlmBridge:
         self._limits = limits
         self._slots = asyncio.Semaphore(max(1, concurrency))
         self._admitted = 0
+        self._refused = 0
         self._metered_usd = 0.0
         self._refusal: Optional[str] = None
         self._server: Optional[_QuietServer] = None
@@ -180,6 +181,11 @@ class LlmBridge:
     @property
     def calls_admitted(self) -> int:
         return self._admitted
+
+    @property
+    def refused_calls(self) -> int:
+        """Calls turned away for a cap — the runner's proof that a failed worker hit one."""
+        return self._refused
 
     def refuse(self, reason: str) -> None:
         """Turn every later call away (a cap the runner tracks tripped)."""
@@ -256,6 +262,7 @@ class LlmBridge:
         ):
             reason = f"The run reached its spend cap of ${limits.max_metered_usd:.2f}."
         if reason is not None:
+            self._refused += 1
             raise BudgetExceededError(reason)
         self._admitted += 1
 

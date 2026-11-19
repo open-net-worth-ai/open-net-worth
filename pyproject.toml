@@ -404,3 +404,49 @@ forbidden_modules = [
     "backend.core.channels",
     "backend.core.agent_runner",
 ]
+
+# Contract 8 — the TradingAgents worker runs in the integration's OWN venv, beside third-party
+# code, as ``<venv python> -I ta_worker.py``. Both directions are closed: it imports no backend
+# module (it could not — the venv has none of them, and it must never hold a secret-bearing one),
+# and nothing in the backend imports it (it is a data file the runner starts, never a module).
+# ``backend.services`` cannot be named on either side (the worker lives inside it, and
+# import-linter refuses shared descendants), so both directions are ALSO pinned over the whole
+# tree by tests/test_trading_agents_worker.py (an AST scan, services included).
+[[tool.importlinter.contracts]]
+name = "TradingAgents worker imports nothing of the backend"
+type = "forbidden"
+source_modules = ["backend.services.trading_agents.worker"]
+forbidden_modules = [
+    "backend.cli",
+    "backend.api",
+    "backend.ai",
+    "backend.db",
+    "backend.core",
+    "backend.monitoring",
+    "backend.connectors",
+    "backend.ingest",
+    "backend.models",
+    "backend.mcp",
+    "backend.sandbox",
+]
+unmatched_ignore_imports_alerting = "none"
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside services imports the TradingAgents worker"
+type = "forbidden"
+source_modules = [
+    "backend.cli",
+    "backend.api",
+    "backend.ai",
+    "backend.db",
+    "backend.core",
+    "backend.monitoring",
+    "backend.connectors",
+    "backend.ingest",
+    "backend.models",
+    "backend.mcp",
+    "backend.sandbox",
+]
+forbidden_modules = ["backend.services.trading_agents.worker"]
+allow_indirect_imports = true
+unmatched_ignore_imports_alerting = "none"

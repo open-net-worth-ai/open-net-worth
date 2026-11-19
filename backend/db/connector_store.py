@@ -46,7 +46,7 @@ from backend.db.engine import get_engine, locked_unit_of_work
 from backend.db.tables import connector_secrets, connectors
 
 # State keys whose string value is an error message that may quote a credential-bearing URL.
-_ERROR_KEYS = ("last_error", "error")
+_ERROR_KEYS = ("last_error", "error", "install_error")
 
 
 def _now() -> str:

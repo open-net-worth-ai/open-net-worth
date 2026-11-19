@@ -504,6 +504,14 @@ def _remove_web_search(connector_id: str) -> None:
     SearchConfigStore().reset_provider(connector_id[len(WEB_SEARCH_PREFIX) :])
 
 
+def _remove_trading_agents(connector_id: str) -> None:
+    """Delete the venv and TradingAgents' scratch folders (its logs and memory hold text derived
+    from the portfolio context). Run rows stay: the owner deletes those from the UI."""
+    from backend.services.trading_agents import install
+
+    install.remove_environment()
+
+
 # ── the kinds ────────────────────────────────────────────────────────────────────────────
 
 _FEED_STATE = ("last_synced_at", "last_status", "last_error")
@@ -617,6 +625,7 @@ _KINDS: tuple[ConnectorKind, ...] = (
             "sec_edgar_user_agent",
             "disclaimer_accepted_at",
         ),
+        remove=_remove_trading_agents,
     ),
     _kind(
         "simplefin",

@@ -1,0 +1,18 @@
+{
+  "pinned_commit": "9fa1196fffbcfd9de5146d2dd2869df84ab99838",
+  "top_level_nodes": [
+    "Market Analyst",
+    "Sentiment Analyst",
+    "News Analyst",
+    "Fundamentals Analyst",
+    "Memory Log",
+    "Bull Researcher",
+    "Bear Researcher",
+    "Research Manager",
+    "Trader",
+    "Aggressive Analyst",
+    "Conservative Analyst",
+    "Neutral Analyst",
+    "Portfolio Manager"
+  ]
+}
