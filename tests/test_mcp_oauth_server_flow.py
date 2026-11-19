@@ -356,6 +356,16 @@ def test_get_and_delete_mcp_need_a_token_while_oauth_is_on(client):
     assert client.get("/mcp", headers={"Authorization": f"Bearer {token}"}).status_code == 405
 
 
+def test_head_mcp_answers_the_challenge_not_the_app_page(client):
+    """`curl -I /mcp` is how an owner checks a proxy setup: it must get the 401 challenge."""
+    res = client.head("/mcp")
+    assert res.status_code == 401
+    header = res.headers["www-authenticate"]
+    assert f'resource_metadata="{PUBLIC}/.well-known/oauth-protected-resource/mcp"' in header
+    token = connect(client)["access_token"]
+    assert client.head("/mcp", headers={"Authorization": f"Bearer {token}"}).status_code == 405
+
+
 # ── the consent page's app icon ──────────────────────────────────────────────────
 
 

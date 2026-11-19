@@ -347,11 +347,13 @@ def _oauth_gate(request: Request) -> Optional[JSONResponse]:
     return _require_mcp_bearer(request)[1]
 
 
-@router.get("/mcp")
+@router.api_route("/mcp", methods=["GET", "HEAD"])
 async def mcp_get_stream(request: Request) -> Response:
     """The optional server→client SSE stream (Streamable HTTP). We don't offer one, so per
     spec return 405 Method Not Allowed (clients fall back to request/response cleanly). An
-    explicit handler is needed so GET /mcp doesn't fall through to the SPA static mount (404)."""
+    explicit handler is needed so GET /mcp doesn't fall through to the SPA static mount (404).
+    HEAD is listed too: a FastAPI GET route doesn't answer it, so ``curl -I /mcp`` fell through
+    to the SPA and got its HTML (200) instead of the 401 challenge a setup check looks for."""
     denied = _oauth_gate(request)
     if denied is not None:
         return denied
