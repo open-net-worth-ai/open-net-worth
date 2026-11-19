@@ -37,6 +37,7 @@ import { VendorTrust } from './VendorTrust'
 import { McpConnectionFields } from './McpConnectionFields'
 import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
 import { MCP_INSTALL_PRESETS, type DirectoryRow } from './catalog'
+import { sameAddressAs, type ExistingServer, type SameAddress } from './directoryRows'
 import {
   EMPTY_MCP_FORM,
   displayName,
@@ -181,12 +182,11 @@ export interface McpAddFlow {
   idFixed: boolean
   /** The OAuth Sign-in button's own state — meaningful only while `form.auth === 'oauth'`. */
   oauth: McpOAuthState
-  /** `anotherAccount`: this entry is already added and the user is adding a second account of
-   *  it — the name defaults to that one (e.g. "Interactive Brokers 2") and the form warns that
-   *  the vendor may sign them back into the first account. */
-  start: (entry?: DirectoryRow, opts?: { anotherAccount?: string }) => void
-  /** The default name of the extra account being added, or null for an ordinary add. */
-  anotherAccount: string | null
+  /** `another`: this entry is already added and the user is adding another one of it. */
+  start: (entry?: DirectoryRow, opts?: { another?: SameAddress }) => void
+  /** Set while this add points at an address a server already uses — from "Add another", or a
+   *  Custom MCP server typed at that address. The form says so and the name is numbered. */
+  sameAddress: SameAddress | null
   runConnect: () => void
   back: () => void
   finish: () => void
@@ -207,11 +207,14 @@ export interface McpAddFlow {
 
 export function useMcpAddFlow({
   takenIds,
+  existingServers = [],
   editing = null,
   onSaved,
 }: {
   /** Already-installed server ids, so step 3's derived id is collision-suffixed. */
   takenIds: string[]
+  /** Already-added servers, so an add at an address one of them uses is named and flagged. */
+  existingServers?: ExistingServer[]
   /** A saved server to reopen the flow ON. Read once, at mount — the host renders this hook's
    *  modal only while it is open, so there is no stale-target effect to keep in sync. */
   editing?: McpEditTarget | null
@@ -254,7 +257,11 @@ export function useMcpAddFlow({
   // The directory card's name, when the flow began from one. A server's self-reported name is
   // often a package slug (Coinbase's CLI says `coinbase`), so the card we list it under wins.
   const catalogNameRef = useRef<string | null>(null)
-  const [anotherAccount, setAnotherAccount] = useState<string | null>(null)
+  const [another, setAnother] = useState<SameAddress | null>(null)
+  const sameAddress =
+    another ??
+    (!editing && form.transport === 'remote' ? sameAddressAs(form.url, existingServers) : null)
+  const defaultName = () => sameAddress?.name ?? catalogNameRef.current
 
   // ── OAuth sign-in (RFC `2026-08-14-mcp-oauth` §4.2/§4.3) ──────────────────────
   // `connected` alone is not enough to seed `signed_in`: a refresh can fail and mark
@@ -422,7 +429,7 @@ export function useMcpAddFlow({
     ? { auth_type: editing.authType, auth_header: editing.authHeader }
     : undefined
 
-  const start = (entry?: DirectoryRow, opts?: { anotherAccount?: string }) => {
+  const start = (entry?: DirectoryRow, opts?: { another?: SameAddress }) => {
     // Disown whatever probe the LAST time through this flow left running. The host modal
     // (`DirectoryModal`) has its own "Back to directory" control that hides this flow's view
     // (`setMcpOpen(false)`) without ever calling `back()` — it doesn't own a probe token to
@@ -438,9 +445,8 @@ export function useMcpAddFlow({
     setOauthClientId('')
     const preset = entry ? MCP_INSTALL_PRESETS[entry.id] : undefined
     // The generic slot names no server — the server's own report has to do there.
-    catalogNameRef.current =
-      opts?.anotherAccount ?? (entry && entry.id !== 'mcp-custom' ? entry.name : null)
-    setAnotherAccount(opts?.anotherAccount ?? null)
+    catalogNameRef.current = entry && entry.id !== 'mcp-custom' ? entry.name : null
+    setAnother(opts?.another ?? null)
     setFormState({
       ...EMPTY_MCP_FORM,
       transport: preset?.transport ?? 'remote',
@@ -528,7 +534,7 @@ export function useMcpAddFlow({
       setFormState((f) =>
         editing
           ? { ...f, name: f.name.trim() || result.name }
-          : { ...f, name: catalogNameRef.current ?? displayName(result.name), serverId: result.id },
+          : { ...f, name: defaultName() ?? displayName(result.name), serverId: result.id },
       )
       setMeta((m) =>
         mergeTrust(m, {
@@ -611,7 +617,7 @@ export function useMcpAddFlow({
       // `suggested_name` is already `serverInfo.name` with the backend's own endpoint-derived
       // fallback; `guessServerName` only covers a server that reported nothing at all.
       const name =
-        catalogNameRef.current ?? displayName(result.suggested_name.trim() || guessServerName(form))
+        defaultName() ?? displayName(result.suggested_name.trim() || guessServerName(form))
       setDiscoveredTools(result.tools)
       // Every NEWLY discovered tool starts at Needs approval — no tiering, no exceptions
       // (spec §4). On an edit the tools already permissioned keep the level they have: a
@@ -689,10 +695,7 @@ export function useMcpAddFlow({
     setSaving(true)
     void (async () => {
       const name =
-        form.name.trim() ||
-        catalogNameRef.current ||
-        displayName(guessServerName(form)) ||
-        'MCP server'
+        form.name.trim() || defaultName() || displayName(guessServerName(form)) || 'MCP server'
       // An OAuth sign-in already minted the row, dormant; saving names it rather than adding a
       // second one under a new id.
       const oauthCreatedId = form.auth === 'oauth' ? oauthServerIdRef.current : null
@@ -776,11 +779,33 @@ export function useMcpAddFlow({
     saveDormant,
     canSave,
     discardAbandonedOAuthServer,
-    anotherAccount,
+    sameAddress,
   }
 }
 
 // ── the body ────────────────────────────────────────────────────────────────
+
+/** An add at an address a server already uses: say which, that this adds ANOTHER one, and —
+ *  for a sign-in — that the vendor may hand back the account already added (UAT 2026-11-19). */
+function SameAddressNote({ flow }: { flow: McpAddFlow }): JSX.Element {
+  const { of, signIn } = flow.sameAddress!
+  const oauth = signIn || flow.form.auth === 'oauth'
+  const own = oauth ? 'sign-in' : flow.form.auth === 'key' ? 'key' : 'connection'
+  return (
+    <div className="cn-errorbox cn-errorbox-warn" role="note">
+      <div className="cn-errorbox-text">
+        You already added {of} at this address. This adds another one, with its own {own}, tools and
+        permissions.
+      </div>
+      {oauth ? (
+        <div className="cn-errorbox-note">
+          Sign out of {of} in your browser first, or its sign-in may put you straight back into the
+          account you already added.
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 /** `m:ss`, so a wait reads as a duration rather than a growing number of seconds. */
 function clock(seconds: number): string {
@@ -919,12 +944,7 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
         ...(connecting ? { flex: 1 } : {}),
       }}
     >
-      {flow.step === 'form' && flow.anotherAccount && flow.form.auth === 'oauth' && (
-        <span className="rd-help" role="note">
-          Adding another. Sign out of this service in your browser first, or its sign-in may put you
-          straight back into the account you already added.
-        </span>
-      )}
+      {flow.step === 'form' && flow.sameAddress && <SameAddressNote flow={flow} />}
       {flow.step === 'form' && <McpConnectionFields flow={flow} />}
 
       {flow.step === 'connecting' && <McpConnectingState flow={flow} />}

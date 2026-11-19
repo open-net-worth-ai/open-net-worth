@@ -201,20 +201,39 @@ export function setupTargetFor(
   return row.mcp ? { kind: 'add', id: row.id } : { kind: 'form', id: row.id }
 }
 
-/** The default name of one more account of an already-added sign-in server: a second account
- *  is a second server at the SAME URL, so it is numbered after every server already there
- *  ("Interactive Brokers 2") — two rows, and two sets of Lucius's tools, never read alike. */
-export function anotherAccountName(connectors: Connector[], entry: DirectoryRow): string {
-  const url = endpointKey(MCP_INSTALL_PRESETS[entry.id]?.url)
-  const already = connectors.filter(
-    (c) => c.id.startsWith(MCP_PREFIX) && endpointKey(toEntry(c).url) === url,
-  ).length
-  return `${entry.name} ${already + 1}`
-}
-
 /** Any MCP server from the directory can be added more than once — two sign-ins, two API
  *  keys, two local commands with different keys — each a server of its own. The generic
  *  "Custom MCP server" slot has its own add link and is never "added". */
 export function canAddAnotherAccount(d: DirectoryRow): boolean {
   return !!d.mcp && !d.generic
+}
+
+/** Another server at an address already in use: `of` is what the user calls the one they
+ *  have, `name` the default for the new one ("Interactive Brokers 2"). */
+export interface SameAddress {
+  of: string
+  name: string
+  /** The one already added signs in (OAuth): the new one will too, whatever the form says yet. */
+  signIn: boolean
+}
+
+/** A server already added, as far as "is this address taken?" needs to know. */
+export interface ExistingServer {
+  name: string
+  url: string
+  authType?: string
+}
+
+/** The servers already at `url`, and the name the next one there gets. Null for a new address. */
+export function sameAddressAs(url: string, existing: ExistingServer[]): SameAddress | null {
+  const key = endpointKey(url)
+  if (!key) return null
+  const there = existing.filter((s) => endpointKey(s.url) === key)
+  if (!there.length) return null
+  const of = there[0].name
+  return {
+    of,
+    name: `${of} ${there.length + 1}`,
+    signIn: there.some((s) => s.authType === 'oauth'),
+  }
 }

@@ -15,9 +15,14 @@ import { Icons } from './icons'
 import { DirectoryPreview, PreviewAction } from './DirectoryPreview'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
-import { type DirectoryRow, type DirectoryFamilyFilter, type DirectorySort } from './catalog'
-import { anotherAccountName, resolveDirectory } from './directoryRows'
-import { toEntry } from './adapter'
+import {
+  MCP_INSTALL_PRESETS,
+  type DirectoryRow,
+  type DirectoryFamilyFilter,
+  type DirectorySort,
+} from './catalog'
+import { resolveDirectory, sameAddressAs } from './directoryRows'
+import { mcpNeverConnected, toEntry } from './adapter'
 import { REST_LAUNCHER_ID } from './restApi'
 import type { ConnectorCategory, FocusConnectorOptions } from './model'
 import type { Connector } from './types'
@@ -88,8 +93,16 @@ export function DirectoryModal({
     .filter((c) => c.id.startsWith(MCP_PREFIX))
     .map((c) => c.id.slice(MCP_PREFIX.length))
 
+  const mcpServers = connectors.filter((c) => c.id.startsWith(MCP_PREFIX))
+  const existingServers = mcpServers.map((c) => ({
+    name: c.name,
+    url: toEntry(c).url ?? '',
+    authType: typeof c.config.auth_type === 'string' ? c.config.auth_type : undefined,
+  }))
+
   const flow = useMcpAddFlow({
     takenIds,
+    existingServers,
     onSaved: (name, toolCount, opts) => {
       toast?.(
         opts?.dormant
@@ -165,8 +178,16 @@ export function DirectoryModal({
     onFocusConnector(entry.installedId ?? entry.id)
   }
 
+  // Offered once the one already added has connected: next to "Finish setup" it read as the
+  // way forward, and a second half-added server is the last thing that user needs.
+  const canAddAnother = (entry: DirectoryRow) => {
+    const live = mcpServers.find((c) => c.id === entry.installedId)
+    return !!live && !mcpNeverConnected(live)
+  }
+
   const addAnother = (entry: DirectoryRow) => {
-    flow.start(entry, { anotherAccount: anotherAccountName(connectors, entry) })
+    const url = MCP_INSTALL_PRESETS[entry.id]?.url ?? ''
+    flow.start(entry, { another: sameAddressAs(url, existingServers) ?? undefined })
     setPreview(null)
     setMcpOpen(true)
   }
@@ -217,7 +238,7 @@ export function DirectoryModal({
       d={preview}
       onAdd={add}
       onConfigure={configure}
-      onAddAnother={addAnother}
+      onAddAnother={canAddAnother(preview) ? addAnother : undefined}
       className="cn-foot-action"
     />
   ) : preview ? (
@@ -273,7 +294,7 @@ export function DirectoryModal({
           liveTools={live?.tools?.map((t) => t.name)}
           onAdd={add}
           onConfigure={configure}
-          onAddAnother={addAnother}
+          onAddAnother={canAddAnother(preview) ? addAnother : undefined}
           actionInFooter={isMobile}
         />
       ) : (
