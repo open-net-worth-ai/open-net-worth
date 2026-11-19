@@ -3892,6 +3892,17 @@
       "include_year_ago": {
         "type": "boolean",
         "description": "Also return the same window one year earlier (the same calendar month last year for a month). Default false."
+      },
+      "group_by": {
+        "items": {
+          "enum": [
+            "month",
+            "payee"
+          ],
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Adds `groups`: each category (bills included, split lines in their own categories) by month and/or payee, and each payee across its categories. Use this, never SQL, for spending by category, month or payee."
       }
     },
     "required": [

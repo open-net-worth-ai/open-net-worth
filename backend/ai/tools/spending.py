@@ -44,6 +44,14 @@ class GetSpendingBreakdownInput(ToolInput):
             "year for a month). Default false."
         ),
     )
+    group_by: Optional[list[Literal["month", "payee"]]] = Field(
+        default=None,
+        description=(
+            "Adds `groups`: each category (bills included, split lines in their own "
+            "categories) by month and/or payee, and each payee across its categories. "
+            "Use this, never SQL, for spending by category, month or payee."
+        ),
+    )
 
 
 @tool(
@@ -86,5 +94,6 @@ async def get_spending_breakdown(input_data: dict):
         period=input_data.get("period") or None,
         baseline_periods=input_data.get("baseline_periods"),
         include_year_ago=bool(input_data.get("include_year_ago")),
+        group_by=input_data.get("group_by"),
     )
     return json.dumps(result, ensure_ascii=False), None
