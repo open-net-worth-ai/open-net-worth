@@ -2,10 +2,11 @@ import '../following/following.css'
 
 import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { ChevronDown, Plus, Search, Wrench } from 'lucide-react'
+import { ChevronDown, Plus, Wrench } from 'lucide-react'
 import '../../tabs/automations.css'
 import { LuciusMark } from '../../../ui/icons'
 import { AutomationMenu } from '../../tabs/automations/AutomationMenu'
+import { SearchBox } from '../following/Controls'
 import type { PaperCard as Card } from '../../../api/paperTrading'
 import { Button, EmptyState, ErrorState, TabSkeleton } from '../../ui'
 import { Spark } from '../../../lucius/identity'
@@ -115,19 +116,15 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
   return (
     <div className="fol-page">
       <section className="fol-sec" aria-label="Paper portfolios">
-        {/* The Automations page's own toolbar: search, then one New menu (Lucius or by hand). */}
-        <div className="a3-toolbar">
-          <label className="a3-search">
-            <Search size={15} strokeWidth={1.6} aria-hidden="true" />
-            <span className="ui-visually-hidden">Search paper portfolios</span>
-            <input
-              type="search"
-              value={query}
-              placeholder="Search paper portfolios…"
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <span className="grow" />
+        {/* Copy Trading's toolbar row (Investments' search, filling the row; it keeps itself
+            above a phone's keyboard) with the Automations page's New menu beside it. */}
+        <div className="fol-discover-bar">
+          <SearchBox
+            value={query}
+            onChange={setQuery}
+            label="Search paper portfolios"
+            placeholder="Search paper portfolios…"
+          />
           <AutomationMenu
             triggerClassName="a3-new-button"
             popoverClassName="a3-new-pop"
