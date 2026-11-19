@@ -46,7 +46,10 @@ from backend.services.statements.importer import (
     category_rows_for,
     external_ref,
     import_routing,
+    routed_other_leg,
+    statement_leg_only,
     strip_display_only,
+    unconverted_leg,
 )
 from backend.services.statements.parser import parse_statement_bytes, run_async, to_upload
 from backend.services.statements.tiers import (
@@ -503,14 +506,16 @@ def _booked_transfer_pool() -> list[dict]:
 def _find_booked_transfers(
     from_acct: str,
     to_acct: str,
-    from_amount: float,
-    to_amount: float,
+    from_amount: float | None,
+    to_amount: float | None,
     date: str,
     pool: list[dict] | None = None,
 ) -> list[tuple[int, dict]]:
     """ALL already-booked ledger transfers matching these exact legs (booked earlier by an
     agent/email/hand), as (day_gap, txn) sorted closest-date-first (stable on pool order).
-    Deterministic: same from/to accounts, both leg amounts within tolerance, date ≤ 2 days.
+    Deterministic: same from/to accounts, both leg amounts within tolerance, date ≤ 2 days. A
+    None amount is a leg the caller can't speak for (a routed row's converted side): the bank's
+    rate is unknown, so only the other leg is judged.
     Near-dup can't cover this — it is expense/income-only; a transfer needs its own check.
     Shared by the FX-pair check and the routed-draft echo check (SI-66). Returns the FULL
     ranked list so `_routed_booked_transfers` can assign 1:1 across rows — the old
@@ -532,9 +537,9 @@ def _find_booked_transfers(
         days = _days_apart(str(t.get("date") or ""), date)
         if days is None or days > 2:
             continue
-        if not _close(float(t.get("from_amount") or 0.0), from_amount):
+        if from_amount is not None and not _close(float(t.get("from_amount") or 0.0), from_amount):
             continue
-        if not _close(float(t.get("to_amount") or 0.0), to_amount):
+        if to_amount is not None and not _close(float(t.get("to_amount") or 0.0), to_amount):
             continue
         out.append((days, t))
     out.sort(key=lambda dt: dt[0])  # stable: pool order breaks day ties
@@ -752,11 +757,12 @@ def _routed_booked_transfers(results: list[RowResult]) -> dict[int, dict]:
             continue
         if pool is None:
             pool = [t for t in _booked_transfer_pool() if t.get("id") not in held]
+        unconverted = unconverted_leg(d)
         ranked = _find_booked_transfers(
             d["from_account_id"],
             d["to_account_id"],
-            float(d.get("from_amount") or 0.0),
-            float(d.get("to_amount") or 0.0),
+            None if unconverted == "from" else float(d.get("from_amount") or 0.0),
+            None if unconverted == "to" else float(d.get("to_amount") or 0.0),
             d.get("date") or "",
             pool,
         )
@@ -1733,6 +1739,9 @@ def decision_preview(
                 "to_account_id": r.draft["to_account_id"],
                 "to_account_name": routed_to.get("name"),
             }
+            other_leg = routed_other_leg(r.draft)
+            if other_leg is not None:
+                routed_info["other_leg"] = other_leg
         if r.draft is not None and target is None and ctx.resolved:
             flags.append(
                 {
@@ -2545,7 +2554,9 @@ def _decision_commit_locked(
                 f.get("type") == "transfer_pair" and f.get("existing_id") == existing_id
                 for f in r.flags
             )
-            merges.append((idx, existing_id, strip_display_only(draft), is_transfer_pair))
+            merges.append(
+                (idx, existing_id, statement_leg_only(strip_display_only(draft)), is_transfer_pair)
+            )
             if fired_routing_automation:
                 fired_routing_automations.append((fired_routing_automation, existing_id, []))
         else:

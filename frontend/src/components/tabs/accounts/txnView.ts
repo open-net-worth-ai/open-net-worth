@@ -9,7 +9,7 @@
 
 import { getBaseCurrency, txnMentionSublabel } from '../../../utils/format'
 import type { Txn, Account, FxRates } from './types'
-import { fCur, fxInfo, toBase } from './format'
+import { fCur, fxInfo, otherSideFlow, toBase } from './format'
 
 export type TransferLeg = 'source' | 'destination'
 
@@ -188,9 +188,9 @@ function amountSubLine(
   const native = showNative ? fCur(Math.abs(amount), ccy, { cents: true }) : null
   let flow = native
   if (xccyOther && xccyOther.amt != null) {
-    const other = fCur(Math.abs(xccyOther.amt), xccyOther.ccy, { cents: true })
-    if (xccyOther.sent) flow = native ? `${other} → ${native}` : `${other} →`
-    else flow = native ? `${native} → ${other}` : `→ ${other}`
+    const other = otherSideFlow(xccyOther.amt, xccyOther.ccy, xccyOther.sent)
+    if (!native) flow = other
+    else flow = xccyOther.sent ? `${other} ${native}` : `${native} ${other}`
   }
   const parts: string[] = []
   if (flow) parts.push(flow)

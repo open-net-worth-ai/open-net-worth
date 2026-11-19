@@ -36,7 +36,7 @@ from backend.core.untrusted import fence_untrusted_block, make_fence_nonce, sani
 from backend.services import ledger as ledger_service
 from backend.services.import_common import RowResult
 from backend.services.statements.canonical import CanonicalRow
-from backend.services.statements.importer import route_transfer_draft
+from backend.services.statements.importer import lacks_route_rate, route_transfer_draft
 from backend.services.statements.profiles import MAX_INSTRUCTIONS_CHARS
 
 logger = logging.getLogger(__name__)
@@ -1289,13 +1289,34 @@ def _validate_ops(
 # ── Application (preview batch + commit per-draft — the SAME deterministic appliers) ──
 
 
+def _flag_missing_rate(r: RowResult, currency: str, account_id: str, target: dict | None) -> None:
+    """A transfer the owner asked for and only a missing rate refused: the row stays plain, so
+    it must say so — it would otherwise book as spending or income with no word why."""
+    if target is None or target.get("archived") or target["id"] == account_id:
+        return
+    if not lacks_route_rate(currency, target):
+        return
+    target_ccy = (target.get("currency") or "").upper()
+    r.flags.append(
+        {
+            "type": "transfer_no_rate",
+            "reason": (
+                f"No exchange rate for {currency} → {target_ccy}, so this can't book as a "
+                f"transfer with {target.get('name') or target['id']}. Refresh exchange rates "
+                "and read the statement again, or keep it as a plain row."
+            ),
+        }
+    )
+
+
 def apply_lucius_ops(
     results: list[RowResult], rows: list[CanonicalRow], ops: list[dict], ctx
 ) -> dict[int, dict]:
     """Mutate the offered drafts per the validated ops. Returns {row_index: provenance}
     for what actually stuck — the preview strip/chips render from this, so a contextually
-    refused op (currency mismatch, FX-pair row, a rule already routed it) is invisible
-    rather than half-claimed. ``ctx`` is the decision flow's routing context (duck-typed:
+    refused op (no rate for the other currency, FX-pair row, a rule already routed it) is never
+    half-claimed; a missing rate alone also flags the row. ``ctx`` is the decision flow's routing
+    context (duck-typed:
     ``pairs`` / ``target_for`` / ``row_currency``)."""
     if not ops:
         return {}
@@ -1334,20 +1355,17 @@ def apply_lucius_ops(
                     idx,
                 )
                 continue  # unroutable currency — never book blind
+            target = accounts.get(str(op.get("account_id") or ""))
             routed = route_transfer_draft(
-                r.draft,
-                row,
-                account_id,
-                ctx.row_currency(row),
-                accounts.get(str(op.get("account_id") or "")),
-                ROUTE_SENTINEL,
+                r.draft, row, account_id, ctx.row_currency(row), target, ROUTE_SENTINEL
             )
             if routed is None:
                 logger.info(
                     "lucius apply: dropping row %d route_transfer — route_transfer_draft "
-                    "refused it (currency/account guard)",
+                    "refused it (rate/account guard)",
                     idx,
                 )
+                _flag_missing_rate(r, ctx.row_currency(row), account_id, target)
                 continue
             r.draft = routed
             # The matcher ran BEFORE this pass (ADR 2026-07-28) under the row's OLD, unrouted
