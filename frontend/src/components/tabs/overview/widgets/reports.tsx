@@ -190,6 +190,8 @@ function useReports(instance: WidgetInstance, def: WidgetDefinition, merchantLim
     meta,
     span,
     periodLabel: sc.periodLabel,
+    // The chosen period's own name while its months are still loading (never the default's).
+    chosen: sc.scope.period ? sc.periodLabel : '',
     tags: sc.tags,
     categories: sc.categories,
   }
@@ -224,14 +226,14 @@ function MonthNote({ children }: { children: string }) {
 // same shape as the Net-worth group's alloc/reach/venues widgets ───────────
 
 const SpendCategories: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
-  const { data, loading, error, meta, span } = useReports(instance, def)
+  const { data, loading, error, meta, span, chosen } = useReports(instance, def)
   const viz = vizOf(instance, def) || 'list'
   const shown = spendingMonth(data)
   const filter = filterPill(
     instance,
     def,
     onPatch,
-    span || (shown.fellBack && shown.ym ? fMonth(shown.ym, 'short') : 'This month'),
+    span || chosen || (shown.fellBack && shown.ym ? fMonth(shown.ym, 'short') : 'This month'),
   )
   // Server-ranked, server-summed; the widget attaches a fallback colour and renders.
   const rows: BreakdownRow[] = withColor(shown.point?.expense_rows ?? []).map((r) => ({
@@ -778,7 +780,7 @@ function gaugeConfig(value: number, total: number, color: string) {
 const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
   // Saved amount and rate come from the server's own savings figure — the same month totals
   // the rest of this group renders, so the gauge can't disagree with the table beside it.
-  const { data, loading, error, meta, span } = useReports(instance, def)
+  const { data, loading, error, meta, span, chosen } = useReports(instance, def)
   const period = data?.period
   const savedYm = data?.savings?.ym
   const filter = filterPill(
@@ -786,6 +788,7 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
     def,
     onPatch,
     span ||
+      chosen ||
       (savedYm && savedYm !== data?.current?.ym ? fMonth(`${savedYm}-01`, 'short') : 'This month'),
   )
   const savings = period?.savings ?? data?.savings
@@ -849,7 +852,11 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
   const cap = rowCap(instance, def) ?? 25
   // Grouped by payee and ranked server-side (no endpoint does per-month payee spend — see the
   // header note), so the browser no longer pulls the month's raw expense legs to fold them.
-  const { data, loading, error, meta, span, tags, categories } = useReports(instance, def, cap)
+  const { data, loading, error, meta, span, chosen, tags, categories } = useReports(
+    instance,
+    def,
+    cap,
+  )
   const shown = spendingMonth(data)
   const rows = shown.merchants.slice(0, cap)
   const month = shown.ym
@@ -857,7 +864,7 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
     instance,
     def,
     onPatch,
-    span || (shown.fellBack && month ? fMonth(month, 'short') : 'This month'),
+    span || chosen || (shown.fellBack && month ? fMonth(month, 'short') : 'This month'),
   )
   const when = data?.period
     ? `in ${meta}`

@@ -80,7 +80,12 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({
   // What the card is narrowed to, for its empty state and its accessible name.
   const where = [span, cats, tagsText(sc.tags)].filter(Boolean).join(' · ')
   const filter = onPatch ? (
-    <ReportFilter instance={instance} def={def} onPatch={onPatch} label={span} />
+    <ReportFilter
+      instance={instance}
+      def={def}
+      onPatch={onPatch}
+      label={g || !sc.scope.period ? span : sc.periodLabel}
+    />
   ) : undefined
   const link =
     onNavigate && def.source?.tab ? (

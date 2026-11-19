@@ -346,15 +346,32 @@
    chart toggle's trigger; a filtered widget's pill is accented so a narrowed figure is never
    mistaken for the whole book. ── */
 
-.ov-rf-trigger {
-  min-width: 0;
+/* The pill is the one header control that may shrink: on a narrow card it truncates rather than
+   push the chart toggle and the widget menu out of the card. (The chart toggle's own rule sets
+   `flex: none`; these selectors outrank it.) */
+.ov-rf-wrap {
   flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* A widget header's action row never outgrows its card: the shared panel style lets it grow to
+   its content's width, which with a filter pill pushed the chart toggle and menu off the card. */
+.ov-widget-panel .ui-panel__actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ov-charttoggle__trigger.ov-rf-trigger {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .ov-rf-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 180px;
+  max-width: 220px;
 }
 
 .ov-rf-trigger.is-filtered {
@@ -430,5 +447,39 @@
   color: var(--accent);
   font: inherit;
   font-size: 12px;
+  cursor: pointer;
+}
+
+/* Phone: the same sections in a bottom sheet, with rows a thumb can hit. */
+.ov-rf-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ov-rf-sheet .ov-rf-check {
+  min-height: 44px;
+  font-size: 15px;
+}
+
+/* About six rows, scrolling inside, so Tags stays within reach below. */
+.ov-rf-sheet .ov-rf-list {
+  max-height: 268px;
+  overscroll-behavior: contain;
+}
+
+.ov-rf-sheet .ov-fs-chip {
+  min-height: 36px;
+}
+
+.ov-rf-done {
+  width: 100%;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--ink);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
   cursor: pointer;
 }
