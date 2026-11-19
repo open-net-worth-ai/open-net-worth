@@ -54,6 +54,9 @@ the ones you take by hand end in `-manual.zip`.
 These backups live on the **same disk** as your book. To protect against losing the computer,
 also keep a copy somewhere else — see the next section.
 
+> **These backups include your credentials, unencrypted.** Keep the folder out of cloud sync and
+> shared drives. To copy a backup elsewhere, use **Download**, which strips them.
+
 ## Keep a copy somewhere else
 
 In **Settings → Data → Restore from a backup**, click **Download** next to a backup. The

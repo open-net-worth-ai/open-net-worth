@@ -340,6 +340,9 @@ export function DataSection({ toast }: SectionProps) {
             kept, listed below
           </span>
         </div>
+        <span className="rd-help">
+          Local backups include your credentials, unencrypted. <b>Download</b> strips them.
+        </span>
       </Panel>
 
       <Panel
