@@ -32,6 +32,9 @@ Open **Connectors → TradingAgents**. The sections, in order:
 - **Install**: one click builds TradingAgents in its own environment inside your data folder, from
   a fixed, reviewed version. It is a large download and can take several minutes. It never installs
   by itself. Removing the TradingAgents connector deletes the environment and everything it wrote (your runs stay).
+  After an Open Net Worth update that changes the pinned version, the section says it needs
+  reinstalling and the card on Intel points you here; click **Reinstall**. When a chosen model has
+  no known price, the run form names it and a run on it is refused.
 - **Models**: a **Deep-thinking model** (the research manager and the portfolio manager, the two
   decisions that matter most; default your Lucius model) and a **Quick model** (everything else,
   which is most of the calls; default your Intel model, else the deep one). Both are models from

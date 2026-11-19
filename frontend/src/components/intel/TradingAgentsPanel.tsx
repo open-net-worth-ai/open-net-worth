@@ -41,6 +41,8 @@ function unavailable(status: TaStatus): Unavailable | null {
       return { message: 'The TradingAgents connector is paused.', action: 'Resume' }
     case 'installing':
       return { message: 'Installing TradingAgents…', action: null }
+    case 'needs_reinstall':
+      return { message: 'TradingAgents needs reinstalling after an update.', action: 'Open setup' }
     case 'model_unavailable':
       return { message: status.availability.message, action: 'Choose models' }
     default:

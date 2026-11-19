@@ -104,6 +104,19 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+describe('after an update', () => {
+  it('shows the reinstall message in Install and offers the reinstall button', () => {
+    const message = 'TradingAgents needs reinstalling after an update.'
+    setup(CONFIG, makeStatus({ availability: { status: 'needs_reinstall', message } }))
+    mount()
+    const install = document.querySelectorAll('section.ta-section')[1]!
+    expect(install.textContent).toContain(message)
+    expect(screen.getByText('Needs reinstall')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reinstall' }))
+    expect(api.installTa).toHaveBeenCalled()
+  })
+})
+
 describe('the form', () => {
   it('shows the eight sections in order, and no AI key field', () => {
     mount()

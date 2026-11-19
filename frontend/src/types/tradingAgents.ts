@@ -7,6 +7,7 @@ export type TaAvailabilityStatus =
   | 'connector_off'
   | 'connector_paused'
   | 'not_installed'
+  | 'needs_reinstall'
   | 'installing'
   | 'model_unavailable'
   | 'ready'
@@ -52,6 +53,8 @@ export interface TaEstimate {
   plan_included: boolean
   /** False when a metered model has no known price, so the figure understates. */
   priced: boolean
+  /** Models with no known price: a metered run on one is refused. */
+  unpriced_models: string[]
 }
 
 export interface TaPortfolio {
@@ -71,6 +74,7 @@ export interface TaDisclosure {
   average_price_omitted: string[]
   partial_cost: string[]
   cash_omitted: string | null
+  cash_floored: string | null
 }
 
 /** GET /api/trading-agents/context-preview, and `run.context_sent`. */

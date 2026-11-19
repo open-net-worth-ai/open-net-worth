@@ -20,6 +20,7 @@ const AVAILABILITY: Record<TaAvailabilityStatus, { label: string; tone: BadgeTon
   installing: { label: 'Installing', tone: 'warn' },
   model_unavailable: { label: 'Model unavailable', tone: 'warn' },
   not_installed: { label: 'Needs install', tone: 'neutral' },
+  needs_reinstall: { label: 'Needs reinstall', tone: 'warn' },
   connector_paused: { label: 'Paused', tone: 'muted' },
   connector_off: { label: 'Not set up', tone: 'neutral' },
   flag_off: { label: 'Off', tone: 'muted' },
@@ -77,7 +78,12 @@ export function TradingAgentsSection() {
       </Cluster>
       <NoticeSection accepted={st.disclaimer_accepted} />
       <Section title="Install">
-        <TradingAgentsInstall install={st.install} />
+        <TradingAgentsInstall
+          install={st.install}
+          reinstallMessage={
+            st.availability.status === 'needs_reinstall' ? st.availability.message : null
+          }
+        />
       </Section>
       <ModelsSection
         draft={draft}

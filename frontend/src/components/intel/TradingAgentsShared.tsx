@@ -23,6 +23,7 @@ export function TradingAgentsShared({
     disclosure.partial_cost.length > 0 &&
       `Average price for ${disclosure.partial_cost.join(', ')} covers only the lots with a known cost.`,
     disclosure.cash_omitted && `Cash left out: ${disclosure.cash_omitted}.`,
+    disclosure.cash_floored && `Cash shown as zero: ${disclosure.cash_floored}.`,
   ].filter((n): n is string => !!n)
 
   return (

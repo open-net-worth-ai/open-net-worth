@@ -23,6 +23,7 @@ export const CONTEXT: TaContext = {
     average_price_omitted: ['GLOBEX'],
     partial_cost: [],
     cash_omitted: null,
+    cash_floored: null,
   },
 }
 

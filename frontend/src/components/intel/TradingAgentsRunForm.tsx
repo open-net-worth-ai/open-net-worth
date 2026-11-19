@@ -54,7 +54,9 @@ function EstimateText({ estimate, plan }: { estimate: TaEstimate; plan: string |
       </Text>
       {!estimate.priced && (
         <Text size="sm" tone="warn">
-          A model has no known price, so this understates.
+          {estimate.unpriced_models.length > 0
+            ? `No price known for ${estimate.unpriced_models.join(', ')} — a run on it is refused.`
+            : 'A model has no known price, so this understates.'}
         </Text>
       )}
     </>

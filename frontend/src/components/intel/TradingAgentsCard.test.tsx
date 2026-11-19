@@ -69,6 +69,7 @@ function setup(opts: { status?: TaStatus; runs?: TaRunSummary[]; run?: TaRun; to
     sample_size: 10,
     plan_included: false,
     priced: true,
+    unpriced_models: [],
   })
   state.preview = query(CONTEXT)
 }
@@ -129,6 +130,12 @@ describe('not available', () => {
       'not installed',
       { availability: { status: 'not_installed', message: 'Install TradingAgents first.' } },
       'Install TradingAgents first.',
+      'Open setup',
+    ],
+    [
+      'needs reinstall',
+      { availability: { status: 'needs_reinstall', message: 'Reinstall.' } },
+      'TradingAgents needs reinstalling after an update.',
       'Open setup',
     ],
     [
@@ -248,10 +255,29 @@ describe('ready, no runs (the form)', () => {
       sample_size: 0,
       plan_included: true,
       priced: true,
+      unpriced_models: [],
     })
     mount()
     expect(
       screen.getByText('Uses your Claude Code plan · about 40 model calls · no dollars'),
+    ).toBeTruthy()
+  })
+
+  it('names the models with no known price', () => {
+    state.estimate = query({
+      estimate_usd: 0.42,
+      low_usd: 0.3,
+      high_usd: 0.6,
+      calls: 38,
+      basis: 'static' as const,
+      sample_size: 0,
+      plan_included: false,
+      priced: false,
+      unpriced_models: ['acme-1', 'acme-2'],
+    })
+    mount()
+    expect(
+      screen.getByText('No price known for acme-1, acme-2 — a run on it is refused.'),
     ).toBeTruthy()
   })
 

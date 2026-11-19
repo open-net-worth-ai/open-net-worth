@@ -21,7 +21,13 @@ const BUTTON: Record<TaStatus['install']['status'], string> = {
 
 /** The install block: an isolated Python environment in the data folder, installed once. A
  *  failure shows the install's own error as the log tail (there is no separate log). */
-export function TradingAgentsInstall({ install }: { install: TaStatus['install'] }) {
+export function TradingAgentsInstall({
+  install,
+  reinstallMessage = null,
+}: {
+  install: TaStatus['install']
+  reinstallMessage?: string | null
+}) {
   const wrote = useConnectorWrote()
   const [error, setError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
@@ -56,6 +62,11 @@ export function TradingAgentsInstall({ install }: { install: TaStatus['install']
         local analysis logs inside your data folder, which are deleted when you remove the connector
         or the run.
       </div>
+      {reinstallMessage && (
+        <Text size="sm" tone="warn" role="status">
+          {reinstallMessage}
+        </Text>
+      )}
       <Cluster justify="between" gap="--space-4">
         <Cluster gap="--space-4">
           <Badge tone={state.tone}>{state.label}</Badge>
@@ -67,7 +78,7 @@ export function TradingAgentsInstall({ install }: { install: TaStatus['install']
         </Cluster>
         <Button
           size="sm"
-          variant={install.status === 'ready' ? 'secondary' : 'primary'}
+          variant={install.status === 'ready' && !reinstallMessage ? 'secondary' : 'primary'}
           loading={installing || starting}
           onClick={() => void start()}
         >

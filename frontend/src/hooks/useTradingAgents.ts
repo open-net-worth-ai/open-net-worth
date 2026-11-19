@@ -18,7 +18,8 @@ import type {
   TaStatus,
 } from '../types/tradingAgents'
 
-const BASE = '/api/trading-agents'
+const SEGMENT = 'trading-agents'
+const BASE = `/api/${SEGMENT}`
 export const TA_STATUS_KEY = `${BASE}/status`
 export const TA_CONFIG_KEY = `${BASE}/config`
 export const TA_COST_KEY = '/api/cost/trading-agents'
