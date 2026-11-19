@@ -2141,6 +2141,9 @@
 .ov-fs-main {
   flex: 1 1 auto;
   min-width: 0;
+  /* The shell stacks top to bottom: without this the main area grew to its content's height
+     and ran past the window (full screen lost the card's bottom edge). */
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -2264,6 +2267,16 @@
   flex-direction: column;
   align-items: center;
   gap: 22px;
+  /* Stacked, never wrapped: the grid card's `flex-wrap: wrap` + `height: 100%` made a long
+     legend wrap into a second column beside the donut, too narrow for its amounts. The card
+     scrolls instead. */
+  flex-wrap: nowrap;
+  height: auto;
+}
+
+.ov-fs-card .ov-breakdown-pie .ov-breakdown-list {
+  max-height: none;
+  overflow-y: visible;
 }
 
 .ov-fs-card .ov-breakdown-pie .ov-breakdown-list {
