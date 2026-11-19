@@ -78,9 +78,8 @@ on its name (the first view can't be deleted).
 
 **Widget menu** — outside Customize mode, each widget's **⋯** menu offers **Edit…** (the same
 settings as **Edit** in Customize — title, chart type, categories and so on), **Display…** (accent
-color, hide title, fixed height), **Set alert…**, **Share with Lucius**, **Duplicate** and
-**Remove**, and a link to the tab it comes from. **Set alert…** has Lucius notify you when the
-widget's number crosses a threshold you choose.
+color, hide title, fixed height), **Share with Lucius**, **Duplicate** and **Remove**, and a
+link to the tab it comes from.
 
 **Build with Lucius** — in **Add widget**, describe what you want ("my USD exposure over time")
 and Lucius builds the widget. An empty view also offers **Build with Lucius** to assemble a whole
@@ -125,15 +124,16 @@ that month.
 Every Reports widget has a filter in its own header: a small pill naming what it shows (for
 example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place. The same
 filters are also in the widget's editor (**Edit**): **Filters** down the right, **Appearance**
-under the preview:
+under the preview. Savings rate, which has a period alone, opens a plain list of periods
+instead, and its editor shows **Period** with its other settings:
 
 - **Period.** Spending by category, Top merchants, Savings rate and Money flow can show
   **This month**, **Last month**, **3 months**, **6 months**, **12 months** or **This year**,
   added up as one figure. **3/6/12 months** end with this month, so they include the month in
   progress. Spending trends, Income vs expense and Income & expense table chart month by month,
   so they offer **3 months**, **6 months**, **12 months** or **This year**. Every one also
-  offers **Custom**: pick a **From** and a **To** month, and it covers both and every month
-  between.
+  offers **Custom**: pick a **From** and a **To** month and year, and it covers both and every
+  month between.
 - **Categories.** Pick one or more (search the list) to count only those categories. A split
   transaction counts only its split in the chosen category.
 - **Tags.** Search the list and pick one or more to count only transactions carrying any of

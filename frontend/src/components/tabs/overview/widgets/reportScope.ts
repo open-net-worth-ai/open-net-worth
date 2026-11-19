@@ -124,3 +124,8 @@ export function monthSpan(from: string, to: string): string {
 export function tagsText(tags: string[]): string {
   return tags.map((t) => `#${t}`).join(' ')
 }
+
+/** Whether a Reports widget filters by category or tag (not by period alone). */
+export function reportHasFilters(def: WidgetDefinition): boolean {
+  return !!def.settings?.some((s) => s.key === 'categories' || s.key === 'tags')
+}

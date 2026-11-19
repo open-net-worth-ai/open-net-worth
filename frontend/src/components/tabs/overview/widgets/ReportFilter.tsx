@@ -6,18 +6,20 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, ChevronLeft, ChevronRight } from '../../../../ui/icons'
+import { Check, ChevronDown } from '../../../../ui/icons'
 import { BottomSheet } from '../../../ui/BottomSheet'
 import { Checkbox } from '../../../ui'
-import { ChartToggleMenu } from '../ChartToggleMenu'
 import { fMonth } from '../../../../utils/format'
 import { useIsMobile } from '../../../../hooks/useIsMobile'
 import { useCategories } from '../../../../hooks/serverState'
 import { useTransactionTags } from '../../accounts/tagOptions'
+import { FilterCombo } from '../../accounts/pickers'
 import type { WidgetDefinition, WidgetInstance } from '../types'
-import { CUSTOM_PERIOD, reportScope } from './reportScope'
+import { CUSTOM_PERIOD, reportHasFilters, reportScope } from './reportScope'
 
 const POPOVER_W = 320
+/** A period-only widget's menu: a menu's width, room for Custom's From / To rows. */
+const MENU_W = 248
 
 interface Props {
   instance: WidgetInstance
@@ -44,7 +46,8 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
   useLayoutEffect(() => {
     if (!open || isMobile || !wrapRef.current) return
     const r = wrapRef.current.getBoundingClientRect()
-    const left = Math.min(Math.max(8, r.right - POPOVER_W), window.innerWidth - POPOVER_W - 8)
+    const w = reportHasFilters(def) ? POPOVER_W : MENU_W
+    const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8)
     setPos({ top: r.bottom + 6, left: Math.max(8, left), maxH: window.innerHeight - r.bottom - 20 })
   }, [open, isMobile])
 
@@ -78,7 +81,13 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
     sc.tags.length === 0 ? '' : sc.tags.length === 1 ? `#${sc.tags[0]}` : `${sc.tags.length} tags`
   const filtered = sc.categories.length > 0 || sc.tags.length > 0
   const summary = [label, catText, tagText].filter(Boolean).join(' · ')
-  const body = <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
+  // A widget with a period alone opens a plain menu of periods; one that also filters by
+  // category or tag opens the filter box.
+  const body = reportHasFilters(def) ? (
+    <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
+  ) : (
+    <ReportPeriodControl instance={instance} def={def} onPatch={onPatch} list />
+  )
 
   return (
     <div className="kebab-wrap ov-rf-wrap" ref={wrapRef}>
@@ -114,7 +123,10 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
         !isMobile &&
         createPortal(
           <div
-            className="kebab-menu kebab-menu--portal ov-rf-pop"
+            className={
+              'kebab-menu kebab-menu--portal ov-rf-pop' +
+              (reportHasFilters(def) ? '' : ' ov-rf-pop--menu')
+            }
             role="dialog"
             aria-label="Filter this widget"
             ref={popRef}
@@ -123,7 +135,7 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
                 ? {
                     top: pos.top,
                     left: pos.left,
-                    width: POPOVER_W,
+                    width: reportHasFilters(def) ? POPOVER_W : MENU_W,
                     maxHeight: pos.maxH,
                     pointerEvents: 'auto',
                   }
@@ -136,6 +148,32 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
           document.body,
         )}
     </div>
+  )
+}
+
+/** The Period control on its own — a Savings rate's whole filter. `list` draws it as a
+ *  menu's rows (its header button); otherwise it is the field the editor shows. */
+export function ReportPeriodControl({
+  instance,
+  def,
+  onPatch,
+  list = false,
+}: {
+  instance: WidgetInstance
+  def: WidgetDefinition
+  onPatch: (patch: Partial<WidgetInstance>) => void
+  list?: boolean
+}) {
+  const sc = reportScope(instance, def)
+  return (
+    <PeriodSection
+      def={def}
+      value={sc.periodLabel}
+      custom={sc.custom}
+      config={instance.config ?? {}}
+      onPatch={(next) => onPatch({ config: { ...instance.config, ...next } })}
+      list={list}
+    />
   )
 }
 
@@ -200,134 +238,142 @@ function PeriodSection({
   custom,
   config,
   onPatch,
+  list = false,
 }: {
   def: WidgetDefinition
   value: string
   custom: { from: string; to: string } | null
   config: Record<string, unknown>
   onPatch: (next: Record<string, unknown>) => void
+  /** The options as a menu's rows (the header button of a widget with a period alone). */
+  list?: boolean
 }) {
   const options = def.settings?.find((s) => s.key === 'period')?.options ?? []
   const from = typeof config.periodFrom === 'string' ? config.periodFrom : ''
   const to = typeof config.periodTo === 'string' ? config.periodTo : ''
   const pick = (o: string) =>
     o === CUSTOM_PERIOD && !custom
-      ? // First time on Custom: the last three full months, to edit from there.
+      ? // First time on Custom: the last three full months, to change from there.
         onPatch({ period: o, periodFrom: from || monthsAgo(3), periodTo: to || monthsAgo(1) })
       : onPatch({ period: o })
-  // A From after the To (or a To before the From) moves the other end with it.
-  const setFrom = (v: string) =>
-    v && onPatch({ periodFrom: v, ...(to && v > to ? { periodTo: v } : {}) })
-  const setTo = (v: string) =>
-    v && onPatch({ periodTo: v, ...(from && v < from ? { periodFrom: v } : {}) })
+  const range =
+    value === CUSTOM_PERIOD ? (
+      <CustomRange
+        from={from}
+        to={to}
+        onChange={(f, t) => onPatch({ periodFrom: f, periodTo: t })}
+      />
+    ) : null
+  if (list) {
+    return (
+      <>
+        <div role="menu" aria-label="Period">
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              role="menuitemradio"
+              aria-checked={value === o}
+              className={
+                'kebab-item ov-charttoggle__item' +
+                (value === o ? ' ov-charttoggle__item--active' : '')
+              }
+              onClick={() => pick(o)}
+            >
+              <span>{o}</span>
+              {value === o && <Check size={13} strokeWidth={2.4} aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+        {range}
+      </>
+    )
+  }
   return (
     <section className="ov-rf-sec">
       <h4 className="ov-rf-h">Period</h4>
-      <div>
-        <ChartToggleMenu
-          ariaLabel="Period"
-          value={value}
-          options={options.map((o) => ({ value: o, label: o }))}
-          onChange={pick}
-        />
-      </div>
-      {value === CUSTOM_PERIOD && (
-        <CustomRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
-      )}
+      <FilterCombo
+        value={value}
+        options={options.map((o) => ({ value: o, label: o }))}
+        anyLabel="Period"
+        clearable={false}
+        onChange={pick}
+      />
+      {range}
     </section>
   )
 }
 
-const MONTH_NAMES = Array.from({ length: 12 }, (_, i) =>
-  fMonth(`2000-${String(i + 1).padStart(2, '0')}`, 'short', 'never'),
-)
+const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 1).padStart(2, '0'),
+  label: fMonth(`2000-${String(i + 1).padStart(2, '0')}`, 'short', 'never'),
+}))
 
-/** From and To, each a month button that opens a year-and-month grid in place. */
+/** A custom period's From and To, drawn as the Accounts register's own date range: a Month and
+ *  a Year picker per row (FilterCombo; a native select on a phone, as there). */
 function CustomRange({
   from,
   to,
-  setFrom,
-  setTo,
+  onChange,
 }: {
   from: string
   to: string
-  setFrom: (v: string) => void
-  setTo: (v: string) => void
+  onChange: (from: string, to: string) => void
 }) {
-  const [editing, setEditing] = useState<'from' | 'to' | null>(null)
-  const field = (key: 'from' | 'to', label: string, v: string) => (
-    <div className="ov-rf-range-f">
-      <span className="ov-rf-range-l">{label}</span>
-      <button
-        type="button"
-        className={'ov-charttoggle__trigger' + (editing === key ? ' is-open' : '')}
-        aria-expanded={editing === key}
-        aria-label={`${label}: ${v ? fMonth(v, 'short', 'always') : 'not set'}`}
-        onClick={() => setEditing((e) => (e === key ? null : key))}
+  const isMobile = useIsMobile()
+  const thisYear = new Date().getFullYear()
+  const years = new Set(Array.from({ length: 11 }, (_, i) => thisYear - i))
+  for (const m of [from, to]) if (m) years.add(Number(m.slice(0, 4)))
+  const yearOpts = [...years]
+    .sort((x, y) => y - x)
+    .map((y) => ({ value: String(y), label: String(y) }))
+  // Moving one end past the other moves the other with it, so the range never runs backwards.
+  const set = (end: 'from' | 'to', part: 'm' | 'y', v: string) => {
+    const cur = end === 'from' ? from : to
+    const next = part === 'y' ? `${v}-${cur.slice(5, 7)}` : `${cur.slice(0, 4)}-${v}`
+    if (end === 'from') onChange(next, next > to ? next : to)
+    else onChange(next < from ? next : from, next)
+  }
+  const pickerFor = (end: 'from' | 'to', part: 'm' | 'y') => {
+    const cur = end === 'from' ? from : to
+    const value = part === 'm' ? cur.slice(5, 7) : cur.slice(0, 4)
+    const opts = part === 'm' ? MONTH_OPTS : yearOpts
+    const label = `${end === 'from' ? 'From' : 'To'} ${part === 'm' ? 'month' : 'year'}`
+    return isMobile ? (
+      <select
+        className="acct-advselect"
+        aria-label={label}
+        value={value}
+        onChange={(e) => set(end, part, e.target.value)}
       >
-        <span>{v ? fMonth(v, 'short', 'always') : 'Pick a month'}</span>
-        <ChevronDown size={11} strokeWidth={2.2} aria-hidden="true" />
-      </button>
-    </div>
-  )
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    ) : (
+      <FilterCombo
+        value={value}
+        options={opts}
+        anyLabel={label}
+        clearable={false}
+        popW={part === 'm' ? 148 : 120}
+        onChange={(v) => set(end, part, v)}
+      />
+    )
+  }
   return (
-    <>
-      <div className="ov-rf-range">
-        {field('from', 'From', from)}
-        {field('to', 'To', to)}
+    <div className="ov-rf-range">
+      <div className="acct-advrow">
+        <span className="acct-advlbl">From</span>
+        {pickerFor('from', 'm')}
+        {pickerFor('from', 'y')}
       </div>
-      {editing && (
-        <MonthGrid
-          value={editing === 'from' ? from : to}
-          onPick={(m) => {
-            if (editing === 'from') setFrom(m)
-            else setTo(m)
-            setEditing(null)
-          }}
-        />
-      )}
-    </>
-  )
-}
-
-function MonthGrid({ value, onPick }: { value: string; onPick: (m: string) => void }) {
-  const [year, setYear] = useState(() => Number((value || monthsAgo(0)).slice(0, 4)))
-  return (
-    <div className="ov-rf-mgrid" role="group" aria-label="Pick a month">
-      <div className="ov-rf-mgrid-head">
-        <button
-          type="button"
-          className="ov-rf-mgrid-step"
-          aria-label="Previous year"
-          onClick={() => setYear((y) => y - 1)}
-        >
-          <ChevronLeft size={14} aria-hidden="true" />
-        </button>
-        <span>{year}</span>
-        <button
-          type="button"
-          className="ov-rf-mgrid-step"
-          aria-label="Next year"
-          onClick={() => setYear((y) => y + 1)}
-        >
-          <ChevronRight size={14} aria-hidden="true" />
-        </button>
-      </div>
-      <div className="ov-rf-mgrid-months">
-        {MONTH_NAMES.map((name, i) => {
-          const m = `${year}-${String(i + 1).padStart(2, '0')}`
-          return (
-            <button
-              key={m}
-              type="button"
-              className={'ov-fs-chip' + (m === value ? ' on' : '')}
-              aria-pressed={m === value}
-              onClick={() => onPick(m)}
-            >
-              {name}
-            </button>
-          )
-        })}
+      <div className="acct-advrow">
+        <span className="acct-advlbl">To</span>
+        {pickerFor('to', 'm')}
+        {pickerFor('to', 'y')}
       </div>
     </div>
   )

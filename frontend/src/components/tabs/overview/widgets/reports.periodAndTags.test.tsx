@@ -325,8 +325,8 @@ describe('the header filter', () => {
     expect(onPatch).toHaveBeenLastCalledWith({
       config: { period: '3 months', categories: ['cat_dining', 'cat_hotels'] },
     })
-    fireEvent.click(within(pop).getByRole('button', { name: 'Period' }))
-    fireEvent.click(screen.getByRole('menuitemradio', { name: '6 months' }))
+    fireEvent.focus(within(pop).getByPlaceholderText('Period'))
+    fireEvent.mouseDown(within(pop).getByRole('button', { name: '6 months' }))
     expect(onPatch).toHaveBeenLastCalledWith({
       config: { period: '6 months', categories: ['cat_dining'] },
     })
@@ -376,7 +376,8 @@ describe('the header filter', () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: /^Filter:/ }))
     const pop = await screen.findByRole('dialog', { name: 'Filter this widget' })
-    expect(within(pop).getByText('Period')).toBeTruthy()
+    // A period alone is a plain menu of periods, not a box holding one dropdown.
+    expect(within(pop).getByRole('menuitemradio', { name: '3 months' })).toBeTruthy()
     expect(within(pop).queryByText('Categories')).toBeNull()
     expect(within(pop).queryByText('Tags')).toBeNull()
   })

@@ -29,7 +29,8 @@ import { resolveCategoryIds } from './categoryRefs'
 import { GridItemContext } from './gridItemContext'
 import { BriefingFocusControl } from './BriefingFocusControl'
 import { vizOptionsFor, vizOf } from './vizModel'
-import { ReportFilterControls } from './widgets/ReportFilter'
+import { ReportFilterControls, ReportPeriodControl } from './widgets/ReportFilter'
+import { reportHasFilters } from './widgets/reportScope'
 import type {
   HeightMode,
   RegisterDeepLink,
@@ -500,11 +501,24 @@ export function WidgetFullscreen({
   // widget def gets for free, never a hand-built per-widget control) + the
   // list row-cap, in that order (mirrors the handoff). ──────────────────────
   const data: Ctrl[] = []
-  const filters = def.settings?.some((st) => st.inline) ? (
+  // A widget that filters by category or tag gets the Filters column; one with a period alone
+  // gets a Period row at the top of its settings instead (a column holding one field was empty).
+  const filters = reportHasFilters(def) ? (
     <div className="ov-fs-filters">
       <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
     </div>
   ) : null
+  if (!filters && def.settings?.some((st) => st.key === 'period' && st.inline)) {
+    appearance.unshift({
+      group: 'Appearance',
+      key: 'period',
+      node: (
+        <div className="ov-fs-ctl ov-fs-ctl-wide" key="period">
+          <ReportPeriodControl instance={instance} def={def} onPatch={onPatch} />
+        </div>
+      ),
+    })
+  }
   const railTabs = filters ? (
     <div className="ov-fs-railtabs">
       <SegmentedControl
