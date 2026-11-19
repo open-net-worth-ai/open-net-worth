@@ -53,13 +53,12 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    /* A bezel, not a fill: the page colour inside a hairline of ink, with ink words — a dark
-       pill ringed in white on dark, a white one ringed in black on light. */
-    --lx-pill-bg: var(--bg);
-    --lx-pill-fg: var(--ink);
+    /* Ink on every theme: a white pill on dark, a black one on light. */
+    --lx-pill-bg: var(--ink);
+    --lx-pill-fg: var(--bg);
     color: var(--lx-pill-fg);
     background: var(--lx-pill-bg);
-    border: 1px solid var(--lx-pill-fg);
+    border: none;
     border-radius: 999px;
     padding: 12px 20px;
     font-size: 13.5px;
