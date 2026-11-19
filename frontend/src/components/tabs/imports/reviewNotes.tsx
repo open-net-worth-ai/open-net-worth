@@ -11,6 +11,27 @@ import type { Preview, PreviewCategory } from './runs'
 const SHOWN_NOTES = 3
 const MANY_ASKS = 3
 
+const NAMES_SHOWN = 3
+
+function pruneNote(app: BudgetAppInfo, p: Preview) {
+  const { categories, groups } = p.prune
+  const names = [...categories, ...groups]
+  const n = names.length
+  const kind = groups.length === 0 ? 'category' : categories.length === 0 ? 'group' : 'item'
+  const noun =
+    n === 1
+      ? kind
+      : kind === 'category'
+        ? 'categories'
+        : kind === 'group'
+          ? 'groups'
+          : 'categories and groups'
+  const listed = names.slice(0, NAMES_SHOWN).join(', ')
+  const rest = n - NAMES_SHOWN
+  const list = rest > 0 ? `${listed} and ${rest} more` : listed
+  return `${app.name} brings its own categories, so ${n} starter ${noun} you never used ${n === 1 ? 'is' : 'are'} removed: ${list}. To keep one, pick it for ${app.aName} category in Categories.`
+}
+
 function lines(app: BudgetAppInfo, p: Preview, asking: PreviewCategory[]) {
   const pruned = [...p.prune.categories, ...p.prune.groups]
   return {
@@ -36,12 +57,7 @@ function lines(app: BudgetAppInfo, p: Preview, asking: PreviewCategory[]) {
     change: p.currency_change
       ? [`The book’s base currency changes from ${p.base_currency} to ${p.currency}.`]
       : [],
-    prune:
-      pruned.length > 0
-        ? [
-            `The starter categories the app came with that you never used are removed, since ${app.name} brings its own: ${pruned.join(', ')}. To keep one, pick it for ${app.aName} category in Categories.`,
-          ]
-        : [],
+    prune: pruned.length > 0 ? [pruneNote(app, p)] : [],
   }
 }
 
@@ -58,7 +74,7 @@ export function Notes({
   const list: { text: string; bad?: boolean }[] = [
     ...l.asks.map((text) => ({ text, bad: true })),
     ...l.blocked.map((text) => ({ text, bad: true })),
-    ...[...l.foreign, ...l.rerun, ...l.change, ...l.prune, ...p.warnings].map((text) => ({ text })),
+    ...[...l.prune, ...l.foreign, ...l.rerun, ...l.change, ...p.warnings].map((text) => ({ text })),
   ]
   if (list.length === 0) return null
   return (
@@ -130,7 +146,7 @@ export function SettleNotes({
         ]
       : l.asks
   const stops = [...asks, ...l.blocked]
-  const notes = [...l.change, ...l.foreign, ...p.warnings, ...l.rerun, ...l.prune]
+  const notes = [...l.prune, ...l.change, ...l.foreign, ...p.warnings, ...l.rerun]
   const first = useIsMobile() ? 1 : SHOWN_NOTES
   const shown = allShown ? notes : notes.slice(0, first)
   const more = notes.length - first
