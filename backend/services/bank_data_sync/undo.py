@@ -17,6 +17,9 @@ hold, this adds:
 * ``opening_restores`` — an account's Starting Balance the run moved (the first import's
   alignment, the bank's balance), put back so the balance doesn't change by what Undo removes.
 
+Two rows already in the book that the run merged into one transfer (``pair_merges``: a card
+payment whose leg settled this run) are split back first (``ledger.unmerge_transactions``).
+
 Not undone, by design: a pending row the bank settled (cleared and re-dated — no money moved), and
 a transaction you edited since (Undo removes the run's rows as they are now). Only the most recent
 run that changed anything can be undone: an older run's rows may since have been folded into a
@@ -29,7 +32,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from backend.core import audit_context, data_events
-from backend.core.errors import ConflictError, NotFoundError
+from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.services import import_runs, import_undo
 from backend.services import ledger as ledger_service
 from backend.services.bank_data_sync import booker, pending, reviews
@@ -45,7 +48,7 @@ def batch_id(run_id: str) -> str:
 
 def record(provider: str, run_id: str, label: str, result: booker.Booked) -> bool:
     """Open the run's batch when it changed the book. False when it changed nothing."""
-    if not (result.created or result.removed_ids or result.promoted):
+    if not (result.created or result.removed_ids or result.promoted or result.pair_merges):
         return False
     batches = ledger_service.import_batches
     batches.create_batch(
@@ -59,6 +62,7 @@ def record(provider: str, run_id: str, label: str, result: booker.Booked) -> boo
             "provider": provider,
             "run_id": run_id,
             "promotions": result.promoted,
+            "pair_merges": result.pair_merges,
             "deleted_ids": result.removed_ids,
             "pending_entries": result.removed_entries,
             "bank_rows": result.booked_views,
@@ -225,6 +229,20 @@ def _revert_promotions(batch: dict) -> tuple[list[list[str]], list[str]]:
     return reverted, left
 
 
+def _unmerge_pairs(batch: dict) -> list[str]:
+    """Split each transfer the run made from two rows already in the book back into its two
+    rows (``ledger.unmerge_transactions``); one you changed since stays the transfer it became."""
+    left: list[str] = []
+    for absorbed_id in batch.get("pair_merges") or []:
+        try:
+            ledger_service.unmerge_transactions(absorbed_id)
+        except ValidationError:
+            row = ledger_service.transactions.find_by_id(absorbed_id) or {}
+            name = row.get("description") or "A card payment"
+            left.append(f"{name} was left as the transfer it became, because you changed it since.")
+    return left
+
+
 def _mark_undone(run_id: str, warnings: list[str]) -> None:
     run = import_runs.get(run_id)
     counts = {**(run.get("counts") or {}), "undone": 1}
@@ -255,14 +273,16 @@ def undo_run(provider: str, run_id: str) -> dict:
     with _exclusive(provider):
         batch = _check_undoable(provider, run_id)
         bid = batch_id(run_id)
-        rows = ledger_service.transactions.query_by_batch(bid, include_deleted=False)
-        groups = _groups(provider, rows)
         token = audit_context.set_audit_scope("user", booker.SURFACE, note=f"undo run:{run_id}")
         try:
+            # The rows the run merged go back to two first, so what follows sees the run's own.
+            unpaired = _unmerge_pairs(batch)
+            rows = ledger_service.transactions.query_by_batch(bid, include_deleted=False)
+            groups = _groups(provider, rows)
             result = import_undo.undo_import(bid)
             restored_openings, opening_failures = _restore_openings(batch)
             reverted, not_reverted = _revert_promotions(batch)
-            not_reverted += opening_failures
+            not_reverted += opening_failures + unpaired
         finally:
             audit_context.clear_audit_scope(token)
         gone = {r["id"] for r in rows}

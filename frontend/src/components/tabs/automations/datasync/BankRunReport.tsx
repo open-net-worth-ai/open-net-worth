@@ -38,6 +38,13 @@ import { bankSyncSend } from './bankSync'
 
 const DID: [string, (n: number) => string][] = [
   ['already_booked', (n) => `${n} already in your book`],
+  // A card payment filed as one transfer — from two new rows, or from rows already in the book
+  // (a leg that settled, ADR 2026-11-13 Amendment 19) — so a run that booked nothing new still
+  // says what it changed.
+  [
+    'card_payments',
+    (n) => `${n} ${n === 1 ? 'move' : 'moves'} between your accounts filed as a transfer`,
+  ],
   ['pending', (n) => `${n} of them pending (uncleared)`],
   ['settled', (n) => `${n} pending cleared`],
   ['pending_removed', (n) => `${n} pending dropped by the bank`],
@@ -226,6 +233,7 @@ function UndoRun({
   const [error, setError] = useState<string | null>(null)
   const booked = counts.booked ?? 0
   const dropped = counts.pending_removed ?? 0
+  const paired = counts.card_payments ?? 0
   const close = () => {
     if (busy) return
     setAsking(false)
@@ -249,6 +257,16 @@ function UndoRun({
   }
   const removes = `${booked} ${booked === 1 ? 'transaction' : 'transactions'}`
   const brings = `${dropped} pending ${dropped === 1 ? 'one' : 'ones'}`
+  // What Undo does, in the order it matters; a run that only filed a transfer from rows already
+  // in the book removes nothing, so it never says "removes the 0 transactions".
+  const does = [
+    booked > 0 && `removes the ${removes} this sync booked`,
+    dropped > 0 && `brings back the ${brings} it dropped`,
+    paired > 0 && `turns each transfer it filed back into what was there before`,
+  ].filter(Boolean) as string[]
+  const says = does.length
+    ? `This ${does.length > 1 ? `${does.slice(0, -1).join(', ')} and ${does[does.length - 1]}` : does[0]}.`
+    : 'This undoes what this sync changed.'
   return (
     <>
       <Button size="sm" variant="ghost" onClick={() => setAsking(true)}>
@@ -264,9 +282,7 @@ function UndoRun({
                 confirmDisabled: busy,
                 body: (
                   <>
-                    <p>
-                      {`This removes the ${removes} this sync booked${dropped ? ` and brings back the ${brings} it dropped` : ''}. Your balances go back to what they were before it.`}
-                    </p>
+                    <p>{`${says} Your balances go back to what they were before it.`}</p>
                     <p>
                       The bank’s rows aren’t booked again by the next sync. They wait together under
                       Needs your review, where you can book them all again, book one, or forget

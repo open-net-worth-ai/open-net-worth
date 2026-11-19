@@ -7,8 +7,8 @@ only sums balances, stays right). The pairing rule, applied to every booking of 
 
 * the card side is an ``income`` into an account of type ``credit``; the paying side is an
   ``expense`` out of a ``cash`` account;
-* same currency and the same amount to the cent, dates at most
-  ``matching.TRANSFER_PAIR_MAX_GAP_DAYS`` apart (the ledger's own transfer-pair window);
+* same currency and the same amount to the cent, dates at most ``PAIR_GAP_DAYS`` (4) apart —
+  a payment taken on a Friday can land on the card on Tuesday (Amendment 19);
 * the wording of at least one side says it is a payment (``_PAYMENT``) and the card side doesn't
   say it is a refund (``_REFUND``) — an exact-amount coincidence between a merchant refund and an
   unrelated bill is not a payment;
@@ -19,8 +19,11 @@ only sums balances, stays right). The pairing rule, applied to every booking of 
 The counterpart is another draft of the same run (the two become one transfer draft) or a LIVE
 row already in the book — from another connector, an earlier run or typed by hand — which is
 promoted to the transfer by the ledger's own pair merge. So the answer doesn't depend on which
-side arrived first. A pending or still-unsettled leg is never paired; it pairs when it settles
-(its booking is a normal row until then). A card payment with NO counterpart in the book (the
+side arrived first. A pending leg is never paired; it pairs when it SETTLES (``pair_in_book``):
+both rows are in the book by then, so the two are merged into one transfer
+(``ledger.merge_transactions(become_transfer=True)``, undone with the run). Two rows that fit
+every rule but the wording are not paired silently: they become a ``transfer_pair`` review
+item ("Make it one transfer"), asked once (Amendment 19). A card payment with NO counterpart in the book (the
 paying account isn't synced) stays what the bank says, income on the card: a transfer needs both
 legs, and the other one, when it arrives, pairs with it.
 
@@ -39,12 +42,13 @@ import re
 from datetime import date, timedelta
 
 from backend.services import ledger as ledger_service
-from backend.services import matching, rejected_identities
-from backend.services.bank_data_sync import pending
+from backend.services import rejected_identities
+from backend.services.bank_data_sync import pending, reviews
 
 logger = logging.getLogger(__name__)
 
-_GAP = timedelta(days=matching.TRANSFER_PAIR_MAX_GAP_DAYS)
+PAIR_GAP_DAYS = 4
+_GAP = timedelta(days=PAIR_GAP_DAYS)
 _TOL = 0.005
 _PAYMENT = re.compile(
     r"\b(payments?|pymts?|pmts?|auto-?pay|bill ?pay|thank you|card services|credit card|crd)\b",
@@ -90,6 +94,14 @@ def _is_cash(row: dict, types: dict) -> bool:
 def _pays(card: dict, cash: dict, types: dict) -> bool:
     """Do these two rows read as the two sides of one card payment, or of one move between two
     of your cash accounts?"""
+    said = _PAYMENT if types.get(card.get("to_account_id")) == "credit" else _TRANSFER
+    return bool(
+        (said.search(_text(card)) or said.search(_text(cash))) and _could_pay(card, cash, types)
+    )
+
+
+def _could_pay(card: dict, cash: dict, types: dict) -> bool:
+    """Every rule of ``_pays`` but the wording: what is ASKED about, never paired silently."""
     if card.get("to_currency") != cash.get("from_currency"):
         return False
     if card.get("to_account_id") == cash.get("from_account_id"):
@@ -102,17 +114,15 @@ def _pays(card: dict, cash: dict, types: dict) -> bool:
     a, b = _day(card.get("date")), _day(cash.get("date"))
     if not a or not b or abs(a - b) > _GAP:
         return False
-    said = _PAYMENT if types.get(card.get("to_account_id")) == "credit" else _TRANSFER
-    return bool(
-        (said.search(_text(card)) or said.search(_text(cash))) and not _REFUND.search(_text(card))
-    )
+    return not _REFUND.search(_text(card))
 
 
-def _unique_pairs(cards: list[dict], cashes: list[dict], types: dict) -> list[tuple[int, int]]:
+def _unique_pairs(
+    cards: list[dict], cashes: list[dict], types: dict, fits=None
+) -> list[tuple[int, int]]:
     """Index pairs ``(card, cash)`` that match each other and nothing else."""
-    wants = {
-        i: [j for j, b in enumerate(cashes) if _pays(a, b, types)] for i, a in enumerate(cards)
-    }
+    fits = fits or _pays
+    wants = {i: [j for j, b in enumerate(cashes) if fits(a, b, types)] for i, a in enumerate(cards)}
     taken: dict[int, list[int]] = {}
     for i, js in wants.items():
         for j in js:
@@ -171,7 +181,10 @@ def _book_pool(drafts: list[dict], provider: str) -> list[dict]:
     days = [x for x in (_day(d.get("date")) for d in drafts) if x]
     if not days:
         return []
-    tracked = {e.get("txn_id") for e in pending.tracked(provider).values()}
+    # A booking still pending is never paired; one the bank has since settled is a row like any
+    # other (its entry is kept a while, marked settled, only so the bank dropping its pending
+    # ref isn't read as a withdrawal).
+    tracked = {e.get("txn_id") for e in pending.tracked(provider).values() if not e.get("settled")}
     opening = ledger_service.opening_txn_ids()
     return [
         t
@@ -232,3 +245,70 @@ def promote_into_book(
             kept = [k for k in kept if k[1] is not draft]
             pool = [t for t in pool if t["id"] != existing["id"]]
     return kept, snapshots
+
+
+def _live_single(txn_ids: set[str]) -> list[dict]:
+    rows = (ledger_service.transactions.find_by_id(i) for i in txn_ids)
+    return [
+        t
+        for t in rows
+        if t and not t.get("deleted") and not t.get("merged_into") and t.get("cleared")
+    ]
+
+
+def pair_in_book(provider: str, txn_ids: set[str], types: dict, run_id: str | None) -> list[str]:
+    """Rows this run left single-leg in the book — a pending booking that settled, a row booked
+    with no counterpart — paired with ONE live row on the other side: merged into one transfer
+    when every rule holds, offered as a ``transfer_pair`` review item when only the wording is
+    missing. Returns the absorbed ids (Undo unmerges them)."""
+    touched = _live_single(txn_ids)
+    if not touched:
+        return []
+    by_id = {t["id"]: t for t in _book_pool(touched, provider)} | {t["id"]: t for t in touched}
+    rows = list(by_id.values())
+    cards = [t for t in rows if _is_card(t, types)]
+    cashes = [t for t in rows if _is_cash(t, types)]
+    mine = {t["id"] for t in touched}
+    absorbed: list[str] = []
+    paired: set[str] = set()
+    for i, j in _unique_pairs(cards, cashes, types):
+        card, cash = cards[i], cashes[j]
+        if mine.isdisjoint({card["id"], cash["id"]}):
+            continue
+        try:
+            ledger_service.merge_transactions(
+                cash["id"], card["id"], reason=f"{provider} card payment", become_transfer=True
+            )
+        except Exception:  # noqa: BLE001 — left as two rows; the review list or a hand merge fixes it
+            logger.exception("bank_data_sync: %s settled card payment not paired", provider)
+            continue
+        absorbed.append(card["id"])
+        paired |= {card["id"], cash["id"]}
+    _suggest(provider, cards, cashes, types, mine, paired, run_id)
+    return absorbed
+
+
+def _suggest(provider, cards, cashes, types, mine, paired, run_id) -> int:
+    """Ask about each pair that fits every rule but the wording, once: a dismissed one stays
+    dismissed (``reviews.seen``)."""
+    asked = 0
+    cards = [c for c in cards if c["id"] not in paired]
+    cashes = [c for c in cashes if c["id"] not in paired]
+    for i, j in _unique_pairs(cards, cashes, types, fits=_could_pay):
+        card, cash = cards[i], cashes[j]
+        if mine.isdisjoint({card["id"], cash["id"]}) or _pays(card, cash, types):
+            continue
+        ref = "pair:" + "|".join(sorted((card["id"], cash["id"])))
+        if reviews.seen(provider, ref, "transfer_pair"):
+            continue
+        reviews.record(
+            provider,
+            "transfer_pair",
+            ref,
+            run_id=run_id,
+            txn_id=card["id"],
+            account_id=card.get("to_account_id"),
+            detail={"pay_txn_id": cash["id"]},
+        )
+        asked += 1
+    return asked

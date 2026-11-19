@@ -6,7 +6,7 @@ order: 30
 audience: [user]
 status: stable
 related: [concepts/the-ledger, concepts/categories, features/accounts, features/categories-payees, features/budgeting]
-keywords: [transactions, ledger, register, split, transfer, reconcile, needs review, receipts, cleared, approve, hide, hidden]
+keywords: [transactions, ledger, register, split, transfer, make transfer, reconcile, needs review, receipts, cleared, approve, hide, hidden]
 ---
 
 # Transactions and the ledger
@@ -149,6 +149,11 @@ can add, edit or re-flag a transaction, but can never clear the flag.
   the other follows. Both accounts must exist (one may be archived). In **All accounts** it shows
   as one row with no **+** or **−**, because the money stays yours; inside one of its accounts it
   shows **−** where the money left and **+** where it arrived.
+- **Two rows that are one transfer** — a card payment your bank showed as spending in checking
+  and a payment on the card, say — become one: select both and choose **More** › **Make
+  Transfer**. They must be in two different accounts, one money out and one money in, for the
+  same amount (two currencies are checked at the exchange rate). Both rows' bank ids are kept,
+  so a later import or bank sync of either side adds nothing.
 - An **Invest** transaction is a buy (cash out, **−**) or a sell (cash in, **+**). While editing,
   click the sign beside the amount to switch. Its payee is the broker or platform (for example
   IBKR) — set automatically when the trade is recorded against an account with an institution,

@@ -344,6 +344,31 @@ describe('the notes', () => {
     expect(w.queryByText(FOUR[4]!)).toBeNull()
   })
 
+  it('lists the removed starter categories first, shown without expanding', async () => {
+    preview = actualPreview({
+      warnings: FOUR,
+      prune: { categories: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'], groups: [] },
+    })
+    const w = await open()
+    const items = w.getAllByRole('listitem').map((li) => li.textContent ?? '')
+    const at = items.findIndex((t) => t.includes('starter categories you never used are removed'))
+    expect(at).toBeGreaterThan(-1)
+    expect(items[at]).toContain('removed: Alpha, Beta, Gamma and 2 more.')
+    expect(items.findIndex((t) => t === FOUR[0])).toBeGreaterThan(at)
+  })
+
+  it('words one removed starter category in the singular', async () => {
+    preview = actualPreview({ prune: { categories: ['Alpha'], groups: [] } })
+    const w = await open()
+    expect(w.getByText(/1 starter category you never used is removed: Alpha\./)).toBeTruthy()
+  })
+
+  it('names groups honestly when they are removed too', async () => {
+    preview = actualPreview({ prune: { categories: ['Alpha'], groups: ['Everyday'] } })
+    const w = await open()
+    expect(w.getByText(/2 starter categories and groups you never used are removed/)).toBeTruthy()
+  })
+
   it('one more note reads as one', async () => {
     preview = actualPreview({ warnings: FOUR.slice(0, 4) })
     const w = await open()
@@ -531,6 +556,17 @@ describe('on a phone', () => {
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }))
+
+  it('shows the removed starter categories as the one note', async () => {
+    asPhone()
+    preview = actualPreview({
+      warnings: ['Note one.'],
+      prune: { categories: ['Alpha'], groups: [] },
+    })
+    const w = await open()
+    expect(w.getByText(/1 starter category you never used/)).toBeTruthy()
+    expect(w.queryByText('Note one.')).toBeNull()
+  })
 
   it('shows one note before folding, and blockers stay', async () => {
     asPhone()

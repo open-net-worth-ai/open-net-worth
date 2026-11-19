@@ -129,15 +129,30 @@ e-wallet, a payment to your credit card — book it as a transfer so it doesn't 
   transfer: Checking → GrabPay**. If Lucius got one wrong, click **Not a transfer — book as an
   expense instead** (or *… as income instead*) on that row.
 - **On one row yourself:** click the row's pencil to open **Edit payee & category** and switch
-  **Type** to **Transfer**, then pick the other account (one in the same currency). A transfer
-  books no payee or category. Switch it back to **Expense** or **Income** to undo it; that also
-  overrides a transfer Lucius chose for the row.
+  **Type** to **Transfer**, then pick the other account — it can be in another currency, marked
+  like *Harbor (USD)*. A transfer books no payee or category. Switch it back to **Expense** or
+  **Income** to undo it; that also overrides a transfer Lucius chose for the row.
 - **In a chat with Lucius:** when you import through Lucius, tell him which row is a transfer and
   to which account. He books it as a transfer in the same import.
 
-The amount on the statement stays on the statement account's side; if the other account is in a
-different currency, its side is converted. Two rows of the same statement that are the two halves
-of one currency conversion are recognised and folded into a single transfer automatically.
+The amount on the statement stays on the statement account's side. If the other account is in a
+different currency, its side is converted at the latest exchange rate, and the row shows what it
+will book under the statement's amount before you confirm (*→ ≈$100.00*), the same way the register
+shows a transfer between currencies. Open the row to see both sides (*Checking sends S$135.00 • Harbor
+receives about $100.00*). That figure is an estimate, because a
+statement only prints its own side: your bank's rate can differ, so correct that side afterwards if
+you know the real amount. If there's no exchange rate for the pair, the row stays a plain expense or
+income: the summary above the rows warns you, and the row shows **Not a transfer — no exchange rate
+for that account** when you open it. Refresh exchange rates and read the statement again, or keep it
+as it is.
+
+If that transfer is already in your ledger, the row is recognised by the statement's amount alone,
+since the other side may have been booked at the bank's real rate. Linking to it updates only the
+statement account's side and leaves the other side as booked.
+
+Two rows of the same statement that are the two halves of one currency conversion are recognised and
+folded into a single transfer automatically, using both printed amounts. An Automation that routes
+rows into a transfer still works only between accounts in the same currency.
 
 ## Statements history
 

@@ -19,6 +19,7 @@ const ACTIONS: Record<BankReview['kind'], { accept: string; dismiss: string }> =
   vanished: { accept: 'Delete it', dismiss: 'Keep it' },
   duplicate: { accept: 'Same transaction', dismiss: 'Ignore it' },
   undone: { accept: 'Book all again', dismiss: 'Forget them' },
+  transfer_pair: { accept: 'Make it one transfer', dismiss: 'Keep them separate' },
 }
 
 type Decide = (item: BankReview, action: 'accept' | 'dismiss' | 'book', ref?: string) => void
@@ -47,6 +48,8 @@ function headline(item: BankReview): string {
   if (item.kind === 'modified') return `${bank} changed a transaction you have booked.`
   if (item.kind === 'posted') return 'A pending transaction posted at a different amount.'
   if (item.kind === 'vanished') return `${bank} no longer lists a transaction you have booked.`
+  if (item.kind === 'transfer_pair')
+    return 'These two look like one transfer between your accounts, such as a card payment.'
   if (d.undone) return 'You undid the sync that booked this, so it was not booked again.'
   return d.reason
     ? 'This looks like a transaction already in your book.'
@@ -192,7 +195,13 @@ function ReviewRow({
             <dd>{row(d.current)}</dd>
           </>
         )}
-        {item.kind !== 'vanished' && (
+        {item.kind === 'transfer_pair' && (
+          <>
+            <dt>and</dt>
+            <dd>{row(d.other)}</dd>
+          </>
+        )}
+        {item.kind !== 'vanished' && item.kind !== 'transfer_pair' && (
           <>
             <dt>From the bank</dt>
             <dd>{row(bankSide)}</dd>

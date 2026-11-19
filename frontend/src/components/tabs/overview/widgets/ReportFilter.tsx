@@ -2,11 +2,13 @@
 // · Dining · #travel") that opens a popover with Period, Categories and Tags. A choice applies
 // as it is made and is saved with the widget — the settings panel keeps only how the widget
 // looks. The popover portals to <body> (like ChartToggleMenu): the trigger sits inside a
-// clipped, scrolling card.
+// clipped, scrolling card. On a phone the same controls open in a bottom sheet instead.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from '../../../../ui/icons'
+import { BottomSheet } from '../../../ui/BottomSheet'
+import { useIsMobile } from '../../../../hooks/useIsMobile'
 import { useCategories } from '../../../../hooks/serverState'
 import { useTransactionTags } from '../../accounts/tagOptions'
 import type { WidgetDefinition, WidgetInstance } from '../types'
@@ -26,6 +28,8 @@ interface Props {
 
 export function ReportFilter({ instance, def, onPatch, label }: Props) {
   const sc = reportScope(instance, def)
+  // A phone gets a bottom sheet with thumb-sized rows; a pointer gets the anchored popover.
+  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number; maxH: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -37,14 +41,14 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
   )
 
   useLayoutEffect(() => {
-    if (!open || !wrapRef.current) return
+    if (!open || isMobile || !wrapRef.current) return
     const r = wrapRef.current.getBoundingClientRect()
     const left = Math.min(Math.max(8, r.right - POPOVER_W), window.innerWidth - POPOVER_W - 8)
     setPos({ top: r.bottom + 6, left: Math.max(8, left), maxH: window.innerHeight - r.bottom - 20 })
-  }, [open])
+  }, [open, isMobile])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || isMobile) return
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node
       if (wrapRef.current?.contains(t) || popRef.current?.contains(t)) return
@@ -59,7 +63,7 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
       document.removeEventListener('mousedown', onDoc)
       document.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, isMobile])
 
   // A widget offers only the filters its definition declares (Savings rate: a period alone).
   const has = (key: string) => !!def.settings?.some((s) => s.key === key)
@@ -76,8 +80,31 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
   const filtered = sc.categories.length > 0 || sc.tags.length > 0
   const summary = [label, catText, tagText].filter(Boolean).join(' · ')
 
+  const body = (
+    <>
+      <PeriodSection def={def} value={sc.periodLabel} onPick={(p) => patch({ period: p })} />
+      {has('categories') && (
+        <CategorySection
+          value={sc.categories}
+          options={Array.isArray(cats) ? cats : []}
+          onChange={(next) => patch({ categories: next })}
+        />
+      )}
+      {has('tags') && <TagSection value={sc.tags} onChange={(next) => patch({ tags: next })} />}
+      {filtered && (
+        <button
+          type="button"
+          className="ov-rf-reset"
+          onClick={() => patch({ categories: [], tags: [] })}
+        >
+          Clear categories and tags
+        </button>
+      )}
+    </>
+  )
+
   return (
-    <div className="kebab-wrap" ref={wrapRef}>
+    <div className="kebab-wrap ov-rf-wrap" ref={wrapRef}>
       <button
         type="button"
         className={'ov-charttoggle__trigger ov-rf-trigger' + (filtered ? ' is-filtered' : '')}
@@ -93,7 +120,21 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
         <span className="ov-rf-label">{summary}</span>
         <ChevronDown size={11} strokeWidth={2.2} aria-hidden="true" />
       </button>
+      {open && isMobile && (
+        <BottomSheet
+          title={`Filter ${instance.title || def.title || 'widget'}`}
+          onClose={() => setOpen(false)}
+          footer={
+            <button type="button" className="ov-rf-done" onClick={() => setOpen(false)}>
+              Done
+            </button>
+          }
+        >
+          <div className="ov-rf-sheet">{body}</div>
+        </BottomSheet>
+      )}
       {open &&
+        !isMobile &&
         createPortal(
           <div
             className="kebab-menu kebab-menu--portal ov-rf-pop"
@@ -107,26 +148,7 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
             }
             onClick={(e) => e.stopPropagation()}
           >
-            <PeriodSection def={def} value={sc.periodLabel} onPick={(p) => patch({ period: p })} />
-            {has('categories') && (
-              <CategorySection
-                value={sc.categories}
-                options={Array.isArray(cats) ? cats : []}
-                onChange={(next) => patch({ categories: next })}
-              />
-            )}
-            {has('tags') && (
-              <TagSection value={sc.tags} onChange={(next) => patch({ tags: next })} />
-            )}
-            {filtered && (
-              <button
-                type="button"
-                className="ov-rf-reset"
-                onClick={() => patch({ categories: [], tags: [] })}
-              >
-                Clear categories and tags
-              </button>
-            )}
+            {body}
           </div>,
           document.body,
         )}
@@ -180,10 +202,13 @@ function CategorySection({
     .filter((c) => c.id !== 'split')
     .map((c) => ({ id: c.id, label: c.label || c.id }))
     .sort((a, b) => a.label.localeCompare(b.label))
-  // Chosen first, so a picked category never hides below the fold.
+  // The categories chosen when the filter opened come first, so they never hide below the
+  // fold — fixed for as long as it stays open, so a row never jumps under a finger mid-tap.
+  const [pinned] = useState(() => new Set(value))
+  const matches = (c: { label: string }) => !needle || c.label.toLowerCase().includes(needle)
   const shown = [
-    ...list.filter((c) => chosen.has(c.id)),
-    ...list.filter((c) => !chosen.has(c.id) && (!needle || c.label.toLowerCase().includes(needle))),
+    ...list.filter((c) => pinned.has(c.id)),
+    ...list.filter((c) => !pinned.has(c.id) && matches(c)),
   ]
   const toggle = (id: string) =>
     onChange(chosen.has(id) ? value.filter((v) => v !== id) : [...value, id])

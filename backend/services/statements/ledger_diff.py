@@ -172,6 +172,10 @@ def _totals(
         if r.draft is None:
             continue
         acct = r.draft.get("from_account_id") or r.draft.get("to_account_id") or ""
+        # A routed transfer's first leg isn't always the statement's: money in comes FROM the
+        # other account, whose ledger (often in another currency) this row says nothing about.
+        if r.draft.get("kind") == "transfer" and row.direction == "IN":
+            acct = r.draft.get("to_account_id") or acct
         if not acct:
             continue
         entry = per_acct.setdefault(

@@ -80,6 +80,7 @@ def settle(
     ref: str,
     row: dict,
     entries: dict[str, dict],
+    settled_ids: list[str] | None = None,
 ) -> str:
     """A posted row that may be a pending one this sync booked. Returns ``settled`` (the booking
     is now cleared; book nothing), ``replaced`` (the pending booking is gone and ``row`` carries
@@ -101,6 +102,8 @@ def settle(
             # never read as the bank withdrawing a booked row (quiet_refs).
             entries[key] = {**entry, "settled": True}
         ledger_service.update_transaction(txn["id"], {"cleared": True, "date": row["date"]})
+        if settled_ids is not None:
+            settled_ids.append(txn["id"])
         return "settled"
     row["_carry"] = {k: txn.get(k) for k in _CARRIED if txn.get(k)}
     ledger_service.bulk_delete_transactions([txn["id"]], reject_identities=False)
