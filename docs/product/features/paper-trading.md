@@ -34,7 +34,7 @@ start with:
 Or click **Create with Lucius** and describe the idea you want to test. Lucius suggests the
 starting cash and the first trades, then creates the portfolio.
 
-Each paper portfolio is a card with a **Paper** tag, its return against the benchmark, its two
+Each paper portfolio is a card with its return against the benchmark, its two
 newest trades and a ring of what it holds.
 
 A copy is a snapshot: it buys once, when you create it, and never follows your holdings or the
@@ -103,7 +103,7 @@ The **Autopilot** tab's switch sets who trades a paper portfolio:
 - **Off** (the default): only you, and Lucius when you ask him in chat.
 - **On**: Lucius reviews the portfolio on a schedule (every weekday or every Monday, at 10:00
   your time), places the trades he decides on, and writes a short memo of what he checked, what
-  he did and what he is watching next. The portfolio and its card show an **Autopilot** tag with Lucius's star, and each order
+  he did and what he is watching next. The portfolio and its card show an **Autopilot** tag with Lucius's star (next to the name, or under it when the name is long), and each order
   he places says **Autopilot**.
 
 Autopilot needs a mandate: it is what you approve in advance. Every review:

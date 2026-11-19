@@ -207,10 +207,10 @@ describe('Paper Trading', () => {
     expect(screen.getByRole('button', { name: 'Create manually' })).toBeTruthy()
   })
 
-  it('lists each paper portfolio as a card carrying the Paper tag', async () => {
+  it('lists each paper portfolio as a card, with no Paper chip (the tab says it)', async () => {
     render(<PaperTab />)
     const open = await screen.findByRole('button', { name: 'Open Buy-zone strategy' })
-    expect(within(open).getByText('Paper')).toBeTruthy()
+    expect(within(open).queryByText('Paper')).toBeNull()
     expect(within(open).getAllByText('NVDA').length).toBeGreaterThan(0)
   })
 

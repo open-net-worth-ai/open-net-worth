@@ -1,11 +1,11 @@
-import { Tag } from '../../ui'
 import { AutopilotTag } from './AutopilotTag'
 import { Donut } from '../following/Donut'
 import { signedPct, toneOf } from '../following/following.format'
 import { fCurrency } from '../../../utils/format'
 import type { PaperCard as Card } from '../../../api/paperTrading'
 
-/** One paper portfolio, built as a Copy Trading card: name, source, its return against the
+/** One paper portfolio, built as a Copy Trading card (the tab already says Paper, so no
+ *  Paper chip): name, source, its return against the
  *  benchmark, its two newest trades, and a ring of what it holds. The whole card opens it. */
 export function PaperCard({ p, onOpen }: { p: Card; onOpen: () => void }) {
   const gap =
@@ -16,7 +16,9 @@ export function PaperCard({ p, onOpen }: { p: Card; onOpen: () => void }) {
     <button type="button" className="fol-card" onClick={onOpen} aria-label={`Open ${p.name}`}>
       <div className="fol-card-main">
         <div className="fol-card-name paper-card-name">
-          {p.name} <Tag>Paper</Tag>
+          <span className="paper-card-title" title={p.name}>
+            {p.name}
+          </span>
           {p.autopilot_mode === 'auto' && <AutopilotTag />}
         </div>
         <div className="fol-card-who">

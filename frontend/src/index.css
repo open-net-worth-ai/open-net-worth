@@ -21256,11 +21256,22 @@ body.hide-amounts .mf-lbl-amt {
 /* Paper Trading. Everything else comes from the kit
    and Copy Trading's following.css; these are the few layouts the paper screens add.
    Tokens only; no borders outside tables (owner, 2026-11-15). */
+/* The name keeps one line (an ellipsis past the column) and never squeezes; when the Autopilot
+   tag doesn't fit beside it, it moves under it, so a short name never breaks in two. */
 .paper-card-name {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
 }
+.paper-card-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .paper-title {
   display: flex;
   align-items: center;
