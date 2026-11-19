@@ -1098,10 +1098,16 @@
   gap: 8px;
   max-width: 100%;
   min-width: 0;
-  /* Never a scroller: a trackpad swipe over a header slid its buttons sideways (a hidden
-     scrollbar). Its controls shrink instead (a filter pill shortens its own label). */
-  overflow-x: clip;
-  overflow-clip-margin: 4px;
+  /* Neither a scroller nor a clip: a scroller let a trackpad swipe slide the buttons sideways,
+     and a clip cut off the ⋮, which sits 6px past this edge to line up with the card's corner.
+     Its controls shrink to fit instead (a filter pill shortens its own label). */
+  overflow: visible;
+}
+
+/* The header clips at its edges (above, and the card's own rounded edge), so a focus ring drawn
+   outside a control was cut to an arc there. Every control in a widget header draws it inside. */
+.ov-responsive-toolbar :focus-visible {
+  outline-offset: -2px;
 }
 
 .ov-responsive-metric-row > * {
