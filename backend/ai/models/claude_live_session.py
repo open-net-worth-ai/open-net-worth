@@ -44,6 +44,7 @@ import json
 from typing import Callable, Optional
 
 from backend.ai.image_payloads import decode_image_payloads
+from backend.core.one_shot_turn import one_shot_active
 
 from . import cli_live_session
 from .claude_cli_argv import with_system_prompt_file
@@ -57,7 +58,7 @@ STALL_DEFAULT = 120.0
 
 def sessions_enabled() -> bool:
     """``ONW_CLAUDE_CLI_SESSIONS=0`` returns the transport to a process per turn."""
-    return cli_live_session.env_flag("ONW_CLAUDE_CLI_SESSIONS")
+    return cli_live_session.env_flag("ONW_CLAUDE_CLI_SESSIONS") and not one_shot_active()
 
 
 def _idle_seconds() -> float:

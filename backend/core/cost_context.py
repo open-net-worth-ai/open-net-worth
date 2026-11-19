@@ -16,8 +16,10 @@ Surfaces:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Optional
+from dataclasses import dataclass
+from typing import Iterator, Optional
 
 _surface: ContextVar[Optional[str]] = ContextVar("cost_surface", default=None)
 
@@ -35,3 +37,34 @@ def get_cost_surface() -> Optional[str]:
 def clear_cost_surface() -> None:
     """Reset the surface (call in a ``finally`` at the entrypoint)."""
     _surface.set(None)
+
+
+@dataclass(frozen=True)
+class CostAttribution:
+    """How a caller that is not a chat turn wants its model calls recorded."""
+
+    source: str
+    surface: str
+    session_id: str
+
+
+_attribution: ContextVar[Optional[CostAttribution]] = ContextVar("cost_attribution", default=None)
+
+
+def get_cost_attribution() -> Optional[CostAttribution]:
+    """The attribution the current task runs under, or ``None`` for an ordinary call."""
+    return _attribution.get()
+
+
+@contextmanager
+def cost_attribution(source: str, surface: str, session_id: str) -> Iterator[None]:
+    """Stamp every cost record a provider writes ITSELF inside the block with these labels.
+
+    A provider that records inside ``stream_chat`` (Antigravity) cannot be told apart from the
+    chat turn's own record afterwards; a caller that records the call itself uses this only to
+    keep a self-recording provider from writing a second, differently-labelled row."""
+    token = _attribution.set(CostAttribution(source, surface, session_id))
+    try:
+        yield
+    finally:
+        _attribution.reset(token)

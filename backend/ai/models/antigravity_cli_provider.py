@@ -179,6 +179,9 @@ _NO_ENFORCED_OFFER = (
 class AntigravityCliProvider(AIProvider):
     """AIProvider implementation backed by the local `agy` CLI binary."""
 
+    #: ``stream_chat`` writes its own cost row per round (the others leave it to the caller).
+    RECORDS_COST_IN_STREAM_CHAT = True
+
     def __init__(self, cli_path: str = "", api_key: str = "") -> None:
         self.cli_path = (cli_path or "").strip()
         self.api_key = (api_key or "").strip()
@@ -244,16 +247,22 @@ class AntigravityCliProvider(AIProvider):
         cost = cost_usd_openai(model, turn.input_tokens, turn.output_tokens, turn.cached_tokens)
         basis = cost_basis_for(self.api_key)
         from backend.ai.cost_tracker import record
+        from backend.core.cost_context import get_cost_attribution
         from backend.db.model_config_store import provider_label_for
 
+        # `stream_chat` records its own rounds; a caller that stamped an attribution (the
+        # TradingAgents bridge) gets THAT row instead of an unlabelled "chat" one.
+        attribution = get_cost_attribution()
         record(
-            source,
+            attribution.source if attribution else source,
             model,
             turn.input_tokens,
             turn.output_tokens,
             0,
             turn.cached_tokens,
             cost_usd=cost,
+            session_id=attribution.session_id if attribution else "",
+            surface=attribution.surface if attribution else None,
             cost_basis=basis,
             provider=provider_label_for("antigravity_cli", ""),
         )

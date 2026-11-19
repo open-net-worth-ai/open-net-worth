@@ -19,6 +19,8 @@ import hashlib
 import json
 from typing import Optional
 
+from backend.core.one_shot_turn import one_shot_active
+
 from . import cli_live_session
 from .cli_live_session import SessionPool
 from .cli_tool_protocol import flatten_messages_with_images
@@ -28,7 +30,7 @@ _USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_read_tokens")
 
 def sessions_enabled() -> bool:
     """``ONW_ANTIGRAVITY_CLI_SESSIONS=0`` returns the transport to a process per round."""
-    return cli_live_session.env_flag("ONW_ANTIGRAVITY_CLI_SESSIONS")
+    return cli_live_session.env_flag("ONW_ANTIGRAVITY_CLI_SESSIONS") and not one_shot_active()
 
 
 def _idle_seconds() -> float:

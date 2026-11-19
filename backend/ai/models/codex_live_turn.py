@@ -37,6 +37,7 @@ import time
 from typing import AsyncGenerator, Optional
 
 from backend.core.errors import ExternalServiceError, ProviderTimeoutError
+from backend.core.one_shot_turn import one_shot_active
 
 from . import codex_app_server as cas
 from .codex_home import NATIVE_THREAD_CONFIG, isolated_home, native_workspace
@@ -55,7 +56,10 @@ _REJECTED_CALL = (
 
 
 def live_turns_enabled() -> bool:
-    """``ONW_CODEX_LIVE_TURNS=0`` returns to one thread per round (the pre-2026-10-05 path)."""
+    """``ONW_CODEX_LIVE_TURNS=0`` returns to one thread per round (the pre-2026-10-05 path); so
+    does a ``one_shot_turn()`` caller, which never answers a parked call in-thread."""
+    if one_shot_active():
+        return False
     return (os.getenv("ONW_CODEX_LIVE_TURNS") or "1").strip().lower() not in (
         "0",
         "false",
