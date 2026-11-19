@@ -523,21 +523,26 @@ def _period_block(period: str, points: list[dict], merchant_limit: int, tags, ca
         "to": yms[-1],
         **summary,
         "merchants": _merchants(yms, merchant_limit, tags, categories),
-        "savings": _this_month_savings(summary)
-        if period == "this_month" and not tags and not categories
+        "savings": _period_savings(points, summary)
+        if not tags and not categories
         else _savings(summary),
     }
 
 
-def _this_month_savings(summary: dict) -> dict:
-    """This month's savings rate against the monthly income in the profile, as the budget
-    plans with: mid-month the salary often hasn't landed, and income-so-far read near 0%.
-    Income already received wins once it is more than the profile's figure."""
+def _period_savings(points: list[dict], summary: dict) -> dict:
+    """A period's savings rate. When it ends with the month in progress, that month's income is
+    the monthly income in the profile (as the budget plans with) until more has come in: the
+    salary often lands late in the month, and without it a period counted the month's spending
+    but none of its income — 12 months of spending against 11 of salary."""
+    if not points or points[-1]["ym"] != user_today().strftime("%Y-%m"):
+        return _savings(summary)
     try:
         expected = float(profile_service.read_profile().get("monthly_net_income") or 0.0)
     except Exception:
         logger.warning("profile income unavailable for the savings rate", exc_info=True)
         expected = 0.0
-    if expected <= summary["income_total"]:
+    missing = expected - points[-1]["income_total"]
+    if missing <= 0:
         return _savings(summary)
-    return {**_savings({**summary, "income_total": expected}), "expected_income": True}
+    income = summary["income_total"] + missing
+    return {**_savings({**summary, "income_total": income}), "expected_income": True}

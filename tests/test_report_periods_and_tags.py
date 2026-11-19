@@ -260,9 +260,24 @@ def test_this_months_savings_rate_counts_the_profiles_monthly_income(book, monke
     received = reports_rollup.reports_aggregates(period="this_month")["period"]["savings"]
     assert received["income"] == pytest.approx(80.0)  # more already came in: the real figure
     assert "expected_income" not in received
-    # Another period keeps what actually came in.
+    # A period that ended before this month keeps what actually came in.
     sep = reports_rollup.reports_aggregates(period="last_month")["period"]["savings"]
     assert sep["income"] == pytest.approx(3000.0)
+
+
+def test_a_period_ending_this_month_counts_its_profile_income(book, monkeypatch):
+    """3 months to October counted October's spending but none of its (unpaid) salary: 3 months
+    of spending against 2 of income. October now counts the profile's monthly income."""
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    monkeypatch.setattr(
+        reports_rollup.profile_service, "read_profile", lambda: {"monthly_net_income": 5000.0}
+    )
+    savings = reports_rollup.reports_aggregates(period="3m")["period"]["savings"]
+    # Aug–Oct: S$3,000 in September + October's S$5,000 (only S$80 came in so far).
+    assert savings["income"] == pytest.approx(8000.0)
+    assert savings["spent"] == pytest.approx(425.5)
+    assert savings["expected_income"] is True
 
 
 def test_a_widgets_all_rows_asks_for_every_merchant_and_transaction(book, monkeypatch):
