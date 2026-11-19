@@ -81,9 +81,8 @@ settings as **Edit** in Customize — title, chart type, categories and so on), 
 color, hide title, fixed height), **Share with Lucius**, **Duplicate** and **Remove**, and a
 link to the tab it comes from. Every list widget's **Rows** setting includes **All**.
 
-**Build with Lucius** — in **Add widget**, describe what you want ("my USD exposure over time")
-and Lucius builds the widget. An empty view also offers **Build with Lucius** to assemble a whole
-view for you.
+**Build with Lucius** — an empty view offers **Build with Lucius**, which asks Lucius in chat
+which widgets to add for you.
 
 Each widget is as tall as its content (or the height you set, if you switched it to **Fixed**).
 Widgets side by side line up when their heights are close; when one is much shorter, it simply

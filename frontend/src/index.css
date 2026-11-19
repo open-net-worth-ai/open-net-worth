@@ -10586,6 +10586,11 @@ body.hide-amounts .mask * {
     padding: 2px var(--space-2);
     cursor: pointer;
   }
+  /* Drawn inside the button: in a widget header the ring's outer half was cut off by the
+     header's edge, leaving a stray blue arc. */
+  .kebab-trigger:focus-visible {
+    outline-offset: -2px;
+  }
   .kebab-trigger[aria-expanded='true'] {
     border-color: var(--line);
     color: var(--text);
