@@ -5,7 +5,7 @@ import type { Account, Category, Txn } from './types'
 import { ReviewChoices, ReviewSummary } from './ReviewSummary'
 import { TransactionReviewPeek } from './TransactionReviewPeek'
 import { SourceIcon, type PayeeOption } from './pickers'
-import { ReviewDetails } from './ReviewDetails'
+import { HAS_PAYEE, ReviewDetails, ReviewPayeeTitle, withPayee } from './ReviewDetails'
 import { useListFitsStage, useSmoothCardHeight } from './reviewCardHeight'
 
 interface Props {
@@ -297,13 +297,27 @@ export function TransactionReviewCard(props: Props) {
                 <span className="acct-review-source-text">{sourceLine(txn)}</span>
               </span>
             </div>
-            <ReviewSummary txn={txn} accounts={props.accounts} draft={draft} />
+            <ReviewSummary
+              txn={txn}
+              accounts={props.accounts}
+              draft={draft}
+              title={
+                expanded && HAS_PAYEE.has(draft.kind) ? (
+                  <ReviewPayeeTitle
+                    value={draft.payee}
+                    options={props.payeeOptions}
+                    onChange={(payee, defaultCategory) =>
+                      props.onDraftChange(withPayee(draft, payee, defaultCategory))
+                    }
+                  />
+                ) : undefined
+              }
+            />
             {expanded ? (
               <ReviewDetails
                 txn={txn}
                 draft={draft}
                 onDraftChange={props.onDraftChange}
-                payeeOptions={props.payeeOptions}
                 onAllDetails={props.onAllDetails}
                 onCollapse={() => setExpanded(false)}
               />

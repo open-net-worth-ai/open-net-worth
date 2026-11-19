@@ -654,7 +654,7 @@ describe('TransactionReviewMode — compact queue', () => {
     expect(screen.queryByLabelText('Amount')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Details' }))
     // A transfer has no payee row.
-    expect(screen.queryByPlaceholderText('Payee')).toBeNull()
+    expect(screen.queryByLabelText('Payee')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'All details' }))
     expect(onAllDetails).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'txn-transfer' }),
@@ -729,6 +729,38 @@ describe('TransactionReviewMode — compact queue', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Less' }))
     expect(screen.queryByTestId('review-details')).toBeNull()
+  })
+
+  it('suggests payees in the card as you type, and a pick fills the row', async () => {
+    const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
+      ...txn,
+      needsReview: false,
+    }))
+    renderMode({
+      onApprove,
+      payeeOptions: [
+        { value: 'Harbor Cafe', label: 'Harbor Cafe', defaultCategory: null },
+        { value: 'Corner Cafe', label: 'Corner Cafe', defaultCategory: null },
+        { value: 'Kroger', label: 'Kroger', defaultCategory: null },
+      ],
+    })
+    await screen.findByRole('heading', { name: 'Kroger' })
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    fireEvent.change(screen.getByLabelText('Payee'), { target: { value: 'cafe' } })
+    const list = screen.getByRole('listbox', { name: 'Payees' })
+    expect(
+      within(list)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Corner Cafe', 'Harbor Cafe'])
+    expect(screen.getByText(/New payee “cafe”/)).toBeTruthy()
+    fireEvent.mouseDown(within(list).getByRole('option', { name: 'Harbor Cafe' }))
+    expect(screen.queryByRole('listbox', { name: 'Payees' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
+    expect(onApprove.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ payee: 'Harbor Cafe', payeeEdited: true }),
+    )
   })
 
   it('a tap anywhere on the facts opens the card', async () => {

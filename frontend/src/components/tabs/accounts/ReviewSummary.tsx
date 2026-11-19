@@ -34,10 +34,13 @@ export function ReviewSummary({
   txn,
   accounts,
   draft,
+  title: titleSlot,
 }: {
   txn: Txn
   accounts: Account[]
   draft: ReviewDraft
+  /** Replaces the heading — the open card's editable payee. */
+  title?: React.ReactNode
 }) {
   const inflow = isInflow(draft)
   const ledgerCurrency = transactionCurrency(
@@ -73,7 +76,7 @@ export function ReviewSummary({
       <span className={`acct-review-summary-kind acct-detail-kind ${draft.kind}`}>
         {typeLabel(draft)}
       </span>
-      <h3>{title || <span className="acct-review-no-payee">No payee yet</span>}</h3>
+      {titleSlot ?? <h3>{title || <span className="acct-review-no-payee">No payee yet</span>}</h3>}
       <div className={`acct-review-summary-amount ${draft.kind}`}>
         {/* A transfer is always drawn from its sending leg, so a sign would only ever be "−" —
             "Transfer to …" already says which way it went. */}

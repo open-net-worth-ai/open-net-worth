@@ -9,58 +9,50 @@
 import { useMemo, useState } from 'react'
 import { ChevronUp, Plus, X } from '../../../ui/icons'
 import { slugTag } from './categories'
-import { AddPayeeField, type PayeeOption } from './pickers'
+import type { PayeeOption } from './pickers'
 import { tagItems, useTransactionTags } from './tagOptions'
 import type { ReviewDraft } from './transactionReview'
 import type { Txn } from './types'
 
 /** How many of your tags the cloud offers before you search. */
 const CLOUD_LIMIT = 10
+/** How many payees the list under the Payee field offers while you type. */
+const PAYEE_LIMIT = 5
 
 /** Kinds whose rows carry a payee — a transfer, adjustment or investment never has one. */
-const HAS_PAYEE = new Set(['expense', 'income'])
+export const HAS_PAYEE = new Set(['expense', 'income'])
+
+/** The draft after a payee pick or a typed name. A payee's default category fills an empty
+ *  category, never overrides one. */
+export function withPayee(
+  draft: ReviewDraft,
+  payee: string,
+  defaultCategory?: string | null,
+): ReviewDraft {
+  return {
+    ...draft,
+    payee,
+    payeeEdited: true,
+    ...(defaultCategory && !draft.category ? { category: defaultCategory } : {}),
+  }
+}
 
 export function ReviewDetails({
   txn,
   draft,
   onDraftChange,
-  payeeOptions,
   onAllDetails,
   onCollapse,
 }: {
   txn: Txn
   draft: ReviewDraft
   onDraftChange: (draft: ReviewDraft) => void
-  payeeOptions: PayeeOption[]
   onAllDetails: () => void
   onCollapse: () => void
 }) {
   const set = (patch: Partial<ReviewDraft>) => onDraftChange({ ...draft, ...patch })
   return (
     <div className="acct-review-details" data-testid="review-details">
-      {HAS_PAYEE.has(draft.kind) && (
-        <div className="acct-review-detail-row">
-          <span className="acct-review-detail-label">Payee</span>
-          <div className="acct-review-detail-value">
-            <AddPayeeField
-              value={draft.payee}
-              options={payeeOptions}
-              accounts={[]}
-              fromAccountId={null}
-              onSelectTransfer={() => {}}
-              advance={() => {}}
-              onChange={(payee, defaultCategory) =>
-                set({
-                  payee,
-                  payeeEdited: true,
-                  // A payee's default category fills an empty pick, never overrides one.
-                  ...(defaultCategory && !draft.category ? { category: defaultCategory } : {}),
-                })
-              }
-            />
-          </div>
-        </div>
-      )}
       <label className="acct-review-detail-row">
         <span className="acct-review-detail-label">Date</span>
         <input
@@ -223,5 +215,95 @@ export function ReviewTags({
         )}
       </div>
     </div>
+  )
+}
+
+/** Payees whose name contains `query`, names starting with it first — the list under the field.
+ *  Exported for tests. */
+export function payeeMatches(options: PayeeOption[], query: string): PayeeOption[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  return options
+    .filter((o) => o.label.toLowerCase().includes(q))
+    .sort(
+      (a, b) =>
+        Number(!a.label.toLowerCase().startsWith(q)) -
+          Number(!b.label.toLowerCase().startsWith(q)) || a.label.localeCompare(b.label),
+    )
+    .slice(0, PAYEE_LIMIT)
+}
+
+/** The open card's heading, editable: the payee IS the card's title, so it is edited there
+ *  rather than repeated in a "Payee" row below it (owner, 2026-11-19). Suggestions are a list in
+ *  the card under it, not a floating popover: the card moves with the swipe, and a popover
+ *  anchored inside it was clipped — typing showed nothing to pick. A name that matches no payee
+ *  is created when the card is approved. */
+export function ReviewPayeeTitle({
+  value,
+  options,
+  onChange,
+}: {
+  value: string
+  options: PayeeOption[]
+  onChange: (payee: string, defaultCategory?: string | null) => void
+}) {
+  const [typing, setTyping] = useState(false)
+  const matches = typing ? payeeMatches(options, value) : []
+  const exact = options.some((o) => o.label.toLowerCase() === value.trim().toLowerCase())
+  const showCreate = typing && !!value.trim() && !exact
+  const pick = (o: PayeeOption) => {
+    onChange(o.label, o.defaultCategory)
+    setTyping(false)
+  }
+  return (
+    <>
+      <h3 className="acct-review-title-edit">
+        <input
+          className="acct-review-title-input"
+          aria-label="Payee"
+          placeholder="No payee yet"
+          value={value}
+          onChange={(e) => {
+            setTyping(true)
+            onChange(e.target.value)
+          }}
+          onBlur={() => setTyping(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && matches[0]) {
+              e.preventDefault()
+              pick(matches[0])
+            } else if (e.key === 'Escape' && typing) {
+              e.stopPropagation()
+              setTyping(false)
+            }
+          }}
+        />
+      </h3>
+      {(matches.length > 0 || showCreate) && (
+        <div className="acct-review-tags acct-review-payee-list" role="listbox" aria-label="Payees">
+          {matches.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="option"
+              aria-selected="false"
+              className="acct-review-tag"
+              // mousedown, not click: the input's blur (which closes this list) fires first.
+              onMouseDown={(e) => {
+                e.preventDefault()
+                pick(o)
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+          {showCreate && (
+            <span className="acct-review-detail-hint">
+              New payee “{value.trim()}”, created when you approve
+            </span>
+          )}
+        </div>
+      )}
+    </>
   )
 }

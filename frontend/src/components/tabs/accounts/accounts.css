@@ -876,12 +876,7 @@
   color: var(--muted);
   font-size: var(--text-xs);
 }
-.acct-review-detail-value {
-  flex: 1;
-  min-width: 0;
-}
-.acct-review-detail-input,
-.acct-review-detail-value .acct-addin {
+.acct-review-detail-input {
   flex: 1;
   width: 100%;
   min-width: 0;
@@ -899,23 +894,17 @@
 }
 /* Read as plain values on the card; a field only looks like a field while you touch it. */
 @media (hover: hover) {
-  .acct-review-detail-input:hover,
-  .acct-review-detail-value .acct-addin:hover {
+  .acct-review-detail-input:hover {
     background: color-mix(in srgb, var(--ink) 5%, transparent);
   }
 }
-.acct-review-detail-input:focus,
-.acct-review-detail-value .acct-addin:focus {
+.acct-review-detail-input:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--surface);
 }
-.acct-review-detail-input::placeholder,
-.acct-review-detail-value .acct-addin::placeholder {
+.acct-review-detail-input::placeholder {
   color: var(--faint);
-}
-.acct-review-detail-value .acct-payf-caret {
-  display: none;
 }
 .acct-review-detail-input::-webkit-calendar-picker-indicator {
   opacity: 0.45;
@@ -968,6 +957,48 @@
 .acct-review-detail-less {
   color: var(--muted);
 }
+/* The heading's two-line clamp would clip the field's focus outline (it sits 9px out). */
+.acct-review-summary h3.acct-review-title-edit {
+  display: block;
+  overflow: visible;
+}
+/* The open card's payee: the heading itself, editable. Same type as the heading it replaces;
+   a field only while touched, like the rows below. */
+.acct-review-title-input {
+  display: block;
+  width: calc(100% + 18px);
+  box-sizing: border-box;
+  margin-left: -9px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1.3;
+}
+@media (hover: hover) {
+  .acct-review-title-input:hover {
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+}
+.acct-review-title-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.acct-review-title-input::placeholder {
+  color: var(--faint);
+}
+.acct-review-payee-list {
+  margin-top: 8px;
+}
+/* Open, the Date row shows the date: the line above the kind would say it twice. */
+.acct-review-facts.is-expanded .acct-review-summary-meta {
+  display: none;
+}
 .acct-review-tags-head {
   display: flex;
   justify-content: space-between;
@@ -998,10 +1029,15 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--muted);
+  color: var(--ink);
   font: inherit;
   font-size: var(--text-xs);
   cursor: pointer;
+}
+@media (hover: hover) {
+  .acct-review-tag:hover {
+    border-color: var(--muted);
+  }
 }
 .acct-review-tag.is-chosen {
   border-color: var(--accent);
@@ -1010,6 +1046,7 @@
 }
 .acct-review-tag.is-add {
   border-style: dashed;
+  color: var(--muted);
 }
 .acct-review-tag.is-create {
   color: var(--accent);
