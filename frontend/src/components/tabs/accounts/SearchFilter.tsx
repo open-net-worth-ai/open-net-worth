@@ -614,7 +614,9 @@ export function SearchFilter({
     addToken({ field: s.field, value: s.value, op: s.op, dir: s.dir, label: s.label, dot: s.dot })
     setDraft('')
     setHi(-1)
-    setOpen(true)
+    // The pick is made: close the list so the filtered register shows. Focus stays in the box,
+    // so typing, ↓ or a click brings the suggestions back for another filter.
+    setOpen(false)
     requestAnimationFrame(() => inpRef.current?.focus())
   }
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -638,6 +640,7 @@ export function SearchFilter({
         const t = parseSegment(draft, suggest, sym)
         if (t) addToken(t)
         setDraft('')
+        setOpen(false)
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
@@ -680,6 +683,7 @@ export function SearchFilter({
         value={draft}
         onChange={onChange}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onKeyDown={onKey}
       />
       {(draft || tokens.length > 0) && (
