@@ -11371,5 +11371,156 @@
       "memo"
     ],
     "type": "object"
+  },
+  "show_visual": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Short title, no amounts"
+      },
+      "blocks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "stats",
+                "chart",
+                "timeline"
+              ]
+            },
+            "tiles": {
+              "type": "array",
+              "description": "stats: 1-4 tiles",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "object",
+                    "description": "a reference like rows: {tool, args?, path}"
+                  },
+                  "compare": {
+                    "type": "object",
+                    "description": "a reference like rows: {tool, args?, path}"
+                  },
+                  "compare_label": {
+                    "type": "string"
+                  },
+                  "better": {
+                    "type": "string",
+                    "enum": [
+                      "up",
+                      "down"
+                    ]
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "money",
+                      "number",
+                      "percent",
+                      "percent_points"
+                    ]
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ]
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "line",
+                "bar",
+                "diverging",
+                "stack",
+                "progress"
+              ]
+            },
+            "rows": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "description": "Tool name or tool_use id"
+                },
+                "args": {
+                  "type": "object",
+                  "description": "args picking the call; {} = no-arg call"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "e.g. totals.spent or rows[0].amount"
+                }
+              },
+              "required": [
+                "tool"
+              ]
+            },
+            "label": {
+              "type": "string",
+              "description": "chart: row field for the x/category"
+            },
+            "series": {
+              "type": "array",
+              "description": "chart: 1-3 {field, name, rows?: ref}; own rows join by label",
+              "items": {
+                "type": "object"
+              }
+            },
+            "target": {
+              "type": "string",
+              "description": "progress: goal field"
+            },
+            "top": {
+              "type": "integer",
+              "description": "keep the N largest rows"
+            },
+            "date": {
+              "type": "string",
+              "description": "timeline: date field"
+            },
+            "value": {
+              "type": "string",
+              "description": "timeline: amount field"
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "money",
+                "number",
+                "percent",
+                "percent_points"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "description": "ISO code, for money"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        "minItems": 1,
+        "maxItems": 3
+      },
+      "code": {
+        "type": "string",
+        "description": "SVG or HTML fragment, instead of blocks"
+      }
+    },
+    "additionalProperties": false
   }
 }

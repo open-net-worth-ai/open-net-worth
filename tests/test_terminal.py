@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import time
 
 import pytest
@@ -274,14 +275,29 @@ def test_closing_the_socket_stops_everything_the_shell_started(env):
         _send(ws, "sleep 300 & echo CHILD=$!\n")
         shown = _read_until(ws, r"CHILD=\d+")
         pid = int(re.search(r"CHILD=(\d+)", shown).group(1))
-    deadline = time.time() + 5
+    # 15s, not 5: on a loaded CI runner (xdist on every core) the hangup, the grace period and
+    # init's reap of the orphan can together take longer than the happy path suggests.
+    deadline = time.time() + 15
     while time.time() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
+        if not _running(pid):
             return
         time.sleep(0.1)
     raise AssertionError("the background process outlived the terminal")
+
+
+def _running(pid: int) -> bool:
+    """Alive and not a zombie: a killed orphan stays signalable until init reaps it, and that
+    reap is not the terminal's job (it flaked CI, 2026-11-19)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except OSError:
+        out = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+        return bool(out.stdout.strip()) and not out.stdout.strip().startswith("Z")
 
 
 def test_oversized_message_closes_the_socket(env):

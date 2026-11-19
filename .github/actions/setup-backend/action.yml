@@ -1,0 +1,29 @@
+name: Set up backend
+description: >
+  Python + the backend's pinned requirements, installed with uv (about 5x faster than pip on a
+  warm cache, same pins: requirements.txt + requirements-dev.txt). One place for every job that
+  needs the backend, so a toolchain change is one edit, not seven.
+inputs:
+  python-version:
+    description: Python version
+    default: "3.12"
+  editable:
+    description: Also install this checkout editable (the `onw` CLI), without its deps
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: ${{ inputs.python-version }}
+    - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      with:
+        enable-cache: true
+        cache-dependency-glob: |
+          requirements.txt
+          requirements-dev.txt
+    - name: Install backend deps
+      shell: bash
+      run: |
+        uv pip install --system -r requirements.txt -r requirements-dev.txt
+        if [ "${{ inputs.editable }}" = "true" ]; then uv pip install --system --no-deps -e .; fi

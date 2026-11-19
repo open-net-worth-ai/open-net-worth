@@ -107,7 +107,8 @@ export function TagField({
       setSel(sel + 1 >= value.length ? null : sel + 1)
     } else if ((e.key === 'Backspace' || e.key === 'Delete') && sel !== null) {
       const left = value.length - 1
-      remove(value[sel])
+      const picked = value[sel]
+      if (picked !== undefined) remove(picked)
       if (!left) setSel(null)
       else setSel(e.key === 'Backspace' ? Math.max(sel - 1, 0) : Math.min(sel, left - 1))
     } else {
@@ -139,7 +140,8 @@ export function TagField({
       flush()
     } else if (e.key === 'Backspace' && !query && value.length) {
       e.preventDefault()
-      remove(value[value.length - 1])
+      const last = value[value.length - 1]
+      if (last !== undefined) remove(last)
     } else if (e.key === 'Tab' && onAdvance) {
       e.preventDefault()
       flush()
@@ -217,7 +219,7 @@ export function TagField({
         <div className="acct-payf-pop acct-tagf-pop" style={fx ?? undefined}>
           <div className="acct-payf-scroll" ref={popRef} role="listbox" aria-label="Tags">
             <div className="acct-payf-h">
-              {items.length === 1 && items[0].type === 'create' ? 'New tag' : 'Tags'}
+              {items.length === 1 && items[0]?.type === 'create' ? 'New tag' : 'Tags'}
             </div>
             {items.length === 0 && (
               <div className="acct-payf-empty">No tags yet — type one to create it</div>

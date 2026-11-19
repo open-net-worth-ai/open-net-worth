@@ -450,7 +450,7 @@ only. `node qa/packaged-smoke-linux.mjs /abs/Open-Net-Worth.AppImage` (or an ins
   an error and nothing is installed.
   `ONW_DESKTOP_UPDATES=0` disables checks. See the
   [Linux decision](../docs/adr/2026-10-02-linux-desktop-appimage-deb-and-self-checked-updates.md).
-- **Release.** The `linux` job in `desktop.yml` builds and tests on `ubuntu-latest`, needs no
+- **Release.** The `linux` job in `desktop.yml` builds and tests on `ubuntu-24.04` (pinned: `ubuntu-latest` moved to 26.04, which Playwright's Chromium does not support), needs no
   signing, and (when `signed`) uploads `desktop-release-linux-x64`. The release job adds
   `install.sh` and one `SHA256SUMS` over every desktop asset, plus its detached signature
   `SHA256SUMS.minisig`. Stable names:

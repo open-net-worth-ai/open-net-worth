@@ -172,9 +172,9 @@ def _results(refs: Optional[List[str]], rng: str) -> list[dict]:
     description=(
         "How paper portfolios did: return against the benchmark and the owner's real "
         "investments over the same days, realised and unrealised P&L, worst fall, swings, "
-        "return per risk, overlap with the real book, and per-trade outcomes — hit rate, best "
-        "and worst trades, and how trades did by the thesis stance they were placed in (e.g. in "
-        "the buy zone). The same figures as the paper page. " + _ABOUT
+        "return per risk, overlap with the real book, and per-trade outcomes — hit rate, "
+        "best/worst trades, and results by the thesis stance at entry (e.g. buy zone). "
+        "Same figures as the paper page. " + _ABOUT
     ),
     input_schema=schema_of(GetPaperResultsInput, tool_name="get_paper_results"),
 )
@@ -432,8 +432,7 @@ def _place_all(input_data: dict) -> dict:
         "Place PAPER orders in a paper portfolio — simulated, no money moves and nothing is sent "
         "to any broker. Market, limit and stop orders; long only. A market order fills at once "
         "when its market is open, else waits for the open; a fund fills at the next NAV. Sells "
-        "are placed before buys. Never use this to stand in for a real order, and never call a "
-        "paper fill the owner's money. " + _ABOUT
+        "are placed before buys. Never a stand-in for a real order. " + _ABOUT
     ),
     input_schema=schema_of(PaperOrdersInput, tool_name="place_paper_orders"),
     mutates=("paper",),
