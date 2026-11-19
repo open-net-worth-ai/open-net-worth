@@ -124,8 +124,8 @@ that month.
 
 Every Reports widget has a filter in its own header: a small pill naming what it shows (for
 example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place. The same
-filters are also in the widget's settings panel (**Edit**), on its **Filters** tab beside
-**Appearance**:
+filters are also in the widget's editor (**Edit**): **Filters** down the right, **Appearance**
+under the preview:
 
 - **Period.** Spending by category, Top merchants, Savings rate and Money flow can show
   **This month**, **Last month**, **3 months**, **6 months**, **12 months** or **This year**,
