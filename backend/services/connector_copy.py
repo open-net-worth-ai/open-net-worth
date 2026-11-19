@@ -2,7 +2,7 @@
 
 Pure data, split out of ``connector_catalog`` so the catalog stays about structure: what a
 connector IS lives there, what it SAYS lives here. Keys are a connector id when the text is
-specific to one instance (the six web-search providers share one kind but each has its own
+specific to one instance (the seven web-search providers share one kind but each has its own
 blurb and tool pair) and a kind otherwise — ``connector_catalog`` resolves id before kind.
 
 The tool NAMES are the exact registry ids (Lucius-callable verbatim), so the detail view lists
@@ -137,6 +137,14 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "firecrawl_fetch_page",
             "Read the full text of a URL via Firecrawl specifically — "
             "handles JS-rendered pages a plain fetch can't.",
+            read_only=True,
+        ),
+    ],
+    "web_search:keenable": [
+        _t("keenable_search", "Search the web via Keenable specifically.", read_only=True),
+        _t(
+            "keenable_fetch_page",
+            "Read the full text of a URL via Keenable specifically, as clean markdown.",
             read_only=True,
         ),
     ],
@@ -358,7 +366,7 @@ TOOLS: dict[str, list[ConnectorTool]] = {
 SHORT: dict[str, str] = {
     "email": "Auto-logs bank and broker activity, straight from your own mailbox.",
     "web_search": "Web search and page reading for Lucius.",
-    # Web search is SIX connectors sharing one kind (one card per provider) —
+    # Web search is SEVEN connectors sharing one kind (one card per provider) —
     # ``connector_catalog.copy_for`` looks up by ``id`` before
     # ``kind``, so these override the family blurb above per provider. Verbatim from the
     # Browse & add catalog's own per-provider copy before the 2026-08-14 fix that made this
@@ -370,6 +378,7 @@ SHORT: dict[str, str] = {
     "web_search:serper": "Google results, fast and low-cost",
     "web_search:google_pse": "Google Custom Search",
     "web_search:firecrawl": "Search + full-page scraping, JS-rendered pages included",
+    "web_search:keenable": "Web search and page reading built for AI agents",
     "telegram": "Chat with Lucius and get alerts on Telegram.",
     "voice": "Talk to Lucius out loud from the chat.",
     "webhook": "Send notifications to any URL.",
@@ -432,6 +441,10 @@ LONG: dict[str, str] = {
     "web_search:firecrawl": (
         "Search plus full page scraping, including JS-rendered pages a plain fetch can't read "
         "— the provider to pick if page reads are coming back thin or blocked."
+    ),
+    "web_search:keenable": (
+        "Ranked results with titles, links, snippets and publish dates, and page reads "
+        "through Keenable's own fetch, which returns the page as clean markdown."
     ),
     "voice": (
         "Press Call in Lucius's chat and talk instead of typing. A fast voice keeps the "

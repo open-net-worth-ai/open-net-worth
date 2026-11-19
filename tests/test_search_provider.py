@@ -19,6 +19,7 @@ import backend.ai.search as search_pkg
 from backend.ai.search.base import PROVIDER_IDS, build_provider
 from backend.ai.search.duckduckgo_provider import DuckDuckGoProvider
 from backend.ai.search.google_pse_provider import GooglePseProvider
+from backend.ai.search.keenable_provider import KeenableProvider
 from backend.ai.search.perplexity_provider import PerplexityProvider
 from backend.ai.search.serper_provider import SerperProvider
 from backend.ai.search.tavily_provider import TavilyProvider
@@ -172,6 +173,78 @@ def test_serper_request_shape_and_mapping(monkeypatch):
     assert rows[0]["content"] == "sn"
 
 
+def test_keenable_request_shape_and_mapping(monkeypatch):
+    # Response shape as returned live by POST /v1/search (checked 2026-11-15).
+    captured: dict = {}
+    _stub_client(
+        monkeypatch,
+        "backend.ai.search.keenable_provider",
+        captured,
+        {
+            "query": "q",
+            "mode": "pro",
+            "results": [
+                {
+                    "title": "KT",
+                    "url": "https://k.example",
+                    "description": "",
+                    "snippet": "ks",
+                    "published_at": "2026-10-08T22:03:10Z",
+                    "acquired_at": "2026-11-08T09:56:53Z",
+                },
+                {"title": "no link", "url": "", "snippet": "dropped"},
+                {"title": None, "url": "https://bare.example", "snippet": None},
+            ],
+        },
+    )
+    rows = asyncio.run(KeenableProvider(api_key="kk").search("q", max_results=50))
+    assert captured["url"] == "https://api.keenable.ai/v1/search"
+    assert captured["headers"]["X-API-Key"] == "kk"
+    assert captured["json"] == {"query": "q", "max_results": 20}
+    assert [r["url"] for r in rows] == ["https://k.example", "https://bare.example"]
+    assert rows[0]["content"] == "ks"
+    assert rows[0]["published_date"] == "2026-10-08T22:03:10Z"
+    assert rows[1]["title"] == "" and rows[1]["content"] == ""
+    assert rows[1]["published_date"] == ""
+
+
+def test_keenable_fetch_page_uses_native_fetch(monkeypatch):
+    captured: dict = {}
+    _stub_client(
+        monkeypatch,
+        "backend.ai.search.keenable_provider",
+        captured,
+        {"url": "https://k.example/a", "title": "A", "content": "# A\n\nbody"},
+    )
+    text = asyncio.run(KeenableProvider(api_key="kk").fetch_page("https://k.example/a"))
+    assert captured["url"] == "https://api.keenable.ai/v1/fetch"
+    assert captured["params"] == {"url": "https://k.example/a"}
+    assert captured["headers"]["X-API-Key"] == "kk"
+    assert text == "# A\n\nbody"
+
+
+def test_keenable_fetch_page_failures_are_marked(monkeypatch):
+    _stub_client(monkeypatch, "backend.ai.search.keenable_provider", {}, {"content": "  "})
+    provider = KeenableProvider(api_key="kk")
+    assert asyncio.run(provider.fetch_page("https://k.example")) == "[no content extracted]"
+
+    class _Boom:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, *a, **k):
+            raise httpx.ConnectError("down")
+
+    monkeypatch.setattr("backend.ai.search.keenable_provider.httpx.AsyncClient", _Boom)
+    assert asyncio.run(provider.fetch_page("https://k.example")).startswith("[fetch failed:")
+
+
 # ── Perplexity mapping (existing, kept) ──────────────────────────────────────────
 
 
@@ -218,7 +291,7 @@ def test_perplexity_falls_back_to_answer_when_no_sources(monkeypatch):
 
 
 def test_providers_require_key():
-    for cls in (TavilyProvider, PerplexityProvider, SerperProvider):
+    for cls in (TavilyProvider, PerplexityProvider, SerperProvider, KeenableProvider):
         with pytest.raises(ValueError):
             cls(api_key="")
 

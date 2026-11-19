@@ -71,6 +71,9 @@ _SEARCH_COST_USD: dict[str, float] = {
     # (yearly) plan — cheaper per call than most of the above, but real cost is plan-tier
     # dependent like every other estimate in this table.
     "firecrawl": 0.002,
+    # keenable.ai/pricing: pay as you go is $4 per 1,000 requests once the 100,000 free
+    # requests a month are used; this is that list price, so it overstates free-tier use.
+    "keenable": 0.004,
     # duckduckgo and searxng are free / self-hosted — no cost
 }
 
@@ -78,9 +81,10 @@ _SEARCH_COST_USD: dict[str, float] = {
 # /scrape is 1 credit/page, ~$0.001 at the same plan tier — the two are NOT the same per-call
 # cost, hence the per-provider dict rather than reusing _PAID_FETCH_COST_USD for both.
 # Plain-GET readers (duckduckgo, searxng, and fallback mode for others) cost ~$0.
-_PAID_FETCH_PROVIDERS: frozenset[str] = frozenset({"tavily", "firecrawl"})
+_PAID_FETCH_PROVIDERS: frozenset[str] = frozenset({"tavily", "firecrawl", "keenable"})
 _PAID_FETCH_COST_USD = 0.002
-_PAID_FETCH_COST_USD_BY_PROVIDER: dict[str, float] = {"firecrawl": 0.001}
+# Keenable bills a fetch like a search (one request, same keenable.ai/pricing list price).
+_PAID_FETCH_COST_USD_BY_PROVIDER: dict[str, float] = {"firecrawl": 0.001, "keenable": 0.004}
 
 # `_recency_hours`/`_news_sort_key`/`_is_stale_news`/`_has_known_publish_date`/
 # `_is_generic_reference_title`/`_is_filename_shaped_title` (RFC intel-signals-data-model, §5.2)

@@ -37,10 +37,10 @@ def test_empty_state_has_builtin_transports_no_mcp():
     # Email + webhook + telegram + simplefin + plaid + lunch_money + lunch_flow + ynab +
     # enable_banking + yodlee + alpaca + ibkr + yahoo_finance + coingecko are always-present
     # built-in transports, and voice while its flag is on (the default); web search is ONE
-    # connector PER provider ("web_search:<id>", 6 of them: DuckDuckGo, Tavily, Perplexity,
-    # Serper, Google PSE, Firecrawl); no servers → no mcp connector.
+    # connector PER provider ("web_search:<id>", 7 of them: DuckDuckGo, Tavily, Perplexity,
+    # Serper, Google PSE, Firecrawl, Keenable); no servers → no mcp connector.
     web_search_ids = {i for i in ids if i.startswith("web_search:")}
-    assert len(web_search_ids) == 6
+    assert len(web_search_ids) == 7
     assert ids - web_search_ids == {
         "email",
         "voice",

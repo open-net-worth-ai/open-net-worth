@@ -605,6 +605,22 @@ export const CATALOG: CatalogEntry[] = [
     popular: false,
     tools: ['firecrawl_search', 'firecrawl_fetch_page'],
   },
+  {
+    id: 'web_search:keenable',
+    name: 'Keenable',
+    families: ['Web'],
+    categories: ['Web search', 'Browsing'],
+    icon: 'search',
+    hue: 'var(--warn)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:keenable"]`.
+    publisher: 'Keenable',
+    verification: 'unverified',
+    homepageUrl: 'https://docs.keenable.ai/',
+    privacyUrl: 'https://keenable.ai/privacy',
+    mcp: false,
+    popular: false,
+    tools: ['keenable_search', 'keenable_fetch_page'],
+  },
 
   // ── MCP (third-party — someone else's code, over a transport we don't own) ────
   //

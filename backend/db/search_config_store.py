@@ -110,6 +110,15 @@ PROVIDER_CATALOG: list = [
         "native_fetch": True,
         "extra_fields": [],
     },
+    {
+        "id": "keenable",
+        "label": "Keenable",
+        "hint": "Web search and page reading built for AI agents.",
+        "docs_url": "https://docs.keenable.ai/api-keys",
+        "needs_api_key": True,
+        "native_fetch": True,
+        "extra_fields": [],
+    },
 ]
 
 _CATALOG_BY_ID = {p["id"]: p for p in PROVIDER_CATALOG}
