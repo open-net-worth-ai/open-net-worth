@@ -219,3 +219,7 @@ export function drillGroup(
     links,
   }
 }
+
+/** Below this width the five-column graph has no room: Plan's Money flow and the Dashboard card
+ *  both draw the compact graph (groups only, tap one for its categories) instead. */
+export const MONEY_FLOW_COMPACT_BELOW_PX = 720

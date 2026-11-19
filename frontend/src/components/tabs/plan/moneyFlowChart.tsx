@@ -35,6 +35,7 @@ export function MoneyFlowChart({
   onOpenCategory,
   onDrill,
   fill,
+  minHeight: floor,
 }: {
   graph: Pick<CashFlowGraph, 'nodes' | 'links' | 'columns'>
   /** Accessible name for the whole chart. */
@@ -46,6 +47,9 @@ export function MoneyFlowChart({
   onDrill?: (node: CashFlowNode) => void
   /** Grow to the height the parent gives it (a flex column), never below the content minimum. */
   fill?: boolean
+  /** The least height to lay out at (default 300 for the narrow graph, 380 for the full one).
+   *  A Dashboard card is shorter than the modal; its rows still get their minimum either way. */
+  minHeight?: number
 }) {
   const maskText = useMaskText()
   const [wrapRef, box] = useElementSize<HTMLDivElement>()
@@ -68,7 +72,7 @@ export function MoneyFlowChart({
     ),
   )
   const labelGap = 30
-  const minHeight = Math.max(narrow ? 300 : 380, tallest * labelGap + 16)
+  const minHeight = Math.max(floor ?? (narrow ? 300 : 380), tallest * labelGap + 16)
   const height = fill ? Math.max(minHeight, Math.floor(box.h)) : minHeight
   // useId's colons/guillemets aren't safe inside url(#…) — keep only id-safe characters.
   const gradId = 'mfg' + useId().replace(/[^\w-]/g, '')

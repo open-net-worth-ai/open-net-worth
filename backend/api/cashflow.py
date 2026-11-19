@@ -42,7 +42,7 @@ Response shape:
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from backend.services.cashflow import (
     DEFAULT_EXPENSE_GROWTH_PCT,
@@ -106,15 +106,24 @@ def get_cashflow_projections():
 
 
 @router.get("/api/cashflow/flow")
-def get_cashflow_flow(month: Optional[str] = None, compact: bool = False):
-    """The money-flow (Sankey) graph for one month — default the last full month. `compact`
-    returns the Dashboard card's three columns instead of the full five."""
+def get_cashflow_flow(
+    month: Optional[str] = None,
+    compact: bool = False,
+    period: Optional[str] = None,
+    tag: Optional[list[str]] = Query(None),
+):
+    """The money-flow (Sankey) graph for one month — default the last full month — or for a
+    whole `period` (this_month, last_month, 3m, 6m, 12m, ytd). `tag` (repeatable) keeps only
+    transactions carrying one of them. `compact` returns the Dashboard card's three columns
+    instead of the full five."""
     from fastapi import HTTPException
 
     from backend.core.errors import ValidationError
     from backend.services import cash_flow_graph as cash_flow_graph_service
 
     try:
-        return cash_flow_graph_service.cash_flow_graph(month, compact=compact)
+        return cash_flow_graph_service.cash_flow_graph(
+            month, compact=compact, period=period, tags=tag
+        )
     except ValidationError as exc:
         raise HTTPException(400, str(exc)) from exc

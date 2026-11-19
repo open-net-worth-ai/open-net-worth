@@ -314,9 +314,33 @@ export interface StackedSeries {
   data: number[]
 }
 
+/** A report period (`backend/services/report_window.PERIODS`). */
+export type ReportPeriod = 'this_month' | 'last_month' | '3m' | '6m' | '12m' | 'ytd'
+
+/** A whole report period summed — what a widget with a Period setting shows. */
+export interface ReportPeriodBlock extends MonthPoint {
+  id: ReportPeriod
+  from: string
+  to: string
+  months: string[]
+  merchants: ReportsRollup['merchants']
+  savings: {
+    income: number
+    spent: number
+    saved: number
+    rate_pct: number
+    known: boolean
+    cards_missing_spending: string[]
+  }
+}
+
 export interface ReportsRollup {
   base_currency: string
   months: string[]
+  /** The tags every figure was narrowed to (empty: no filter). */
+  tags: string[]
+  /** Present when a `period` was asked for. */
+  period?: ReportPeriodBlock
   points: MonthPoint[]
   current: MonthPoint
   expense_series: StackedSeries[]
@@ -576,7 +600,11 @@ export interface CashFlowNode {
 }
 
 export interface CashFlowGraph {
+  /** The newest month in the graph; `months` lists them all when a period was asked for. */
   month: string
+  months: string[]
+  period: ReportPeriod | null
+  tags: string[]
   base_currency: string
   income_total: number
   spend_total: number

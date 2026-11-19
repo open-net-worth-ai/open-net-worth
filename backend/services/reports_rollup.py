@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from backend.core.fx import base_currency
 from backend.core.user_time import user_today
-from backend.services import card_coverage
+from backend.services import card_coverage, report_window
 from backend.services import ledger as ledger_service
 from backend.services import planning as planning_service
 from backend.services.fx_cache import load_fx_cache
@@ -54,7 +54,7 @@ def _row_category_ids(row: dict) -> list[str]:
     return [key] if key and not str(key).startswith("env_") else []
 
 
-def month_summary(ym: str) -> dict:
+def month_summary(ym: str, tags: list[str] | None = None) -> dict:
     """One month's spend/income, per category, from Planning's own aggregates — plus HISTORY:
     rows dated before an account's Starting Balance, which the budget leaves out (the opening
     balance already holds them) but a report of where money went must count. A statement
@@ -63,53 +63,31 @@ def month_summary(ym: str) -> dict:
 
     Payment envelopes are excluded from spending: a credit-card payment moves money between
     the user's own accounts, so counting it as spend would double-count the original purchase.
-    """
-    month_view = planning_service.budget_month(ym)
-    income_view = planning_service.income_view(ym)
-    history = planning_service.history_activity_by_category(ym)
 
-    claimed: set[str] = set()
-    expense_rows = []
-    for group_index, group in enumerate(month_view.get("groups") or []):
-        for c in group.get("categories") or []:
-            if c.get("is_payment_envelope"):
-                continue
-            ids = _row_category_ids(c)
-            if group.get("unsorted"):
-                ids = [""]  # the Uncategorized row holds blank-category history
-            claimed.update(ids)
-            activity = float(c.get("activity") or 0.0) + sum(history.get(i, 0.0) for i in ids)
-            if activity < -_EPSILON:
-                expense_rows.append(
-                    {
-                        "key": c.get("key"),
-                        "label": c.get("label") or "",
-                        "color": c.get("color") or "",
-                        "group_id": group.get("id") or "",
-                        "group": group.get("name") or "",
-                        "group_index": group_index,
-                        "category_ids": _row_category_ids(c),
-                        "amount": _round2(-activity),
-                    }
-                )
-    expense_rows.extend(_history_only_rows(history, claimed))
-    income_rows = []
-    for c in income_view.get("categories") or []:
-        received = float(c.get("received") or 0.0)
-        if received > _EPSILON:
-            income_rows.append(
-                {
-                    "key": c.get("key"),
-                    "label": c.get("label") or "",
-                    "color": c.get("color") or "",
-                    "amount": _round2(received),
-                }
-            )
-    uncategorized_in = _uncategorized_income(ym)
-    if uncategorized_in > _EPSILON:
-        income_rows.append(
-            {"key": "", "label": "Uncategorized income", "color": "", "amount": uncategorized_in}
+    ``tags`` narrows it to the transactions carrying any of them: the same fold, over those
+    rows only (``planning.tagged_activity_by_category``), history included."""
+    month_view = planning_service.budget_month(ym)
+    if tags:
+        activity = planning_service.tagged_activity_by_category(ym, tags)
+        expense_rows = _expense_rows(
+            month_view, lambda c, ids: sum(activity.get(i, 0.0) for i in ids)
         )
+        expense_rows.extend(_history_only_rows(activity, _claimed(month_view)))
+        received = planning_service.tagged_income_by_category(ym, tags)
+        income_rows = _income_rows(lambda key: received.get(key, 0.0), received.get("", 0.0))
+    else:
+        history = planning_service.history_activity_by_category(ym)
+        expense_rows = _expense_rows(
+            month_view,
+            lambda c, ids: float(c.get("activity") or 0.0) + sum(history.get(i, 0.0) for i in ids),
+        )
+        expense_rows.extend(_history_only_rows(history, _claimed(month_view)))
+        income_view = planning_service.income_view(ym)
+        received_by = {
+            c.get("key"): float(c.get("received") or 0.0)
+            for c in income_view.get("categories") or []
+        }
+        income_rows = _income_rows(lambda key: received_by.get(key, 0.0), _uncategorized_income(ym))
     expense_rows.sort(key=lambda r: r["amount"], reverse=True)
     income_rows.sort(key=lambda r: r["amount"], reverse=True)
     return {
@@ -119,6 +97,71 @@ def month_summary(ym: str) -> dict:
         "income_rows": income_rows,
         "income_total": _round2(sum(r["amount"] for r in income_rows)),
     }
+
+
+def _budget_rows(month_view: dict):
+    """Each spending row of the budget month with its group, and the ledger categories behind
+    it — payment envelopes left out (see ``month_summary``)."""
+    for group_index, group in enumerate(month_view.get("groups") or []):
+        for c in group.get("categories") or []:
+            if c.get("is_payment_envelope"):
+                continue
+            # The Uncategorized row holds blank-category activity.
+            ids = [""] if group.get("unsorted") else _row_category_ids(c)
+            yield group_index, group, c, ids
+
+
+def _claimed(month_view: dict) -> set[str]:
+    return {i for _gi, _g, _c, ids in _budget_rows(month_view) for i in ids}
+
+
+def _expense_rows(month_view: dict, activity_of) -> list[dict]:
+    rows = []
+    for group_index, group, c, ids in _budget_rows(month_view):
+        activity = activity_of(c, ids)
+        if activity < -_EPSILON:
+            rows.append(
+                {
+                    "key": c.get("key"),
+                    "label": c.get("label") or "",
+                    "color": c.get("color") or "",
+                    "group_id": group.get("id") or "",
+                    "group": group.get("name") or "",
+                    "group_index": group_index,
+                    "category_ids": _row_category_ids(c),
+                    "amount": _round2(-activity),
+                }
+            )
+    return rows
+
+
+def _income_rows(received_of, uncategorized_in: float) -> list[dict]:
+    from backend.services.categories import get_all_categories
+
+    rows = []
+    for c in get_all_categories(include_hidden=True):
+        if c.get("kind") != "income":
+            continue
+        received = received_of(c["id"])
+        if received > _EPSILON:
+            rows.append(
+                {
+                    "key": c["id"],
+                    "label": c.get("label") or c["id"],
+                    "color": c.get("color") or "",
+                    "amount": _round2(received),
+                }
+            )
+    if uncategorized_in > _EPSILON:
+        rows.append(
+            {
+                "key": "",
+                "label": "Uncategorized income",
+                "color": "",
+                "amount": _round2(uncategorized_in),
+            }
+        )
+    return rows
 
 
 def _history_only_rows(history: dict[str, float], claimed: set[str]) -> list[dict]:
@@ -272,20 +315,24 @@ def _table(points: list[dict], side: str) -> list[dict]:
     return rows
 
 
-def _merchants(ym: str, limit: int) -> list[dict]:
-    """Spend grouped by payee for one month. No endpoint does this per-month
-    (`GET /api/payees/report` is all-time), so it folds the month's expense legs here —
-    server-side, in base currency, instead of in the browser."""
+def _merchants(yms: list[str], limit: int, tags: list[str] | None = None) -> list[dict]:
+    """Spend grouped by payee over the months `yms` (only transactions carrying one of `tags`,
+    when given). No endpoint does this per-month (`GET /api/payees/report` is all-time), so it
+    folds the expense legs here — server-side, in base currency, instead of in the browser."""
     from backend.services import payee_registry
 
     names = payee_registry.payee_names()
     base = base_currency()
     rates = load_fx_cache()
+    months = set(yms)
+    wanted = {t.strip().lower() for t in tags or [] if t and t.strip()}
     totals: dict[str, dict] = {}
     for t in ledger_service.transactions.all():
         if t.get("deleted") or t.get("kind") != "expense":
             continue
-        if not (t.get("date") or "").startswith(ym):
+        if (t.get("date") or "")[:7] not in months:
+            continue
+        if wanted and not any(str(g).strip().lower() in wanted for g in t.get("tags") or []):
             continue
         payee_id = t.get("payee_id")
         description = (t.get("description") or "").strip()
@@ -299,7 +346,7 @@ def _merchants(ym: str, limit: int) -> list[dict]:
             "key": key,
             "label": meta["label"],
             "amount": _round2(meta["amount"]),
-            # Share of the WHOLE month's spend, not of the top-N shown — a cut list never
+            # Share of the WHOLE period's spend, not of the top-N shown — a cut list never
             # inflates each row's share.
             "pct": round(meta["amount"] / month_total * 100, 2) if month_total > 0 else 0.0,
         }
@@ -384,20 +431,29 @@ def reports_aggregates(
     months: int = DEFAULT_MONTHS,
     merchant_limit: int = 10,
     series_cap: int = DEFAULT_SERIES_CAP,
+    period: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict:
-    """Every reports-group figure, for the trailing `months` window ending this month."""
-    months = max(1, min(int(months), 24))
+    """Every reports-group figure, for the trailing `months` window ending this month — or,
+    given a `period` (`report_window.PERIODS`), for that period's months, with the whole
+    period summed under `period`. `tags` narrows every figure to the transactions carrying any
+    of them."""
+    tags = [t for t in tags or [] if t and t.strip()] or None
     this_month = user_today().strftime("%Y-%m")
-    yms = _past_months(this_month, months)
-    points = [month_summary(ym) for ym in yms]
+    if period:
+        yms = report_window.period_months(period)
+    else:
+        yms = _past_months(this_month, max(1, min(int(months), 24)))
+    points = [month_summary(ym, tags) for ym in yms]
     latest = points[-1]
     spending_ym = _spending_month(points)
 
     expense_totals = _side_totals(points, "expense_total")
     income_totals = _side_totals(points, "income_total")
-    return {
+    out = {
         "base_currency": base_currency(),
         "months": yms,
+        "tags": tags or [],
         "points": points,
         "current": latest,
         "expense_series": _stacked_series(points, "expense_rows", series_cap),
@@ -416,6 +472,29 @@ def reports_aggregates(
         # The month the spending widgets show: `current_month` unless it has none yet.
         "current_month": this_month,
         "spending_month": spending_ym,
-        "merchants": _merchants(spending_ym, merchant_limit),
+        "merchants": _merchants([spending_ym], merchant_limit, tags),
         "savings": {**_with_card_caveat(_latest_savings(points)), "trailing": trailing_saving()},
+    }
+    if period:
+        out["period"] = _period_block(period, points, merchant_limit, tags)
+    return out
+
+
+def _period_block(period: str, points: list[dict], merchant_limit: int, tags) -> dict:
+    """The whole period as one figure: what Spending by category, Top merchants and Savings
+    rate show once a widget picks a period."""
+    summary = report_window.combine(points)
+    yms = summary["months"]
+    return {
+        "id": period,
+        "from": yms[0],
+        "to": yms[-1],
+        **summary,
+        "merchants": _merchants(yms, merchant_limit, tags),
+        "savings": {
+            **_savings(summary),
+            "cards_missing_spending": card_coverage.cards_without_activity(
+                f"{yms[0]}-01", f"{yms[-1]}-31"
+            ),
+        },
     }

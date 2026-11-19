@@ -40,6 +40,7 @@ import type {
   NetWorthStats,
   PlanningSummary,
   PortfolioAnalytics,
+  ReportPeriod,
   ReportsRollup,
   SpendByWeek,
 } from '../../types/aggregates'
@@ -115,16 +116,38 @@ export function usePlanningSummary(ym?: string): QueryCacheResult<PlanningSummar
 }
 
 /** Trailing-window income/expense rollups. */
-export function useReportsRollup(months = 6, merchantLimit = 10): QueryCacheResult<ReportsRollup> {
+/** A report's scope: a period (omitted: the widget's long-standing default window) and the
+ *  tags it is narrowed to. */
+export interface ReportScope {
+  period?: ReportPeriod
+  tags?: string[]
+}
+
+function scopeQuery({ period, tags }: ReportScope = {}): string {
+  const parts = period ? [`period=${period}`] : []
+  for (const tag of [...(tags ?? [])].sort()) parts.push(`tag=${encodeURIComponent(tag)}`)
+  return parts.length ? `&${parts.join('&')}` : ''
+}
+
+export function useReportsRollup(
+  months = 6,
+  merchantLimit = 10,
+  scope: ReportScope = {},
+): QueryCacheResult<ReportsRollup> {
   const version = useDataVersion([...PLANNING_SIGNALS])
-  const key = `/api/reports/rollup?months=${months}&merchant_limit=${merchantLimit}`
+  const key = `/api/reports/rollup?months=${months}&merchant_limit=${merchantLimit}${scopeQuery(scope)}`
   return useQueryCache<ReportsRollup>(key, () => fetchJson<ReportsRollup>(key), { version })
 }
 
-/** One month's money-flow (Sankey) graph. `month` is YYYY-MM; the key always carries it. */
-export function useCashFlowGraph(month: string, compact = false): QueryCacheResult<CashFlowGraph> {
+/** One month's money-flow (Sankey) graph — or a whole period's, given `scope.period`. `month` is
+ *  YYYY-MM; the key always carries it. */
+export function useCashFlowGraph(
+  month: string,
+  compact = false,
+  scope: ReportScope = {},
+): QueryCacheResult<CashFlowGraph> {
   const version = useDataVersion([...PLANNING_SIGNALS])
-  const key = `/api/cashflow/flow?month=${month}&compact=${compact}`
+  const key = `/api/cashflow/flow?month=${month}&compact=${compact}${scopeQuery(scope)}`
   return useQueryCache<CashFlowGraph>(key, () => fetchJson<CashFlowGraph>(key), { version })
 }
 
