@@ -109,3 +109,47 @@ describe('TagField', () => {
     expect(onLeave).toHaveBeenCalledWith(['new-one'])
   })
 })
+
+describe('TagField ←/→ between existing tags', () => {
+  const picked = () =>
+    Array.from(document.querySelectorAll('.acct-tagf-chip.sel')).map((c) => c.textContent)
+
+  it('← from the start of the input walks left through the chips, → walks back to the input', () => {
+    render(<Harness initial={['gift', 'japan-trip', 'work']} />)
+    input().focus()
+    fireEvent.keyDown(input(), { key: 'ArrowLeft' })
+    expect(picked()).toEqual(['work'])
+    fireEvent.keyDown(input(), { key: 'ArrowLeft' })
+    fireEvent.keyDown(input(), { key: 'ArrowLeft' })
+    fireEvent.keyDown(input(), { key: 'ArrowLeft' }) // stops at the first
+    expect(picked()).toEqual(['gift'])
+    fireEvent.keyDown(input(), { key: 'ArrowRight' })
+    expect(picked()).toEqual(['japan-trip'])
+    fireEvent.keyDown(input(), { key: 'ArrowRight' })
+    fireEvent.keyDown(input(), { key: 'ArrowRight' })
+    expect(picked()).toEqual([]) // back in the input
+    expect(document.activeElement).toBe(input())
+  })
+
+  it('Backspace / Delete remove the picked chip, not the last one', () => {
+    render(<Harness initial={['gift', 'japan-trip', 'work']} />)
+    fireEvent.focus(input())
+    fireEvent.keyDown(input(), { key: 'ArrowLeft' })
+    fireEvent.keyDown(input(), { key: 'ArrowLeft' })
+    fireEvent.keyDown(input(), { key: 'Backspace' })
+    expect(value()).toBe('gift|work')
+    expect(picked()).toEqual(['gift'])
+    fireEvent.keyDown(input(), { key: 'Delete' })
+    expect(value()).toBe('work')
+    expect(picked()).toEqual(['work'])
+  })
+
+  it('typing drops the pick and goes back to searching', () => {
+    render(<Harness initial={['gift']} />)
+    fireEvent.focus(input())
+    fireEvent.keyDown(input(), { key: 'ArrowLeft' })
+    expect(picked()).toEqual(['gift'])
+    fireEvent.change(input(), { target: { value: 'w' } })
+    expect(picked()).toEqual([])
+  })
+})

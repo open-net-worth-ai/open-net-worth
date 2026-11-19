@@ -44,6 +44,9 @@ export function TagField({
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(0)
+  // The chip picked with ←/→ (focus stays in the input), or null while the caret is in the input.
+  const [sel, setSel] = useState<number | null>(null)
+  const chipRefs = useRef<(HTMLSpanElement | null)[]>([])
   const ref = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const popRef = useRef<HTMLDivElement | null>(null)
@@ -60,6 +63,20 @@ export function TagField({
   useEffect(() => {
     if (open) scrollHiIntoView(popRef.current)
   }, [hi, open])
+  // A clipped (compact) field scrolls: keep the picked chip, or else the caret, in view. By hand,
+  // not scrollIntoView: that also scrolls the register, and a chip wider than the field must show
+  // its start rather than its end.
+  useEffect(() => {
+    const box = ref.current
+    const el = sel === null ? inputRef.current : chipRefs.current[sel]
+    if (!box || !el || box.scrollWidth <= box.clientWidth) return
+    const b = box.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    const pad = 6
+    if (r.left < b.left + pad || r.width > b.width - 2 * pad)
+      box.scrollLeft += r.left - b.left - pad
+    else if (r.right > b.right - pad) box.scrollLeft += r.right - b.right + pad
+  }, [sel, value.length])
 
   const add = (tag: string): string[] => {
     const t = slugTag(tag)
@@ -81,7 +98,29 @@ export function TagField({
     setHi(0)
   }
 
+  /** ←/→ walk the chips; Backspace/Delete remove the picked one. True when the key was used. */
+  function chipKey(e: React.KeyboardEvent<HTMLInputElement>): boolean {
+    const atStart = e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0
+    if (e.key === 'ArrowLeft' && value.length && (sel !== null || atStart)) {
+      setSel(sel === null ? value.length - 1 : Math.max(sel - 1, 0))
+    } else if (e.key === 'ArrowRight' && sel !== null) {
+      setSel(sel + 1 >= value.length ? null : sel + 1)
+    } else if ((e.key === 'Backspace' || e.key === 'Delete') && sel !== null) {
+      const left = value.length - 1
+      remove(value[sel])
+      if (!left) setSel(null)
+      else setSel(e.key === 'Backspace' ? Math.max(sel - 1, 0) : Math.min(sel, left - 1))
+    } else {
+      if (sel !== null) setSel(null)
+      return false
+    }
+    e.preventDefault()
+    setOpen(false)
+    return true
+  }
+
   function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (chipKey(e)) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       if (!open) setOpen(true)
@@ -129,8 +168,14 @@ export function TagField({
         leave(flush())
       }}
     >
-      {value.map((tag) => (
-        <span key={tag} className="acct-detail-tag acct-tagf-chip">
+      {value.map((tag, i) => (
+        <span
+          key={tag}
+          ref={(el) => {
+            chipRefs.current[i] = el
+          }}
+          className={'acct-detail-tag acct-tagf-chip' + (i === sel ? ' sel' : '')}
+        >
           {tag}
           <button
             type="button"
@@ -156,10 +201,12 @@ export function TagField({
         placeholder={value.length ? '' : placeholder}
         value={query}
         onFocus={() => {
+          setSel(null)
           setOpen(true)
           setHi(0)
         }}
         onChange={(e) => {
+          setSel(null)
           setQuery(e.target.value)
           setOpen(true)
           setHi(0)

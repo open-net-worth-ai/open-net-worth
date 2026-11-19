@@ -10130,7 +10130,9 @@ button.acct-alert-src {
 .acct-tagf.compact {
   min-height: 30px;
   flex-wrap: nowrap;
-  overflow: hidden;
+  /* Scrolls (no bar) so ←/→ can bring a clipped chip into view. */
+  overflow-x: auto;
+  scrollbar-width: none;
   border-radius: var(--radius-sm);
   padding: 3px 6px;
 }
@@ -10143,6 +10145,14 @@ button.acct-alert-src {
 }
 /* Centred on the line box the × sits ~1px above lowercase tag text (whose x-height centre is below
    it), so it reads as floating high — drop it onto the letters. */
+.acct-tagf.compact::-webkit-scrollbar {
+  display: none;
+}
+/* The chip picked with ←/→ — Backspace/Delete removes it. */
+.acct-tagf-chip.sel {
+  border-color: var(--accent);
+  color: var(--ink);
+}
 .acct-tagf-x {
   display: inline-flex;
   align-items: center;
