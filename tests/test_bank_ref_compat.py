@@ -22,6 +22,9 @@ from backend.services.aggregation.providers import PROVIDERS, FetchWindow, deriv
 from backend.services.bank_data_sync import runner, settings
 from tests.bank_sync_fakes import days_ago
 
+# Its accounts hold foreign currencies: seed synthetic rates, never a live FX fetch.
+pytestmark = pytest.mark.usefixtures("fx_rates")
+
 UID = "uid-acme-1"
 ON = days_ago(3)
 

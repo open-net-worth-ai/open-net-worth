@@ -83,6 +83,7 @@ function renderMode(over: Partial<React.ComponentProps<typeof TransactionReviewM
     onApprove: vi.fn(),
     onReject: vi.fn(),
     onAllDetails: vi.fn(),
+    onEditAll: vi.fn(),
     ...over,
   }
   return { ...render(<TransactionReviewMode {...props} />), props }

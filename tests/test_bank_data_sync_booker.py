@@ -54,7 +54,8 @@ def _balance(account_id: str) -> float:
     return round(ledger_service.balances()[account_id], 2)
 
 
-pytestmark = pytest.mark.flags(bank_data_sync=True)
+# Its accounts hold foreign currencies: seed synthetic rates, never a live FX fetch.
+pytestmark = [pytest.mark.flags(bank_data_sync=True), pytest.mark.usefixtures("fx_rates")]
 
 
 def test_first_import_books_the_history_and_keeps_todays_balance(bank):

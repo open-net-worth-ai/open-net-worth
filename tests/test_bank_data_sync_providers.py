@@ -62,7 +62,7 @@ def test_the_config_is_all_that_differs():
 
 
 @pytest.fixture
-def eb(db_isolated, monkeypatch):
+def eb(db_isolated, fx_rates, monkeypatch):
     from backend.db import EnableBankingConfigStore
 
     monkeypatch.setattr(ledger_service, "base_currency", lambda: "EUR")
@@ -119,7 +119,7 @@ def test_enable_banking_books_every_row_once_pending_uncleared(eb):
 
 
 @pytest.fixture
-def plaid(db_isolated, monkeypatch):
+def plaid(db_isolated, fx_rates, monkeypatch):
     from backend.db import PlaidConfigStore
 
     monkeypatch.setattr(ledger_service, "base_currency", lambda: "USD")

@@ -11,7 +11,8 @@ export async function login(target) {
   try {
     await target
       .getByRole("button", { name: "Settings", exact: true })
-      .waitFor();
+      // A cold browser's first load of the app on a busy hosted runner can pass 30s.
+      .waitFor({ timeout: 90_000 });
   } catch (error) {
     if (
       await target
