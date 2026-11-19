@@ -830,8 +830,18 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
           <div className="ov-savings-pct money">{rate}%</div>
         </div>
         <Text as="p" size="xs" tone="faint" className="ov-savings-sub">
-          <span className="money">{fBaseCompact(savings.saved)}</span> of{' '}
-          <span className="money">{fBaseCompact(savings.income)}</span> saved
+          {savings.spent > savings.income ? (
+            // Spent more than came in: say by how much, not "S$0 saved".
+            <>
+              <span className="money">{fBaseCompact(savings.spent - savings.income)}</span> more
+              spent than <span className="money">{fBaseCompact(savings.income)}</span> income
+            </>
+          ) : (
+            <>
+              <span className="money">{fBaseCompact(savings.saved)}</span> of{' '}
+              <span className="money">{fBaseCompact(savings.income)}</span> saved
+            </>
+          )}
         </Text>
       </div>
     </WidgetShell>
