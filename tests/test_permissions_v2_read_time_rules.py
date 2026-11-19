@@ -708,9 +708,14 @@ def test_rule6_the_blocked_list_reaches_the_approval_context_only_when_the_flag_
 # ── the two properties that hold the rules together ───────────────────────────────────────
 
 
-def test_the_table_holds_only_rows_the_test_itself_wrote(client):
+def test_the_table_holds_only_rows_the_test_itself_wrote(client, monkeypatch):
     """Exercise the gate, the list API and Reset; every default stays a read, never a write."""
     CODE = CODE_EXEC_AUTO_RUN_FLAG
+
+    async def no_network(*_a, **_kw):
+        return []
+
+    monkeypatch.setattr("backend.ai.tools.misc.search_results", no_network)
     AppConfigStore().set_flag(CODE, True)
     try:
         perms.set_tool_permission(CORE, "add_transactions", "always_allow")

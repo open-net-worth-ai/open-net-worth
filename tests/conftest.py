@@ -106,6 +106,12 @@ def pytest_addoption(parser):
         metavar="NAME=on|off",
         help="force a feature flag for the whole run (repeatable) — docs/FEATURE_FLAGS.md",
     )
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="K/N",
+        help="run only slice K of N (whole files, balanced by test count) — tests/sharding.py",
+    )
 
 
 def pytest_configure(config):
@@ -152,7 +158,10 @@ def _feature_flags(request, monkeypatch):
         yield
 
 
-def pytest_collection_modifyitems(items):
+def pytest_collection_modifyitems(config, items):
+    from tests import sharding
+
+    sharding.select(config, items)
     skip_integration = pytest.mark.skip(reason="ANTHROPIC_API_KEY not set")
     for item in items:
         if "integration" in item.keywords and not os.environ.get("ANTHROPIC_API_KEY"):

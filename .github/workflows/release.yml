@@ -29,7 +29,7 @@ env:
 jobs:
   version:
     name: tag matches every stamped version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
       litellm_ref: ${{ steps.version.outputs.litellm_ref }}
@@ -56,7 +56,7 @@ jobs:
   gate-backend:
     name: gate - backend tests
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,7 +74,7 @@ jobs:
   gate-frontend:
     name: gate - frontend tests
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,7 +93,7 @@ jobs:
   security:
     name: gate - security scan
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -110,7 +110,7 @@ jobs:
   wheel:
     name: build wheel + sdist
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -141,7 +141,7 @@ jobs:
   image:
     name: agent image (amd64 + arm64)
     needs: [version, gate-backend, gate-frontend, security]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -212,7 +212,7 @@ jobs:
   draft:
     name: manifest, signatures and DRAFT release
     needs: [version, gate-backend, gate-frontend, security, wheel, image, desktop]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
@@ -250,7 +250,7 @@ jobs:
   verify:
     name: verify the draft
     needs: [version, image, draft]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
@@ -270,7 +270,7 @@ jobs:
   promote:
     name: promote to latest (manual approval)
     needs: [version, image, verify]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Required reviewers on this environment are the gate: nothing below runs until the owner
     # approves, after reading the verify job. Promotion is the one step desktop updates cannot undo.
     environment: release
@@ -316,7 +316,7 @@ jobs:
     name: publish to PyPI
     needs: [version, promote]
     if: ${{ vars.PYPI_PUBLISH == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: pypi
       url: https://pypi.org/project/open-net-worth/${{ needs.version.outputs.version }}

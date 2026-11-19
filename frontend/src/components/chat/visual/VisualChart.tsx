@@ -18,7 +18,7 @@ function useWidth() {
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const ro = new ResizeObserver(([e]) => setWidth(Math.round(e.contentRect.width)))
+    const ro = new ResizeObserver(([e]) => e && setWidth(Math.round(e.contentRect.width)))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -134,6 +134,6 @@ function displayLabels(labels: string[]): string[] {
   if (!labels.every((l) => /^\d{4}-\d{2}-\d{2}/.test(l))) return labels
   const monthEnds =
     labels.length > 1 &&
-    labels.every((l, i) => i === 0 || l.slice(0, 7) !== labels[i - 1].slice(0, 7))
+    labels.every((l, i) => i === 0 || l.slice(0, 7) !== labels[i - 1]?.slice(0, 7))
   return labels.map((l) => (monthEnds ? fMonth(l.slice(0, 7)) : fDate(l.slice(0, 10))))
 }

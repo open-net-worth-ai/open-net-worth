@@ -271,7 +271,16 @@ def test_it_reports_the_version_the_server_comes_back_on(path, serve_requests, c
     assert ask_server(path, SERVER, "9.9.9", **LONGER) == 0
 
     assert "Now running 9.9.9" in capsys.readouterr().out
-    assert not path.exists()
+    assert _gone_soon(path)
+
+
+def _gone_soon(path, wait=5.0):
+    """The faked version can answer before the watcher's thread has cleared the file (Windows
+    retries a remove while the reader holds it), so the clear is awaited, not raced."""
+    deadline = time.monotonic() + wait
+    while path.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return not path.exists()
 
 
 def test_it_ignores_the_old_version_still_answering_during_the_restart(
