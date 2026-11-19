@@ -24,6 +24,7 @@ import {
 import { SourceIcon, IconCheck } from './pickers'
 import { SplitChip } from './SplitView'
 import { TagField } from './TagField'
+import { Tooltip } from '../../ui/Tooltip'
 import { Check, Circle } from '../../../ui/icons'
 
 // The click that ends an inline edit (by landing outside the cell) only ends it: without this it
@@ -517,14 +518,9 @@ export function TxnRow({
             )}
           </span>
         )}
-        {has('tags') && (
-          <span
-            className="acct-td-tags"
-            data-edit=""
-            onDoubleClick={editCell('tags')}
-            title={edit === 'tags' || !t.tags?.length ? undefined : t.tags.join(', ')}
-          >
-            {edit === 'tags' ? (
+        {has('tags') &&
+          (edit === 'tags' ? (
+            <span className="acct-td-tags" data-edit="">
               <InlineTags
                 initial={t.tags ?? []}
                 onDone={(tags) => {
@@ -534,17 +530,23 @@ export function TxnRow({
                 }}
                 onCancel={close}
               />
-            ) : t.tags?.length ? (
-              t.tags.map((tg) => (
-                <span key={tg} className="acct-detail-tag">
-                  {tg}
-                </span>
-              ))
-            ) : (
-              <span className="acct-payee-sub">—</span>
-            )}
-          </span>
-        )}
+            </span>
+          ) : (
+            // The cell clips its chips; hovering a clipped one shows every tag in the app's tip.
+            <Tooltip label={(t.tags ?? []).join(', ')} onlyWhenClipped>
+              <span className="acct-td-tags" data-edit="" onDoubleClick={editCell('tags')}>
+                {t.tags?.length ? (
+                  t.tags.map((tg) => (
+                    <span key={tg} className="acct-detail-tag">
+                      {tg}
+                    </span>
+                  ))
+                ) : (
+                  <span className="acct-payee-sub">—</span>
+                )}
+              </span>
+            </Tooltip>
+          ))}
         {has('source') && (
           <span className="acct-src">
             {t.needsReview ? (

@@ -123,3 +123,29 @@ describe('Tooltip pointer focus', () => {
     expect(screen.queryByRole('tooltip')).toBeNull()
   })
 })
+
+describe('Tooltip onlyWhenClipped', () => {
+  function cell(scrollWidth: number, clientWidth: number) {
+    render(
+      <Tooltip label="disputed, temporary-credit, email" onlyWhenClipped>
+        <span data-testid="cell">disputed temporary-credit email</span>
+      </Tooltip>,
+    )
+    const el = screen.getByTestId('cell')
+    Object.defineProperty(el, 'scrollWidth', { configurable: true, value: scrollWidth })
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: clientWidth })
+    return el
+  }
+
+  it('shows the full text when the content is cut off', () => {
+    fireEvent.mouseEnter(cell(240, 120))
+    act(() => void vi.advanceTimersByTime(700))
+    expect(screen.getByRole('tooltip').textContent).toBe('disputed, temporary-credit, email')
+  })
+
+  it('stays hidden when everything already fits', () => {
+    fireEvent.mouseEnter(cell(120, 120))
+    act(() => void vi.advanceTimersByTime(700))
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+})
