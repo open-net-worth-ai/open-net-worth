@@ -229,8 +229,9 @@ export function sameAddressAs(url: string, existing: ExistingServer[]): SameAddr
   const key = endpointKey(url)
   if (!key) return null
   const there = existing.filter((s) => endpointKey(s.url) === key)
-  if (!there.length) return null
-  const of = there[0].name
+  const first = there[0]
+  if (!first) return null
+  const of = first.name
   return {
     of,
     name: `${of} ${there.length + 1}`,

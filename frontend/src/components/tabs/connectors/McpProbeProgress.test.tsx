@@ -92,6 +92,7 @@ function connectingFlow(
     saveDormant: () => {},
     canSave: false,
     discardAbandonedOAuthServer: () => {},
+    sameAddress: null,
   }
 }
 
