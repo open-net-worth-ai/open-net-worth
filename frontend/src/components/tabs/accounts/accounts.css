@@ -896,6 +896,12 @@
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--ink);
 }
+/* Centred on the line box, the × floats ~1px above lowercase tag text (whose x-height centre is
+   lower) — the same drop the drawer's tag chips take (.acct-tagf-x). */
+.acct-review-tag.is-chosen svg {
+  position: relative;
+  top: 1px;
+}
 .acct-review-tag.is-add {
   border-style: dashed;
   color: var(--muted);
