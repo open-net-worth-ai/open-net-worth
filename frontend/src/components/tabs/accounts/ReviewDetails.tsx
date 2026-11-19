@@ -7,17 +7,16 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ChevronUp, Plus, X } from '../../../ui/icons'
+import { ChevronUp, Plus, User, X } from '../../../ui/icons'
 import { slugTag } from './categories'
 import type { PayeeOption } from './pickers'
+import { ReviewChipChooser } from './ReviewCategoryChoices'
 import { tagItems, useTransactionTags } from './tagOptions'
 import type { ReviewDraft } from './transactionReview'
 import type { Txn } from './types'
 
 /** How many of your tags the cloud offers before you search. */
 const CLOUD_LIMIT = 10
-/** How many payees the list under the Payee field offers while you type. */
-const PAYEE_LIMIT = 5
 
 /** Kinds whose rows carry a payee — a transfer, adjustment or investment never has one. */
 export const HAS_PAYEE = new Set(['expense', 'income'])
@@ -37,44 +36,92 @@ export function withPayee(
   }
 }
 
+/** Which value of the open card is being edited in place, if any. */
+export type ReviewEditing = null | 'payee' | 'memo'
+
 export function ReviewDetails({
   txn,
   draft,
   onDraftChange,
+  payeeOptions,
+  editing,
+  onEdit,
   onAllDetails,
   onCollapse,
 }: {
   txn: Txn
   draft: ReviewDraft
   onDraftChange: (draft: ReviewDraft) => void
+  payeeOptions: PayeeOption[]
+  editing: ReviewEditing
+  onEdit: (editing: ReviewEditing) => void
   onAllDetails: () => void
   onCollapse: () => void
 }) {
   const set = (patch: Partial<ReviewDraft>) => onDraftChange({ ...draft, ...patch })
+  // The payee, tapped: the rows give way to the same in-place search the category's "Other"
+  // opens — one list, a search field the keyboard comes up for only when tapped, and "Create".
+  if (editing === 'payee') {
+    const byName = new Map(payeeOptions.map((o) => [o.label, o]))
+    return (
+      <div className="acct-review-details" data-testid="review-details">
+        <ReviewChipChooser
+          caption="Payee"
+          options={payeeOptions.map((o) => ({ id: o.label, label: o.label }))}
+          selected={draft.payee || null}
+          // The options arrive most used first: those lead the list, the rest A–Z.
+          suggestedIds={payeeOptions.slice(0, 8).map((o) => o.label)}
+          onChange={(name) => {
+            if (name) onDraftChange(withPayee(draft, name, byName.get(name)?.defaultCategory))
+          }}
+          onCreate={(name) => onDraftChange(withPayee(draft, name))}
+          icon={User}
+          searchLabel="Search payees"
+          placeholder="Find or create a payee…"
+          resultsTestId="review-payee-results"
+          startSearching
+          onCloseSearch={() => onEdit(null)}
+        />
+      </div>
+    )
+  }
   return (
     <div className="acct-review-details" data-testid="review-details">
-      <label className="acct-review-detail-row">
-        <span className="acct-review-detail-label">Date</span>
-        <input
-          className="acct-review-detail-input"
-          type="date"
-          value={draft.date.slice(0, 10)}
-          onChange={(e) => e.target.value && set({ date: e.target.value })}
-        />
-      </label>
-      <label className="acct-review-detail-row">
-        <span className="acct-review-detail-label">Memo</span>
-        <input
-          className="acct-review-detail-input"
-          value={draft.memo}
-          placeholder="Add a memo"
-          onChange={(e) => set({ memo: e.target.value })}
-        />
-      </label>
+      {editing === 'memo' ? (
+        <div className="acct-review-detail-row is-open">
+          <div className="acct-review-tags-head">
+            <span className="acct-review-detail-label">Memo</span>
+            <button type="button" className="acct-review-detail-link" onClick={() => onEdit(null)}>
+              Done
+            </button>
+          </div>
+          <textarea
+            className="acct-review-memo-input"
+            aria-label="Memo"
+            rows={2}
+            value={draft.memo}
+            placeholder="What it was for, who you were with"
+            // Tapped to write: the keyboard is what was asked for here.
+            autoFocus
+            onChange={(e) => set({ memo: e.target.value })}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="acct-review-detail-row is-button"
+          onClick={() => onEdit('memo')}
+        >
+          <span className="acct-review-detail-label">Memo</span>
+          <span className={'acct-review-detail-text' + (draft.memo ? '' : ' is-empty')}>
+            {draft.memo || 'Add a memo'}
+          </span>
+        </button>
+      )}
       <ReviewTags tags={draft.tags} onChange={(tags) => set({ tags })} />
       {txn.description && (
         <div className="acct-review-detail-row">
-          <span className="acct-review-detail-label">Bank text</span>
+          <span className="acct-review-detail-label">Description</span>
           <span className="acct-review-detail-static" title={txn.description}>
             {txn.description}
           </span>
@@ -215,95 +262,5 @@ export function ReviewTags({
         )}
       </div>
     </div>
-  )
-}
-
-/** Payees whose name contains `query`, names starting with it first — the list under the field.
- *  Exported for tests. */
-export function payeeMatches(options: PayeeOption[], query: string): PayeeOption[] {
-  const q = query.trim().toLowerCase()
-  if (!q) return []
-  return options
-    .filter((o) => o.label.toLowerCase().includes(q))
-    .sort(
-      (a, b) =>
-        Number(!a.label.toLowerCase().startsWith(q)) -
-          Number(!b.label.toLowerCase().startsWith(q)) || a.label.localeCompare(b.label),
-    )
-    .slice(0, PAYEE_LIMIT)
-}
-
-/** The open card's heading, editable: the payee IS the card's title, so it is edited there
- *  rather than repeated in a "Payee" row below it (owner, 2026-11-19). Suggestions are a list in
- *  the card under it, not a floating popover: the card moves with the swipe, and a popover
- *  anchored inside it was clipped — typing showed nothing to pick. A name that matches no payee
- *  is created when the card is approved. */
-export function ReviewPayeeTitle({
-  value,
-  options,
-  onChange,
-}: {
-  value: string
-  options: PayeeOption[]
-  onChange: (payee: string, defaultCategory?: string | null) => void
-}) {
-  const [typing, setTyping] = useState(false)
-  const matches = typing ? payeeMatches(options, value) : []
-  const exact = options.some((o) => o.label.toLowerCase() === value.trim().toLowerCase())
-  const showCreate = typing && !!value.trim() && !exact
-  const pick = (o: PayeeOption) => {
-    onChange(o.label, o.defaultCategory)
-    setTyping(false)
-  }
-  return (
-    <>
-      <h3 className="acct-review-title-edit">
-        <input
-          className="acct-review-title-input"
-          aria-label="Payee"
-          placeholder="No payee yet"
-          value={value}
-          onChange={(e) => {
-            setTyping(true)
-            onChange(e.target.value)
-          }}
-          onBlur={() => setTyping(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && matches[0]) {
-              e.preventDefault()
-              pick(matches[0])
-            } else if (e.key === 'Escape' && typing) {
-              e.stopPropagation()
-              setTyping(false)
-            }
-          }}
-        />
-      </h3>
-      {(matches.length > 0 || showCreate) && (
-        <div className="acct-review-tags acct-review-payee-list" role="listbox" aria-label="Payees">
-          {matches.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="option"
-              aria-selected="false"
-              className="acct-review-tag"
-              // mousedown, not click: the input's blur (which closes this list) fires first.
-              onMouseDown={(e) => {
-                e.preventDefault()
-                pick(o)
-              }}
-            >
-              {o.label}
-            </button>
-          ))}
-          {showCreate && (
-            <span className="acct-review-detail-hint">
-              New payee “{value.trim()}”, created when you approve
-            </span>
-          )}
-        </div>
-      )}
-    </>
   )
 }

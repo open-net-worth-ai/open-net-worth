@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
-import { Check, Search, Tags, X } from '../../../ui/icons'
+import { Check, Plus, Search, Tags, X } from '../../../ui/icons'
 import { TextField } from '../../ui'
 import { useIsCoarsePointer } from '../../../hooks/useIsCoarsePointer'
 import type { Category } from './types'
@@ -35,6 +35,9 @@ export function ReviewChipChooser({
   placeholder,
   resultsTestId = 'review-choice-results',
   limit = 4,
+  onCreate,
+  startSearching = false,
+  onCloseSearch,
 }: {
   caption: string
   options: ReviewChoiceOption[]
@@ -49,8 +52,14 @@ export function ReviewChipChooser({
   /** Chips before "Other". Four category names fit two rows on a phone; account names are
    *  longer, so a transfer offers three. */
   limit?: number
+  /** Offered as "Create “name”" when the search matches no option by name. */
+  onCreate?: (name: string) => void
+  /** Open already in search — for a chooser opened by tapping its value (the payee). */
+  startSearching?: boolean
+  /** Closing the search (✕, Escape or a pick) when the chooser has no chip row to return to. */
+  onCloseSearch?: () => void
 }) {
-  const [searching, setSearching] = useState(false)
+  const [searching, setSearching] = useState(startSearching)
   const [query, setQuery] = useState('')
   // On a touch screen, focusing the field on open throws the on-screen keyboard over the
   // chips the search was opened to browse. The keyboard belongs to a tap on the field itself.
@@ -87,6 +96,7 @@ export function ReviewChipChooser({
   const close = () => {
     setSearching(false)
     setQuery('')
+    onCloseSearch?.()
   }
   const pick = (id: string | null) => {
     onChange(id)
@@ -105,6 +115,11 @@ export function ReviewChipChooser({
         (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) ||
         a.label.localeCompare(b.label),
     )
+  const typed = query.trim()
+  const canCreate =
+    !!onCreate &&
+    !!typed &&
+    !options.some((option) => option.label.toLowerCase() === typed.toLowerCase())
   if (searching) {
     return (
       <div className="acct-review-category-choices">
@@ -153,6 +168,19 @@ export function ReviewChipChooser({
                 {option.label}
               </button>
             ))}
+            {canCreate && (
+              <button
+                type="button"
+                className="acct-review-choice is-create"
+                onClick={() => {
+                  onCreate?.(typed)
+                  close()
+                }}
+              >
+                <Plus size={14} aria-hidden="true" />
+                Create “{typed}”
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -204,11 +232,13 @@ export function ReviewCategoryChoices({
   selected,
   suggestedIds,
   onChange,
+  onCreate,
 }: {
   categories: Category[]
   selected: string | null
   suggestedIds: string[]
   onChange: (id: string | null) => void
+  onCreate?: (name: string) => void
 }) {
   return (
     <ReviewChipChooser
@@ -222,6 +252,7 @@ export function ReviewCategoryChoices({
       searchLabel="Search categories"
       placeholder="Find a category…"
       resultsTestId="review-category-results"
+      onCreate={onCreate}
     />
   )
 }

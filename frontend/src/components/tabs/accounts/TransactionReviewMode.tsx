@@ -8,6 +8,7 @@ import { TransactionReviewCard } from './TransactionReviewCard'
 import { useReviewWaitingElsewhere } from './useReviewWaitingElsewhere'
 import { startingReviewDraft, validateReviewDraft, type ReviewDraft } from './transactionReview'
 import type { PayeeOption } from './pickers'
+import type { CatKind } from './AddCategoryModal'
 import type { Account, ApiTxn, Category, Txn } from './types'
 
 export type { ReviewDraft } from './transactionReview'
@@ -54,6 +55,8 @@ export interface TransactionReviewModeProps {
   onAllDetails: (txn: Txn, draft: ReviewDraft) => void
   /** The tapped-open card's payee picker. */
   payeeOptions?: PayeeOption[]
+  /** "Create “name”" in the card's category search. */
+  onCreateCategory?: (name: string, kind: CatKind) => Promise<Category>
   /** Reopens the review across every account — offered once an account's own runs out. */
   onReviewEverywhere?: () => void
   /** A row changed from OUTSIDE the cards — the drawer's Save, Mark as reviewed or Delete —
@@ -89,6 +92,7 @@ export function TransactionReviewMode({
   onReject,
   onAllDetails,
   payeeOptions = NO_PAYEE_OPTIONS,
+  onCreateCategory,
   onReviewEverywhere,
   rowChanged = null,
 }: TransactionReviewModeProps) {
@@ -491,6 +495,7 @@ export function TransactionReviewMode({
               onSkip={skip}
               onAllDetails={() => onAllDetails(current, draft)}
               payeeOptions={payeeOptions}
+              onCreateCategory={onCreateCategory}
             />
           )}
         </div>

@@ -323,6 +323,8 @@ export function TransactionSurfacesProvider({
           setDetail({ id: txn.id, txn, mode: seed ? 'edit' : 'view', seed: seed ?? undefined })
         }}
         payeeOptions={payeeOptions}
+        // The same create every surface uses: the palette colour cycles by category count.
+        onCreateCategory={(name, kind) => createCategory(name, kind, categories.length)}
         rowChanged={rowChange}
       />
       {detail && (

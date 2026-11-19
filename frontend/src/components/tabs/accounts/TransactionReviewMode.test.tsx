@@ -731,7 +731,7 @@ describe('TransactionReviewMode — compact queue', () => {
     expect(screen.queryByTestId('review-details')).toBeNull()
   })
 
-  it('suggests payees in the card as you type, and a pick fills the row', async () => {
+  it('opens the payee search in place from the heading, and a pick fills it', async () => {
     const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
       ...txn,
       needsReview: false,
@@ -746,21 +746,48 @@ describe('TransactionReviewMode — compact queue', () => {
     })
     await screen.findByRole('heading', { name: 'Kroger' })
     fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    fireEvent.change(screen.getByLabelText('Payee'), { target: { value: 'cafe' } })
-    const list = screen.getByRole('listbox', { name: 'Payees' })
-    expect(
-      within(list)
-        .getAllByRole('option')
-        .map((o) => o.textContent),
-    ).toEqual(['Corner Cafe', 'Harbor Cafe'])
-    expect(screen.getByText(/New payee “cafe”/)).toBeTruthy()
-    fireEvent.mouseDown(within(list).getByRole('option', { name: 'Harbor Cafe' }))
-    expect(screen.queryByRole('listbox', { name: 'Payees' })).toBeNull()
+    // No text field on the open card itself — the heading is a button.
+    expect(screen.queryByLabelText('Payee')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Kroger' }))
+    fireEvent.change(screen.getByLabelText('Search payees'), { target: { value: 'cafe' } })
+    const results = screen.getByTestId('review-payee-results')
+    expect(within(results).getByRole('button', { name: 'Corner Cafe' })).toBeTruthy()
+    expect(within(results).getByRole('button', { name: /Create “cafe”/ })).toBeTruthy()
+    fireEvent.click(within(results).getByRole('button', { name: 'Harbor Cafe' }))
+    expect(screen.queryByTestId('review-payee-results')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Harbor Cafe' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
     expect(onApprove.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({ payee: 'Harbor Cafe', payeeEdited: true }),
     )
+  })
+
+  it('creates a category from the search when nothing matches, and picks it', async () => {
+    const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
+      ...txn,
+      needsReview: false,
+    }))
+    const onCreateCategory = vi.fn(async (name: string, kind: string) => ({
+      id: 'cat_new',
+      label: name,
+      kind,
+      color: '#888',
+    }))
+    renderMode({ onApprove, onCreateCategory } as never)
+    await screen.findByRole('heading', { name: 'Kroger' })
+    fireEvent.click(screen.getByRole('button', { name: 'Other' }))
+    fireEvent.change(screen.getByLabelText('Search categories'), { target: { value: 'Pet care' } })
+    fireEvent.click(screen.getByRole('button', { name: /Create “Pet care”/ }))
+    await waitFor(() => expect(onCreateCategory).toHaveBeenCalledWith('Pet care', 'expense'))
+    // An exact name match offers no Create.
+    fireEvent.click(screen.getByRole('button', { name: 'Other' }))
+    fireEvent.change(screen.getByLabelText('Search categories'), { target: { value: 'groceries' } })
+    expect(screen.queryByRole('button', { name: /Create “groceries”/ })).toBeNull()
+    fireEvent.click(screen.getByLabelText('Close search'))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
+    expect(onApprove.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ category: 'cat_new' }))
   })
 
   it('a tap anywhere on the facts opens the card', async () => {
@@ -1123,7 +1150,11 @@ describe('TransactionReviewMode — edits and actions', () => {
     renderMode({ onApprove })
     await screen.findByRole('heading', { name: 'Kroger' })
     fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    fireEvent.change(screen.getByPlaceholderText('Add a memo'), { target: { value: 'Snacks' } })
+    // The memo row opens its own editor; the date line is the device's picker.
+    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Memo' }), { target: { value: 'Snacks' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.getByRole('button', { name: /^Memo/ }).textContent).toContain('Snacks')
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-15' } })
     fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
     fireEvent.change(screen.getByLabelText('Find or create a tag'), {
@@ -1165,6 +1196,29 @@ describe('TransactionReviewMode — edits and actions', () => {
     expect(card.classList.contains('is-exiting-right')).toBe(true)
     fireEvent.transitionEnd(card, { propertyName: 'transform' })
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
+  })
+
+  it('swipes from an untouched field on the open card, but not from the one being edited', async () => {
+    renderMode()
+    await screen.findByRole('heading', { name: 'Kroger' })
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    const card = screen.getByTestId('transaction-review-card')
+    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
+    const memo = screen.getByRole('textbox', { name: 'Memo' })
+
+    // Being typed in: the drag is the field's (caret, selection) — the card stays.
+    memo.focus()
+    fireEvent.pointerDown(memo, { pointerId: 20, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(memo, { pointerId: 20, clientX: 150, clientY: 102 })
+    fireEvent.pointerUp(memo, { pointerId: 20, clientX: 150, clientY: 102 })
+    expect(card.classList.contains('is-exiting-left')).toBe(false)
+
+    // Untouched: just part of the card — a left drag skips it.
+    memo.blur()
+    fireEvent.pointerDown(memo, { pointerId: 21, clientX: 300, clientY: 100 })
+    fireEvent.pointerMove(memo, { pointerId: 21, clientX: 150, clientY: 102 })
+    fireEvent.pointerUp(memo, { pointerId: 21, clientX: 150, clientY: 102 })
+    expect(card.classList.contains('is-exiting-left')).toBe(true)
   })
 
   it('maps ArrowRight and ArrowLeft outside fields while leaving field arrows alone', async () => {

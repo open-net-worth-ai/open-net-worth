@@ -244,7 +244,10 @@ describe('AccountsTab — transaction review mode', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
     // A change on the card, then All details: the drawer opens straight into the editor with it.
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
-    fireEvent.change(screen.getByPlaceholderText('Add a memo'), { target: { value: 'From card' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Memo' }), {
+      target: { value: 'From card' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'All details' }))
     const save = await screen.findByRole('button', { name: 'Save changes' })
     // On the card AND, seeded, in the drawer's Memo field.
@@ -287,7 +290,10 @@ describe('AccountsTab — transaction review mode', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
-    fireEvent.change(screen.getByPlaceholderText('Add a memo'), { target: { value: 'From card' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Memo/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Memo' }), {
+      target: { value: 'From card' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'All details' }))
 
     await waitFor(() =>

@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeftRight, Check, ChevronDown, Wallet, X } from '../../../ui/icons'
 import { sourceLine, validateReviewDraft, type ReviewDraft } from './transactionReview'
 import type { Account, Category, Txn } from './types'
+import type { CatKind } from './AddCategoryModal'
 import { ReviewChoices, ReviewSummary } from './ReviewSummary'
 import { TransactionReviewPeek } from './TransactionReviewPeek'
 import { SourceIcon, type PayeeOption } from './pickers'
-import { HAS_PAYEE, ReviewDetails, ReviewPayeeTitle, withPayee } from './ReviewDetails'
+import { HAS_PAYEE, ReviewDetails, type ReviewEditing } from './ReviewDetails'
 import { useListFitsStage, useSmoothCardHeight } from './reviewCardHeight'
 
 interface Props {
@@ -41,13 +42,21 @@ interface Props {
   onAllDetails: () => void
   /** Payee picker options for the tapped-open card. */
   payeeOptions: PayeeOption[]
+  /** "Create “name”" in the category search: makes the category (palette colour, like every
+   *  other create) and resolves to it, so the card can pick it. */
+  onCreateCategory?: (name: string, kind: CatKind) => Promise<Category>
 }
 
-/** Only fields that own horizontal dragging themselves (caret, native scroll) block a swipe.
- *  Buttons do NOT: the category chips cover much of the card, and refusing to start there made
- *  most of the card un-swipeable. A tap on one still selects it — see `moved`. */
+/** Only a field you are typing in owns horizontal dragging (caret, selection), so only it blocks
+ *  a swipe — plus links and native selects. Buttons do NOT: the category chips cover much of the
+ *  card. And an untouched field doesn't either: the open card is mostly fields, and refusing
+ *  every one of them left a phone almost nowhere to start a swipe (owner report 2026-11-19).
+ *  A tap on either still reaches it — see `moved`. */
 function startedOnControl(target: EventTarget | null): boolean {
-  return target instanceof Element && !!target.closest('input, select, textarea, a')
+  if (!(target instanceof Element)) return false
+  const field = target.closest('input, select, textarea, a')
+  if (!field) return false
+  return field.matches('select, a') || field === document.activeElement
 }
 
 // Commit distance: a third of the card's width, capped at 130px (about 113px on a phone-width
@@ -74,6 +83,30 @@ export function TransactionReviewCard(props: Props) {
   // Tapped open: the facts panel shows the editable rows. Per card — the card is keyed by row,
   // so the next one always arrives closed.
   const [expanded, setExpanded] = useState(false)
+  // The one value being edited in place on the open card (payee search, memo), if any.
+  const [editing, setEditing] = useState<ReviewEditing>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
+  // The draft as of now — a category create resolves after a request, and must not write back
+  // a draft from before whatever the reviewer changed meanwhile.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const collapse = () => {
+    setEditing(null)
+    setExpanded(false)
+  }
+  const createCategory = props.onCreateCategory
+    ? (name: string) => {
+        setCreateError(null)
+        const kind: CatKind = draft.kind === 'income' ? 'income' : 'expense'
+        props.onCreateCategory!(name, kind)
+          .then((category) => props.onDraftChange({ ...draftRef.current, category: category.id }))
+          .catch((e: unknown) =>
+            setCreateError(
+              e instanceof Error && e.message ? e.message : 'Could not create the category.',
+            ),
+          )
+      }
+    : undefined
   const selectedAccount = props.accounts.find((item) => item.id === draft.accountId) ?? account
   const validationError = validateReviewDraft(txn, draft, props.accounts)
   const [dragX, setDragX] = useState(0)
@@ -301,16 +334,11 @@ export function TransactionReviewCard(props: Props) {
               txn={txn}
               accounts={props.accounts}
               draft={draft}
-              title={
-                expanded && HAS_PAYEE.has(draft.kind) ? (
-                  <ReviewPayeeTitle
-                    value={draft.payee}
-                    options={props.payeeOptions}
-                    onChange={(payee, defaultCategory) =>
-                      props.onDraftChange(withPayee(draft, payee, defaultCategory))
-                    }
-                  />
-                ) : undefined
+              onEditPayee={
+                expanded && HAS_PAYEE.has(draft.kind) ? () => setEditing('payee') : undefined
+              }
+              onDateChange={
+                expanded ? (date) => props.onDraftChange({ ...draft, date }) : undefined
               }
             />
             {expanded ? (
@@ -318,8 +346,11 @@ export function TransactionReviewCard(props: Props) {
                 txn={txn}
                 draft={draft}
                 onDraftChange={props.onDraftChange}
+                payeeOptions={props.payeeOptions}
+                editing={editing}
+                onEdit={setEditing}
                 onAllDetails={props.onAllDetails}
-                onCollapse={() => setExpanded(false)}
+                onCollapse={collapse}
               />
             ) : (
               <button
@@ -340,7 +371,9 @@ export function TransactionReviewCard(props: Props) {
             draft={draft}
             onDraftChange={props.onDraftChange}
             suggestedCategoryIds={props.suggestedCategoryIds}
+            onCreateCategory={createCategory}
           />
+          {createError && <p className="acct-review-validation">{createError}</p>}
           {validationError && <p className="acct-review-validation">{validationError}</p>}
         </div>
       </div>

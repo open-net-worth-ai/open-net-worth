@@ -1,4 +1,4 @@
-import { CalendarCheck, Receipt, StickyNote, Tags, Wallet } from '../../../ui/icons'
+import { CalendarCheck, Pencil, Receipt, StickyNote, Tags, Wallet } from '../../../ui/icons'
 import { fCurrency } from '../../../utils/format'
 import {
   isInflow,
@@ -34,13 +34,16 @@ export function ReviewSummary({
   txn,
   accounts,
   draft,
-  title: titleSlot,
+  onEditPayee,
+  onDateChange,
 }: {
   txn: Txn
   accounts: Account[]
   draft: ReviewDraft
-  /** Replaces the heading — the open card's editable payee. */
-  title?: React.ReactNode
+  /** The open card: the payee heading is a button that opens the payee search in place. */
+  onEditPayee?: () => void
+  /** The open card: the date line opens the device's own date picker (no keyboard). */
+  onDateChange?: (date: string) => void
 }) {
   const inflow = isInflow(draft)
   const ledgerCurrency = transactionCurrency(
@@ -66,17 +69,43 @@ export function ReviewSummary({
   return (
     <div className="acct-review-summary">
       <div className="acct-review-summary-meta">
-        <span>
-          <CalendarCheck size={14} aria-hidden="true" />
-          {reviewDate(draft.date)}
-        </span>
+        {onDateChange ? (
+          <label className="acct-review-date-edit">
+            <CalendarCheck size={14} aria-hidden="true" />
+            {reviewDate(draft.date)}
+            <Pencil size={12} aria-hidden="true" className="acct-review-edit-mark" />
+            {/* The native picker, laid over the line: a tap opens the phone's date wheel. */}
+            <input
+              type="date"
+              aria-label="Date"
+              className="acct-review-date-native"
+              value={draft.date.slice(0, 10)}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              onChange={(e) => e.target.value && onDateChange(e.target.value)}
+            />
+          </label>
+        ) : (
+          <span>
+            <CalendarCheck size={14} aria-hidden="true" />
+            {reviewDate(draft.date)}
+          </span>
+        )}
       </div>
       {/* The kind is an eyebrow over the payee, in the register's kind colour; the amount below
           wears the same colour, so what kind of money this is reads before a word is read. */}
       <span className={`acct-review-summary-kind acct-detail-kind ${draft.kind}`}>
         {typeLabel(draft)}
       </span>
-      {titleSlot ?? <h3>{title || <span className="acct-review-no-payee">No payee yet</span>}</h3>}
+      {onEditPayee ? (
+        <h3>
+          <button type="button" className="acct-review-title-button" onClick={onEditPayee}>
+            {title || <span className="acct-review-no-payee">No payee yet</span>}
+            <Pencil size={14} aria-hidden="true" className="acct-review-edit-mark" />
+          </button>
+        </h3>
+      ) : (
+        <h3>{title || <span className="acct-review-no-payee">No payee yet</span>}</h3>
+      )}
       <div className={`acct-review-summary-amount ${draft.kind}`}>
         {/* A transfer is always drawn from its sending leg, so a sign would only ever be "−" —
             "Transfer to …" already says which way it went. */}
@@ -156,6 +185,7 @@ export function ReviewChoices({
   draft,
   onDraftChange,
   suggestedCategoryIds,
+  onCreateCategory,
 }: {
   txn: Txn
   accounts: Account[]
@@ -163,6 +193,8 @@ export function ReviewChoices({
   draft: ReviewDraft
   onDraftChange: (draft: ReviewDraft) => void
   suggestedCategoryIds: string[]
+  /** "Create “name”" in the category search — a new category of this card's kind, picked. */
+  onCreateCategory?: (name: string) => void
 }) {
   const ledgerCurrency = transactionCurrency(
     draft,
@@ -246,6 +278,11 @@ export function ReviewChoices({
           selected={draft.category}
           suggestedIds={suggestedCategoryIds}
           onChange={(category) => onDraftChange({ ...draft, category })}
+          onCreate={
+            onCreateCategory && (draft.kind === 'expense' || draft.kind === 'income')
+              ? onCreateCategory
+              : undefined
+          }
         />
       )}
     </div>
