@@ -2673,3 +2673,10 @@
     border-color: var(--cta-hover);
   }
 }
+
+/* Edit focuses the editor window itself on open (not the card's first control); the window is
+   a focus target, not a control, so it draws no ring — its controls keep theirs. */
+.ov-fs-shell:focus,
+.ov-fs-shell:focus-visible {
+  outline: none;
+}
