@@ -214,9 +214,6 @@ built from your regular income and bills.
 - **Savings rate** here is the average over the projected months ahead (net change divided by
   projected income). It is a different period from the Dashboard's last-month rate and 3-month
   average and the Budget screen's month-in-progress pace; hover the label to see which.
-- A credit card with no purchases in the period shows **Card spending not included yet** under
-  the hero: the runway and the projection don't see that spending, so they read better than
-  your real situation.
 - **Export CSV** downloads the projection.
 - **Money flow** opens a diagram of one month: income flowing to spending groups and savings,
   with a **Flow** / **Table** switch (on a phone, tap **Breakdown** under the diagram for the

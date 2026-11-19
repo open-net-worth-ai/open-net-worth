@@ -3107,6 +3107,42 @@ def history_activity_by_category(month: str) -> dict[str, float]:
     return out
 
 
+def _has_any_tag(txn: dict, wanted: frozenset[str]) -> bool:
+    return any(str(tag).strip().lower() in wanted for tag in (txn.get("tags") or []))
+
+
+def tagged_activity_by_category(month: str, tags: list[str]) -> dict[str, float]:
+    """Activity for ``month`` from the transactions carrying any of ``tags`` — what a report
+    filtered to those tags shows. The SAME fold as the budget's Activity, run over the tagged
+    rows only and with history counted (a report counts it — see
+    ``history_activity_by_category``), so a filtered report can never disagree with the
+    unfiltered one on what a leg is, only on which legs are in."""
+    wanted = frozenset(t.strip().lower() for t in tags if t and t.strip())
+    ctx = _build_context(month)
+    txns = [t for t in ctx["txns"] if _has_any_tag(t, wanted)]
+    no_cutoffs: dict = {}
+    return _activity_by_category(
+        txns,
+        month,
+        ctx["base"],
+        ctx["rates"],
+        ctx["plan_source_ids"],
+        no_cutoffs,
+        ctx["card_pay_env_of"],
+        ctx,
+    )
+
+
+def tagged_income_by_category(month: str, tags: list[str]) -> dict[str, float]:
+    """Income received in ``month`` per category, from the transactions carrying any of
+    ``tags`` — ``income_view``'s own sum over the tagged rows."""
+    wanted = frozenset(t.strip().lower() for t in tags if t and t.strip())
+    ctx = _build_context(month)
+    txns = [t for t in ctx["txns"] if _has_any_tag(t, wanted)]
+    sums = _income_received_ytd(txns, month, ctx["base"], ctx["rates"])
+    return {cat: received for cat, (received, _ytd) in sums.items()}
+
+
 def _income_received_ytd(
     txns: list[dict], month: str, base: str, rates: dict
 ) -> dict[str, tuple[float, float]]:

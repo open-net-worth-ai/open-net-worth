@@ -34,3 +34,4 @@ export {
   useCashFlowGraph,
   useSpendByWeek,
 } from './aggregates'
+export type { ReportScope } from './aggregates'

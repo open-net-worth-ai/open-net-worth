@@ -80,7 +80,6 @@ def runway() -> dict:
         "horizon_months": horizon,
         "trajectory": _trajectory(cash, burn, record["expense_growth_pct"], horizon),
         "known": burn > 0,
-        "cards_missing_spending": record["cards_missing_spending"],
     }
 
 

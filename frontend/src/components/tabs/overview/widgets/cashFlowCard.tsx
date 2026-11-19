@@ -1,24 +1,28 @@
-// Dashboard "Money flow" card (defId rep-sankey) — a glanceable 3-column money-flow Sankey for
-// the last full month: income → total → spending groups + Saved. Deliberately NOT Plan's
-// Money flow modal: no controls, no drill-down; "Open in Plan" goes there. It shares only the
-// pure geometry (moneyFlowLayout) and the server graph (GET /api/cashflow/flow?compact=true).
+// Dashboard "Money flow" card (defId rep-sankey) — income → total → spending groups + Saved, for
+// the last full month or the period its settings pick, optionally narrowed to tags. Clicking a
+// spending group redraws the card as that group → its categories; a category opens its
+// transactions for the same months and tags. It draws with Plan › Cash Flow's own Money flow
+// chart (moneyFlowChart.tsx), so the two look and behave the same: gradient ribbons, labels
+// with each share, hover tracing a path. Every figure is the server's (GET /api/cashflow/flow).
 
-import { useMemo } from 'react'
+import { useState } from 'react'
 import type { ComponentType } from 'react'
-import { useMaskText } from '../../../../utils/amountMask'
 import { fBase, fBaseCompact } from '../../../../utils/format'
 import { Skeleton, Text } from '../../../ui'
-import { useCashFlowGraph } from '../../../../hooks/serverState'
-import {
-  fitLabel,
-  flowLinkColor,
-  flowNodeColor,
-  layoutMoneyFlow,
-} from '../../../shared/moneyFlowLayout'
-import type { WidgetContentProps } from '../types'
+import { ChevronLeft } from '../../../../ui/icons'
+import { useCashFlowGraph, type ReportScope } from '../../../../hooks/serverState'
+import type { CashFlowGraph, CashFlowNode } from '../../../../types/aggregates'
+import { MONEY_FLOW_COMPACT_BELOW_PX, drillGroup } from '../../../shared/moneyFlowLayout'
+import { MoneyFlowChart } from '../../plan/moneyFlowChart'
+import type { RegisterDeepLink, WidgetContentProps } from '../types'
 import { WidgetShell } from '../WidgetShell'
 import { WidgetPlaceholder } from '../WidgetPlaceholder'
+import { monthSpan, reportScope, tagsText } from './reportScope'
 import { useElementSize } from '../../../../hooks/useElementWidth'
+import { useIsMobile } from '../../../../hooks/useIsMobile'
+
+/** The least height the card lays the chart out at; a taller graph scrolls inside the card. */
+const CARD_CHART_MIN = 240
 
 function lastFullMonth(): string {
   const d = new Date()
@@ -26,36 +30,46 @@ function lastFullMonth(): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
 }
 
-function shortMonth(ym: string): string {
-  const d = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1, 1)
-  return d.toLocaleString('en', { month: 'short' })
+/** "Sep", or "Aug – Oct" for a period. */
+function spanOf(g: Pick<CashFlowGraph, 'months'> | undefined, month: string): string {
+  const months = g?.months?.length ? g.months : [month]
+  return monthSpan(months[0]!, months[months.length - 1]!)
 }
 
-export const CashFlowCard: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate }) => {
-  const maskText = useMaskText()
+/** The register filter for one category, over the card's months and tags. */
+function registerLink(node: CashFlowNode, g: CashFlowGraph, tags: string[]): RegisterDeepLink {
+  const months = g.months?.length ? g.months : [g.month]
+  const from = months[0]!
+  const to = months[months.length - 1]!
+  const ids = node.category_ids ?? []
+  const range = {
+    month: from,
+    monthTo: to !== from ? to : undefined,
+    tag: tags.length ? tags : undefined,
+  }
+  return node.uncategorized
+    ? { ...range, uncategorized: true, kind: 'expense' }
+    : { ...range, category: ids.length === 1 ? ids[0] : ids }
+}
+
+export const CashFlowCard: ComponentType<WidgetContentProps> = ({
+  instance,
+  def,
+  onNavigate,
+  onOpenRegister,
+}) => {
   const month = lastFullMonth()
-  const query = useCashFlowGraph(month, true)
+  const sc = reportScope(instance, def)
+  // Plan's rule: the full graph (groups and their categories) when the card is wide enough,
+  // otherwise the compact one, where a group opens into its categories.
+  const isMobile = useIsMobile()
+  const [bodyRef, body] = useElementSize<HTMLDivElement>()
+  // Unmeasured counts as compact: most cards are half-width, so they ask once.
+  const compact = isMobile || body.w < MONEY_FLOW_COMPACT_BELOW_PX
+  const query = useCashFlowGraph(month, compact, sc.scope)
   const g = query.data
-  const [ref, box] = useElementSize<HTMLDivElement>()
-  // jsdom (and the first layout pass) measure 0 — fall back to the card's default size.
-  const width = Math.max(box.w || 360, 260)
-  const height = Math.max(box.h || 220, 180)
-  const laid = useMemo(
-    () =>
-      g
-        ? layoutMoneyFlow(g, {
-            width,
-            height,
-            labelLeft: Math.min(100, width * 0.27),
-            labelRight: Math.min(128, width * 0.32),
-            nodeWidth: 7,
-            nodePadding: 8,
-            labelGap: 26,
-          })
-        : null,
-    [g, width, height],
-  )
-  const byId = useMemo(() => new Map((laid?.nodes ?? []).map((n) => [n.id, n])), [laid])
+  const [drilled, setDrilled] = useState<{ id: string; label: string } | null>(null)
+  const where = [spanOf(g, month), tagsText(sc.tags)].filter(Boolean).join(' · ')
   const link =
     onNavigate && def.source?.tab ? (
       <button type="button" className="ov-panel-link" onClick={() => onNavigate(def.source!.tab)}>
@@ -76,7 +90,9 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({ instance, def,
   if (query.initialLoading && !g) {
     return (
       <WidgetShell title={instance.title} base={def.title} fill>
-        <Skeleton height="100%" />
+        <div className="ov-mf" ref={bodyRef}>
+          <Skeleton height="100%" />
+        </div>
       </WidgetShell>
     )
   }
@@ -85,89 +101,105 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({ instance, def,
       <WidgetShell title={instance.title} base={def.title}>
         <WidgetPlaceholder
           detail={
-            !g
-              ? "Couldn't load the money flow."
-              : `No income or spending recorded in ${shortMonth(month)}.`
+            !g ? "Couldn't load the money flow." : `No income or spending recorded in ${where}.`
           }
         />
       </WidgetShell>
     )
   }
+  const meta = (
+    <>
+      {where} ·{' '}
+      <span className="money">{fBaseCompact(g.shortfall > 0 ? g.shortfall : g.saved)}</span>
+      {g.shortfall > 0 ? ' over' : ' saved'}
+    </>
+  )
   return (
-    <WidgetShell
-      title={instance.title}
-      base={def.title}
-      fill
-      footer={footer}
-      meta={
-        <>
-          {shortMonth(month)} ·{' '}
-          <span className="money">{fBaseCompact(g.shortfall > 0 ? g.shortfall : g.saved)}</span>
-          {g.shortfall > 0 ? ' over' : ' saved'}
-        </>
-      }
-    >
-      <div className="ov-mf" ref={ref}>
-        {laid && (
-          <svg
-            className="mf-svg ov-mf-svg"
-            width={width}
-            height={height}
-            viewBox={`0 0 ${width} ${height}`}
-            role="img"
-            aria-label={`Money flow for ${shortMonth(month)}: ${fBase(g.income_total)} in, ${fBase(g.spend_total)} out`}
-          >
-            <defs>
-              <pattern
-                id="ov-mf-hatch"
-                width="6"
-                height="6"
-                patternUnits="userSpaceOnUse"
-                patternTransform="rotate(45)"
-              >
-                <rect width="2" height="6" fill="var(--mf-short)" />
-              </pattern>
-            </defs>
-            {laid.links.map((l) => (
-              <path
-                key={l.key}
-                className="mf-lnk"
-                d={l.path}
-                stroke={flowLinkColor(byId.get(l.target)!, byId.get(l.source)!)}
-                strokeWidth={l.width}
-              >
-                <title>{`${byId.get(l.source)!.label} → ${byId.get(l.target)!.label}: ${fBase(l.amount)}`}</title>
-              </path>
-            ))}
-            {laid.nodes.map((n) => (
-              <g key={n.id} className="mf-node">
-                <title>{maskText(`${n.label}: ${fBase(n.amount)} (${n.pct}%)`)}</title>
-                <rect
-                  x={n.x0}
-                  y={n.y0}
-                  width={n.x1 - n.x0}
-                  height={Math.max(2, n.y1 - n.y0)}
-                  rx={2}
-                  fill={n.kind === 'shortfall' ? 'url(#ov-mf-hatch)' : flowNodeColor(n)}
-                />
-                {n.kind !== 'total' && (
-                  <text
-                    className="mf-lbl ov-mf-lbl"
-                    x={n.labelX}
-                    y={n.labelY - 2}
-                    textAnchor={n.anchor}
-                  >
-                    <tspan className="mf-lbl-name">{fitLabel(n.label, n.labelMax, 11)}</tspan>
-                    <tspan className="mf-lbl-amt" x={n.labelX} dy={12}>
-                      {fBase(n.amount)}
-                    </tspan>
-                  </text>
-                )}
-              </g>
-            ))}
-          </svg>
+    <WidgetShell title={instance.title} base={def.title} fill footer={footer} meta={meta}>
+      <div className="ov-mf" ref={bodyRef}>
+        {drilled && compact ? (
+          <DrilledGroup
+            month={month}
+            scope={sc.scope}
+            group={drilled}
+            tags={sc.tags}
+            where={where}
+            onBack={() => setDrilled(null)}
+            onOpenRegister={onOpenRegister}
+          />
+        ) : (
+          <MoneyFlowChart
+            graph={g}
+            label={`Money flow for ${where}: ${fBase(g.income_total)} in, ${fBase(g.spend_total)} out`}
+            shareOf={g.shortfall > 0 ? 'spending' : 'income'}
+            onDrill={compact ? (n) => setDrilled({ id: n.id, label: n.label }) : undefined}
+            onOpenCategory={
+              onOpenRegister ? (n) => onOpenRegister(registerLink(n, g, sc.tags)) : undefined
+            }
+            fill
+            minHeight={CARD_CHART_MIN}
+          />
         )}
       </div>
     </WidgetShell>
+  )
+}
+
+/** One spending group → its categories, over the card's months and tags. The compact graph
+ *  stops at groups, so this reads the full one — exactly what Plan's phone drill-in shows. */
+function DrilledGroup({
+  month,
+  scope,
+  group,
+  tags,
+  where,
+  onBack,
+  onOpenRegister,
+}: {
+  month: string
+  scope: ReportScope
+  group: { id: string; label: string }
+  tags: string[]
+  where: string
+  onBack: () => void
+  onOpenRegister?: (filter: RegisterDeepLink) => void
+}) {
+  const query = useCashFlowGraph(month, false, scope)
+  const full = query.data
+  const drilled = full ? drillGroup(full, group.id) : null
+  const head = drilled?.nodes[0]
+  return (
+    <>
+      <div className="ov-mf-drill">
+        <button type="button" className="ov-mf-drill-back" onClick={onBack}>
+          <ChevronLeft size={14} aria-hidden="true" /> All groups
+        </button>
+        <span className="ov-mf-drill-title">
+          {group.label}
+          {head && (
+            <>
+              {' · '}
+              <span className="money">{fBase(head.amount)}</span>
+            </>
+          )}
+        </span>
+      </div>
+      {query.initialLoading && !full ? (
+        <Skeleton height="100%" />
+      ) : !drilled || !full ? (
+        <WidgetPlaceholder detail={`No categories to show for ${group.label} in ${where}.`} />
+      ) : (
+        <MoneyFlowChart
+          graph={drilled}
+          label={`${group.label} in ${where}, by category`}
+          shareOf={group.label}
+          fill
+          minHeight={CARD_CHART_MIN}
+          onOpenCategory={
+            onOpenRegister ? (n) => onOpenRegister(registerLink(n, full, tags)) : undefined
+          }
+        />
+      )}
+    </>
   )
 }
