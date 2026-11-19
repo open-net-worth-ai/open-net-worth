@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeftRight, Check, Info, Pencil, Wallet, X } from '../../../ui/icons'
-import { Button } from '../../ui'
+import { ArrowLeftRight, Check, ChevronDown, Wallet, X } from '../../../ui/icons'
 import { sourceLine, validateReviewDraft, type ReviewDraft } from './transactionReview'
 import type { Account, Category, Txn } from './types'
 import { ReviewChoices, ReviewSummary } from './ReviewSummary'
 import { TransactionReviewPeek } from './TransactionReviewPeek'
-import { SourceIcon } from './pickers'
+import { SourceIcon, type PayeeOption } from './pickers'
+import { ReviewDetails } from './ReviewDetails'
 import { useListFitsStage, useSmoothCardHeight } from './reviewCardHeight'
 
 interface Props {
@@ -36,9 +36,11 @@ interface Props {
   onDraftChange: (draft: ReviewDraft) => void
   onApprove: () => Promise<void>
   onSkip: () => void
-  /** The full drawer, read-only: sometimes the facts panel is not enough to decide. */
-  onViewAll: () => void
-  onEditAll: () => void
+  /** The full drawer, carrying this card's unsaved picks: for the rare edits the card itself
+   *  does not offer (splits, receipts, the original charge). */
+  onAllDetails: () => void
+  /** Payee picker options for the tapped-open card. */
+  payeeOptions: PayeeOption[]
 }
 
 /** Only fields that own horizontal dragging themselves (caret, native scroll) block a swipe.
@@ -69,6 +71,9 @@ function swipeThreshold(card: HTMLDivElement | null): number {
 
 export function TransactionReviewCard(props: Props) {
   const { txn, account, draft, busy } = props
+  // Tapped open: the facts panel shows the editable rows. Per card — the card is keyed by row,
+  // so the next one always arrives closed.
+  const [expanded, setExpanded] = useState(false)
   const selectedAccount = props.accounts.find((item) => item.id === draft.accountId) ?? account
   const validationError = validateReviewDraft(txn, draft, props.accounts)
   const [dragX, setDragX] = useState(0)
@@ -261,35 +266,25 @@ export function TransactionReviewCard(props: Props) {
           )}
           {/* Two grounds, no rule between them: the facts on a panel tinted by kind, the one
               decision (the category) on the plain surface it rests on — YNAB's card language. */}
-          <div className="acct-review-facts" data-kind={draft.kind}>
-            {/* A grid: the account name and the actions share the first row (the name wraps
-                if it must), the source line has the second row to itself — beside the
-                actions it wrapped early on a phone (owner, 2026-09-21). */}
+          <div
+            className={'acct-review-facts' + (expanded ? ' is-expanded' : '')}
+            data-kind={draft.kind}
+            // A tap anywhere on the facts opens the card — the thumb's reach, unlike the head's
+            // corner. Controls inside (and the open rows) keep their own taps.
+            onClick={(event) => {
+              const target = event.target as Element
+              if (expanded || target.closest('button, input, select, textarea, a, label')) return
+              setExpanded(true)
+            }}
+          >
+            {/* The account name, then the source line on a row of its own. Details and Edit used
+                to sit in this corner, out of a phone thumb's reach; a tap on the facts (or the
+                Details pill below the amount) opens the card instead (2026-11-19). */}
             <div className="acct-review-card-head">
               <b>
                 <Wallet size={16} aria-hidden="true" />
                 {selectedAccount?.name ?? 'Unknown account'}
               </b>
-              <span className="acct-review-head-actions">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="acct-review-edit-all"
-                  iconLeft={<Info size={14} />}
-                  onClick={props.onViewAll}
-                >
-                  Details
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="acct-review-edit-all"
-                  iconLeft={<Pencil size={14} />}
-                  onClick={props.onEditAll}
-                >
-                  Edit
-                </Button>
-              </span>
               <span
                 className="acct-review-source"
                 title={
@@ -303,6 +298,26 @@ export function TransactionReviewCard(props: Props) {
               </span>
             </div>
             <ReviewSummary txn={txn} accounts={props.accounts} draft={draft} />
+            {expanded ? (
+              <ReviewDetails
+                txn={txn}
+                draft={draft}
+                onDraftChange={props.onDraftChange}
+                payeeOptions={props.payeeOptions}
+                onAllDetails={props.onAllDetails}
+                onCollapse={() => setExpanded(false)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="acct-review-expand"
+                aria-expanded="false"
+                onClick={() => setExpanded(true)}
+              >
+                <ChevronDown size={14} aria-hidden="true" />
+                Details
+              </button>
+            )}
           </div>
           <ReviewChoices
             txn={txn}

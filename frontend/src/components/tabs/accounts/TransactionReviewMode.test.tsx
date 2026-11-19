@@ -140,8 +140,7 @@ function renderMode(over: Partial<React.ComponentProps<typeof TransactionReviewM
     onApprove: vi.fn(async (txn: Txn) => ({ ...txn, needsReview: false })),
     onReject: vi.fn(async () => undefined),
     onAskLucius: vi.fn(async () => undefined),
-    onViewAll: vi.fn(),
-    onEditAll: vi.fn(),
+    onAllDetails: vi.fn(),
     ...over,
   }
   return { ...render(<TransactionReviewMode {...props} />), props }
@@ -647,14 +646,20 @@ describe('TransactionReviewMode — compact queue', () => {
         has_more: false,
       }),
     )
-    const onEditAll = vi.fn()
-    renderMode({ onEditAll })
+    const onAllDetails = vi.fn()
+    renderMode({ onAllDetails })
 
     await screen.findByRole('heading', { name: /Transfer to Brokerage USD/ })
     expect(screen.getByText('110.00 USD')).toBeTruthy()
     expect(screen.queryByLabelText('Amount')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(onEditAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'txn-transfer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    // A transfer has no payee row.
+    expect(screen.queryByPlaceholderText('Payee')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
+    expect(onAllDetails).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'txn-transfer' }),
+      expect.objectContaining({ kind: 'transfer' }),
+    )
   })
 
   it('drops a card the drawer marked reviewed, and patches one the drawer edited, in place', async () => {
@@ -708,14 +713,29 @@ describe('TransactionReviewMode — compact queue', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('opens the drawer read-only from Details, to look before deciding', async () => {
-    const onViewAll = vi.fn()
-    const onEditAll = vi.fn()
-    renderMode({ onViewAll, onEditAll })
+  it('opens the card in place from Details, and hands the drawer the card draft', async () => {
+    const onAllDetails = vi.fn()
+    renderMode({ onAllDetails })
     await screen.findByRole('heading', { name: 'Kroger' })
+    expect(screen.queryByTestId('review-details')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-    expect(onViewAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'txn-new' }))
-    expect(onEditAll).not.toHaveBeenCalled()
+    expect(screen.getByTestId('review-details')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Other' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dining out' }))
+    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
+    expect(onAllDetails).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'txn-new' }),
+      expect.objectContaining({ category: 'dining' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Less' }))
+    expect(screen.queryByTestId('review-details')).toBeNull()
+  })
+
+  it('a tap anywhere on the facts opens the card', async () => {
+    renderMode()
+    await screen.findByRole('heading', { name: 'Kroger' })
+    fireEvent.click(screen.getByRole('heading', { name: 'Kroger' }))
+    expect(screen.getByTestId('review-details')).toBeTruthy()
   })
 
   it('lets a transfer card change where the money went, in the source currency only', async () => {
@@ -818,8 +838,8 @@ describe('TransactionReviewMode — compact queue', () => {
         has_more: false,
       }),
     )
-    const onEditAll = vi.fn()
-    renderMode({ onEditAll })
+    const onAllDetails = vi.fn()
+    renderMode({ onAllDetails })
 
     // The split's own lines, read-only, with their figures — not a lone pill.
     await screen.findByText('Split across 2 categories')
@@ -828,8 +848,12 @@ describe('TransactionReviewMode — compact queue', () => {
     expect(front.getByText('Dining out').textContent).toBe('Dining out53.29 SGD')
     expect(screen.queryByRole('button', { name: 'Other' })).toBeNull()
     expect(screen.queryByText('Choose a category')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(onEditAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'txn-split' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
+    expect(onAllDetails).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'txn-split' }),
+      expect.anything(),
+    )
   })
 })
 
@@ -861,6 +885,7 @@ describe('TransactionReviewMode — edits and actions', () => {
       payeeEdited: false,
       category: 'dining',
       memo: 'Weekly shop',
+      tags: [],
       cleared: false,
     })
     expect(await screen.findByRole('heading', { name: 'Old Shop' })).toBeTruthy()
@@ -997,10 +1022,10 @@ describe('TransactionReviewMode — edits and actions', () => {
     expect(within(rear).getByText('Old row')).toBeTruthy()
     expect(within(rear).getByText('Everyday Checking')).toBeTruthy()
     expect(within(rear).getByText('Groceries')).toBeTruthy()
-    // The SAME body as the front card — chips and Edit included — so a swipe reveals a whole
-    // card, not a reduced one. None of it is reachable or announced (aria-hidden).
+    // The SAME body as the front card — chips and the Details pill included — so a swipe
+    // reveals a whole card, not a reduced one. None of it is reachable or announced.
     expect(within(rear).getByText('Choose a category')).toBeTruthy()
-    expect(within(rear).getByText('Edit')).toBeTruthy()
+    expect(within(rear).getByText('Details')).toBeTruthy()
     expect(within(rear).queryByRole('button')).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Old Shop' })).toBeNull()
 
@@ -1058,14 +1083,30 @@ describe('TransactionReviewMode — edits and actions', () => {
     expect(screen.queryByRole('button', { name: 'Ask Lucius' })).toBeNull()
   })
 
-  it('hands Edit to the full editor instead of editing inline', async () => {
-    const onEditAll = vi.fn()
-    renderMode({ onEditAll })
+  it('edits memo, date and tags in place and approves them with the category', async () => {
+    const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
+      ...txn,
+      needsReview: false,
+    }))
+    renderMode({ onApprove })
     await screen.findByRole('heading', { name: 'Kroger' })
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(onEditAll).toHaveBeenCalledWith(expect.objectContaining({ id: 'txn-new' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    fireEvent.change(screen.getByPlaceholderText('Add a memo'), { target: { value: 'Snacks' } })
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-15' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
+    fireEvent.change(screen.getByLabelText('Find or create a tag'), {
+      target: { value: 'Work Trip' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Create “work-trip”/ }))
+    expect(screen.getByRole('button', { name: 'Remove tag work-trip' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    // No Amount editor on the card: the money stays the drawer's job.
     expect(screen.queryByLabelText('Amount')).toBeNull()
-    expect(screen.getByRole('heading', { name: 'Kroger' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
+    expect(onApprove.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ memo: 'Snacks', date: '2026-09-15', tags: ['work-trip'] }),
+    )
   })
 
   it('swipes from a category chip, and a tap on one still selects it', async () => {

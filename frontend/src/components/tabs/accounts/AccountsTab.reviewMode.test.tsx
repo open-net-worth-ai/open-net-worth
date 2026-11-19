@@ -242,8 +242,13 @@ describe('AccountsTab — transaction review mode', () => {
     renderTab()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    // A change on the card, then All details: the drawer opens straight into the editor with it.
+    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.change(screen.getByPlaceholderText('Add a memo'), { target: { value: 'From card' } })
+    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
     const save = await screen.findByRole('button', { name: 'Save changes' })
+    // On the card AND, seeded, in the drawer's Memo field.
+    expect(screen.getAllByDisplayValue('From card')).toHaveLength(2)
 
     fireEvent.click(save)
     await waitFor(() => expect(document.querySelector('.acct-detail-wrap')).toBeNull())
@@ -281,7 +286,9 @@ describe('AccountsTab — transaction review mode', () => {
     renderTab()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start review' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+    fireEvent.change(screen.getByPlaceholderText('Add a memo'), { target: { value: 'From card' } })
+    fireEvent.click(screen.getByRole('button', { name: 'All details' }))
 
     await waitFor(() =>
       expect(document.querySelector('.acct-detail-wrap.above-modal')).toBeTruthy(),

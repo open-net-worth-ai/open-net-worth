@@ -40,9 +40,9 @@ describe('Transaction Review mode deck and actions', () => {
     expect(t_rule(css, '.acct-review-stage')).toMatch(/overflow:\s*hidden auto/)
   })
 
-  it('guards the Edit hover behind a hover-capable pointer so a tap never paints it first', () => {
-    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.acct-review-edit-all:hover \{/)
-    expect(css).not.toMatch(/\n\.acct-review-edit-all:hover \{/)
+  it('guards the Details pill hover behind a hover-capable pointer so a tap never paints it first', () => {
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.acct-review-expand:hover \{/)
+    expect(css).not.toMatch(/\n\.acct-review-expand:hover \{/)
   })
 
   it('fades an edge only while that edge is cutting the category list off', () => {

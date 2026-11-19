@@ -100,6 +100,15 @@ function fmtChangeItem(x: unknown, ctx: ChangeCtx): string {
   return `${label}${amt}${o.memo ? ` (${String(o.memo)})` : ''}`
 }
 
+/** Unsaved picks from the review card, filled into the editor's form over the saved row. */
+export interface EditSeed {
+  category?: string | null
+  payee?: string
+  date?: string
+  memo?: string
+  tags?: string[]
+}
+
 export interface TxnDetailProps {
   txn: Txn | null
   accounts: Account[]
@@ -114,6 +123,8 @@ export interface TxnDetailProps {
   onClose: () => void
   /** Open already editing (the review card's Edit); re-applied whenever the txn changes. */
   initialMode?: 'view' | 'edit'
+  /** The review card's unsaved picks, filled into the editor (see EditSeed). */
+  editSeed?: EditSeed
   onSave: (id: string, patch: Record<string, unknown>) => Promise<void> | void
   onDelete: (txn: Txn) => void
   onMarkReviewed: (txn: Txn) => void
@@ -326,6 +337,9 @@ interface EditBodyProps {
   onSave: (id: string, patch: Record<string, unknown>) => Promise<void> | void
   onCancel: () => void
   actionError?: string | null
+  seed?: EditSeed
+  /** Whether the form differs from how it opened — for the close guard's "Discard?" prompt. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 function EditBody({
   txn,
@@ -342,6 +356,8 @@ function EditBody({
   onSave,
   onCancel,
   actionError,
+  seed,
+  onDirtyChange,
 }: EditBodyProps) {
   const isInc0 = txn.kind === 'income'
   // The kind's own leg first, but whichever leg HAS the money if not: an income stored on the
@@ -358,15 +374,15 @@ function EditBody({
   const [f, setF] = useState({
     kind: txn.kind as string,
     amount: String(mainAmt),
-    date: txn.date,
+    date: seed?.date ?? txn.date,
     account: mainAcct,
     toAccount:
       txn.toAccountId && txn.toAccountId !== txn.fromAccountId ? (txn.toAccountId ?? '') : '',
-    category: txn.category ?? '',
-    payee: payeeName,
+    category: (seed?.category !== undefined ? seed.category : txn.category) ?? '',
+    payee: seed?.payee ?? payeeName,
     description: txn.description ?? '',
-    memo: txn.memo ?? '',
-    tags: (txn.tags ?? []).join(', '),
+    memo: seed?.memo ?? txn.memo ?? '',
+    tags: (seed?.tags ?? txn.tags ?? []).join(', '),
     origAmount: txn.origAmount != null ? String(txn.origAmount) : '',
     origCurrency: txn.origCurrency ?? '',
     toAmount: txn.toAmount != null ? String(txn.toAmount) : '',
@@ -393,6 +409,14 @@ function EditBody({
   // prop; the Amount sign then flips it buy ⇄ sell, the way adjustment's sign flips raise/lower.
   const wasInvestmentSell = txn.kind === 'investment' && !txn.fromAccountId && !!txn.toAccountId
   const [investSell, setInvestSell] = useState(wasInvestmentSell)
+  // Dirty = differs from how the editor OPENED (seeded picks included — they still live on the
+  // review card, so closing loses nothing of theirs).
+  const snapshot = JSON.stringify({ f, cleared, splits, dir, investSell })
+  const [opened] = useState(snapshot)
+  const dirty = snapshot !== opened
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
   const switchKind = (k: string) => {
     // Leaving expense/income drops any split allocation (a transfer/adjustment/investment leg
     // can't carry splits — the backend would 422). switching between expense↔income keeps them.
@@ -1756,6 +1780,7 @@ export default function TxnDetail({
   rates,
   onClose,
   initialMode,
+  editSeed,
   onSave,
   onDelete,
   onMarkReviewed,
@@ -1790,6 +1815,17 @@ export default function TxnDetail({
   // — save, cancel, ✕ or a drag — closes rather than dropping the reviewer on a detail view
   // they never asked for and have to dismiss a second time.
   const openedForEdit = initialMode === 'edit'
+  // Leaving the editor by ✕, Escape or a drag with unsaved edits asks first: a stray swipe on a
+  // phone sheet silently dropped them. Cancel and Save are deliberate and never ask.
+  const dirtyRef = useRef(false)
+  const onDirtyChange = useCallback((d: boolean) => {
+    dirtyRef.current = d
+  }, [])
+  const [confirmDiscard, setConfirmDiscard] = useState<(() => void) | null>(null)
+  const guardDirty = (leave: () => void) => () => {
+    if (mode === 'edit' && dirtyRef.current) setConfirmDiscard(() => leave)
+    else leave()
+  }
   // Below the phone breakpoint the drawer renders as a BOTTOM SHEET, not a right-docked
   // drawer (task 176): a 384px-wide panel on a 390px screen is a hairline off the viewport
   // edge with no reachable close target, and every touch target sits in the far corners.
@@ -1816,7 +1852,7 @@ export default function TxnDetail({
   const dragHandlers = useSheetDragToDismiss({
     sheetRef,
     overlayRef,
-    onDismiss: () => (mode === 'edit' && !openedForEdit ? setMode('view') : onClose()),
+    onDismiss: guardDirty(() => (mode === 'edit' && !openedForEdit ? setMode('view') : onClose())),
     enabled: isMobile,
   })
 
@@ -2017,121 +2053,139 @@ export default function TxnDetail({
   // Drag the sheet's grab handle down to dismiss (the `.mb-sheet` gesture + threshold).
   // Mirrors the ✕ exactly: from Edit it returns to View rather than discarding the edit,
   // the same protection the backdrop click already has.
-  const dismiss = editing && !openedForEdit ? () => setMode('view') : onClose
+  const dismiss = guardDirty(editing && !openedForEdit ? () => setMode('view') : onClose)
   return (
-    <Dialog.Root
-      open
-      modal={false}
-      onOpenChange={(next) => {
-        if (!next) dismiss()
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Content
-          asChild
-          aria-describedby={undefined}
-          onInteractOutside={(event) => {
-            if (isStackedOnDrawer(overlayRef.current, event.target)) event.preventDefault()
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Escape') return
-            event.preventDefault()
-            event.stopPropagation()
-            dismiss()
-          }}
-        >
-          <div
-            ref={overlayRef}
-            className={`acct-detail-wrap${isMobile ? ' sheet' : ''}${liftAboveModal ? ' above-modal' : ''}`}
-            onClick={editing ? undefined : handleBackdropClick}
+    <>
+      <Dialog.Root
+        open
+        modal={false}
+        onOpenChange={(next) => {
+          if (!next) dismiss()
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Content
+            asChild
+            aria-describedby={undefined}
+            onInteractOutside={(event) => {
+              if (isStackedOnDrawer(overlayRef.current, event.target)) event.preventDefault()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              event.stopPropagation()
+              dismiss()
+            }}
           >
-            <Dialog.Title className="ui-visually-hidden">Transaction details</Dialog.Title>
-            {!isMobile && (
-              <div
-                className="acct-detail-resize"
-                style={{ right: `calc(var(--chat-width, 0px) + ${width}px)` }}
-                onPointerDown={onResizePointerDown}
-                title="Drag to resize"
-              />
-            )}
-            <aside
-              ref={sheetRef}
-              className={`acct-detail${editing ? ' editing' : ''}${isMobile ? ' sheet' : ''}${openedPending ? ' acct-detail--full' : ''}`}
-              style={isMobile ? undefined : { width: width + 'px' }}
-              onClick={(e) => e.stopPropagation()}
-              {...dragHandlers}
+            <div
+              ref={overlayRef}
+              className={`acct-detail-wrap${isMobile ? ' sheet' : ''}${liftAboveModal ? ' above-modal' : ''}`}
+              onClick={editing ? undefined : handleBackdropClick}
             >
-              {/* The sheet root is its own scroll container, so its sticky grab bar and title row
+              <Dialog.Title className="ui-visually-hidden">Transaction details</Dialog.Title>
+              {!isMobile && (
+                <div
+                  className="acct-detail-resize"
+                  style={{ right: `calc(var(--chat-width, 0px) + ${width}px)` }}
+                  onPointerDown={onResizePointerDown}
+                  title="Drag to resize"
+                />
+              )}
+              <aside
+                ref={sheetRef}
+                className={`acct-detail${editing ? ' editing' : ''}${isMobile ? ' sheet' : ''}${openedPending ? ' acct-detail--full' : ''}`}
+                style={isMobile ? undefined : { width: width + 'px' }}
+                onClick={(e) => e.stopPropagation()}
+                {...dragHandlers}
+              >
+                {/* The sheet root is its own scroll container, so its sticky grab bar and title row
             opt in as drag surfaces — otherwise a handle drag while scrolled would read as a
             scroll (see useSheetDragToDismiss's top-of-file note, point 4). */}
-              {isMobile && (
-                <div className="acct-detail-grab" {...DRAG_SURFACE_PROPS}>
-                  <span className="acct-detail-grabbar" />
+                {isMobile && (
+                  <div className="acct-detail-grab" {...DRAG_SURFACE_PROPS}>
+                    <span className="acct-detail-grabbar" />
+                  </div>
+                )}
+                <div className="acct-detail-top" {...DRAG_SURFACE_PROPS}>
+                  <span className="acct-detail-kicker">
+                    {editing ? 'Edit transaction' : 'Transaction'}
+                  </span>
+                  <button className="acct-detail-x" onClick={dismiss} aria-label="Close">
+                    <X size={18} strokeWidth={1.6} aria-hidden="true" />
+                  </button>
                 </div>
-              )}
-              <div className="acct-detail-top" {...DRAG_SURFACE_PROPS}>
-                <span className="acct-detail-kicker">
-                  {editing ? 'Edit transaction' : 'Transaction'}
-                </span>
-                <button className="acct-detail-x" onClick={dismiss} aria-label="Close">
-                  <X size={18} strokeWidth={1.6} aria-hidden="true" />
-                </button>
-              </div>
-              {editing ? (
-                <EditBody
-                  txn={txn}
-                  accounts={accounts}
-                  acctMap={acctMap}
-                  categories={categories}
-                  catMap={catMap}
-                  payeeOptions={payeeOptions}
-                  payeeName={payeeName}
-                  baseCurrency={baseCurrency}
-                  rates={rates}
-                  onManagePayees={onManagePayees}
-                  onCreateCategory={onCreateCategory}
-                  // Wait for the save request to resolve before flipping back to View — flipping
-                  // eagerly made a save look like it did nothing (or silently discarded a failure)
-                  // while the request was still in flight. On failure, stay in Edit (the caller
-                  // already surfaced an error toast) so the user's in-progress edit isn't lost.
-                  onSave={(id, patch) =>
-                    Promise.resolve(onSave(id, patch)).then(() =>
-                      openedForEdit ? onClose() : setMode('view'),
-                    )
-                  }
-                  onCancel={() => (openedForEdit ? onClose() : setMode('view'))}
-                  actionError={actionError}
-                />
-              ) : (
-                <ViewBody
-                  pending={loading}
-                  txn={txn}
-                  acctMap={acctMap}
-                  catMap={catMap}
-                  payeeMap={payeeMap}
-                  payeeName={payeeName}
-                  activity={activity}
-                  actors={actors}
-                  baseCurrency={baseCurrency}
-                  rates={rates}
-                  source={source}
-                  onRetrySource={loadSourceEntries}
-                  onUnlinkSource={handleUnlinkSource}
-                  unlinkingKey={unlinkingKey}
-                  unlinkErrorKey={unlinkErrorKey}
-                  statementLinks={statementLinks}
-                  onEdit={() => setMode('edit')}
-                  onDelete={onDelete}
-                  onMarkReviewed={onMarkReviewed}
-                  onToggleCleared={onToggleCleared}
-                  onToggleHidden={onToggleHidden}
-                  actionError={actionError}
-                />
-              )}
-            </aside>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+                {editing ? (
+                  <EditBody
+                    txn={txn}
+                    accounts={accounts}
+                    acctMap={acctMap}
+                    categories={categories}
+                    catMap={catMap}
+                    payeeOptions={payeeOptions}
+                    payeeName={payeeName}
+                    baseCurrency={baseCurrency}
+                    rates={rates}
+                    onManagePayees={onManagePayees}
+                    onCreateCategory={onCreateCategory}
+                    // Wait for the save request to resolve before flipping back to View — flipping
+                    // eagerly made a save look like it did nothing (or silently discarded a failure)
+                    // while the request was still in flight. On failure, stay in Edit (the caller
+                    // already surfaced an error toast) so the user's in-progress edit isn't lost.
+                    onSave={(id, patch) =>
+                      Promise.resolve(onSave(id, patch)).then(() =>
+                        openedForEdit ? onClose() : setMode('view'),
+                      )
+                    }
+                    onCancel={() => (openedForEdit ? onClose() : setMode('view'))}
+                    actionError={actionError}
+                    seed={editSeed}
+                    onDirtyChange={onDirtyChange}
+                  />
+                ) : (
+                  <ViewBody
+                    pending={loading}
+                    txn={txn}
+                    acctMap={acctMap}
+                    catMap={catMap}
+                    payeeMap={payeeMap}
+                    payeeName={payeeName}
+                    activity={activity}
+                    actors={actors}
+                    baseCurrency={baseCurrency}
+                    rates={rates}
+                    source={source}
+                    onRetrySource={loadSourceEntries}
+                    onUnlinkSource={handleUnlinkSource}
+                    unlinkingKey={unlinkingKey}
+                    unlinkErrorKey={unlinkErrorKey}
+                    statementLinks={statementLinks}
+                    onEdit={() => setMode('edit')}
+                    onDelete={onDelete}
+                    onMarkReviewed={onMarkReviewed}
+                    onToggleCleared={onToggleCleared}
+                    onToggleHidden={onToggleHidden}
+                    actionError={actionError}
+                  />
+                )}
+              </aside>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <ConfirmModal
+        open={confirmDiscard !== null}
+        title="Discard your changes?"
+        body="The edits you made here haven't been saved."
+        confirmLabel="Discard"
+        danger
+        onClose={() => setConfirmDiscard(null)}
+        onConfirm={() => {
+          const leave = confirmDiscard
+          setConfirmDiscard(null)
+          dirtyRef.current = false
+          leave?.()
+        }}
+      />
+    </>
   )
 }

@@ -19,6 +19,7 @@ export interface ReviewDraft {
   payeeEdited: boolean
   category: string | null
   memo: string
+  tags: string[]
   cleared: boolean
 }
 
@@ -45,6 +46,7 @@ export function startingReviewDraft(txn: Txn, payeeNames: Record<string, string>
     payeeEdited: false,
     category: txn.category,
     memo: txn.memo,
+    tags: txn.tags ?? [],
     cleared: txn.cleared,
   }
 }
@@ -124,6 +126,7 @@ export function reviewDraftToUpdate(
   if (draft.kind !== txn.kind) update.kind = draft.kind
   if (draft.date !== txn.date) update.date = draft.date
   if (draft.memo !== txn.memo) update.memo = draft.memo
+  if (draft.tags.join('\u0000') !== (txn.tags ?? []).join('\u0000')) update.tags = draft.tags
   if (draft.cleared !== txn.cleared) update.cleared = draft.cleared
   if (draft.category !== txn.category) update.category = draft.category
 
@@ -175,6 +178,28 @@ export function reviewDraftToUpdate(
     update.original_currency = originalCurrency || null
   }
   return update
+}
+
+/** The card's unsaved picks the drawer's editor can take, or null when the card has changed
+ *  nothing it carries. Only the fields both surfaces edit the same way: the editor's own form
+ *  covers the rest (kind, account, amounts) from the saved row. */
+export function reviewDraftSeed(
+  txn: Txn,
+  draft: ReviewDraft,
+): {
+  category?: string | null
+  payee?: string
+  date?: string
+  memo?: string
+  tags?: string[]
+} | null {
+  const seed: NonNullable<ReturnType<typeof reviewDraftSeed>> = {}
+  if (draft.category !== txn.category) seed.category = draft.category
+  if (draft.payeeEdited) seed.payee = draft.payee
+  if (draft.date !== txn.date) seed.date = draft.date
+  if (draft.memo !== txn.memo) seed.memo = draft.memo
+  if (draft.tags.join('\u0000') !== (txn.tags ?? []).join('\u0000')) seed.tags = draft.tags
+  return Object.keys(seed).length ? seed : null
 }
 
 /** The card's source line, in the drawer's own words. `via` is the audit's qualifier: a named

@@ -116,7 +116,13 @@ holding area.
 
 1. In Accounts, click **N to review** to list them, or **Start review** to go through them one
    card at a time.
-2. On each card, correct the account, amount, date, payee or category if needed.
+2. On each card, pick the category. To see or fix more, tap the card (or its **Details**
+   button): it opens in place with **Payee**, **Date**, **Memo** and **Tags**, plus the bank's
+   own text. For tags, tap one of yours from the list, or type to find or create one. Everything
+   you change on the card is saved together when you approve it.
+   **All details** opens the full transaction for the rarer edits — splits, receipts, the
+   original charge — already filled in with what you picked on the card. If you close it with
+   edits you haven't saved, it asks before discarding them.
 3. Click **Approve** to save it and clear the flag, **Skip** to leave it for later, or **Reject**
    to delete it (you confirm first). On a touch screen, swipe right to approve, left to skip.
 

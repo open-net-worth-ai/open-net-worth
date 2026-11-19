@@ -814,39 +814,206 @@
 .acct-review-swipe-hint svg {
   flex: none;
 }
-/* Details (the drawer, read-only) and Edit, side by side; the head's left block wraps first. */
-.acct-review-head-actions {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
+/* The closed card's "Details" pill: a tap on it — or anywhere on the facts — opens the card's
+   editable rows. Thumb height, centred under the amount. */
+.acct-review-facts:not(.is-expanded) {
+  cursor: pointer;
 }
-.acct-review-edit-all {
-  display: inline-flex;
+.acct-review-expand {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--primary);
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-pill);
   background: transparent;
+  color: var(--muted);
   font: inherit;
-  /* The footer's button size, not the card's body size — "font: inherit" alone made Details
-     and Edit the largest type on the card, bigger than Approve (owner, 2026-09-21). */
-  font-size: var(--text-sm);
-  font-weight: 650;
+  font-size: var(--text-xs);
+  font-weight: 600;
   cursor: pointer;
 }
 /* Hover-capable pointers only: on touch, an unguarded :hover paints on tap before the action. */
 @media (hover: hover) {
-  .acct-review-edit-all:hover {
-    background: color-mix(in srgb, var(--primary) 9%, transparent);
+  .acct-review-expand:hover {
+    color: var(--ink);
+    border-color: var(--muted);
   }
 }
-.acct-review-edit-all:focus-visible {
+.acct-review-expand:focus-visible,
+.acct-review-detail-link:focus-visible,
+.acct-review-detail-less:focus-visible,
+.acct-review-tag:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+/* The tapped-open rows: label left, value right. No rules between them — the fields' own boxes
+   already separate the rows. */
+.acct-review-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+.acct-review-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+.acct-review-detail-row.is-open {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 4px 0;
+}
+.acct-review-detail-label {
+  flex: none;
+  width: 72px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.acct-review-detail-value {
+  flex: 1;
+  min-width: 0;
+}
+.acct-review-detail-input,
+.acct-review-detail-value .acct-addin {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  color-scheme: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+}
+/* Read as plain values on the card; a field only looks like a field while you touch it. */
+@media (hover: hover) {
+  .acct-review-detail-input:hover,
+  .acct-review-detail-value .acct-addin:hover {
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+}
+.acct-review-detail-input:focus,
+.acct-review-detail-value .acct-addin:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.acct-review-detail-input::placeholder,
+.acct-review-detail-value .acct-addin::placeholder {
+  color: var(--faint);
+}
+.acct-review-detail-value .acct-payf-caret {
+  display: none;
+}
+.acct-review-detail-input::-webkit-calendar-picker-indicator {
+  opacity: 0.45;
+  cursor: pointer;
+}
+/* The tag search is a real search box, so it keeps its outline. */
+.acct-review-detail-row.is-open .acct-review-detail-input {
+  flex: none;
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+.acct-review-detail-static {
+  flex: 1;
+  min-width: 0;
+  /* Lines up with the text inside the fields above (their 8px padding + 1px border). */
+  padding-left: 9px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.acct-review-detail-hint {
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+.acct-review-detail-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2px;
+}
+.acct-review-detail-link,
+.acct-review-detail-less {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.acct-review-detail-link {
+  color: var(--primary);
+}
+.acct-review-detail-less {
+  color: var(--muted);
+}
+.acct-review-tags-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.acct-review-tags {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.acct-review-detail-row:not(.is-open) > .acct-review-tags {
+  padding-left: 9px;
+}
+/* Opened, the rows show the memo (and the bank text) themselves: the summary's one-line
+   preview of them would be the same words twice. */
+.acct-review-facts.is-expanded .acct-review-summary-details p {
+  display: none;
+}
+/* Tag chips: a 32px tap target each — the cloud is meant to be tapped, not typed into. */
+.acct-review-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.acct-review-tag.is-chosen {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+.acct-review-tag.is-add {
+  border-style: dashed;
+}
+.acct-review-tag.is-create {
+  color: var(--accent);
+  font-weight: 600;
 }
 .acct-review-validation {
   margin: 0 var(--acct-review-card-pad) var(--acct-review-card-pad);
@@ -1028,9 +1195,6 @@
   }
   .acct-review-summary-details {
     margin-top: 12px;
-  }
-  .acct-review-edit-all {
-    padding-inline: 9px;
   }
   .acct-review-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
