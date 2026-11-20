@@ -379,7 +379,7 @@ export function snapBandBottoms<T extends GridItem>(items: T[]): T[] {
     const byBottom = [...live].sort((a, b) => a.y + a.h - (b.y + b.h))
     let grow: { id: string; h: number } | null = null
     for (const it of byBottom) {
-      if (it.heightMode === 'fixed') continue
+      if (isSection(it) || it.heightMode === 'fixed') continue
       const end = it.y + it.h
       const beside = live.filter((o) => {
         const gap = o.y + o.h - end
