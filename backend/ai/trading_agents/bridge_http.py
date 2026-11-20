@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 from backend.ai.trading_agents import openai_shape as shape
 from backend.ai.trading_agents.bridge_models import SOURCE, BridgeModel
 from backend.ai.trading_agents.openai_errors import error_body
+from backend.core.config import SERVER_EVENT_LOOP
 from backend.core.cost_context import cost_attribution
 from backend.core.errors import ValidationError
 from backend.core.one_shot_turn import one_shot_turn
@@ -39,6 +40,7 @@ def server_config(app) -> uvicorn.Config:
         log_config=None,
         access_log=False,
         lifespan="off",
+        loop=SERVER_EVENT_LOOP,
         proxy_headers=False,
         timeout_graceful_shutdown=2,
     )

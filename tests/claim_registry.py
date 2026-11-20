@@ -105,6 +105,8 @@ def backend_symbols() -> frozenset[str]:
 # Staleness is policed by test_not_a_tool_exemptions_are_not_stale.
 NOT_A_TOOL: dict[str, str] = {
     "open_setup": "the Connectors screen command connectors.open_setup, not a tool",
+    "start_by": "a commitment action's date field (commitments_store), not a tool; it became "
+    "tool-shaped only when start_trading_agents_analysis made `start` a tool verb",
     "auto_pay": "a commitment KIND (purchase|loan_repayment|auto_pay|goal), not a tool",
     "auto_applied": "a field on the get_agent_metrics response payload",
     "import_review_default": "a profile.json setting name, not a tool",

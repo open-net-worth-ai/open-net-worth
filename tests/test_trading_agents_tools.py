@@ -111,7 +111,7 @@ def test_the_four_tools_are_registered_under_the_connector():
     for name in NAMES:
         entry = registry._REGISTRY[name]
         assert entry.connector == "trading_agents"
-        assert entry.unavailable is not None
+        assert entry.unavailable is None
         assert entry.input_schema["type"] == "object"
         assert not {"oneOf", "allOf", "anyOf"} & set(entry.input_schema)
 
@@ -179,14 +179,14 @@ async def test_a_start_queues_and_returns_at_once(submitted):
 
 
 @pytest.mark.usefixtures("ready")
-async def test_an_unattended_start_is_recorded_as_an_automation(submitted):
-    from backend.core import unattended
+async def test_a_start_on_the_automation_surface_is_recorded_as_an_automation(submitted):
+    from backend.core.audit_context import clear_audit_scope, set_audit_scope
 
-    token = unattended._unattended.set(True)
+    token = set_audit_scope("system", "automation")
     try:
         await tools.start_trading_agents_analysis({"ticker": "ACME"})
     finally:
-        unattended._unattended.reset(token)
+        clear_audit_scope(token)
     assert submitted[0]["requested_by"] == "automation"
 
 

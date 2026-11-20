@@ -20,9 +20,9 @@ from pydantic import Field
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of
 from backend.ai.trading_agents import runner
+from backend.core.audit_context import get_audit_scope
 from backend.core.chat_session import get_session_id
 from backend.core.errors import OpenNetWorthError
-from backend.core.unattended import is_unattended
 from backend.db.trading_agents_run_store import TradingAgentsRunStore
 from backend.services import trading_agents
 from backend.services.trading_agents import budget, run_views, runs, ticker
@@ -108,16 +108,19 @@ class CancelTradingAgentsRunInput(ToolInput):
 # ── availability ─────────────────────────────────────────────────────────────────────────
 
 
-def _unavailable() -> Optional[str]:
-    """Why a run cannot start now (flag off, connector off/paused, not installed, no model)."""
-    result = trading_agents.availability()
-    return None if result.ready else result.message
-
-
-def _flag_unavailable() -> Optional[str]:
+def _flag_refusal() -> Optional[tuple[str, None]]:
     """Reading or cancelling a run needs only the release flag: a finished run's report stays
-    readable after the connector is paused or a model provider is turned off."""
-    return None if trading_agents.flag_on() else "TradingAgents is not turned on."
+    readable after the connector is paused or a model provider is turned off. (A start has the
+    runner's full availability chain in ``plan``; ``unavailable=`` is the sandbox tools' own.)"""
+    if trading_agents.flag_on():
+        return None
+    return json.dumps({"error": "TradingAgents is not turned on."}), None
+
+
+def _requested_by() -> str:
+    """Provenance of a start: an Automation's run is audited on the ``automation`` surface."""
+    scope = get_audit_scope()
+    return "automation" if scope is not None and scope.surface == "automation" else "lucius"
 
 
 # ── what a start would do ────────────────────────────────────────────────────────────────
@@ -253,7 +256,6 @@ def _failure(exc: OpenNetWorthError) -> tuple[str, None]:
     mutates=("trading_agents",),
     connector="trading_agents",
     external_effect=True,
-    unavailable=_unavailable,
     precheck=_precheck,
     preview_adapter=_StartPreview(),
 )
@@ -262,7 +264,7 @@ async def start_trading_agents_analysis(input_data: dict):
         plan = _take_validated(input_data) or await asyncio.to_thread(_plan, input_data)
         run_id = await runner.submit(
             plan.symbol,
-            requested_by="automation" if is_unattended() else "lucius",
+            requested_by=_requested_by(),
             session_id=get_session_id(),
             prepared=plan,
         )
@@ -295,9 +297,10 @@ async def start_trading_agents_analysis(input_data: dict):
     ),
     input_schema=schema_of(GetTradingAgentsRunInput, tool_name="get_trading_agents_run"),
     connector="trading_agents",
-    unavailable=_flag_unavailable,
 )
 async def get_trading_agents_run(input_data: dict):
+    if refused := _flag_refusal():
+        return refused
     row = await asyncio.to_thread(TradingAgentsRunStore().get, str(input_data["run_id"]))
     if row is None:
         return json.dumps({"error": f"No TradingAgents run {input_data['run_id']!r}."}), None
@@ -329,9 +332,10 @@ def _listed(input_data: dict) -> dict:
     ),
     input_schema=schema_of(ListTradingAgentsRunsInput, tool_name="list_trading_agents_runs"),
     connector="trading_agents",
-    unavailable=_flag_unavailable,
 )
 async def list_trading_agents_runs(input_data: dict):
+    if refused := _flag_refusal():
+        return refused
     try:
         listed = await asyncio.to_thread(_listed, input_data)
     except OpenNetWorthError as exc:
@@ -348,9 +352,10 @@ async def list_trading_agents_runs(input_data: dict):
     input_schema=schema_of(CancelTradingAgentsRunInput, tool_name="cancel_trading_agents_run"),
     mutates=("trading_agents",),
     connector="trading_agents",
-    unavailable=_flag_unavailable,
 )
 async def cancel_trading_agents_run(input_data: dict):
+    if refused := _flag_refusal():
+        return refused
     try:
         row = await runner.cancel(str(input_data["run_id"]))
     except OpenNetWorthError as exc:

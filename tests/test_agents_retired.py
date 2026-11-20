@@ -66,7 +66,15 @@ def test_agent_finding_store_kept_as_a_data_preservation_shim_only():
 def test_no_agent_tool_is_registered():
     from backend.ai.tools import TOOL_SCHEMAS
 
-    assert not {t["name"] for t in TOOL_SCHEMAS if "agent" in t["name"]}
+    # TradingAgents is a third-party research connector (flag ``trading_agents``), not the retired
+    # Agent product: its four tools merely carry the vendor's name.
+    trading_agents_tools = {
+        "start_trading_agents_analysis",
+        "get_trading_agents_run",
+        "list_trading_agents_runs",
+        "cancel_trading_agents_run",
+    }
+    assert not {t["name"] for t in TOOL_SCHEMAS if "agent" in t["name"]} - trading_agents_tools
 
 
 def test_the_agent_routes_are_gone():
