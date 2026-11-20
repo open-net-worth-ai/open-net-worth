@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useKeepFieldInView } from './useKeepFieldInView'
+import { useTransactionTags } from './tagOptions'
 import { authFetch } from '../../../api/client'
 import { Check, ChevronLeft, Trash2 } from '../../../ui/icons'
 import { Button, ConfirmDialog, Modal } from '../../ui'
@@ -123,6 +124,10 @@ export function TransactionReviewMode({
   const [clearedCount, setClearedCount] = useState(0)
   const [inputMode, setInputMode] = useState<'keyboard' | 'pointer' | null>(null)
   const keepFieldInView = useKeepFieldInView<HTMLDivElement>()
+  // Loaded with the review, like the categories the tab already holds: fetched on the first
+  // "+ Tag" instead, the cloud opened empty and filled a beat later (owner report 2026-11-20).
+  // One shared cache entry, so every card's cloud reads it at once.
+  useTransactionTags()
   // Outlives each keyed card, so the next one animates from the height the last one had.
   const cardHeight = useRef<number | null>(null)
   const lastCardHeight = useCallback(() => cardHeight.current, [])

@@ -11,6 +11,15 @@ import { authFetch } from '../../../api/client'
 
 const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
 
+// Your tag list loads with the review (its own cached query); stubbed so the queued fetch
+// responses below stay the review's own, in order.
+const KNOWN_TAGS: string[] = []
+vi.mock('./tagOptions', async (orig) => ({
+  ...(await orig<typeof import('./tagOptions')>()),
+  useTransactionTags: vi.fn(() => KNOWN_TAGS),
+}))
+import { useTransactionTags } from './tagOptions'
+
 function okJson(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -1135,6 +1144,13 @@ describe('TransactionReviewMode — edits and actions', () => {
     expect(card.getByText('Tags')).toBeTruthy()
     expect(card.getByRole('button', { name: 'Remove tag gift' })).toBeTruthy()
     expect(card.getAllByRole('button', { name: 'Tag' })).toHaveLength(1)
+  })
+
+  it('loads your tags with the review, before the first "+ Tag"', async () => {
+    renderMode()
+    await screen.findByRole('heading', { name: 'Kroger' })
+    expect(screen.queryByLabelText('Find or create a tag')).toBeNull()
+    expect(useTransactionTags).toHaveBeenCalled()
   })
 
   it('tags picked on the card are approved with the category', async () => {

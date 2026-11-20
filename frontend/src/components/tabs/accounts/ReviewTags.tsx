@@ -62,8 +62,7 @@ export function ReviewTags({
   return <TagCloud tags={tags} chosen={chosen} onChange={onChange} onDone={() => setOpen(false)} />
 }
 
-/** The open Tags editor. Its own component so your tag list is fetched only when it opens —
- *  not once per card for a row nobody tags. */
+/** The open Tags editor. Your tag list is already loaded: the review fetches it when it opens. */
 function TagCloud({
   tags,
   chosen,
