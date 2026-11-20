@@ -30,6 +30,10 @@ TURN_ID = "019fbbae-29cf-7991-8ee7-c323140a9b42"
 _FAKE_SERVER = r"""
 import json, sys
 
+# The app passes a scrubbed env (no PYTHONUTF8), so decode the UTF-8 protocol explicitly.
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
+
 def send(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()

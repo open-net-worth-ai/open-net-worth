@@ -21,8 +21,9 @@ import contextvars
 import gzip
 import hashlib
 import logging
+import threading
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.core.io import (
@@ -34,6 +35,26 @@ from backend.core.io import (
 from . import _policy, _restore
 
 logger = logging.getLogger("backend.ai.checkpoint")
+
+_stamp_lock = threading.Lock()
+_last_stamp: datetime | None = None
+
+
+def _ordered_stamp() -> str:
+    """A checkpoint's created_at, strictly after the previous one this process issued.
+
+    Restore decides which turns are "later" by comparing these stamps; two turns inside one
+    tick of a coarse clock (Windows' is ~16 ms) would compare equal and a restore could
+    treat a later turn as earlier. Microseconds are always written so the strings compare
+    in time order."""
+    global _last_stamp
+    with _stamp_lock:
+        now = datetime.now(timezone.utc)
+        if _last_stamp is not None and now <= _last_stamp:
+            now = _last_stamp + timedelta(microseconds=1)
+        _last_stamp = now
+        return now.isoformat(timespec="microseconds")
+
 
 _active_ctx: contextvars.ContextVar["CheckpointContext | None"] = contextvars.ContextVar(
     "checkpoint_ctx", default=None
@@ -121,7 +142,7 @@ class CheckpointContext:
         self.anchor_history_len = anchor_history_len
         self.message_preview = message_preview
         self.kind = kind
-        self.created_at = datetime.now(timezone.utc).isoformat()
+        self.created_at = _ordered_stamp()
         self._seen: set[Path] = set()
         self.files: dict[str, str | None] = {}  # name -> "sha256:…" | None (didn't exist)
         self.has_writes = False

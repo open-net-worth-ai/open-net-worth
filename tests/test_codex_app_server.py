@@ -16,6 +16,7 @@ import pytest
 
 from backend.ai.models import codex_app_server as cas
 from backend.ai.models import codex_cli_provider as ccp
+from backend.core import process_tree
 from backend.core.errors import CliNotSignedInError, ExternalServiceError
 from tests.fake_exe import python_cli
 
@@ -186,6 +187,10 @@ def test_the_exec_transport_still_folds_what_it_cannot_send():
 
 _FAKE_SERVER = r"""
 import json, sys
+
+# The app passes a scrubbed env (no PYTHONUTF8), so decode the UTF-8 protocol explicitly.
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
 
 def send(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
@@ -545,7 +550,8 @@ async def test_every_turn_carries_the_tool_manifest_across_model_switch_and_resp
     await _turn("gpt-5.6-terra")
     await _turn("gpt-6-luna")
     client = cas.client_for(cli)
-    client._proc.kill()
+    # Kill the whole tree, as a real crash would: on Windows the pid is a .cmd launcher.
+    process_tree.kill_tree(client._proc.pid)
     await client._proc.wait()
     await _turn("gpt-6-luna")
     await client.aclose()
@@ -586,7 +592,8 @@ async def test_a_dead_server_is_respawned_on_the_next_turn(tmp_path):
     async for _ in client.run_turn(instructions="s", transcript="t", model="m", effort="low"):
         pass
     first = client._proc.pid
-    client._proc.kill()
+    # Kill the whole tree, as a real crash would: on Windows the pid is a .cmd launcher.
+    process_tree.kill_tree(client._proc.pid)
     await client._proc.wait()
 
     async for _ in client.run_turn(instructions="s", transcript="t", model="m", effort="low"):
