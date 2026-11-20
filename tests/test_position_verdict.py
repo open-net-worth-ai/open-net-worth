@@ -360,3 +360,32 @@ def test_the_take_context_carries_the_alerts(monkeypatch, db_isolated, aapl_thes
     )
     ctx = analyst_mod._verdict_context("inst-aapl", held=True)
     assert "YOUR PRICE ALERTS on this ticker: ≤ USD 80 (Floor)." in ctx
+
+
+# ── a suggested buy is bounded by the position ──────────────────────────────────────────
+
+
+def _buy(quantity, action="add", **kw):
+    raw = {
+        "action": action,
+        "why": "x",
+        "actions": [{"type": "order", "side": "buy", "quantity": q} for q in quantity],
+    }
+    return pv.normalize(raw, held=action == "add", price=100.0, **kw)
+
+
+def test_buys_on_a_holding_may_at_most_double_it():
+    assert [a["quantity"] for a in _buy([40], held_qty=40)["actions"]] == [40.0]
+    assert "actions" not in _buy([41], held_qty=40)
+    assert "actions" not in _buy([1_000_000_000], held_qty=40)
+
+
+def test_staged_buys_are_kept_only_while_their_total_stays_within_the_bound():
+    kept = _buy([30, 30, 10], held_qty=40)["actions"]
+    assert [a["quantity"] for a in kept] == [30.0, 10.0]
+
+
+def test_a_first_buy_on_a_watched_ticker_has_an_absolute_ceiling():
+    assert _buy([10_000], action="buy")["actions"][0]["quantity"] == 10_000.0
+    assert "actions" not in _buy([10_001], action="buy")
+    assert "actions" not in _buy([1e12], action="add", held_qty=None)
