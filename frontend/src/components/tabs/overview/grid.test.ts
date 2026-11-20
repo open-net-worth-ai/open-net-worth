@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  snapBandBottoms,
+  AUTOH_IDS,
+  fitMode,
+  heightModeFor,
   compact,
   COLS,
   computeDisplayLayout,
@@ -621,5 +625,48 @@ describe('a breakdown keeps the height it is given', () => {
     const item = { instanceId: 'w', defId: 'rep-spendcat', x: 0, y: 0, w: 6, h: 300 }
     // Its legend scrolls inside the box; growing to it pushed every widget below down.
     expect(responsiveHeight(item as never, 760)).toBe(300)
+  })
+})
+
+describe('Fit / Fixed', () => {
+  it('gives every list and number card both, and no chart', () => {
+    for (const id of ['networth-nums', 'fx', 'recent-txns', 'subscriptions', 'rep-savings'])
+      expect(AUTOH_IDS.has(id)).toBe(true)
+    for (const id of ['hero', 'networth-chart', 'rep-trends', 'rep-sankey'])
+      expect(AUTOH_IDS.has(id)).toBe(false)
+  })
+
+  it('starts lists on Fit and Spending by category on Fixed, and stores only a change', () => {
+    expect(fitMode('fx', undefined)).toBe(true)
+    expect(fitMode('fx', heightModeFor('fx', false))).toBe(false)
+    expect(heightModeFor('fx', true)).toBeUndefined()
+    expect(fitMode('rep-spendcat', undefined)).toBe(false)
+    expect(fitMode('rep-spendcat', heightModeFor('rep-spendcat', true))).toBe(true)
+    expect(heightModeFor('rep-spendcat', false)).toBeUndefined()
+  })
+})
+
+describe('two stacks side by side', () => {
+  it("lines up their top cards, moving what's under them down", () => {
+    const w = (instanceId: string, x: number, y: number, h: number) =>
+      ({ kind: 'widget', instanceId, defId: 'summary', x, y, w: 6, h }) as unknown as GridItem
+    // Net worth (148) beside Cash flow (160), each with another card under it.
+    const out = snapBandBottoms([
+      w('nw', 0, 0, 148),
+      w('a', 0, 148, 200),
+      w('cf', 6, 0, 160),
+      w('b', 6, 160, 300),
+    ])
+    const by = new Map(out.map((it) => [it.instanceId, it]))
+    expect(by.get('nw')!.h).toBe(160)
+    expect(by.get('a')!.y).toBe(160)
+    expect(by.get('cf')!.h).toBe(160)
+  })
+
+  it('leaves a big difference alone', () => {
+    const w = (instanceId: string, x: number, h: number) =>
+      ({ kind: 'widget', instanceId, defId: 'summary', x, y: 0, w: 6, h }) as unknown as GridItem
+    const out = snapBandBottoms([w('short', 0, 100), w('tall', 6, 100 + SNAP_PX + 1)])
+    expect(out.find((it) => it.instanceId === 'short')!.h).toBe(100)
   })
 })

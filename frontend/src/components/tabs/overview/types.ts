@@ -101,7 +101,7 @@ export interface WidgetDefinition {
   rows?: { options: Array<number | 'all'>; default: number | 'all' }
 }
 
-export type HeightMode = 'fixed'
+export type HeightMode = 'fixed' | 'fit'
 
 export interface WidgetAlert {
   op: '>' | '<' | '>=' | '<=' | '=='

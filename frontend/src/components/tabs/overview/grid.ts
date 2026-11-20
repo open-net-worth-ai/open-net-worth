@@ -52,12 +52,37 @@ export const AUTOH_IDS = new Set([
   'text',
   'lux-html',
   ...LIST_IDS,
+  // Lists and number cards whose content has a natural height (a chart has none: it redraws to
+  // fill its box, so it has no Fit).
+  'networth-nums',
+  'fx',
+  'recent-added-txns',
+  'recent-txns',
+  'category-txns',
+  'subscriptions',
+  'venues',
+  'reach',
+  'calendar',
+  'rep-savings',
+  'rep-table',
+  'rep-spendcat',
 ])
+
+// Fit/Fixed widgets that start Fixed: Spending by category's long pie legend, grown to its
+// content, pushed every widget below it down.
+export const FIXED_BY_DEFAULT = new Set(['rep-spendcat'])
 export const AUTOH_MIN = 40
 
 /** Is this widget currently auto-height (content-fit), or pinned to a fixed size? */
 export function fitMode(defId: string, heightMode: WidgetInstance['heightMode']): boolean {
-  return AUTOH_IDS.has(defId) && heightMode !== 'fixed'
+  if (!AUTOH_IDS.has(defId) || heightMode === 'fixed') return false
+  return heightMode === 'fit' || !FIXED_BY_DEFAULT.has(defId)
+}
+
+/** The stored heightMode for a Fit / Fixed pick: nothing when it is the widget's default. */
+export function heightModeFor(defId: string, fit: boolean): WidgetInstance['heightMode'] {
+  if (FIXED_BY_DEFAULT.has(defId)) return fit ? 'fit' : undefined
+  return fit ? undefined : 'fixed'
 }
 
 const overlaps = (a: { x: number; w: number }, b: { x: number; w: number }): boolean =>
@@ -334,27 +359,41 @@ export const SNAP_PX = 60
 
 /**
  * Each card keeps its own height — a Fit card its content's, a Fixed card the height the user
- * set — except that a SMALL gap to the band's bottom closes: the lowest card in its column
- * grows by up to `SNAP_PX` to line up with the tallest. One rule covers a flat row (cards side
- * by side) and a composed block (one tall card beside two, three, any number stacked): only
- * the bottom card of a shorter column ever grows, and the cards above it are never touched.
+ * set — except that a SMALL gap closes: a card whose bottom sits up to `SNAP_PX` above the
+ * bottom of a card beside it grows to line up, and whatever is stacked under it moves down with
+ * it. One rule covers a flat row, the top cards of two stacks side by side (Net worth beside
+ * Cash flow, each with more cards under it) and a short column beside one tall card.
  *
  * It used to stretch every card in a row to the row's tallest, so a two-item "Next 30 days"
- * beside a long list was half empty — it read as broken, not short. A card the user pinned
- * `fixed` never grows past the height they chose. Display-only, like `responsiveHeight`.
+ * beside a long list was half empty — it read as broken, not short. It then lined up only the
+ * bottom card of each column, which left two stacks' top cards a few pixels apart. A card the
+ * user pinned `fixed` never grows past the height they chose. Display-only, like
+ * `responsiveHeight`.
  */
 export function snapBandBottoms<T extends GridItem>(items: T[]): T[] {
-  const live = items.filter((it) => !isSection(it) && !it.collapsed)
-  if (live.length < 2) return items
-  const bottom = Math.max(...live.map((it) => it.y + it.h))
-  return items.map((it) => {
-    if (isSection(it) || it.collapsed || it.heightMode === 'fixed') return it
-    const end = it.y + it.h
-    const gap = bottom - end
-    if (gap <= 0 || gap > SNAP_PX) return it
-    const covered = live.some((o) => o !== it && overlaps(o, it) && o.y >= end)
-    return covered ? it : { ...it, h: it.h + gap }
-  })
+  let cur = items
+  // Each pass grows one card, and only ever grows: bounded by the number of cards.
+  for (let pass = 0; pass <= items.length; pass++) {
+    const live = cur.filter((it) => !isSection(it) && !it.collapsed)
+    if (live.length < 2) return cur
+    const byBottom = [...live].sort((a, b) => a.y + a.h - (b.y + b.h))
+    let grow: { id: string; h: number } | null = null
+    for (const it of byBottom) {
+      if (it.heightMode === 'fixed') continue
+      const end = it.y + it.h
+      const beside = live.filter((o) => {
+        const gap = o.y + o.h - end
+        return o !== it && !overlaps(o, it) && o.y < end && gap > 0 && gap <= SNAP_PX
+      })
+      if (!beside.length) continue
+      grow = { id: it.instanceId, h: Math.max(...beside.map((o) => o.y + o.h)) - it.y }
+      break
+    }
+    if (!grow) return cur
+    const { id, h } = grow
+    cur = compact(cur.map((it) => (it.instanceId === id ? { ...it, h } : it)))
+  }
+  return cur
 }
 
 /**

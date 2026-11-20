@@ -85,6 +85,9 @@ link to the tab it comes from. Every list widget's **Rows** setting includes **A
 which widgets to add for you.
 
 Each widget is as tall as its content (or the height you set, if you switched it to **Fixed**).
+Lists and number cards (Net worth's numbers, FX rates, transactions, subscriptions, Savings rate
+and the like) have **Height: Fit / Fixed** in **Edit**; Spending by category starts on Fixed so
+its long legend scrolls inside. Charts have no Fit: they fill the height you give them.
 Widgets side by side line up when their heights are close; when one is much shorter, it simply
 ends sooner instead of stretching into an empty card. You can stack two or three widgets beside
 one tall one — when the stack ends just short of the tall widget, its last widget lines up.
@@ -123,7 +126,8 @@ that month.
 Every Reports widget has a filter in its own header: a small pill naming what it shows (for
 example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place. The same
 filters are also in the widget's editor (**Edit**): **Filters** down the right, **Appearance**
-under the preview. Savings rate, which has a period alone, opens a plain list of periods
+under the preview. Every widget's editor has this layout: how it looks under the preview, what
+it shows (filters, its own settings, a Lucius prompt) on the right. Savings rate, which has a period alone, opens a plain list of periods
 instead, and its editor shows **Period** with its other settings:
 
 - **Period.** Spending by category, Top merchants, Savings rate and Money flow can show

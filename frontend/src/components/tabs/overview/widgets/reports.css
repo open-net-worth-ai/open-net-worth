@@ -494,17 +494,17 @@
 /* In the editor's right-hand column the filters take the column's height: Period keeps its
    own, Categories and Tags share the rest and scroll inside their lists, so the column itself
    doesn't scroll (and draw a second scrollbar) unless the window is very short. */
-.ov-fs-shell--split .ov-fs-filters {
+.ov-fs-rail .ov-fs-filters {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.ov-fs-shell--split .ov-fs-filters .ov-rf-sec:has(.ov-rf-list) {
+.ov-fs-rail .ov-fs-filters .ov-rf-sec:has(.ov-rf-list) {
   flex: 1 1 0;
   min-height: 150px;
 }
 
-.ov-fs-shell--split .ov-fs-filters .ov-rf-list {
+.ov-fs-rail .ov-fs-filters .ov-rf-list {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
