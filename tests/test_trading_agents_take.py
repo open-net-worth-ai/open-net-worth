@@ -113,8 +113,7 @@ def test_the_digest_carries_the_rating_its_age_and_what_it_was_sized_against():
     }
     block = "\n".join(ta.lines())
     assert "Rating: Hold" in block and "2 day(s) ago" in block and DECISION in block
-    assert "position in this ticker" in block
-    assert "anthropic:model-a" in block
+    assert "your cash and this position" in block
 
 
 def test_the_decision_text_is_capped_and_sanitized_as_third_party_output():
@@ -205,14 +204,17 @@ _LLM = json.dumps(
 
 
 @pytest.fixture
-def synthesis(monkeypatch, tmp_path, db_isolated):
-    """Run the on-demand synthesis for ACME against a fake model; returns what it was asked."""
+def synthesis(request, monkeypatch, tmp_path, db_isolated):
+    """Run the on-demand synthesis for ACME against a fake model; returns what it was asked.
+    ``@pytest.mark.parametrize("synthesis", [(response, held)], indirect=True)`` picks the model's
+    answer and whether ACME is held."""
     import backend.monitoring.analyst as analyst_mod
     from tests.test_analyst_sweep import _async_return, _stub_analyst
 
+    response, held = getattr(request, "param", (_LLM, True))
     _instrument()
-    calls, _ = _stub_analyst(monkeypatch, tmp_path, db_isolated, llm_response=_LLM)
-    monkeypatch.setattr(analyst_mod, "_is_held_instrument", lambda iid: True)
+    calls, _ = _stub_analyst(monkeypatch, tmp_path, db_isolated, llm_response=response)
+    monkeypatch.setattr(analyst_mod, "_is_held_instrument", lambda iid: held)
     monkeypatch.setattr(analyst_mod, "_fetch_analyst_consensus_block", _async_return(""))
 
     def go(force=True):
@@ -254,11 +256,14 @@ def test_the_take_records_which_run_informed_it_and_the_detail_serves_it(synthes
     brief = AssetBriefStore().get(IID)
     assert brief["trading_agents_signal"] == "Hold"
     assert brief["trading_agents_trade_date"] == (user_today() - timedelta(days=3)).isoformat()
-    assert take_input.served(brief) == {
+    assert take_input.served(brief, held=True) == {
         "run_id": run_id,
         "signal": "Hold",
         "trade_date": brief["trading_agents_trade_date"],
         "age_days": 3,
+        "view": "research says keep the position as it is",
+        "held": True,
+        "allowed_actions": ["hold"],
     }
     assert _detail()["trading_agents_input"]["run_id"] == run_id
 
@@ -624,8 +629,9 @@ def test_a_crash_pass_that_can_push_never_sees_the_digest(synthesis):
 
 
 def test_the_rule_forbids_the_digest_in_every_pushed_or_timeline_field():
-    for field in ("message", "headline", "analysis", "why", "impact", "actions"):
-        assert field in take_input.RULE.split("Mention it ONLY")[1]
+    forbidden = take_input.RULE.split("never in ")[1].split(" — ")[0]
+    for field in ("message", "headline", "analysis", "impact", "actions"):
+        assert field in forbidden
 
 
 # ── the open page learns the take changed ────────────────────────────────────────────────
@@ -659,7 +665,7 @@ def test_deleting_the_run_a_take_used_removes_the_chip(synthesis):
     synthesis()
     assert _detail()["trading_agents_input"]["run_id"] == run_id
     apply_run_change("delete", run_id=run_id)
-    assert take_input.served(AssetBriefStore().get(IID)) is None
+    assert take_input.served(AssetBriefStore().get(IID), held=True) is None
     assert _detail()["trading_agents_input"] is None
 
 
@@ -711,3 +717,276 @@ def test_the_app_shutdown_stops_the_seam():
 
     source = (Path(__file__).parent.parent / "backend" / "main.py").read_text()
     assert "await take_refresh.shutdown()" in source
+
+
+# ── one view: the vocabulary bridge, the correction, the budget (spec §17, WP11) ─────────────
+
+RATINGS = ("Buy", "Overweight", "Hold", "Underweight", "Sell")
+ALLOWED = {
+    True: {
+        "Buy": ("add", "hold"),
+        "Overweight": ("add", "hold"),
+        "Hold": ("hold",),
+        "Underweight": ("trim", "hold"),
+        "Sell": ("sell", "trim"),
+    },
+    False: {
+        "Buy": ("buy", "wait"),
+        "Overweight": ("buy", "wait"),
+        "Hold": ("wait",),
+        "Underweight": ("wait",),
+        "Sell": ("wait",),
+    },
+}
+
+
+@pytest.mark.parametrize("held", [True, False])
+@pytest.mark.parametrize("rating", RATINGS)
+def test_every_rating_maps_to_allowed_actions_and_a_reading_for_held_and_not_held(rating, held):
+    from backend.services import position_verdict
+    from backend.services.trading_agents import vocabulary
+
+    allowed = vocabulary.allowed_actions(rating, held)
+    assert allowed == ALLOWED[held][rating]
+    assert set(allowed) <= set(
+        position_verdict.HELD_ACTIONS if held else position_verdict.WATCHED_ACTIONS
+    )
+    assert vocabulary.view(rating, held)
+
+
+def test_the_table_covers_exactly_the_ratings_a_run_can_settle_on():
+    assert take_input._SIGNALS == set(RATINGS)
+
+
+def test_a_sell_on_a_stock_that_is_not_held_never_reads_as_an_instruction_to_sell():
+    from backend.services.trading_agents import vocabulary
+
+    assert vocabulary.view("Sell", False) == "negative outlook — not a buy now"
+    assert vocabulary.view("Sell", True) == "research says exit or reduce"
+    assert "sell" not in vocabulary.allowed_actions("Sell", False)
+
+
+def test_the_digest_block_carries_the_reading_and_the_allowed_actions():
+    held = take_input.digest(_row(signal="Sell"), user_today(), held=True)
+    watched = take_input.digest(_row(signal="Sell"), user_today(), held=False)
+    assert "research says exit or reduce; allowed actions: sell, trim" in "\n".join(held.lines())
+    assert "not a buy now; allowed actions: wait" in "\n".join(watched.lines())
+    assert held.facts() == frozenset()
+    assert take_input.digest(_row(context_level="ticker"), user_today()).facts() == {
+        "position_unseen"
+    }
+    old = take_input.digest(_row(trade_date=user_today() - timedelta(days=4)), user_today())
+    assert old.facts() == {"stale_run"}
+
+
+def test_served_carries_the_reading_and_whether_the_ticker_is_held():
+    brief = {
+        "trading_agents_run_id": _run(signal="Sell"),
+        "trading_agents_signal": "Sell",
+        "trading_agents_trade_date": user_today().isoformat(),
+    }
+    held = take_input.served(brief, held=True)
+    watched = take_input.served(brief, held=False)
+    assert (held["held"], held["allowed_actions"]) == (True, ["sell", "trim"])
+    assert held["view"] == "research says exit or reduce"
+    assert (watched["held"], watched["allowed_actions"]) == (False, ["wait"])
+    assert watched["view"] == "negative outlook — not a buy now"
+    assert {"run_id", "signal", "trade_date", "age_days"} <= set(held)
+
+
+def _verdict(action, *, why="Because.", **extra) -> dict:
+    return {"action": action, "why": why, **extra}
+
+
+def _sell(qty=1.0) -> dict:
+    return {"type": "order", "side": "sell", "quantity": qty, "limit": None}
+
+
+def _buy(qty=1.0) -> dict:
+    return {"type": "order", "side": "buy", "quantity": qty, "limit": None}
+
+
+def _norm(raw, *, held=True, **kw):
+    from backend.services import position_verdict
+
+    return position_verdict.normalize(raw, held=held, price=100.0, held_qty=10.0, **kw)
+
+
+def test_a_disallowed_action_without_a_reason_is_replaced_by_the_nearest_allowed_one():
+    out = _norm(_verdict("hold", actions=[_sell()]), ta_signal="Sell")
+    assert (out["action"], out["ta_aligned"]) == ("trim", True)
+    assert out["why"] == "TradingAgents rated Sell: research says exit or reduce."
+    assert _norm(_verdict("sell"), ta_signal="Buy")["action"] == "hold"
+    assert _norm(_verdict("add"), ta_signal="Hold")["action"] == "hold"
+    assert _norm(_verdict("add"), ta_signal="Underweight")["action"] == "hold"
+    assert _norm(_verdict("hold"), ta_signal="Buy") == _norm(_verdict("hold"))
+
+
+def test_a_stock_not_held_is_never_told_to_buy_against_a_sell():
+    out = _norm(_verdict("buy", actions=[_buy()]), held=False, ta_signal="Sell")
+    assert (out["action"], out["ta_aligned"]) == ("wait", True)
+    assert "actions" not in out
+    assert _norm(_verdict("wait"), held=False, ta_signal="Sell") == _norm(
+        _verdict("wait"), held=False
+    )
+
+
+def test_orders_that_contradict_the_replaced_action_are_dropped_and_alerts_stay():
+    alert = {"type": "alert", "when": "below", "price": 90.0}
+    out = _norm(_verdict("sell", actions=[_sell(), alert]), ta_signal="Buy")
+    assert out["action"] == "hold" and out["actions"] == [alert]
+    out = _norm(_verdict("add", actions=[_buy(), alert]), ta_signal="Hold")
+    assert out["action"] == "hold" and out["actions"] == [alert]
+
+
+def test_a_valid_overlay_reason_keeps_the_action_and_is_recorded():
+    out = _norm(_verdict("hold", ta_overlay_reason="concentration"), ta_signal="Sell")
+    assert out["action"] == "hold" and out["ta_overlay_reason"] == "concentration"
+    assert "ta_aligned" not in out
+    kept = _norm(_verdict("sell", ta_overlay_reason="Thesis"), held=True, ta_signal="Buy")
+    assert kept["action"] == "sell" and kept["ta_overlay_reason"] == "thesis"
+
+
+def test_a_reason_that_is_a_fact_about_the_run_holds_only_when_it_is_true():
+    raw = _verdict("hold", ta_overlay_reason="stale_run")
+    assert _norm(raw, ta_signal="Sell")["action"] == "trim"
+    kept = _norm(raw, ta_signal="Sell", ta_facts=frozenset({"stale_run"}))
+    assert (kept["action"], kept["ta_overlay_reason"]) == ("hold", "stale_run")
+    unseen = _verdict("hold", ta_overlay_reason="position_unseen")
+    assert _norm(unseen, ta_signal="Sell", ta_facts=frozenset({"stale_run"}))["action"] == "trim"
+
+
+@pytest.mark.parametrize("reason", ["none", "", "because I said so", None, 7])
+def test_no_reason_or_an_unknown_one_does_not_excuse_a_different_action(reason):
+    out = _norm(_verdict("hold", ta_overlay_reason=reason), ta_signal="Sell")
+    assert out["action"] == "trim" and out["ta_aligned"] is True
+
+
+def test_an_allowed_action_stores_nothing_extra_whatever_reason_came_with_it():
+    out = _norm(_verdict("trim", ta_overlay_reason="concentration"), ta_signal="Sell")
+    assert out == _norm(_verdict("trim"), ta_signal="Sell")
+    assert not {"ta_aligned", "ta_overlay_reason"} & set(out)
+
+
+def test_without_a_rating_the_verdict_is_exactly_what_it_was():
+    """Golden: the dict ``normalize`` returned before WP11 for these inputs."""
+    raw = _verdict("hold", ta_overlay_reason="concentration", stop=90, actions=[_sell(2)])
+    assert _norm(raw) == {
+        "action": "hold",
+        "why": "Because.",
+        "held": True,
+        "price_at": 100.0,
+        "stop": 90.0,
+    }
+    assert _norm(_verdict("sell", actions=[_sell(2)])) == {
+        "action": "sell",
+        "why": "Because.",
+        "held": True,
+        "price_at": 100.0,
+        "actions": [{"type": "order", "side": "sell", "quantity": 2.0}],
+    }
+    assert _norm(raw, ta_signal=None) == _norm(raw) == _norm(raw, ta_signal="")
+
+
+def test_the_composed_call_shows_the_correction_only_when_there_is_one():
+    from backend.services import position_verdict
+
+    plain = position_verdict.compose(
+        {**_norm(_verdict("hold")), "at": "x"}, None, held=True, price=100.0, currency="USD"
+    )
+    assert not {"ta_aligned", "ta_overlay_reason"} & set(plain)
+    fixed = _norm(_verdict("hold"), ta_signal="Sell")
+    shown = position_verdict.compose(fixed, None, held=True, price=100.0, currency="USD")
+    assert shown["ta_aligned"] is True and shown["action"] == "trim"
+
+
+def _llm(action, **verdict) -> str:
+    body = json.loads(_LLM)
+    body["verdict"] = {"action": action, "why": "Weigh it.", **verdict}
+    return json.dumps(body)
+
+
+@pytest.mark.parametrize("synthesis", [(_llm("hold"), True)], indirect=True)
+def test_the_written_take_is_aligned_with_a_sell_on_a_held_stock(synthesis):
+    _run(signal="Sell", days_ago=1)
+    assert synthesis() is True
+    verdict = AssetBriefStore().get(IID)["position_verdict"]
+    assert (verdict["action"], verdict["ta_aligned"]) == ("trim", True)
+    assert "allowed actions: sell, trim" in _prompts(synthesis.calls)
+
+
+@pytest.mark.parametrize(
+    "synthesis", [(_llm("hold", ta_overlay_reason="concentration"), True)], indirect=True
+)
+def test_the_written_take_keeps_a_hold_against_a_sell_for_an_overlay_reason(synthesis):
+    _run(signal="Sell", days_ago=1)
+    assert synthesis() is True
+    verdict = AssetBriefStore().get(IID)["position_verdict"]
+    assert (verdict["action"], verdict["ta_overlay_reason"]) == ("hold", "concentration")
+
+
+@pytest.mark.parametrize("synthesis", [(_llm("buy"), False)], indirect=True)
+def test_a_stock_not_held_is_waited_on_against_a_sell_and_told_so_in_the_prompt(synthesis):
+    _run(signal="Sell", days_ago=1)
+    assert synthesis() is True
+    assert AssetBriefStore().get(IID)["position_verdict"]["action"] == "wait"
+    assert "not a buy now; allowed actions: wait" in _prompts(synthesis.calls)
+
+
+@pytest.mark.parametrize("synthesis", [(_llm("buy"), False)], indirect=True)
+def test_without_a_run_the_verdict_is_never_aligned(synthesis):
+    assert synthesis() is True
+    verdict = AssetBriefStore().get(IID)["position_verdict"]
+    assert verdict["action"] == "buy" and "ta_aligned" not in verdict
+
+
+_OLD_RULE_CHARS = 964
+_OLD_WORST_BLOCK_CHARS = 1613
+_ROW = {
+    "id": "a",
+    "subject_type": "asset",
+    "subject": "ACME",
+    "label": "Acme",
+    "trigger": "brief_stale",
+    "ticker": "ACME",
+}
+_EVIDENCE = [{"title": "Oil rises", "source": "Wire", "published": "2026-10-01", "snippet": "Up."}]
+
+
+def _assembled(ta=None, *, held=True) -> str:
+    from backend.monitoring import analyst
+
+    user, system = analyst._build_prompts(
+        _ROW,
+        _EVIDENCE,
+        position_ctx="ACME: 10 shares",
+        is_held=held,
+        want_key_issues=True,
+        trading_agents_block=analyst._trading_agents_block(ta) if ta else "",
+    )
+    return user + system + (take_input.RULE if ta else "")
+
+
+def test_the_prompt_grows_by_at_most_the_digest_and_a_shorter_rule():
+    worst = take_input.digest(
+        _row(decision_text="x " * 2_000, trade_date=user_today() - timedelta(days=5)),
+        user_today(),
+        held=True,
+    )
+    from backend.monitoring import analyst
+
+    block = analyst._trading_agents_block(worst)
+    grown = len(_assembled(worst)) - len(_assembled())
+    assert len(block) / 4 <= 250
+    assert grown == len(block) + len(take_input.RULE)
+    assert len(take_input.RULE) < _OLD_RULE_CHARS
+    assert grown < _OLD_RULE_CHARS + _OLD_WORST_BLOCK_CHARS
+
+
+def test_the_rule_anchors_on_the_research_and_no_longer_asks_for_a_comparison():
+    rule = take_input.RULE
+    assert "stock-level research" in rule and "ONE recommendation" in rule
+    assert "ta_overlay_reason" in rule and "allowed actions" in rule
+    assert "at most 2 sentences" in rule
+    for old in ("agrees or disagrees", "where it agrees", "Combine it"):
+        assert old not in rule

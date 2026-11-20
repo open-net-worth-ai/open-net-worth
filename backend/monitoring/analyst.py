@@ -2858,7 +2858,7 @@ def _write_asset_brief_synthesis(
                 parsed.get("portfolio_narrative") or "",
                 source_dicts(evidence),
                 now,
-                verdict=_brief_verdict(instrument_id, parsed, held, now),
+                verdict=_brief_verdict(instrument_id, parsed, held, now, trading_agents),
                 trading_agents=trading_agents.provenance() if trading_agents else None,
             )
         else:
@@ -2922,14 +2922,14 @@ def _verdict_context(instrument_id: str, *, held: bool) -> str:
     return "".join(f"\n\n{p}" for p in parts)
 
 
-def _trading_agents_input(instrument_id: str) -> take_input.TakeInput | None:
+def _trading_agents_input(instrument_id: str, held: bool = False) -> take_input.TakeInput | None:
     """The ticker's TradingAgents digest for the take (``services.trading_agents.take_input``), or
     None — feature off, no usable run, or ANY failure: the take is then produced as it always was."""
     try:
         from backend.db.instrument_store import InstrumentStore
 
         inst = InstrumentStore().find_by_id(instrument_id) or {}
-        return take_input.latest(inst.get("price_source_id") or "")
+        return take_input.latest(inst.get("price_source_id") or "", held=held)
     except Exception as exc:
         logger.debug(
             "analyst: TradingAgents input failed for %s: %s", instrument_id, type(exc).__name__
@@ -2955,13 +2955,13 @@ def _trading_agents_block(ta: take_input.TakeInput) -> str:
     return f"\n{take_input.BEGIN}\n" + "\n".join(lines) + f"\n{take_input.END}\n"
 
 
-def _take_input_for_pass(row: dict, instrument_id: str) -> take_input.TakeInput | None:
+def _take_input_for_pass(row: dict, instrument_id: str, held: bool) -> take_input.TakeInput | None:
     """The TradingAgents digest for one synthesis pass, and a record that the pass started with it.
     Only the take's own ``brief_stale`` pass reads it: a crash / news-spike / material-news pass
     writes the Intel timeline and can push, and research text must never reach either."""
     if not instrument_id or row.get("trigger") != "brief_stale":
         return None
-    ta = _trading_agents_input(instrument_id)
+    ta = _trading_agents_input(instrument_id, held)
     if ta is not None:
         try:
             from backend.monitoring import asset_brief
@@ -2994,15 +2994,27 @@ def _consider_trading_agents(instrument_id: str, ta: take_input.TakeInput | None
         )
 
 
-def _brief_verdict(instrument_id: str, parsed: dict, held: bool, now: str) -> dict | None:
-    """The synthesis's verdict, checked against the last price on file (no network), stamped
-    with when it was made so the next take can be shown it."""
+def _brief_verdict(
+    instrument_id: str,
+    parsed: dict,
+    held: bool,
+    now: str,
+    trading_agents: take_input.TakeInput | None = None,
+) -> dict | None:
+    """The synthesis's verdict, checked against the last price on file (no network) and, when the
+    take read a TradingAgents run, against what that rating allows — stamped with when it was
+    made so the next take can be shown it."""
     from backend.db.instrument_store import InstrumentStore
 
     inst = InstrumentStore().find_by_id(instrument_id) or {}
     price = thesis_judgment.local_price(inst) if inst else None
     verdict = position_verdict.normalize(
-        parsed.get("verdict"), held=held, price=price, held_qty=_held_quantity(instrument_id)
+        parsed.get("verdict"),
+        held=held,
+        price=price,
+        held_qty=_held_quantity(instrument_id),
+        ta_signal=trading_agents.signal if trading_agents else None,
+        ta_facts=trading_agents.facts() if trading_agents else frozenset(),
     )
     return {**verdict, "at": now} if verdict else None
 
@@ -3751,7 +3763,9 @@ async def _process_row(
             brief_instrument_id = iid
         if brief_instrument_id:
             analyst_block = await _fetch_analyst_consensus_block(brief_instrument_id)
-            trading_agents = _take_input_for_pass(row, brief_instrument_id)
+            trading_agents = _take_input_for_pass(
+                row, brief_instrument_id, bool(held_instrument_id)
+            )
     t_consensus = time.monotonic()
 
     # Captured HERE, immediately before the read — NOT after the LLM call below completes (INT14b

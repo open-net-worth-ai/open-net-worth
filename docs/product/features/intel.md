@@ -233,8 +233,10 @@ keeps its levels unless something has changed, and if the price falls through it
 plainly: it either calls **Sell**, or says why it's holding.
 
 With [TradingAgents](trading-agents.md) on, the take also reads that stock's latest
-finished analysis, combines it with its own, and shows "Includes TradingAgents" with the rating and
-its age.
+finished analysis, uses it as the research on the stock, adds what it knows about your position
+into one call, and shows "Includes TradingAgents" with the rating and its age. A Sell on a stock
+you do not own reads as "not a buy now", never as an instruction to sell; see
+[how the two fit together](trading-agents.md#how-the-take-and-tradingagents-fit-together).
 
 Most of the time the call is to do nothing, and then there's nothing to tap. When Lucius decides
 something would help, it adds a few actions under the call (usually no more than three), each a

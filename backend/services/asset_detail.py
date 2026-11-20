@@ -1305,6 +1305,7 @@ def read_asset_detail(
     # change_pct persisted in an old peer entry) would otherwise 500 the endpoint at
     # json.dumps(allow_nan=False). Degrade it to null (unknown) rather than crash the view.
     thesis = investment_theses.thesis_for(instrument_id)
+    is_held = bool(pos_block and pos_block.get("held") and pos_block.get("qty"))
     return json_safe(
         {
             "instrument_id": instrument_id,
@@ -1332,11 +1333,11 @@ def read_asset_detail(
             "position_verdict": position_verdict.compose(
                 brief.get("position_verdict"),
                 thesis,
-                held=bool(pos_block and pos_block.get("held") and pos_block.get("qty")),
+                held=is_held,
                 price=price_block.get("last"),
                 currency=price_block.get("currency") or "",
             ),
-            "trading_agents_input": take_input.served(brief),
+            "trading_agents_input": take_input.served(brief, held=is_held),
             "freshness": freshness,
             # Real progress marker for an in-flight refresh ("searching" -> "analysing" ->
             # "ready", written by monitoring.asset_brief._do_refresh as each stage

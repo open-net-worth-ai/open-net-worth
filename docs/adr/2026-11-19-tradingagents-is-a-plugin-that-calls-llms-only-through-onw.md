@@ -215,6 +215,31 @@ Review fixes (same day):
 - **The page hears about the take.** A completed pass publishes an `intel` data event; the refetch
   it causes finds nothing superseded.
 
+## Amendment 2026-11-20 (2) — One view: research on the stock, overlay on the position
+
+Owner feedback: a held stock at 85% of the portfolio read "Hold" in the take and "Sell" on the
+TradingAgents card, and the take called that a disagreement; a stock not held read WAIT against a
+Sell. Two verdicts competed (spec §17). The decision:
+
+- **They fill each other's gaps.** TradingAgents is the stock research; the take is the position
+  overlay (size, concentration, thesis, levels, alerts, run age, whether the run saw the position)
+  and writes ONE recommendation that uses it. The rule no longer asks for "agrees or disagrees";
+  the take does not re-derive the stock view.
+- **A vocabulary bridge, not a mapping of ratings to orders.** `services/trading_agents/vocabulary.py`
+  holds one pure table: for each rating and held / not held, the actions the research supports and
+  a plain reading. Held: Buy/Overweight add or hold, Hold hold, Underweight trim or hold, Sell sell
+  or trim. Not held: Buy/Overweight buy or wait, anything else wait; a Sell is "not a buy now".
+- **Checkable.** The verdict carries `ta_overlay_reason`. `position_verdict.normalize` replaces an
+  action outside the allowed set, given no valid reason, with the nearest allowed one (and a plain
+  `why`), drops the orders that no longer fit, and records `ta_aligned`. Two reasons are facts about
+  the run (`stale_run`, `position_unseen`) and count only when true. No digest: unchanged.
+  Alternative rejected: a second model pass to reconcile (cost).
+- **Cheaper.** Decision text capped at 600 characters (was 1,200), the models line leaves the block,
+  the rule is shorter, and with a digest the narrative is at most 2 sentences and `why` 1.
+  `key_issues` and the evidence are not trimmed. The 1,200-character figure above is superseded.
+- **Served.** `trading_agents_input` gains `view`, `held` and `allowed_actions` so the page does not
+  carry its own copy of the table.
+
 ## Alternatives considered
 
 - **Import `tradingagents` into ONW's interpreter** — rejected: dependency conflicts (pandas 3) and

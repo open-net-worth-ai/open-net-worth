@@ -607,6 +607,9 @@ per-connector permission list).
 
 ## 16. Lucius's take uses TradingAgents (WP9)
 
+> §17 supersedes the prompt rule's "say where it agrees or disagrees" and the 1200-character cap
+> below: the take uses the research as its anchor and the decision text is capped at 600.
+
 **Goal.** "Lucius's take on your position" (`key_issues`, `portfolio_narrative`, `position_verdict`
 on the asset brief, written by `monitoring/analyst.py`'s synthesis) also reads the ticker's
 TradingAgents analysis while the feature is on. It is combined with Lucius's own analysis and
@@ -713,7 +716,8 @@ A Sell on a stock the user does not hold is never shown as an instruction to sel
 one clause, asks `verdict.action` to be an allowed action, and lets it differ ONLY for an overlay
 reason: `concentration`, `thesis`, `levels`, `alerts` (Lucius's read of the position) or `stale_run`
 (run older than 3 days), `position_unseen` (run sized at `ticker`) — facts the server checks. The
-verdict carries `ta_overlay_reason` (those six, or `none`); `why` starts with the reason.
+verdict carries `ta_overlay_reason` (one of those six; absent or `none` is no exception); `why`
+starts with the reason.
 
 **Correction (checkable, not only prompted).** `position_verdict.normalize(..., ta_signal=,
 ta_facts=)`: an action outside `allowed_actions` with no valid reason is REPLACED by the nearest
@@ -727,8 +731,8 @@ byte-identical to before.
 actions, age, context level and a decision text capped at `DECISION_CHARS = 600` (was 1200); the
 models line is gone from the block. With a digest the model writes `portfolio_narrative` in at most
 2 sentences and `why` in 1. No extra model call. Measured on the worst-case fixture (decision at the
-cap, stale): `RULE` 964 -> 938 chars; block 1613 -> 984 chars (about 246 tokens); added to the
-prompt 2577 -> 1922 chars (about 644 -> 480 tokens). `key_issues` and the news evidence are NOT
+cap, stale): `RULE` 964 -> 928 chars; block 1613 -> 984 chars (about 246 tokens); added to the
+prompt 2577 -> 1912 chars (about 644 -> 478 tokens). `key_issues` and the news evidence are NOT
 trimmed: the page shows 3-5 issues and the model needs the evidence for them.
 
 **Data contract.** `trading_agents_input` gains `view`, `held`, `allowed_actions`; `run_id`,
@@ -738,7 +742,8 @@ trimmed: the page shows 3-5 issues and the model needs the evidence for them.
 **What TradingAgents sees** (so the research is not mistaken for portfolio-blind). The default
 `context_level` is `investments`; every start path (tool, REST, card form) uses the configured
 level unless the caller names one. The worker passes `PortfolioContext` to `propagate`, which
-renders it into the prompts of the trader, risk team and portfolio manager (not the data analysts).
+renders it into prompts (per ONW's reading of the pinned commit, the trader, risk team and
+portfolio manager; the analysts' data tools take ticker and date only).
 `investments`: cash and every investment position (ticker, quantity, average price); `position`:
 cash and the analysed ticker's own position; `ticker`: nothing (`None`, not a flat book). A held
 ticker at `investments` or `position` is seen as held with its quantity; a not-held ticker at either

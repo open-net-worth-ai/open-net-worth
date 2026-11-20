@@ -108,12 +108,12 @@ Reading, listing and cancelling still work after you pause the connector.
 ## Lucius's take uses it
 
 While TradingAgents is on, **Lucius's take on your position** (the asset page's Analysis tab) also
-reads the stock's latest finished analysis, so you get one combined view. Lucius weighs it against
-its own evidence, says where it agrees or disagrees, and names it ("TradingAgents rated Hold on
-2026-11-17"). The rating is an input: Lucius still makes its own call, and it never becomes an
-order. The take never starts an analysis for you, because that costs money; it offers one in a
+reads the stock's latest finished analysis, so you get one combined view. Lucius uses it as the
+research on the stock, adds what it knows about your position, and names it once ("TradingAgents
+rated Hold on 2026-11-17"). The rating is an input: it never becomes an order. The take never starts an analysis for you, because that costs money; it offers one in a
 single row under the take, and the run starts only when you click it.
 
+- **One view, not two.** See [How the take and TradingAgents fit together](#how-the-take-and-tradingagents-fit-together).
 - **Which analysis.** The most recent finished run for the stock, at most 14 days old, with a
   rating. A run that could not settle on one (Unclear) is not used. With the feature off, or the
   connector paused, there is nothing to include and the take is exactly what it was.
@@ -135,11 +135,36 @@ single row under the take, and the run starts only when you click it.
   While it runs the row shows the stage, the time and **Cancel**, with **View** to open the card;
   when it finishes the take updates by itself (**Refresh this take** appears if that takes more than
   two minutes). If TradingAgents is not ready, the row says why and links **Set up TradingAgents**.
-- **What is sent.** The rating, the date, the analysis's decision text (up to 1,200 characters),
+- **What is sent.** The rating, the date, the analysis's decision text (up to 600 characters),
   how much of your holdings that run could see (not the amounts) and the model names go to the AI
   provider that writes the take, the same one that already receives your position for it. The
   reports and the amounts shared with the run are not sent. The decision text may itself restate
   figures the run was shown (for example a position size or a price), and those figures go with it.
+
+## How the take and TradingAgents fit together
+
+They do different jobs. **TradingAgents is the research on the stock**: price action, fundamentals,
+sentiment, news and a bull/bear debate. **Lucius's take is the view for your position**: how big it
+is, how concentrated, your thesis, your levels and alerts, and how old the research is. The take
+uses the research and adds your position, so you get one recommendation instead of two verdicts.
+
+TradingAgents rates the stock, not what to do with it, so its rating is read differently depending
+on whether you hold it. The take's call follows the research unless something about your position
+says otherwise:
+
+| TradingAgents says | If you hold it, the take calls | If you do not hold it, the take calls |
+|---|---|---|
+| Buy / Overweight | Add or Hold | Buy or Wait |
+| Hold | Hold | Wait |
+| Underweight | Trim or Hold | Wait |
+| Sell | Sell or Trim | Wait ("negative outlook, not a buy now") |
+
+A Sell on a stock you do not own is never an instruction to sell. When the take chooses something
+else, for example Hold on a stock the research rates Sell because it is most of your portfolio,
+it begins its reason with that: "Despite TradingAgents' Sell: …". The reasons it may use are
+concentration, your thesis, your levels, your alerts, research older than 3 days, or research that
+did not see your position. If it gives none, the call is adjusted to the nearest one the research
+supports. The take's text stays short: no extra AI call, and a smaller prompt than before.
 
 ## What is shared, and with whom
 
