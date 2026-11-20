@@ -1,6 +1,8 @@
 # Paper Autopilot upgrades — plan
 
-Status: step 1 (memory, with lessons) built 2026-11-21; steps 2–4 proposed.
+Status: step 1 (memory, with lessons) built 2026-11-21; step 2 (propose, the app sizes) built
+behind `autopilot_committee` 2026-11-21 (ADR `2026-11-21-autopilot-proposes-the-app-sizes`);
+steps 3–4 in progress.
 
 ## Why
 

@@ -48,6 +48,9 @@ DEFAULT = {
     "running_since": None,
     # What Lucius recorded with record_autopilot_memo during the running review.
     "memo_draft": None,
+    # What he proposed with propose_paper_orders (flag autopilot_committee): placed by code
+    # once his turn ends (autopilot_proposals).
+    "proposals_draft": None,
     # Why the next review runs early ("Review now", "ACME fell 6.1% today"), and why the running
     # one is running; None = its schedule.
     "pending_trigger": None,
@@ -271,6 +274,8 @@ def finish(pid: str, record: dict) -> dict:
             # One sentence each on stocks it fully sold: later reviews read them as its earlier
             # opinion (autopilot_memory), kept apart from the facts.
             "lessons": (draft.get("lessons") or []) if status == "done" else [],
+            # Flag autopilot_committee: each proposal and what happened to it.
+            "proposals": record.get("proposals") or [],
             "error": error,
         }
         failures = a["failures"] + 1 if status == "failed" else 0
@@ -281,6 +286,7 @@ def finish(pid: str, record: dict) -> dict:
             running_since=None,
             running_trigger=None,
             memo_draft=None,
+            proposals_draft=None,
             failures=failures,
             paused_reason=paused,
             runs=[*a["runs"], entry][-MAX_RUNS_KEPT:],
@@ -311,6 +317,28 @@ def save_memo(pid: str, memo: str, watching: str | None, lessons: list | None = 
             "lessons": clean_lessons,
         }
         return _save(row, a, conn=conn)
+
+
+def save_proposals(pid: str, proposals: list | None) -> dict:
+    """Record the running review's proposals (op "autopilot_proposals"). Only during a review;
+    a later call replaces the earlier one, so the last list is his final word."""
+    from backend.services.paper_trading import autopilot_proposals, service
+
+    clean = autopilot_proposals.clean(proposals)
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        row = service.portfolio(pid, conn=conn)
+        a = of(row)
+        if not a["running_since"]:
+            raise ConflictError("Proposals are recorded only during an autopilot review.")
+        a["proposals_draft"] = clean
+        return _save(row, a, conn=conn)
+
+
+def proposals_draft(pid: str) -> list[dict]:
+    """The running review's proposals, as recorded."""
+    from backend.services.paper_trading import service
+
+    return list(of(service.portfolio(pid)).get("proposals_draft") or [])
 
 
 def _clean_lessons(lessons: list | None) -> list[dict]:

@@ -274,6 +274,22 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 15),
         remove_by=date(2027, 5, 15),
     ),
+    Flag(
+        name="autopilot_committee",
+        title="Autopilot proposes, the app sizes",
+        description=(
+            "Paper Trading's Autopilot stops placing orders itself. Each review proposes "
+            "trades with a conviction (low, medium, high) and the app sizes them: 4%, 7% or "
+            "10% of the portfolio, kept under the mandate's cap and above its cash floor. A "
+            "stock it already holds competes with new ones for the same cash. History shows "
+            "every proposal and what happened to it. Off: the review places its own orders, "
+            "as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 21),
+        remove_by=date(2027, 3, 31),
+    ),
 )
 
 

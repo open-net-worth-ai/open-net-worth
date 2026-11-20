@@ -13,6 +13,7 @@ import {
   setPaperAutopilot,
   type AutopilotCadence,
   type AutopilotEffort,
+  type AutopilotProposal,
   type AutopilotRun,
   type PaperAutopilot,
   type PaperMandate,
@@ -380,6 +381,19 @@ function SettingsDialog({
   )
 }
 
+const ACTION: Record<AutopilotProposal['action'], string> = {
+  buy: 'Buy',
+  trim: 'Trim',
+  sell: 'Sell',
+}
+
+/** "Buy ACME (high): placed, to 10% (high conviction). Paper buy filled: 98 ACME at 100.05" */
+export function proposalLine(p: AutopilotProposal): string {
+  const sure = p.conviction ? ` (${p.conviction})` : ''
+  const order = p.order ? `. ${p.order}` : ''
+  return `${ACTION[p.action]} ${p.symbol}${sure}: ${p.status}, ${p.detail}${order}`
+}
+
 function outcome(r: AutopilotRun): string {
   if (r.status === 'failed') return "Didn't finish"
   if (!r.orders.length) return 'No trades'
@@ -436,12 +450,23 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
                   {r.trigger ? `Started by: ${r.trigger}` : 'Started on schedule'} • Ran on{' '}
                   {modelLabel(r.model)} • {effortLabel(r.effort)}
                 </div>
-                {r.orders.length > 0 && (
+                {(r.proposals?.length ?? 0) > 0 ? (
                   <ul className="paper-ap-trades">
-                    {r.orders.map((o) => (
-                      <li key={o.id}>{o.label}</li>
+                    {(r.proposals ?? []).map((p) => (
+                      <li key={p.asset}>
+                        {proposalLine(p)}
+                        <span className="paper-ap-why">Why: {p.why}</span>
+                      </li>
                     ))}
                   </ul>
+                ) : (
+                  r.orders.length > 0 && (
+                    <ul className="paper-ap-trades">
+                      {r.orders.map((o) => (
+                        <li key={o.id}>{o.label}</li>
+                      ))}
+                    </ul>
+                  )
                 )}
               </div>
             )}

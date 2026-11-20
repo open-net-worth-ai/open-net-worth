@@ -297,7 +297,10 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # default offer is unchanged.
     # 2026-11-20: 498_300 -> 498_700. get_spending_breakdown's group_by (month / payee, commit 279a5dc6)
     # measured 498,590 on CI; it replaces raw SQL Lucius used to drop split lines. Not CORE.
-    budget = 498_700
+    # 2026-11-21: 498_700 -> 499_800. propose_paper_orders (flag autopilot_committee) measured
+    # 499,669: a paper autopilot review proposes orders and the app sizes them. Flag-hidden and
+    # offered only inside a review, never in a chat's default offer. Not CORE.
+    budget = 499_800
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

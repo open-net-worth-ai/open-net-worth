@@ -771,6 +771,10 @@ def apply_paper_change(change: dict) -> dict:
         from backend.services.paper_trading import autopilot
 
         return {"started": autopilot.trigger(change.get("id"), change.get("reasons") or {})}
+    if op == "autopilot_proposals":
+        from backend.services.paper_trading import autopilot
+
+        return {"portfolio": autopilot.save_proposals(change.get("id"), change.get("proposals"))}
     if op == "autopilot_run_now":
         from backend.services.paper_trading import autopilot
 

@@ -47,6 +47,21 @@ export type AutopilotMode = 'manual' | 'auto'
 export type AutopilotCadence = 'daily' | 'weekly'
 export type AutopilotEffort = 'low' | 'medium' | 'high'
 
+/** One proposal of a review (flag autopilot_committee): Lucius proposes, the app sizes it. */
+export interface AutopilotProposal {
+  asset: string
+  symbol: string
+  action: 'buy' | 'trim' | 'sell'
+  conviction: 'low' | 'medium' | 'high' | null
+  why: string
+  case?: string | null
+  /** placed: an order went in; skipped: nothing to do (detail says why); refused: it failed. */
+  status: 'placed' | 'skipped' | 'refused'
+  detail: string
+  /** The order's own line, when one was placed ("Paper buy filled: 98 ACME at 100.05"). */
+  order: string | null
+}
+
 /** One autopilot review: what Lucius wrote, and the paper orders it placed. */
 export interface AutopilotRun {
   id: string
@@ -63,6 +78,8 @@ export interface AutopilotRun {
   looked_up?: { tool: string; query: string }[]
   /** One sentence each on stocks it fully sold; later reviews read them as its earlier read. */
   lessons?: { symbol: string; lesson: string }[]
+  /** Flag autopilot_committee: what the review proposed, and what the app did with each. */
+  proposals?: AutopilotProposal[]
   error: string | null
   /** What it ran on: '' is the app's default model. */
   model?: string

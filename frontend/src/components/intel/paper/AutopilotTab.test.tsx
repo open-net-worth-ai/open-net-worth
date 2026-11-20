@@ -35,6 +35,64 @@ const autopilot: PaperAutopilot = {
 
 afterEach(cleanup)
 
+const withProposals: PaperAutopilot = {
+  ...autopilot,
+  runs: [
+    {
+      ...autopilot.runs[0]!,
+      orders: [{ id: 'o1', label: 'Paper buy filled: 98 ACME at 100.05', status: 'filled' }],
+      proposals: [
+        {
+          asset: 'ACME',
+          symbol: 'ACME',
+          action: 'buy',
+          conviction: 'high',
+          why: 'Leader in its niche.',
+          status: 'placed',
+          detail: 'to 10% (high conviction)',
+          order: 'Paper buy filled: 98 ACME at 100.05',
+        },
+        {
+          asset: 'ACOIN',
+          symbol: 'ACOIN',
+          action: 'buy',
+          conviction: 'low',
+          why: 'A small second bet.',
+          status: 'skipped',
+          detail: 'no cash above the mandate floor',
+          order: null,
+        },
+      ],
+    },
+  ],
+}
+
+describe('AutopilotTab proposals', () => {
+  it('shows each proposal with what the app did with it, and its reason', () => {
+    render(
+      <AutopilotTab
+        autopilot={withProposals}
+        mandate={null}
+        archived={false}
+        onEditMandate={() => {}}
+        onNotice={() => {}}
+        portfolioId="ppf_1"
+      />,
+    )
+    expect(
+      screen.getByText(
+        /Buy ACME \(high\): placed, to 10% \(high conviction\)\. Paper buy filled: 98 ACME/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/Buy ACOIN \(low\): skipped, no cash above the mandate floor/),
+    ).toBeTruthy()
+    expect(screen.getByText('Why: A small second bet.')).toBeTruthy()
+    // The proposals replace the plain order list: each order shows once, inside its proposal.
+    expect(screen.queryByText('Paper buy filled: 98 ACME at 100.05')).toBeNull()
+  })
+})
+
 describe('AutopilotTab history', () => {
   it("shows a review's lessons on the stocks it fully sold", () => {
     render(

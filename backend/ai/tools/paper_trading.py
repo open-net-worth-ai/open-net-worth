@@ -322,6 +322,49 @@ async def record_autopilot_memo(input_data: dict):
         return _dump({"error": _err(exc), "simulated": True})
 
 
+class AutopilotProposalInput(NestedInput):
+    asset: str = Field(description="A ticker (ACME) or an asset_key from a holding.")
+    action: Literal["buy", "trim", "sell"] = Field(
+        description="buy: a new name or more of a holding; trim: down to its weight; sell: all."
+    )
+    conviction: Optional[Literal["low", "medium", "high"]] = Field(
+        default=None, description="For buy and trim: sets its size (4%, 7%, 10%)."
+    )
+    why: str = Field(description="One sentence: the journal note on its order.")
+    case: Optional[str] = None
+
+
+class ProposePaperOrdersInput(ToolInput):
+    proposals: list[AutopilotProposalInput] = Field(description="10 at most; [] for none.")
+
+
+def _record_proposals(input_data: dict) -> dict:
+    from backend.core.errors import ConflictError
+
+    ctx = get_automation_approval()
+    if ctx is None or not ctx.automation_id.startswith("autopilot:") or not ctx.paper_portfolio_id:
+        raise ConflictError("propose_paper_orders is only for a paper autopilot review.")
+    return facade.record_proposals(ctx.paper_portfolio_id, input_data.get("proposals") or [])
+
+
+@tool(
+    "propose_paper_orders",
+    description=(
+        "Inside a paper autopilot review only: propose this review's orders. The app sizes "
+        "them by conviction and places them after your turn; a later call replaces the list."
+    ),
+    input_schema=schema_of(ProposePaperOrdersInput, tool_name="propose_paper_orders"),
+    mutates=("paper",),
+)
+async def propose_paper_orders(input_data: dict):
+    if refused := _refusal():
+        return refused
+    try:
+        return _dump(await asyncio.to_thread(_record_proposals, input_data))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
 # ── orders ─────────────────────────────────────────────────────────────────────────────────
 
 

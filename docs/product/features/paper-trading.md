@@ -144,6 +144,24 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
 - can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
   such as a holding past its stop loss or over its cap.
 
+**Autopilot proposes, the app sizes** (Settings → Developer → Experimental, off by default). With
+it on, a review no longer places orders itself. It proposes them: **buy** (a new stock, or more of
+one it holds), **trim** or **sell**, each with a one-sentence reason and, for a buy or trim, how sure
+it is. The app then decides the size:
+
+| Conviction | Target share of the portfolio |
+|---|---|
+| Low | 4% |
+| Medium | 7% |
+| High | 10% |
+
+A buy fills the gap to its target, never above the mandate's per-stock cap and never below its
+cash floor; a trim sells down to its target; a sell sells it all. A stock it already holds competes
+with a new one for the same cash. Sells go first, then buys from the most convinced down, each
+through the same checks as any paper order. **History** lists every proposal with what happened
+to it: placed (with its order), skipped (and why, such as "already at its target" or "no cash above
+the floor") or refused. Off: the review places its own orders, as before.
+
 A review also starts early, between scheduled ones, when a holding moves 5% or more in its last session,
 falls past the stop loss, or breaks a mandate limit (checked every few minutes, each reason once a
 day). These alerts go to Lucius, not to you; the review says what started it.

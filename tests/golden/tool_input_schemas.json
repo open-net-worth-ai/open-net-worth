@@ -11551,5 +11551,57 @@
       }
     },
     "additionalProperties": false
+  },
+  "propose_paper_orders": {
+    "additionalProperties": false,
+    "properties": {
+      "proposals": {
+        "description": "10 at most; [] for none.",
+        "items": {
+          "properties": {
+            "asset": {
+              "description": "A ticker (ACME) or an asset_key from a holding.",
+              "type": "string"
+            },
+            "action": {
+              "description": "buy: a new name or more of a holding; trim: down to its weight; sell: all.",
+              "enum": [
+                "buy",
+                "trim",
+                "sell"
+              ],
+              "type": "string"
+            },
+            "conviction": {
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "type": "string",
+              "description": "For buy and trim: sets its size (4%, 7%, 10%)."
+            },
+            "why": {
+              "description": "One sentence: the journal note on its order.",
+              "type": "string"
+            },
+            "case": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "asset",
+            "action",
+            "why"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "proposals"
+    ],
+    "type": "object"
   }
 }

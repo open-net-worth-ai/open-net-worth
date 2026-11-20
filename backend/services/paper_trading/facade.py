@@ -79,6 +79,17 @@ def record_memo(
     return {"ok": True, **SIMULATED}
 
 
+def record_proposals(pid: str, proposals: list[dict]) -> dict:
+    """The running autopilot review's proposals (flag autopilot_committee): code sizes and
+    places them once the review's turn ends."""
+    out = service.apply_paper_change(
+        {"op": "autopilot_proposals", "id": pid, "proposals": proposals}
+    )
+    from backend.services.paper_trading import autopilot
+
+    return {"proposals": autopilot.of(out["portfolio"]).get("proposals_draft") or [], **SIMULATED}
+
+
 def run_autopilot_now(pid: str) -> dict:
     """Review now: the scheduler's next pass (within a minute) runs it."""
     from backend.services.paper_trading import autopilot
