@@ -45,6 +45,8 @@ interface Props {
   /** "Create “name”" in the category search: makes the category (palette colour, like every
    *  other create) and resolves to it, so the card can pick it. */
   onCreateCategory?: (name: string, kind: CatKind) => Promise<Category>
+  /** Tags approved earlier in this review, newest first — the cloud leads with them. */
+  recentTags?: string[]
 }
 
 /** Only a field you are typing in owns horizontal dragging (caret, selection), so only it blocks
@@ -341,6 +343,7 @@ export function TransactionReviewCard(props: Props) {
               onChange={(tags) => props.onDraftChange({ ...draft, tags })}
               open={tagsOpen}
               onOpenChange={setTagsOpen}
+              recentTags={props.recentTags}
             />
           )}
           {/* Everything else is the drawer's. Down here, in the thumb's reach; both carry the

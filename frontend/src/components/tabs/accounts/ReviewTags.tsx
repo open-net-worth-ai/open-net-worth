@@ -14,6 +14,7 @@ import { tagItems, useTransactionTags } from './tagOptions'
 
 /** How many of your tags the cloud offers before you search. */
 const CLOUD_LIMIT = 10
+const NO_TAGS: string[] = []
 
 /** Shown only once the row has tags, or the cloud is open: not everyone tags, so an untagged
  *  card offers just "+ Tag" in its bottom row (owner, 2026-11-19). `open` is the card's. */
@@ -22,11 +23,13 @@ export function ReviewTags({
   onChange,
   open,
   onOpenChange,
+  recentTags = NO_TAGS,
 }: {
   tags: string[]
   onChange: (tags: string[]) => void
   open: boolean
   onOpenChange: (open: boolean) => void
+  recentTags?: string[]
 }) {
   const setOpen = onOpenChange
   const remove = (tag: string) => onChange(tags.filter((t) => t !== tag))
@@ -61,22 +64,37 @@ export function ReviewTags({
       </div>
     )
   }
-  return <TagCloud tags={tags} chosen={chosen} onChange={onChange} onDone={() => setOpen(false)} />
+  return (
+    <TagCloud
+      tags={tags}
+      chosen={chosen}
+      recentTags={recentTags}
+      onChange={onChange}
+      onDone={() => setOpen(false)}
+    />
+  )
 }
 
 /** The open Tags editor. Your tag list is already loaded: the review fetches it when it opens. */
 function TagCloud({
   tags,
   chosen,
+  recentTags,
   onChange,
   onDone,
 }: {
   tags: string[]
   chosen: React.ReactNode[]
+  recentTags: string[]
   onChange: (tags: string[]) => void
   onDone: () => void
 }) {
-  const known = useTransactionTags()
+  const fetched = useTransactionTags()
+  // This review's tags first — even before the refetch has them — then the rest by use.
+  const known = useMemo(
+    () => [...recentTags, ...fetched.filter((t) => !recentTags.includes(t))],
+    [recentTags, fetched],
+  )
   const coarsePointer = useIsCoarsePointer()
   const [query, setQuery] = useState('')
   const items = useMemo(() => tagItems(known, tags, query), [known, tags, query])

@@ -128,6 +128,10 @@ export function TransactionReviewMode({
   // "+ Tag" instead, the cloud opened empty and filled a beat later (owner report 2026-11-20).
   // One shared cache entry, so every card's cloud reads it at once.
   useTransactionTags()
+  // Tags approved in THIS review, newest first: the next card's cloud leads with them. The cloud
+  // shows your 10 most-used tags, so a tag made a card ago (used once) fell below the cut —
+  // and the refetch races an optimistic Approve anyway (owner, 2026-11-20).
+  const [recentTags, setRecentTags] = useState<string[]>([])
   // Outlives each keyed card, so the next one animates from the height the last one had.
   const cardHeight = useRef<number | null>(null)
   const lastCardHeight = useCallback(() => cardHeight.current, [])
@@ -287,6 +291,11 @@ export function TransactionReviewMode({
     const txn = current
     const submitted = draft
     removeCurrent(txn.id)
+    if (submitted.tags.length)
+      setRecentTags((prev) => [
+        ...submitted.tags,
+        ...prev.filter((t) => !submitted.tags.includes(t)),
+      ])
     setActionError(null)
     setAnnouncement(`Approved. ${Math.max(0, visibleQueue.length - 1)} transactions remaining.`)
     try {
@@ -503,6 +512,7 @@ export function TransactionReviewMode({
               onAllDetails={() => onAllDetails(current, draft)}
               onEditAll={() => onEditAll(current, draft)}
               onCreateCategory={onCreateCategory}
+              recentTags={recentTags}
             />
           )}
         </div>

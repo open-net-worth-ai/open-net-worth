@@ -1146,6 +1146,26 @@ describe('TransactionReviewMode — edits and actions', () => {
     expect(card.getAllByRole('button', { name: 'Tag' })).toHaveLength(1)
   })
 
+  it("a tag approved on one card leads the next card's cloud, before the server lists it", async () => {
+    const onApprove = vi.fn<(txn: Txn, draft: ReviewDraft) => Promise<Txn>>(async (txn) => ({
+      ...txn,
+      needsReview: false,
+    }))
+    renderMode({ onApprove })
+    await screen.findByRole('heading', { name: 'Kroger' })
+    fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
+    fireEvent.change(screen.getByLabelText('Find or create a tag'), {
+      target: { value: 'fresh-tag' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Create “fresh-tag”/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await screen.findByRole('heading', { name: 'Old Shop' })
+    const card = within(screen.getByTestId('transaction-review-card'))
+    fireEvent.click(card.getByRole('button', { name: 'Tag' }))
+    const cloud = within(card.getByRole('group', { name: 'Your tags' }))
+    expect(cloud.getAllByRole('button')[0]?.textContent).toBe('fresh-tag')
+  })
+
   it('loads your tags with the review, before the first "+ Tag"', async () => {
     renderMode()
     await screen.findByRole('heading', { name: 'Kroger' })
