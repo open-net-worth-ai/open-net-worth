@@ -98,7 +98,7 @@ describe('BookedScreen', () => {
     expect(screen.queryByRole('button', { name: 'Undo import' })).toBeNull()
   })
 
-  it('says rows the user deleted stay deleted after an undo', () => {
+  it('says the entries the user deleted come back after an undo', () => {
     renderBooked({
       result: {
         created: 2,
@@ -112,7 +112,7 @@ describe('BookedScreen', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(screen.getByRole('alertdialog').textContent).toContain(
-      'The 1 row you deleted stays deleted.',
+      'The 1 entry you deleted comes back.',
     )
   })
 })

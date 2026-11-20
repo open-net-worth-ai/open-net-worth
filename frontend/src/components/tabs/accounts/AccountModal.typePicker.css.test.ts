@@ -57,7 +57,11 @@ describe('account-type typography', () => {
 
 describe('edit-account metadata', () => {
   it('uses one vertical column and opens the colour picker inward', () => {
-    expect(css).toMatch(/\.acct-classification-fields \{[^}]*grid-template-columns:\s*1fr/s)
+    // The edit form's metadata (`.acct-identity-fields`, which replaced the old two-column
+    // `.acct-classification-fields` grid) stacks as a single flex column.
+    expect(css).toMatch(
+      /\.acct-identity-fields \{[^}]*display:\s*flex;[^}]*flex-direction:\s*column/s,
+    )
     expect(css).toMatch(/\.acct-cp-pop \{[^}]*left:\s*0;[^}]*right:\s*auto/s)
   })
 })

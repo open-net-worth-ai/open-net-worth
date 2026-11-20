@@ -189,7 +189,9 @@ describe('skill lifecycle activity', () => {
         '{"type":"skill_loaded","id":"skill:fresh","skill_id":"trace","skill_name":"trace","source":"model"}',
         '{"type":"text_delta","text":"The balance is correct."}',
       ]),
-      { suggestionsEnabled: false },
+      // A deliberate continuation: a plain attach to a trailing open bubble is a reconnect and
+      // arms the replay skip by design, which is not what this test is about.
+      { suggestionsEnabled: false, isResume: true },
     )
 
     expect(chatSessions.getSlice('fresh-model-skill').messages[1]?.text).toBe(

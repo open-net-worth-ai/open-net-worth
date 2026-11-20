@@ -89,12 +89,13 @@ describe('ImportModal — a shown category is booked without being touched', () 
   it('sends the row category id as an explicit edit when the screen already resolved one', async () => {
     const onDecisionCommit = await openAndConfirm(previewWithCategory('cat_transport'))
     // 4th arg = the staged ledger deletions (none marked here) — see
-    // ImportModal.stagedDelete.test.tsx for that contract.
+    // ImportModal.stagedDelete.test.tsx for that contract; 5th = the uploaded source file.
     expect(onDecisionCommit).toHaveBeenCalledWith(
       'st-cathint',
       'a1',
       [{ row: 0, action: 'create', edits: { category: 'cat_transport' } }],
       [],
+      expect.any(File),
     )
   })
 
@@ -103,6 +104,6 @@ describe('ImportModal — a shown category is booked without being touched', () 
     // flow omits the row entirely rather than spelling out a no-op (RFC D7: "send per-row
     // deviations from the defaults").
     const onDecisionCommit = await openAndConfirm(previewWithCategory(null))
-    expect(onDecisionCommit).toHaveBeenCalledWith('st-cathint', 'a1', [], [])
+    expect(onDecisionCommit).toHaveBeenCalledWith('st-cathint', 'a1', [], [], expect.any(File))
   })
 })

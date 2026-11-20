@@ -230,6 +230,7 @@ describe('ImportModal handoff port — production behavior characterization', ()
         { row: 6, action: 'skip' },
       ],
       [],
+      expect.any(File),
     )
   })
 
@@ -252,7 +253,7 @@ describe('ImportModal handoff port — production behavior characterization', ()
     fireEvent.click(mark)
 
     await waitFor(() => expect(onMarkImportReviewed).toHaveBeenCalledWith('imp-characterization'))
-    expect(await screen.findByText('✓ All 2 new rows marked reviewed')).toBeTruthy()
+    expect(await screen.findByText('✓ 2 new rows marked reviewed')).toBeTruthy()
   })
 
   it('offers "View in register" on the Booked screen, wired to the real batch id', async () => {
@@ -286,8 +287,13 @@ describe('ImportModal handoff port — production behavior characterization', ()
     expect(await screen.findByText('Import undone')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Review again' }))
-    // The review itself, not a re-read: the rows are back and Confirm books again.
-    expect(document.body.querySelector('.imp3-arow-match')?.textContent).toContain('Strong ledger')
+    // The review itself, not a re-read: the rows are back and Confirm books again. Review
+    // again rebuilds from the cached read, so the rows come back after a processing step.
+    await waitFor(() => {
+      expect(document.body.querySelector('.imp3-arow-match')?.textContent).toContain(
+        'Strong ledger',
+      )
+    })
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy()
     expect(onDecisionCommit).toHaveBeenCalledTimes(1)
   })

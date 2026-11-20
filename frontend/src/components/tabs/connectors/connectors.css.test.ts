@@ -47,6 +47,8 @@ interface Rule {
   selector: string
   props: Set<string>
   file: string
+  /** Inside an `@layer` block — any layered rule loses to this unlayered sheet by origin. */
+  layered: boolean
 }
 
 function splitTopLevel(list: string): string[] {
@@ -108,7 +110,8 @@ function parse(file: string): Rule[] {
       if (m?.[1]) props.add(m[1])
     }
     if (!open.includes('@keyframes'))
-      for (const s of splitTopLevel(prelude)) rules.push({ selector: s, props, file })
+      for (const s of splitTopLevel(prelude))
+        rules.push({ selector: s, props, file, layered: open.includes('@layer') })
     open.push('')
   }
   return rules
@@ -160,6 +163,10 @@ describe('connectors.css — B • nothing leaks in from a sibling unlayered she
   const reaching = findCss(SRC)
     .filter((f) => f !== CONNECTORS_CSS)
     .flatMap(parse)
+    // A LAYERED foreign rule (all of index.css) is beaten by this unlayered sheet whatever the
+    // load order, so it can't race it: only unlayered sheets can collide. Counting them flagged
+    // the `.btn-primary` / `.btn-secondary` look a `.bank-handoff-go` link is MEANT to inherit.
+    .filter((r) => !r.layered)
     .filter((r) => {
       const compounds = r.selector
         .replace(/::?[a-zA-Z-]+(\([^)]*\))?/g, '')

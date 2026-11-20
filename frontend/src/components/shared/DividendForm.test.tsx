@@ -86,9 +86,10 @@ describe('DividendForm', () => {
   })
 
   it('warns, then sends no account, when the user picks "Don\'t add"', async () => {
-    const { findByText, getByRole, onDone, container } = renderForm()
+    const { findByText, getByRole, onDone } = renderForm()
     await findByText(/goes into Everyday Cash/)
-    const select = container.querySelector('label.disposal-deposit select') as HTMLSelectElement
+    // The dialog is portaled out of the render container.
+    const select = document.querySelector('label.disposal-deposit select') as HTMLSelectElement
 
     fireEvent.change(select, { target: { value: '' } })
     expect(await findByText(/removes this dividend's cash transaction/)).toBeTruthy()
@@ -116,13 +117,13 @@ describe('DividendForm', () => {
   })
 
   it('offers no account for a reinvested dividend and says its shares stay', async () => {
-    const { container, getByRole, findByText } = renderForm({
+    const { getByRole, findByText } = renderForm({
       ...CASH,
       id: 'inc-2',
       is_drp: true,
       txn_id: null,
     })
-    expect(container.querySelector('label.disposal-deposit')).toBeNull()
+    expect(document.querySelector('label.disposal-deposit')).toBeNull()
 
     fireEvent.click(getByRole('button', { name: 'Delete' }))
     expect(await findByText(/reinvested shares stay as a lot/)).toBeTruthy()

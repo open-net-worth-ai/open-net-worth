@@ -46,6 +46,8 @@ const ROWS = [makeTxn('txn-1'), makeTxn('txn-2'), makeTxn('txn-3')]
 
 /** Counts register fetches so a test can prove the optimistic path did NOT re-page. */
 let txnListFetches = 0
+/** What the register endpoint serves; a test swaps it to model a write landing on the server. */
+let serverRows: ApiTxn[] = ROWS
 
 function mockCore(url: string): Promise<Response> | null {
   if (url.startsWith('/api/accounts')) return Promise.resolve(okJson([]))
@@ -55,7 +57,9 @@ function mockCore(url: string): Promise<Response> | null {
   if (url.startsWith('/api/prices')) return Promise.resolve(okJson({}))
   if (url.startsWith('/api/transactions?')) {
     txnListFetches++
-    return Promise.resolve(okJson({ transactions: ROWS, total: ROWS.length, has_more: false }))
+    return Promise.resolve(
+      okJson({ transactions: serverRows, total: serverRows.length, has_more: false }),
+    )
   }
   return null
 }
@@ -63,6 +67,7 @@ function mockCore(url: string): Promise<Response> | null {
 beforeEach(() => {
   mockAuthFetch.mockReset()
   txnListFetches = 0
+  serverRows = ROWS
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -148,9 +153,13 @@ describe('useAccountsLedger.bulkUpdate — optimistic status flips', () => {
   })
 
   it('clears needsReview optimistically and reports the server count', async () => {
-    const result = await boot(async () =>
-      okJson({ updated: ['txn-1'], not_found: [], skipped: [], count: 1 }),
-    )
+    // A review flip refetches the register, so the server's copy has to carry the write too.
+    const result = await boot(async () => {
+      serverRows = ROWS.map((t) =>
+        t.id === 'txn-1' ? ({ ...t, needs_review: false } as ApiTxn) : t,
+      )
+      return okJson({ updated: ['txn-1'], not_found: [], skipped: [], count: 1 })
+    })
 
     let res!: Awaited<ReturnType<typeof result.current.bulkUpdate>>
     await act(async () => {

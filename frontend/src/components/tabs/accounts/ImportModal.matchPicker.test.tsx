@@ -294,9 +294,13 @@ describe('ImportModal — a pick re-points every surface (SIUM-ALT-PICK-REPOINTS
     expect(within(after).getByText('reference attached')).toBeTruthy()
   })
 
-  it('the re-pointed-to entry leaves "In your ledger, not on this statement"', async () => {
+  // The row now covers B, so B leaves the panel; the engine's original pick A is released in
+  // its place (owner, 2026-10-26: a row re-pointed at a different entry releases its original).
+  it('the re-pointed-to entry leaves "In your ledger, not on this statement" and the original takes its place', async () => {
     await pickB()
-    expect(document.querySelector('.imp3-sec.ledger')).toBeNull()
+    const sect = document.querySelector('.imp3-sec.ledger') as HTMLElement
+    expect(within(sect).getByText('Anthropic A')).toBeTruthy()
+    expect(within(sect).queryByText('Anthropic B')).toBeNull()
   })
 
   it('the commit payload carries the PICKED existing_id on the merge decision', async () => {

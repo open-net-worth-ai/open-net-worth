@@ -132,8 +132,15 @@ const aiRow = {
   near_cutoff: null,
 }
 
-const ledgerRow = async (note: string): Promise<HTMLElement> =>
-  (await screen.findByText(note)).closest('.imp3-arow') as HTMLElement
+// Every fixture entry is ON a statement we hold (`on_statements`), and since 2026-10-26 such an
+// entry is not "not on this statement": it sits in the quiet, collapsed "on another statement
+// you imported" group beneath the panel, so the group is opened first. The row anatomy is the
+// same one the panel itself renders.
+const ledgerRow = async (note: string): Promise<HTMLElement> => {
+  const group = await screen.findByRole('button', { name: /on another statement you imported/ })
+  if (group.getAttribute('aria-expanded') === 'false') fireEvent.click(group)
+  return (await screen.findByText(note)).closest('.imp3-arow') as HTMLElement
+}
 
 // ── Defect 1: the secondary line ─────────────────────────────────────────────────────
 

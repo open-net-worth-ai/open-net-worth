@@ -167,9 +167,17 @@ describe('mobile bottom navigation clearance', () => {
       /@supports \(-webkit-touch-callout:\s*none\)\s*\{\s*@media \(max-width: 639\.98px\)\s*\{\s*:root\[data-onw-display-mode='browser'\] \.app-shell\.mb-shell\s*\{[^{}]*height:\s*100svh;/,
     )
     expect(css.match(/height:\s*100svh;/g)).toHaveLength(1)
-    // Installed/PWA mode must keep the existing dynamic height. On iOS standalone,
-    // forcing the browser's small viewport leaves a permanent dead band below the app.
-    expect(css).not.toContain("data-onw-display-mode='standalone'")
+    // Installed/PWA mode must never take the browser's small viewport: on iOS standalone it
+    // leaves a permanent dead band below the app. It is sized from the real web view instead
+    // (`height: 100%` down the ancestor chain — iOS resolves 100dvh to the full screen, past
+    // the status bar), so the only standalone rules are percentage heights, never `svh`.
+    const standaloneRule = css.match(
+      /:root\[data-onw-display-mode='standalone'\] \.app-shell\.mb-shell\s*\{([^}]*)\}/,
+    )?.[1]
+    expect(standaloneRule).toBeDefined()
+    expect(standaloneRule).toContain('height: 100%;')
+    expect(standaloneRule).toContain('min-height: 0;')
+    expect(standaloneRule).not.toContain('svh')
     const displayModeStamp = main.indexOf('stampPwaDisplayMode()')
     const reactMount = main.indexOf('createRoot(')
     expect(displayModeStamp).toBeGreaterThan(-1)

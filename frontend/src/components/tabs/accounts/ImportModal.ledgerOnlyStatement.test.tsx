@@ -139,6 +139,17 @@ async function openWith(preview: unknown) {
 }
 
 const ledgerRow = async (): Promise<HTMLElement> => {
+  // An entry a statement we hold already backs (`on_statements`) sits in the quiet, collapsed
+  // "on another statement you imported" group since 2026-10-26 — open it first. A row with
+  // `on_statements: null` is in the panel itself and has no such group.
+  await waitFor(() =>
+    expect(
+      document.querySelector('.imp3-dchip.ledger') ||
+        screen.queryByRole('button', { name: /on another statement you imported/ }),
+    ).toBeTruthy(),
+  )
+  const group = screen.queryByRole('button', { name: /on another statement you imported/ })
+  if (group?.getAttribute('aria-expanded') === 'false') fireEvent.click(group)
   await waitFor(() => expect(document.querySelector('.imp3-arow .imp3-dchip.ledger')).toBeTruthy())
   return document.querySelector('.imp3-dchip.ledger')!.closest('.imp3-arow') as HTMLElement
 }
