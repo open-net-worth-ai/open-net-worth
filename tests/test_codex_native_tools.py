@@ -39,7 +39,7 @@ TURN = "%(turn)s"
 ROUNDS = %(rounds)r
 VERSION = "%(version)s"
 REJECT_DYNAMIC = %(reject)r
-RECORD = "%(record)s"
+RECORD = %(record)r
 AFTER = %(after)r
 round_n = 0
 
@@ -116,7 +116,7 @@ def _server(tmp_path, rounds, *, version="0.160.0", reject=False, host=True, aft
             "rounds": rounds,
             "version": version,
             "reject": reject,
-            "record": record,
+            "record": str(record),
             "after": {str(k): v for k, v in (after or {}).items()},
         },
         encoding="utf-8",

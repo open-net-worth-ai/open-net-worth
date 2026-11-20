@@ -7,6 +7,7 @@ number is made up."""
 from __future__ import annotations
 
 import dataclasses
+import os
 import sqlite3
 import subprocess
 import sys
@@ -242,17 +243,18 @@ def test_actual_is_registered_whatever_was_imported_first(tmp_path):
         "from backend.services import budget_app;"
         "print(sorted(a.key for a in budget_app.all_apps()))"
     )
+    env = {
+        "ONW_ROOT": str(tmp_path),
+        "ONW_QA_MODE": "1",
+        "PATH": "/usr/bin:/bin",
+        "HOME": str(tmp_path),
+    }
+    if os.name == "nt":
+        # Windows finds a home through USERPROFILE (never HOME), and Python needs SystemRoot.
+        env["USERPROFILE"] = str(tmp_path)
+        env["SystemRoot"] = os.environ["SystemRoot"]
     done = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        timeout=120,
-        env={
-            "ONW_ROOT": str(tmp_path),
-            "ONW_QA_MODE": "1",
-            "PATH": "/usr/bin:/bin",
-            "HOME": str(tmp_path),
-        },
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120, env=env
     )
     assert done.returncode == 0, done.stderr
     assert done.stdout.strip().splitlines()[-1] == "['actual_budget', 'ynab']"

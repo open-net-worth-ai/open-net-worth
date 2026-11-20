@@ -88,6 +88,7 @@ from backend.core.errors import (
     ExternalServiceError,
     ProviderTimeoutError,
 )
+from backend.core.process_tree import kill_and_reap, spawn_kwargs
 
 from . import cli_sign_in, codex_app_server, codex_live_turn, codex_turn_claims
 from .base import AIProvider, log_text_cap
@@ -394,6 +395,7 @@ class CodexCliProvider(AIProvider):
                 cwd=workdir,
                 env=_child_env(self.api_key),
                 limit=_STDOUT_LIMIT,
+                **spawn_kwargs(),
             )
             assert proc.stdin is not None
             proc.stdin.write(prompt.encode("utf-8"))
@@ -1201,16 +1203,5 @@ async def _drain(stream, sink: list[bytes]) -> None:
 
 
 async def _kill(proc) -> None:
-    """Best-effort terminate AND reap — a dead process must never keep the turn alive.
-
-    The reap matters: without awaiting ``wait()`` the transport is torn down by the GC
-    later, after the loop may already be closed.
-    """
-    try:
-        proc.kill()
-    except (ProcessLookupError, OSError):
-        return
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=5.0)
-    except (asyncio.TimeoutError, ProcessLookupError, OSError):
-        pass
+    """Best-effort terminate AND reap — a dead process must never keep the turn alive."""
+    await kill_and_reap(proc)

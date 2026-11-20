@@ -193,7 +193,7 @@ def send(obj):
 
 THREAD = "%(thread)s"
 TURNS = %(script)r
-RECORD = "%(record)s"
+RECORD = %(record)r
 turn_n = 0
 
 def record(kind, params):
@@ -247,7 +247,7 @@ def _fake_server(tmp_path, script: list, name: str = "codex"):
     record = tmp_path / f"{name}_received.jsonl"
     py = tmp_path / f"{name}_server.py"
     py.write_text(
-        _FAKE_SERVER % {"thread": THREAD_ID, "script": turns, "record": record},
+        _FAKE_SERVER % {"thread": THREAD_ID, "script": turns, "record": str(record)},
         encoding="utf-8",
     )
     exe = tmp_path / name
