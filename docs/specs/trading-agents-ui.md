@@ -954,3 +954,90 @@ Build order: (1) raise G1-G3 with the backend owner and get G1 first (setup cann
 | Cost | panel between Search & fetch and Model telemetry; "TradingAgents" in By surface only; plan-only user sees $0.00 + plan tile; unpriced warning when > 0; no own period control |
 | Approval card | Dedicated body (no "Shared with the ai provider · 3 fields" fold); warn note names the recipient; Shared summary carries cash + count; only `ac-*` classes; passes `anatomy.test.tsx` |
 | Cross-cutting | no raw px/hex; `lint:classes` clean; one page heading; kit primitives only (list in section 7); empty/loading/error present in every data region |
+
+---
+
+## 10. WP10 — condensed card + the take's TradingAgents chip
+
+Status: added 2026-11-20 (owner: the card is too verbose; the take now uses a run, spec §16).
+Frontend only. Backend contract: `trading_agents_input` on the asset detail (below); no other
+backend change.
+
+### 10.1 Condensed card (State C, done)
+
+Default view is the rating and a short decision; everything else is behind one control.
+
+```
+┌ Panel title="TradingAgents · research only"      actions: [ Run new analysis ] ───┐
+│ [ Overweight ]  ta-scale                                                         │
+│ Text xs faint: ACME · as of 2026-11-19 · 6 min ago · Your thesis chip (if any)   │
+│ ta-decision (≤3 sentences / ≤400 chars of decision_text)  [ Show more ]          │
+│ Button ghost sm: [ Show full analysis ]                                          │
+│ ta-disclaimer (one line, always visible)                                         │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Condensed decision.** First three sentences of `decision_text` (split on `. `, `? `, `! `
+  and newlines), at most 400 characters, cut at a word boundary with "…". Pure helper in
+  `utils/` with a vitest (no sentence ⇒ hard cut at 400). "Show more" shows the full markdown
+  decision in place; it is a `Button variant="ghost" size="sm"` with `aria-expanded`.
+- **"Show full analysis"** is the one control that reveals everything else: the reports
+  accordion, "What was shared", History and the models/cost footer. Collapsed by default,
+  state is component state (no `localStorage`), reset when the featured run changes.
+  Expanded, those regions render exactly as in 2.4 (no redesign of their contents).
+- **Kept visible always:** rating pill + scale, as-of/age line, thesis chip, disclaimer line,
+  "Run new analysis".
+- **Footer line moves inside** the expanded area; the only cost shown collapsed is none.
+- States A, B, D, E are unchanged except the disclaimer stays one line. Running (B) keeps the
+  stage list; it is not condensed.
+- Phone: same order; "Show more" / "Show full analysis" are full width.
+- Copy: "Show more" / "Show less"; "Show full analysis" / "Hide full analysis".
+- Accessibility: both controls are buttons with `aria-expanded` and `aria-controls`; the
+  expanded region is a labelled `section`.
+
+### 10.2 The take's chip
+
+`PositionVerdictLine.tsx` / the narrative block gain a small chip beside "Lucius's take":
+
+`Includes TradingAgents · Hold · 3 days ago`
+
+- Source: `data.trading_agents_input` (`{run_id, signal, trade_date, age_days}`), read-only.
+  **Hidden when null** and when the TradingAgents flag is off (`useFlag` `undefined`/`false`).
+- Text: `Includes TradingAgents · {label} · {age}`; label is the rating label map of 2.4
+  (`TradingAgentsRating`'s words, never the raw REVIEW); age is `0 → "today"`,
+  `1 → "yesterday"`, else `"{n} days ago"`. A run older than 3 days adds a faint
+  "(may be stale)".
+- It is a link (`Tag`/`Badge` kit primitive, no new styling beyond a `ta-chip` class) that
+  selects that run in the card: scrolls to `TradingAgentsCard` and sets its featured run id to
+  `run_id`. If the run was deleted the card shows the latest run and the chip stays a plain
+  label.
+- Never offers an order or a rating-as-action; never shown on non-equity or tickerless pages
+  (the field is null there).
+
+### 10.3 Types
+
+`frontend/src/types/assetDetail.ts`:
+
+```ts
+export interface TradingAgentsInput {
+  run_id: string
+  signal: TaSignal              // 'Buy' | 'Overweight' | 'Hold' | 'Underweight' | 'Sell' | 'REVIEW'
+  trade_date: string            // ISO date
+  age_days: number
+}
+// AssetDetail gains:  trading_agents_input: TradingAgentsInput | null
+```
+
+### 10.4 States and tests
+
+| State | Renders |
+|---|---|
+| Done, collapsed (default) | rating, as-of line, condensed decision, two buttons, disclaimer |
+| Done, decision expanded | full decision markdown, "Show less" |
+| Done, full analysis open | + reports, shared, history, footer |
+| Decision shorter than 400 chars / 3 sentences | no "Show more" |
+| Chip with input | chip + link; without (`null`) nothing, no gap |
+
+Vitest: condensing helper (3 sentences, 400 cap, no punctuation, markdown stripped of headings),
+card collapsed/expanded states, chip present/absent/stale, both flag values, `npm run lint:classes`
+for `ta-chip`.
