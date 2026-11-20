@@ -118,11 +118,16 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
   stories its asset page shows), your investment thesis for each one that has it, and the chart
   and company figures of anything that moved a lot or is near a limit, before it decides
   anything;
+- looks for new names that fit the mandate's goal: it searches for companies in the theme it
+  doesn't hold yet, shortlists two or three, and checks their figures and charts against what it
+  holds. A holding it sold leaves a slot it tries to fill, and cash well above the floor needs a
+  reason (an event it is waiting for, a price it wants) or it buys the strongest candidate. The
+  memo names the names it weighed and why it bought or passed;
 - ends with a memo Lucius writes for you, plus what he is watching next. A review that ends
   without one counts as failed;
 - can also search the web and X when the stored news doesn't explain a move, read a longer
   price history, check the dividend calendar before buying near an ex-date, and look at your
-  watchlist and Intel's latest analysis for ideas. It never opens a link it picks itself, so a
+  watchlist and Intel's latest analysis as a second source of ideas. It never opens a link it picks itself, so a
   link planted in a result can't send it anywhere (with **Search reads results** on, a search
   reads the top results' pages, chosen by the search engine). It makes at most 10 searches and
   price-history reads a review, and **History** lists each one;

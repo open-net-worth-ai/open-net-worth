@@ -110,6 +110,13 @@ def test_a_review_is_offered_only_reads_and_paper_tools_under_the_paper_guard(pa
     ctx = seen["ctx"]
     assert ctx.simulation_only and ctx.paper_portfolio_id == pid
     assert "max 20% per holding" in seen["prompt"] and "Prefer adding to winners." in seen["prompt"]
+    # Every review hunts for new names that fit the goal, and idle cash needs a reason
+    # (owner, 2026-11-20: reviews that only checked holdings sold stops and sat on the cash).
+    assert "Look for new names, every review" in seen["prompt"]
+    assert "Cash well above its floor is a choice too" in seen["prompt"]
+    # The new-name checks use only tools the review is offered.
+    for name in ("web_search", "get_asset_fundamentals", "preview_paper_orders"):
+        assert name in seen["prompt"] and name in autopilot_run.TOOLS
     [run] = views.page(pid)["autopilot"]["runs"]
     assert run["status"] == "done" and run["memo"].startswith("Bought a little ACME")
     assert [o["status"] for o in run["orders"]] == ["filled"]
