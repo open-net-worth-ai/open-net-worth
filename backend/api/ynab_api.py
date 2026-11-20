@@ -142,6 +142,8 @@ class MigrationRequest(BaseModel):
     category_links: Optional[dict[str, str]] = None
     # A preview only: the preview this one refines (the review re-checking a changed link).
     recheck_of: Optional[str] = None
+    # Keep this book's unused starter categories rather than removing them at import.
+    keep_starters: bool = False
 
 
 def _migration(kind: str, body: MigrationRequest) -> dict:
@@ -156,6 +158,7 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
             same_as=body.same_as,
             category_links=body.category_links,
             recheck_of=body.recheck_of if kind == "preview" else None,
+            keep_starters=body.keep_starters,
         )
     except ynab_migration.ConfirmationRequired as exc:
         raise HTTPException(

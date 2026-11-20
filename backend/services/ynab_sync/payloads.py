@@ -252,11 +252,22 @@ def _plain_fields(ctx: Context, top: dict, b: dict, n: dict, changed: list[str])
     return op
 
 
+def _budget_leg(ctx: Context, tops: list[str]) -> str | None:
+    """The one leg of a transfer in a budget account, where the app keeps its category; ``None``
+    when both or neither leg is, or the app takes no category on a transfer."""
+    on = {a["id"]: bool(a.get("on_budget")) for a in ctx.meta["accounts"]}
+    legs = [t for t in tops if on.get(ctx.mirror[t]["account_id"])]
+    return legs[0] if current().caps.categorized_transfers and len(legs) == 1 else None
+
+
 def _transfer_ops(
     ctx: Context, tops: list[str], b: dict, n: dict, changed: list[str]
 ) -> list[dict]:
-    if {"kind", "category", "splits"} & set(changed) or any(
-        b[s] and n[s] and b[s][0] != n[s][0] for s in ("from", "to")
+    leg = _budget_leg(ctx, tops) if len(tops) == 2 else None
+    if (
+        {"kind", "splits"} & set(changed)
+        or ("category" in changed and leg is None)
+        or any(b[s] and n[s] and b[s][0] != n[s][0] for s in ("from", "to"))
     ):
         raise Unsupported(
             f"changing a transfer's accounts or category cannot be sent to {current().name}"
@@ -266,6 +277,8 @@ def _transfer_ops(
         op = {"id": tid}
         if {"from", "to"} & set(changed):
             op["amount"] = _milli(n["from"][1], outflow)
+        if "category" in changed and tid == leg:
+            op["category_id"] = _category_id(ctx, n["category"])
         ops.append(op)
     return ops
 

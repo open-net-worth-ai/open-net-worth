@@ -369,6 +369,24 @@ describe('the notes', () => {
     expect(w.getByText(/2 starter categories and groups you never used are removed/)).toBeTruthy()
   })
 
+  it('keeps the starter categories when asked, and imports with that choice', async () => {
+    preview = actualPreview({ prune: { categories: ['Alpha'], groups: [] } })
+    const w = await open()
+    preview = actualPreview({ prune: { categories: [], groups: [] }, keep_starters: true })
+    fireEvent.click(w.getByRole('button', { name: 'Keep them' }))
+    await waitFor(() => expect(previews().length).toBe(1))
+    expect(previews()[0]?.body.keep_starters).toBe(true)
+    expect(
+      await w.findByText(/The starter categories stay, and the sync adds them to Actual/),
+    ).toBeTruthy()
+    expect(w.getByRole('button', { name: 'Remove them' })).toBeTruthy()
+    fireEvent.click(w.getByRole('button', { name: 'Accept suggestions' }))
+    await waitFor(() => expect(importButton(w).disabled).toBe(false))
+    fireEvent.click(importButton(w))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(requests.at(-1)?.body).toMatchObject({ plan_id: 'b1', keep_starters: true })
+  })
+
   it('one more note reads as one', async () => {
     preview = actualPreview({ warnings: FOUR.slice(0, 4) })
     const w = await open()

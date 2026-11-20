@@ -18,7 +18,13 @@ from backend.services.ynab_migration import (
 )
 
 
-def book_changes(plan: dict, state: str, kept: frozenset[str], kept_groups: set[str]) -> dict:
+def book_changes(
+    plan: dict,
+    state: str,
+    kept: frozenset[str],
+    kept_groups: set[str],
+    keep_starters: bool = False,
+) -> dict:
     """What an import would do to the book beyond adding the plan: a currency change and the
     removal of untouched starter budget items. Shown in the preview and used by the import.
     ``kept`` are the book's categories the plan is paired with, ``kept_groups`` the names (lower
@@ -31,8 +37,9 @@ def book_changes(plan: dict, state: str, kept: frozenset[str], kept_groups: set[
         "currency_blocked": base != plan["currency"] and bool(money),
         "money_data": money,
         "prune": {"categories": [], "groups": []},
+        "keep_starters": keep_starters,
     }
-    if state == "fresh":
+    if state == "fresh" and not keep_starters:
         wanted = {c["label"].lower() for c in plan["categories"]}
         prune = guards.starter_prune_plan(wanted, kept)
         kept_names = {c["group"].lower() for c in plan["categories"]} | kept_groups

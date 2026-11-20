@@ -212,6 +212,16 @@ def test_preview_lists_the_prune_and_the_currency_change(ynab):
     assert "Groceries" not in preview["prune"]["categories"]  # the plan reuses it
 
 
+def test_keep_starters_keeps_the_unused_starter_categories(ynab):
+    preview = run("preview", keep_starters=True)["preview"]
+    assert preview["keep_starters"] is True
+    assert preview["prune"] == {"categories": [], "groups": []}
+    job = run(keep_starters=True)
+    assert job["status"] == "done", job["error"]
+    assert "Medical expenses" in _labels()
+    assert "Kept the starter categories, as asked." in [e["line"] for e in job["log"]]
+
+
 def test_a_book_with_money_data_but_no_accounts_keeps_its_currency_and_budget(ynab):
     from backend.db.owned_assets_store import OwnedAssetsStore
 

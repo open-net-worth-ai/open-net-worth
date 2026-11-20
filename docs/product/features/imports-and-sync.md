@@ -52,7 +52,7 @@ Until it is set up, its page is two steps, the second unlocked by the first:
    what the plan holds (currency, accounts, transactions, categories, budget months), then a note
    for anything the import would change in this book: a base-currency change (only in a book with
    no money data yet), the starter categories you never used, which it removes (pick one for a
-   YNAB category to keep it), accounts here that didn't come
+   YNAB category to keep it, or press **Keep them** to keep them all), accounts here that didn't come
    from YNAB (they stay as they are and the plan is added beside them), and any warnings. A plan
    in another currency than a book that already holds data can't be imported, and the note says
    so. Three tabs show the plan itself:
@@ -160,7 +160,9 @@ time.
   the sync: a category hidden or deleted in YNAB is **hidden** here. YNAB's API can neither delete
   nor hide a category, so one hidden, deleted or merged here is **moved into a YNAB group called
   "Hidden in Open Net Worth"** (made once; hide it in YNAB yourself if you like, and showing it
-  again here moves it back), with its transactions relabelled as usual. A
+  again here moves it back), with its transactions relabelled as usual. Its Assigned in YNAB is
+  set to 0 in every month, as it holds nothing here any more, so YNAB doesn't count that money
+  twice. A
   category that sits in no envelope is created in a YNAB group called **Not budgeted**; if YNAB
   later assigns money to it, it gets an envelope here. Categories in those two groups are never
   followed into a group here. A group renamed on one side is renamed on

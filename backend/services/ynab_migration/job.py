@@ -108,12 +108,14 @@ def start(
     category_links: dict[str, str] | None = None,
     account_types: dict[str, str] | None = None,
     currency: str | None = None,
+    keep_starters: bool = False,
 ) -> dict:
     """``sync_direction`` (an import only): turn the two-way sync on in that direction once the
     import succeeds — the worker does it, so closing the page mid-import does not lose it.
     ``account_links`` / ``same_as`` / ``category_links`` (a preview or an import): see the module
     docstring. ``account_types`` / ``currency``: what the person settled in the review, for an app
-    that asks (``settle``, ``links.settle_types``)."""
+    that asks (``settle``, ``links.settle_types``). ``keep_starters``: keep the book's unused starter
+    categories instead of removing them, to fold the app's categories into later."""
     app = current()
     if kind not in KINDS:
         raise ValidationError(f"kind must be one of {', '.join(KINDS)}")
@@ -157,6 +159,7 @@ def start(
             "recheck_of": recheck_of,
             "account_types": dict(account_types or {}),
             "currency": currency,
+            "keep_starters": bool(keep_starters),
         }
         _POOL.submit(
             contextvars.copy_context().run,
@@ -280,7 +283,13 @@ def _execute(run: _Run, kind: str, plan_id: str, confirm: bool, choice: dict) ->
             **preview.details(plan),
             "accounts": review.preview_accounts(plan, existing, chosen, same_as),
             "book_state": state,
-            **review.book_changes(plan, state, shown.pop("kept"), shown.pop("kept_groups")),
+            **review.book_changes(
+                plan,
+                state,
+                shown.pop("kept"),
+                shown.pop("kept_groups"),
+                keep_starters=bool(choice.get("keep_starters")),
+            ),
             **shown,
             **plan.get("review", {}),
         },
@@ -302,7 +311,12 @@ def _execute(run: _Run, kind: str, plan_id: str, confirm: bool, choice: dict) ->
         raise ValidationError(
             f"{current().name}'s {names[0]} matches more than one of your categories. Pick one."
         )
-    picks = {"accounts": chosen, "same_as": same_as, "categories": decisions}
+    picks = {
+        "accounts": chosen,
+        "same_as": same_as,
+        "categories": decisions,
+        "keep_starters": bool(choice.get("keep_starters")),
+    }
     _import(run, store, plan_id, plan, state, existing, picks)
 
 
@@ -368,7 +382,9 @@ def _import(
     archived = apply.archive_closed(plan, rows)
     if archived:
         run.log(f"Archived {archived} closed account(s).")
-    budget_envs = _budget(run, plan, plan_id, state, env_ids, counts, kept)
+    budget_envs = _budget(
+        run, plan, plan_id, state, env_ids, counts, kept, picks.get("keep_starters", False)
+    )
     run.progress("verifying")
     verified = verify.verify(store, plan_id, plan, budget_envs, not plan.get("tracking"))
     run.update(verification=report.verification(verified))
@@ -393,12 +409,22 @@ def _categories(run: _Run, plan: dict, plan_id: str, decisions: dict, counts: di
 
 
 def _budget(
-    run: _Run, plan: dict, plan_id: str, state: str, env_ids: dict, counts: dict, kept
+    run: _Run,
+    plan: dict,
+    plan_id: str,
+    state: str,
+    env_ids: dict,
+    counts: dict,
+    kept,
+    keep_starters: bool = False,
 ) -> dict:
     """The budget half of an import; returns the envelopes verification compares."""
     if state == "fresh":
         budget_engines_service.set_home_engine("zero_based")  # YNAB is zero-based budgeting
         run.log(settle.method_line(plan))
+    if state == "fresh" and keep_starters:
+        run.log(report.starters_kept_line())
+    elif state == "fresh":
         prune = guards.starter_prune_plan({c["label"].lower() for c in plan["categories"]}, kept)
         names = {c["group"].lower() for c in plan["categories"]}
         paired = {g["group"] for g in ynab_pairs.load(plan_id)[1].values()}

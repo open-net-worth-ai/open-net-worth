@@ -43,6 +43,9 @@ class Context:
     )  # YNAB account id -> Starting Balance txn
     # Ledger accounts linked to this app but not to this budget (``budget_scoped_accounts``).
     other_budget_accounts: frozenset[str] = frozenset()
+    # YNAB categories whose category here was removed (deleted, or folded into another): here
+    # they hold no Assigned, so the app's figures for them are sent as 0 (``assigned``).
+    removed_here: frozenset[str] = frozenset()
 
     @property
     def live_accounts(self) -> list[dict]:
@@ -133,6 +136,7 @@ def build(
         sub_parent=sub_parent,
         link_of=link_of,
         openings=_openings(mirror),
+        removed_here=frozenset(y for y, p in pairs.items() if p["category"] not in live),
         other_budget_accounts=others,
     )
 

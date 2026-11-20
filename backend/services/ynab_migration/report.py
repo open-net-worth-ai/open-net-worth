@@ -89,6 +89,10 @@ def starter_line(removed: Counter) -> str:
     )
 
 
+def starters_kept_line() -> str:
+    return "Kept the starter categories, as asked."
+
+
 def problem(raw: dict) -> dict:
     """``raw`` is what ``apply`` collected: ``{ref, reason, kind}``."""
     return {
